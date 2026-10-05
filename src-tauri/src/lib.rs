@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 mod affects;
+mod alert;
 mod app;
 mod color;
 mod disk;
@@ -45,6 +46,18 @@ pub fn run() {
     let builder = builder
         .menu(app::menu::build)
         .on_menu_event(app::menu::on_event);
+    // A click on a toast of an installed Windows Vosh starts it again.
+    // The guard hands that start to the Vosh that runs, which selects the
+    // session of the newest banner. It goes first, before the other
+    // plugins.
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        app::windows::second_start(app);
+    }));
+    // Alert banners on Windows and Linux. macOS posts through a module of
+    // Vosh's own, see alert/mac.rs.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
 
     builder
         // Serves the regular face of a system font family. fontLoader.ts

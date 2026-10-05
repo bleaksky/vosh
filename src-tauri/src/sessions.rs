@@ -75,6 +75,13 @@ impl SessionId {
         Self(n)
     }
 
+    /// The session numbered `n`, as a banner Vosh posted names it. It may
+    /// name a session that has since closed, which a lookup then refuses.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) const fn from_number(n: u32) -> Self {
+        Self(n)
+    }
+
     /// The key the profile's stores hold the session's Lua stops under.
     pub(crate) fn stop_key(self) -> StopKey {
         StopKey(self.0)
@@ -168,6 +175,17 @@ pub(crate) struct Session {
     /// command's echo, landed after the open row and closed it. Output in
     /// another session never moves it.
     output_count: AtomicU64,
+    /// When each alert of the session last rang, for the 10 second cap. A
+    /// leaf lock, taken alone once the profile and connection let go.
+    alert_caps: std::sync::Mutex<crate::alert::Caps>,
+    /// The series of redials the session runs after a drop, if any. A
+    /// leaf lock, held to start, take or wake one. See
+    /// [`crate::session::reconnect`].
+    redial: std::sync::Mutex<Option<crate::session::reconnect::Redial>>,
+    /// A redial opened the connection that runs and the game's prompt
+    /// has yet to come, which rings the Connection alert. Only
+    /// [`crate::session::reconnect`] reads or sets it.
+    pub(crate) awaiting_game_prompt: crate::session::reconnect::AwaitingPrompt,
 }
 
 impl Session {
@@ -196,6 +214,9 @@ impl Session {
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
+            alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
+            redial: std::sync::Mutex::new(None),
+            awaiting_game_prompt: crate::session::reconnect::AwaitingPrompt::default(),
         }
     }
 
@@ -257,8 +278,9 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = name.map(str::to_string);
     }
 
-    /// The character logged in on the live connection, if any.
-    fn character(&self) -> Option<String> {
+    /// The character logged in on the live connection, if any. A drop
+    /// keeps it until the next connect.
+    pub(crate) fn character(&self) -> Option<String> {
         self.current_character
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -273,20 +295,22 @@ impl Session {
         self.connection.lock().tick.in_session
     }
 
-    /// What a line in another session calls this one: the name you gave
-    /// it, or the character logged in, or else the world it runs with the
-    /// port, like `The Forsaken Lands 1825`. None while it has no name and
-    /// runs no connection.
+    /// What a line in another session or a banner calls this one, as its
+    /// row reads: the name you gave it, or the character logged in, or
+    /// else the world where it last connected with the port, like `The
+    /// Forsaken Lands 1825`, which a drop and each failed redial keep.
+    /// None while it has no name and never connected.
     pub(crate) fn label(&self) -> Option<String> {
         self.name().or_else(|| self.character()).or_else(|| {
-            let (host, port) = self
-                .current_connection
+            let address = self
+                .address
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone()?;
             Some(format!(
-                "{} {port}",
-                crate::profile::worlds::world_name(&host)
+                "{} {}",
+                crate::profile::worlds::world_name(&address.host),
+                address.port
             ))
         })
     }
@@ -324,6 +348,81 @@ impl Session {
         self.output_count.fetch_add(1, Ordering::AcqRel) + 1
     }
 
+    /// The host and port of the live connection, which a drop keeps until
+    /// the next connect.
+    pub(crate) fn live_address(&self) -> Option<(String, u16)> {
+        self.current_connection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Keep `redial`, the series of redials the session now runs.
+    pub(crate) fn start_redial(&self, redial: crate::session::reconnect::Redial) {
+        *self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(redial);
+    }
+
+    /// Take the series of redials the session runs, to end it.
+    pub(crate) fn take_redial(&self) -> Option<crate::session::reconnect::Redial> {
+        self.redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
+    /// Take the series of redials the session runs when `matches` holds
+    /// for it, to end it.
+    pub(crate) fn take_redial_if(
+        &self,
+        matches: impl FnOnce(&crate::session::reconnect::Redial) -> bool,
+    ) -> Option<crate::session::reconnect::Redial> {
+        let mut redial = self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if redial.as_ref().is_some_and(matches) {
+            redial.take()
+        } else {
+            None
+        }
+    }
+
+    /// Dial at once in the series the session runs. Returns false when it
+    /// runs none.
+    pub(crate) fn redial_now(&self) -> bool {
+        let redial = self
+            .redial
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match redial.as_ref() {
+            Some(redial) if !redial.ended() => {
+                redial.now();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Forget the caps of the Lua `owner`, whose alerts ended.
+    pub(crate) fn forget_alert_owner(&self, owner: &str) {
+        self.alert_caps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .forget_owner(owner);
+    }
+
+    /// Whether the alert counted under `cap` may ring at `now`, under the
+    /// 10 second cap, and if so, mark that it rang.
+    pub(crate) fn allow_alert(&self, cap: &str, now: tokio::time::Instant) -> bool {
+        self.alert_caps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .allow(cap, now)
+    }
+
     /// Send `event` with `payload`, which serializes as an object, and
     /// the session's id beside its fields, `{session, ..payload}`, so the
     /// page can tell which session it came from.
@@ -333,13 +432,21 @@ impl Session {
         event: &str,
         payload: &T,
     ) {
-        let named = Named {
-            session: self.id,
-            payload,
-        };
-        if let Err(e) = app.emit(event, &named) {
-            warn!(error = %e, event, "failed to emit a session event");
-        }
+        emit_for(app, self.id, event, payload);
+    }
+}
+
+/// Send `event` with `payload` for the session `session`, as
+/// [`Session::emit`] does, from a task that holds only its id.
+pub(crate) fn emit_for<R: tauri::Runtime, T: Serialize>(
+    app: &AppHandle<R>,
+    session: SessionId,
+    event: &str,
+    payload: &T,
+) {
+    let named = Named { session, payload };
+    if let Err(e) = app.emit(event, &named) {
+        warn!(error = %e, event, "failed to emit a session event");
     }
 }
 
@@ -679,8 +786,11 @@ mod tests {
     fn a_label_names_the_session_or_its_character_or_else_the_world_with_its_port() {
         let session = on_defaults(SessionId(2));
         assert_eq!(session.label(), None);
-        *session.current_connection.lock().unwrap() =
-            Some(("play.theforsakenlands.com".into(), 1825));
+        *session.address.lock().unwrap() = Some(super::Address {
+            host: "play.theforsakenlands.com".into(),
+            port: 1825,
+            tls: true,
+        });
         assert_eq!(session.label().as_deref(), Some("The Forsaken Lands 1825"));
         *session.current_character.lock().unwrap() = Some("Builder".into());
         assert_eq!(session.label().as_deref(), Some("Builder"));

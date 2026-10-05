@@ -305,6 +305,10 @@ export function normalizeTrigger(raw: unknown): TriggerRecord {
   if (r.target === 'prompt' || r.target === 'room' || r.target === 'room_target') {
     out.target = r.target;
   }
+  // The alert table rides along as it came, until the Alert row lands.
+  if (r.alert && typeof r.alert === 'object' && !Array.isArray(r.alert)) {
+    out.alert = r.alert as Record<string, unknown>;
+  }
   return out;
 }
 

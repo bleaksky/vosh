@@ -413,9 +413,16 @@ export function presetToggles(stored: readonly string[]): PresetToggle[] {
   return PRESETS.map((p) => ({ id: p.id, enabled: on.has(p.id) }));
 }
 
-/** What to store in enabled_presets for these toggles. */
-export function storedPresetIds(toggles: readonly PresetToggle[]): string[] {
-  const on = toggles.filter((t) => t.enabled).map((t) => t.id);
+/** What to store in enabled_presets for these toggles. The ids in
+ *  `stored` that name no preset of this page, such as the alert presets
+ *  until their card lands, stay on the list. */
+export function storedPresetIds(
+  toggles: readonly PresetToggle[],
+  stored: readonly string[] = [],
+): string[] {
+  const known = new Set(PRESETS.map((p) => p.id));
+  const kept = stored.filter((id) => !known.has(id) && id !== PRESETS_OFF_MARKER);
+  const on = [...toggles.filter((t) => t.enabled).map((t) => t.id), ...kept];
   return on.length > 0 ? on : [PRESETS_OFF_MARKER];
 }
 

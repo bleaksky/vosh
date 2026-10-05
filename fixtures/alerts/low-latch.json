@@ -1,0 +1,30 @@
+{
+  "about": "The low latch on a vital, which the vitals panes draw and the Low health alert rings on. nextLow in src/lib/stores/vitalsStore.ts and next_low in src-tauri/src/alert/presets.rs both read this file. Each step is one call from the latch it was in. Each run feeds Char.Vitals values in turn, and a hidden one is the zeros lamented tears sends, which no view reads as low and which starts the latch over.",
+  "steps": [
+    { "was": false, "current": 20, "max": 100, "low": false },
+    { "was": false, "current": 19, "max": 100, "low": true },
+    { "was": true, "current": 24, "max": 100, "low": true },
+    { "was": true, "current": 25, "max": 100, "low": false },
+    { "was": true, "current": 0, "max": 0, "low": false },
+    { "was": false, "current": 175, "max": 900, "low": true },
+    { "was": false, "current": 176, "max": 900, "low": false },
+    { "was": true, "current": 220, "max": 900, "low": true },
+    { "was": true, "current": 221, "max": 900, "low": false },
+    { "was": false, "current": -5, "max": 900, "low": true },
+    { "was": true, "current": 1200, "max": 900, "low": false }
+  ],
+  "runs": [
+    {
+      "what": "A fight that turns your health low, regen across the line, lamented tears, and a second fall",
+      "vitals": [
+        { "hp": 850, "maxhp": 900, "hidden": false, "low": false, "rings": false },
+        { "hp": 170, "maxhp": 900, "hidden": false, "low": true, "rings": true },
+        { "hp": 200, "maxhp": 900, "hidden": false, "low": true, "rings": false },
+        { "hp": 0, "maxhp": 0, "hidden": true, "low": false, "rings": false },
+        { "hp": 200, "maxhp": 900, "hidden": false, "low": false, "rings": false },
+        { "hp": 150, "maxhp": 900, "hidden": false, "low": true, "rings": true },
+        { "hp": 900, "maxhp": 900, "hidden": false, "low": false, "rings": false }
+      ]
+    }
+  ]
+}

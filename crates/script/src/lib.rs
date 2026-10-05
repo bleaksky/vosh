@@ -2051,6 +2051,55 @@ mod tests {
     }
 
     #[test]
+    fn mud_alert_rings_for_whose_lua_raised_it_and_posts_a_banner_at_first() {
+        use vosh_automation::alert::{AlertParts, Attention};
+        assert_eq!(
+            run("mud.alert('Health low')"),
+            vec![Action::Alert {
+                owner: Owner::Typed,
+                title: "Health low".into(),
+                text: None,
+                parts: AlertParts {
+                    banner: true,
+                    ..AlertParts::default()
+                },
+            }]
+        );
+        let mut e = ScriptEngine::new().unwrap();
+        let watch = Owner::Plugin("watch".into());
+        let code = "mud.alert('Health low', {text = 'Tolliver bleeds', words = true, \
+                    sound = 'low', attention = 'until', background = false, banner = false})";
+        let loaded = e
+            .load_script(watch.clone(), "@watch/main.lua", code)
+            .unwrap();
+        assert_eq!(
+            loaded.actions,
+            vec![
+                Action::DropPluginAliases("watch".into()),
+                Action::Alert {
+                    owner: watch.clone(),
+                    title: "Health low".into(),
+                    text: Some("Tolliver bleeds".into()),
+                    parts: AlertParts {
+                        banner: false,
+                        sound: Some("low".into()),
+                        attention: Some(Attention::Until),
+                        background: false,
+                        words: true,
+                    },
+                },
+            ]
+        );
+        assert_eq!(watch.tag(), "plugin:watch");
+        // An attention it does not know asks for none.
+        let actions = run("mud.alert('Health low', {attention = 'forever'})");
+        assert!(
+            matches!(&actions[..], [Action::Alert { parts, .. }] if parts.attention.is_none()),
+            "{actions:?}"
+        );
+    }
+
+    #[test]
     fn a_plugin_alias_is_the_plugin_s_and_goes_with_it() {
         let mut e = ScriptEngine::new().unwrap();
         let healer = Owner::Plugin("healer".into());

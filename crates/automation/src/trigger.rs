@@ -23,7 +23,7 @@ pub mod store;
 
 pub use action::{HighlightStyle, TriggerAction};
 pub use color::NamedColor;
-pub use engine::{matching, process_on_ground, LineResult, MatchScope};
+pub use engine::{matching, process_on_ground, LineResult, MatchScope, TriggerAlert};
 #[cfg(any(test, feature = "testkit"))]
 pub use engine::{process, process_scoped};
 pub use store::{MatchMode, Trigger, TriggerError, TriggerPattern, TriggerStore, TriggerTarget};

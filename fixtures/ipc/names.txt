@@ -1,8 +1,14 @@
 command affect_full_get(session?)
 command affects_snapshot_get(session?)
+command alert_presets_get()
+command alert_presets_set(id, alert?)
+command alerts_ask_permission()
+command alerts_open_settings()
+command alerts_permission()
 command aliases_export()
 command aliases_import(json)
 command app_quit()
+command daylight_get(session?)
 command fonts_list()
 command groups_list(list)
 command groups_set_enabled(list, group, enabled)
@@ -84,6 +90,8 @@ command prompt_render_many(requests, session?)
 command prompt_show_get(session?)
 command prompt_state_get(session?)
 command prompt_watch(on, session?)
+command reconnect_get()
+command reconnect_set(on)
 command scrollback_clear(session?)
 command scrollback_load(feedNative, session?)
 command session_close(session)
@@ -91,6 +99,8 @@ command session_connect(host, port, tls, session?)
 command session_disconnect(session?)
 command session_identity_get(session?)
 command session_open(profile?)
+command session_reconnect_cancel(session?)
+command session_reconnect_now(session?)
 command session_rename(session, name?)
 command session_select(session)
 command session_send_input(line, session?)
@@ -122,6 +132,8 @@ command ui_set_theme(theme, lightTheme?, darkTheme?)
 command updater_check()
 command updater_install_and_relaunch()
 command window_backdrop_set(background?, appearance?)
+event session://alert app unheard
+event session://alerts-ended app unheard
 event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard
@@ -131,6 +143,7 @@ event session://prompt-gag-without-reader app heard
 event session://prompt-state app heard
 event session://prompt-status app heard
 event session://prompt-vars app heard
+event session://reconnect app unheard
 event session://routed app heard
 event session://state app heard
 event session://target app heard
@@ -146,6 +159,7 @@ event vosh://chat-colors-changed app heard
 event vosh://chip-style-changed app page heard
 event vosh://connection-target-changed page heard
 event vosh://custom-themes-changed app page heard
+event vosh://daylight-changed app unheard
 event vosh://echo-macros-changed page heard
 event vosh://fit-game-colors-changed page heard
 event vosh://flush-pending-writes app heard
@@ -175,6 +189,7 @@ event vosh://prompt-card-open page heard
 event vosh://prompt-config-changed app heard
 event vosh://readable-highlights-changed page heard
 event vosh://session-identity-changed app heard
+event vosh://session-selected app unheard
 event vosh://settings-find app heard
 event vosh://settings-goto-tab page heard
 event vosh://spellcheck-prompt-changed page heard

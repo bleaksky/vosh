@@ -42,7 +42,31 @@ font-kit = "0.14"
 urlencoding = "2"
 quick-xml = "0.36"
 
+# Alert banners on Windows and Linux (Alerts Q1): WinRT toasts and the
+# freedesktop server, with no telemetry. macOS posts through a module of
+# Vosh's own on UNUserNotificationCenter instead, below.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-notification = "2"
+
+# A toast click on an installed Windows Vosh starts the app again, since
+# the toast has no activator of its own, so the second start hands its
+# turn to the Vosh that runs (Alerts Q1).
+[target.'cfg(windows)'.dependencies]
+tauri-plugin-single-instance = "2"
+# ToastNotifier.Setting, which says whether Windows lets Vosh show
+# toasts, since the plugin says it always does. The toast crate the
+# plugin uses brings this version and feature already.
+windows = { version = "0.62", features = ["UI_Notifications"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
+# Alert banners on macOS through UNUserNotificationCenter (Alerts Q1),
+# with the click, the willPresent delegate and the permission check of
+# Vosh's own. It needs the objc2 0.6 family it is built on, which the
+# window crates already bring, so these add no new crate.
+objc2-user-notifications = "0.3"
+objc2-06 = { package = "objc2", version = "0.6" }
+objc2-foundation = "0.3"
+block2 = "0.6"
 # Used by `enable_macos_spellcheck` in app/windows.rs to message-send
 # setContinuousSpellCheckingEnabled: into the WKWebView (and by the native
 # surface's NSView glue). Gated with respondsToSelector: so a future macOS

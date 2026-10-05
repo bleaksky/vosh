@@ -1,6 +1,6 @@
 //! Raw TCP and TLS connection wrappers built on tokio.
 //!
-//! Returns a [`Stream`] enum that the session loop reads from and writes to
+//! Returns a [`Stream`] that the session loop reads from and writes to
 //! without caring whether the underlying transport is plain or TLS.
 
 use std::sync::Arc;
@@ -9,6 +9,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::time::Instant;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
@@ -29,39 +30,64 @@ pub(crate) enum ConnectionError {
     Tls(String),
 }
 
-/// Either a plain TCP stream or a TLS-wrapped one. The session loop owns
-/// this and reads or writes through it without branching on the variant.
-pub(crate) enum Stream {
+/// Either a plain TCP stream or a TLS-wrapped one, and when a line of
+/// yours last left on it. The session loop owns this and reads or writes
+/// through it without branching on the variant.
+pub(crate) struct Stream {
+    io: Io,
+    /// When the last write that ended a line left, the commands you type
+    /// and those triggers, timers, the tick and Lua send. A telnet answer
+    /// ends no line, so it never counts.
+    last_line: Option<Instant>,
+}
+
+enum Io {
     Tcp(TcpStream),
     Tls(Box<TlsStream<TcpStream>>),
 }
 
 impl Stream {
+    fn new(io: Io) -> Self {
+        Self {
+            io,
+            last_line: None,
+        }
+    }
+
     pub(crate) async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Stream::Tcp(s) => s.read(buf).await,
-            Stream::Tls(s) => s.read(buf).await,
+        match &mut self.io {
+            Io::Tcp(s) => s.read(buf).await,
+            Io::Tls(s) => s.read(buf).await,
         }
     }
 
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        match self {
-            Stream::Tcp(s) => AsyncWriteExt::write_all(s, buf).await,
-            Stream::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await,
+        match &mut self.io {
+            Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
+            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
         }
+        if buf.ends_with(b"\n") {
+            self.last_line = Some(Instant::now());
+        }
+        Ok(())
+    }
+
+    /// When a line of yours last left for the game, None before the first.
+    pub(crate) fn last_line(&self) -> Option<Instant> {
+        self.last_line
     }
 
     pub(crate) async fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Stream::Tcp(s) => AsyncWriteExt::flush(s).await,
-            Stream::Tls(s) => AsyncWriteExt::flush(s.as_mut()).await,
+        match &mut self.io {
+            Io::Tcp(s) => AsyncWriteExt::flush(s).await,
+            Io::Tls(s) => AsyncWriteExt::flush(s.as_mut()).await,
         }
     }
 
     pub(crate) async fn shutdown(&mut self) -> std::io::Result<()> {
-        match self {
-            Stream::Tcp(s) => AsyncWriteExt::shutdown(s).await,
-            Stream::Tls(s) => AsyncWriteExt::shutdown(s.as_mut()).await,
+        match &mut self.io {
+            Io::Tcp(s) => AsyncWriteExt::shutdown(s).await,
+            Io::Tls(s) => AsyncWriteExt::shutdown(s.as_mut()).await,
         }
     }
 
@@ -75,9 +101,9 @@ impl Stream {
     /// isolation, so the TLS variant always reports `WouldBlock` and the
     /// caller falls back to its normal error path.
     pub(crate) fn try_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Stream::Tcp(s) => s.try_read(buf),
-            Stream::Tls(_) => Err(std::io::Error::new(
+        match &mut self.io {
+            Io::Tcp(s) => s.try_read(buf),
+            Io::Tls(_) => Err(std::io::Error::new(
                 std::io::ErrorKind::WouldBlock,
                 "try_read not supported on TLS streams",
             )),
@@ -93,7 +119,7 @@ pub(crate) async fn connect(host: &str, port: u16, tls: bool) -> Result<Stream, 
         tcp.set_nodelay(true)?;
 
         if !tls {
-            return Ok::<Stream, ConnectionError>(Stream::Tcp(tcp));
+            return Ok::<Stream, ConnectionError>(Stream::new(Io::Tcp(tcp)));
         }
 
         let server_name = rustls_pki_types::ServerName::try_from(host.to_string())
@@ -105,7 +131,7 @@ pub(crate) async fn connect(host: &str, port: u16, tls: bool) -> Result<Stream, 
             .connect(server_name, tcp)
             .await
             .map_err(|e| ConnectionError::Tls(e.to_string()))?;
-        Ok(Stream::Tls(Box::new(tls_stream)))
+        Ok(Stream::new(Io::Tls(Box::new(tls_stream))))
     };
 
     match tokio::time::timeout(CONNECT_TIMEOUT, attempt).await {

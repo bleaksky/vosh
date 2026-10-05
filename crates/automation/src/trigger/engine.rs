@@ -8,6 +8,7 @@ use regex::Regex;
 use vosh_protocol::ansi::plain_text;
 use vosh_protocol::ansi::PieceKind;
 
+use crate::alert::AlertParts;
 use crate::split::split_commands;
 use crate::stops::StopKey;
 use crate::trigger::action::{HighlightStyle, TriggerAction};
@@ -65,6 +66,17 @@ pub struct LineResult {
     /// numbered groups). The session loop evaluates these against
     /// its shared `ScriptEngine` after the line is displayed.
     pub scripts: Vec<ScriptCall>,
+    /// The alert of each trigger that matched, once for each trigger, in
+    /// priority order. A gagged line rings too.
+    pub alerts: Vec<TriggerAlert>,
+}
+
+/// The alert of a trigger that matched a line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerAlert {
+    /// The trigger's name, which titles the banner.
+    pub trigger: String,
+    pub parts: AlertParts,
 }
 
 /// Run the trigger store against a single line of MUD output.
@@ -156,6 +168,7 @@ pub fn process_on_ground(
     let mut sends = Vec::new();
     let mut routes = Vec::new();
     let mut scripts: Vec<ScriptCall> = Vec::new();
+    let mut alerts: Vec<TriggerAlert> = Vec::new();
     let mut any_match = false;
     // The SGR open of the first base style that matched, in priority
     // order. See [`HighlightStyle::base`].
@@ -181,6 +194,16 @@ pub fn process_on_ground(
                 continue;
             }
             any_match = true;
+            // A trigger rings once for the line, however many of its
+            // patterns match.
+            if let Some(parts) = &compiled.trigger.alert {
+                if !alerts.iter().any(|a| a.trigger == compiled.trigger.name) {
+                    alerts.push(TriggerAlert {
+                        trigger: compiled.trigger.name.clone(),
+                        parts: parts.clone(),
+                    });
+                }
+            }
 
             // Send and Script both need this line's capture groups, and
             // they are identical, so compute them at most once per
@@ -270,6 +293,7 @@ pub fn process_on_ground(
             sends,
             routes,
             scripts,
+            alerts,
         };
     }
 
@@ -340,6 +364,7 @@ pub fn process_on_ground(
         sends,
         routes,
         scripts,
+        alerts,
     }
 }
 
@@ -800,6 +825,57 @@ mod tests {
         assert!(text.contains("\x1b[0m"));
     }
 
+    /// A trigger on `$n walks in.`, from `act_move.c:1053`, that rings `parts`.
+    fn visitor(parts: crate::alert::AlertParts) -> Trigger {
+        Trigger {
+            alert: Some(parts),
+            ..Trigger::new("visitor", r"^(\w+) walks in\.$", TriggerAction::Gag)
+        }
+    }
+
+    #[test]
+    fn a_trigger_rings_its_alert_once_for_a_line_even_when_it_hides_it() {
+        let parts = crate::alert::AlertParts {
+            banner: true,
+            ..Default::default()
+        };
+        let mut trigger = visitor(parts.clone());
+        trigger
+            .patterns
+            .push(crate::trigger::TriggerPattern::regex("walks in"));
+        let s = store(vec![
+            trigger,
+            highlight("quiet", "walks", NamedColor::Yellow),
+        ]);
+        let r = process(&s, b"Maren walks in.", SESSION);
+        assert!(r.display.is_none(), "the visitor trigger gags the line");
+        assert_eq!(
+            r.alerts,
+            [TriggerAlert {
+                trigger: "visitor".into(),
+                parts,
+            }]
+        );
+        let r = process(&s, b"Maren leaves south.", SESSION);
+        assert!(r.alerts.is_empty(), "{:?}", r.alerts);
+    }
+
+    #[test]
+    fn a_trigger_vosh_stopped_or_turned_off_rings_nothing() {
+        let mut s = store(vec![visitor(crate::alert::AlertParts::default())]);
+        s.stop("visitor", SESSION);
+        let rung = process(&s, b"Maren walks in.", SESSION).alerts;
+        assert!(rung.is_empty(), "{rung:?}");
+        assert_eq!(process(&s, b"Maren walks in.", StopKey(2)).alerts.len(), 1);
+        let off = Trigger {
+            enabled: false,
+            ..visitor(crate::alert::AlertParts::default())
+        };
+        let s = store(vec![off]);
+        let rung = process(&s, b"Maren walks in.", SESSION).alerts;
+        assert!(rung.is_empty(), "{rung:?}");
+    }
+
     #[test]
     fn gag_drops_line() {
         let s = store(vec![Trigger::new("spam", "tingle", TriggerAction::Gag)]);
@@ -1057,6 +1133,7 @@ mod tests {
             preset: None,
             group: None,
             target: TriggerTarget::Line,
+            alert: None,
         }]);
         let line = "[\x1b[0;31mAFK\x1b[0;0m] Tolliver is resting here.";
         let r = process(&s, line.as_bytes(), SESSION);
@@ -1373,6 +1450,7 @@ mod tests {
             preset: None,
             group: None,
             target: TriggerTarget::Line,
+            alert: None,
         }]);
         let r1 = process(&s, b"You see a goblin.", SESSION);
         assert!(r1.display.unwrap().contains("\x1b[31m"));
@@ -1397,6 +1475,7 @@ mod tests {
             preset: None,
             group: None,
             target: TriggerTarget::Line,
+            alert: None,
         }]);
         // goblin pattern (enabled) gags.
         assert!(process(&s, b"You see a goblin.", SESSION).display.is_none());

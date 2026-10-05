@@ -323,6 +323,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
         preset: None,
         group: None,
         target: vosh_automation::trigger::TriggerTarget::Line,
+        alert: None,
     });
 }
 

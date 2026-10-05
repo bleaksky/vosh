@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::time::Duration;
 
 use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Result as LuaResult, Table, Value};
+use vosh_automation::alert::{AlertParts, Attention};
 use vosh_automation::vars::Scope;
 
 use crate::actions::Action;
@@ -100,6 +101,8 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     mud.set("untrigger", owned(lua, owner.as_ref(), mud_untrigger)?)?;
 
     mud.set("on_gmcp", owned(lua, owner.as_ref(), mud_on_gmcp)?)?;
+
+    mud.set("alert", owned(lua, owner.as_ref(), mud_alert)?)?;
 
     mud.set("timer", owned(lua, owner.as_ref(), mud_timer)?)?;
     mud.set(
@@ -299,6 +302,64 @@ fn mud_unset_prompt_var(lua: &Lua, name: mlua::String) -> LuaResult<()> {
         Action::RemovePromptVar(name)
     })?;
     Ok(())
+}
+
+/// `mud.alert(title, options)`. The alert rings as a trigger's alert
+/// does, under the same focus rule and 10 second cap, and belongs to
+/// whose Lua raised it, so turning a plugin off ends its alerts. It posts
+/// a banner unless `options` says `banner = false`, and `options` may add
+/// `sound`, `attention` (`once` or `until`), `background`, `words` and
+/// the `text` a banner with words shows.
+fn mud_alert(
+    lua: &Lua,
+    owner: Option<&Owner>,
+    (title, options): (mlua::String, Option<Table>),
+) -> LuaResult<()> {
+    let get_text = |key: &str| -> LuaResult<Option<mlua::String>> {
+        options.as_ref().map_or(Ok(None), |o| o.get(key))
+    };
+    let get_flag = |key: &str| -> LuaResult<Option<bool>> {
+        options.as_ref().map_or(Ok(None), |o| o.get(key))
+    };
+    let (text, sound, attention) = (
+        get_text("text")?,
+        get_text("sound")?,
+        get_text("attention")?,
+    );
+    let empty = lua.create_string("")?;
+    let Some([title, text, sound, attention]) = all_capped(
+        lua,
+        [
+            (&title, NAME_BYTES),
+            (text.as_ref().unwrap_or(&empty), ECHO_BYTES),
+            (sound.as_ref().unwrap_or(&empty), NAME_BYTES),
+            (attention.as_ref().unwrap_or(&empty), NAME_BYTES),
+        ],
+    )?
+    else {
+        return Ok(());
+    };
+    let parts = AlertParts {
+        banner: get_flag("banner")?.unwrap_or(true),
+        sound: (!sound.is_empty()).then_some(sound),
+        attention: match attention.as_str() {
+            "once" => Some(Attention::Once),
+            "until" => Some(Attention::Until),
+            _ => None,
+        },
+        background: get_flag("background")?.unwrap_or(true),
+        words: get_flag("words")?.unwrap_or(false),
+    };
+    with_state(lua, |s| {
+        let owner = registrant(s, owner);
+        s.queue(Action::Alert {
+            owner,
+            title,
+            text: (!text.is_empty()).then_some(text),
+            parts,
+        });
+        Ok(())
+    })
 }
 
 fn mud_set_group_enabled(lua: &Lua, (name, enabled): (mlua::String, bool)) -> LuaResult<()> {

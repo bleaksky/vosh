@@ -69,7 +69,10 @@ export function PresetsEditor({
         for (const id of plan.remove) await presetsRemove(id);
         const install = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
         if (install.length > 0) await presetsInstall(install);
-        const enabled_presets = storedPresetIds(draftValues(draft));
+        const enabled_presets = storedPresetIds(
+          draftValues(draft),
+          configRef.current.enabled_presets,
+        );
         const next = { ...configRef.current, enabled_presets };
         if (!(await setUiConfig(next))) throw new Error(PRESETS_TURNED_AWAY);
         configRef.current = next;
