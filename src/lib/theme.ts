@@ -10,11 +10,11 @@
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
 
-import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { THEME_CHANGED, THEME_PREFS_CHANGED } from '../ipc/events';
 import { getUiConfig } from '../ipc/uiConfig';
+import { windowBackdropSet } from '../ipc/windows';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
 import {
@@ -304,7 +304,7 @@ onCustomThemesChanged(() => {
 // own clear color, but the appearance still goes, so a new window never
 // opens on the previous theme's.
 function reportBackdrop(shown: ThemePaintSide, follow: boolean) {
-  invoke('window_backdrop_set', {
+  windowBackdropSet({
     background: solidHex(shown.vars['--bg'] ?? ''),
     appearance: follow ? null : shown.appearance,
   }).catch(() => {

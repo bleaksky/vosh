@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { APP_MENU } from '../ipc/events';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { menuSetState, subscribeAppMenu } from '../ipc/windows';
 import SHORTCUTS from './appShortcuts.json';
 import { PANE_TYPES, type PaneType } from './paneLayout';
 
@@ -134,7 +133,7 @@ export function setAppMenuState(state: MenuState): void {
   const json = JSON.stringify(state);
   if (json === lastSent) return;
   lastSent = json;
-  invoke('menu_set_state', { state }).catch((e: unknown) => {
+  menuSetState(state).catch((e: unknown) => {
     // Send the next snapshot even when it matches this one.
     lastSent = null;
     console.error('[menu] menu_set_state failed', e);
@@ -148,8 +147,8 @@ export function resetAppMenuState(): void {
 
 /** Hear menu commands. Main window only. */
 export function listenAppMenu(cb: (id: string) => void): Promise<UnlistenFn> {
-  return listen<unknown>(APP_MENU, (event) => {
-    if (typeof event.payload === 'string') cb(event.payload);
+  return subscribeAppMenu((id) => {
+    if (typeof id === 'string') cb(id);
   });
 }
 
@@ -174,14 +173,6 @@ export function pageHasSelection(doc: SelectionSource = document): boolean {
   }
   const selection = doc.getSelection();
   return !!selection && !selection.isCollapsed && selection.toString().length > 0;
-}
-
-/** Edit, then Copy, with the native grid. With `terminal` a grid
- *  selection wins. Otherwise the system copies the page's own. */
-export function menuCopy(terminal: boolean): void {
-  invoke('menu_copy', { terminal }).catch((e: unknown) => {
-    console.error('[menu] menu_copy failed', e);
-  });
 }
 
 /** Open the session popover in `mode`, from the menu bar. */

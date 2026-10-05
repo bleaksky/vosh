@@ -7,8 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { SETTINGS_FIND } from '../../ipc/events';
+import { subscribeSettingsFind } from '../../ipc/windows';
 import { shortcutKey, shortcutKeys } from '../../lib/palette';
 import { scrollWithin } from '../../lib/scrollWithin';
 import {
@@ -86,7 +85,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen(SETTINGS_FIND, () => {
+    subscribeSettingsFind(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
     })

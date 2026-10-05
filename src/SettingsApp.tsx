@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   affectsDisplayFields,
@@ -7,7 +6,6 @@ import {
   sameAffectsDisplay,
   subscribeAffectsDisplayChanged,
 } from './ipc/affects';
-import { SETTINGS_GOTO_TAB } from './ipc/events';
 import { loadoutsGetState, subscribeLoadoutsChanged } from './ipc/loadouts';
 import { subscribeProfilesChanged } from './ipc/profiles';
 import { getUiConfig, type UiConfig } from './ipc/uiConfig';
@@ -18,6 +16,7 @@ import {
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
 } from './ipc/uiConfigSave';
+import { subscribeSettingsGotoTab } from './ipc/windows';
 import {
   applyThemePrefs,
   isOwnThemeEcho,
@@ -145,10 +144,10 @@ export function SettingsApp() {
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void listen<string>(SETTINGS_GOTO_TAB, (event) => {
-      if (typeof event.payload !== 'string') return;
+    void subscribeSettingsGotoTab((target) => {
+      if (typeof target !== 'string') return;
       clearPendingTarget();
-      go(resolveSettingsTarget(event.payload));
+      go(resolveSettingsTarget(target));
       void getCurrentWindow().setFocus();
     }).then((fn) => {
       if (cancelled) fn();
