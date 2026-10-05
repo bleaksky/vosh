@@ -1,5 +1,5 @@
-import { indexedRgb } from '../../terminal/bandCells';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../../theme/baseAnsi';
+import { indexedRgb } from '../../theme/color';
 import type { XtermPalette } from '../../theme/themes';
 
 // The Settings log view (the SettingsGeneralLogs board) and the
