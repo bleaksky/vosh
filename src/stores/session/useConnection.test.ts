@@ -5,14 +5,11 @@ import { CONNECTION_TARGET_CHANGED } from '../../ipc/events';
 import { pushToast } from '../toasts';
 import {
   connectTo,
-  KNOWN_WORLDS,
-  knownWorld,
   loadTarget,
   parseTarget,
   profileSwitchErrorMessage,
   saveConnectionTarget,
   subscribeConnectionTarget,
-  worldName,
 } from './useConnection';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -60,41 +57,6 @@ describe('the saved target', () => {
     expect(unlisten).toHaveBeenCalled();
     handler?.({ payload: { host: 'late.example.org', port: 23 } });
     expect(seen).toHaveLength(1);
-  });
-});
-
-describe('knownWorld', () => {
-  it('finds the world a host plays', () => {
-    expect(knownWorld('play.theforsakenlands.com')?.name).toBe('The Forsaken Lands');
-    expect(knownWorld('mud.example.org')).toBeUndefined();
-  });
-});
-
-describe('KNOWN_WORLDS', () => {
-  it('knows where to connect to The Forsaken Lands', () => {
-    expect(KNOWN_WORLDS).toContainEqual({
-      domain: 'theforsakenlands.com',
-      name: 'The Forsaken Lands',
-      host: 'play.theforsakenlands.com',
-      port: 1848,
-    });
-  });
-
-  it('names every known world by its own host', () => {
-    for (const world of KNOWN_WORLDS) expect(worldName(world.host)).toBe(world.name);
-  });
-});
-
-describe('worldName', () => {
-  it('names a known world by its host or any subdomain', () => {
-    expect(worldName('play.theforsakenlands.com')).toBe('The Forsaken Lands');
-    expect(worldName('theforsakenlands.com')).toBe('The Forsaken Lands');
-    expect(worldName(' Play.TheForsakenLands.com. ')).toBe('The Forsaken Lands');
-  });
-
-  it('shows any other host as typed', () => {
-    expect(worldName('mud.example.org')).toBe('mud.example.org');
-    expect(worldName('nottheforsakenlands.com')).toBe('nottheforsakenlands.com');
   });
 });
 

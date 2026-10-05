@@ -3,7 +3,7 @@ import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
 import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from '../stores/gmcp/chatStore';
-import { KNOWN_WORLDS } from '../stores/session/useConnection';
+import { KNOWN_WORLDS } from '../lib/knownWorlds';
 import {
   defaultEnabledIds,
   type Preset,

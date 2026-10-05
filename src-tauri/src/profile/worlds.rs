@@ -2,7 +2,7 @@
 //! as the world it belongs to, and Vosh knows the port you connect on.
 
 /// A world Vosh knows by name. Mirrors `KNOWN_WORLDS` in
-/// src/stores/session/useConnection.ts, and a test here reads that list.
+/// src/lib/knownWorlds.ts, and a test here reads that list.
 pub(crate) struct KnownWorld {
     /// A host matches this domain or any subdomain of it.
     pub domain: &'static str,
@@ -41,7 +41,7 @@ pub(crate) fn is_forsaken_lands(host: &str) -> bool {
 
 /// The name Vosh shows for a host, like `The Forsaken Lands` for
 /// `play.theforsakenlands.com`. Unknown hosts show as typed. Mirrors
-/// `worldName` in src/stores/session/useConnection.ts.
+/// `worldName` in src/lib/knownWorlds.ts.
 pub(crate) fn world_name(host: &str) -> String {
     known_world(host).map_or_else(|| host.trim().to_string(), |w| w.name.to_string())
 }
@@ -76,12 +76,12 @@ mod tests {
 
     #[test]
     fn known_worlds_match_the_list_the_page_shows() {
-        // The page keeps its own copy in src/stores/session/useConnection.ts, with
+        // The page keeps its own copy in src/lib/knownWorlds.ts, with
         // the host it dials for each world.
-        let source = include_str!("../../../src/stores/session/useConnection.ts");
+        let source = include_str!("../../../src/lib/knownWorlds.ts");
         let start = source
             .find("export const KNOWN_WORLDS")
-            .expect("useConnection.ts declares KNOWN_WORLDS");
+            .expect("knownWorlds.ts declares KNOWN_WORLDS");
         let list = &source[start..];
         let list = &list[..list.find("\n];").expect("the page list ends")];
         let field = |entry: &str, key: &str| -> String {

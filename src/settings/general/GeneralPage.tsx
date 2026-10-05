@@ -13,12 +13,8 @@ import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { savedSessionsText } from './logView';
 import { settingsSubpage } from '../../lib/settingsNav';
-import {
-  KNOWN_WORLDS,
-  knownWorld,
-  parseTarget,
-  useSavedTarget,
-} from '../../stores/session/useConnection';
+import { KNOWN_WORLDS, knownWorld } from '../../lib/knownWorlds';
+import { parseTarget, useSavedTarget } from '../../stores/session/useConnection';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import {

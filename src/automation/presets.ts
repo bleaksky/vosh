@@ -35,7 +35,7 @@ export interface Preset {
   name: string;
   description: string;
   /** The worlds Get started suggests the preset on, each by the name
-   *  KNOWN_WORLDS in useConnection.ts gives it. Empty when no world
+   *  KNOWN_WORLDS in knownWorlds.ts gives it. Empty when no world
    *  suggests it. Get started and the Presets page read this one field.
    *  The presets step lists the suggestions outside Chat, and the Chat
    *  step lists the ones in it. */
@@ -65,7 +65,7 @@ export interface PresetSampleLine {
   target?: Extract<TriggerTarget, 'room' | 'room_target'>;
 }
 
-// The Forsaken Lands, as KNOWN_WORLDS in useConnection.ts names it. Get
+// The Forsaken Lands, as KNOWN_WORLDS in knownWorlds.ts names it. Get
 // started suggests six presets there. The presets step lists five, each
 // changing only how a line looks, and their samples show what most
 // characters meet early, a room, a fight, a cure and experience. The Chat
