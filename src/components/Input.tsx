@@ -25,6 +25,11 @@ import {
   SPELLCHECK_PROMPT_CHANGED,
 } from '../ipc/events';
 import {
+  nativeSurfaceCopy,
+  nativeSurfaceScroll,
+  nativeSurfaceSelectAll,
+} from '../ipc/nativeSurface';
+import {
   getTarget,
   onGmcpPackage,
   onInputMode,
@@ -45,7 +50,6 @@ import {
 } from '../lib/maskedInput';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled } from './Terminal';
 import { isMacPlatform, shortcutKey } from '../lib/palette';
 
@@ -836,7 +840,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       const inputHasSelection = el.selectionStart != null && el.selectionStart !== el.selectionEnd;
       if (!inputHasSelection) {
         event.preventDefault();
-        void invoke('native_surface_copy').catch(() => {});
+        void nativeSurfaceCopy().catch(() => {});
         return;
       }
     }
@@ -858,7 +862,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     ) {
       event.preventDefault();
       if (nativeSurfaceEnabled()) {
-        void invoke('native_surface_select_all').catch(() => {});
+        void nativeSurfaceSelectAll().catch(() => {});
       } else {
         onSelectAllTerminal?.();
       }
@@ -872,9 +876,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       event.preventDefault();
       onScrollTerminal?.(event.key === 'PageUp' ? -1 : 1);
       if (nativeSurfaceEnabled()) {
-        void invoke('native_surface_scroll', {
-          kind: event.key === 'PageUp' ? 'pageup' : 'pagedown',
-        }).catch(() => {});
+        void nativeSurfaceScroll(event.key === 'PageUp' ? 'pageup' : 'pagedown').catch(() => {});
       }
       return;
     }
@@ -892,7 +894,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       void stopWalk().catch(() => {});
       onExitSplit?.();
       if (nativeSurfaceEnabled()) {
-        void invoke('native_surface_scroll', { kind: 'bottom' }).catch(() => {});
+        void nativeSurfaceScroll('bottom').catch(() => {});
       }
       return;
     }

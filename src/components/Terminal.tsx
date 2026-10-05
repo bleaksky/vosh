@@ -10,12 +10,17 @@ import {
 } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../lib/baseAnsi';
-import { NATIVE_GRID_SIZE } from '../ipc/events';
+import {
+  nativeSurfacePointer,
+  nativeSurfaceSetBounds,
+  nativeSurfaceSetCellMetrics,
+  nativeSurfaceSetFont,
+  nativeSurfaceSetTheme,
+  nativeSurfaceWheel,
+  onNativeGridSize,
+} from '../ipc/nativeSurface';
 import { setWindowSize } from '../ipc/session';
 import {
   loadScrollback,
@@ -98,7 +103,7 @@ function reportTheme(themeId: string, themeTerminalColors: boolean): void {
   setHighlightGround(theme.xterm.background);
   if (!nativeSurfaceEnabled()) return;
   const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors());
-  void invoke('native_surface_set_theme', {
+  void nativeSurfaceSetTheme({
     background: native.background,
     foreground: native.foreground,
     selection: native.selection,
@@ -645,7 +650,7 @@ export function Terminal({
       const key = `${Math.round(r.left)},${top},${Math.round(r.width)},${height},${dpr},${lent}`;
       if (key === lastNativeBounds) return;
       lastNativeBounds = key;
-      void invoke('native_surface_set_bounds', {
+      void nativeSurfaceSetBounds({
         x: r.left,
         y: top,
         width: r.width,
@@ -673,7 +678,7 @@ export function Terminal({
       const key = `${width},${height},${charHeight}`;
       if (key === lastCellMetrics) return;
       lastCellMetrics = key;
-      void invoke('native_surface_set_cell_metrics', {
+      void nativeSurfaceSetCellMetrics({
         width,
         height,
         charHeight: charHeight > 0 ? charHeight : null,
@@ -819,7 +824,7 @@ export function Terminal({
     const detachUnderlayInput = (() => {
       if (quietRef.current || !nativeSurfaceEnabled() || !sizer) return undefined;
       const send = (kind: string, x: number, y: number, open: boolean) => {
-        void invoke('native_surface_pointer', { kind, x, y, open }).catch(() => {});
+        void nativeSurfacePointer({ kind, x, y, open }).catch(() => {});
       };
       const toLocal = (clientX: number, clientY: number) => {
         const r = sizer.getBoundingClientRect();
@@ -905,7 +910,7 @@ export function Terminal({
         const scale = e.deltaMode === 1 ? 8.5 : e.deltaMode === 2 ? 200 : 1;
         const delta = -e.deltaY * scale;
         if (delta === 0) return;
-        void invoke('native_surface_wheel', { deltaY: delta }).catch(() => {});
+        void nativeSurfaceWheel(delta).catch(() => {});
       };
       sizer.addEventListener('pointerdown', onDown);
       sizer.addEventListener('pointermove', onMove);
@@ -936,8 +941,7 @@ export function Terminal({
     // over it. xterm does nothing for a size it already has.
     let unsubGridSize: (() => void) | undefined;
     if (!quietRef.current && nativeSurfaceEnabled()) {
-      void listen<[number, number]>(NATIVE_GRID_SIZE, (event) => {
-        const [cols, rows] = event.payload;
+      void onNativeGridSize(([cols, rows]) => {
         if (cols > 0 && rows > 0) writer.resize(cols, rows);
       }).then((un) => {
         unsubGridSize = un;
@@ -1551,7 +1555,7 @@ export function Terminal({
     if (nativeSurfaceEnabled()) {
       // The whole list, so the atlas falls back through it the way
       // xterm does.
-      void invoke('native_surface_set_font', {
+      void nativeSurfaceSetFont({
         family: fontFamily,
         size: Math.round(fontSize),
       }).catch(() => {});
