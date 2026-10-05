@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import {
   clockTime,
   entryCopy,

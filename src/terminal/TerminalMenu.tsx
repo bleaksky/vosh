@@ -9,9 +9,9 @@ import {
 } from 'react';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from '../input/Input';
-import { submenuAt } from './panel/menuPlacement';
-import { MenuItem, MenuSeparator, MenuSurface } from './panel/MenuSurface';
-import { ChevronRightIcon } from './panel/paneIcons';
+import { submenuAt } from '../components/panel/menuPlacement';
+import { MenuItem, MenuSeparator, MenuSurface } from '../components/panel/MenuSurface';
+import { ChevronRightIcon } from '../components/panel/paneIcons';
 import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
 import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';
@@ -19,7 +19,7 @@ import { openPaneSubmenu, type PaneSubmenuState } from '../lib/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';
-import { SETTINGS_MENU, type SettingsMenuRow } from '../lib/settingsMenu';
+import { SETTINGS_MENU, type SettingsMenuRow } from './settingsMenu';
 
 interface Props {
   /** Pointer position in viewport coordinates. The menu opens with its

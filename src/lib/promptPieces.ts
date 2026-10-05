@@ -5,7 +5,7 @@
 // and says, and where the marks sit on your prompt. Pure, so the
 // components stay about layout.
 
-import { cellWidth } from './sgrCells';
+import { cellWidth } from '../terminal/sgrCells';
 import { layoutPrompt, type PieceSpan, type RegionOnScreen } from './promptPointer';
 import type {
   PromptColorChoice,

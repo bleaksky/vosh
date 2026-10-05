@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
 import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
-import { SETTINGS_MENU } from '../lib/settingsMenu';
+import { SETTINGS_MENU } from '../terminal/settingsMenu';
 
 function body(id: string): string {
   const topic = HELP_TOPICS.find((t) => t.id === id);

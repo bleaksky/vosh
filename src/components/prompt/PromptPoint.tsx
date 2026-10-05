@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import {
   BOX_TEXT_X,
   cellsBefore,
@@ -19,7 +19,7 @@ import {
   type PromptCompileReport,
 } from '../../ipc/prompt';
 import { numberRuns } from '../../lib/promptScreen';
-import { parseSgrCells } from '../../lib/sgrCells';
+import { parseSgrCells } from '../../terminal/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, Field } from '../settings/ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { MatchRow } from './PromptCandidate';

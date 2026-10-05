@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { SETTINGS_GOTO_TAB } from '../ipc/events';
 import { pushEscape } from '../lib/escapeStack';
 import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
-import { SETTINGS_MENU } from '../lib/settingsMenu';
+import { SETTINGS_MENU } from './settingsMenu';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { TerminalMenu } from './TerminalMenu';
 

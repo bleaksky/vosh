@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import fixture from '../../fixtures/prompt/aabahran/pointer/cases.json';
-import { OutputShaper } from './outputShaper';
+import { OutputShaper } from '../terminal/outputShaper';
 import { dockGap } from './promptBand';
 import {
   bandPlain,
@@ -20,7 +20,7 @@ import {
 } from './promptPointer';
 import { type PromptOpenRow } from '../ipc/prompt';
 import { decodeOutputPayload, type OutputPayload } from '../ipc/terminal';
-import { RegionWriter } from './terminalRegion';
+import { RegionWriter } from '../terminal/terminalRegion';
 
 const span = (piece: number, row: number, col: number, width: number): PieceSpan => ({
   piece,

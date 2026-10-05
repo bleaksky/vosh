@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import {
   BOX_TEXT_X,
   boxHeight,

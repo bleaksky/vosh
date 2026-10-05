@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { BandEnv } from '../../lib/bandCells';
+import type { BandEnv } from '../../terminal/bandCells';
 import { menuPosition } from '../../lib/promptCard';
 import { MORE_STYLES_HEIGHT, MORE_STYLES_PLACE } from './PromptPiece';
 import type { PromptCheckRead } from '../../ipc/prompt';

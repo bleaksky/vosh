@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from '../lib/nativeScroll';
+import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './native/nativeScroll';
 import { nativeSurfaceEnabled } from './Terminal';
 
 interface Props {

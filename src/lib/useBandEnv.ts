@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { subscribeBaseAnsi } from '../theme/baseAnsi';
-import type { BandEnv } from './bandCells';
+import type { BandEnv } from '../terminal/bandCells';
 import { useFitGameColors } from '../theme/fitGameColors';
-import { ansi16Of, xtermThemeFor } from './terminalTheme';
+import { ansi16Of, xtermThemeFor } from '../terminal/terminalTheme';
 import { getCurrentThemeId } from '../theme/theme';
 import { findTheme, onCustomThemesChanged, themeTokens } from '../theme/themes';
 

@@ -3,7 +3,7 @@ import { dockRows } from '../../lib/promptBand';
 import { type PromptSpan } from '../../ipc/promptDesign';
 import { onState } from '../../ipc/session';
 import { onOutput, type SessionOutput } from '../../ipc/terminal';
-import { closePinRow } from '../../lib/terminalRegion';
+import { closePinRow } from '../../terminal/terminalRegion';
 import { createStore } from '../store';
 
 // The prompt the session pinned above the command line, as the text the

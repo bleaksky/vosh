@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import bandCases from '../../fixtures/prompt-bands/cases.json';
-import promptCss from '../styles/prompt.css?raw';
-import promptBandsSource from './promptBands.ts?raw';
+import bandCases from '../../../fixtures/prompt-bands/cases.json';
+import promptCss from '../../styles/prompt.css?raw';
+import promptBandsSource from './liftBands.ts?raw';
 import {
   BAND_RADIUS,
   BAND_X,
@@ -16,10 +16,10 @@ import {
   notchedPath,
   widenNewest,
   type LiftExtent,
-} from './promptBands';
-import { OutputShaper } from './outputShaper';
-import { RegionWriter } from './terminalRegion';
-import type { SessionOutput } from '../ipc/terminal';
+} from './liftBands';
+import { OutputShaper } from '../outputShaper';
+import { RegionWriter } from '../terminalRegion';
+import type { SessionOutput } from '../../ipc/terminal';
 
 // The lift marks against a real xterm with no page around it, through the
 // same writer the terminal uses, so region marks and lift marks share the

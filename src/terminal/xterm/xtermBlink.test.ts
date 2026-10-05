@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { BLINK_MS } from './blink';
+import { BLINK_MS } from '../../lib/blink';
 import { sgrBlink, XtermBlink } from './xtermBlink';
 
 /** A stand in for the parts of xterm the aligner reads: a screen of

@@ -1,5 +1,5 @@
 import type { IBufferCell, IDisposable, Terminal } from '@xterm/xterm';
-import { BLINK_MS, untilBlinkShows } from './blink';
+import { BLINK_MS, untilBlinkShows } from '../../lib/blink';
 
 // Blinking text in xterm. xterm 6.1 draws SGR 5 itself once
 // blinkIntervalDuration is above 0. Its WebGL renderer hides a blinking

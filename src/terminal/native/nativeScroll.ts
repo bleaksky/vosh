@@ -1,4 +1,4 @@
-import { onNativeScroll } from '../ipc/nativeSurface';
+import { onNativeScroll } from '../../ipc/nativeSurface';
 
 // Scroll depth of the native terminal grid. The native renderer
 // reports `vosh://native-scroll` as `[offset, max]` whenever the depth
