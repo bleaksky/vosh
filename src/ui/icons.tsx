@@ -239,8 +239,8 @@ export function TerminalIcon(props: IconProps) {
   );
 }
 
-/** The tick ring a third of the way round: Tick and target. */
-export function TickRingIcon(props: IconProps) {
+/** A ring a third of the way round: Tick and target. */
+export function TickIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <circle cx="8" cy="8" r="6.25" opacity="0.4" />
