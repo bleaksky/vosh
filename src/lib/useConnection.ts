@@ -8,6 +8,7 @@ import {
   onState,
   subscribeConnectionTargetChanged,
 } from '../ipc/session';
+import { useTauriEvent } from '../ipc/useTauriEvent';
 import { pushToast } from './toasts';
 
 // The session the title band shows and the session menu drives. Moved
@@ -189,31 +190,16 @@ export async function connectTo(target: ConnectionTarget): Promise<void> {
  *  the session ends. */
 export function useCharacterName(): string | null {
   const [name, setName] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const unsubs: (() => void)[] = [];
-    const keep = (p: Promise<() => void>) =>
-      void p.then((fn) => {
-        if (cancelled) fn();
-        else unsubs.push(fn);
-      });
-    const take = (data: { name?: unknown }) => {
-      if (typeof data?.name === 'string' && data.name.trim().length > 0) {
-        setName(data.name.trim());
-      }
-    };
-    keep(onGmcpPackage('Char.Status', take));
-    keep(onGmcpPackage('Char.Name', take));
-    keep(
-      onState((payload) => {
-        if (payload.kind === 'disconnected') setName(null);
-      }),
-    );
-    return () => {
-      cancelled = true;
-      for (const fn of unsubs) fn();
-    };
-  }, []);
+  const take = (data: { name?: unknown }) => {
+    if (typeof data?.name === 'string' && data.name.trim().length > 0) {
+      setName(data.name.trim());
+    }
+  };
+  useTauriEvent((cb) => onGmcpPackage('Char.Status', cb), take);
+  useTauriEvent((cb) => onGmcpPackage('Char.Name', cb), take);
+  useTauriEvent(onState, (payload) => {
+    if (payload.kind === 'disconnected') setName(null);
+  });
   return name;
 }
 

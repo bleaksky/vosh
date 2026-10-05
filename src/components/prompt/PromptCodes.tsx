@@ -22,6 +22,7 @@ import {
   type PromptLegendRow,
   type PromptLineTrigger,
 } from '../../ipc/prompt';
+import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { pushToast } from '../../lib/toasts';
 import { Button, Field } from '../settings/ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
@@ -64,47 +65,39 @@ export function CodesEntry({ initial, onRead, onPoint, onGameSent }: CodesEntryP
     source: 'typed',
     at: localStamp(new Date()),
   });
-  const gameSent = useRef(onGameSent);
-  gameSent.current = onGameSent;
 
   useEffect(() => {
+    if (initial) return;
     let alive = true;
-    if (!initial) {
-      void promptLastSeen()
-        .then((last) => {
-          if (!alive || !last?.prompt || last.source === 'gmcp') return;
-          setPrompt(last.prompt);
-          setFprompt(last.fprompt ?? '');
-          setSeen(lastSeenLine(last, new Date()));
-          origin.current = { source: last.source, at: last.at ?? localStamp(new Date()) };
-        })
-        .catch(() => {});
-    }
-    let unlisten: (() => void) | undefined;
-    void onGamePromptSeen((payload) => {
-      if (payload.kind === 'gmcp') {
-        gameSent.current();
-        return;
-      }
-      const now = new Date();
-      if (payload.kind === 'prompt') {
-        setPrompt(payload.text);
-        setSeen(`Vosh saw it when you typed prompt at ${clockTime(now)}.`);
-        origin.current = { source: 'session', at: localStamp(now) };
-      } else if (payload.kind === 'fprompt') {
-        setFprompt(payload.text);
-      }
-    }).then((fn) => {
-      if (alive) unlisten = fn;
-      else fn();
-    });
+    void promptLastSeen()
+      .then((last) => {
+        if (!alive || !last?.prompt || last.source === 'gmcp') return;
+        setPrompt(last.prompt);
+        setFprompt(last.fprompt ?? '');
+        setSeen(lastSeenLine(last, new Date()));
+        origin.current = { source: last.source, at: last.at ?? localStamp(new Date()) };
+      })
+      .catch(() => {});
     return () => {
       alive = false;
-      unlisten?.();
     };
     // The step reads where the codes came from once, as it opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useTauriEvent(onGamePromptSeen, (payload) => {
+    if (payload.kind === 'gmcp') {
+      onGameSent();
+      return;
+    }
+    const now = new Date();
+    if (payload.kind === 'prompt') {
+      setPrompt(payload.text);
+      setSeen(`Vosh saw it when you typed prompt at ${clockTime(now)}.`);
+      origin.current = { source: 'session', at: localStamp(now) };
+    } else if (payload.kind === 'fprompt') {
+      setFprompt(payload.text);
+    }
+  });
 
   // What you type is yours, though the copy keeps saying where the codes
   // came from, so the card does not change its question under you.

@@ -29,6 +29,7 @@ import {
   terminalScreenRows,
   terminalLocalWrite,
 } from '../ipc/terminal';
+import { useTauriEvent } from '../ipc/useTauriEvent';
 import { findTheme, onCustomThemesChanged } from '../lib/themes';
 import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';
@@ -1629,23 +1630,12 @@ export function Terminal({
 
   // Live-refresh the xterm palette when the user switches themes from
   // the settings window. Listens on the cross-window theme event.
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeThemeChanges((themeId) => {
-      const term = termRef.current;
-      if (!term) return;
-      term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
-      reportTheme(themeId, themeTerminalColorsRef.current);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [liftsHere]);
+  useTauriEvent(subscribeThemeChanges, (themeId) => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    reportTheme(themeId, themeTerminalColorsRef.current);
+  });
 
   return (
     <div ref={sizingRef} className="terminal-sizer">

@@ -42,6 +42,7 @@ import {
   subscribeSpellcheckPromptChanged,
   type InputCursorStyle,
 } from '../ipc/uiConfig';
+import { useTauriEvent } from '../ipc/useTauriEvent';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import {
   draftAfterMaskChange,
@@ -259,36 +260,24 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
   }, [value, passwordMode, fontKey]);
 
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    let cancelled = false;
-    onInputMode((payload) => {
-      const wasMasked = passwordModeRef.current;
-      passwordModeRef.current = payload.password;
-      setPasswordMode(payload.password);
-      if (wasMasked !== payload.password) {
-        setValue((draft) => draftAfterMaskChange(wasMasked, payload.password, draft));
-        setSearchPrefix(null);
-        setHistoryIndex(null);
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(onInputMode, (payload) => {
+    const wasMasked = passwordModeRef.current;
+    passwordModeRef.current = payload.password;
+    setPasswordMode(payload.password);
+    if (wasMasked !== payload.password) {
+      setValue((draft) => draftAfterMaskChange(wasMasked, payload.password, draft));
+      setSearchPrefix(null);
+      setHistoryIndex(null);
+    }
+  });
 
   // Room characters from Room.Chars GMCP. Used as a noun source for
   // Tab completion so the user can complete combat target names
   // without typing the whole word.
   const roomCharsRef = useRef<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    onGmcpPackage<unknown>('Room.Chars', (data) => {
+  useTauriEvent<unknown>(
+    (cb) => onGmcpPackage('Room.Chars', cb),
+    (data) => {
       if (!Array.isArray(data)) {
         roomCharsRef.current = [];
         return;
@@ -303,15 +292,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         }
       }
       roomCharsRef.current = names;
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+    },
+  );
 
   // Tab-completion cycling state. When the user presses Tab we
   // resolve the word being typed, build a candidate list, and
@@ -332,23 +314,18 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const quickKeysRef = useRef<QuickKey[]>([]);
   useEffect(() => {
     let cancelled = false;
-    let unsub: (() => void) | undefined;
     getTarget()
       .then((snap) => {
         if (!cancelled) quickKeysRef.current = snap.quick_keys;
       })
       .catch(() => {});
-    onTarget((payload) => {
-      quickKeysRef.current = payload.quick_keys;
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
     return () => {
       cancelled = true;
-      unsub?.();
     };
   }, []);
+  useTauriEvent(onTarget, (payload) => {
+    quickKeysRef.current = payload.quick_keys;
+  });
 
   // Keep-last-command preference. When true, after submitting a
   // line the input retains the value and selects the text so
@@ -370,13 +347,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const echoCaretRef = useRef<boolean>(true);
   useEffect(() => {
     let cancelled = false;
-    let unlistenKeep: (() => void) | undefined;
-    let unlistenPaste: (() => void) | undefined;
-    let unlistenSpell: (() => void) | undefined;
-    let unlistenCursor: (() => void) | undefined;
-    let unlistenEcho: (() => void) | undefined;
-    let unlistenEchoMacros: (() => void) | undefined;
-    let unlistenEchoCaret: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (cancelled) return;
@@ -389,62 +359,34 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         setCursorStyle(cfg.input_cursor_style);
       })
       .catch(() => {});
-    subscribeKeepLastChanged((on) => {
-      keepLastRef.current = Boolean(on);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenKeep = fn;
-    });
-    subscribePasteLineDelayChanged((ms) => {
-      const n = Number(ms);
-      if (Number.isFinite(n) && n >= 0) {
-        pasteDelayRef.current = Math.min(10_000, Math.floor(n));
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenPaste = fn;
-    });
-    subscribeSpellcheckPromptChanged((on) => {
-      setSpellcheckPrompt(Boolean(on));
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenSpell = fn;
-    });
-    subscribeInputCursorStyleChanged((style) => {
-      setCursorStyle(normalizeInputCursorStyle(style));
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenCursor = fn;
-    });
-    subscribeInputEchoColorChanged((next) => {
-      echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenEcho = fn;
-    });
-    subscribeEchoMacrosChanged((on) => {
-      echoMacrosRef.current = Boolean(on);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenEchoMacros = fn;
-    });
-    subscribeInputEchoCaretChanged((on) => {
-      echoCaretRef.current = Boolean(on);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlistenEchoCaret = fn;
-    });
     return () => {
       cancelled = true;
-      unlistenKeep?.();
-      unlistenPaste?.();
-      unlistenSpell?.();
-      unlistenCursor?.();
-      unlistenEcho?.();
-      unlistenEchoMacros?.();
-      unlistenEchoCaret?.();
     };
   }, []);
+  useTauriEvent(subscribeKeepLastChanged, (on) => {
+    keepLastRef.current = Boolean(on);
+  });
+  useTauriEvent(subscribePasteLineDelayChanged, (ms) => {
+    const n = Number(ms);
+    if (Number.isFinite(n) && n >= 0) {
+      pasteDelayRef.current = Math.min(10_000, Math.floor(n));
+    }
+  });
+  useTauriEvent(subscribeSpellcheckPromptChanged, (on) => {
+    setSpellcheckPrompt(Boolean(on));
+  });
+  useTauriEvent(subscribeInputCursorStyleChanged, (style) => {
+    setCursorStyle(normalizeInputCursorStyle(style));
+  });
+  useTauriEvent(subscribeInputEchoColorChanged, (next) => {
+    echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
+  });
+  useTauriEvent(subscribeEchoMacrosChanged, (on) => {
+    echoMacrosRef.current = Boolean(on);
+  });
+  useTauriEvent(subscribeInputEchoCaretChanged, (on) => {
+    echoCaretRef.current = Boolean(on);
+  });
 
   // Keyboard macro bindings — keyed by canonical key string
   // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and

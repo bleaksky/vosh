@@ -71,8 +71,10 @@ import {
   normalizeTerminalLineHeight,
   TERMINAL_LINE_HEIGHTS,
   type TerminalLineHeight,
+  type UiConfig,
 } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
+import { useTauriEvent } from './ipc/useTauriEvent';
 import { menuCopy, openHelpWindow, openSettingsWindow, subscribeHelpOpen } from './ipc/windows';
 import { subscribeMigrationApplied } from './ipc/wizard';
 import {
@@ -448,25 +450,12 @@ function App() {
 
   // Customize… in Settings, and anything else in another window, opens
   // the card here and brings this window forward.
-  useEffect(() => {
-    let alive = true;
-    let unlisten: (() => void) | undefined;
-    void subscribePromptCardOpen((request) => {
-      openPromptCard(request.view ?? 'design');
-      void getCurrentWindow()
-        .setFocus()
-        .catch(() => {});
-    })
-      .then((fn) => {
-        if (alive) unlisten = fn;
-        else fn();
-      })
+  useTauriEvent(subscribePromptCardOpen, (request) => {
+    openPromptCard(request.view ?? 'design');
+    void getCurrentWindow()
+      .setFocus()
       .catch(() => {});
-    return () => {
-      alive = false;
-      unlisten?.();
-    };
-  }, [openPromptCard]);
+  });
 
   // On quit the backend asks each window for the writes it holds back,
   // like a pane layout waiting out a splitter drag, before it writes
@@ -884,31 +873,16 @@ function App() {
   // `#help <words>` from the command line (src-tauri input::help_query).
   // A topic id or number opens that topic. Other words open Help on its
   // search when a topic matches, and the terminal says so when none does.
-  const writeLiveRef = useRef(writeLive);
-  writeLiveRef.current = writeLive;
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeHelpOpen((payload) => {
-      const words = typeof payload === 'string' ? payload.trim() : '';
-      if (!helpOpensOn(words)) {
-        if (words.length > 0) {
-          writeLiveRef.current(`\x1b[38;5;244m${helpNoMatchNotice(words)}\x1b[0m\r\n`);
-        }
-        return;
+  useTauriEvent(subscribeHelpOpen, (payload) => {
+    const words = typeof payload === 'string' ? payload.trim() : '';
+    if (!helpOpensOn(words)) {
+      if (words.length > 0) {
+        writeLive(`\x1b[38;5;244m${helpNoMatchNotice(words)}\x1b[0m\r\n`);
       }
-      openHelpTopic(words);
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+      return;
+    }
+    openHelpTopic(words);
+  });
 
   // Menu bar commands (macOS only). Each arrives with its palette id.
   useEffect(() => {
@@ -1062,39 +1036,31 @@ function App() {
   // per-field listener settle too. The panes, the tracked affects, the
   // tick settings, and the chip style also come from the backend on
   // their own events.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void followReplacedUiConfig(
-      (cfg) => {
-        if (cancelled) return;
-        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-        setBaseAnsi(cfg.terminal_base_ansi);
-        applyThemePrefs(cfg, { broadcast: true });
-        setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
-        setFontSize(cfg.font_size || 14);
-        setPanelFont(cfg.panel_font);
-        setPanelSize(cfg.panel_font_size);
-        setTerminalLineHeight(cfg.terminal_line_height);
-        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
-        applyBrightBold(cfg.bright_bold);
-        setBlinkChoice(cfg.blink_text);
-        setFitGameColors(cfg.fit_game_colors);
-        fitThemesInPlay(cfg);
-        setReadableHighlights(cfg.readable_highlights);
-        applySplitDividerColor(cfg.split_divider_color);
-      },
-      (e) => console.error('[app] reading the replaced config failed', e),
-      { broadcast: true },
-    ).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+  useTauriEvent(
+    (cb) =>
+      followReplacedUiConfig(
+        cb,
+        (e) => console.error('[app] reading the replaced config failed', e),
+        { broadcast: true },
+      ),
+    (cfg: UiConfig) => {
+      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+      setBaseAnsi(cfg.terminal_base_ansi);
+      applyThemePrefs(cfg, { broadcast: true });
+      setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
+      setFontSize(cfg.font_size || 14);
+      setPanelFont(cfg.panel_font);
+      setPanelSize(cfg.panel_font_size);
+      setTerminalLineHeight(cfg.terminal_line_height);
+      setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
+      applyBrightBold(cfg.bright_bold);
+      setBlinkChoice(cfg.blink_text);
+      setFitGameColors(cfg.fit_game_colors);
+      fitThemesInPlay(cfg);
+      setReadableHighlights(cfg.readable_highlights);
+      applySplitDividerColor(cfg.split_divider_color);
+    },
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -1145,25 +1111,14 @@ function App() {
     }
   }, [panelSize]);
 
-  useEffect(() => {
-    // Cross-window emit from the settings save path. window CustomEvents
-    // do not cross webviews, so we listen via the Tauri event bus here.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeFontChanged((detail) => {
-      setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
-      setFontSize(detail.size || 14);
-      setPanelFont(normalizePanelFont(detail.panel));
-      setPanelSize(normalizePanelSize(detail.panelSize));
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Cross-window emit from the settings save path. window CustomEvents
+  // do not cross webviews, so we listen via the Tauri event bus here.
+  useTauriEvent(subscribeFontChanged, (detail) => {
+    setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
+    setFontSize(detail.size || 14);
+    setPanelFont(normalizePanelFont(detail.panel));
+    setPanelSize(normalizePanelSize(detail.panelSize));
+  });
 
   useEffect(() => {
     try {
@@ -1173,99 +1128,33 @@ function App() {
     }
   }, [terminalLineHeight]);
 
-  useEffect(() => {
-    // Settings save broadcasts the terminal line height.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeTerminalLineHeightChanged((value) => {
-      setTerminalLineHeight(value);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts the terminal line height.
+  useTauriEvent(subscribeTerminalLineHeightChanged, (value) => {
+    setTerminalLineHeight(value);
+  });
 
-  useEffect(() => {
-    // Settings save broadcasts the bright-bold toggle. Apply it to the
-    // native surface without a relaunch.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeBrightBoldChanged((value) => {
-      applyBrightBold(value);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts the bright-bold toggle. Apply it to the
+  // native surface without a relaunch.
+  useTauriEvent(subscribeBrightBoldChanged, (value) => {
+    applyBrightBold(value);
+  });
 
-  useEffect(() => {
-    // Settings save broadcasts the Blinking text choice.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeBlinkTextChanged((value) => setBlinkChoice(value)).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts the Blinking text choice.
+  useTauriEvent(subscribeBlinkTextChanged, (value) => setBlinkChoice(value));
 
-  useEffect(() => {
-    // Settings save broadcasts Fit game colors. The terminal, the prompt
-    // band and the panes draw from it at once.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeFitGameColorsChanged(setFitGameColors).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts Fit game colors. The terminal, the prompt
+  // band and the panes draw from it at once.
+  useTauriEvent(subscribeFitGameColorsChanged, setFitGameColors);
 
-  useEffect(() => {
-    // Settings save broadcasts Keep highlight colors readable. The
-    // session takes it for the next line.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeReadableHighlightsChanged(setReadableHighlights).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts Keep highlight colors readable. The
+  // session takes it for the next line.
+  useTauriEvent(subscribeReadableHighlightsChanged, setReadableHighlights);
 
-  useEffect(() => {
-    // Settings save broadcasts the new divider color. Apply it on the
-    // main window without a relaunch.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeSplitDividerChanged((color) => {
-      applySplitDividerColor(color);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings save broadcasts the new divider color. Apply it on the
+  // main window without a relaunch.
+  useTauriEvent(subscribeSplitDividerChanged, (color) => {
+    applySplitDividerColor(color);
+  });
 
   // The native grid draws a band under each lifted prompt while your
   // prompt shows lifted, and under your design while the prompt card
@@ -1342,78 +1231,34 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    // Live-flip the terminal palette mode when the user toggles the
-    // setting. The Terminal component re-applies the palette on the
-    // prop change without recreating xterm.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeThemeTerminalColorsChanged((on) => {
-      setThemeTerminalColors(Boolean(on));
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Live-flip the terminal palette mode when the user toggles the
+  // setting. The Terminal component re-applies the palette on the
+  // prop change without recreating xterm.
+  useTauriEvent(subscribeThemeTerminalColorsChanged, (on) => {
+    setThemeTerminalColors(Boolean(on));
+  });
 
-  useEffect(() => {
-    // Settings saved, or the palette picked, new theme fields. Keep this
-    // window's copy current so the OS listener and the next palette pick
-    // start from them. The sender already broadcast the resolved theme.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeThemePrefs((prefs) => {
-      applyThemePrefs(prefs);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Settings saved, or the palette picked, new theme fields. Keep this
+  // window's copy current so the OS listener and the next palette pick
+  // start from them. The sender already broadcast the resolved theme.
+  useTauriEvent(subscribeThemePrefs, (prefs) => {
+    applyThemePrefs(prefs);
+  });
 
-  useEffect(() => {
-    // Custom-themes catalog updates from any other webview. Refreshes
-    // the in-memory THEMES registry so a subsequent theme-changed event
-    // can find a newly-saved custom theme.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeCustomThemesChanged((list) => {
-      setCustomThemes(list.map(customToAppTheme));
-      // The menu bar lists custom themes too.
-      setThemeTick((n) => n + 1);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Custom-themes catalog updates from any other webview. Refreshes
+  // the in-memory THEMES registry so a subsequent theme-changed event
+  // can find a newly-saved custom theme.
+  useTauriEvent(subscribeCustomThemesChanged, (list) => {
+    setCustomThemes(list.map(customToAppTheme));
+    // The menu bar lists custom themes too.
+    setThemeTick((n) => n + 1);
+  });
 
-  useEffect(() => {
-    // Base ANSI palette edits from the settings window: update the
-    // live override; the Terminal re-derives via its own subscription.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeBaseAnsiChanged((colors) => {
-      setBaseAnsi(colors);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // Base ANSI palette edits from the settings window: update the
+  // live override; the Terminal re-derives via its own subscription.
+  useTauriEvent(subscribeBaseAnsiChanged, (colors) => {
+    setBaseAnsi(colors);
+  });
 
   useEffect(() => {
     // The game sent a new prompt setting and your capture follows it.
@@ -1429,66 +1274,44 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    // The shared catalog wizard wrote its files. Nothing this session
-    // changes saves until Vosh opens again, so say so in the terminal and
-    // in a toast that stays up.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeMigrationApplied(() => {
-      showMigrationApplied(writeLive);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // The shared catalog wizard wrote its files. Nothing this session
+  // changes saves until Vosh opens again, so say so in the terminal and
+  // in a toast that stays up.
+  useTauriEvent(subscribeMigrationApplied, () => {
+    showMigrationApplied(writeLive);
+  });
 
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    let cancelled = false;
-    onState((payload: StatePayload) => {
-      if (payload.kind === 'disconnected') {
-        setStatus({ kind: 'idle' });
-        // A reason means the link dropped out from under us; a clean
-        // user-initiated disconnect carries none and stays quiet.
-        if (payload.reason) {
-          if (termRef.current) {
-            writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
-          }
-          pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
+  useTauriEvent(onState, (payload: StatePayload) => {
+    if (payload.kind === 'disconnected') {
+      setStatus({ kind: 'idle' });
+      // A reason means the link dropped out from under us; a clean
+      // user-initiated disconnect carries none and stays quiet.
+      if (payload.reason) {
+        if (termRef.current) {
+          writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
         }
-      } else {
-        setStatus(payload);
-        // Push the current terminal size on every (re)connect so the
-        // negotiator advertises the live cols × rows via NAWS as soon
-        // as the server asks. MUDs that honor NAWS wrap at this width
-        // server-side, which is the right answer to word wrap.
-        if (payload.kind === 'connected') {
-          pushToast({
-            kind: 'success',
-            message: 'Connected',
-            meta: `${payload.host}:${payload.port}`,
-          });
-          const handle = termRef.current;
-          if (handle) {
-            const { cols, rows } = handle.windowSize();
-            void setWindowSize(cols, rows).catch(() => {});
-          }
+        pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
+      }
+    } else {
+      setStatus(payload);
+      // Push the current terminal size on every (re)connect so the
+      // negotiator advertises the live cols × rows via NAWS as soon
+      // as the server asks. MUDs that honor NAWS wrap at this width
+      // server-side, which is the right answer to word wrap.
+      if (payload.kind === 'connected') {
+        pushToast({
+          kind: 'success',
+          message: 'Connected',
+          meta: `${payload.host}:${payload.port}`,
+        });
+        const handle = termRef.current;
+        if (handle) {
+          const { cols, rows } = handle.windowSize();
+          void setWindowSize(cols, rows).catch(() => {});
         }
       }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, []);
+    }
+  });
 
   // Run a find call from the toolbar. The live pane is the
   // authoritative iterator: each call advances its SearchAddon
