@@ -254,7 +254,7 @@ export class LiftTracker implements IDisposable {
 }
 
 /** The attribute on the terminal area that clears xterm's ground so the
- *  bands show under the text. An attribute and not a class, since App.tsx
+ *  bands show under the text. An attribute and not a class, since MainWindow.tsx
  *  writes the area's className whole whenever the scrollback split opens
  *  or closes, and React never writes this attribute. */
 export const LIFTED_ATTR = 'data-prompt-lifted';

@@ -261,7 +261,7 @@
 }
 
 /* The title dims to the tertiary tone while the window is in the
-   background. App.tsx writes the attribute from the window's focus. */
+   background. MainWindow.tsx writes the attribute from the window's focus. */
 :root[data-window-focus='unfocused'] .shell-title-button {
   color: var(--tertiary);
 }

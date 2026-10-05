@@ -13,8 +13,8 @@ vi.mock('react-dom/client', () => {
   return { default: { createRoot }, createRoot };
 });
 vi.mock('./shell/MainWindow', () => ({ default: () => null }));
-vi.mock('./settings/SettingsWindow', () => ({ SettingsApp: () => null }));
-vi.mock('./help/HelpWindow', () => ({ HelpApp: () => null }));
+vi.mock('./settings/SettingsWindow', () => ({ SettingsWindow: () => null }));
+vi.mock('./help/HelpWindow', () => ({ HelpWindow: () => null }));
 
 const paint: ThemePaint = {
   v: 1,

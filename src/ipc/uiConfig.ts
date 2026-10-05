@@ -338,7 +338,7 @@ export function normalizeGameTime(raw: unknown): GameTime {
   return GAME_TIMES.find((clock) => clock === raw) ?? '24h';
 }
 
-// Dedupe the mount-time burst: App, Input, and the tracked affects
+// Dedupe the mount-time burst: MainWindow, Input, and the tracked affects
 // store all call getUiConfig on first render. Sharing one
 // in-flight promise turns that into a single IPC round-trip. The cache
 // clears once resolved, so a later call (after a config change) still

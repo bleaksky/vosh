@@ -57,7 +57,7 @@ function opensAdvanced(target: SettingsTarget): boolean {
   );
 }
 
-export function InputGroup({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
+export function InputPage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
   const [advanced, setAdvanced] = useState(() => opensAdvanced(target));
   const advancedId = useId();

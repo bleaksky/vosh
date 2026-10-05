@@ -43,9 +43,9 @@ import { useSettingsClose } from './useSettingsClose';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronRightIcon } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
-import { GeneralGroup } from './general/GeneralPage';
-import { LayoutGroup } from './layout/LayoutPage';
-import { InputGroup } from './input/InputPage';
+import { GeneralPage } from './general/GeneralPage';
+import { LayoutPage } from './layout/LayoutPage';
+import { InputPage } from './input/InputPage';
 import { AutomationPage } from './automation/AutomationPage';
 import { CharactersPage } from './characters/CharactersPage';
 import { AppearancePage } from './appearance/AppearancePage';
@@ -71,10 +71,10 @@ interface GroupPage {
 
 const PAGES: Record<SettingsGroup, GroupPage> = {
   // The session logs page pins its toolbar over the results.
-  general: { Page: GeneralGroup, selfScroll: (target) => settingsSubpage(target) !== null },
+  general: { Page: GeneralPage, selfScroll: (target) => settingsSubpage(target) !== null },
   appearance: { Page: AppearancePage },
-  layout: { Page: LayoutGroup },
-  input: { Page: InputGroup },
+  layout: { Page: LayoutPage },
+  input: { Page: InputPage },
   automation: { Page: AutomationPage, selfScroll: true },
   characters: { Page: CharactersPage },
 };
@@ -98,7 +98,7 @@ function clearPendingTarget() {
   }
 }
 
-export function SettingsApp() {
+export function SettingsWindow() {
   const mac = isMacPlatform();
   const [nav, setNav] = useState<{ target: SettingsTarget; seq: number }>(() => ({
     target: takePendingTarget() ?? { group: 'general' },

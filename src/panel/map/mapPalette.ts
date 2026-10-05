@@ -172,7 +172,7 @@ export function mapThemeSignature(): string {
 // Aabahran's sector codes: 0..9, then a, b and c for desert, lava and
 // snow in older data. Map.Tiles sends the sector as a JSON number
 // (gmcp.c, "s":%d), so those three arrive as 10, 11 and 12, which
-// sectorCodeOf in ServerMapView.tsx turns into "10", "11" and "12".
+// sectorCodeOf in mapTiles.ts turns into "10", "11" and "12".
 // Both spellings map to our sector index.
 const SERVER_CODE_TO_SECTOR: Record<string, number> = {
   '0': 0, // Inside

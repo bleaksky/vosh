@@ -12,7 +12,7 @@ import { roomNameColor, terrainLabel, type RoomNameGround } from './roomName';
 import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../stores/gmcp/roomStore';
 import { themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
-import { ServerMapView } from './MapView';
+import { MapView } from './MapView';
 import { mapBandLayout, mapBandPeople, mapBandRows } from './mapBand';
 import { PaneHeader, PaneMeta } from '../PaneHeader';
 import { exitsLabel } from '../paneText';
@@ -41,7 +41,7 @@ export function MapPane() {
     <>
       <PaneHeader meta={info?.area ? <PaneMeta>{info.area}</PaneMeta> : null} />
       <div ref={boxRef} className="pane-map-box">
-        <ServerMapView emptyText="The map appears when your MUD sends Map.Tiles." />
+        <MapView emptyText="The map appears when your MUD sends Map.Tiles." />
       </div>
       <ul
         ref={rowsRef}

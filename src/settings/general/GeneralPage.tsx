@@ -41,9 +41,9 @@ import { SessionLogs } from './SessionLogs';
 // disclosure at the end with the GPU rendering switch, which drives
 // the xterm renderer macOS does not show.
 
-export function GeneralGroup(props: SettingsPageProps) {
+export function GeneralPage(props: SettingsPageProps) {
   if (settingsSubpage(props.target) !== null) return <SessionLogs {...props} />;
-  return <GeneralPage {...props} />;
+  return <GeneralSections {...props} />;
 }
 
 /** What to call this computer in a sentence: Mac, PC, or computer. */
@@ -55,7 +55,14 @@ function computerName(): string {
   return 'computer';
 }
 
-function GeneralPage({ target, navSeq, config, setConfig, onError, navigate }: SettingsPageProps) {
+function GeneralSections({
+  target,
+  navSeq,
+  config,
+  setConfig,
+  onError,
+  navigate,
+}: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
   const mac = isMacPlatform();
   return (

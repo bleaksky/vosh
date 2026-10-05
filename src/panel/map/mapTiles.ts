@@ -2,7 +2,7 @@ import { SECTORS, UNKNOWN_GLYPH, sectorForCode, sectorGlyphColor } from './mapPa
 
 // Reading a Map.Tiles packet. Aabahran builds the grid in generate_map
 // (minimap.c) and writes it in gmcp_send_map (gmcp.c). The painters in
-// ServerMapView draw what these functions read, so the rooms, the
+// MapView draw what these functions read, so the rooms, the
 // corridors and the glyph grid can be checked against real packets
 // without a canvas.
 

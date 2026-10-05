@@ -81,7 +81,7 @@ function useActiveProfile(): string | null {
   return active;
 }
 
-export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPageProps) {
+export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
   const mac = isMacPlatform();
   const profile = useActiveProfile();

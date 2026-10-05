@@ -91,7 +91,7 @@ export function updateLeafProps(id: string, patch: Record<string, string>): void
 }
 
 /** Hand the caret back to the command line, the way the title band's
- *  menus do when they close. App listens for this event. */
+ *  menus do when they close. MainWindow listens for this event. */
 export function returnToCommandLine(): void {
   window.dispatchEvent(new CustomEvent('vosh:focus-input'));
 }

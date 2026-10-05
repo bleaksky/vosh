@@ -47,7 +47,7 @@ import type { Cell } from '../terminal/sgrCells';
 // shrinks, and the page lays out nothing new. While the dock shows, the
 // grid also keeps to the bottom of its pane (Terminal's anchorBottom), so
 // the pixels a window leaves over under whole rows sit above the text and
-// the newest line sits the same gap over the band in any window. App
+// the newest line sits the same gap over the band in any window. MainWindow
 // reads the same count from the same store, so the band and the terminal
 // change in one commit, before the page paints. The game is told the rows
 // the pane holds with a one row band, so a fight sends it no new size
