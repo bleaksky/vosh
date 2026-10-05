@@ -92,6 +92,11 @@ export function linearToOklab([r, g, b]: [number, number, number]): Oklab {
   };
 }
 
+/** sRGB from linear channels, each 0..1. */
+export function linearToRgb([r, g, b]: [number, number, number]): Rgb {
+  return { r: fromLinear(r), g: fromLinear(g), b: fromLinear(b) };
+}
+
 // Linear sRGB, 0..1 inside the gamut, with nothing clamped.
 function oklabToLinear(c: Oklab): [number, number, number] {
   const l = (c.L + 0.3963377774 * c.a + 0.2158037573 * c.b) ** 3;

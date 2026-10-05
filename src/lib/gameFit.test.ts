@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { apca, checks, fit, GAME_FIXED_COLORS, needsFit, xterm256 } from './gameFit';
+import {
+  apca,
+  checks,
+  COLOR_VISIONS,
+  fit,
+  GAME_FIXED_COLORS,
+  holdsVision,
+  needsFit,
+  seenBy,
+  toColorVision,
+  xterm256,
+  type ColorVision,
+} from './gameFit';
 import { BUILTIN_THEMES, findTheme, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
@@ -138,6 +150,114 @@ describe('fit', () => {
       'T6 green pair dE 7.6',
       'T7 deutan yellow/green 9.5',
     ]);
+  });
+});
+
+describe('color vision', () => {
+  const need = (vision: ColorVision, id: string) =>
+    checks(TRIAD, vision).find((c) => c.id === id)?.need;
+  const short = (p: XtermPalette, vision: ColorVision) =>
+    checks(p, vision)
+      .filter((c) => !c.ok)
+      .map((c) => `${c.id} ${c.value}`);
+
+  it('asks Typical the 46 checks as they stood', () => {
+    for (const theme of BUILTIN_THEMES) {
+      expect(checks(theme.xterm, 'typical'), theme.id).toEqual(checks(theme.xterm));
+    }
+    expect(
+      checks(TRIAD)
+        .filter((c) => /^T7 (protan|deutan|tritan) /.test(c.id))
+        .map((c) => c.need),
+    ).toEqual([
+      '>=12',
+      '>=12',
+      '>=10',
+      '>=10',
+      '>=10',
+      '>=12',
+      '>=12',
+      '>=10',
+      '>=10',
+      '>=10',
+      '>=8',
+    ]);
+  });
+
+  it('raises a quarter the floors of the pairs each vision sees through, and no others', () => {
+    for (const vision of COLOR_VISIONS) expect(checks(TRIAD, vision)).toHaveLength(46);
+    expect(need('deuteranopia', 'T7 deutan red/yellow')).toBe('>=15');
+    expect(need('deuteranopia', 'T7 deutan red/brightYellow')).toBe('>=15');
+    expect(need('deuteranopia', 'T7 deutan red/green')).toBe('>=12.5');
+    expect(need('deuteranopia', 'T7 deutan yellow/green')).toBe('>=12.5');
+    expect(need('deuteranopia', 'T7 protan red/green')).toBe('>=10');
+    expect(need('deuteranopia', 'T7 tritan cyan/green')).toBe('>=8');
+    expect(need('protanopia', 'T7 protan brightRed/brightGreen')).toBe('>=12.5');
+    expect(need('protanopia', 'T7 deutan red/yellow')).toBe('>=12');
+    expect(need('tritanopia', 'T7 tritan cyan/green')).toBe('>=10');
+    expect(need('tritanopia', 'T7 deutan red/green')).toBe('>=10');
+    // The lightness and body text floors stay as Typical asks them.
+    expect(need('deuteranopia', 'T7 red/yellow dL')).toBe('>=10');
+    expect(need('deuteranopia', 'T3 red Lc')).toBe('>=45');
+  });
+
+  it('reads a saved vision and takes anything else as Typical', () => {
+    expect(COLOR_VISIONS.map(toColorVision)).toEqual(COLOR_VISIONS);
+    expect(toColorVision('deutan')).toBe('typical');
+    expect(toColorVision(undefined)).toBe('typical');
+  });
+
+  it('says whether a palette holds the floors a vision raises', () => {
+    // Triad keeps red dE 14.7 from yellow and 10.5 from green for a
+    // deuteranope, past the floors Typical asks and short of the ones
+    // Deuteranopia asks.
+    expect(short(TRIAD, 'typical')).toEqual([]);
+    expect(short(TRIAD, 'deuteranopia')).toEqual([
+      'T7 deutan red/yellow 14.7',
+      'T7 deutan red/green 10.5',
+    ]);
+    expect(holdsVision(TRIAD, 'typical')).toBe(true);
+    expect(holdsVision(TRIAD, 'deuteranopia')).toBe(false);
+    expect(holdsVision(TRIAD, 'tritanopia')).toBe(true);
+  });
+
+  it('keeps the Typical fit where it already holds the vision', () => {
+    // Triad as published holds the tritanopia floor, so it stays as it is.
+    expect(fit(TRIAD, 'tritanopia', {})).toEqual({});
+    expect(needsFit(TRIAD, 'tritanopia')).toBe(false);
+    expect(needsFit(TRIAD, 'deuteranopia')).toBe(true);
+  });
+
+  // The fit themes.ts ships for Triad under Deuteranopia. It moves green
+  // and yellow lighter at their own hues, keeps every floor Typical asks,
+  // and lifts red and green to dE 12.1 for a deuteranope, short of 12.5.
+  it('fits Triad for a deuteranope by lightness alone', { timeout: 30_000 }, () => {
+    const fitted = fit(TRIAD, 'deuteranopia', {});
+    expect(fitted).toEqual({
+      foreground: '#dcdcdb',
+      green: '#53d1b3',
+      yellow: '#f9d57c',
+      brightYellow: '#fff4ca',
+      brightBlue: '#98c6ff',
+      brightMagenta: '#e0b2e6',
+    });
+    const play = { ...TRIAD, ...fitted };
+    expect(short(play, 'typical')).toEqual([]);
+    expect(short(play, 'deuteranopia')).toEqual(['T7 deutan red/green 12.1']);
+  });
+
+  it('shows a color as the vision sees it, through the matrices the checks use', () => {
+    expect(seenBy('#fe6457', 'typical')).toBe('#fe6457');
+    expect(seenBy('rgba(255, 255, 255, 0.1)', 'deuteranopia')).toBe('rgba(255, 255, 255, 0.1)');
+    for (const vision of COLOR_VISIONS) {
+      expect(seenBy('#000000', vision), vision).toBe('#000000');
+      expect(seenBy('#ffffff', vision), vision).toBe('#ffffff');
+    }
+    // Triad's scarlet turns olive for a deuteranope and a protanope, as
+    // board 9 of the Themes review draws it.
+    expect(seenBy('#fe6457', 'deuteranopia')).toBe('#b3a353');
+    expect(seenBy('#fe6457', 'protanopia')).toBe('#8d8255');
+    expect(seenBy('#fe6457', 'tritanopia')).toBe('#ff4262');
   });
 });
 
