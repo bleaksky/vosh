@@ -1,5 +1,5 @@
 import { fitOffThread } from './fitOffThread';
-import { fitKey, needsFit, type ColorVision } from './gameFit';
+import { fitKey, needsFit, needsVisionFit, type ColorVision } from './gameFit';
 import type { UiConfig } from './session';
 import { customThemes, holdFit, holdVisionFit, onMissingVisionFit, type AppTheme } from './themes';
 
@@ -47,10 +47,12 @@ export function fitForVision(theme: AppTheme, vision: ColorVision): void {
   const key = `${vision} ${fitKey(palette)}`;
   if (vision === 'typical' || askedVision.has(key)) return;
   askedVision.add(key);
-  // A palette that holds every floor the vision raises as published
-  // plays as published. Play may be drawing, so the list changes later.
-  if (!needsFit(palette, vision)) {
-    queueMicrotask(() => holdVisionFit(palette, vision, {}));
+  // A Typical fit that already keeps every pair the vision keeps apart
+  // plays for the vision as it is. Play may be drawing, so the list
+  // changes later.
+  if (!needsVisionFit(palette, vision, theme.fitted)) {
+    const typical = theme.fitted ?? {};
+    queueMicrotask(() => holdVisionFit(palette, vision, typical));
     return;
   }
   void fitOffThread(palette, vision, theme.fitted).then((fitted) => {
