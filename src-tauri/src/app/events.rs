@@ -242,7 +242,7 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 // Windows and the menu.
 
 /// Sent to the main window on `#help <words>`. The payload is the
-/// words. `App` hears it and opens Help on the best match.
+/// words. `MainWindow` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
@@ -256,7 +256,7 @@ pub(crate) const APP_MENU: &str = "vosh://app-menu";
 #[cfg(target_os = "macos")]
 pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
 /// Find, chosen while Help is in front, focuses the help search. The
-/// payload is null. `HelpApp` hears it.
+/// payload is null. `HelpWindow` hears it.
 #[cfg(target_os = "macos")]
 pub(crate) const HELP_FIND: &str = "vosh://help-find";
 
@@ -276,11 +276,11 @@ pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
 pub(crate) const NATIVE_COPIED: &str = "vosh://native-copied";
 /// A click the page forwarded to the native surface ended. The page
 /// cancels the press, so no DOM mouseup follows, and the command line
-/// takes focus from this instead. The payload is null. `App` hears it.
+/// takes focus from this instead. The payload is null. `MainWindow` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
 /// The pointer over the native surface wants another cursor. The
-/// payload is the CSS cursor name. `App` hears it.
+/// payload is the CSS cursor name. `MainWindow` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 
