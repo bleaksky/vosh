@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. Stage C runs R15 to R20, as you approved on October 4. R15 is done and R16 comes next. You check the app after R20, and the page half of R14b follows it. The last commit of each phase updates this line.
+Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. Stage C runs R15 to R20, as you approved on October 4. R15 and R16 are done and R17 comes next. You check the app after R20, and the page half of R14b follows it. The last commit of each phase updates this line.
