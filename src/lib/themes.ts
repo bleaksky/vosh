@@ -1648,6 +1648,11 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
   },
 });
 
+/** The theme a config without a theme key reads, as Rust reads it
+ *  (default_theme in profile/ui.rs), and the theme Vosh falls back to.
+ *  It is not the theme a new install starts on. A new install starts on
+ *  Triad, which NEW_INSTALL_THEME in profile/set.rs writes to the first
+ *  config (Themes review Q3). */
 export const DEFAULT_THEME_ID = 'obsidian-ember';
 
 /** Themes Vosh no longer ships, each by the id of the theme that took

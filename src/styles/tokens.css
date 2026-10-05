@@ -1,9 +1,12 @@
 /* One Window design tokens. src/lib/theme.ts writes the color tokens
    on :root at runtime from lib/chrome's derivation of the active
-   terminal theme. The values below are Obsidian Ember's, so the first
-   paint matches the default theme, and a test in lib/chrome.test.ts
-   holds them to that derivation. Every new component reads these names
-   and nothing else. */
+   terminal theme. The values below are Obsidian Ember's, the fallback
+   theme a config without a theme key reads, and a test in
+   lib/chrome.test.ts holds them to that derivation. They paint only
+   until the startup paint or the config brings your theme. A new
+   install starts on Triad, and its window stays hidden until the
+   config paints Triad, for half a second at most. Every new component
+   reads these names and nothing else. */
 
 :root {
   --bg: #050403;
