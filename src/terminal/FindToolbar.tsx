@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import type { FindOptions } from './Terminal';
+import type { FindOptions } from './terminalHandle';
 import { shortcutLabel } from '../lib/shortcuts';
 
 export interface FindToolbarHandle {

@@ -8,7 +8,8 @@ import {
   type MouseEvent,
 } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Terminal, type TerminalHandle } from '../terminal/Terminal';
+import { Terminal } from '../terminal/Terminal';
+import type { TerminalHandle } from '../terminal/terminalHandle';
 import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { Resizable } from '../terminal/Resizable';
