@@ -5,7 +5,7 @@
 // ground. Your room takes the accent. map3dScene.ts holds the geometry,
 // and this file decides only the paint and its order.
 
-import { WHITE, mix, parseHex, scaled, toRgba, type Rgb } from './color';
+import { WHITE, mix, parseHex, scaled, toRgba, type Rgb } from '../theme/color';
 import { isNorthUp, type Map3dView } from './map3dView';
 import {
   TILE,

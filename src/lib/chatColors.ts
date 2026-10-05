@@ -17,11 +17,11 @@
 // a deep yellow stays yellow. Only the pane's ink moves. The theme and
 // the terminal keep the published color.
 
-import { ANSI_SLOT_LABELS } from './appearanceSettings';
-import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
-import type { ChromeTokens } from './chrome';
-import { composite, contrast, liftAtHue, parseHex, toHex } from './color';
-import type { XtermPalette } from './themes';
+import { ANSI_SLOT_LABELS } from '../theme/appearanceSettings';
+import { ANSI_SLOTS, type AnsiSlot } from '../theme/baseAnsi';
+import type { ChromeTokens } from '../theme/chrome';
+import { composite, contrast, liftAtHue, parseHex, toHex } from '../theme/color';
+import type { XtermPalette } from '../theme/themes';
 
 // A Map rather than an object literal: pane names come straight from
 // server data and user-defined routes, and keys like "constructor"

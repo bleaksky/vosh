@@ -3,7 +3,7 @@ import appSource from '../App.tsx?raw';
 import settingsSource from '../SettingsApp.tsx?raw';
 import { REPAINT_WAIT_MS, showAfterThemePaint, type RevealDeps } from './reveal';
 
-vi.mock('./theme', () => ({ paintMatchesBoot: () => false }));
+vi.mock('../theme/theme', () => ({ paintMatchesBoot: () => false }));
 
 function fakeDeps(painted: boolean) {
   const frames: Array<() => void> = [];

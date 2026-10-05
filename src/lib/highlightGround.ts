@@ -1,5 +1,5 @@
 import { highlightGroundSet } from '../ipc/terminal';
-import { getFitGameColors, subscribeFitGameColors } from './fitGameColors';
+import { getFitGameColors, subscribeFitGameColors } from '../theme/fitGameColors';
 
 // Keep highlight colors readable, and Fit game colors. The session lifts
 // each fixed color a trigger paints text in, a true color or a 256 color

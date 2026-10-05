@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { parseCommChannel, parseRoutedLine, type ChatLine } from '../../stores/gmcp/chatStore';
-import { findTheme, themeTokens } from '../../lib/themes';
+import { findTheme, themeTokens } from '../../theme/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
 import { ChatLog } from './ChatPane';

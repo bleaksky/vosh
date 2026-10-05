@@ -5,8 +5,8 @@
 // text, on either renderer.
 
 import type { ITheme } from '@xterm/xterm';
-import { baseAnsiRecord } from './baseAnsi';
-import { playPalette, themeTokens, type AppTheme } from './themes';
+import { baseAnsiRecord } from '../theme/baseAnsi';
+import { playPalette, themeTokens, type AppTheme } from '../theme/themes';
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
 // terminal renders in "independent palette" mode (the default) so

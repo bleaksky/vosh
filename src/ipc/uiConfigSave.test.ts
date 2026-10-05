@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
-import { isOwnThemeEcho } from '../lib/theme';
+import { isOwnThemeEcho } from '../theme/theme';
 import { getUiConfig, normalizeUiConfig, type RawUiConfig, type UiConfig } from './uiConfig';
 import {
   broadcastUiConfigChanges,

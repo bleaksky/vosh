@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { STATUS_TEXT_CONTRAST } from '../../lib/chrome';
-import { contrast, parseHex, rgbToOklch } from '../../lib/color';
+import { STATUS_TEXT_CONTRAST } from '../../theme/chrome';
+import { contrast, parseHex, rgbToOklch } from '../../theme/color';
 import type { WorldTime } from '../../stores/gmcp/worldStore';
-import { BUILTIN_THEMES, findTheme, themeTokens } from '../../lib/themes';
+import { BUILTIN_THEMES, findTheme, themeTokens } from '../../theme/themes';
 import { DAYLIGHT_SLOTS, daylightPhase, daylightTint, isDaytime } from './daylight';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);

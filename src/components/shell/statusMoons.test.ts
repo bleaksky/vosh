@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Moons } from '../../stores/gmcp/worldStore';
-import { findTheme, themeTokens } from '../../lib/themes';
+import { findTheme, themeTokens } from '../../theme/themes';
 import { moonColor } from './moonColors';
 import { statusMoons } from './statusMoons';
 

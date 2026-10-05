@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { bandRuns, decorationLine, type BandEnv } from '../../lib/bandCells';
-import { contrast, parseHex } from '../../lib/color';
+import { contrast, parseHex } from '../../theme/color';
 import { sampleCut } from '../../lib/promptCard';
 import type { Cell } from '../../lib/sgrCells';
 

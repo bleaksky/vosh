@@ -1,10 +1,10 @@
 import { useEffect, useId, useState } from 'react';
-import { setBaseAnsi } from '../../../lib/baseAnsi';
+import { setBaseAnsi } from '../../../theme/baseAnsi';
 import { renderFontStack } from '../../../lib/fontLoader';
 import { INPUT_CURSOR_STYLES, type InputCursorStyle } from '../../../ipc/uiConfig';
 import type { SettingsTarget } from '../../../lib/settingsNav';
-import { getCurrentThemeId } from '../../../lib/theme';
-import { findTheme, resolveThemeTerminalColors } from '../../../lib/themes';
+import { getCurrentThemeId } from '../../../theme/theme';
+import { findTheme, resolveThemeTerminalColors } from '../../../theme/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import {

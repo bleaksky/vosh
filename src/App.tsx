@@ -82,7 +82,7 @@ import {
   applyThemePrefs,
   getCurrentThemeId,
   subscribeThemePrefs,
-} from './lib/theme';
+} from './theme/theme';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { normalizePanelFont, panelFontFamily, panelFontList } from './lib/panelFont';
 import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './lib/panelSize';
@@ -95,12 +95,12 @@ import {
   resolveThemeTerminalColors,
   setCustomThemes,
   themeTokens,
-} from './lib/themes';
-import { parseHex, toRgba } from './lib/color';
-import { setBaseAnsi } from './lib/baseAnsi';
+} from './theme/themes';
+import { parseHex, toRgba } from './theme/color';
+import { setBaseAnsi } from './theme/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
-import { fitThemesInPlay } from './lib/customThemeFits';
-import { setFitGameColors } from './lib/fitGameColors';
+import { fitThemesInPlay } from './theme/customThemeFits';
+import { setFitGameColors } from './theme/fitGameColors';
 import { startStores } from './stores';
 import { pushToast } from './stores/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';

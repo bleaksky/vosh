@@ -1,7 +1,7 @@
-import { liftToContrast, STATUS_TEXT_CONTRAST, type ChromeTokens } from '../../lib/chrome';
-import { parseHex, toHex } from '../../lib/color';
+import { liftToContrast, STATUS_TEXT_CONTRAST, type ChromeTokens } from '../../theme/chrome';
+import { parseHex, toHex } from '../../theme/color';
 import type { WorldTime } from '../../stores/gmcp/worldStore';
-import type { XtermPalette } from '../../lib/themes';
+import type { XtermPalette } from '../../theme/themes';
 
 // The game time's daylight tint and whether its sun is up. The old
 // input row chip tinted the time with a fixed color per part of the

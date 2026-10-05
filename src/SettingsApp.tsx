@@ -23,9 +23,9 @@ import {
   isOwnThemeEcho,
   subscribeThemeChanges,
   subscribeThemePrefs,
-} from './lib/theme';
+} from './theme/theme';
 import { showAfterThemePaint } from './lib/reveal';
-import { customToAppTheme, setCustomThemes } from './lib/themes';
+import { customToAppTheme, setCustomThemes } from './theme/themes';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { isMacPlatform } from './lib/shortcuts';
 import {

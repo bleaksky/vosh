@@ -1,6 +1,6 @@
-import { liftToContrast, STATUS_CONTRAST, type ChromeTokens } from '../../lib/chrome';
-import { parseHex, toHex } from '../../lib/color';
-import type { XtermPalette } from '../../lib/themes';
+import { liftToContrast, STATUS_CONTRAST, type ChromeTokens } from '../../theme/chrome';
+import { parseHex, toHex } from '../../theme/color';
+import type { XtermPalette } from '../../theme/themes';
 
 // Each moon in the status line takes the color the game gives its name.
 // Lysenties shows in bright white (ANSI 15), Nercuros in bright cyan

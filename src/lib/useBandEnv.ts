@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { subscribeBaseAnsi } from './baseAnsi';
+import { subscribeBaseAnsi } from '../theme/baseAnsi';
 import type { BandEnv } from './bandCells';
-import { useFitGameColors } from './fitGameColors';
+import { useFitGameColors } from '../theme/fitGameColors';
 import { ansi16Of, xtermThemeFor } from './terminalTheme';
-import { getCurrentThemeId } from './theme';
-import { findTheme, onCustomThemesChanged, themeTokens } from './themes';
+import { getCurrentThemeId } from '../theme/theme';
+import { findTheme, onCustomThemesChanged, themeTokens } from '../theme/themes';
 
 // The colors terminal text outside the renderers draws with. The pinned
 // band and the prompt card read them, so a prompt looks there as it does

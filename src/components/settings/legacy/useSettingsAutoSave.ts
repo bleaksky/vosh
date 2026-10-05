@@ -9,7 +9,7 @@ import {
   isOwnThemeEcho,
   subscribeThemeChanges,
   subscribeThemePrefs,
-} from '../../../lib/theme';
+} from '../../../theme/theme';
 import type { SetUiConfig } from '../pageTypes';
 
 export interface AutoSaveOptions {

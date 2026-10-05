@@ -4,7 +4,7 @@
 // from this table so a tile in either mode reads the same.
 
 import { textPx } from '../components/panel/paneTextSize';
-import { oklabToRgb, parseHex, rgbToOklab, toHex } from './color';
+import { oklabToRgb, parseHex, rgbToOklab, toHex } from '../theme/color';
 import { readPanelFace, readPanelTextPx } from './panelFace';
 
 export interface SectorTheme {

@@ -3,7 +3,7 @@
 // window.
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { ThemePrefs } from '../lib/theme';
+import type { ThemePrefs } from '../theme/theme';
 import { CUSTOM_THEMES_CHANGED, THEME_CHANGED, THEME_PREFS_CHANGED } from './events';
 
 // ThemeChoice is now a free-form string keyed against THEMES in

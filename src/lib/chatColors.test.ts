@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANSI_SLOTS } from './baseAnsi';
+import { ANSI_SLOTS } from '../theme/baseAnsi';
 import {
   CHAT_CHANNELS,
   CHAT_CONTRAST,
@@ -11,8 +11,8 @@ import {
   normalizeChatColors,
   sameChatColors,
 } from './chatColors';
-import { composite, contrast, parseHex, rgbToOklch, type Rgb } from './color';
-import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
+import { composite, contrast, parseHex, rgbToOklch, type Rgb } from '../theme/color';
+import { BUILTIN_THEMES, findTheme, themeTokens } from '../theme/themes';
 
 const kanso = findTheme('kanso-zen').xterm;
 const rubric = findTheme('rubric').xterm;

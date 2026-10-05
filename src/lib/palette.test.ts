@@ -316,12 +316,12 @@ describe('initialSelection', () => {
 
 describe('theme order', () => {
   afterEach(async () => {
-    const { setCustomThemes } = await import('./themes');
+    const { setCustomThemes } = await import('../theme/themes');
     setCustomThemes([]);
   });
 
   it('lists the themes in the gallery order, your own themes last', async () => {
-    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    const { customToAppTheme, setCustomThemes } = await import('../theme/themes');
     setCustomThemes([
       customToAppTheme({
         id: 'mine',
@@ -386,7 +386,7 @@ describe('chooseTheme', () => {
   });
 
   afterEach(async () => {
-    const { applyThemePrefs } = await import('./theme');
+    const { applyThemePrefs } = await import('../theme/theme');
     applyThemePrefs({
       theme: 'obsidian-ember',
       follow_system_appearance: false,
@@ -397,7 +397,7 @@ describe('chooseTheme', () => {
   });
 
   it('sets the manual pick while follow is off', async () => {
-    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('./theme');
+    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('../theme/theme');
     applyThemePrefs({
       theme: 'nord',
       follow_system_appearance: false,
@@ -415,7 +415,7 @@ describe('chooseTheme', () => {
   });
 
   it('fills the slot that matches the pick while follow is on', async () => {
-    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('./theme');
+    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('../theme/theme');
     applyThemePrefs({
       theme: 'nord',
       follow_system_appearance: true,
@@ -427,7 +427,7 @@ describe('chooseTheme', () => {
     expect(getThemePrefs()).toMatchObject({ theme: 'nord', dark_theme: 'rose-pine' });
 
     // A light pick fills the light slot and stays hidden on a dark OS.
-    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    const { customToAppTheme, setCustomThemes } = await import('../theme/themes');
     setCustomThemes([
       customToAppTheme({
         id: 'paper',
@@ -462,13 +462,13 @@ describe('the theme on screen', () => {
   // the tests above import behind.
   it('checks the theme a retired id shows, from the startup paint on', async () => {
     vi.resetModules();
-    const { prepaintTheme } = await import('./themePaint');
+    const { prepaintTheme } = await import('../theme/themePaint');
     prepaintTheme({
       storage: () => ({ getItem: () => oldPaint, setItem: () => {} }),
       systemDark: () => false,
       root: () => ({ setAttribute: () => {}, style: { setProperty: () => {} } }),
     });
-    const { getCurrentThemeId } = await import('./theme');
+    const { getCurrentThemeId } = await import('../theme/theme');
     expect(getCurrentThemeId()).toBe('vellum');
     const palette = await import('./palette');
     const checked = palette.themeEntries().filter((e) => e.checked);

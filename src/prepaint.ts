@@ -4,6 +4,6 @@
 // the dark stylesheet defaults. main.tsx imports it first, and imports
 // run in order, so this lands before any other module and before React
 // renders.
-import { prepaintTheme } from './lib/themePaint';
+import { prepaintTheme } from './theme/themePaint';
 
 prepaintTheme();

@@ -22,7 +22,7 @@
 // the fit while Fit game colors is on (playPalette in themes.ts,
 // fitGameColors).
 
-import { indexedRgb } from './bandCells';
+import { indexedRgb } from '../lib/bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
 import {
   contrast,

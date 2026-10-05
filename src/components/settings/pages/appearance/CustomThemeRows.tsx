@@ -5,7 +5,7 @@ import {
   editCustomTheme,
   removeCustomTheme,
   THEME_SLOT_GROUPS,
-} from '../../../../lib/appearanceSettings';
+} from '../../../../theme/appearanceSettings';
 import { emitCustomThemesChanged, emitThemeChanged, type CustomTheme } from '../../../../ipc/theme';
 import type { UiConfig } from '../../../../ipc/uiConfig';
 import {
@@ -14,7 +14,7 @@ import {
   applyThemePrefs,
   pickTheme,
   themePrefsOf,
-} from '../../../../lib/theme';
+} from '../../../../theme/theme';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -23,7 +23,7 @@ import {
   migrateCustomChrome,
   setCustomThemes,
   themeTokens,
-} from '../../../../lib/themes';
+} from '../../../../theme/themes';
 import { ConfirmDialog } from '../../../ConfirmDialog';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Button, Field, PlusIcon, Row, Select } from '../../ui';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { STATUS_CONTRAST } from '../../lib/chrome';
-import { contrast, parseHex, rgbToOklch } from '../../lib/color';
-import { BUILTIN_THEMES, findTheme, themeTokens } from '../../lib/themes';
+import { STATUS_CONTRAST } from '../../theme/chrome';
+import { contrast, parseHex, rgbToOklch } from '../../theme/color';
+import { BUILTIN_THEMES, findTheme, themeTokens } from '../../theme/themes';
 import { MOON_SLOTS, moonColor, moonSlot } from './moonColors';
 
 const NAMES = ['Lysenties', 'Nercuros', 'Dyphrities'];

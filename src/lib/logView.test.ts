@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CANONICAL_ANSI_16 } from './baseAnsi';
+import { CANONICAL_ANSI_16 } from '../theme/baseAnsi';
 import {
   groupLogDays,
   logColorCss,
@@ -15,7 +15,7 @@ import {
   parseLogLine,
   savedSessionsText,
 } from './logView';
-import { findTheme } from './themes';
+import { findTheme } from '../theme/themes';
 
 // Local times, so the tests hold in any time zone.
 const at = (month: number, day: number, hour: number, minute: number, year = 2026) =>
