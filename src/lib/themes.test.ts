@@ -1505,28 +1505,42 @@ describe('window status colors for a color vision', () => {
   const lch = (c: string) => rgbToOklch(hex(c));
   const hueOff = (h: number, target: number) => ((h - target + 540) % 360) - 180;
 
-  // A tritanope tells red, yellow and green apart, so the window keeps
-  // its status colors. TRITAN_NEAR names the themes where a tritanope
-  // sees danger nearer warn than CHANNEL_FLOOR, or nearer success than
-  // STATUS_PART, or as far as a typical eye sees them if less, minus
-  // VISION_SLACK.
-  const TRITAN_NEAR: Record<string, string> = { 'harbor-dark': 'danger/warn 3.8' };
+  // A tritanope tells red, yellow and green apart by hue, so the window
+  // keeps its status colors wherever a tritanope sees danger STATUS_PART
+  // from warn and from success, or as far as a typical eye sees them if
+  // that is less, give or take VISION_SLACK. TRITAN_MOVED names the
+  // themes where danger stands nearer, with the distance a tritanope
+  // sees before and after. There the window moves the three in lightness
+  // at their own hues.
+  const TRITAN_MOVED: Record<string, string> = {
+    'tokyo-night': 'danger/warn 12.1 to 16.4',
+    'rose-pine': 'danger/warn 16.9 to 20.3',
+    'solarized-light': 'danger/warn 15.9 to 19.0',
+    'melange-light': 'danger/warn 8.6 to 26.3',
+    'harbor-dark': 'danger/warn 3.8 to 12.7',
+  };
 
-  it('keeps the status colors under tritanopia', () => {
-    const near: Record<string, string> = {};
+  it('keeps the status colors under tritanopia where a tritanope tells them apart', () => {
+    const moved: Record<string, string> = {};
     for (const theme of BUILTIN_THEMES) {
       const t = themeTokens(theme);
       const v = themeTokens(theme, 'tritanopia');
-      for (const key of KEYS) expect(v[key], `${theme.id} ${key}`).toBe(t[key]);
       const items: string[] = [];
-      const warn = sees(t.danger, t.warn, 'tritanopia');
-      if (warn < CHANNEL_FLOOR) items.push(`danger/warn ${warn.toFixed(1)}`);
-      const success = sees(t.danger, t.success, 'tritanopia');
-      const part = Math.min(STATUS_PART, deltaEOk(hex(t.danger), hex(t.success))) - VISION_SLACK;
-      if (success < part) items.push(`danger/success ${success.toFixed(1)} of ${part.toFixed(1)}`);
-      if (items.length > 0) near[theme.id] = items.join(', ');
+      for (const key of ['warn', 'success'] as const) {
+        const need = Math.min(STATUS_PART, deltaEOk(hex(t.danger), hex(t[key]))) - VISION_SLACK;
+        const was = sees(t.danger, t[key], 'tritanopia');
+        if (was >= need) continue;
+        const now = sees(v.danger, v[key], 'tritanopia');
+        items.push(`danger/${key} ${was.toFixed(1)} to ${now.toFixed(1)}`);
+      }
+      for (const key of KEYS) {
+        const at = `${theme.id} ${key}`;
+        if (items.length === 0) expect(v[key], at).toBe(t[key]);
+        else expect(Math.abs(hueOff(lch(v[key]).h, lch(t[key]).h)), at).toBeLessThan(3);
+      }
+      if (items.length > 0) moved[theme.id] = items.join(', ');
     }
-    expect(near).toEqual(TRITAN_NEAR);
+    expect(moved).toEqual(TRITAN_MOVED);
   });
 
   it('turns success blue and danger toward vermilion for deuteranopia and protanopia', () => {
@@ -1600,6 +1614,22 @@ describe('window status colors for a color vision', () => {
           value: (s) => lch(s[key]).C,
           need: CHROMA_KEEP * Math.min(lch(t[key]).C, target.chroma) - 0.002,
         });
+      } else {
+        out.push({
+          id: `${key} hue`,
+          tier: 0,
+          keys: [key],
+          value: (s) => 3 - Math.abs(hueOff(lch(s[key]).h, lch(t[key]).h)),
+          need: 0,
+        });
+        const from = lch(t[key]).C;
+        out.push({
+          id: `${key} chroma`,
+          tier: 0,
+          keys: [key],
+          value: (s) => lch(s[key]).C,
+          need: from > 0.04 ? HUE_CHROMA_KEEP * from - 0.002 : 0,
+        });
       }
       if (theme.chrome?.accent !== undefined) {
         out.push({
@@ -1645,20 +1675,29 @@ describe('window status colors for a color vision', () => {
       value: (s) => sees(s.danger, s.success, vision),
       need: Math.min(STATUS_PART, deltaEOk(hex(t.danger), hex(t.success))) - VISION_SLACK,
     });
+    if (Object.keys(STATUS_SWAP[vision]).length === 0) {
+      out.push({
+        id: 'danger/warn part',
+        tier: 5,
+        keys: ['danger', 'warn'],
+        value: (s) => sees(s.danger, s.warn, vision),
+        need: Math.min(STATUS_PART, deltaEOk(hex(t.danger), hex(t.warn))) - VISION_SLACK,
+      });
+    }
     return out;
   };
 
-  // Each rule the window leaves short for deuteranopia and protanopia,
-  // how far it gets of how far it needs, and what stops it going
-  // further: a firmer rule, or one as firm, that a step in lightness or
-  // hue breaks. Where nothing stops it the search missed the step.
+  // Each rule the window leaves short for each vision, how far it gets of
+  // how far it needs, and what stops it going further: a firmer rule, or
+  // one as firm, that a step in lightness or hue breaks. Where nothing
+  // stops it the search missed the step.
   const WINDOW_SHORT: Record<string, string> = {
     'protanopia rose-pine': 'success move 6.6 of 10.0. success hue window, success/secondary',
   };
 
   it('keeps every floor and target of the window, or names the rule short and what stops it', () => {
     const report: Record<string, string> = {};
-    for (const vision of ['deuteranopia', 'protanopia'] as const) {
+    for (const vision of OTHER) {
       for (const theme of BUILTIN_THEMES) {
         const v = themeTokens(theme, vision);
         const own = { danger: v.danger, warn: v.warn, success: v.success };
@@ -1713,14 +1752,13 @@ describe('window status colors for a color vision', () => {
 
   // An accent the rule picks stands ACCENT_APART from every status color
   // as the vision sees them, wherever a hue of the theme stands that far.
-  // On two themes for a tritanope none does, since the window keeps its
-  // Typical status colors, and the rule takes the hue that stands
-  // farthest. A pinned accent stays as the theme drew it, and no status
+  // On One Half Dark for a tritanope none does, since the window keeps
+  // its Typical status colors, and the rule takes the hue that stands
+  // farthest, its Typical pick. A pinned accent stays as the theme drew it, and no status
   // color comes nearer to it than the Typical one stands, up to
   // ACCENT_APART.
   const ACCENT_SHORT: Record<string, string> = {
     'tritanopia one-half-dark accent from danger': '11.1',
-    'tritanopia tokyo-night accent from success': '11.2',
   };
 
   it('keeps the accent apart from every status color as the vision sees them', () => {
