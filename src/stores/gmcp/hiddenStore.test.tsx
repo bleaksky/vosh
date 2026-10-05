@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import lament from '../../../fixtures/gmcp/aabahran/lament.json';
-import { AffectsPaneView } from '../../panel/affects/AffectsTimers';
+import { TimersView } from '../../panel/affects/AffectsTimers';
 import { GroupPaneView } from '../../panel/group/GroupPane';
 import { PaneLeafContext } from '../../panel/paneActions';
 import { VitalsBlock } from '../../panel/VitalsFooter';
@@ -97,7 +97,7 @@ function panes(s: Stores): { vitals: string; affects: string; group: string } {
     ),
     affects: renderToStaticMarkup(
       <PaneLeafContext.Provider value={leaf('affects')}>
-        <AffectsPaneView
+        <TimersView
           current={s.affects.getAffects()}
           tracked={[{ name: 'sanctuary', label: null }]}
           hidden={s.affects.getAffectsHidden()}

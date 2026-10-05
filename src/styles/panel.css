@@ -376,7 +376,7 @@
    at 12 px, 18 in from the left and 12 from the right. In each cell the mark
    sits at x 0, the hours right aligned in a column of three cells from
    x 14, and the name 8 after them, both in the game face. While a
-   longer count shows, AffectsPane sets --affect-hours-ch on the body
+   longer count shows, TimersView sets --affect-hours-ch on the body
    and every cell's column widens to fit it. */
 .pane-affects-grid {
   display: grid;
@@ -548,7 +548,7 @@
 }
 
 /* The rest scroll in a window of whole rows, a page at a time, so a
-   row is never cut. AffectsPane sets the height. The count cell stands
+   row is never cut. TimersView sets the height. The count cell stands
    in for the scroll bar. */
 .pane-affects-rest {
   overflow: hidden;
