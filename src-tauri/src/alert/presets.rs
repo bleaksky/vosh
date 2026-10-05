@@ -321,13 +321,15 @@ pub(crate) fn parts(p: &Profile, id: &str) -> Option<AlertParts> {
     }))
 }
 
-/// Whether `line` holds `name` as a whole word, with its capital.
+/// Whether `line` holds `name` as a whole word, with its capital. A
+/// quote may open right before it, as in `$n yells '$t'`, and a
+/// possessive may follow, as in `Orla's`.
 fn names(line: &str, name: &str) -> bool {
-    let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '\'');
+    let word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
     line.match_indices(name).any(|(at, _)| {
         let before = line[..at].chars().next_back();
         let after = line[at + name.len()..].chars().next();
-        !word(before) && !(after.is_some_and(char::is_alphanumeric))
+        !word(before) && !word(after)
     })
 }
 
