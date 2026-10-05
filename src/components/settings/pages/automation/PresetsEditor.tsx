@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { countPhrase, draftValues } from '../../../../lib/automationDraft';
-import { searchText } from '../../../../lib/automationList';
+import { countPhrase, draftValues } from '../../../../automation/automationDraft';
+import { searchText } from '../../../../automation/automationList';
 import {
   presetSavePlan,
   presetToggles,
   storedPresetIds,
   type PresetToggle,
-} from '../../../../lib/automationRecords';
-import { PRESET_CATEGORIES, presetById, PRESETS, presetTriggers } from '../../../../lib/presets';
+} from '../../../../automation/automationRecords';
+import {
+  PRESET_CATEGORIES,
+  presetById,
+  PRESETS,
+  presetTriggers,
+} from '../../../../automation/presets';
 import { presetsInstall, presetsRemove } from '../../../../ipc/automation';
 import { getUiConfig, type UiConfig } from '../../../../ipc/uiConfig';
 import { setUiConfig } from '../../../../ipc/uiConfigSave';

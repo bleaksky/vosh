@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { act, createElement } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { foldedStorageKey, groupKeyOf, searchText } from '../../../../lib/automationList';
+import { foldedStorageKey, groupKeyOf, searchText } from '../../../../automation/automationList';
 import { FakeDocument, FakeElement, findAll } from '../../../../test/fakeDom';
 import type { DetailProps, KindSpec } from './types';
 

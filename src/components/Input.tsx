@@ -43,7 +43,7 @@ import {
   type InputCursorStyle,
 } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { canonicalKeyFromEvent } from '../lib/macroKeys';
+import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
   draftAfterMaskChange,
   isMasked,

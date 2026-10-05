@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { groupKeyOf, searchText } from '../../../../lib/automationList';
-import { jsonListText, parseJsonList } from '../../../../lib/automationRecords';
+import { groupKeyOf, searchText } from '../../../../automation/automationList';
+import { jsonListText, parseJsonList } from '../../../../automation/automationRecords';
 import {
   blankTrigger,
   effectOf,
@@ -28,7 +28,7 @@ import {
   withTriggerStyle,
   type HighlightPatch,
   type TriggerStyle,
-} from '../../../../lib/automationTriggers';
+} from '../../../../automation/automationTriggers';
 import {
   subscribeTriggersChanged,
   type HighlightStyle,

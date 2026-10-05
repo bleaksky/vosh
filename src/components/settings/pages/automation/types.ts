@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Draft, KindNoun, SavedWrite } from '../../../../lib/automationDraft';
-import type { ListEntry } from '../../../../lib/automationList';
+import type { Draft, KindNoun, SavedWrite } from '../../../../automation/automationDraft';
+import type { ListEntry } from '../../../../automation/automationList';
 import type { GroupList } from '../../../../ipc/automation';
 
 /** The kinds on the Automation switcher. Loadouts shows in loadout

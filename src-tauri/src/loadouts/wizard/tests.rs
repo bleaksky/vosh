@@ -31,7 +31,7 @@ const LIBRARY: &[&str] = &[
 
 #[test]
 fn the_library_here_is_the_one_presets_ts_holds() {
-    let library = include_str!("../../../../src/lib/presets.ts");
+    let library = include_str!("../../../../src/automation/presets.ts");
     // Each preset opens with its id, four spaces in, in the order
     // the page lists them.
     let ids: Vec<&str> = library

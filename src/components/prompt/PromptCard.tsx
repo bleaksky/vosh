@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { moveTriggerToPrompts } from '../../lib/automationTriggers';
+import { moveTriggerToPrompts } from '../../automation/automationTriggers';
 import { BAND_OUTSET_Y, dockGap, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,

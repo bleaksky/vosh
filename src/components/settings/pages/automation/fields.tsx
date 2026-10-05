@@ -1,6 +1,6 @@
 import { forwardRef, useId, useState, type ReactNode } from 'react';
 import { CodeEditor } from '../../../CodeEditor';
-import { canonicalKeyFromEvent, labelForKey } from '../../../../lib/macroKeys';
+import { canonicalKeyFromEvent, labelForKey } from '../../../../automation/macroKeys';
 import { Field, useRowIds, type FieldProps } from '../../ui';
 
 // Controls the Automation detail cards share. Each one wraps a

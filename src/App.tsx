@@ -86,8 +86,8 @@ import {
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { normalizePanelFont, panelFontFamily, panelFontList } from './lib/panelFont';
 import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './lib/panelSize';
-import { PRESETS, presetTriggers } from './lib/presets';
-import { presetLaunchPlan } from './lib/automationRecords';
+import { PRESETS, presetTriggers } from './automation/presets';
+import { presetLaunchPlan } from './automation/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
 import {
   customToAppTheme,

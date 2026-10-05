@@ -6,7 +6,7 @@ import {
   saveFolded,
   withFold,
   type SearchFolds,
-} from '../../../../lib/automationList';
+} from '../../../../automation/automationList';
 
 /** The page's storage, or null where reading it throws. */
 function pageStorage(): Storage | null {

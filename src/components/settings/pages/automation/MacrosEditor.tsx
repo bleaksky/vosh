@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { groupKeyOf, searchText } from '../../../../lib/automationList';
+import { groupKeyOf, searchText } from '../../../../automation/automationList';
 import {
   blankMacro,
   jsonListText,
@@ -8,9 +8,9 @@ import {
   saveMacroDraft,
   validateMacros,
   type MacroRecord,
-} from '../../../../lib/automationRecords';
-import { withGroup } from '../../../../lib/automationTriggers';
-import { labelForKey } from '../../../../lib/macroKeys';
+} from '../../../../automation/automationRecords';
+import { withGroup } from '../../../../automation/automationTriggers';
+import { labelForKey } from '../../../../automation/macroKeys';
 import { listMacros, subscribeMacrosChanged } from '../../../../ipc/automation';
 import { Card, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';

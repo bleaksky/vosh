@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { KindNoun } from '../../../../lib/automationDraft';
+import type { KindNoun } from '../../../../automation/automationDraft';
 import { CodeEditor } from '../../../CodeEditor';
 import { Button } from '../../ui';
 

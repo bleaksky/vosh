@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { automationSaveError } from '../../../../lib/automationRecords';
-import { switchesByName, withSwitch } from '../../../../lib/groupSwitches';
+import { automationSaveError } from '../../../../automation/automationRecords';
+import { switchesByName, withSwitch } from '../../../../automation/groupSwitches';
 import {
   listGroupSwitches,
   setGroupEnabled,

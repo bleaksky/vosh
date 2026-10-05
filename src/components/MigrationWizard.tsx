@@ -8,9 +8,9 @@ import {
   type MigrationItemKind,
   type MigrationPlan,
 } from '../ipc/wizard';
-import { patternSource } from '../lib/automationTriggers';
-import { PRESETS } from '../lib/presets';
-import { presetChanges } from '../lib/wizardPresets';
+import { patternSource } from '../automation/automationTriggers';
+import { PRESETS } from '../automation/presets';
+import { presetChanges } from '../automation/wizardPresets';
 
 /** The id of every preset in the library this build installs from. */
 const LIBRARY = PRESETS.map((p) => p.id);
