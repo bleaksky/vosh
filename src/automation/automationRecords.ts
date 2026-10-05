@@ -21,8 +21,7 @@ import {
   timersSet,
 } from '../ipc/automation';
 import { type TickConfig } from '../ipc/tick';
-
-const quote = (name: string) => `“${name}”`;
+import { errorText, quoted } from '../lib/text';
 
 // ── Aliases ─────────────────────────────────────────────────────────
 
@@ -113,7 +112,7 @@ export function validateAliases(list: readonly AliasRecord[]): string | null {
   for (const a of list) {
     const name = a.name.trim();
     if (!name) return 'Give every alias a name before you save.';
-    if (seen.has(name)) return `Two aliases are named ${quote(name)}. Give each one its own name.`;
+    if (seen.has(name)) return `Two aliases are named ${quoted(name)}. Give each one its own name.`;
     seen.add(name);
   }
   return null;
@@ -247,7 +246,7 @@ export function validateTimers(list: readonly TimerRecord[]): string | null {
   for (const t of list) {
     if (!t.command.trim()) {
       return t.name.trim()
-        ? `The timer ${quote(t.name.trim())} needs a command.`
+        ? `The timer ${quoted(t.name.trim())} needs a command.`
         : 'Every timer needs a command before you save.';
     }
   }
@@ -530,7 +529,7 @@ export function jsonListText(values: readonly unknown[]): string {
 /** A save error as a sentence. The stores answer with terse messages,
  *  so the common ones read as what to fix. */
 export function automationSaveError(error: unknown): string {
-  const text = String(error instanceof Error ? error.message : error).trim();
+  const text = errorText(error);
   const regex = /invalid regex `([^`]*)`/.exec(text);
   if (regex) return `Vosh could not read the pattern ${regex[1]}. Fix it and save again.`;
   // tick_set_config answers a bad Reset on pattern with its own sentence,
@@ -548,7 +547,7 @@ export function automationSaveError(error: unknown): string {
  *  says which of the two failed. A message that already reads as a
  *  sentence passes through. */
 export function importErrorMessage(error: unknown, step: 'read' | 'import'): string {
-  const text = String(error instanceof Error ? error.message : error).trim();
+  const text = errorText(error);
   if (/could not detect import format/i.test(text)) {
     return 'Vosh could not tell which client made this file. Choose its format and import again.';
   }

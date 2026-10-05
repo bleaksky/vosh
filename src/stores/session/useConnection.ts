@@ -11,6 +11,7 @@ import {
 } from '../../ipc/session';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { worldName } from '../../lib/knownWorlds';
+import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 
 // The session the title band shows and the session menu drives, with
@@ -114,7 +115,7 @@ export function useSavedTarget(): [ConnectionTarget, (target: ConnectionTarget) 
  *  backend answers with a sentence that names the profile you are still
  *  using, and it passes through. */
 export function profileSwitchErrorMessage(error: unknown): string {
-  const text = String(error instanceof Error ? error.message : error).trim();
+  const text = errorText(error);
   return text || 'Vosh could not switch profiles, so you connect with the profile you were using.';
 }
 
