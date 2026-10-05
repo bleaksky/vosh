@@ -16,6 +16,8 @@ import {
   needsVisionFit,
   seenApart,
   seenBy,
+  TEXT_SLOTS,
+  textGuards,
   toColorVision,
   turnHue,
   turnRoom,
@@ -239,26 +241,31 @@ describe('color vision', () => {
     expect(needsVisionFit({ ...TRIAD, red: 'crimson' }, 'deuteranopia')).toBe(false);
   });
 
-  // The fit themes.ts ships for Triad under Deuteranopia. Red darkens a
-  // touch and turns 11 degrees toward orange, green lightens and turns 10
-  // toward teal, yellow and the bold twins lighten, and Triad still
-  // passes all 46 checks.
+  // The fit themes.ts ships for Triad under Deuteranopia. Lighter green
+  // would run into body text and darker green into its floor, so only red
+  // moves, turning 11 degrees toward orange. Triad still passes all 46
+  // checks.
   it('fits Triad for a deuteranope, lightness first and then a small turn', () => {
     const fitted = fit(TRIAD, 'deuteranopia', {});
-    expect(fitted).toEqual({
-      red: '#f86632',
-      green: '#6df3e3',
-      yellow: '#fbd67d',
-      brightGreen: '#cdffea',
-      brightYellow: '#fff5cd',
-    });
+    expect(fitted).toEqual({ red: '#f86632' });
     const play = { ...TRIAD, ...fitted };
     expect(short(play)).toEqual([]);
     expect(visionChecks(play, TRIAD, 'deuteranopia').map((c) => c.value)).toEqual([
-      23.3, 27.9, 19.5,
+      13.5, 25.4, 15.7,
     ]);
     expect(hue(play.red) - hue(TRIAD.red)).toBeCloseTo(11, 0);
-    expect(hue(play.green) - hue(TRIAD.green)).toBeCloseTo(10, 0);
+  });
+
+  it('keeps every color a vision moves clear of body text, white and bold white', () => {
+    expect(TEXT_SLOTS).toEqual(['foreground', 'white', 'brightWhite']);
+    expect(textGuards('typical')).toEqual([]);
+    expect(textGuards('deuteranopia')).toHaveLength(6 * 3);
+    expect(textGuards('tritanopia')).toHaveLength(10 * 3);
+    expect(textGuards('protanopia').slice(0, 3)).toEqual([
+      ['red', 'foreground'],
+      ['red', 'white'],
+      ['red', 'brightWhite'],
+    ]);
   });
 
   it('moves only the colors of the pairs a vision keeps apart and their twins', () => {

@@ -34,6 +34,7 @@ import {
   holdsVision,
   HUE_TURN_FAR,
   seenApart,
+  textGuards,
   turnHue,
   turnRoom,
   turnSlots,
@@ -845,7 +846,8 @@ describe('color vision fits', () => {
     }
     return h.toString(16).padStart(8, '0');
   };
-  const sees = (p: XtermPalette, a: AnsiSlot, b: AnsiSlot, vision: ColorVision) =>
+  type Slot = (typeof GAME_SLOTS)[number];
+  const sees = (p: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
     seenApart(hex(p[a]), hex(p[b]), vision);
   // How far a check falls outside its target, as the fit measures it.
   const gap = (need: string, value: number) => {
@@ -861,6 +863,11 @@ describe('color vision fits', () => {
     const cap = kept ? deltaEOk(hex(typical[a]), hex(typical[b])) : VISION_GUARD;
     return Math.min(sees(typical, a, b, vision), cap);
   };
+  // The floor a fit for `vision` holds each color it moves to from body
+  // text, white and bold white: where the Typical fit has it, or
+  // VISION_GUARD if that is less.
+  const textFloor = (typical: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
+    Math.min(sees(typical, a, b, vision), VISION_GUARD);
 
   // The 24 themes one-window (c5a6ebd0) shipped, their Typical fits and
   // their play palettes with Fit game colors on, digested from that
@@ -970,6 +977,24 @@ describe('color vision fits', () => {
     }
   });
 
+  // A tell in green never reads as body text. Each color a vision moves
+  // stays as far from body text, white and bold white, as the vision
+  // sees them, as the Typical fit has it, or VISION_GUARD if that is
+  // less.
+  it('keeps every color it moves clear of body text, white and bold white', () => {
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        const typical = playPalette(theme, true);
+        const own = playPalette(theme, true, vision);
+        for (const [a, b] of textGuards(vision)) {
+          const at = `${vision} ${theme.id} ${a}/${b}`;
+          const floor = textFloor(typical, a, b, vision);
+          expect(sees(own, a, b, vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
+        }
+      }
+    }
+  });
+
   // Red, green and for a tritanope cyan turn up OKLCH hue, at most
   // HUE_TURN_FAR and never past their family's limit. Every other color
   // keeps its hue, give or take the rounding of a step in lightness.
@@ -1027,6 +1052,9 @@ describe('color vision fits', () => {
         for (const [x, y] of GUARDED_PAIRS) {
           if (sees(p, x, y, vision) < guardFloor(typical, x, y, vision)) why.push(`${x}/${y}`);
         }
+        for (const [x, y] of textGuards(vision)) {
+          if (sees(p, x, y, vision) < textFloor(typical, x, y, vision)) why.push(`${x}/${y}`);
+        }
         const c0 = rgbToOklch(hex(theme.xterm[k])).C;
         if (c0 > 0.04 && rgbToOklch(hex(color)).C < 0.6 * c0) why.push(`${k} chroma`);
         if (step === 'turn' && family) {
@@ -1043,104 +1071,133 @@ describe('color vision fits', () => {
   // Each pair each vision's fit leaves short of its target, how far it
   // gets of how far it needs, and what stops it going further.
   const GAME_SHORT: Record<string, string> = {
-    'deuteranopia catppuccin':
-      'red/green 11.7 of 24.3, red/brightYellow 29.1 of 32.1, red/yellow 23.4 of 26.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, cyan/green, green/yellow',
-    'deuteranopia classic-vivid':
-      'red/green 19.8 of 35.9, red/brightYellow 30 of 40.5, red/yellow 20.7 of 24.4. T3 red Lc, T6 green bright step dL, T7 deutan yellow/green, brightYellow chroma, green hue limit, green/yellow, red/brightYellow, yellow chroma',
-    'deuteranopia dracula':
-      'red/green 15.4 of 39.1, red/brightYellow 32.1 of 39.8, red/yellow 25.4 of 35.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow, red/yellow',
-    'deuteranopia everforest-dark':
-      'red/green 23.1 of 28.2, red/yellow 13.6 of 16.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, green/yellow',
-    'deuteranopia green-screen':
-      'red/green 19.4 of 35.8, red/brightYellow 27.3 of 37.2, red/yellow 18.7 of 22.8. T3 red Lc, T7 deutan yellow/green, brightYellow chroma, green hue limit, green/yellow, red hue limit, yellow chroma',
-    'deuteranopia harbor-dark':
-      'red/green 24.5 of 36.2. T3 red Lc, T6 green bright step dL, T6 green pair dE, green hue limit, trade',
-    'deuteranopia high-contrast':
-      'red/green 16 of 40.8, red/brightYellow 28.9 of 37.8, red/yellow 25.9 of 37.4. T3 red Lc, T6 green pair dE, T6 yellow bright step dL, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow',
-    'deuteranopia iceberg-dark': 'red/green 24.4 of 27.6. T3 red Lc, T6 green pair dE',
-    'deuteranopia kanso-zen':
-      'red/green 21.5 of 25.1, red/brightYellow 25.8 of 27.2, red/yellow 12.2 of 15.4. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, green/brightYellow, green/yellow, trade',
-    'deuteranopia melange-dark': 'red/green 19.5 of 21.6. T3 red Lc, T6 green pair dE',
-    'deuteranopia modus-vivendi':
-      'red/green 19.3 of 38.8, red/brightYellow 22.5 of 26, red/yellow 12.2 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, green/brightYellow, green/yellow',
-    'deuteranopia monokai':
-      'red/green 22.5 of 39.6, red/brightYellow 20.3 of 26.6, red/yellow 12.5 of 20.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow',
-    'deuteranopia nightfly':
-      'red/green 12.6 of 30, red/brightYellow 29.6 of 34.5, red/yellow 22.6 of 30.3. T3 red Lc, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow, red hue limit',
-    'deuteranopia nord':
-      'red/green 12.9 of 19.7, red/brightYellow 32.5 of 34.4, red/yellow 23.7 of 26. T3 red Lc, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, cyan/green, green/yellow',
     'deuteranopia obsidian-ember':
-      'red/green 23.4 of 28.6. T3 red Lc, T6 green pair dE, green hue limit, red hue limit',
-    'deuteranopia one-half-dark':
-      'red/green 21.2 of 30.8, red/brightYellow 23.8 of 25.4, red/yellow 12.1 of 17.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow',
+      'red/green 19.3 of 28.6, red/brightYellow 21.9 of 23.9, red/yellow 12 of 15.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, green/brightWhite, green/brightYellow, green/foreground, green/white, green/yellow',
+    'deuteranopia triad':
+      'red/green 13.5 of 30.3, red/brightYellow 25.4 of 30.5, red/yellow 15.7 of 22.6. T3 red Lc, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, cyan/green, green/white, red hue limit',
+    'deuteranopia rubric':
+      'red/green 22.9 of 29.1. T3 red Lc, cyan/green, green hue limit, red hue limit',
+    'deuteranopia kanso-zen':
+      'red/green 21.5 of 25.1, red/brightYellow 25.5 of 27.2, red/yellow 12.2 of 15.4. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/brightWhite, green/brightYellow, green/foreground, green/yellow, trade, yellow/foreground',
+    'deuteranopia tokyo-night':
+      'red/green 21.1 of 33.2, red/brightYellow 24 of 25.1, red/yellow 12 of 18.1. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/yellow',
+    'deuteranopia nord':
+      'red/green 12.9 of 19.7, red/brightYellow 32.2 of 34.4, red/yellow 23.4 of 26. T3 red Lc, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, cyan/green, green/yellow, red/yellow',
     'deuteranopia rose-pine':
-      'red/green 12.4 of 23, red/brightYellow 22.6 of 26.7, red/yellow 15.9 of 20.7. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, cyan/green, green hue limit, red/yellow',
+      'red/green 10.2 of 23, red/brightYellow 22.6 of 26.7, red/yellow 15.9 of 20.7. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green hue limit, red/yellow',
+    'deuteranopia gruvbox':
+      'red/green 21.7 of 31.9, red/brightYellow 24.7 of 28.6, red/yellow 12.1 of 19.6. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow/foreground, green/brightYellow, green/foreground, green/yellow',
+    'deuteranopia catppuccin':
+      'red/green 11.7 of 24.3, red/brightYellow 29.1 of 32.1, red/yellow 23.4 of 26.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, cyan/green, green/yellow, yellow/brightWhite',
+    'deuteranopia dracula':
+      'red/green 15.4 of 39.1, red/brightYellow 32.1 of 39.8, red/yellow 25.4 of 35.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, cyan/green, green/foreground, green/white, red/yellow',
+    'deuteranopia monokai':
+      'red/green 22.5 of 39.6, red/brightYellow 19.7 of 26.6, red/yellow 12.5 of 20.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green/brightYellow, green/yellow',
+    'deuteranopia one-half-dark':
+      'red/green 21.2 of 30.8, red/brightYellow 21.5 of 25.4, red/yellow 12.1 of 17.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green/brightWhite, green/yellow',
     'deuteranopia solarized-light':
       'red/green 32.3 of 35.1. T3 red Lc, T6 green pair dE, green/brightYellow',
-    'deuteranopia srcery':
-      'red/green 28.7 of 36.1, red/brightYellow 26.3 of 28.9, red/yellow 18.4 of 21.7. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, green hue limit, trade',
     'deuteranopia tango-dark':
-      'red/green 25.3 of 38.9, red/brightYellow 28 of 34.7, red/yellow 19.9 of 23.9. T3 red Lc, T6 green bright step dL, T6 yellow pair dE, brightYellow chroma, green hue limit',
-    'deuteranopia tokyo-night':
-      'red/green 21.1 of 33.2, red/brightYellow 24 of 25.1, red/yellow 12 of 18.1. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, green/yellow',
-    'deuteranopia triad':
-      'red/green 23.3 of 30.3, red/brightYellow 27.9 of 30.5, red/yellow 19.5 of 22.6. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, green hue limit, green/brightYellow, red hue limit',
+      'red/green 20.8 of 38.9, red/brightYellow 27.4 of 34.7, red/yellow 12 of 23.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T7 deutan red/yellow, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/brightYellow, green/yellow, red/yellow',
+    'deuteranopia classic-vivid':
+      'red/green 11.7 of 35.9, red/brightYellow 30 of 40.5, red/yellow 20.7 of 24.4. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/yellow, red/brightYellow, yellow chroma',
+    'deuteranopia high-contrast':
+      'red/green 15.1 of 40.8, red/brightYellow 28.9 of 37.8, red/yellow 25.9 of 37.4. T3 red Lc, T6 green pair dE, T6 yellow bright step dL, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, green/yellow',
+    'deuteranopia everforest-dark':
+      'red/green 21.5 of 28.2, red/brightYellow 21.8 of 24.8, red/yellow 12 of 16.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, green/brightWhite, green/yellow, yellow/foreground, yellow/white',
+    'deuteranopia green-screen':
+      'red/green 10 of 35.8, red/brightYellow 27 of 37.2, red/yellow 18.6 of 22.8. T3 red Lc, T6 green pair dE, T7 deutan red/green, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/foreground, green/yellow, red/green, yellow chroma',
+    'deuteranopia srcery':
+      'red/green 25 of 36.1, red/brightYellow 21.4 of 28.9, red/yellow 12.7 of 21.7. T3 red Lc, T6 green bright step dL, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, green hue limit, green/brightWhite, trade',
+    'deuteranopia nightfly':
+      'red/green 12.6 of 30, red/brightYellow 29.6 of 34.5, red/yellow 22.6 of 30.3. T3 red Lc, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/yellow, red hue limit',
+    'deuteranopia melange-dark':
+      'red/green 17.6 of 21.6. T3 red Lc, T6 green pair dE, cyan/green, green/brightYellow, green/foreground',
+    'deuteranopia melange-light':
+      'red/green 29.4 of 30.8. T3 red Lc, green/brightWhite, green/foreground',
+    'deuteranopia modus-vivendi':
+      'red/green 19.1 of 38.8, red/brightYellow 19.5 of 26, red/yellow 12.2 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, green/brightYellow, green/yellow',
+    'deuteranopia harbor-dark':
+      'red/green 19.5 of 36.2, red/brightYellow 25.3 of 25.7, red/yellow 12 of 17.7. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, green/brightYellow, green/yellow',
+    'deuteranopia iceberg-dark':
+      'red/green 22.9 of 27.6, red/brightYellow 22.5 of 23.5, red/yellow 12.7 of 14.3. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, brightYellow/foreground, green/brightWhite, green/yellow',
+    'protanopia obsidian-ember':
+      'red/green 28.3 of 28.6. T3 red Lc, T6 green pair dE, green/brightWhite, green/foreground',
+    'protanopia triad':
+      'red/green 20.6 of 30.3. T3 red Lc, T7 protan yellow/green, cyan/green, green/foreground, green/white, green/yellow, red hue limit',
+    'protanopia rubric':
+      'red/green 12.3 of 29.1, red/brightYellow 32 of 37.5, red/yellow 21.8 of 26.9. T3 red Lc, T6 yellow pair dE, brightYellow/foreground, cyan/green, green hue limit, green/white, red hue limit',
+    'protanopia nord': 'red/green 17.6 of 19.7. T3 red Lc, T7 protan yellow/green, green/yellow',
+    'protanopia rose-pine':
+      'red/green 16.9 of 23. T3 red Lc, T6 green pair dE, cyan/green, green/white, red/yellow',
     'protanopia catppuccin':
       'red/green 19.4 of 24.3. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/yellow',
-    'protanopia classic-vivid':
-      'red/green 26.1 of 35.9, red/brightYellow 40.4 of 40.5. T3 red Lc, T7 protan yellow/green, brightYellow chroma, green/yellow',
-    'protanopia dracula':
-      'red/green 30.3 of 39.1. T3 red Lc, T6 green pair dE, T7 protan yellow/green, cyan/green, green/yellow',
-    'protanopia green-screen':
-      'red/green 27.4 of 35.8. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/brightYellow, green/yellow',
-    'protanopia high-contrast':
-      'red/green 30.3 of 40.8. T3 red Lc, T6 green pair dE, cyan/green, green/brightYellow',
-    'protanopia modus-vivendi':
-      'red/green 35.6 of 38.8, red/yellow 23.3 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE',
+    'protanopia dracula': 'red/green 27.7 of 39.1. T3 red Lc, T7 protan yellow/green, green/yellow',
     'protanopia monokai':
-      'red/green 35.6 of 39.6. T3 red Lc, T6 green bright step dL, T6 green pair dE',
-    'protanopia nightfly': 'red/green 24.2 of 30. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia nord': 'red/green 17.9 of 19.7. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia one-half-dark': 'red/yellow 17.8 of 17.9. T3 red Lc, T6 yellow pair dE',
-    'protanopia rubric':
-      'red/green 23.2 of 29.1. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green hue limit, green/yellow, red hue limit',
+      'red/green 35.6 of 39.6, red/yellow 20.2 of 20.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE',
+    'protanopia one-half-dark':
+      'red/green 30.7 of 30.8, red/yellow 17.8 of 17.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, green/foreground, green/white',
     'protanopia solarized-light':
       'red/green 21.8 of 35.1, red/yellow 12.9 of 21.9. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/yellow',
-    'protanopia triad':
-      'red/green 29.4 of 30.3. T3 red Lc, T6 green pair dE, green hue limit, green/brightYellow, red hue limit',
-    'tritanopia catppuccin':
-      'red/brightYellow 31.9 of 32.1, red/yellow 25.7 of 26.9. T3 red Lc, T6 yellow pair dE, brightYellow chroma, trade',
-    'tritanopia classic-vivid':
-      'red/brightYellow 39 of 40.5, cyan/green 19.5 of 19.5, cyan/blue 6.2 of 19.4. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, brightYellow chroma, cyan/blue, trade',
-    'tritanopia dracula': 'cyan/green 12.2 of 21.8. T2 green Lc, T6 cyan pair dE',
-    'tritanopia green-screen':
-      'cyan/green 8.2 of 19.3, cyan/blue 14.9 of 17.4. T3 blue Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T7 tritan cyan/green, cyan/green, trade',
-    'tritanopia gruvbox':
-      'red/brightYellow 26 of 28.6, red/yellow 18.5 of 19.6. T3 red Lc, T6 yellow pair dE, green/brightYellow',
-    'tritanopia harbor-dark':
-      'cyan/green 10.1 of 18.7, cyan/blue 12.7 of 12.9. T3 blue Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, cyan/green, trade',
-    'tritanopia high-contrast':
-      'red/yellow 36.5 of 37.4, cyan/green 11.7 of 22.3. T3 red Lc, T6 cyan pair dE, T6 yellow bright step dL, T6 yellow pair dE, red/green, trade',
-    'tritanopia iceberg-dark':
-      'red/brightYellow 22.8 of 23.5, red/yellow 14 of 14.3. T3 red Lc, T6 yellow pair dE, green/brightYellow',
+    'protanopia classic-vivid':
+      'red/green 26.1 of 35.9, red/brightYellow 40.4 of 40.5. T3 red Lc, T7 protan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/yellow',
+    'protanopia high-contrast':
+      'red/green 29.8 of 40.8. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/brightYellow, green/yellow',
+    'protanopia green-screen':
+      'red/green 25.7 of 35.8. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/brightYellow, green/foreground, green/yellow',
+    'protanopia srcery':
+      'red/green 32.9 of 36.1. T3 red Lc, T6 green pair dE, green/brightWhite, green/foreground',
+    'protanopia nightfly': 'red/green 24.2 of 30. T3 red Lc, T7 protan yellow/green, green/yellow',
+    'protanopia melange-dark':
+      'red/yellow 12.4 of 12.9. T3 red Lc, T6 yellow pair dE, yellow/white',
+    'protanopia melange-light': 'red/green 23.9 of 30.8. T3 red Lc, green/foreground',
+    'protanopia modus-vivendi':
+      'red/green 34.7 of 38.8, red/yellow 22.1 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE',
+    'protanopia harbor-dark':
+      'red/green 33.4 of 36.2. T3 red Lc, T6 green pair dE, green/foreground',
+    'tritanopia obsidian-ember':
+      'red/brightYellow 23.1 of 23.9, red/yellow 14.3 of 15.9, cyan/green 8.6 of 11.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, trade, yellow/foreground',
     'tritanopia kanso-zen':
-      'cyan/green 14.5 of 14.7. T2 cyan Lc, T6 green pair dE, cyan/blue, green/brightYellow',
-    'tritanopia melange-dark': 'cyan/green 8.7 of 9.1. T2 cyan Lc, T6 green pair dE, cyan/blue',
-    'tritanopia modus-vivendi':
-      'cyan/green 9.5 of 18.2, cyan/blue 12.5 of 14.1. T3 blue Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T7 tritan cyan/green, cyan/green, trade',
-    'tritanopia monokai':
-      'red/yellow 18.6 of 20.9, cyan/green 14.7 of 19.7. T2 cyan Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, green chroma',
-    'tritanopia nord': 'red/yellow 25.3 of 26. T3 red Lc, T6 yellow pair dE',
-    'tritanopia obsidian-ember': 'cyan/green 10.4 of 11.9. T6 green pair dE, trade',
-    'tritanopia one-half-dark':
-      'red/brightYellow 24.2 of 25.4, red/yellow 16.2 of 17.9, cyan/green 17.4 of 18.9, cyan/blue 7.3 of 8.9. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, cyan/green, green/brightYellow',
+      'red/brightYellow 26.6 of 27.2, cyan/green 14.5 of 14.7. T2 cyan Lc, T3 red Lc, T6 green pair dE, brightYellow chroma, brightYellow/brightWhite, cyan/blue, green/brightWhite, green/brightYellow',
+    'tritanopia tokyo-night':
+      'red/green 32 of 33.2, red/brightYellow 23 of 25.1, red/yellow 15.1 of 18.1, cyan/green 14.9 of 22.5. T2 cyan Lc, T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow/brightWhite, cyan/green, green/brightWhite, green/brightYellow',
+    'tritanopia nord':
+      'red/brightYellow 33.8 of 34.4, red/yellow 24.7 of 26. T3 red Lc, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, yellow/foreground, yellow/white',
     'tritanopia rose-pine':
-      'red/brightYellow 26.6 of 26.7, red/yellow 17.3 of 20.7. T3 red Lc, T6 yellow pair dE, brightYellow chroma, trade',
-    'tritanopia srcery': 'cyan/green 9.9 of 15. T6 green bright step dL, T6 green pair dE, trade',
+      'red/brightYellow 26.6 of 26.7, red/yellow 17.3 of 20.7. T3 red Lc, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, trade',
+    'tritanopia gruvbox':
+      'red/brightYellow 25.5 of 28.6, red/yellow 17.8 of 19.6, cyan/blue 11.3 of 11.7. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 yellow pair dE, brightYellow/foreground, trade, yellow/white',
+    'tritanopia catppuccin':
+      'red/brightYellow 31.9 of 32.1, red/yellow 25.7 of 26.9, cyan/green 11.2 of 11.8. T2 green Lc, T3 red Lc, T6 cyan pair dE, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, trade, yellow/brightWhite',
+    'tritanopia dracula': 'cyan/green 10.4 of 21.8. T2 green Lc, T6 cyan pair dE',
+    'tritanopia monokai':
+      'red/yellow 18.2 of 20.9, cyan/green 14.7 of 19.7. T2 cyan Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, green chroma',
+    'tritanopia one-half-dark':
+      'red/brightYellow 24.2 of 25.4, red/yellow 16.2 of 17.9, cyan/green 17.4 of 18.9, cyan/blue 7.3 of 8.9. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, cyan/green, green/brightWhite, green/brightYellow',
+    'tritanopia solarized-light':
+      'red/green 32.4 of 35.1, cyan/blue 11.3 of 12.2. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green pair dE, cyan/green, cyan/white, green/brightYellow, green/foreground, green/white',
     'tritanopia tango-dark':
       'cyan/green 12.5 of 19.1, cyan/blue 8.7 of 13. T2 cyan Lc, T3 blue Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, cyan/blue, cyan/green',
-    'tritanopia tokyo-night':
-      'cyan/green 15.2 of 22.5. T2 cyan Lc, T6 green bright step dL, T6 green pair dE',
+    'tritanopia classic-vivid':
+      'red/brightYellow 37.5 of 40.5, cyan/green 19.5 of 19.5, cyan/blue 6.2 of 19.4. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, brightYellow chroma, brightYellow/brightWhite, cyan/blue, trade',
+    'tritanopia high-contrast':
+      'red/yellow 36.5 of 37.4, cyan/green 11.5 of 22.3. T3 red Lc, T6 cyan pair dE, T6 yellow bright step dL, T6 yellow pair dE, red/green, yellow/brightWhite',
+    'tritanopia everforest-dark':
+      'red/brightYellow 24 of 24.8, red/yellow 15.7 of 16.8. T3 red Lc, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, green/brightYellow, yellow/foreground, yellow/white',
+    'tritanopia green-screen':
+      'red/brightYellow 36.5 of 37.2, cyan/green 16.3 of 19.3, cyan/blue 5.9 of 17.4. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, brightYellow chroma, brightYellow/brightWhite, cyan/blue, trade',
+    'tritanopia srcery':
+      'red/yellow 19.8 of 21.7, cyan/green 9.8 of 15, cyan/blue 11.5 of 13.4. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 tritan cyan/green, cyan/green, trade, yellow/white',
+    'tritanopia nightfly':
+      'cyan/green 11.6 of 12.8, cyan/blue 15.7 of 17.7. T2 green Lc, T3 blue Lc, T6 cyan pair dE',
+    'tritanopia melange-dark':
+      'red/brightYellow 18.5 of 21.8, red/yellow 10.8 of 12.9, cyan/green 8.8 of 9.1, cyan/blue 8.6 of 9.9. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green pair dE, T6 yellow pair dE, T7 tritan cyan/green, brightYellow/foreground, cyan/blue, cyan/green, cyan/white, trade, yellow/white',
+    'tritanopia modus-vivendi':
+      'red/brightYellow 25.9 of 26, red/yellow 22.4 of 25, cyan/green 9.5 of 18.2, cyan/blue 11 of 14.1. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 tritan cyan/green, brightYellow/foreground, cyan/green, trade',
+    'tritanopia harbor-dark':
+      'red/brightYellow 24.1 of 25.7, red/yellow 15.4 of 17.7, cyan/green 10.1 of 18.7, cyan/blue 12.7 of 12.9. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, brightYellow/foreground, cyan/green, trade',
+    'tritanopia iceberg-dark':
+      'red/brightYellow 22.3 of 23.5, red/yellow 13.5 of 14.3, cyan/green 13.1 of 14.4, cyan/blue 8.6 of 9.1. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green pair dE, T6 yellow pair dE, brightYellow/foreground, brightYellow/white, cyan/blue, cyan/foreground, cyan/green, cyan/white, green/brightWhite, green/brightYellow',
   };
 
   it('parts every pair as far as a typical eye sees it in the Typical fit, or names the pair it cannot reach and why', () => {
@@ -1164,9 +1221,9 @@ describe('color vision fits', () => {
   });
 
   // Where the Typical fit misses a target, the fit for the vision moves
-  // something, except on three themes for a protanope, where GAME_SHORT
-  // shows every step that would part red from green further giving up a
-  // floor the Typical fit holds. Their window changes all the same.
+  // something, except where GAME_SHORT shows every step that would part
+  // the pair further giving up a floor or a guard the Typical fit holds.
+  // Their window changes all the same.
   it('changes every theme for every vision its Typical fit misses, and none it holds', () => {
     const kept: string[] = [];
     for (const vision of OTHER) {
@@ -1179,15 +1236,26 @@ describe('color vision fits', () => {
       }
     }
     expect(kept).toEqual([
+      'deuteranopia monokai',
+      'deuteranopia one-half-dark',
+      'deuteranopia everforest-dark',
+      'protanopia obsidian-ember',
+      'protanopia nord',
       'protanopia catppuccin',
+      'protanopia dracula',
+      'protanopia monokai',
+      'protanopia one-half-dark',
       'protanopia classic-vivid',
+      'protanopia green-screen',
       'protanopia nightfly',
+      'protanopia melange-dark',
     ]);
     for (const at of kept) {
       expect(GAME_SHORT[at], at).not.toContain('trade');
-      const theme = findTheme(at.split(' ')[1]);
+      const [vision, id] = at.split(' ') as [ColorVision, string];
+      const theme = findTheme(id);
       const window = CHROME_COLOR_KEYS.some(
-        (key) => themeTokens(theme, 'protanopia')[key] !== themeTokens(theme)[key],
+        (key) => themeTokens(theme, vision)[key] !== themeTokens(theme)[key],
       );
       expect(window, at).toBe(true);
     }
@@ -1365,15 +1433,15 @@ describe('window status colors for a color vision', () => {
   // Each pair the window leaves short of its target for each vision, how
   // far it gets of how far it needs, and what stops it going further.
   const WINDOW_SHORT: Record<string, string> = {
-    'deuteranopia classic-vivid':
-      'danger/success 36.8 of 52.0, danger/warn 42.4 of 45.7. danger 3:1 floor, danger chroma, danger hue limit, success chroma, warn chroma, warn/success',
     'deuteranopia dracula': 'danger/success 34.2 of 37.8. danger 3:1 floor, success chroma, trade',
-    'deuteranopia green-screen':
-      'danger/success 37.8 of 44.2. danger 3:1 floor, danger hue limit, success chroma',
     'deuteranopia monokai':
       'danger/success 30.4 of 43.4, danger/warn 29.1 of 29.5. danger 3:1 floor, success chroma, trade, warn chroma, warn/success',
     'deuteranopia tango-dark':
       'danger/success 24.4 of 37.5, danger/warn 24.3 of 34.2. accent, danger 3:1 floor, danger hue limit, success chroma, warn chroma, warn/success',
+    'deuteranopia classic-vivid':
+      'danger/success 36.8 of 52.0, danger/warn 42.4 of 45.7. danger 3:1 floor, danger chroma, danger hue limit, success chroma, warn chroma, warn/success',
+    'deuteranopia green-screen':
+      'danger/success 37.8 of 44.2. danger 3:1 floor, danger hue limit, success chroma',
     'protanopia rubric': 'danger/warn 24.3 of 26.9. danger chroma, warn/success',
     'tritanopia classic-vivid': 'danger/success 51.8 of 52.0. danger 3:1 floor, trade',
   };

@@ -27,7 +27,8 @@
 // confuses until, seen through that vision, each pair stands as far
 // apart as a typical eye sees it in the Typical fit (visionChecks). It
 // moves lightness first, and turns a hue a little only where lightness
-// leaves a pair short (HUE_TURN). A built in theme ships them in
+// leaves a pair short (HUE_TURN). No color it moves runs into body text,
+// white or bold white (textGuards). A built in theme ships them in
 // themes.ts (VISION_FITS) where the fit for a vision moves anything, and
 // gameFit.test.ts fits them again with VOSH_FIT_THEMES=1.
 
@@ -579,6 +580,14 @@ export const GUARDED_PAIRS: readonly CuePair[] = [
  *  part come, the floor the Themes review asks of most T7 pairs. */
 export const VISION_GUARD = 10;
 
+/** The text colors a cue color must never run into: body text, and the
+ *  white and bold white the game writes whole sentences in. A fit for a
+ *  color vision keeps each color it moves (visionSlots) from coming
+ *  nearer each of them, as that vision sees them, than the Typical fit
+ *  has it, or VISION_GUARD if that is less, so a tell in green never
+ *  reads as body text. */
+export const TEXT_SLOTS: readonly GameSlot[] = ['foreground', 'white', 'brightWhite'];
+
 /** The cue pairs a fit for `vision` keeps apart. Every vision other
  *  than Typical keeps red apart from green, bright yellow and yellow,
  *  and Tritanopia also keeps cyan apart from green and blue. Typical
@@ -636,6 +645,13 @@ export function visionSlots(vision: ColorVision): readonly GameSlot[] {
     }
   }
   return GAME_SLOTS.filter((k) => named.has(k));
+}
+
+/** Each color a fit for `vision` moves (visionSlots) against body text,
+ *  white and bold white (TEXT_SLOTS), the pairs it keeps from running
+ *  together as that vision sees them. Typical names none. */
+export function textGuards(vision: ColorVision): readonly (readonly [GameSlot, GameSlot])[] {
+  return visionSlots(vision).flatMap((k) => TEXT_SLOTS.map((t) => [k, t] as const));
 }
 
 /** The slots a fit for `vision` may turn in hue, each up OKLCH hue
@@ -752,9 +768,10 @@ interface Hold {
   // The pairs the vision keeps apart, each with its target, how far
   // apart a typical eye sees it in `from`.
   pairs: readonly (readonly [AnsiSlot, AnsiSlot, number])[];
-  // The cue pairs, each with the distance, as the vision sees it, it
-  // may not drop under (GUARDED_PAIRS).
-  guards: readonly (readonly [AnsiSlot, AnsiSlot, number])[];
+  // The cue pairs, and each color the search moves against body text,
+  // white and bold white, each with the distance, as the vision sees it,
+  // it may not drop under (GUARDED_PAIRS, TEXT_SLOTS).
+  guards: readonly (readonly [GameSlot, GameSlot, number])[];
 }
 
 interface VisionState {
@@ -1004,15 +1021,16 @@ const cheapest = <S extends Search>(runs: S[]) =>
  *  keeps apart (holdsVision). Else it moves only the slots of those
  *  pairs and their twins (visionSlots), so every other color plays as
  *  Typical has it. No step gives up a check the Typical fit passes or
- *  falls further short of one it misses (holdsCheck), or brings a cue
- *  pair under its guard (GUARDED_PAIRS). It moves lightness first, in
- *  one search from the Typical fit (visionSearch). Where that leaves a
- *  pair short, a search from there may also turn red, green and for a
- *  tritanope cyan up to HUE_TURN degrees, kept where it parts the pairs
- *  further, and where that still leaves one short, one more up to
- *  HUE_TURN_FAR, kept where it closes FAR_GAIN more of the gap. Where
- *  nothing parts a pair at all, the fit is the Typical fit. That takes
- *  up to two seconds. */
+ *  falls further short of one it misses (holdsCheck), brings a cue pair
+ *  under its guard (GUARDED_PAIRS), or brings a color it moves under its
+ *  guard from body text, white or bold white (textGuards). It moves
+ *  lightness first, in one search from the Typical fit (visionSearch).
+ *  Where that leaves a pair short, a search from there may also turn
+ *  red, green and for a tritanope cyan up to HUE_TURN degrees, kept
+ *  where it parts the pairs further, and where that still leaves one
+ *  short, one more up to HUE_TURN_FAR, kept where it closes FAR_GAIN
+ *  more of the gap. Where nothing parts a pair at all, the fit is the
+ *  Typical fit. That takes up to two seconds. */
 export function fit(
   src: XtermPalette,
   vision: ColorVision = 'typical',
@@ -1036,11 +1054,16 @@ export function fit(
     slots: visionSlots(vision),
     turns: turnSlots(vision),
     pairs: targets.map(([a, b]) => [a, b, dE(from[a], from[b])] as const),
-    guards: GUARDED_PAIRS.map(([a, b], i) => {
-      const seen = dECvd(from[a], from[b], kind);
-      const floor = targets.includes(GUARDED_PAIRS[i]) ? dE(from[a], from[b]) : VISION_GUARD;
-      return [a, b, Math.min(seen, floor)] as const;
-    }),
+    guards: [
+      ...GUARDED_PAIRS.map(([a, b], i) => {
+        const seen = dECvd(from[a], from[b], kind);
+        const floor = targets.includes(GUARDED_PAIRS[i]) ? dE(from[a], from[b]) : VISION_GUARD;
+        return [a, b, Math.min(seen, floor)] as const;
+      }),
+      ...textGuards(vision).map(
+        ([a, b]) => [a, b, Math.min(dECvd(from[a], from[b], kind), VISION_GUARD)] as const,
+      ),
+    ],
   };
   const home: VisionState = {
     L: Object.fromEntries(GAME_SLOTS.map((k) => [k, rgbToOklch(rgb(from[k])).L])) as Lightness,
