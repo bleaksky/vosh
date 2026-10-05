@@ -1,0 +1,22 @@
+/* Bundled @font-face declarations. macOS WKWebView refuses to match
+   user-installed fonts by CSS family name (anti-fingerprinting since
+   Sonoma); the only way to render a custom font is to ship it with
+   the app and load it via @font-face. The bundled family takes a
+   "Bundled" suffix in its CSS family name so it cannot be shadowed
+   by a partially-matching system font on other platforms. */
+
+@font-face {
+  font-family: 'JetBrainsMono Bundled';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'JetBrainsMono Bundled';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
+}
