@@ -403,8 +403,10 @@ describe('AppearancePage', () => {
     ]);
     expect(typical.label).toContain('Color vision');
     expect(typical.label).toContain(
-      'Fit game colors keeps hits, tells and says apart for the vision you pick.',
+      'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
     );
+    // Typical changes nothing, so the row says nothing more.
+    expect(typical.label).not.toContain('turn');
     expect(typical.options).toEqual([
       { label: 'Typical', value: 'typical' },
       { label: 'Deuteranopia', value: 'deuteranopia' },
@@ -414,8 +416,25 @@ describe('AppearancePage', () => {
     expect(typical.value).toBe('typical');
     // A pick saves with the rest of the config.
     expect(typical.saved?.color_vision).toBe('deuteranopia');
+    // The row says what the vision swaps, the same on every theme.
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
+    expect(picked.label).toContain(
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+    );
+    const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
+    const swapped =
+      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+    expect((await visionRow(kanso)).label).toContain(swapped);
+    // Fit game colors off swaps the published colors, so the row says
+    // the same.
+    expect((await visionRow({ ...kanso, fit_game_colors: false })).label).toContain(swapped);
+    // While the theme's colors are off for MUD text, the game text keeps
+    // your base palette.
+    const base = await visionRow({ ...kanso, theme_terminal_colors: false });
+    expect(base.label).toContain(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. In the window success turns blue and danger leans toward orange.",
+    );
   });
 
   it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {

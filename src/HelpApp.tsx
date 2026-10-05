@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { followReplacedUiConfig, getUiConfig, type UiConfig } from './lib/session';
+import {
+  followReplacedUiConfig,
+  getUiConfig,
+  subscribeColorVisionChanged,
+  type UiConfig,
+} from './lib/session';
 import {
   applyThemePrefs,
   getCurrentThemeId,
+  setColorVision,
   subscribeThemeChanges,
   subscribeThemePrefs,
 } from './lib/theme';
@@ -325,6 +331,9 @@ export function HelpApp() {
         setThemeId(getCurrentThemeId());
       }),
     );
+    // Settings saved another color vision, which the status colors here
+    // follow too.
+    void keep(subscribeColorVisionChanged(setColorVision));
     return () => {
       window.clearTimeout(fallback);
       cancelled = true;

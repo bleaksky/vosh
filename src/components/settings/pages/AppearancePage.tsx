@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   BUNDLED_FONTS,
+  colorVisionNote,
   fontChoices,
   pairChoices,
   panelFontChoices,
@@ -53,7 +54,8 @@ import { fitAndKeep } from './appearance/fitAndKeep';
 // then follow system appearance and the light and dark pair it switches
 // between. Terminal text holds the font, the size, the line height,
 // whether MUD text takes the theme's colors, whether play fits the
-// game's colors to the theme and for which color vision, whether Vosh
+// game's colors to the theme, which color vision the game text and the
+// window's status colors follow, whether Vosh
 // keeps the colors your triggers set readable on the theme, and whether
 // a line the same as the one before it shows once with a count. While that is on, two rows
 // under it choose whether the lines of a fight collapse, and whether
@@ -172,7 +174,12 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   const lightTheme = shownId(config.light_theme);
   const darkTheme = shownId(config.dark_theme);
   // An id no theme has draws the fallback theme, so the caption names it.
-  const caption = themeCaption(themes.find((t) => t.id === shown) ?? findTheme(shown));
+  const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
+  const caption = themeCaption(shownTheme);
+  const visionNote = colorVisionNote(
+    config.color_vision,
+    resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
+  );
   // While follow is on the arrow keys stay among the themes the OS
   // shows now, so stepping through the gallery never fills the other
   // slot and each step lands on the radio it checks.
@@ -359,7 +366,18 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
         <Row
           anchor="color-vision"
           label="Color vision"
-          description="Fit game colors keeps hits, tells and says apart for the vision you pick."
+          description={
+            <>
+              Vosh swaps the colors your eyes confuse for colors they tell apart, the way color
+              blind modes in games do.
+              {visionNote !== '' && (
+                <>
+                  <br />
+                  {visionNote}
+                </>
+              )}
+            </>
+          }
         >
           <Select
             value={config.color_vision}

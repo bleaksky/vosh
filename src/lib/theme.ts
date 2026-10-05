@@ -9,12 +9,19 @@
 // follow_system_appearance is off it is `theme`. While it is on it is
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
+//
+// Every window paints the chrome for your color vision, from UiConfig
+// color_vision, which swaps the status colors (lib/chrome). A window
+// takes it from its config through applyThemePrefs, and from a change
+// through setColorVision, which paints the theme again.
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
+import { toColorVision, type ColorVision } from './gameFit';
+import { createStore } from './stores/store';
 import {
   bootPaintSide,
   osPrefersDark,
@@ -62,6 +69,8 @@ let lastStandsFor: string | null = null;
 /** The theme id applyTheme was last asked for. A catalog refresh that
  *  answers after a later pick leaves the later pick on screen. */
 let lastChoice: string | null = null;
+/** The color vision this window paints for. */
+const visionStore = createStore<ColorVision>('typical');
 
 /** The saved fields that decide which theme Vosh shows. UiConfig
  *  carries all four. */
@@ -180,8 +189,13 @@ export interface ThemePrefsOptions {
 }
 
 /** Remember the theme fields, show the theme they resolve to, and follow
- *  the OS while follow is on. Returns the id it applied. */
-export function applyThemePrefs(prefs: ThemePrefs, options: ThemePrefsOptions = {}): string {
+ *  the OS while follow is on. Returns the id it applied. A whole
+ *  UiConfig also brings the color vision the window paints for. */
+export function applyThemePrefs(
+  prefs: ThemePrefs & { color_vision?: unknown },
+  options: ThemePrefsOptions = {},
+): string {
+  if (prefs.color_vision !== undefined) visionStore.set(toColorVision(prefs.color_vision));
   themePrefs = themePrefsOf(prefs);
   if (options.broadcastFlips !== undefined) broadcastFlips = options.broadcastFlips;
   followSystemScheme(themePrefs.follow_system_appearance);
@@ -197,10 +211,33 @@ export function getThemePrefs(): ThemePrefs | null {
   return themePrefs;
 }
 
-/** What a theme paints on the root: its attributes, its chrome tokens,
- *  and two more values the page reads. Pure. */
-export function themePaintSide(theme: AppTheme): ThemePaintSide {
-  const tokens = themeTokens(theme);
+/** Paint for `vision` from now on, and paint the theme on screen again
+ *  when it changes. The main window also fits the game colors for it
+ *  (lib/fitGameColors). */
+export function setColorVision(vision: ColorVision): void {
+  if (vision === visionStore.get()) return;
+  visionStore.set(vision);
+  if (lastChoice !== null) applyTheme(lastChoice);
+}
+
+/** The color vision this window paints for. */
+export function getColorVision(): ColorVision {
+  return visionStore.get();
+}
+
+/** Hear each change of the color vision this window paints for. */
+export function subscribeColorVision(cb: () => void): () => void {
+  return visionStore.subscribe(cb);
+}
+
+/** What a theme paints on the root for `vision`, by default the one
+ *  this window paints for: its attributes, its chrome tokens, and two
+ *  more values the page reads. */
+export function themePaintSide(
+  theme: AppTheme,
+  vision: ColorVision = visionStore.get(),
+): ThemePaintSide {
+  const tokens = themeTokens(theme, vision);
   const vars = tokensToCssVars(tokens);
   // The legacy --c-* names alias the tokens in styles/tokens.css. The
   // one exception is the soft accent: the map canvas reads it through

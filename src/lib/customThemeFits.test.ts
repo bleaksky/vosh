@@ -11,16 +11,16 @@ import {
 } from './themes';
 
 // The fit runs in a worker. Here it answers when the test says, and
-// `visions` records the color vision and the Typical fit each ask held.
+// `visions` records the color vision and the start each ask held.
 const fitting = vi.hoisted(() => {
   const asked: XtermPalette[] = [];
   const visions: [string, Partial<XtermPalette> | undefined][] = [];
   let answer: (fitted: Partial<XtermPalette> | null) => void = () => {};
   const fitOffThread = vi.fn(
-    (palette: XtermPalette, vision = 'typical', typical?: Partial<XtermPalette>) =>
+    (palette: XtermPalette, vision = 'typical', start?: Partial<XtermPalette>) =>
       new Promise<Partial<XtermPalette> | null>((resolve) => {
         asked.push(palette);
-        visions.push([vision, typical]);
+        visions.push([vision, start]);
         answer = resolve;
       }),
   );
@@ -129,8 +129,8 @@ describe('fitThemesInPlay', () => {
   });
 });
 
-describe('fits for a color vision', () => {
-  it('fits a custom theme in play once for your vision, and plays its Typical fit until then', async () => {
+describe('swaps for a color vision', () => {
+  it('swaps a custom theme in play once for your vision, and plays its Typical fit until then', async () => {
     const list = [theme('dusk', '#1a1b27', { red: '#cb7b74' })];
     load({ theme: 'dusk', custom_themes: list });
     const heard = vi.fn();
@@ -141,7 +141,7 @@ describe('fits for a color vision', () => {
     // Typical plays the fit the theme keeps and asks for nothing.
     expect(playPalette(dusk, true)).toEqual(typical);
     expect(fitting.asked).toHaveLength(0);
-    // Deuteranopia plays it too until its own fit lands, and asks once,
+    // Deuteranopia plays it too until its swap lands, and asks once,
     // from the Typical fit.
     expect(playPalette(dusk, true, 'deuteranopia')).toEqual(typical);
     expect(playPalette(dusk, true, 'deuteranopia')).toEqual(typical);
@@ -151,7 +151,7 @@ describe('fits for a color vision', () => {
     fitting.answer({ red: '#b06a64', green: '#9fe0a0' });
     await vi.waitFor(() => expect(heard).toHaveBeenCalled());
     // The theme comes back as a new object, so a view that keeps it
-    // draws again, now in the fit for the vision.
+    // draws again, now in the swap for the vision.
     expect(findTheme('dusk')).not.toBe(dusk);
     expect(playPalette(findTheme('dusk'), true, 'deuteranopia')).toEqual({
       ...dusk.xterm,
@@ -170,20 +170,49 @@ describe('fits for a color vision', () => {
     stopHearing();
   });
 
-  it('plays a custom theme that holds the vision as published, and fits nothing', async () => {
-    // Triad as published holds every floor Tritanopia raises.
-    const night = { ...theme('night', '#150c22'), xterm: { ...findTheme('triad').xterm } };
-    load({ theme: 'night', custom_themes: [night] });
-    expect(playPalette(findTheme('night'), true, 'tritanopia')).toBe(findTheme('night').xterm);
-    await Promise.resolve();
-    expect(playPalette(findTheme('night'), true, 'tritanopia')).toBe(findTheme('night').xterm);
-    expect(fitting.asked).toHaveLength(0);
+  // The old fit left a theme whose Typical fit kept the pairs apart as
+  // it was. The swap changes every theme, so a copy of Kanso Zen asks
+  // for one too, from its Typical fit.
+  it('swaps a custom theme whatever its Typical fit already keeps apart', () => {
+    const kanso = findTheme('kanso-zen');
+    const zen = {
+      ...theme('zen', kanso.xterm.background, kanso.fitted as Record<string, string>),
+      xterm: { ...kanso.xterm },
+    };
+    load({ theme: 'zen', custom_themes: [zen] });
+    const typical = playPalette(findTheme('zen'), true);
+    expect(typical).toEqual({ ...kanso.xterm, ...kanso.fitted });
+    expect(playPalette(findTheme('zen'), true, 'protanopia')).toEqual(typical);
+    expect(fitting.asked).toEqual([kanso.xterm]);
+    expect(fitting.visions).toEqual([['protanopia', kanso.fitted]]);
   });
 
-  it('asks for nothing while Fit game colors is off, or for a built in theme', () => {
-    load({ theme: 'mist', custom_themes: [theme('mist', '#1b1c28')] });
-    expect(playPalette(findTheme('mist'), false, 'protanopia')).toBe(findTheme('mist').xterm);
+  // With Fit game colors off the game text plays the published colors,
+  // and a vision swaps from them.
+  it('swaps from the published colors while Fit game colors is off, and asks nothing for a built in theme', async () => {
+    load({ theme: 'mist', custom_themes: [theme('mist', '#1b1c28', { red: '#cb7b74' })] });
+    const mist = findTheme('mist');
+    expect(playPalette(mist, false, 'protanopia')).toBe(mist.xterm);
+    expect(fitting.visions).toEqual([['protanopia', {}]]);
+    fitting.answer({ green: '#79baf7' });
+    await vi.waitFor(() => expect(findTheme('mist')).not.toBe(mist));
+    expect(playPalette(findTheme('mist'), false, 'protanopia')).toEqual({
+      ...mist.xterm,
+      green: '#79baf7',
+    });
+    // The swap from the Typical fit is another, and Fit game colors on
+    // asks for it.
+    expect(playPalette(findTheme('mist'), true, 'protanopia')).toEqual({
+      ...mist.xterm,
+      red: '#cb7b74',
+    });
+    expect(fitting.visions).toEqual([
+      ['protanopia', {}],
+      ['protanopia', { red: '#cb7b74' }],
+    ]);
+    fitting.asked.length = 0;
     playPalette(findTheme('kanso-zen'), true, 'protanopia');
+    playPalette(findTheme('kanso-zen'), false, 'protanopia');
     expect(fitting.asked).toHaveLength(0);
   });
 });
