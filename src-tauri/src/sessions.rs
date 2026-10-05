@@ -432,13 +432,21 @@ impl Session {
         event: &str,
         payload: &T,
     ) {
-        let named = Named {
-            session: self.id,
-            payload,
-        };
-        if let Err(e) = app.emit(event, &named) {
-            warn!(error = %e, event, "failed to emit a session event");
-        }
+        emit_for(app, self.id, event, payload);
+    }
+}
+
+/// Send `event` with `payload` for the session `session`, as
+/// [`Session::emit`] does, from a task that holds only its id.
+pub(crate) fn emit_for<R: tauri::Runtime, T: Serialize>(
+    app: &AppHandle<R>,
+    session: SessionId,
+    event: &str,
+    payload: &T,
+) {
+    let named = Named { session, payload };
+    if let Err(e) = app.emit(event, &named) {
+        warn!(error = %e, event, "failed to emit a session event");
     }
 }
 

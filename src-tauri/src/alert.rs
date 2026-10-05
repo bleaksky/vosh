@@ -172,31 +172,36 @@ pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, ale
             continue;
         }
         let words = alert.parts.words.then(|| alert.words.clone()).flatten();
-        let played = state.banners.post(
-            app,
-            &banner::Banner {
-                session: session.id,
-                title: alert.title.clone(),
-                label: label.clone(),
-                words: words.clone(),
-                owner: alert.owner.clone(),
-            },
-            &fate,
-        );
-        session.emit(
-            app,
-            events::ALERT,
-            &AlertPayload {
-                title: alert.title,
-                label: label.clone(),
-                words,
-                sound: if played { None } else { fate.sound.clone() },
-                banner: fate.banner,
-                notice: fate.notice,
-                source: alert.source,
-                owner: alert.owner,
-            },
-        );
+        let banner = banner::Banner {
+            session: session.id,
+            title: alert.title.clone(),
+            label: label.clone(),
+            words: words.clone(),
+            owner: alert.owner.clone(),
+        };
+        let payload = AlertPayload {
+            title: alert.title,
+            label: label.clone(),
+            words,
+            sound: fate.sound.clone(),
+            banner: fate.banner,
+            notice: fate.notice,
+            source: alert.source,
+            owner: alert.owner,
+        };
+        let (to, id) = (app.clone(), session.id);
+        state.banners.post(app, banner, fate, move |played| {
+            // A system sound played in place of the page's tone.
+            let payload = if played {
+                AlertPayload {
+                    sound: None,
+                    ..payload
+                }
+            } else {
+                payload
+            };
+            crate::sessions::emit_for(&to, id, events::ALERT, &payload);
+        });
     }
 }
 
