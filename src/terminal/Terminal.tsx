@@ -607,7 +607,6 @@ export function Terminal({
       },
       outputTaken: () => outputTaken,
       region: () => writer.region(),
-      webgl,
       quiet: () => quietRef.current,
       lent: () => lentRef.current,
     });

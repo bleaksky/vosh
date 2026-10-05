@@ -526,8 +526,8 @@ function MainWindow() {
     const tick = () => {
       const h = historyTermRef.current;
       if (h && !done) {
-        const d = h.debug();
-        if (d.bufferLength > d.rows + 1) {
+        const size = h.contentSize();
+        if (size.bufferLength > size.rows + 1) {
           done = true;
           const scrollBack = preSplitLiveRowsRef.current;
           h.scrollToBottom();

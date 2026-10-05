@@ -51,19 +51,9 @@ export interface TerminalHandle {
    *  DOM renderer leaves it blank until the next scroll triggers a draw;
    *  calling this after it settles paints it immediately. */
   refresh: () => void;
-  /** A snapshot of the xterm internals. The history split reads
-   *  `bufferLength` and `rows` from it to know when its pane holds real
-   *  content. */
-  debug: () => {
-    rows: number;
-    cols: number;
-    viewportY: number;
-    baseY: number;
-    bufferLength: number;
-    hostW: number;
-    hostH: number;
-    webgl: boolean;
-  };
+  /** The rows the pane shows and the lines its buffer holds. The history
+   *  split reads them to know when its pane holds real content. */
+  contentSize: () => { rows: number; bufferLength: number };
   /** Height of one terminal cell in CSS pixels, derived from the
    *  host's pixel height divided by the current row count. Used
    *  by the split-scrollback Resizable to snap the divider to
@@ -144,7 +134,6 @@ export interface HandleParts {
   outputTaken(): number;
   /** The open region as the writer in use holds it. */
   region(): ReturnType<RegionWriter['region']>;
-  webgl: { active(): boolean };
   /** Whether this is the split's history pane. */
   quiet(): boolean;
   /** Rows lent to the pinned prompt band. */
@@ -184,19 +173,8 @@ const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
 
 /** The handle a terminal pane gives its host once it is set up. */
 export function terminalHandle(parts: HandleParts): TerminalHandle {
-  const {
-    term,
-    searchAddon,
-    paneSizer,
-    sizer,
-    host,
-    write,
-    outputTaken,
-    region,
-    webgl,
-    quiet,
-    lent,
-  } = parts;
+  const { term, searchAddon, paneSizer, sizer, host, write, outputTaken, region, quiet, lent } =
+    parts;
   return {
     write,
     outputTaken,
@@ -209,15 +187,9 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
     refresh: () => {
       if (term.rows > 0) term.refresh(0, term.rows - 1);
     },
-    debug: () => ({
+    contentSize: () => ({
       rows: term.rows,
-      cols: term.cols,
-      viewportY: term.buffer.active.viewportY,
-      baseY: term.buffer.active.baseY,
       bufferLength: term.buffer.active.length,
-      hostW: host && host.style.width ? parseFloat(host.style.width) : 0,
-      hostH: host && host.style.height ? parseFloat(host.style.height) : 0,
-      webgl: webgl.active(),
     }),
     // viewportY tracks the top of the viewport in scrollback coords;
     // baseY tracks the top of the bottom page. Equal means the

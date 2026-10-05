@@ -4,12 +4,8 @@ import type { XtermBlink } from './xtermBlink';
 
 /** Draws `term` with xterm's WebGL renderer when it can, and tells `blink`
  *  while WebGL draws. `quiet` is the history pane, which keeps the DOM
- *  renderer. `active` says whether WebGL still draws. */
-export function loadWebgl(
-  term: Terminal,
-  blink: XtermBlink,
-  quiet: boolean,
-): { active(): boolean; dispose(): void } {
+ *  renderer. */
+export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { dispose(): void } {
   // WebGL is on by default: the GPU renderer is far smoother for
   // scroll and burst output than xterm's DOM renderer. The webgl2
   // probe below still falls back to DOM when the WebView can't
@@ -100,14 +96,5 @@ export function loadWebgl(
   } else {
     console.log('[vosh] webgl off — re-enable with localStorage.removeItem("vosh.webgl")');
   }
-  return {
-    active: () => webglAddon !== null,
-    dispose: () => {
-      // Forget the addon first, so active() reads false even when its
-      // dispose throws.
-      const addon = webglAddon;
-      webglAddon = null;
-      addon?.dispose();
-    },
-  };
+  return { dispose: () => webglAddon?.dispose() };
 }
