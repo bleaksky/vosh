@@ -1,15 +1,15 @@
 import { useMemo } from 'react';
 import { usePlayPalette } from '../../lib/fitGameColors';
 import type { VitalsOptions } from '../../ipc/uiConfig';
-import { useChipStyle } from '../../lib/stores/chipStyleStore';
-import { useCombat } from '../../lib/stores/combatStore';
-import { useGameTime } from '../../lib/stores/gameTimeStore';
-import { useTarget } from '../../lib/stores/targetStore';
-import { useTickCount } from '../../lib/stores/tickCountStore';
-import { shownTick, useTick } from '../../lib/stores/tickStore';
-import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
-import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
-import { useWorld } from '../../lib/stores/worldStore';
+import { useChipStyle } from '../../stores/chipStyleStore';
+import { useCombat } from '../../stores/combatStore';
+import { useGameTime } from '../../stores/gameTimeStore';
+import { useTarget } from '../../stores/targetStore';
+import { useTickCount } from '../../stores/tickCountStore';
+import { shownTick, useTick } from '../../stores/tickStore';
+import { useVitalsOptions } from '../../stores/vitalsOptionsStore';
+import { useVitals, type Vitals, type VitalKey } from '../../stores/vitalsStore';
+import { useWorld } from '../../stores/worldStore';
 import { themeTokens } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import {

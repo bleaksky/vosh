@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { SessionOutput } from '../../ipc/terminal';
+import type { SessionOutput } from '../ipc/terminal';
 import { bandAfterOutput, pinRowAfterOutput, pinRowAfterWrite } from './pinnedPromptStore';
 
 vi.mock('@tauri-apps/api/event', () => ({

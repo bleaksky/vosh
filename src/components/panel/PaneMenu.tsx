@@ -18,8 +18,8 @@ import {
 import { setAffectsDisplay } from '../../ipc/affects';
 import { profilesList } from '../../ipc/profiles';
 import { resetChatColors, setChatColor } from '../../ipc/uiConfig';
-import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
-import { useChatColors } from '../../lib/stores/chatColorsStore';
+import { useAffectsDisplay } from '../../stores/affectsDisplayStore';
+import { useChatColors } from '../../stores/chatColorsStore';
 import { usePlayPalette } from '../../lib/fitGameColors';
 import type { XtermPalette } from '../../lib/themes';
 import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';

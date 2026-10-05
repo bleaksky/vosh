@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { normalizeAffectName } from '../../../../lib/affects';
 import { useEscape } from '../../../../lib/escapeStack';
 import type { TrackedAffect } from '../../../../ipc/affects';
-import { useAffects } from '../../../../lib/stores/affectsStore';
+import { useAffects } from '../../../../stores/affectsStore';
 import {
   addTrackedAffect,
   affectSuggestions,

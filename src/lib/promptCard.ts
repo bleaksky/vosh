@@ -22,7 +22,7 @@ import type {
   PromptShow,
   PromptShowState,
 } from '../ipc/prompt';
-import type { GamePromptSeen } from './stores/gamePromptStore';
+import type { GamePromptSeen } from '../stores/gamePromptStore';
 
 /** The card's steps. `codes-entry` is P2, `codes` P3 with its states P3b
  *  and P3c, `point` B2's question and `name` A2's naming of P15, `start`

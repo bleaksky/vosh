@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import { createStore } from './stores/store';
+import { createStore } from '../stores/store';
 import { playPalette, type XtermPalette } from './themes';
 import { useActiveTheme } from './useActiveTheme';
 

@@ -9,7 +9,7 @@ import {
 } from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
 import { usePlayPalette } from '../../lib/fitGameColors';
-import { useChatColors } from '../../lib/stores/chatColorsStore';
+import { useChatColors } from '../../stores/chatColorsStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';

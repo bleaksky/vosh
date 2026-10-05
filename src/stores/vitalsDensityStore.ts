@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { getUiConfig, subscribeVitalsDensityChanged, type VitalsDensity } from '../../ipc/uiConfig';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { getUiConfig, subscribeVitalsDensityChanged, type VitalsDensity } from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // The active profile's vitals density for the panel footer. Seeded

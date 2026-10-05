@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { usePlayPalette } from '../../lib/fitGameColors';
 import { roomNameColor, terrainLabel, type RoomNameGround } from '../../lib/roomName';
-import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../lib/stores/roomStore';
+import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../stores/roomStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { ServerMapView } from '../ServerMapView';

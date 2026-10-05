@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorldTime } from '../../lib/stores/worldStore';
+import type { WorldTime } from '../../stores/worldStore';
 import { formatGameTime } from './gameTime';
 
 function at(hour: number | null, minute: number | null = null): WorldTime {

@@ -1,13 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import lament from '../../../fixtures/gmcp/aabahran/lament.json';
-import { AffectsPaneView } from '../../components/panel/AffectsPane';
-import { GroupPaneView } from '../../components/panel/GroupPane';
-import { PaneLeafContext } from '../../components/panel/paneActions';
-import { VitalsBlock } from '../../components/panel/VitalsFooter';
-import type { PaneLeaf } from '../paneLayout';
-import { DEFAULT_VITALS_OPTIONS } from '../../ipc/uiConfig';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import lament from '../../fixtures/gmcp/aabahran/lament.json';
+import { AffectsPaneView } from '../components/panel/AffectsPane';
+import { GroupPaneView } from '../components/panel/GroupPane';
+import { PaneLeafContext } from '../components/panel/paneActions';
+import { VitalsBlock } from '../components/panel/VitalsFooter';
+import type { PaneLeaf } from '../lib/paneLayout';
+import { DEFAULT_VITALS_OPTIONS } from '../ipc/uiConfig';
+import { aabahranPacket } from '../test/aabahranGmcp';
 
 // Drives the four stores that OR in the hidden state through a fake
 // Tauri event bus, with the lamented tears cases in
@@ -40,7 +40,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 
-vi.mock('../tickSound', () => ({ playTickSound: vi.fn() }));
+vi.mock('../lib/tickSound', () => ({ playTickSound: vi.fn() }));
 
 function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
@@ -70,7 +70,7 @@ async function load() {
     vitals: await import('./vitalsStore'),
     affects: await import('./affectsStore'),
     combat: await import('./combatStore'),
-    group: await import('../groupStore'),
+    group: await import('../lib/groupStore'),
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STATUS_TEXT_CONTRAST } from '../../lib/chrome';
 import { contrast, parseHex, rgbToOklch } from '../../lib/color';
-import type { WorldTime } from '../../lib/stores/worldStore';
+import type { WorldTime } from '../../stores/worldStore';
 import { BUILTIN_THEMES, findTheme, themeTokens } from '../../lib/themes';
 import { DAYLIGHT_SLOTS, daylightPhase, daylightTint, isDaytime } from './daylight';
 

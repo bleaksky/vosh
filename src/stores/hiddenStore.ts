@@ -1,5 +1,5 @@
-import { hiddenGet, onHidden, type HiddenPayload } from '../../ipc/prompt';
-import { onState } from '../../ipc/session';
+import { hiddenGet, onHidden, type HiddenPayload } from '../ipc/prompt';
+import { onState } from '../ipc/session';
 import { createStore } from './store';
 
 // Which values the game hides right now, from session://hidden. The

@@ -62,7 +62,7 @@ import { subscribeUiConfigReplaced } from '../../../ipc/uiConfig';
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import { shownColumns, type Cell } from '../../../lib/sgrCells';
 import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
-import { useGamePrompt } from '../../../lib/stores/gamePromptStore';
+import { useGamePrompt } from '../../../stores/gamePromptStore';
 import { useBandEnv } from '../../../lib/useBandEnv';
 import { CARD_ROW_PX, useCellWidth } from '../../../lib/useCellWidth';
 import { knownWorld } from '../../../lib/useConnection';

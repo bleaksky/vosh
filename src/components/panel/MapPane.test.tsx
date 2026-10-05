@@ -6,7 +6,7 @@ import {
   type RoomInfo,
   type RoomInfoBase,
   type RoomPerson,
-} from '../../lib/stores/roomStore';
+} from '../../stores/roomStore';
 import { findTheme, themeTokens } from '../../lib/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranPacket } from '../../test/aabahranGmcp';

@@ -22,8 +22,8 @@ import { findOnScreen, type ScreenAsk } from '../../lib/promptScreen';
 import type { PromptOpenRow, PromptShowState } from '../../ipc/prompt';
 import { type PromptPiece } from '../../ipc/promptDesign';
 import { onOutput } from '../../ipc/terminal';
-import { getPinnedBand } from '../../lib/stores/pinnedPromptStore';
-import { setPromptReach } from '../../lib/stores/promptReachStore';
+import { getPinnedBand } from '../../stores/pinnedPromptStore';
+import { setPromptReach } from '../../stores/promptReachStore';
 import { shownColumns } from '../../lib/sgrCells';
 import type { PromptCardHost } from './PromptCard';
 

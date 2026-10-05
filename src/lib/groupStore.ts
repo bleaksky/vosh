@@ -1,6 +1,6 @@
 import { onGmcpPackage, onState } from '../ipc/session';
-import { getHidden, subscribeHidden } from './stores/hiddenStore';
-import { isHiddenFlag } from './stores/store';
+import { getHidden, subscribeHidden } from '../stores/hiddenStore';
+import { isHiddenFlag } from '../stores/store';
 
 export interface GroupMember {
   /** Stable per character identity. Aabahran sends it because the name
