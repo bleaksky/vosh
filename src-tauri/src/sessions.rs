@@ -182,9 +182,10 @@ pub(crate) struct Session {
     /// leaf lock, held to start, take or wake one. See
     /// [`crate::session::reconnect`].
     redial: std::sync::Mutex<Option<crate::session::reconnect::Redial>>,
-    /// A redial opened the connection that runs and its first text has
-    /// yet to come, which rings the Connection alert.
-    pub(crate) redialed: AtomicBool,
+    /// A redial opened the connection that runs and the game's prompt
+    /// has yet to come, which rings the Connection alert. Only
+    /// [`crate::session::reconnect`] reads or sets it.
+    pub(crate) awaiting_game_prompt: crate::session::reconnect::AwaitingPrompt,
 }
 
 impl Session {
@@ -215,7 +216,7 @@ impl Session {
             output_count: AtomicU64::new(0),
             alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
             redial: std::sync::Mutex::new(None),
-            redialed: AtomicBool::new(false),
+            awaiting_game_prompt: crate::session::reconnect::AwaitingPrompt::default(),
         }
     }
 

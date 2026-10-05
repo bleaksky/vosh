@@ -7,7 +7,6 @@
 //! gathered, once. A partial that waited for the next read, and the lines
 //! held for the rest of a prompt, go out the same way.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::AppHandle;
@@ -394,11 +393,8 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             .collect();
         // The first text of a link a redial opened is the game's prompt,
         // which waits for your login.
-        if out.writes_text() && session.redialed.swap(false, Ordering::AcqRel) {
-            rings.extend(crate::alert::presets::connection(
-                &p,
-                crate::alert::presets::Link::Ready,
-            ));
+        if out.writes_text() {
+            rings.extend(super::reconnect::reached_prompt(session, &p));
         }
         (
             p.open().clone(),
