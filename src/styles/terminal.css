@@ -105,7 +105,7 @@
    base carved-channel handle is transparent, which would make the
    split boundary invisible inside the well; --split-divider lets
    the user pick the line color from Settings. Hover and drag still
-   show the base rule's ember tick. */
+   show the base rule's accent tick. */
 .terminal-pane-history.resizable .resizable-handle {
   background: var(--split-divider);
   flex: 0 0 2px;
@@ -133,17 +133,13 @@
   z-index: 5;
 }
 
-/* xterm's FitAddon reads the host's computed height to compute the
-   row count, and paneSizer.ts writes width/height in pixels onto the
-   host every frame. Host is position:absolute so flex/box-model never
-   re-flows it; sizer just provides the bounding rect JS reads.
-   Padding lives on the host so xterm renders inside it. Departing
-   from this shape (e.g. width:100% on the host) led to xterm
-   measuring cells against one box and rendering inside another,
-   which shows up as doubled character spacing. */
-/* Flex item inside terminal-area (which is now flex column). Its
-   bounding rect is the truth source for the terminal-host pixel
-   dimensions that paneSizer.ts writes every frame. */
+/* The sizer is the flex item that takes the pane's space, and only
+   its rect matters. paneSizer.ts writes that rect in whole pixels onto
+   the host, and FitAddon counts rows from the host's size. The host is
+   absolutely placed so the flex layout never reflows it. Size the host
+   any other way, with width 100% for one, and xterm measures cells
+   against one box and renders inside another, which doubles the
+   character spacing. */
 .terminal-sizer {
   flex: 1 1 0;
   min-width: 0;
@@ -158,20 +154,11 @@
   left: 0;
   overflow: hidden;
   background: var(--bg);
-  /* Padding deliberately NOT here. xterm-addon-fit reads the host
-     clientHeight (includes parent padding) but subtracts only the
-     padding of xterm.element itself when computing available rows.
-     If padding lives on the host, FitAddon overshoots by that
-     padding and renders one extra row that bleeds past the visible
-     area into the input bar. Padding must live on .xterm below so
-     FitAddon sees and subtracts it. */
 }
 
-/* xterm.element (the .xterm div xterm creates inside the host).
-   Padding is intentionally zero — the visible padding lives on
-   .terminal-area where FitAddon is not affected by it. Explicit 100%
-   sizing here also stops the doubled-character-cell bug when no
-   inline size has been written yet. */
+/* xterm.element, the .xterm div xterm creates inside the host. The
+   explicit 100% keeps the cells single width before the sizer has
+   written the host a size. */
 .terminal-host .xterm {
   width: 100%;
   height: 100%;
@@ -239,7 +226,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 /* Carved-channel handle. The handle paints nothing at rest — it is
-   an 8px strip of the exposed ground — and a centered ember tick
+   an 8px strip of the exposed ground — and a centered accent tick
    surfaces on hover to name the grab point. Dragging stretches the
    tick and adds a soft glow. */
 .resizable-handle {
