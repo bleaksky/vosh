@@ -1729,19 +1729,20 @@ const VISION_FIT_CACHE = new Map<string, Partial<XtermPalette>>();
 
 /** The fit `theme` plays in for `vision`. Typical plays the theme's own
  *  fit (`fitted`). Another vision plays the fit a built in theme stores
- *  for it, else the Typical fit, which then holds the vision's floors.
- *  Undefined where nothing is fitted. */
+ *  for it, else the Typical fit, which then holds the vision's floors. A
+ *  custom theme plays the fit this window holds for the vision
+ *  (holdVisionFit), and its Typical fit until one lands. Undefined where
+ *  nothing is fitted. */
 export function visionFitOf(
   theme: AppTheme,
   vision: ColorVision,
 ): Partial<XtermPalette> | undefined {
   if (vision === 'typical') return theme.fitted;
-  const row = VISION_FITS[theme.id]?.[vision];
   // A custom theme never holds a built in id, and the palette check
   // keeps a copy with other colors on its own fit.
-  if (row === undefined || BUILTIN_BY_ID.get(theme.id)?.xterm !== theme.xterm) {
-    return theme.fitted;
-  }
+  if (BUILTIN_BY_ID.get(theme.id)?.xterm !== theme.xterm) return customVisionFit(theme, vision);
+  const row = VISION_FITS[theme.id]?.[vision];
+  if (row === undefined) return theme.fitted;
   const key = `${vision} ${theme.id}`;
   let fitted = VISION_FIT_CACHE.get(key);
   if (!fitted) {
@@ -1791,6 +1792,41 @@ export function onCustomThemesChanged(listener: () => void): () => void {
   return () => {
     customThemeListeners.delete(listener);
   };
+}
+
+// Fits for a color vision the main window made this launch for custom
+// themes in play, by the vision and the colors they fit. No file holds
+// them. lib/customThemeFits makes them when play asks for one this
+// window holds none of (onMissingVisionFit).
+const HELD_VISION_FITS = new Map<string, Partial<XtermPalette>>();
+let askVisionFit: ((theme: AppTheme, vision: ColorVision) => void) | undefined;
+
+function customVisionFit(theme: AppTheme, vision: ColorVision): Partial<XtermPalette> | undefined {
+  const held = HELD_VISION_FITS.get(`${vision} ${fitKey(theme.xterm)}`);
+  if (held) return held;
+  askVisionFit?.(theme, vision);
+  return theme.fitted;
+}
+
+/** Hand play a way to fit a custom theme for a vision this window holds
+ *  no fit of. The main window sets it (lib/customThemeFits). Elsewhere
+ *  play keeps the Typical fit. */
+export function onMissingVisionFit(ask: (theme: AppTheme, vision: ColorVision) => void): void {
+  askVisionFit = ask;
+}
+
+/** Hold `fitted` in memory as the fit for `vision` of the custom themes
+ *  with the colors of `palette`, and tell every listener. Each such theme
+ *  comes back as a new object, so a view that keeps the theme it drew
+ *  draws again. */
+export function holdVisionFit(
+  palette: XtermPalette,
+  vision: ColorVision,
+  fitted: Partial<XtermPalette>,
+): void {
+  const key = fitKey(palette);
+  HELD_VISION_FITS.set(`${vision} ${key}`, fitted);
+  setCustomThemes(CUSTOM_THEMES.map((t) => (fitKey(t.xterm) === key ? { ...t } : t)));
 }
 
 // Fits the main window made this launch for custom themes in play that

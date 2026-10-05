@@ -39,6 +39,21 @@ describe('the xterm theme', () => {
     expect(base.foreground).toBe('#c9cdcb');
   });
 
+  it('draws the fit for your color vision while Fit game colors is on', () => {
+    const triad = findTheme('triad');
+    // Triad passes every check Typical asks as published, and lifts its
+    // greens and yellows for a deuteranope (themes.ts VISION_FITS).
+    expect(xtermThemeFor(triad, true, true).green).toBe(triad.xterm.green);
+    const deutan = xtermThemeFor(triad, true, true, 'deuteranopia');
+    expect(deutan.green).toBe('#53d1b3');
+    expect(deutan.yellow).toBe('#f9d57c');
+    expect(deutan.red).toBe(triad.xterm.red);
+    // Off, every vision draws the published palette.
+    expect(xtermThemeFor(triad, true, false, 'deuteranopia').green).toBe(triad.xterm.green);
+    const native = nativeThemeOf(triad, true, true, 'deuteranopia');
+    expect(native.ansi).toEqual(ansi16Of(deutan));
+  });
+
   it('hands the native grid the 16 colors and body text xterm draws', () => {
     for (const theme of BUILTIN_THEMES) {
       for (const tinted of [true, false]) {

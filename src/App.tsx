@@ -47,6 +47,7 @@ import {
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeReadableHighlightsChanged,
+  subscribeColorVisionChanged,
   subscribeFitGameColorsChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
@@ -83,7 +84,7 @@ import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
 import { fitThemesInPlay } from './lib/customThemeFits';
-import { setFitGameColors } from './lib/fitGameColors';
+import { setColorVision, setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
@@ -1010,6 +1011,7 @@ function App() {
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
         setFitGameColors(cfg.fit_game_colors);
+        setColorVision(cfg.color_vision);
         fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
@@ -1078,6 +1080,7 @@ function App() {
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
         setFitGameColors(cfg.fit_game_colors);
+        setColorVision(cfg.color_vision);
         fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
@@ -1225,6 +1228,21 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     subscribeFitGameColorsChanged(setFitGameColors).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts the color vision. Play draws the fit for
+    // it at once, a custom theme once its fit lands.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeColorVisionChanged(setColorVision).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });

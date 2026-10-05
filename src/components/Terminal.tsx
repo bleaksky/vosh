@@ -24,7 +24,12 @@ import {
   terminalLocalWrite,
 } from '../lib/session';
 import { findTheme, onCustomThemesChanged } from '../lib/themes';
-import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
+import {
+  getColorVision,
+  getFitGameColors,
+  subscribeColorVision,
+  subscribeFitGameColors,
+} from '../lib/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';
 import { nativeThemeOf, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
@@ -90,13 +95,14 @@ export function nativeSurfaceEnabled(): boolean {
 // keeps trigger colors readable on it, on either renderer. Then report the
 // surface colors and resolved ANSI palette to the native renderer so its
 // background/foreground/selection and the 16-color palette match xterm
-// (including the themeTerminalColors tint and Fit game colors),
+// (including the themeTerminalColors tint, Fit game colors and the
+// color vision it fits for),
 // live-updating on theme or toggle change.
 function reportTheme(themeId: string, themeTerminalColors: boolean): void {
   const theme = findTheme(themeId);
   setHighlightGround(theme.xterm.background);
   if (!nativeSurfaceEnabled()) return;
-  const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors());
+  const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors(), getColorVision());
   void invoke('native_surface_set_theme', {
     background: native.background,
     foreground: native.foreground,
@@ -290,7 +296,7 @@ function clearGround(color: string | undefined): string {
  *  while the pane lifts your prompts (`clear`), since the bands draw under
  *  xterm's text and the terminal area's ground shows through. */
 function themeFor(themeId: string, tinted: boolean, clear: boolean) {
-  const theme = xtermThemeFor(findTheme(themeId), tinted, getFitGameColors());
+  const theme = xtermThemeFor(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
   if (clear) theme.background = clearGround(theme.background);
   return theme;
 }
@@ -1600,7 +1606,8 @@ export function Terminal({
 
   // Re-apply when the user edits the base ANSI palette (the colors
   // used while the tint toggle is off), turns Fit game colors on or off,
-  // or a new custom theme list brings the theme on screen its fit.
+  // picks another color vision, or a new custom theme list brings the
+  // theme on screen its fit.
   useEffect(() => {
     const reapply = () => {
       const term = termRef.current;
@@ -1614,10 +1621,12 @@ export function Terminal({
     };
     const stopBase = subscribeBaseAnsi(reapply);
     const stopFit = subscribeFitGameColors(reapply);
+    const stopVision = subscribeColorVision(reapply);
     const stopList = onCustomThemesChanged(reapply);
     return () => {
       stopBase();
       stopFit();
+      stopVision();
       stopList();
     };
   }, [liftsHere]);

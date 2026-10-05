@@ -1,11 +1,13 @@
 // The xterm theme the terminal draws with, from the chrome theme, the
-// "Use the theme's colors for MUD text" setting and Fit game colors. The
+// "Use the theme's colors for MUD text" setting, Fit game colors and the
+// color vision it fits for. The
 // pinned prompt band and the native renderer resolve their colors from
 // the same palette, so a prompt on the band looks as it would in the
 // text, on either renderer.
 
 import type { ITheme } from '@xterm/xterm';
 import { baseAnsiRecord } from './baseAnsi';
+import type { ColorVision } from './gameFit';
 import { playPalette, themeTokens, type AppTheme } from './themes';
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
@@ -15,15 +17,21 @@ import { playPalette, themeTokens, type AppTheme } from './themes';
 // cube (codes 16-231) and 24-step grayscale ramp (232-255) are
 // already theme-independent inside xterm.js; this fixes the 0-15
 // slice that the theme used to tint.
-export function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean, fit: boolean): ITheme {
-  // The play palette, fitted while Fit game colors is on. Tinted mode
+export function xtermThemeFor(
+  theme: AppTheme,
+  themeTerminalColors: boolean,
+  fit: boolean,
+  vision: ColorVision = 'typical',
+): ITheme {
+  // The play palette, fitted for your color vision while Fit game colors
+  // is on. Tinted mode
   // lets it color server output; otherwise the BASE palette applies, the
   // canonical xterm-256 chart unless the user replaced slots in the
   // themes tab (lib/baseAnsi). Either way the theme owns the surfaces
   // (background, foreground, cursor, selection). The selection is the
   // window's token pair, an opaque fill with its own text, so xterm
   // draws what the native renderer and the window draw.
-  const play = playPalette(theme, fit);
+  const play = playPalette(theme, fit, vision);
   const base: ITheme = themeTerminalColors ? { ...play } : { ...play, ...baseAnsiRecord() };
   const tokens = themeTokens(theme);
   base.selectionBackground = tokens.selection;
@@ -33,8 +41,13 @@ export function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean, fit
 
 /** What native_surface_set_theme takes, from the theme xterm draws
  *  with, so the native grid draws the same ground, text and 16 colors. */
-export function nativeThemeOf(theme: AppTheme, themeTerminalColors: boolean, fit: boolean) {
-  const resolved = xtermThemeFor(theme, themeTerminalColors, fit);
+export function nativeThemeOf(
+  theme: AppTheme,
+  themeTerminalColors: boolean,
+  fit: boolean,
+  vision: ColorVision = 'typical',
+) {
+  const resolved = xtermThemeFor(theme, themeTerminalColors, fit, vision);
   return {
     background: resolved.background ?? '#101218',
     foreground: resolved.foreground ?? '#cccccc',
