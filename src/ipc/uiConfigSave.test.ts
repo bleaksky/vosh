@@ -5,7 +5,7 @@ import { pendingWrites } from '../lib/pendingWrites';
 import { queueSettingsChange } from '../settings/useSettingsAutoSave';
 import { isOwnThemeEcho } from '../theme/theme';
 import { getUiConfig, normalizeUiConfig, type RawUiConfig, type UiConfig } from './uiConfig';
-import { broadcastUiConfigChanges, followReplacedUiConfig, setUiConfig } from './uiConfigSave';
+import { broadcastUiConfigChanges, followReplacedUiConfig } from './uiConfigSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -241,80 +241,6 @@ describe('a replaced UI config', () => {
     expect(payloads.get('vosh://vitals-density-changed')).toBe('line');
     // Your prompt travels through the prompt commands, not the config.
     expect(payloads.has('vosh://prompt-template-changed')).toBe(false);
-  });
-
-  /** A backend that hands out its generation with the config and turns
-   *  away a save read at another one, as ui_set_config does. */
-  function fakeBackend(initial: RawUiConfig) {
-    let generation = 1;
-    let stored: Record<string, unknown> = { ...initial };
-    vi.mocked(invoke).mockImplementation(((
-      command: string,
-      args?: { config: Record<string, unknown> },
-    ) => {
-      if (command === 'ui_get_config') return Promise.resolve({ ...stored, generation });
-      if (command === 'ui_set_config' && args) {
-        const next = args.config;
-        if (next.generation != null && next.generation !== generation) {
-          return Promise.resolve(false);
-        }
-        stored = { ...next };
-        return Promise.resolve(true);
-      }
-      return Promise.resolve();
-    }) as typeof invoke);
-    return {
-      /** #profile load, #profile reset, an import, or a switch. */
-      replace(next: RawUiConfig) {
-        stored = { ...next };
-        generation += 1;
-      },
-      stored: () => stored,
-    };
-  }
-
-  it('turns away a save built on the old profile after a #profile load', async () => {
-    const backend = fakeBackend(raw({ tick_count: 'down', chip_style: 'icon_value' }));
-    const opened = await getUiConfig();
-    expect(opened.generation).toBe(1);
-    let config = opened;
-    const replace = await follow((next) => {
-      config = next;
-    });
-
-    // #profile load lands while a save built on the old copy waits, or
-    // while a Settings page holds one, or right after you typed in the
-    // gap before the new copy arrived.
-    backend.replace(raw({ tick_count: 'up', chip_style: 'value_only' }));
-    const sent = vi.mocked(emit);
-    sent.mockClear();
-    expect(await setUiConfig({ ...opened, font_size: 16 })).toBe(false);
-    expect(backend.stored()).toMatchObject({ tick_count: 'up', chip_style: 'value_only' });
-    expect(backend.stored().font_size).toBe(14);
-    expect(sent).not.toHaveBeenCalled();
-
-    // The new copy arrives, and an edit made on it saves.
-    replace();
-    await vi.waitFor(() => expect(config.generation).toBe(2));
-    expect(config.tick_count).toBe('up');
-    expect(await setUiConfig({ ...config, font_size: 16 })).toBe(true);
-    expect(backend.stored()).toMatchObject({
-      font_size: 16,
-      tick_count: 'up',
-      chip_style: 'value_only',
-    });
-  });
-
-  it('reads the config again when a save is turned away, notice or not', async () => {
-    const backend = fakeBackend(raw({ tick_count: 'down' }));
-    const opened = await getUiConfig();
-    const applied: UiConfig[] = [];
-    await follow((next) => applied.push(next));
-    backend.replace(raw({ tick_count: 'up' }));
-    expect(await setUiConfig({ ...opened, font_size: 16 })).toBe(false);
-    await vi.waitFor(() => expect(applied).toHaveLength(1));
-    expect(applied[0].tick_count).toBe('up');
-    expect(applied[0].generation).toBe(2);
   });
 
   it('applies only the newest read when two replaces come close together', async () => {

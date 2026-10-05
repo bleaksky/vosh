@@ -1,7 +1,7 @@
-// Saving the whole UI config, telling every other window what changed,
-// and following a config the backend replaced.
+// The broadcast that tells every other window which UI config fields
+// changed, and the follower that keeps a window on a config the backend
+// replaced.
 
-import { invoke } from '@tauri-apps/api/core';
 import { emit, type UnlistenFn } from '@tauri-apps/api/event';
 import { noteThemeEcho, resolveActiveTheme, systemPrefersDark, themePrefsOf } from '../theme/theme';
 import { resolveThemeTerminalColors } from '../theme/themes';
@@ -37,7 +37,6 @@ import {
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,
-  uiConfigPayload,
   vitalsOptionsOf,
   type FontChange,
   type UiConfig,
@@ -175,10 +174,6 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   );
 }
 
-/** The reads followReplacedUiConfig runs in this window. A save the
- *  backend turned away runs them too. */
-const replaceFollowers = new Set<() => void>();
-
 /** How followReplacedUiConfig hands a window the replaced config. */
 export interface FollowReplacedOptions {
   /** After `apply`, send every field to every window. The main window
@@ -192,9 +187,8 @@ export interface FollowReplacedOptions {
  *  it on a profile switch, a #profile load or reset, or an import.
  *  Every replace reads the config again, never sharing a read that
  *  started before it, and hands it to `apply`. Only the newest read
- *  applies. A whole config save the backend turned away reads it again
- *  here too. The main window passes `broadcast` and sends every field
- *  to the other windows. */
+ *  applies. The main window passes `broadcast` and sends every field to
+ *  the other windows. */
 export async function followReplacedUiConfig(
   apply: (config: UiConfig) => void,
   onError: (error: unknown) => void,
@@ -211,12 +205,7 @@ export async function followReplacedUiConfig(
       })
       .catch(onError);
   };
-  replaceFollowers.add(reread);
-  const unlisten = await subscribeUiConfigReplaced(reread);
-  return () => {
-    replaceFollowers.delete(reread);
-    unlisten();
-  };
+  return subscribeUiConfigReplaced(reread);
 }
 
 // Every window hears its own affects display broadcast too. One this
@@ -237,23 +226,4 @@ export function isOwnAffectsDisplayEcho(display: AffectsDisplay): boolean {
   const now = Date.now();
   const key = JSON.stringify(normalizeAffectsDisplay(display));
   return affectsDisplayEchoes.some((e) => e.key === key && now - e.at < AFFECTS_DISPLAY_ECHO_MS);
-}
-
-/** Save the whole config and send every field to every window. Resolves
- *  false when the backend turned the save away, because it replaced
- *  the live config after this copy was read (a profile switch, a
- *  #profile load or reset, or an import). Nothing is sent then, and
- *  this window reads the config again. */
-export async function setUiConfig(config: UiConfig): Promise<boolean> {
-  const applied = await invoke<boolean | undefined>('ui_set_config', {
-    config: uiConfigPayload(config),
-  });
-  if (applied === false) {
-    // The old profile's values stay off the new one. Take the new copy,
-    // even if the replace notice never reached this window.
-    for (const reread of replaceFollowers) reread();
-    return false;
-  }
-  await broadcastUiConfigChanges(config);
-  return true;
 }

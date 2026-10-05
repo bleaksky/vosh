@@ -558,64 +558,6 @@ export async function setUiFields(fields: UiFields, profile?: string | null): Pr
   });
 }
 
-/** The snake_case payload `ui_set_config` takes, matching the Rust
- *  `UiConfigPayload` DTO, the same shape `ui_get_config` returns.
- *  `dock_layout` is omitted on purpose, since only the old dock to
- *  panes conversion reads it. */
-export function uiConfigPayload(config: UiConfig): Record<string, unknown> {
-  return {
-    theme: config.theme,
-    follow_system_appearance: config.follow_system_appearance,
-    light_theme: config.light_theme,
-    dark_theme: config.dark_theme,
-    auto_update: config.auto_update,
-    font_family: config.font_family,
-    font_size: config.font_size,
-    terminal_line_height: config.terminal_line_height,
-    panel_font: config.panel_font,
-    panel_font_size: config.panel_font_size,
-    // Wire format intentionally drops `label: null` to the omitted
-    // form so the backend's `Option<String>` deserializes cleanly.
-    tracked_affects: config.tracked_affects.map((t) => ({
-      name: t.name,
-      ...(t.label ? { label: t.label } : {}),
-    })),
-    enabled_presets: config.enabled_presets,
-    keep_last_command: config.keep_last_command,
-    theme_terminal_colors: config.theme_terminal_colors,
-    bright_bold: config.bright_bold,
-    blink_text: config.blink_text,
-    fit_game_colors: config.fit_game_colors,
-    readable_highlights: config.readable_highlights,
-    collapse_repeats: config.collapse_repeats,
-    collapse_fight_lines: config.collapse_fight_lines,
-    collapse_attack_lines: config.collapse_attack_lines,
-    terminal_base_ansi: config.terminal_base_ansi,
-    custom_themes: config.custom_themes,
-    split_divider_color: config.split_divider_color,
-    input_echo_color: config.input_echo_color,
-    echo_macros: config.echo_macros,
-    input_echo_caret: config.input_echo_caret,
-    paste_line_delay_ms: config.paste_line_delay_ms,
-    spellcheck_prompt: config.spellcheck_prompt,
-    input_cursor_style: config.input_cursor_style,
-    vitals_density: config.vitals_density,
-    vitals_values: config.vitals_values,
-    vitals_meter: config.vitals_meter,
-    vitals_warn_thirds: config.vitals_warn_thirds,
-    vitals_hide_when_pinned: config.vitals_hide_when_pinned,
-    chip_style: config.chip_style,
-    tick_count: config.tick_count,
-    game_time: config.game_time,
-    affects_style: config.affects_style,
-    affects_marker: config.affects_marker,
-    affects_tint: config.affects_tint,
-    affects_running_out_hours: config.affects_running_out_hours,
-    affects_almost_gone_hours: config.affects_almost_gone_hours,
-    generation: config.generation ?? null,
-  };
-}
-
 /** Hear a new chip style saved from Settings. The Settings save emits
  *  it to every window, so the main window's status line follows at
  *  once. */
