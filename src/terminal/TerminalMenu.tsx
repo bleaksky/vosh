@@ -12,7 +12,7 @@ import { nativeSurfaceEnabled } from './terminalRenderer';
 import { type InputHandle } from '../input/Input';
 import { submenuAt } from '../ui/menuPlacement';
 import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
-import { ChevronRightIcon } from '../ui/paneIcons';
+import { ChevronRightIcon } from '../ui/icons';
 import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
 import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';

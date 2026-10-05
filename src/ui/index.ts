@@ -3,11 +3,10 @@
 // place (src/styles/settings.css). README.md beside this file lists each
 // one and its props.
 //
-// MenuSurface with menuPlacement, ConfirmDialog, CodeEditor,
-// WindowControls and paneIcons are imported by path. CodeEditor would
-// load CodeMirror into every file that imports this barrel,
-// WindowControls takes its icons from it, and paneIcons repeats four
-// names from icons.tsx.
+// MenuSurface with menuPlacement, ConfirmDialog, CodeEditor and
+// WindowControls are imported by path. CodeEditor would load CodeMirror
+// into every file that imports this barrel, and WindowControls takes its
+// icons from it.
 
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
