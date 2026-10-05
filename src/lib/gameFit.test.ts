@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { deltaEOk, parseHex, rgbToOklch, toHex } from './color';
 import {
   apca,
   checks,
@@ -6,13 +7,23 @@ import {
   fit,
   GAME_FIXED_COLORS,
   GAME_SLOTS,
+  holdsCheck,
   holdsVision,
+  HUE_LIMIT,
+  HUE_TURN,
+  HUE_TURN_FAR,
   needsFit,
+  needsVisionFit,
+  seenApart,
   seenBy,
   toColorVision,
+  turnHue,
+  turnRoom,
+  turnSlots,
+  visionChecks,
+  visionPairs,
   visionSlots,
   xterm256,
-  type ColorVision,
 } from './gameFit';
 import { BUILTIN_THEMES, findTheme, visionFitOf, type XtermPalette } from './themes';
 
@@ -156,17 +167,13 @@ describe('fit', () => {
 });
 
 describe('color vision', () => {
-  const need = (vision: ColorVision, id: string) =>
-    checks(TRIAD, vision).find((c) => c.id === id)?.need;
-  const short = (p: XtermPalette, vision: ColorVision) =>
-    checks(p, vision)
+  const short = (p: XtermPalette) =>
+    checks(p)
       .filter((c) => !c.ok)
       .map((c) => `${c.id} ${c.value}`);
+  const hue = (hex: string) => rgbToOklch(parseHex(hex) ?? { r: 0, g: 0, b: 0 }).h;
 
-  it('asks Typical the 46 checks as they stood', () => {
-    for (const theme of BUILTIN_THEMES) {
-      expect(checks(theme.xterm, 'typical'), theme.id).toEqual(checks(theme.xterm));
-    }
+  it('asks the 46 checks the same whatever the vision', () => {
     expect(
       checks(TRIAD)
         .filter((c) => /^T7 (protan|deutan|tritan) /.test(c.id))
@@ -186,21 +193,32 @@ describe('color vision', () => {
     ]);
   });
 
-  it('raises a quarter the floors of the pairs each vision sees through, and no others', () => {
-    for (const vision of COLOR_VISIONS) expect(checks(TRIAD, vision)).toHaveLength(46);
-    expect(need('deuteranopia', 'T7 deutan red/yellow')).toBe('>=15');
-    expect(need('deuteranopia', 'T7 deutan red/brightYellow')).toBe('>=15');
-    expect(need('deuteranopia', 'T7 deutan red/green')).toBe('>=12.5');
-    expect(need('deuteranopia', 'T7 deutan yellow/green')).toBe('>=12.5');
-    expect(need('deuteranopia', 'T7 protan red/green')).toBe('>=10');
-    expect(need('deuteranopia', 'T7 tritan cyan/green')).toBe('>=8');
-    expect(need('protanopia', 'T7 protan brightRed/brightGreen')).toBe('>=12.5');
-    expect(need('protanopia', 'T7 deutan red/yellow')).toBe('>=12');
-    expect(need('tritanopia', 'T7 tritan cyan/green')).toBe('>=10');
-    expect(need('tritanopia', 'T7 deutan red/green')).toBe('>=10');
-    // The lightness and body text floors stay as Typical asks them.
-    expect(need('deuteranopia', 'T7 red/yellow dL')).toBe('>=10');
-    expect(need('deuteranopia', 'T3 red Lc')).toBe('>=45');
+  it('keeps red apart from green, bright yellow and yellow, and for a tritanope cyan from green and blue', () => {
+    const red = [
+      ['red', 'green'],
+      ['red', 'brightYellow'],
+      ['red', 'yellow'],
+    ];
+    expect(visionPairs('typical')).toEqual([]);
+    expect(visionPairs('deuteranopia')).toEqual(red);
+    expect(visionPairs('protanopia')).toEqual(red);
+    expect(visionPairs('tritanopia')).toEqual([...red, ['cyan', 'green'], ['cyan', 'blue']]);
+  });
+
+  // Triad keeps no fit, so its Typical fit is the published palette. A
+  // typical eye sees its red 30.3 from its green, and a deuteranope 10.5.
+  it('measures each pair through the vision against what a typical eye sees in the Typical fit', () => {
+    expect(visionChecks(TRIAD, TRIAD, 'typical')).toEqual([]);
+    expect(visionChecks(TRIAD, TRIAD, 'deuteranopia')).toEqual([
+      { id: 'red/green', value: 10.5, need: 30.3, ok: false },
+      { id: 'red/brightYellow', value: 24, need: 30.5, ok: false },
+      { id: 'red/yellow', value: 14.7, need: 22.6, ok: false },
+    ]);
+    expect(holdsVision(TRIAD, TRIAD, 'typical')).toBe(true);
+    expect(holdsVision(TRIAD, TRIAD, 'deuteranopia')).toBe(false);
+    expect(seenApart(parseHex(TRIAD.red)!, parseHex(TRIAD.green)!, 'typical')).toBe(
+      deltaEOk(parseHex(TRIAD.red)!, parseHex(TRIAD.green)!),
+    );
   });
 
   it('reads a saved vision and takes anything else as Typical', () => {
@@ -209,75 +227,91 @@ describe('color vision', () => {
     expect(toColorVision(undefined)).toBe('typical');
   });
 
-  it('says whether a palette holds the floors a vision raises', () => {
-    // Triad keeps red dE 14.7 from yellow and 10.5 from green for a
-    // deuteranope, past the floors Typical asks and short of the ones
-    // Deuteranopia asks.
-    expect(short(TRIAD, 'typical')).toEqual([]);
-    expect(short(TRIAD, 'deuteranopia')).toEqual([
-      'T7 deutan red/yellow 14.7',
-      'T7 deutan red/green 10.5',
-    ]);
-    expect(holdsVision(TRIAD, 'typical')).toBe(true);
-    expect(holdsVision(TRIAD, 'deuteranopia')).toBe(false);
-    expect(holdsVision(TRIAD, 'tritanopia')).toBe(true);
+  // Kanso Zen's Typical fit already parts every pair as a protanope sees
+  // it, so the fit for Protanopia is that fit, the same object.
+  it('keeps the Typical fit where it already parts every pair the vision keeps apart', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(needsVisionFit(kanso.xterm, 'protanopia', kanso.fitted)).toBe(false);
+    expect(fit(kanso.xterm, 'protanopia', kanso.fitted)).toBe(kanso.fitted);
+    expect(needsVisionFit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(true);
+    expect(needsVisionFit(TRIAD, 'typical')).toBe(false);
+    // A color the fit cannot read.
+    expect(needsVisionFit({ ...TRIAD, red: 'crimson' }, 'deuteranopia')).toBe(false);
   });
 
-  it('keeps the Typical fit where it already holds the vision', () => {
-    // Triad as published holds the tritanopia floor, so it stays as it is.
-    expect(fit(TRIAD, 'tritanopia', {})).toEqual({});
-    expect(needsFit(TRIAD, 'tritanopia')).toBe(false);
-    expect(needsFit(TRIAD, 'deuteranopia')).toBe(true);
-  });
-
-  // The fit themes.ts ships for Triad under Deuteranopia. It moves red a
-  // touch darker and green, yellow and bright yellow lighter, each at its
-  // own hue, keeps every floor Typical asks, and parts every pair
-  // Deuteranopia raises.
-  it('fits Triad for a deuteranope by lightness alone', { timeout: 30_000 }, () => {
+  // The fit themes.ts ships for Triad under Deuteranopia. Red darkens a
+  // touch and turns 11 degrees toward orange, green lightens and turns 10
+  // toward teal, yellow and the bold twins lighten, and Triad still
+  // passes all 46 checks.
+  it('fits Triad for a deuteranope, lightness first and then a small turn', () => {
     const fitted = fit(TRIAD, 'deuteranopia', {});
     expect(fitted).toEqual({
-      red: '#fb6154',
-      green: '#52d1b3',
-      yellow: '#f8d47a',
-      brightYellow: '#fff3c7',
+      red: '#f86632',
+      green: '#6df3e3',
+      yellow: '#fbd67d',
+      brightGreen: '#cdffea',
+      brightYellow: '#fff5cd',
     });
     const play = { ...TRIAD, ...fitted };
-    expect(short(play, 'typical')).toEqual([]);
-    expect(short(play, 'deuteranopia')).toEqual([]);
+    expect(short(play)).toEqual([]);
+    expect(visionChecks(play, TRIAD, 'deuteranopia').map((c) => c.value)).toEqual([
+      23.3, 27.9, 19.5,
+    ]);
+    expect(hue(play.red) - hue(TRIAD.red)).toBeCloseTo(11, 0);
+    expect(hue(play.green) - hue(TRIAD.green)).toBeCloseTo(10, 0);
   });
 
-  it('moves only the colors of the pairs a vision raises and their twins', () => {
+  it('moves only the colors of the pairs a vision keeps apart and their twins', () => {
     const both = ['red', 'green', 'yellow', 'brightRed', 'brightGreen', 'brightYellow'];
     expect(visionSlots('deuteranopia')).toEqual(both);
     expect(visionSlots('protanopia')).toEqual(both);
-    expect(visionSlots('tritanopia')).toEqual(['green', 'cyan', 'brightGreen', 'brightCyan']);
+    expect(visionSlots('tritanopia')).toEqual([
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'cyan',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightCyan',
+    ]);
     expect(visionSlots('typical')).toEqual([]);
+    expect(turnSlots('deuteranopia')).toEqual(['red', 'green']);
+    expect(turnSlots('protanopia')).toEqual(['red', 'green']);
+    expect(turnSlots('tritanopia')).toEqual(['red', 'green', 'cyan']);
+    expect(turnSlots('typical')).toEqual([]);
   });
 
-  // Iceberg Dark keeps yellow at Lc 58.1 and red at Lc 37.8 in its
-  // Typical fit. Its fit for a deuteranope parts red from green further
-  // and leaves both no fainter.
-  it('keeps every check the Typical fit passes and lets none it misses fall further', () => {
-    const iceberg = findTheme('iceberg-dark');
-    const typical = iceberg.fitted ?? {};
-    const fitted = fit(iceberg.xterm, 'deuteranopia', typical);
-    const play = { ...iceberg.xterm, ...fitted };
-    expect(short(play, 'typical')).toEqual(short({ ...iceberg.xterm, ...typical }, 'typical'));
-    expect(short(play, 'typical')).toEqual(['T2 yellow Lc 58.1', 'T3 red Lc 37.8']);
-    for (const slot of GAME_SLOTS.filter((k) => !visionSlots('deuteranopia').includes(k))) {
-      expect(play[slot], slot).toBe({ ...iceberg.xterm, ...typical }[slot]);
-    }
+  it('turns a hue up to the bound and never past its family limit', () => {
+    expect([HUE_TURN, HUE_TURN_FAR]).toEqual([30, 40]);
+    expect(HUE_LIMIT).toEqual({ red: 40, green: 185, cyan: 240 });
+    expect(turnRoom('red', 5, HUE_TURN)).toBe(30);
+    expect(turnRoom('red', 5, HUE_TURN_FAR)).toBe(35);
+    expect(turnRoom('red', 29, HUE_TURN_FAR)).toBe(11);
+    expect(turnRoom('red', 42, HUE_TURN_FAR)).toBe(0);
+    expect(turnRoom('green', 142, HUE_TURN_FAR)).toBe(40);
+    expect(turnRoom('green', 172, HUE_TURN)).toBe(13);
+    expect(turnRoom('cyan', 200, HUE_TURN_FAR)).toBe(40);
+    // A turn of nothing gives the color back.
+    expect(turnHue({ r: 254, g: 100, b: 87 }, 0)).toEqual({ r: 254, g: 100, b: 87 });
+    expect(hue(toHex(turnHue({ r: 254, g: 100, b: 87 }, 10)))).toBeCloseTo(hue('#fe6457') + 10, 0);
   });
 
-  // Harbor Dark under Typical keeps red at Lc 40.8, short of 45. The
-  // search finds no step that parts its raised pairs further without
-  // darkening red or giving up a check the Typical fit passes, so a
-  // deuteranope plays the Typical fit.
-  it('keeps the Typical fit where every step parts a pair only by a trade', () => {
-    const harbor = findTheme('harbor-dark');
-    const typical = harbor.fitted ?? {};
-    expect(fit(harbor.xterm, 'deuteranopia', typical)).toBe(typical);
+  // A deuteranope sees nothing through the protan or tritan matrices,
+  // so a fit for Deuteranopia leaves those pairs to the players who see
+  // through them, and holds every other check as the Typical fit has it.
+  it('holds every check but the T7 pairs another vision sees through', () => {
+    expect(holdsCheck('T3 red Lc', 'deuteranopia')).toBe(true);
+    expect(holdsCheck('T6 green pair dE', 'tritanopia')).toBe(true);
+    expect(holdsCheck('T7 red/yellow dL', 'protanopia')).toBe(true);
+    expect(holdsCheck('T7 deutan red/green', 'deuteranopia')).toBe(true);
+    expect(holdsCheck('T7 protan red/green', 'deuteranopia')).toBe(false);
+    expect(holdsCheck('T7 tritan cyan/green', 'deuteranopia')).toBe(false);
+    expect(holdsCheck('T7 tritan cyan/green', 'tritanopia')).toBe(true);
+    expect(holdsCheck('T7 deutan red/green', 'tritanopia')).toBe(false);
+    expect(holdsCheck('T7 protan red/green', 'typical')).toBe(true);
   });
 
   it('shows a color as the vision sees it, through the matrices the checks use', () => {

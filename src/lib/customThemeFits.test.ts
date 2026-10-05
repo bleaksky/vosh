@@ -170,13 +170,19 @@ describe('fits for a color vision', () => {
     stopHearing();
   });
 
-  it('plays a custom theme that holds the vision as published, and fits nothing', async () => {
-    // Triad as published holds every floor Tritanopia raises.
-    const night = { ...theme('night', '#150c22'), xterm: { ...findTheme('triad').xterm } };
-    load({ theme: 'night', custom_themes: [night] });
-    expect(playPalette(findTheme('night'), true, 'tritanopia')).toBe(findTheme('night').xterm);
+  it('plays a custom theme whose Typical fit holds the vision in that fit, and fits nothing', async () => {
+    // Kanso Zen's Typical fit already parts every pair a protanope sees.
+    const kanso = findTheme('kanso-zen');
+    const zen = {
+      ...theme('zen', kanso.xterm.background, kanso.fitted as Record<string, string>),
+      xterm: { ...kanso.xterm },
+    };
+    load({ theme: 'zen', custom_themes: [zen] });
+    const typical = playPalette(findTheme('zen'), true);
+    expect(typical).toEqual({ ...kanso.xterm, ...kanso.fitted });
+    expect(playPalette(findTheme('zen'), true, 'protanopia')).toEqual(typical);
     await Promise.resolve();
-    expect(playPalette(findTheme('night'), true, 'tritanopia')).toBe(findTheme('night').xterm);
+    expect(playPalette(findTheme('zen'), true, 'protanopia')).toEqual(typical);
     expect(fitting.asked).toHaveLength(0);
   });
 
