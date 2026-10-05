@@ -87,6 +87,14 @@ export function cellWidth(code: number): 0 | 1 | 2 {
   return isWide(code) ? 2 : 1;
 }
 
+/** The cells `text` takes in a row, each character as `cellWidth`
+ *  counts it. */
+export function textCells(text: string): number {
+  let cells = 0;
+  for (const ch of text) cells += cellWidth(ch.codePointAt(0) ?? 0);
+  return cells;
+}
+
 /** Read an extended color after 38, 48 or 58: `5;n` or `2;r;g;b`, with
  *  semicolons or colons. Returns the color and how many parameters it
  *  took after the 38. */

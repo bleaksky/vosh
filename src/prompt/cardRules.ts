@@ -8,7 +8,7 @@
 import { profileDisplayName } from '../lib/characterProfiles';
 import { listJoin, possessive } from '../lib/text';
 import type { MoveMade } from './promptPieces';
-import { cellWidth, parseSgrCells, type Cell } from '../terminal/sgrCells';
+import { parseSgrCells, textCells, type Cell } from '../terminal/sgrCells';
 import type { SessionIdentity } from '../ipc/characters';
 import type {
   PromptCapture,
@@ -256,14 +256,7 @@ export interface PlacedLabels {
 
 /** The cells before character `index` of `line`, a wide character two. */
 export function cellsBefore(line: string, index: number): number {
-  let cells = 0;
-  let i = 0;
-  for (const ch of line) {
-    if (i >= index) break;
-    cells += cellWidth(ch.codePointAt(0) ?? 0);
-    i += 1;
-  }
-  return cells;
+  return textCells(Array.from(line).slice(0, index).join(''));
 }
 
 /** Where each name goes under the line it names: under its first

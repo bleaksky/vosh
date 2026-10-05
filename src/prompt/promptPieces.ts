@@ -5,7 +5,7 @@
 // and says, and where the marks sit on your prompt. Pure, so the
 // components stay about layout.
 
-import { cellWidth } from '../terminal/sgrCells';
+import { textCells } from '../terminal/sgrCells';
 import { toHex } from '../theme/color';
 import { layoutPrompt, type PieceSpan, type RegionOnScreen } from './promptPointer';
 import type {
@@ -474,8 +474,7 @@ export function dockMapper(input: {
     },
     point(row, col) {
       if (!visible(row)) return null;
-      let cells = 0;
-      for (const ch of rows[row] ?? '') cells += cellWidth(ch.codePointAt(0) ?? 0);
+      const cells = textCells(rows[row] ?? '');
       return { left: left + Math.min(col, cells) * cellW, top: top(row) };
     },
   };
@@ -576,13 +575,6 @@ export interface RawMark {
   warn: boolean;
 }
 
-/** The cells a line of text takes, a wide character two. */
-function cellsOf(text: string): number {
-  let cells = 0;
-  for (const ch of text) cells += cellWidth(ch.codePointAt(0) ?? 0);
-  return cells;
-}
-
 /** The marks on the game's own lines (P2, P3, P3b): every line whole
  *  while you tell Vosh your prompt, else each value the newest read
  *  marks, on a line the row shows. A read whose lines differ from what
@@ -597,7 +589,7 @@ export function rawMarks(
 ): RawMark[] {
   if (whole) {
     return open.raw_lines
-      .map((line, row) => ({ row, col: 0, width: cellsOf(line), warn: false }))
+      .map((line, row) => ({ row, col: 0, width: textCells(line), warn: false }))
       .filter((m) => m.width > 0);
   }
   if (!read) return [];
@@ -608,8 +600,8 @@ export function rawMarks(
     const line = lines[mark.line];
     if (line === undefined || open.raw_lines[row] !== line) continue;
     const chars = Array.from(line);
-    const col = cellsOf(chars.slice(0, mark.start).join(''));
-    const width = cellsOf(chars.slice(mark.start, mark.end).join(''));
+    const col = textCells(chars.slice(0, mark.start).join(''));
+    const width = textCells(chars.slice(mark.start, mark.end).join(''));
     if (width > 0) out.push({ row, col, width, warn: mark.warn });
   }
   return out;
