@@ -92,18 +92,17 @@ impl Default for Banners {
     }
 }
 
-/// What the system banners remember: the session of the newest banner,
-/// which a click that starts Vosh again on Windows selects.
+/// What the system banners remember: the session of the newest banner
+/// that went out since you last came to Vosh, which a click that starts
+/// Vosh again on Windows selects.
 #[derive(Debug, Default)]
 pub(crate) struct SystemBanners {
     newest: Mutex<Option<SessionId>>,
 }
 
 impl SystemBanners {
-    /// The session of the newest banner.
-    fn newest(&self) -> Option<SessionId> {
-        *self
-            .newest
+    fn newest(&self) -> std::sync::MutexGuard<'_, Option<SessionId>> {
+        self.newest
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -166,14 +165,25 @@ impl Banners {
         }
     }
 
-    /// The session of the newest banner the system showed, which a click
-    /// that starts Vosh again on Windows selects.
+    /// Take the session of the newest banner the system showed since
+    /// you last came to Vosh, which a click that starts Vosh again on
+    /// Windows selects. A second start takes it once, so the next one
+    /// from the Start menu only brings Vosh to the front.
     #[cfg_attr(not(windows), allow(dead_code))]
-    pub(crate) fn newest(&self) -> Option<SessionId> {
+    pub(crate) fn take_newest(&self) -> Option<SessionId> {
         match self {
-            Banners::System(system) => system.newest(),
+            Banners::System(system) => system.newest().take(),
             #[cfg(test)]
             Banners::Recorded(_) => None,
+        }
+    }
+
+    /// You came to the main window, so no banner from before is new.
+    pub(crate) fn forget_newest(&self) {
+        match self {
+            Banners::System(system) => *system.newest() = None,
+            #[cfg(test)]
+            Banners::Recorded(_) => {}
         }
     }
 
@@ -211,15 +221,21 @@ impl SystemBanners {
         let system_sound = fate.sound.is_some() && hidden;
         let mut played = false;
         if fate.banner {
-            *self
-                .newest
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(banner.session);
             #[cfg(target_os = "macos")]
-            super::mac::post(banner, false);
+            let shown = {
+                super::mac::post(banner, false);
+                true
+            };
             #[cfg(not(target_os = "macos"))]
-            {
-                played = super::desktop::post(app, banner, system_sound);
+            let shown = match super::desktop::post(app, banner, system_sound) {
+                Some(sound) => {
+                    played = sound;
+                    true
+                }
+                None => false,
+            };
+            if shown {
+                *self.newest() = Some(banner.session);
             }
         }
         #[cfg(target_os = "macos")]
@@ -316,4 +332,24 @@ pub(crate) fn show_session<R: tauri::Runtime>(app: &AppHandle<R>, session: Sessi
             let _ = main.set_focus();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_second_start_selects_the_newest_banner_once_and_none_once_you_came_back() {
+        let banners = Banners::System(SystemBanners::default());
+        let (one, two) = (SessionId::from_number(1), SessionId::from_number(2));
+        let Banners::System(system) = &banners else {
+            unreachable!()
+        };
+        *system.newest() = Some(one);
+        banners.forget_newest();
+        assert_eq!(banners.take_newest(), None, "you came back since");
+        *system.newest() = Some(two);
+        assert_eq!(banners.take_newest(), Some(two));
+        assert_eq!(banners.take_newest(), None, "a start from the Start menu");
+    }
 }

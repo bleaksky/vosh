@@ -311,7 +311,14 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
         .try_state::<crate::app::state::SharedState>()
     {
         match event {
-            tauri::WindowEvent::Focused(focused) => state.focus.set(window.label(), *focused),
+            tauri::WindowEvent::Focused(focused) => {
+                state.focus.set(window.label(), *focused);
+                // Once you come to the main window, a later start of Vosh
+                // selects no session for a banner from before.
+                if *focused && window.label() == "main" {
+                    state.banners.forget_newest();
+                }
+            }
             tauri::WindowEvent::Destroyed => state.focus.set(window.label(), false),
             _ => {}
         }
@@ -339,12 +346,13 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
 /// Vosh started again while it ran, as a click on a toast of an
 /// installed Windows Vosh does, since the toast has no activator. The
 /// Vosh that runs takes the start in place of a second one, selects the
-/// session of the newest banner and comes to the front.
+/// session of the newest banner since you last came to it, once, and
+/// comes to the front. With no such banner it only comes to the front.
 #[cfg(windows)]
 pub(crate) fn second_start<R: Runtime>(app: &AppHandle<R>) {
     let newest = app
         .try_state::<crate::app::state::SharedState>()
-        .and_then(|state| state.banners.newest());
+        .and_then(|state| state.banners.take_newest());
     match newest {
         Some(session) => crate::alert::banner::show_session(app, session),
         None => {
