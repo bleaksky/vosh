@@ -157,7 +157,19 @@ The page in `src` is one bundle for three windows. `src/main.tsx` renders the ma
 | `src/styles`     | The stylesheets, with `src/styles.css` beside the folder until R18 sorts them                                                                                                                                                                                                                                                                                                                             |
 | `src/test`       | The Aabahran GMCP packets and the stand in DOM several tests share                                                                                                                                                                                                                                                                                                                                        |
 
-A few imports still run from `src/ipc`, `src/stores`, `src/theme` and `src/lib` into `src/panel`, `src/prompt`, `src/terminal` and `src/help`, and R17 judges each one. `src/ipc/session.ts` also takes the `ConnectionTarget` type from `src/stores/session/useConnection.ts` until R17 moves the type into it.
+A few imports still run from `src/ipc`, `src/stores`, `src/theme` and `src/lib` into `src/panel`, `src/prompt`, `src/terminal` and `src/help`, and they stay. Each reads a helper or a type, never a component, and none closes an import loop.
+
+- `src/ipc/characters.ts` uses `sanitizeLayout` from `src/panel/paneLayout.ts`, the page twin of Rust's sanitize, to clean the pane layout in the payload as `src/ipc` cleans the others.
+- `src/ipc/panes.ts` imports the `PaneLayout` type from the same file.
+- `src/ipc/uiConfig.ts` and `src/theme/appearanceSettings.ts` use the Panel font and Panel size normalizers in `src/panel/panelFont.ts` and `src/panel/panelSize.ts`, which R19 retires from the page copy of the UI config. appearanceSettings also reads the named choices beside them for the two menus in Settings.
+- `src/stores/config/chatColorsStore.ts` uses `NO_CHAT_COLORS`, `normalizeChatColors` and `sameChatColors` from `src/panel/chat/chatColors.ts`, which R20's config store factory takes.
+- `src/stores/gmcp/mapTilesStore.ts` imports the `MapTilesPayload` type from `src/panel/map/mapTiles.ts`.
+- `src/stores/session/pinnedPromptStore.ts` uses `dockRows` from `src/prompt/pinnedDock.ts` and `closePinRow` from `src/terminal/terminalRegion.ts`, both pure.
+- `src/lib/helpLink.ts` uses `rankTopics` and `resolveHelpTarget` from `src/help/helpNav.ts`. 2.5 of the plan makes helpLink the one deep link helper.
+- `src/lib/appMenu.ts` uses `PANE_TYPES` from `src/panel/paneLayout.ts` for the panes the macOS menu bar lists.
+- `src/theme/gameFit.ts` uses `indexedRgb` from `src/terminal/bandCells.ts`, the 256 color table.
+
+Two tests cross as well. `src/ipc/characters.test.ts` builds its expected layout with `defaultLayout`, and `src/stores/gmcp/hiddenStore.test.tsx` renders the Affects and Group panes and the vitals footer over the stores it drives.
 
 ## Twins
 
