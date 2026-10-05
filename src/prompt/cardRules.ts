@@ -5,8 +5,8 @@
 // another game's numbers take names, and where the card sits over your
 // prompt. Pure, so the components stay about layout.
 
-import { profileDisplayName, profilePossessive } from '../lib/profileLabel';
-import { listJoin } from '../lib/text';
+import { profileDisplayName } from '../lib/characterProfiles';
+import { listJoin, possessive } from '../lib/text';
 import type { MoveMade } from './promptPieces';
 import { cellWidth, parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type { SessionIdentity } from '../ipc/characters';
@@ -446,7 +446,11 @@ export function startRows(
     rows.push(row(preset.id, preset.label, preset.template));
   }
   const others = designs.map((d) =>
-    row(`profile:${d.profile}`, `${profilePossessive(d.display_name)} prompt`, d.template),
+    row(
+      `profile:${d.profile}`,
+      `${possessive(profileDisplayName(d.display_name))} prompt`,
+      d.template,
+    ),
   );
   const emptyPreset = presets.find((p) => p.id === 'empty');
   const empty = emptyPreset ? row('empty', emptyPreset.label, '') : null;
