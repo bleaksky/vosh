@@ -14,7 +14,6 @@ import {
 } from '../ipc/nativeSurface';
 import {
   getTarget,
-  onGmcpPackage,
   onInputMode,
   onTarget,
   sendInput,
@@ -31,10 +30,10 @@ import {
   macroEcho,
   planSubmit,
 } from './maskedInput';
-import { recentNames } from './recentNames';
 import { useCaret } from './useCaret';
 import { useInputPreferences } from './useInputPreferences';
 import { useMacroKeys } from './useMacroKeys';
+import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 
@@ -176,41 +175,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
   });
 
-  // Room characters from Room.Chars GMCP. Used as a noun source for
-  // Tab completion so the user can complete combat target names
-  // without typing the whole word.
-  const roomCharsRef = useRef<string[]>([]);
-  useTauriEvent<unknown>(
-    (cb) => onGmcpPackage('Room.Chars', cb),
-    (data) => {
-      if (!Array.isArray(data)) {
-        roomCharsRef.current = [];
-        return;
-      }
-      const names: string[] = [];
-      for (const entry of data) {
-        if (entry && typeof entry === 'object') {
-          const name = (entry as { name?: unknown }).name;
-          if (typeof name === 'string' && name.length > 0) {
-            names.push(name);
-          }
-        }
-      }
-      roomCharsRef.current = names;
-    },
-  );
-
-  // Tab-completion cycling state. When the user presses Tab we
-  // resolve the word being typed, build a candidate list, and
-  // remember the cycle so consecutive Tab presses walk through the
-  // matches. Any input change other than Tab resets this so the next
-  // Tab starts a fresh search.
-  const tabStateRef = useRef<{
-    wordStart: number;
-    matches: string[];
-    idx: number;
-    suffixOffset: number;
-  } | null>(null);
+  const { complete, resetCycle } = useTabCompletion(inputRef, value, setValue, history);
 
   // Track configured quick-keys so we can skip the local echo when
   // the user types one. The backend echoes the expansion (`bash
@@ -285,98 +250,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       setHistoryIndex(null);
     }
     // Same for the tab-completion cycle; typing anything breaks it.
-    if (tabStateRef.current) {
-      tabStateRef.current = null;
-    }
-  };
-
-  // Build the list of completion candidates ordered by source priority:
-  //   1. Unique words pulled from typed-command history, most recent first.
-  //   2. Room-character names from the latest Room.Chars GMCP push.
-  //   3. Capitalized name-like tokens seen anywhere in MUD output in
-  //      the last 30 minutes (who-list names, comm-channel speakers,
-  //      consider targets, etc.). Populated by Terminal.tsx via
-  //      ingestRecentNames().
-  // Filter by case-insensitive prefix and deduplicate so the user does
-  // not see the same word twice when a noun also appeared in history.
-  const buildTabMatches = (prefix: string): string[] => {
-    const lower = prefix.toLowerCase();
-    const seen = new Set<string>();
-    const matches: string[] = [];
-    const consider = (word: string) => {
-      if (word.length === 0) return;
-      if (word.toLowerCase() === lower) return;
-      if (!word.toLowerCase().startsWith(lower)) return;
-      const key = word.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      matches.push(word);
-    };
-    for (let i = history.length - 1; i >= 0; i--) {
-      for (const token of history[i].split(/\s+/)) {
-        consider(token);
-      }
-    }
-    for (const name of roomCharsRef.current) {
-      consider(name);
-    }
-    for (const name of recentNames()) {
-      consider(name);
-    }
-    return matches;
-  };
-
-  const handleTabComplete = (step: number) => {
-    const el = inputRef.current;
-    if (!el) return;
-    const caret = el.selectionStart ?? value.length;
-    const state = tabStateRef.current;
-    if (state) {
-      // Cycle within the existing match set.
-      if (state.matches.length === 0) return;
-      const next = (state.idx + step + state.matches.length) % state.matches.length;
-      const match = state.matches[next];
-      const before = value.slice(0, state.wordStart);
-      const after = value.slice(value.length - state.suffixOffset);
-      const nextValue = before + match + after;
-      setValue(nextValue);
-      tabStateRef.current = { ...state, idx: next };
-      // Move the caret to the end of the inserted match on the next
-      // tick so React has committed the value update.
-      requestAnimationFrame(() => {
-        const e2 = inputRef.current;
-        if (!e2) return;
-        const pos = before.length + match.length;
-        e2.setSelectionRange(pos, pos);
-      });
-      return;
-    }
-    // Fresh completion. Walk back from caret to find the start of
-    // the current word.
-    let start = caret;
-    while (start > 0 && /\S/.test(value[start - 1])) start -= 1;
-    const prefix = value.slice(start, caret);
-    if (prefix.length === 0) return;
-    const matches = buildTabMatches(prefix);
-    if (matches.length === 0) return;
-    const idx = step >= 0 ? 0 : matches.length - 1;
-    const match = matches[idx];
-    const before = value.slice(0, start);
-    const after = value.slice(caret);
-    const nextValue = before + match + after;
-    setValue(nextValue);
-    tabStateRef.current = {
-      wordStart: start,
-      matches,
-      idx,
-      suffixOffset: after.length,
-    };
-    requestAnimationFrame(() => {
-      const e2 = inputRef.current;
-      if (!e2) return;
-      const pos = before.length + match.length;
-      e2.setSelectionRange(pos, pos);
-    });
+    resetCycle();
   };
 
   // Shared submit path for both Enter and multi-line paste. Echoes the
@@ -508,12 +382,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // Any other key resets the cycle.
     if (event.key === 'Tab') {
       event.preventDefault();
-      handleTabComplete(event.shiftKey ? -1 : 1);
+      complete(event.shiftKey ? -1 : 1);
       return;
     }
-    if (tabStateRef.current) {
-      tabStateRef.current = null;
-    }
+    resetCycle();
 
     // Macro lookup runs first so a bound key fires its command
     // regardless of any other handler. allowPlainPrintable matches
