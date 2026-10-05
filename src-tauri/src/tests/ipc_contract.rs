@@ -21,8 +21,9 @@
 //! at run time, and events.ts holds no constant that no call names.
 //!
 //! Every page invoke, listen and emit sits in `src/ipc`, one file to a
-//! topic, so the rest of the page reaches the app only through the
-//! wrappers there.
+//! topic, so the rest of the page reaches the app's commands and events
+//! only through the wrappers there. The Tauri window API is not an app
+//! command and stays with the windows that call it.
 //!
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
