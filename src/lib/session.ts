@@ -274,6 +274,10 @@ export interface TriggerRecord {
    *  `tar` among them. Omitted on the wire when the value is 'line' (the
    *  backend's default). */
   target?: TriggerTarget;
+  /** The alert the trigger rings when it matches, in a table of its own
+   *  beside the actions (Alerts Q6). The page keeps it as it came until
+   *  the Alert row lands, so a Save never drops it. */
+  alert?: Record<string, unknown> | null;
 }
 
 export type TriggerTarget = 'line' | 'prompt' | 'room' | 'room_target';
