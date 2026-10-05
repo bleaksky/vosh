@@ -20,6 +20,10 @@
 //! names its event by a constant from events.ts, unless the name is built
 //! at run time, and events.ts holds no constant that no call names.
 //!
+//! Every page invoke, listen and emit sits in `src/ipc`, one file to a
+//! topic, so the rest of the page reaches the app only through the
+//! wrappers there.
+//!
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
 //! and lists, so the scan reads the strings and not the calls. That holds
@@ -218,6 +222,9 @@ struct Contract {
 /// app file that names every event the app sends.
 const PAGE_EVENTS: &str = "src/ipc/events.ts";
 const APP_EVENTS: &str = "src-tauri/src/app/events.rs";
+
+/// The page folder that holds every call into the app and every event.
+const PAGE_IPC: &str = "src/ipc/";
 
 /// An event name a file holds as a constant.
 struct EventConstant {
@@ -609,6 +616,24 @@ fn events_not_named_by_constant(contract: &Contract) -> Vec<String> {
     failures
 }
 
+/// Every page call that runs a command, hears or sends an event sits in
+/// [`PAGE_IPC`].
+fn calls_outside_ipc(contract: &Contract) -> Vec<String> {
+    contract
+        .calls
+        .iter()
+        .filter(|c| !c.file.starts_with(PAGE_IPC))
+        .map(|c| {
+            format!(
+                "{} calls {} outside {PAGE_IPC}. Call it from a wrapper in the topic \
+                 file there that owns it.",
+                c.at(),
+                c.callee
+            )
+        })
+        .collect()
+}
+
 /// The list of every name the page and the app share, so a change to one
 /// shows as a diff in the commit that makes it.
 const NAMES_FILE: &str = "fixtures/ipc/names.txt";
@@ -753,6 +778,11 @@ fn every_page_event_is_named_by_its_constant() {
     fail_with(events_not_named_by_constant(contract()));
 }
 
+#[test]
+fn every_page_call_sits_in_src_ipc() {
+    fail_with(calls_outside_ipc(contract()));
+}
+
 /// Every page call whose name is built at run time is on `list`, and
 /// every entry there matches a call.
 fn unlisted_run_time_names(contract: &Contract, list: &[BuiltAtRunTime]) -> Vec<String> {
@@ -871,11 +901,11 @@ fn the_scan_follows_every_page_call_and_app_file() {
     }
 }
 
-/// A page call in `src/page.ts` for a contract built by hand.
+/// A page call in `src/ipc/page.ts` for a contract built by hand.
 fn page_call(call: Call, arg: &str, name: Name) -> PageCall {
     let &(callee, ..) = CALLEES.iter().find(|c| c.2 == call).unwrap();
     PageCall {
-        file: "src/page.ts".into(),
+        file: "src/ipc/page.ts".into(),
         line: 1,
         callee,
         call,
@@ -959,6 +989,10 @@ fn each_check_rejects_the_case_it_guards() {
             page_call(Call::Invoke, "'unread'", fixed("unread")),
             page_call(Call::Invoke, "'unregistered'", fixed("unregistered")),
             page_call(Call::Listen, "SENT", fixed("vosh://sent")),
+            PageCall {
+                file: "src/raw.ts".into(),
+                ..page_call(Call::Listen, "SENT", fixed("vosh://sent"))
+            },
             page_call(Call::Listen, "'vosh://built/x'", fixed("vosh://built/x")),
             page_call(Call::Emit, "PAGE", fixed("vosh://page")),
             page_call(Call::Emit, "QUIET", fixed("vosh://quiet")),
@@ -1061,7 +1095,7 @@ fn each_check_rejects_the_case_it_guards() {
         ),
         &[
             "src-tauri/src/app.rs sends vosh://lost,",
-            "src/page.ts line 1 sends vosh://told,",
+            "src/ipc/page.ts line 1 sends vosh://told,",
             "lists vosh://sent, and a page listen hears it.",
             "lists vosh://stale, and nothing sends it.",
         ],
@@ -1103,9 +1137,14 @@ fn each_check_rejects_the_case_it_guards() {
         "events_not_named_by_constant",
         &events_not_named_by_constant(&contract),
         &[
-            "src/page.ts line 1 names vosh://built/x as 'vosh://built/x'.",
+            "src/ipc/page.ts line 1 names vosh://built/x as 'vosh://built/x'.",
             "src/ipc/events.ts holds STALE, and no call names it.",
         ],
+    );
+    assert_rejects(
+        "calls_outside_ipc",
+        &calls_outside_ipc(&contract),
+        &["src/raw.ts line 1 calls listen outside src/ipc/."],
     );
 }
 
