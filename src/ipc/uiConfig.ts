@@ -300,11 +300,6 @@ export interface UiConfig {
   /** At or under this many hours an affect's hours turn bold red. Whole
    *  hours from 0 to 99, never over affects_running_out_hours. */
   affects_almost_gone_hours: number;
-  /** How many times the backend had replaced the live config when this
-   *  copy was read. setUiConfig sends it back, and the backend turns
-   *  away a save from a copy read before a later replace. Absent on a
-   *  config that never came from the backend. */
-  generation?: number;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -399,7 +394,6 @@ export interface RawUiConfig {
   affects_tint?: boolean;
   affects_running_out_hours?: number;
   affects_almost_gone_hours?: number;
-  generation?: number;
 }
 
 export async function fetchUiConfig(): Promise<UiConfig> {
@@ -504,7 +498,6 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     affects_tint: cfg.affects_tint === true,
     affects_running_out_hours: thresholds.running_out,
     affects_almost_gone_hours: thresholds.almost_gone,
-    ...(typeof cfg.generation === 'number' ? { generation: cfg.generation } : {}),
   };
 }
 
@@ -543,7 +536,7 @@ export async function setUiTheme(
 
 /** The fields setUiFields can save. The tracked affects save through
  *  trackedAffectsSet. */
-export type UiFields = Partial<Omit<UiConfig, 'tracked_affects' | 'generation'>>;
+export type UiFields = Partial<Omit<UiConfig, 'tracked_affects'>>;
 
 /** Save only the fields `fields` names, so two windows that each change
  *  a field keep both changes. It writes the profile `profile` names while

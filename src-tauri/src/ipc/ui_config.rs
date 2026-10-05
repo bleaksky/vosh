@@ -63,12 +63,6 @@ pub(crate) struct UiConfigPayload {
     pub affects_tint: bool,
     pub affects_running_out_hours: u32,
     pub affects_almost_gone_hours: u32,
-    /// The [`AppState::ui_config_generation`] this copy was read at. Never
-    /// reaches disk.
-    ///
-    /// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub generation: Option<u64>,
 }
 
 impl UiConfigPayload {
@@ -118,31 +112,19 @@ impl UiConfigPayload {
             affects_tint: ui.affects_tint,
             affects_running_out_hours: ui.affects_running_out_hours,
             affects_almost_gone_hours: ui.affects_almost_gone_hours,
-            generation: None,
         }
     }
 }
 
-/// The live UI config and the [`AppState::ui_config_generation`] it was
-/// read at.
-///
-/// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
+/// The live UI config. Your prompt is not in it. The prompt section
+/// reads and writes the `[prompt]` table through the prompt commands, and
+/// `[ui]` keeps only a copy of its switch and design for an older build.
 #[tauri::command]
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
     let p = state.selected_session().lock_profile().await;
-    Ok(ui_config_of(&p, state.ui_config_generation()))
-}
-
-/// What `ui_get_config` hands the webview for the live profile `p`, read
-/// at `generation`. Your prompt is not in it: the prompt section reads and
-/// writes the `[prompt]` table through the prompt commands, and `[ui]`
-/// keeps only a copy of its switch and design for an older build.
-fn ui_config_of(p: &crate::profile::live::Profile, generation: u64) -> UiConfigPayload {
-    let mut payload = UiConfigPayload::from_ui(&p.ui);
-    payload.generation = Some(generation);
-    payload
+    Ok(UiConfigPayload::from_ui(&p.ui))
 }
 
 /// One field of the UI config with its new value, as the page sends it,
@@ -621,22 +603,14 @@ mod tests {
         }
     }
 
-    /// What `ui_get_config` hands out for `ui`, read at `generation`.
-    fn save_of(ui: &UiConfig, generation: Option<u64>) -> UiConfigPayload {
-        let mut payload = UiConfigPayload::from_ui(ui);
-        payload.generation = generation;
-        payload
-    }
-
     #[test]
     fn the_settings_payload_carries_nothing_of_your_prompt() {
         let (p, _) = prompt_profile();
-        let json = serde_json::to_value(super::ui_config_of(&p, 5)).unwrap();
+        let json = serde_json::to_value(UiConfigPayload::from_ui(&p.ui)).unwrap();
         let keys = json.as_object().unwrap();
         for key in ["prompt_template_enabled", "prompt_template", "prompt_show"] {
             assert!(!keys.contains_key(key), "{key} reaches Settings");
         }
-        assert_eq!(json["generation"], 5);
     }
 
     #[test]
@@ -677,14 +651,6 @@ mod tests {
             let read = serde_json::from_value::<Vec<super::UiField>>(fields);
             assert!(read.is_err(), "{key}");
         }
-    }
-
-    #[test]
-    fn the_generation_travels_with_the_config_but_stays_optional() {
-        let json = serde_json::to_value(save_of(&UiConfig::default(), Some(7))).unwrap();
-        assert_eq!(json["generation"], serde_json::json!(7));
-        let json = serde_json::to_value(save_of(&UiConfig::default(), None)).unwrap();
-        assert!(json.get("generation").is_none());
     }
 
     #[test]

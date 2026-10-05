@@ -135,7 +135,6 @@ describe('a custom theme on a built-in id', () => {
       light_theme: 'solarized-light',
       dark_theme: 'nord',
       custom_themes: [custom('night-ink', '#000000'), imported],
-      generation: 4,
     });
 
   afterEach(() => {

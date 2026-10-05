@@ -16,10 +16,10 @@ use crate::sessions::{Session, SessionId, SessionRow, Sessions, NO_SUCH_SESSION}
 /// What every command, window and session shares. The sessions with the
 /// profiles they play, the profile set, the log store, the plugins, the
 /// catalog and loadouts of loadout mode, the file of the affect fulls and
-/// the app data folder. The generations that turn away a write read before the
-/// profile was replaced live here too, with the flag that holds the
-/// saves back until a relaunch and the flag that says loadout mode is
-/// live.
+/// the app data folder. The generation that turns away a pane layout
+/// write read before the profile was replaced lives here too, with the
+/// flag that holds the saves back until a relaunch and the flag that says
+/// loadout mode is live.
 pub(crate) struct AppState {
     /// The sessions, the one selected and the profiles they play. See
     /// [`crate::sessions`] for where its lock sits.
@@ -60,14 +60,6 @@ pub(crate) struct AppState {
     /// and `pane_layout_set` refuses one from before a swap so it cannot
     /// land on the new profile.
     panes_generation: AtomicU64,
-    /// Counts the times the live profile's whole UI config has been
-    /// replaced: a profile switch, an import, `#profile load` and `reset`.
-    /// It moves under the profile lock in the same step that swaps the
-    /// config. `ui_get_config` hands it out with the config, and a whole
-    /// config save carries back the one it was read at, so `ui_set_config`
-    /// refuses a copy from before a replace rather than write the old
-    /// profile's values over the new one.
-    ui_config_generation: AtomicU64,
     /// Set by `migration_apply` once catalog.toml / loadouts.toml are
     /// written: the session is in the post-migration window where the live
     /// Profile is still pre-migration state and must not be persisted.
@@ -271,19 +263,6 @@ impl AppState {
         self.panes_generation.fetch_add(1, Ordering::AcqRel);
     }
 
-    /// Note that the live UI config was replaced wholesale, panes included.
-    /// Advances the UI config and panes generations. Call with the profile
-    /// lock held, in the step that swaps the config.
-    pub(crate) fn note_ui_config_replaced(&self) {
-        self.bump_panes_generation();
-        self.ui_config_generation.fetch_add(1, Ordering::AcqRel);
-    }
-
-    /// Read the UI config generation. Call with the profile lock held.
-    pub(crate) fn ui_config_generation(&self) -> u64 {
-        self.ui_config_generation.load(Ordering::Acquire)
-    }
-
     /// Read the panes generation. Call with the profile lock held.
     pub(crate) fn panes_generation(&self) -> u64 {
         self.panes_generation.load(Ordering::Acquire)
@@ -303,7 +282,6 @@ impl Default for AppState {
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
             panes_generation: AtomicU64::new(0),
-            ui_config_generation: AtomicU64::new(0),
             relaunch_pending: AtomicBool::new(false),
             loadout_mode: AtomicBool::new(false),
             app_data: OnceLock::new(),
