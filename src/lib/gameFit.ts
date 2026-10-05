@@ -29,9 +29,12 @@
 // purple and magenta turns pink (SWAP_TARGETS). The swap starts from the
 // palette Typical plays, the Typical fit or the published colors, and
 // then settles the lightness of every cue color and the hue of each
-// turned one inside its window, by floors in strict order. A built in
-// theme ships its swaps in themes.ts (VISION_FITS), and gameFit.test.ts
-// works them out again with VOSH_FIT_THEMES=1.
+// turned one inside its window, by floors in strict order. No two of the
+// game's channels come nearer than CHANNEL_LEAST, so where the theme's
+// own text and channels already fill the blues, a color keeps its hue
+// rather than run into one. A built in theme ships its swaps in
+// themes.ts (VISION_FITS), and gameFit.test.ts works them out again with
+// VOSH_FIT_THEMES=1.
 
 import { indexedRgb } from './bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
@@ -51,6 +54,7 @@ import {
   type Oklch,
   type Rgb,
 } from './color';
+import { GAME_CHANNEL_SLOTS } from './gameChannels';
 import type { XtermPalette } from './themes';
 
 /** The slots the fit may move, body text and the 16 ANSI colors. */
@@ -628,7 +632,8 @@ const RED_GREEN_SWAP: Readonly<Partial<Record<CueFamily, SwapTarget>>> = {
  *  chroma, and only its lightness may move: yellow and cyan under every
  *  vision, magenta under deuteranopia and protanopia, and green under
  *  tritanopia, since turning them runs bold cyan, bold magenta and tells
- *  into body text. Typical turns none. */
+ *  into body text. A turned color keeps its own hue too where no hue in
+ *  its window holds the firm floors (swapFor). Typical turns none. */
 export const SWAP_TARGETS: Readonly<
   Record<ColorVision, Readonly<Partial<Record<CueFamily, SwapTarget>>>>
 > = {
@@ -651,7 +656,9 @@ export const LEAD_SLOTS: Readonly<Record<ColorVision, readonly AnsiSlot[]>> = {
 };
 
 /** How far the lead color and its bold twin move at least, in OKLab dE
- *  times 100 as a typical eye sees them, so the swap shows. */
+ *  times 100 as a typical eye sees them, so the swap shows. Where the
+ *  lead cannot, such as Rose Pine's pine green, which is a blue already,
+ *  another plain color the vision turns moves MOVE_MIN.lead. */
 export const MOVE_MIN = { lead: 12, bold: 6 } as const;
 
 /** How far the lead color moves where every firmer floor leaves room. */
@@ -725,29 +732,26 @@ export const KEPT_PAIRS: Readonly<Record<ColorVision, readonly CuePair[]>> = {
  *  times 100. */
 export const KEPT_SLACK = 0.5;
 
-/** The pairs of the game's own channels, from the server's color codes:
- *  tells in green, says in bold yellow, faction in yellow, yells in cyan,
- *  cabal in bold blue, clan in bold cyan, group tells in bold magenta and
- *  hits on you in red. A swap keeps each pair at least CHANNEL_FLOOR
- *  apart, or as far as at the start if that is less, both as the vision
- *  sees them and as a typical eye does. */
+/** The cue colors the game's channels print in, from the table the chat
+ *  pane reads (gameChannels): tells in green, faction in yellow, yells
+ *  in cyan, immortal talk in bold red, newbie chat in bold green, says in
+ *  bold yellow, cabal in bold blue, group tells in bold magenta and clan
+ *  in bold cyan. Hits on you in red join them, the color the game prints
+ *  its fight lines in. */
+const CHANNEL_SET = new Set<AnsiSlot>(GAME_CHANNEL_SLOTS.values());
+export const CHANNEL_SLOTS: readonly AnsiSlot[] = CUE_SLOTS.filter(
+  (k) => k === 'red' || CHANNEL_SET.has(k),
+);
+
+/** The pairs a swap keeps apart as channels: every two channel colors,
+ *  and tells and yells against blue text. A swap keeps each pair at
+ *  least CHANNEL_FLOOR apart, and never under CHANNEL_LEAST, or as far as
+ *  at the start if that is less, both as the vision sees them and as a
+ *  typical eye does. */
 export const CHANNEL_PAIRS: readonly CuePair[] = [
-  ['red', 'green'],
-  ['brightRed', 'brightGreen'],
-  ['red', 'yellow'],
-  ['red', 'brightYellow'],
-  ['green', 'yellow'],
-  ['green', 'brightYellow'],
-  ['green', 'cyan'],
+  ...CHANNEL_SLOTS.flatMap((a, i) => CHANNEL_SLOTS.slice(i + 1).map((b) => [a, b] as const)),
   ['green', 'blue'],
-  ['green', 'brightBlue'],
-  ['green', 'brightCyan'],
-  ['green', 'brightMagenta'],
-  ['brightGreen', 'brightYellow'],
   ['cyan', 'blue'],
-  ['brightBlue', 'brightCyan'],
-  ['brightBlue', 'brightMagenta'],
-  ['brightCyan', 'brightMagenta'],
 ];
 
 const pairKey = ([a, b]: CuePair) => [a, b].sort().join('/');
@@ -770,9 +774,11 @@ export const CUE_PAIRS: readonly CuePair[] = [CUE_SLOTS.slice(0, 6), CUE_SLOTS.s
 export const CHANNEL_FLOOR = 6;
 export const CUE_FLOOR = 3;
 
-/** How near two channels come at the very least, firmer than the visible
- *  change, so tells never read as cabal or group tells: twice
- *  VISION_SLACK, or as near as they stood at the start if that is less. */
+/** How near two channels come at the very least, as firm as the checks,
+ *  so tells never read as cabal or group tells: twice VISION_SLACK, or as
+ *  near as they stood at the start if that is less. Where no hue in its
+ *  window keeps a turned color this far from every channel, it keeps its
+ *  own hue. */
 export const CHANNEL_LEAST = 4;
 
 /** How near, in OKLab dE times 100, a swap lets a color it moves come to
@@ -802,6 +808,11 @@ export const L_REACH = 0.15;
  *  could clear every distance by lifting a color to white, which shows
  *  no color at all. */
 export const CHROMA_KEEP = 0.75;
+
+/** The share of its start chroma a color that keeps its hue keeps at
+ *  least, as the Typical fit asks, so a lilac or a cream never lifts to
+ *  white. A color under 0.04 of chroma, a gray, keeps none. */
+export const HUE_CHROMA_KEEP = 0.6;
 
 /** The most any slot of `keys` moves from `a` to `b`, in OKLab dE times
  *  100 as a typical eye sees it. A color that is not hex counts as no
@@ -940,14 +951,15 @@ const CUE_WANT = 6;
 // wins, so a later tier never buys an earlier one.
 const HOLD = 0;
 const CLEAR = 1;
-const LEAST = 2;
-const SHOW = 3;
-const FLOOR = 4;
-const PART = 5;
-const WANT = 6;
-const ROOM = 7;
-const SOFT = 8;
-const TIER_COUNT = 9;
+const SHOW = 2;
+const LEAD = 3;
+const TURN = 4;
+const FLOOR = 5;
+const PART = 6;
+const WANT = 7;
+const ROOM = 8;
+const SOFT = 9;
+const TIER_COUNT = 10;
 const TIE = 1e-9;
 
 function betterTiers(a: readonly number[], b: readonly number[]): boolean {
@@ -966,6 +978,8 @@ type Floor = readonly [number, number, number, number];
 interface SwapState {
   L: Float64Array;
   dh: Float64Array;
+  // 1 where a color the vision turns keeps its own hue instead.
+  own: Uint8Array;
 }
 
 interface Scored {
@@ -986,37 +1000,46 @@ interface Scored {
  *  colors and the hue of each turned one, from up to six starts: the
  *  lightness of `start` and the published lightness of the turned
  *  colors, each with the turned hues at their target and at either end
- *  of their window (HUE_STARTS). It scores each palette on tiers in
- *  strict order, so a later tier never buys an earlier one:
+ *  of their window (HUE_STARTS). Where no hue in its window holds the
+ *  first two tiers, a turned color keeps its own hue and chroma, as
+ *  every other family does, such as tells on a theme whose own text,
+ *  yells and cabal already fill the blues. The search scores each
+ *  palette on tiers in strict order, so a later tier never buys an
+ *  earlier one:
  *
  *  1. Every check `start` passes still passes, and one it misses falls
  *     no more than MISS_SLACK further short (holdsCheck). No color moves
  *     more than L_REACH in lightness, red stays on its side of yellow
- *     and bold yellow where they stood 0.02 apart, and a turned color
- *     keeps CHROMA_KEEP of its chroma, or of its target chroma if less.
+ *     and bold yellow where they stood 0.02 apart, a turned color keeps
+ *     CHROMA_KEEP of its chroma, or of its target chroma if less, and
+ *     every other color HUE_CHROMA_KEEP of its own. Each channel pair
+ *     keeps CHANNEL_LEAST, or as far as at the start if that is less,
+ *     seen and typical.
  *  2. Each color stays at least VISION_GUARD, or as far as at the start
  *     if that is less, minus VISION_SLACK, from body text, white and
  *     bold white, seen and typical. Each kept pair (KEPT_PAIRS) comes no
  *     nearer, seen, than at the start, minus KEPT_SLACK.
- *  3. Each channel pair keeps CHANNEL_LEAST, or as far as at the start
- *     if that is less, seen and typical.
+ *  3. The lead color (LEAD_SLOTS), or another plain color the vision
+ *     turns, moves at least MOVE_MIN.lead, as a typical eye sees it.
  *  4. The lead color moves at least MOVE_MIN.lead and its bold twin
- *     MOVE_MIN.bold, as a typical eye sees them (LEAD_SLOTS).
- *  5. Each channel pair keeps CHANNEL_FLOOR and every other cue pair of
+ *     MOVE_MIN.bold, turned.
+ *  5. Every turned color takes a hue in its window rather than keep its
+ *     own.
+ *  6. Each channel pair keeps CHANNEL_FLOOR and every other cue pair of
  *     a weight CUE_FLOOR, or as far as at the start if that is less,
  *     seen and typical.
- *  6. Each parted pair (PARTED_PAIRS) stands PART_MIN apart, seen, or as
+ *  7. Each parted pair (PARTED_PAIRS) stands PART_MIN apart, seen, or as
  *     far as a typical eye sees it at the start if that is less, minus
  *     VISION_SLACK.
- *  7. The lead color moves MOVE_WANT.
- *  8. Each channel pair keeps VISION_GUARD and every other cue pair 6,
+ *  8. The lead color moves MOVE_WANT.
+ *  9. Each channel pair keeps VISION_GUARD and every other cue pair 6,
  *     and each color VISION_GUARD from the text, or as far as at the
  *     start if that is less.
  *
  *  Under them a soft cost keeps each color near its start lightness,
- *  near its target hue and at its chroma. A swap takes about two
- *  seconds, so a built in theme stores its swaps (themes.ts VISION_FITS)
- *  and a custom theme swaps in a worker (fitOffThread). */
+ *  near its target hue and at its chroma. A swap takes one to two and a
+ *  half seconds, so a built in theme stores its swaps (themes.ts
+ *  VISION_FITS) and a custom theme swaps in a worker (fitOffThread). */
 export function swapFor(
   src: XtermPalette,
   vision: ColorVision,
@@ -1044,19 +1067,23 @@ export function swapFor(
   const keepChroma = CUE_SLOTS.map(
     (_, i) => CHROMA_KEEP * Math.min(lch[i].C, target[i]?.chroma ?? 0),
   );
+  const holdChroma = lch.map((c) => (c.C > 0.04 ? HUE_CHROMA_KEEP * c.C : 0));
   const turned = CUE_SLOTS.map((_, i) => i).filter((i) => target[i] !== null);
 
-  // The color slot `i` takes at lightness `L` and, for a turned family,
-  // `dh` degrees off its target hue.
+  // The color slot `i` takes at lightness `L`: for a turned family `dh`
+  // degrees off its target hue, at the chroma it aims for, unless it
+  // keeps its own hue (`own`), as every other family does.
   const made = CUE_SLOTS.map(() => new Map<number, Tone>());
-  const colorAt = (i: number, L: number, dh: number): Tone => {
-    const turn = target[i];
+  const colorAt = (i: number, L: number, dh: number, own: number): Tone => {
+    const turn = own ? null : target[i];
     if (!turn && Math.abs(L - lch[i].L) < 1e-9) return begin[i];
-    const key = Math.round(L * 1e5) * 4096 + Math.round((dh + 100) * 10);
+    const key = Math.round(L * 1e5) * 4096 + (turn ? Math.round((dh + 100) * 10) : 4095);
     let tone = made[i].get(key);
     if (!tone) {
-      const h = turn ? (turn.hue + dh + 360) % 360 : lch[i].h;
-      const c = oklchToRgbInGamut({ L: Math.max(0, Math.min(1, L)), C: want[i], h });
+      const at = Math.max(0, Math.min(1, L));
+      const c = turn
+        ? oklchToRgbInGamut({ L: at, C: want[i], h: (turn.hue + dh + 360) % 360 })
+        : oklchToRgbInGamut({ L: at, C: lch[i].C, h: lch[i].h });
       tone = toneAt(toHex(c));
       made[i].set(key, tone);
     }
@@ -1091,6 +1118,8 @@ export function swapFor(
     return [i, j, Math.min(PART_MIN[vision], typicalOf(begin[i], begin[j]))] as const;
   });
   const [leadSlot, boldSlot] = LEAD_SLOTS[vision].map(readAt);
+  // The plain colors the vision turns, which CUE_SLOTS lists first.
+  const plainTurned = turned.filter((i) => i < n / 2);
   const red = readAt('red');
   const sides = (['yellow', 'brightYellow'] as const)
     .map((y) => [readAt(y), begin[red].lab.L - begin[readAt(y)].lab.L] as const)
@@ -1119,10 +1148,11 @@ export function swapFor(
 
   const score = (state: SwapState): Scored => {
     const list = begin.slice();
-    for (let i = 0; i < n; i += 1) list[i] = colorAt(i, state.L[i], state.dh[i]);
+    for (let i = 0; i < n; i += 1) list[i] = colorAt(i, state.L[i], state.dh[i], state.own[i]);
+    const turnedNow = (i: number) => target[i] !== null && state.own[i] === 0;
     const tiers = new Array<number>(TIER_COUNT).fill(0);
     // 1. The checks, the reach in lightness, red's side of yellow and
-    // the chroma of a turned color.
+    // the chroma each color keeps.
     const now = measure(toneFor(list));
     for (let i = 0; i < now.oks.length; i += 1) {
       if (!holds[i]) continue;
@@ -1141,11 +1171,12 @@ export function swapFor(
       const diff = list[red].lab.L - list[y].lab.L;
       if (Math.sign(diff) !== Math.sign(was)) tiers[HOLD] += 1 + Math.abs(diff) * 100;
     }
-    for (const i of turned) {
+    for (let i = 0; i < n; i += 1) {
+      const floor = turnedNow(i) ? keepChroma[i] : holdChroma[i];
       const C = Math.hypot(list[i].lab.a, list[i].lab.b);
-      if (C < keepChroma[i] - TIE) tiers[HOLD] += 1 + (keepChroma[i] - C) * 100;
+      if (C < floor - TIE) tiers[HOLD] += 1 + (floor - C) * 100;
     }
-    // 2 and 8. Clear of the text, and the kept pairs.
+    // 2 and 9. Clear of the text, and the kept pairs.
     for (const [i, j, seenFloor, typicalFloor] of textFloors) {
       const s = seenOf(list[i], list[j]);
       const t = typicalOf(list[i], list[j]);
@@ -1160,19 +1191,26 @@ export function swapFor(
       const s = seenOf(list[i], list[j]);
       if (s < floor - TIE) tiers[CLEAR] += 1 + (floor - s);
     }
-    // 4 and 7. How far the lead color moves.
-    const lead = typicalOf(begin[leadSlot], list[leadSlot]);
-    const bold = typicalOf(begin[boldSlot], list[boldSlot]);
-    if (lead < MOVE_MIN.lead) tiers[SHOW] += 1 + (MOVE_MIN.lead - lead);
-    if (bold < MOVE_MIN.bold) tiers[SHOW] += 1 + (MOVE_MIN.bold - bold);
+    // 3, 4, 5 and 8. How far the lead color moves, or the second, and
+    // which turned colors keep their own hue. A color that keeps its
+    // own hue counts as no move.
+    const moved = (i: number) => (turnedNow(i) ? typicalOf(begin[i], list[i]) : 0);
+    const lead = moved(leadSlot);
+    const bold = moved(boldSlot);
+    let shown = lead;
+    for (const i of plainTurned) shown = Math.max(shown, moved(i));
+    if (shown < MOVE_MIN.lead) tiers[SHOW] += 1 + (MOVE_MIN.lead - shown);
+    if (lead < MOVE_MIN.lead) tiers[LEAD] += 1 + (MOVE_MIN.lead - lead);
+    if (bold < MOVE_MIN.bold) tiers[LEAD] += 1 + (MOVE_MIN.bold - bold);
+    for (const i of turned) tiers[TURN] += state.own[i];
     if (lead < MOVE_WANT) tiers[WANT] += 1 + (MOVE_WANT - lead);
-    // 3, 5 and 8. The channel and cue pairs.
+    // 1, 6 and 9. The channel and cue pairs.
     const pairs = (floors: readonly Floor[], least: number, firm: number, soft: number) => {
       for (const [i, j, seenStart, typicalStart] of floors) {
         const s = seenOf(list[i], list[j]);
         const t = typicalOf(list[i], list[j]);
         for (const [tier, most] of [
-          [LEAST, least],
+          [HOLD, least],
           [FLOOR, firm],
           [ROOM, soft],
         ] as const) {
@@ -1185,7 +1223,7 @@ export function swapFor(
     };
     pairs(channelFloors, CHANNEL_LEAST, CHANNEL_FLOOR, VISION_GUARD);
     pairs(cueFloors, 0, CUE_FLOOR, CUE_WANT);
-    // 6. The parted pairs, and their shortfall under the soft cost.
+    // 7. The parted pairs, and their shortfall under the soft cost.
     for (const [i, j, need] of parted) {
       const s = seenOf(list[i], list[j]);
       if (s < need - VISION_SLACK - TIE) tiers[PART] += 1 + (need - VISION_SLACK - s);
@@ -1193,12 +1231,12 @@ export function swapFor(
     }
     for (let i = 0; i < n; i += 1) {
       const C = Math.hypot(list[i].lab.a, list[i].lab.b);
-      const w = want[i];
+      const w = turnedNow(i) ? want[i] : lch[i].C;
       if (w > 0.04 && C < SOFT_CHROMA_SHARE * w) {
         tiers[SOFT] += ((SOFT_CHROMA_SHARE * w - C) / w) * SOFT_CHROMA;
       }
       tiers[SOFT] += Math.abs(state.L[i] - lch[i].L) * 100 * SOFT_L;
-      tiers[SOFT] += Math.abs(state.dh[i]) * SOFT_HUE;
+      if (turnedNow(i)) tiers[SOFT] += Math.abs(state.dh[i]) * SOFT_HUE;
     }
     return { tiers, state, tones: list };
   };
@@ -1222,8 +1260,8 @@ export function swapFor(
 
   const run = (first: SwapState): Scored => {
     let best = score(first);
-    const consider = (L: Float64Array, dh: Float64Array) => {
-      const next = score({ L, dh });
+    const consider = (L: Float64Array, dh: Float64Array, own = best.state.own) => {
+      const next = score({ L, dh, own });
       if (!betterTiers(next.tiers, best.tiers)) return false;
       best = next;
       return true;
@@ -1247,6 +1285,12 @@ export function swapFor(
         }
       }
       for (const i of turned) {
+        // Keep its own hue, or turn it again, at each lightness.
+        const own = best.state.own.slice();
+        own[i] = 1 - own[i];
+        const dh = withHue(i, 0);
+        for (const L of sweep[i]) moved = consider(withL(i, L), dh, own) || moved;
+        if (best.state.own[i]) continue;
         const reach = target[i]?.reach ?? 0;
         for (let d = -reach; d <= reach + 1e-9; d += SWEEP_HUE) {
           if (d !== best.state.dh[i]) moved = consider(best.state.L, withHue(i, d)) || moved;
@@ -1288,6 +1332,7 @@ export function swapFor(
           }
         }
         for (const i of turned) {
+          if (best.state.own[i]) continue;
           const reach = target[i]?.reach ?? 0;
           for (const d of REFINE_HUE) {
             const dh = Math.max(-reach, Math.min(reach, best.state.dh[i] + d));
@@ -1310,7 +1355,11 @@ export function swapFor(
   const lights = published.some((L, i) => L !== home[i]) ? [home, published] : [home];
   const runs = lights.flatMap((L) =>
     HUE_STARTS.map((side) =>
-      run({ L, dh: Float64Array.from(target, (t) => (t ? side * t.reach : 0)) }),
+      run({
+        L,
+        dh: Float64Array.from(target, (t) => (t ? side * t.reach : 0)),
+        own: new Uint8Array(n),
+      }),
     ),
   );
   const best = runs.reduce((win, r) => (betterTiers(r.tiers, win.tiers) ? r : win));
