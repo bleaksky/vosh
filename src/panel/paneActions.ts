@@ -1,7 +1,9 @@
 import { createContext, useContext } from 'react';
 import {
+  addPane,
   closePane,
   isLeaf,
+  leafIdFor,
   replacePane,
   sanitize,
   splitPane,
@@ -11,12 +13,13 @@ import {
   type PaneType,
   type SplitDir,
 } from './paneLayout';
-import { getPanelLayout, setPaneTree } from './panelLayoutStore';
+import { getPanelLayout, setPaneTree, updatePanelLayout } from './panelLayoutStore';
 import { paneTypesToAdd } from './paneTypes';
 
-// What a pane's header and menu can do to the tree. Each action reads
-// the store's current tree when it runs, so a menu that stayed open
-// across a profile switch or a drag never writes back a stale copy.
+// What a pane's header and menu, the palette and the title band can do
+// to the panel. Each action reads the store's current tree when it
+// runs, so a menu that stayed open across a profile switch or a drag
+// never writes back a stale copy.
 
 /** The leaf a pane renders, handed down by PanelHost. */
 export const PaneLeafContext = createContext<PaneLeaf | null>(null);
@@ -45,6 +48,22 @@ export function showHereInstead(id: string, pane: PaneType): void {
 export function closeHere(id: string): void {
   const root = getPanelLayout()?.root;
   if (root) setPaneTree(closePane(root, id));
+}
+
+/** Show or hide one pane type from the palette. Showing opens the
+ *  panel too, and a pane already there under a hidden panel just
+ *  comes back with it. */
+export function togglePane(pane: PaneType): void {
+  updatePanelLayout((l) => {
+    const leaf = leafIdFor(l.root, pane);
+    if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
+    return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, pane) };
+  });
+}
+
+/** Add a pane from the title band, at the bottom of the panel. */
+export function addPaneType(pane: PaneType): void {
+  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, pane) }));
 }
 
 /** Merge `patch` into the props of leaf `id`. An empty string value

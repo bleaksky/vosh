@@ -354,6 +354,17 @@ export function findNode(tree: PaneNode, id: string): PaneNode | null {
   return null;
 }
 
+/** The id of the leaf showing `pane`, or null when the panel does not
+ *  show it. */
+export function leafIdFor(node: PaneNode, pane: PaneType): string | null {
+  if (isLeaf(node)) return node.pane === pane ? node.id : null;
+  for (const child of node.children) {
+    const hit = leafIdFor(child, pane);
+    if (hit !== null) return hit;
+  }
+  return null;
+}
+
 /** Pane types in the tree, in reading order. */
 export function allPanes(tree: PaneSplit): PaneType[] {
   const out: PaneType[] = [];
