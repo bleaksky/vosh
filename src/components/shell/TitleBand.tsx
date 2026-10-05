@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { SESSION_MENU_EVENT, type SessionMenuMode } from '../../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../../lib/palette';
@@ -202,29 +203,14 @@ export function TitleBand({
 function WindowControls() {
   const win = () => getCurrentWindow();
   const [maximized, setMaximized] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    const w = getCurrentWindow();
-    const read = () => {
-      w.isMaximized()
-        .then((m) => {
-          if (!cancelled) setMaximized(m);
-        })
-        .catch(() => {});
-    };
-    read();
-    w.onResized(read)
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
+  const read = () => {
+    getCurrentWindow()
+      .isMaximized()
+      .then(setMaximized)
       .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  };
+  useEffect(() => read(), []);
+  useTauriEvent<unknown>((cb) => getCurrentWindow().onResized(cb), read);
   return (
     <div className="shell-window-controls">
       <button

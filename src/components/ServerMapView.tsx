@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcpPackage } from '../ipc/session';
+import { useTauriEvent } from '../ipc/useTauriEvent';
 import { drawMap3D } from '../lib/map3dDraw';
 import {
   DEFAULT_MAP_3D_VIEW,
@@ -145,20 +146,9 @@ export function ServerMapView({ emptyText }: ServerMapViewProps = {}) {
   // MAP_COLORS reads through its getters.
   const [themeVersion, setThemeVersion] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeThemeChanges(() => {
-      setThemeVersion((v) => v + 1);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent(subscribeThemeChanges, () => {
+    setThemeVersion((v) => v + 1);
+  });
 
   useEffect(() => {
     try {
