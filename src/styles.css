@@ -425,7 +425,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 /* Ember block caret. A 7x15 accent block, absolutely positioned
    by Input.tsx at the measured caret spot.
-   Blinks on a stepped keyframe like a hardware cursor; Input.tsx
+   Blinks on a stepped keyframe like a hardware cursor; useCaret.ts
    restarts the animation on every value change so the caret holds
    solid while the user types. */
 .input-caret {
@@ -500,7 +500,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   height: 15px;
 }
 
-/* Hidden mirror Input.tsx measures the caret position with: the
+/* Hidden mirror useCaret.ts measures the caret position with: the
    composed text up to selectionStart plus a marker span, wrapped
    exactly like the textarea. Font family and size inherit from
    .input-row (the same inheritance the textarea uses), so only the
