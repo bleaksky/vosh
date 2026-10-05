@@ -532,7 +532,7 @@ Themes recolor the whole window, the terminal included. They live in Settings un
 
 A theme sets both layers of the window. The window layer covers the grounds, the text, the separators, the accent, and the warn, danger, and success colors. The terminal layer covers the background, the text, the cursor, the selection, and all sixteen ANSI colors. MUD text takes the theme's sixteen colors while `Use the theme's colors for MUD text` is on under Terminal text, which it is for every theme until you turn it off.
 
-A new install starts on Triad, with Rubric as its light theme. The built in themes stay as they are, so start a custom theme from one to change it. If the theme you use ever disappears, Vosh falls back to Obsidian Ember.
+A new install starts on Triad, with Rubric as its light theme. The built in themes stay as they are, so start a custom theme from one to change it. If the theme you use ever disappears, Vosh falls back to Obsidian Ember. One Dark, Vellum and Everforest Light left Vosh. If you chose one, Vosh shows the theme that took its place until you pick another, One Half Dark for One Dark, Rubric for Vellum, and Melange Light for Everforest Light.
 
 ### 6.2 Create a custom theme
 
