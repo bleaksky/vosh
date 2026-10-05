@@ -12,7 +12,13 @@ import {
   type ThemePrefs,
 } from './theme';
 import { uniqueThemeId } from './themeImport';
-import { BUILTIN_THEMES, customToAppTheme, DEFAULT_THEME_ID, themeTokens } from './themes';
+import {
+  BUILTIN_THEMES,
+  customToAppTheme,
+  DEFAULT_THEME_ID,
+  themeShownBy,
+  themeTokens,
+} from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
  *  unset is on for every theme. The chrome derives its status colors
@@ -1729,6 +1735,10 @@ export interface CustomTheme {
   description: string;
   xterm: Record<string, string>;
   chrome: Record<string, string>;
+  /** The game color fit of the palette, kept once Settings has fitted
+   *  it (lib/gameFit). None on a theme saved before the fit or by Vosh
+   *  0.8.1, which drops it. */
+  fitted?: Record<string, string>;
 }
 
 /** Caret shapes the command line can paint. Each one renders inside the
@@ -1986,14 +1996,18 @@ export function normalizeAffectsDisplay(raw: unknown): AffectsDisplay {
   };
 }
 
-/** The light theme a profile starts with. */
+/** The light theme a profile that never chose one is saved with, as
+ *  Rust saves it (default_light_theme in profile/ui.rs). Vosh retired
+ *  Vellum for Rubric (Themes review Q14), so the id shows Rubric
+ *  (RETIRED_THEMES), and Vosh 0.8.1 still reads it as Vellum. A new
+ *  install starts with Rubric itself, which NEW_INSTALL_LIGHT_THEME in
+ *  profile/set.rs writes (Q4). */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
 /** The dark theme a profile that never saved one starts with: its
- *  current theme when that theme is dark, else Obsidian Ember. */
+ *  current theme when the theme it shows is dark, else Obsidian Ember. */
 export function seedDarkTheme(theme: string, customThemes: CustomTheme[]): string {
-  const custom = customThemes.find((t) => t.id === theme);
-  const found = custom ? customToAppTheme(custom) : BUILTIN_THEMES.find((t) => t.id === theme);
+  const found = themeShownBy([...BUILTIN_THEMES, ...customThemes.map(customToAppTheme)], theme);
   return found && themeTokens(found).appearance === 'dark' ? theme : DEFAULT_THEME_ID;
 }
 
@@ -2076,6 +2090,10 @@ export interface UiConfig {
    *  means none, which reads as on unless your system reduces motion.
    *  Resolve with resolveBlinkText before use. */
   blink_text: boolean | null;
+  /** Fit game colors. While on, play draws the game's colors in the
+   *  slots the theme fits for them (themes.ts playPalette), and Settings
+   *  keeps the theme as published. On unless you turn it off. */
+  fit_game_colors: boolean;
   /** Keep highlight colors readable. While on, the session draws a true
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
@@ -2229,6 +2247,7 @@ export interface RawUiConfig {
   theme_terminal_colors?: boolean;
   bright_bold?: boolean;
   blink_text?: boolean | null;
+  fit_game_colors?: boolean;
   readable_highlights?: boolean;
   collapse_repeats?: boolean;
   collapse_fight_lines?: boolean;
@@ -2317,6 +2336,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
     blink_text: typeof cfg.blink_text === 'boolean' ? cfg.blink_text : null,
+    fit_game_colors: cfg.fit_game_colors !== false,
     readable_highlights: cfg.readable_highlights !== false,
     collapse_repeats: cfg.collapse_repeats === true,
     collapse_fight_lines: cfg.collapse_fight_lines !== false,
@@ -2398,6 +2418,7 @@ const BLINK_TEXT_EVENT = 'vosh://blink-text-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
+const FIT_GAME_COLORS_EVENT = 'vosh://fit-game-colors-changed';
 const READABLE_HIGHLIGHTS_EVENT = 'vosh://readable-highlights-changed';
 
 async function emitChanged<T>(
@@ -2478,6 +2499,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
+  await emitChanged(FIT_GAME_COLORS_EVENT, config.fit_game_colors, prev?.fit_game_colors);
   await emitChanged(
     READABLE_HIGHLIGHTS_EVENT,
     config.readable_highlights,
@@ -2745,6 +2767,7 @@ function uiConfigPayload(config: UiConfig): Record<string, unknown> {
     theme_terminal_colors: config.theme_terminal_colors,
     bright_bold: config.bright_bold,
     blink_text: config.blink_text,
+    fit_game_colors: config.fit_game_colors,
     readable_highlights: config.readable_highlights,
     collapse_repeats: config.collapse_repeats,
     collapse_fight_lines: config.collapse_fight_lines,
@@ -2920,6 +2943,16 @@ export async function subscribeBrightBoldChanged(
 ): Promise<UnlistenFn> {
   return listen<boolean>('vosh://bright-bold-changed', (event) => {
     cb(Boolean(event.payload));
+  });
+}
+
+/** Hear Fit game colors change, saved in Settings or brought by
+ *  another profile. */
+export async function subscribeFitGameColorsChanged(
+  cb: (value: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>(FIT_GAME_COLORS_EVENT, (event) => {
+    cb(event.payload !== false);
   });
 }
 

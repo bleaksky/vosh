@@ -15,7 +15,7 @@ import { composite, contrast, parseHex, rgbToOklch, type Rgb } from './color';
 import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
 
 const kanso = findTheme('kanso-zen').xterm;
-const vellum = findTheme('vellum').xterm;
+const rubric = findTheme('rubric').xterm;
 
 const hex = (h: string): Rgb => {
   const c = parseHex(h);
@@ -93,9 +93,9 @@ describe('chatChannelColor', () => {
   });
 
   it('follows the theme', () => {
-    expect(chatChannelColor('say', vellum)).toBe('#b88226');
-    expect(chatChannelColor('tell', vellum)).toBe('#4f7a3a');
-    expect(chatChannelColor('immortal', vellum)).toBe('#c2574a');
+    expect(chatChannelColor('say', rubric)).toBe('#3b2200');
+    expect(chatChannelColor('tell', rubric)).toBe('#007873');
+    expect(chatChannelColor('immortal', rubric)).toBe('#970004');
   });
 });
 
@@ -150,7 +150,7 @@ describe('chatInks', () => {
     // 3:1 on a cream panel. A clamp per channel would turn it orange.
     const yellow = '#dfa000';
     const panel = '#f6efdc';
-    const ink = chatInks({ ...vellum, yellow }, { panel, appearance: 'light' }).yellow;
+    const ink = chatInks({ ...rubric, yellow }, { panel, appearance: 'light' }).yellow;
     const was = rgbToOklch(hex(yellow));
     const now = rgbToOklch(hex(ink.color));
     expect(contrast(hex(ink.color), hex(panel))).toBeGreaterThanOrEqual(CHAT_CONTRAST);
@@ -159,16 +159,15 @@ describe('chatInks', () => {
   });
 
   it('lifts the published colors that fade on a panel, and leaves the theme alone', () => {
+    // Solarized Dark's red and Green Screen's magenta left the list when
+    // the one ground rule put the panel on the terminal ground, where
+    // each reads at 3:1.
     const cases = [
-      ['vellum', 'brightYellow'],
       ['solarized-light', 'cyan'],
-      ['solarized-dark', 'red'],
+      ['melange-light', 'green'],
       ['tango-dark', 'blue'],
       ['classic-vivid', 'blue'],
-      ['everforest-light', 'yellow'],
-      ['everforest-light', 'red'],
       ['green-screen', 'blue'],
-      ['green-screen', 'magenta'],
     ] as const;
     for (const [id, slot] of cases) {
       const theme = findTheme(id);
@@ -184,10 +183,10 @@ describe('chatInks', () => {
       color: kanso.brightYellow,
       fadeTag: true,
     });
-    // Vellum's green tell reads at 4.3:1 on its panel, but near 2.6:1 a
+    // Rubric's green tell reads at 4.3:1 on its panel, but near 2.7:1 a
     // step back, so its tag draws solid.
-    expect(chatInks(vellum, themeTokens(findTheme('vellum'))).green).toEqual({
-      color: vellum.green,
+    expect(chatInks(rubric, themeTokens(findTheme('rubric'))).green).toEqual({
+      color: rubric.green,
       fadeTag: false,
     });
   });
@@ -228,7 +227,7 @@ describe('the colors you pick for a channel', () => {
     expect(chatChannelSlot(' TELL ', picked)).toBe('red');
     expect(chatChannelSlot('yell', picked)).toBe('cyan');
     expect(chatChannelColor('say', kanso, picked)).toBe(kanso.brightBlue);
-    expect(chatChannelColor('say', vellum, picked)).toBe(vellum.brightBlue);
+    expect(chatChannelColor('say', rubric, picked)).toBe(rubric.brightBlue);
   });
 
   it('reads only the sixteen slots, and never a key off the prototype', () => {

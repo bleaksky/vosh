@@ -58,15 +58,16 @@ describe('daylightTint', () => {
   });
 
   it('darkens a pale slot on a light theme and keeps its hue', () => {
-    const vellum = findTheme('vellum');
-    const tokens = themeTokens(vellum);
-    const tint = daylightTint(12, vellum.xterm, tokens);
+    // Rubric's vermilion draws dusk at about 3:1 on the paper.
+    const rubric = findTheme('rubric');
+    const tokens = themeTokens(rubric);
+    const tint = daylightTint(17, rubric.xterm, tokens);
     expect(tint).not.toBeNull();
-    expect(tint).not.toBe(vellum.xterm.brightYellow);
+    expect(tint).not.toBe(rubric.xterm.red);
     const bg = parseHex(tokens.bg)!;
     expect(contrast(parseHex(tint!)!, bg)).toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
     const hue = (hex: string) => rgbToOklch(parseHex(hex)!).h;
-    expect(Math.abs(hue(tint!) - hue(vellum.xterm.brightYellow))).toBeLessThan(10);
+    expect(Math.abs(hue(tint!) - hue(rubric.xterm.red))).toBeLessThan(10);
   });
 
   it('reads as words on every built in theme at every hour', () => {

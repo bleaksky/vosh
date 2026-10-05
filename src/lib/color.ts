@@ -71,10 +71,17 @@ function fromLinear(v: number): number {
   return c * 255;
 }
 
+/** The linear sRGB channels of a color, each 0..1. */
+export function rgbToLinear(c: Rgb): [number, number, number] {
+  return [toLinear(c.r), toLinear(c.g), toLinear(c.b)];
+}
+
 export function rgbToOklab(c: Rgb): Oklab {
-  const r = toLinear(c.r);
-  const g = toLinear(c.g);
-  const b = toLinear(c.b);
+  return linearToOklab(rgbToLinear(c));
+}
+
+/** OKLab from linear sRGB channels, each 0..1. */
+export function linearToOklab([r, g, b]: [number, number, number]): Oklab {
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -209,6 +216,14 @@ export function solveAlphaForContrast(
     if (contrast(color, bg) >= target) return { alpha: i / 100, color };
   }
   return { alpha: 1, color: fg };
+}
+
+/** The straight OKLab distance between two colors, times 100. The
+ *  chrome rule holds an accent it picks this far from the status colors. */
+export function deltaEOk(x: Rgb, y: Rgb): number {
+  const p = rgbToOklab(x);
+  const q = rgbToOklab(y);
+  return 100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
 }
 
 /** CIELAB (D65) coordinates. */

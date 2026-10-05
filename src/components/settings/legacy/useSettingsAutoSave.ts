@@ -18,8 +18,14 @@ export interface AutoSaveOptions {
   now?: boolean;
 }
 
-/** Patch the window's config copy and save the whole snapshot. */
-export type UpdateConfig = (patch: Partial<UiConfig>, options?: AutoSaveOptions) => void;
+/** Patch the window's config copy and save the whole snapshot. A patch
+ *  can also be worked out from the latest copy, for an answer that lands
+ *  after the page that asked for it closed. Null leaves the copy as it
+ *  is. */
+export type UpdateConfig = (
+  patch: Partial<UiConfig> | ((latest: UiConfig) => Partial<UiConfig> | null),
+  options?: AutoSaveOptions,
+) => void;
 
 /** One save waiting on the debounce, with the page that asked for it. */
 interface AutoSave {
@@ -63,7 +69,9 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   const update: UpdateConfig = (patch, options = {}) => {
     setConfig((prev) => {
       if (!prev) return prev;
-      const next = { ...prev, ...patch };
+      const change = typeof patch === 'function' ? patch(prev) : patch;
+      if (!change) return prev;
+      const next = { ...prev, ...change };
       autoSave.schedule(
         {
           cfg: next,

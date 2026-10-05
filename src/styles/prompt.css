@@ -30,7 +30,7 @@
 /* A white band on paper needs the light float ring to read, drawn inside
    the band so its size stays the board's. */
 :root[data-appearance='light'] .prompt-band {
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 
 .prompt-band-row {
@@ -80,7 +80,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-band {
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 
 /* A band that steps in around your echo on its last row draws as one SVG
@@ -107,7 +107,7 @@
 }
 
 :root[data-appearance='light'] .prompt-lift-ring {
-  stroke: var(--edge-inset);
+  stroke: var(--edge);
   stroke-width: 1;
 }
 
@@ -193,14 +193,14 @@
 }
 
 .pc-head .st-icon-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-rule {
   flex: none;
   height: 1px;
   margin: 0 1px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .pc-body {
@@ -269,7 +269,7 @@
 }
 
 .pc-menu-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-menu-button[aria-disabled='true'] {
@@ -549,7 +549,7 @@
   height: 18px;
   padding: 0 6px;
   border-radius: var(--r-key);
-  background: var(--st-fill);
+  background: var(--field);
   box-sizing: border-box;
   font-family: var(--font-mud);
   font-size: 11.5px;
@@ -560,8 +560,8 @@
   white-space: pre;
 }
 
-/* On paper the fill is white, so the chip takes the hairline ring the
-   Settings fields take there. */
+/* On paper the fill is the raised paper, so the chip takes the hairline
+   ring the Settings fields take there. */
 :root[data-appearance='light'] .pc-code {
   box-shadow: var(--st-fill-ring);
 }
@@ -663,7 +663,7 @@
 
 .pc-name-button:hover,
 .pc-name-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
   color: var(--text);
 }
 
@@ -692,7 +692,7 @@
   height: 1px;
   margin: 6px 12px;
   padding: 0;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .pc-start {
@@ -728,7 +728,7 @@
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
 .pc-start[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-start-check {
@@ -803,7 +803,7 @@
 }
 
 .pc-forget .st-button[aria-expanded='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 /* Menus the card opens: More, Presets, From another profile and the name
@@ -832,12 +832,12 @@
 .pc-menu > li.pc-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .pc-menu .ov-menu-item:hover,
 .pc-menu .ov-menu-item:focus-visible {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-menu .pc-starts {
@@ -872,7 +872,7 @@
 .pc-name-item:hover,
 .pc-name-item:focus-visible,
 .pc-name-item[aria-checked='true'] {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-name-item .pc-start-check {
@@ -991,7 +991,7 @@
   border: 0;
   border-radius: var(--r-key);
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px var(--edge-inset);
+  box-shadow: inset 0 0 0 1px var(--key-ring);
 }
 
 .pc-swatch.is-by-value {
@@ -1156,7 +1156,7 @@
 
 .pc-style-item:hover,
 .pc-style-item:focus-visible {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-style-item .pc-start-check {
@@ -1302,7 +1302,7 @@
 .pc-picker-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .pc-picker-row {
@@ -1327,7 +1327,7 @@
 
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .pc-picker-name {
@@ -1423,7 +1423,7 @@
 }
 
 .pc-form.is-on {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 /* A sample sits on the terminal's ground, as it draws in the text. */
@@ -1450,7 +1450,7 @@
   padding: 0 6px;
   border: 0;
   border-radius: var(--r-key);
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   color: var(--secondary);
   font-family: var(--font-mud);
@@ -1476,7 +1476,7 @@
   overflow-y: auto;
   border-radius: var(--r-row);
   outline: none;
-  background: var(--st-fill);
+  background: var(--field);
   box-shadow: var(--st-fill-ring);
   font-family: var(--font-mud);
   font-variant-ligatures: none;
@@ -1510,6 +1510,12 @@
 .pc-text-mark {
   border-radius: 2px;
   background: var(--selection);
+}
+
+/* The tokens under the caret read as selected text. */
+.pc-text-mark,
+.pc-text-mark .pc-tok {
+  color: var(--selection-text);
 }
 
 .pc-text-help {
@@ -1549,9 +1555,9 @@
 }
 
 /* The card's marks on your prompt, over the terminal and under the card:
-   the picked part in the selection token with a 1 px accent ring at
-   radius 2, the warn ring at radius 4, the 2 by 17 caret, and a ↵ two
-   cells wide after each row a line break ends. */
+   the picked part in the accent tint with a 1 px accent ring at radius 2,
+   the warn ring at radius 4, the 2 by 17 caret, and a ↵ two cells wide
+   after each row a line break ends. */
 .pc-marks {
   position: fixed;
   top: 0;
@@ -1570,15 +1576,18 @@
   pointer-events: none;
 }
 
-/* A value Vosh reads on the game's own line while the card reads your
-   codes: the selection token alone (P2, P3). */
-.pc-mark-value {
-  background: var(--selection);
+/* The marks over the terminal cannot redraw the glyphs under them, so
+   where a mark in the window takes the opaque selection, these take the
+   accent tint. A value Vosh reads on the game's own line while the card
+   reads your codes takes the tint alone (P2, P3). */
+.pc-mark-value,
+.pc-mark-token,
+.pc-mark-return[aria-pressed='true'] {
+  background: var(--mark-tint);
 }
 
 .pc-mark-token {
   border-radius: 2px;
-  background: var(--selection);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -1610,7 +1619,6 @@
 }
 
 .pc-mark-return[aria-pressed='true'] {
-  background: var(--selection);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -1654,7 +1662,7 @@
   right: 0;
   left: 0;
   height: 1px;
-  background: var(--divider);
+  background: var(--sep);
   content: '';
 }
 
@@ -1787,7 +1795,7 @@
 
 .st-prompt-mark {
   background: var(--selection);
-  color: var(--text);
+  color: var(--selection-text);
 }
 
 .st-prompt-line-meta {

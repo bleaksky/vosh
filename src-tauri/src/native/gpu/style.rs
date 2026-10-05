@@ -200,6 +200,8 @@ pub(crate) struct ChromeTokens {
     pub divider: Option<Paint>,
     /// Selected cells, composited over each cell's own background.
     pub selection: Option<Paint>,
+    /// The text of selected cells. None keeps each cell's own color.
+    pub selection_text: Option<Paint>,
     /// Every find match, composited like the selection.
     pub find_match: Option<Paint>,
     /// The match the find bar is on.
@@ -218,6 +220,7 @@ impl ChromeTokens {
     pub(crate) const UNSET: Self = Self {
         divider: None,
         selection: None,
+        selection_text: None,
         find_match: None,
         current_match: None,
         link: None,
@@ -260,6 +263,8 @@ pub(super) const SCROLLBAR_TRACK_SHARE: f32 = 0.2;
 pub(super) struct ChromePaint {
     pub(super) divider: Paint,
     pub(super) selection: Paint,
+    /// The text of selected cells, or None to keep each cell's own color.
+    pub(super) selection_text: Option<Paint>,
     pub(super) find_match: Paint,
     pub(super) current_match: Paint,
     pub(super) link: Paint,
@@ -302,6 +307,7 @@ pub(super) fn resolve_chrome(
             .selection
             .or_else(|| theme_sel.map(Paint::opaque))
             .unwrap_or_else(|| Paint::tint(fg, SELECTION_FALLBACK_ALPHA)),
+        selection_text: t.selection_text,
         find_match: t
             .find_match
             .unwrap_or_else(|| Paint::tint(yellow, FIND_MATCH_FALLBACK_ALPHA)),
@@ -550,15 +556,18 @@ fn brighten(color: Color) -> Color {
     })
 }
 
+/// Dim text (SGR 2) at 0.6 of its linear color.
+pub(super) fn dimmed(c: Rgba) -> Rgba {
+    [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6, c[3]]
+}
+
 /// Apply cell attributes: bold brightens fg, dim darkens it, inverse swaps
 /// fg/bg. Returns (fg, bg) rgba.
 pub(super) fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
     let fg_color = if flags.bold { brighten(fg) } else { fg };
     let mut fg_rgba = color_to_rgba(fg_color);
     if flags.dim {
-        fg_rgba[0] *= 0.6;
-        fg_rgba[1] *= 0.6;
-        fg_rgba[2] *= 0.6;
+        fg_rgba = dimmed(fg_rgba);
     }
     let bg_rgba = color_to_rgba(bg);
     if flags.inverse {

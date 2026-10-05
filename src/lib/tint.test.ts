@@ -3,7 +3,7 @@ import { resolveThemeTerminalColors } from './session';
 
 describe('resolveThemeTerminalColors', () => {
   it('tints output with the theme by default for every theme', () => {
-    for (const theme of ['obsidian-ember', 'nord', 'vellum', 'custom-2']) {
+    for (const theme of ['obsidian-ember', 'nord', 'rubric', 'custom-2']) {
       expect(resolveThemeTerminalColors(theme, null)).toBe(true);
     }
   });

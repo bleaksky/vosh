@@ -23,9 +23,10 @@ import {
   terminalScreenRows,
   terminalLocalWrite,
 } from '../lib/session';
-import { findTheme } from '../lib/themes';
+import { findTheme, onCustomThemesChanged } from '../lib/themes';
+import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';
-import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
+import { nativeThemeOf, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
@@ -89,21 +90,18 @@ export function nativeSurfaceEnabled(): boolean {
 // keeps trigger colors readable on it, on either renderer. Then report the
 // surface colors and resolved ANSI palette to the native renderer so its
 // background/foreground/selection and the 16-color palette match xterm
-// (including the themeTerminalColors tint), live-updating on theme or
-// toggle change.
+// (including the themeTerminalColors tint and Fit game colors),
+// live-updating on theme or toggle change.
 function reportTheme(themeId: string, themeTerminalColors: boolean): void {
-  setHighlightGround(findTheme(themeId).xterm.background);
+  const theme = findTheme(themeId);
+  setHighlightGround(theme.xterm.background);
   if (!nativeSurfaceEnabled()) return;
-  const resolved = xtermThemeFor(findTheme(themeId), themeTerminalColors);
-  const ansi = ansi16Of(resolved);
+  const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors());
   void invoke('native_surface_set_theme', {
-    background: resolved.background ?? '#101218',
-    foreground: resolved.foreground ?? '#cccccc',
-    // The raw theme selection hex (resolved.selectionBackground is an
-    // rgba() string after the translucency pass, which the backend hex
-    // parser cannot read).
-    selection: findTheme(themeId).xterm.selectionBackground ?? '#2a3b5e',
-    ansi,
+    background: native.background,
+    foreground: native.foreground,
+    selection: native.selection,
+    ansi: native.ansi,
   }).catch(() => {});
 }
 
@@ -292,7 +290,7 @@ function clearGround(color: string | undefined): string {
  *  while the pane lifts your prompts (`clear`), since the bands draw under
  *  xterm's text and the terminal area's ground shows through. */
 function themeFor(themeId: string, tinted: boolean, clear: boolean) {
-  const theme = xtermThemeFor(findTheme(themeId), tinted);
+  const theme = xtermThemeFor(findTheme(themeId), tinted, getFitGameColors());
   if (clear) theme.background = clearGround(theme.background);
   return theme;
 }
@@ -1601,9 +1599,10 @@ export function Terminal({
   }, [lifted]);
 
   // Re-apply when the user edits the base ANSI palette (the colors
-  // used while the tint toggle is off).
+  // used while the tint toggle is off), turns Fit game colors on or off,
+  // or a new custom theme list brings the theme on screen its fit.
   useEffect(() => {
-    return subscribeBaseAnsi(() => {
+    const reapply = () => {
       const term = termRef.current;
       if (!term) return;
       term.options.theme = themeFor(
@@ -1612,7 +1611,15 @@ export function Terminal({
         liftsHere(),
       );
       reportTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
-    });
+    };
+    const stopBase = subscribeBaseAnsi(reapply);
+    const stopFit = subscribeFitGameColors(reapply);
+    const stopList = onCustomThemesChanged(reapply);
+    return () => {
+      stopBase();
+      stopFit();
+      stopList();
+    };
   }, [liftsHere]);
 
   // Live-refresh the xterm palette when the user switches themes from

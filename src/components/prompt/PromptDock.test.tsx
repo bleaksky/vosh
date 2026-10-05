@@ -47,6 +47,8 @@ const NORD: BandEnv = {
   ],
   fg: '#d8dee9',
   bg: '#2e3440',
+  selection: '#4c566a',
+  selectionText: '#eceff4',
   renderer: 'xterm',
   brightBold: false,
 };

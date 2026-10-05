@@ -2,7 +2,8 @@
   "notes": "Written from the page sources. grounds holds the terminal background of every built in theme, in BUILTIN_THEMES order from src/lib/themes.ts. colors holds the fixed text colors Keep highlight colors readable is tested with. true_color holds #8fa7d9, the weather blue the Room, time and weather colors preset paints in true color, and indexed holds every 256 color index the trigger presets in src/lib/presets.ts paint text in, all past the 16 and so the same on every theme. templates holds every Replace template of the presets once, in the order the presets list them, as the escapes they save. src/lib/readableGrounds.test.ts holds the grounds, the indexes and the templates to those sources. The tests in crates/automation/src/trigger/readable.rs lift every color on every ground, and run every template through the trigger engine on every ground and measure each color it draws.",
   "grounds": [
     { "theme": "obsidian-ember", "background": "#050403" },
-    { "theme": "vellum", "background": "#f7f4ee" },
+    { "theme": "triad", "background": "#150c22" },
+    { "theme": "rubric", "background": "#f0e5cf" },
     { "theme": "kanso-zen", "background": "#090e13" },
     { "theme": "tokyo-night", "background": "#1a1b26" },
     { "theme": "nord", "background": "#2e3440" },
@@ -11,7 +12,6 @@
     { "theme": "catppuccin", "background": "#1e1e2e" },
     { "theme": "dracula", "background": "#1a1c23" },
     { "theme": "monokai", "background": "#272822" },
-    { "theme": "one-dark", "background": "#282c34" },
     { "theme": "one-half-dark", "background": "#282c34" },
     { "theme": "solarized-dark", "background": "#002b36" },
     { "theme": "solarized-light", "background": "#fdf6e3" },
@@ -19,8 +19,12 @@
     { "theme": "classic-vivid", "background": "#0a0a0a" },
     { "theme": "high-contrast", "background": "#0d0d0d" },
     { "theme": "everforest-dark", "background": "#2d353b" },
-    { "theme": "everforest-light", "background": "#fdf6e3" },
-    { "theme": "green-screen", "background": "#0a0e0b" }
+    { "theme": "green-screen", "background": "#0a0e0b" },
+    { "theme": "srcery", "background": "#121110" },
+    { "theme": "nightfly", "background": "#011627" },
+    { "theme": "melange-dark", "background": "#292522" },
+    { "theme": "melange-light", "background": "#f1f1f1" },
+    { "theme": "modus-vivendi", "background": "#000000" }
   ],
   "colors": {
     "true_color": ["#8fa7d9"],

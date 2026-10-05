@@ -22,7 +22,9 @@
 //!   pointing at "default" as the active profile. Existing users keep
 //!   their setup with zero action.
 //! - Else create an empty index with one "default" profile entry (its
-//!   file is created on the first save).
+//!   file is created on the first save). A folder that holds nothing of
+//!   yours is a new install, which also gets a global.toml that starts it
+//!   on Triad.
 
 use std::path::{Path, PathBuf};
 
@@ -34,7 +36,7 @@ use crate::disk::paths;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
-use crate::profile::shared::ScopeConfig;
+use crate::profile::shared::{GlobalConfig, ScopeConfig};
 use crate::sessions::{SessionId, SessionRow};
 
 #[derive(Debug, Error)]
@@ -167,6 +169,12 @@ impl SessionEntry {
 
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 
+/// The theme a new install starts on, and its light theme (Themes review
+/// Q3 and Q4). `UiConfig` keeps Obsidian Ember and Vellum as its
+/// defaults, which a file without these keys still reads.
+const NEW_INSTALL_THEME: &str = "triad";
+const NEW_INSTALL_LIGHT_THEME: &str = "rubric";
+
 /// Live in-memory view of the profile collection. Held in `AppState`
 /// behind a `Mutex` so commands can mutate it. The active in-memory
 /// `Profile` is still the canonical runtime state; this struct is the
@@ -203,7 +211,8 @@ impl ProfileSet {
     /// Load (or migrate-and-load) the profile set rooted at the given
     /// app data directory. Always returns a valid set; on a fresh
     /// install it returns a single-entry "default" set whose
-    /// profile file does not exist yet.
+    /// profile file does not exist yet, beside a global.toml that holds
+    /// the theme a new install starts on.
     pub(crate) fn load_or_migrate(root: PathBuf) -> Result<Self, ProfileSetError> {
         let index_path = paths::profiles_index_path(&root);
 
@@ -229,11 +238,25 @@ impl ProfileSet {
 
         // No index file. Migrate the legacy single-profile layout if
         // present, otherwise seed a fresh empty index.
+        let new_install = holds_nothing_of_yours(&root);
         std::fs::create_dir_all(paths::profiles_dir(&root))?;
         let legacy = paths::root_profile_path(&root);
         if legacy.exists() {
             let target = paths::profile_path(&root, DEFAULT_PROFILE_NAME);
             std::fs::rename(&legacy, &target)?;
+        }
+        // global.toml holds the new install's theme before the index
+        // names a profile, so a crash before the first save keeps it,
+        // and a global.toml that does not save leaves the folder new for
+        // the next launch.
+        if new_install {
+            let global = GlobalConfig {
+                theme: Some(NEW_INSTALL_THEME.to_string()),
+                light_theme: Some(NEW_INSTALL_LIGHT_THEME.to_string()),
+                ..GlobalConfig::default()
+            };
+            let body = toml::to_string_pretty(&global)?;
+            crate::disk::atomic::write_with_backup(&paths::global_path(&root), &body)?;
         }
 
         let index = ProfilesIndex {
@@ -569,6 +592,21 @@ impl ProfileSet {
     }
 }
 
+/// True when the app data folder `root` holds no profiles.toml, no root
+/// profile.toml, no global.toml and nothing in profiles/, which only a
+/// new install does. A folder whose profiles.toml you deleted to recover
+/// still holds its profile files, and keeps the theme it has.
+fn holds_nothing_of_yours(root: &Path) -> bool {
+    let profiles_empty = match std::fs::read_dir(paths::profiles_dir(root)) {
+        Ok(mut entries) => entries.next().is_none(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+    };
+    profiles_empty
+        && !paths::profiles_index_path(root).exists()
+        && !paths::root_profile_path(root).exists()
+        && !paths::global_path(root).exists()
+}
+
 /// The name Vosh shows for a profile. The reserved `default` profile
 /// reads `Default`, and every other name shows as typed.
 pub(crate) fn display_name(name: &str) -> String {
@@ -759,6 +797,38 @@ pub(crate) mod tests {
         assert_eq!(set.list().len(), 1);
         assert!(paths::profiles_index_path(dir.path()).exists());
         assert!(paths::profiles_dir(dir.path()).exists());
+    }
+
+    #[test]
+    fn an_empty_folder_starts_on_triad() {
+        let dir = tempdir().unwrap();
+        ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let global = paths::global_path(dir.path());
+        let text = std::fs::read_to_string(&global).unwrap();
+        assert_eq!(text, "theme = \"triad\"\nlight_theme = \"rubric\"\n");
+        // The next launch finds the folder in use and leaves it alone.
+        std::fs::write(&global, "theme = \"nord\"\n").unwrap();
+        ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&global).unwrap(),
+            "theme = \"nord\"\n"
+        );
+    }
+
+    #[test]
+    fn a_folder_in_use_keeps_its_theme() {
+        // Bug 5 recovery deletes profiles.toml and leaves the profile
+        // files, and the oldest builds kept one profile.toml at the root.
+        for kept in ["profiles/default.toml", "profile.toml", "global.toml"] {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join(kept);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "marker = 1\n").unwrap();
+            ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+            let global = std::fs::read_to_string(paths::global_path(dir.path())).ok();
+            let want = (kept == "global.toml").then(|| "marker = 1\n".to_string());
+            assert_eq!(global, want, "{kept}");
+        }
     }
 
     #[test]

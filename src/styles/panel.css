@@ -759,7 +759,7 @@
    hours or red at one or none. The wash sits behind the row, 6 px past
    it each side at radius 4, 20 tall in Timers first like a chip, and
    22 tall over the text and the meter in Countdown. The missing wash is
-   8 percent, so a red name keeps 4.5 to 1 on Vellum. */
+   8 percent, so a red name keeps 4 to 1 or better on the light themes. */
 [data-affects-tint] .pane-affect,
 [data-affects-tint] .pane-countdown-cell {
   isolation: isolate;
@@ -920,8 +920,8 @@
 }
 
 /* On a light theme the yellow hours read under 3 to 1 on the tinted
-   chip (Solarized Light and Everforest Light), so a light theme draws
-   them in the deeper warn text tone, in both chip styles. */
+   chip (Solarized Light), so a light theme draws them in the deeper
+   warn text tone, in both chip styles. */
 :root[data-appearance='light'] .pane-chip-tracked.is-warn .pane-chip-hours {
   color: var(--warn-text);
 }
@@ -1062,7 +1062,8 @@
 /* The drawing: inset 8, radius 8, no fill or border of its own. The
    map paints on the panel's color, so the rooms sit in the pane with
    no box around them. It takes the height the rows leave and keeps at
-   least 96 px. */
+   least 96 px. The rooms it clips at its sides fade out over 12 px
+   instead of ending in half squares. */
 .pane-map-box {
   position: relative;
   display: flex;
@@ -1071,6 +1072,14 @@
   margin: 0 8px;
   border-radius: var(--r-row);
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 
 .pane-map-box .server-view {
@@ -1089,6 +1098,13 @@
   outline: 1px solid var(--accent);
   outline-offset: -1px;
   border-radius: var(--r-row);
+}
+
+/* The fade would hide the sides of that ring, so the drawing shows
+   whole while it has the keyboard. */
+.pane-map-box:has(.map-canvas-host:focus-visible) {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .pane-map-empty {
@@ -1190,11 +1206,24 @@
   color: var(--tertiary);
 }
 
-/* The exits keep their full width until the room name is down to a
-   floor of 3em, then they give way with an ellipsis. Six exits in a wide
-   face on a narrow panel never push the name out of its row. The 8px is
-   the gap .pane-row-value leaves before the exits. */
-.pane-map-exits {
+/* The exits sit at the right of the terrain row, so the room name has
+   its whole row. On a narrow panel they give way with an ellipsis once
+   the row runs short. */
+.pane-map-where .pane-map-exits {
+  min-width: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A band with no terrain row keeps the exits beside the name. They keep
+   their full width until the name is down to a floor of 3em, then give
+   way with an ellipsis, so six exits in a wide face never push the name
+   out of its row. The 8px is the gap .pane-row-value leaves before the
+   exits. */
+.pane-map-room .pane-map-exits {
   min-width: 0;
   max-width: calc(100% - 3em - 8px);
   overflow: hidden;
@@ -1554,7 +1583,6 @@
 /* Menus keep the system face whatever the Panel font, like every other
    menu. */
 .pane-menu {
-  --menu-hi: rgba(255, 255, 255, 0.08);
   position: fixed;
   z-index: 1000;
   min-width: 232px;
@@ -1572,10 +1600,6 @@
   font-weight: 400;
   -webkit-user-select: none;
   user-select: none;
-}
-
-:root[data-appearance='light'] .pane-menu {
-  --menu-hi: rgba(0, 0, 0, 0.05);
 }
 
 .pane-menu-narrow,
@@ -1647,20 +1671,20 @@
 }
 
 /* The color a chat channel shows, before its name under Channel colors
-   and before each color it can take. The ring keeps black and the
-   ground's own color visible on the menu. */
+   and before each color it can take. The swatch ring keeps black and
+   the ground's own color visible on the menu. */
 .pane-menu-swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   margin-right: 8px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--divider);
+  box-shadow: inset 0 0 0 1px var(--key-ring);
   vertical-align: -1px;
 }
 
 .pane-menu > .pane-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }

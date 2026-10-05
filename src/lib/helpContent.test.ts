@@ -635,14 +635,21 @@ describe('the help on the one window', () => {
     expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
+  it('says which theme shows for a theme that left Vosh', () => {
+    expect(body('make-it-yours.switch-themes')).toContain(
+      'If you chose one, Vosh shows the theme that took its place until you pick another, One Half Dark for One Dark, Rubric for Vellum, and Melange Light for Everforest Light.',
+    );
+  });
+
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
-    expect(text).toContain('The first names the room you stand in and its exits.');
-    expect(text).toContain('The name takes the color the terminal shows it in');
+    expect(text).toContain('The first names the room you stand in. The name takes the color');
     expect(text).toContain(
-      'The second row names the terrain and the region, like `Inside` and `Coastal North`.',
+      'The second row names the terrain and the region, like `Inside` and `Coastal North`, with the exits at its right.',
     );
-    expect(text).toContain('A short pane gives up rows of people first, then the terrain row');
+    expect(text).toContain(
+      'A short pane gives up rows of people first, then the terrain row, and keeps the room, with its exits beside the name.',
+    );
     expect(HELP_TOPICS.some((t) => t.id === 'shape.room-strip')).toBe(false);
     expect(HELP_TOPICS.some((t) => t.id === 'shape.split-the-well')).toBe(false);
   });

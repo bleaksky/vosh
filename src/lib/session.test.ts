@@ -112,7 +112,7 @@ describe('seedDarkTheme', () => {
   });
 
   it('falls back to Obsidian Ember for a light or unknown theme', () => {
-    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('rubric', [])).toBe('obsidian-ember');
     expect(seedDarkTheme('system', [])).toBe('obsidian-ember');
     expect(seedDarkTheme('gone', [])).toBe('obsidian-ember');
   });
@@ -121,6 +121,41 @@ describe('seedDarkTheme', () => {
     const themes = [custom('night-ink', '#000000'), custom('paper', '#ffffff')];
     expect(seedDarkTheme('night-ink', themes)).toBe('night-ink');
     expect(seedDarkTheme('paper', themes)).toBe('obsidian-ember');
+  });
+
+  it('reads a retired id by the theme that took its place', () => {
+    // A saved One Dark shows One Half Dark, so it seeds a dark theme of
+    // One Half Dark under the id you saved.
+    expect(seedDarkTheme('one-dark', [])).toBe('one-dark');
+    expect(findTheme(seedDarkTheme('one-dark', [])).id).toBe('one-half-dark');
+    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
+    expect(seedDarkTheme('everforest-light', [])).toBe('obsidian-ember');
+    // A custom theme with a retired id wins over the successor.
+    expect(seedDarkTheme('one-dark', [custom('one-dark', '#ffffff')])).toBe('obsidian-ember');
+  });
+});
+
+describe('a retired theme id', () => {
+  it('stays as you saved it, and so does the light default that names Vellum', async () => {
+    const saved = normalizeUiConfig(
+      raw({ theme: 'one-dark', light_theme: 'vellum', dark_theme: 'everforest-light' }),
+    );
+    expect(saved).toMatchObject({
+      theme: 'one-dark',
+      light_theme: 'vellum',
+      dark_theme: 'everforest-light',
+    });
+    expect(normalizeUiConfig(raw()).light_theme).toBe('vellum');
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    await setUiConfig(saved);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      theme: 'one-dark',
+      light_theme: 'vellum',
+      dark_theme: 'everforest-light',
+    });
   });
 });
 
@@ -160,11 +195,10 @@ describe('a custom theme on a built-in id', () => {
 
   it('frees the Everforest and Green Screen ids too', () => {
     // An Everforest file you imported, or a theme you named Green Screen.
-    const ids = ['everforest-dark', 'everforest-light', 'green-screen'];
+    const ids = ['everforest-dark', 'green-screen'];
     const out = freeBuiltinThemeIds(
       raw({
         theme: 'green-screen',
-        light_theme: 'everforest-light',
         dark_theme: 'everforest-dark',
         custom_themes: ids.map((id) => custom(id, '#000000')),
       }),
@@ -172,8 +206,32 @@ describe('a custom theme on a built-in id', () => {
     expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
     expect(out).toMatchObject({
       theme: 'green-screen-2',
-      light_theme: 'everforest-light-2',
       dark_theme: 'everforest-dark-2',
+    });
+  });
+
+  it('leaves a custom theme on a retired id where it is, since it wins over the successor', () => {
+    const cfg = raw({ theme: 'vellum', custom_themes: [custom('vellum', '#ffffff')] });
+    expect(freeBuiltinThemeIds(cfg)).toBe(cfg);
+  });
+
+  it('frees the ids of the schemes Vosh added after Green Screen', () => {
+    // A Srcery or Modus Vivendi file you imported reads under the id the
+    // built in theme now has.
+    const ids = ['srcery', 'nightfly', 'melange-dark', 'melange-light', 'modus-vivendi'];
+    const out = freeBuiltinThemeIds(
+      raw({
+        theme: 'modus-vivendi',
+        light_theme: 'melange-light',
+        dark_theme: 'srcery',
+        custom_themes: ids.map((id) => custom(id, '#000000')),
+      }),
+    );
+    expect(out.custom_themes?.map((t) => t.id)).toEqual(ids.map((id) => `${id}-2`));
+    expect(out).toMatchObject({
+      theme: 'modus-vivendi-2',
+      light_theme: 'melange-light-2',
+      dark_theme: 'srcery-2',
     });
   });
 
@@ -411,6 +469,32 @@ describe('vitals density', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_density: 'line' });
     expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
+  });
+});
+
+describe('Fit game colors', () => {
+  it('reads on for a config saved before it existed, and keeps it off once off', () => {
+    expect(normalizeUiConfig(raw()).fit_game_colors).toBe(true);
+    expect(normalizeUiConfig(raw({ fit_game_colors: false })).fit_game_colors).toBe(false);
+  });
+
+  it('saves with the rest of the config and tells every window when it changes', async () => {
+    const invoked = vi.mocked(invoke);
+    invoked.mockClear();
+    const off = { ...normalizeUiConfig(raw()), fit_game_colors: false };
+    await setUiConfig(off);
+    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({ fit_game_colors: false });
+
+    const sent = vi.mocked(emit);
+    await broadcastUiConfigChanges(off);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    expect(sent).toHaveBeenCalledWith('vosh://fit-game-colors-changed', true);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://fit-game-colors-changed');
   });
 });
 

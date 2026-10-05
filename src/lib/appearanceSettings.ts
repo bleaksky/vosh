@@ -16,7 +16,15 @@ import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
-import { DEFAULT_THEME_ID, themeTokens, type AppTheme } from './themes';
+import { fitKey } from './gameFit';
+import {
+  customToAppTheme,
+  DEFAULT_THEME_ID,
+  themeTokens,
+  type AppTheme,
+  type ThemeLicense,
+  type XtermPalette,
+} from './themes';
 
 /** One option of a settings select. */
 export interface Choice {
@@ -180,12 +188,43 @@ export function stepGalleryTheme(
   return from;
 }
 
+// ── Theme caption ────────────────────────────────────────────────────
+
+const LICENSE_TERMS: Record<ThemeLicense, string> = {
+  MIT: 'under the MIT license',
+  'GPL-3.0': 'under the GPL version 3',
+  'GPL-3.0-or-later': 'under the GPL version 3 or later',
+  'Public domain': 'in the public domain',
+  'None published': 'with no license published',
+};
+
+/** The caption under the theme gallery for the theme on screen: its
+ *  description, then for a built in theme one sentence that names
+ *  where its colors come from, who made them, and their license. A
+ *  custom theme shows its description alone, and nothing when that is
+ *  blank. */
+export function themeCaption(theme: AppTheme): string {
+  const { source, author, license } = theme;
+  const parts = [theme.description.trim()];
+  if (source !== undefined && author !== undefined && license !== undefined) {
+    const terms = LICENSE_TERMS[license];
+    const from = author === source ? source : `${source} by ${author}`;
+    parts.push(
+      source === 'Vosh'
+        ? `${author} made it for Vosh, ${terms}.`
+        : `Its colors come from ${from}, ${terms}.`,
+    );
+  }
+  return parts.filter((part) => part !== '').join(' ');
+}
+
 // ── Custom themes ────────────────────────────────────────────────────
 
 type ThemeFields = ThemePrefs & { custom_themes: CustomTheme[] };
 
 /** A new custom theme that starts as a copy of `base`, with an id
- *  clear of `takenIds`. */
+ *  clear of `takenIds`. It keeps the fit of `base`, since its colors
+ *  are the same. */
 export function copyTheme(base: AppTheme, takenIds: Iterable<string>): CustomTheme {
   const label = `${base.label} copy`;
   return {
@@ -194,21 +233,48 @@ export function copyTheme(base: AppTheme, takenIds: Iterable<string>): CustomThe
     description: `A copy of ${base.label}.`,
     xterm: { ...(base.xterm as unknown as Record<string, string>) },
     chrome: { ...(base.chrome ?? {}) } as Record<string, string>,
+    ...(base.fitted && { fitted: { ...base.fitted } as Record<string, string> }),
   };
 }
 
-/** Replace one custom theme's fields. */
+/** The colors a game color fit of the custom theme reads (fitKey). */
+export function customFitKey(theme: CustomTheme): string {
+  return fitKey(customToAppTheme(theme).xterm);
+}
+
+/** Replace one custom theme's fields. A change to a color the game
+ *  color fit reads drops the fit the theme kept, since it was fitted to
+ *  the old colors. */
 export function editCustomTheme(
   list: readonly CustomTheme[],
   id: string,
   patch: Partial<CustomTheme>,
 ): CustomTheme[] {
-  return list.map((t) => (t.id === id ? { ...t, ...patch } : t));
+  return list.map((t) => {
+    if (t.id !== id) return t;
+    const next = { ...t, ...patch };
+    if (patch.xterm !== undefined && customFitKey(next) !== customFitKey(t)) delete next.fitted;
+    return next;
+  });
+}
+
+/** `list` with `fitted` kept on theme `id`, or null when that theme is
+ *  gone or its colors changed since `palette` was fitted. */
+export function keepFit(
+  list: readonly CustomTheme[],
+  id: string,
+  palette: XtermPalette,
+  fitted: Partial<XtermPalette>,
+): CustomTheme[] | null {
+  const theme = list.find((t) => t.id === id);
+  if (!theme || customFitKey(theme) !== fitKey(palette)) return null;
+  return editCustomTheme(list, id, { fitted: { ...fitted } as Record<string, string> });
 }
 
 /** The fields after you delete a custom theme. Any pick that named it
  *  falls back to the stock theme for its place: Obsidian Ember for the
- *  manual pick and the dark theme, Vellum for the light theme. */
+ *  manual pick and the dark theme, DEFAULT_LIGHT_THEME_ID for the light
+ *  theme, which shows Rubric. */
 export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
   return {
     ...ui,

@@ -201,6 +201,14 @@ pub(crate) struct UiConfig {
     /// unless the system asks to reduce motion. Your choice always wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blink_text: Option<bool>,
+    /// Fit game colors. While on, play draws the game's colors in the
+    /// slots the theme fits for them, so the colors that fade on its
+    /// ground read, and Settings keeps the theme as published. On by
+    /// default, and a file written before this switch reads it on.
+    /// Written only while off, so a profile that never turns it off
+    /// saves the bytes it saved before.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub fit_game_colors: bool,
     /// Keep highlight colors readable. While on, a fixed color a trigger
     /// paints text in, a true color or a 256 color past the 16, that fades
     /// on the theme's terminal background draws at a lightness that reads
@@ -854,6 +862,13 @@ pub(crate) struct CustomTheme {
     /// borderHover, accent, accentSoft, warn, danger, info, success.
     #[serde(default)]
     pub chrome: std::collections::BTreeMap<String, String>,
+    /// The game color fit of `xterm`: the slots Fit game colors moves
+    /// in play, body text and the 16 ANSI colors. Settings fits a theme
+    /// once when you import it or change one of those colors, and keeps
+    /// the fit here. Left out of the file while empty. Vosh 0.8.1 drops
+    /// it on save, and the next build fits the theme again.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub fitted: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for UiConfig {
@@ -877,6 +892,7 @@ impl Default for UiConfig {
             theme_terminal_colors: None,
             bright_bold: false,
             blink_text: None,
+            fit_game_colors: true,
             readable_highlights: true,
             collapse_repeats: false,
             collapse_fight_lines: true,
@@ -913,15 +929,23 @@ impl Default for UiConfig {
     }
 }
 
+/// The theme a file without the key reads, and the fallback. A new
+/// install starts on Triad instead, which `NEW_INSTALL_THEME` in
+/// profile/set.rs writes before the first launch (Themes review Q3).
 fn default_theme() -> String {
     "obsidian-ember".to_string()
 }
 
+/// The light theme a file without the key reads. Vellum is retired, and
+/// the frontend shows Rubric for it (`RETIRED_THEMES` in themes.ts),
+/// while Vosh 0.8.1 still reads it as Vellum. A new install starts with
+/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs (Q4).
 fn default_light_theme() -> String {
     "vellum".to_string()
 }
 
-/// Trim a light theme pick and turn a blank one into `vellum`.
+/// Trim a light theme pick and turn a blank one into `vellum`, which
+/// shows Rubric.
 pub(crate) fn coerce_light_theme(value: String) -> String {
     match value.trim() {
         "" => default_light_theme(),
@@ -1382,6 +1406,53 @@ name = "haste"
             ..UiConfig::default()
         };
         assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn fit_game_colors_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(through_toml(&ui).fit_game_colors);
+        ui.fit_game_colors = false;
+        assert!(!through_toml(&ui).fit_game_colors);
+    }
+
+    #[test]
+    fn fit_game_colors_is_written_only_while_off() {
+        let mut config = ProfileConfig::default();
+        let on = config.to_toml().unwrap();
+        assert!(!on.contains("fit_game_colors"), "{on}");
+        config.ui.fit_game_colors = false;
+        let off = config.to_toml().unwrap();
+        assert!(off.contains("fit_game_colors = false"), "{off}");
+        // A file from before the switch reads it on.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(old.ui.fit_game_colors);
+    }
+
+    #[test]
+    fn a_custom_theme_keeps_its_fit_and_writes_none_while_empty() {
+        let mut ui = UiConfig {
+            custom_themes: vec![CustomTheme {
+                id: "dusk".into(),
+                label: "Dusk".into(),
+                ..CustomTheme::default()
+            }],
+            ..UiConfig::default()
+        };
+        let config = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        };
+        let empty = config.to_toml().unwrap();
+        assert!(!empty.contains("fitted"), "{empty}");
+        ui.custom_themes[0].fitted =
+            std::collections::BTreeMap::from([("red".into(), "#cb7b74".into())]);
+        assert_eq!(through_toml(&ui).custom_themes, ui.custom_themes);
+        // A theme saved before the fit reads with none.
+        let old =
+            ProfileConfig::from_toml("[[ui.custom_themes]]\nid = \"dusk\"\nlabel = \"Dusk\"\n")
+                .unwrap();
+        assert!(old.ui.custom_themes[0].fitted.is_empty());
     }
 
     #[test]

@@ -10,8 +10,10 @@ import {
 import {
   MAP_COLORS,
   hexToRgba,
+  lightAppearance,
   mapInks,
   mapThemeSignature,
+  roomFill,
   sectorForCode,
 } from '../lib/mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
@@ -590,9 +592,12 @@ function drawSquares(
   for (const layer of layers) drawOffFloorOverlay(ctx, layer, ox, oy, pitch);
 
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
-  // origin gets a yellow glow + bright yellow border. Each cell's alpha
-  // tracks Manhattan distance from the player so the player sits in a
-  // bright pool that fades outward.
+  // and your room in the accent over its soft fill. A light theme fills
+  // each room from its sector over the paper (roomFill), so your room
+  // stays the only accent square. Each cell's alpha tracks Manhattan
+  // distance from the player so the player sits in a bright pool that
+  // fades outward.
+  const light = lightAppearance();
   for (const { row: r, col: c, cell } of gridRooms(payload, rows, cols)) {
     const cx = ox + c * pitch;
     const cy = oy + r * pitch;
@@ -621,7 +626,7 @@ function drawSquares(
       ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
     } else {
       ctx.globalAlpha = depth;
-      ctx.fillStyle = sector.fill;
+      ctx.fillStyle = roomFill(sector, ground, light);
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
       ctx.strokeStyle = hexToRgba(sector.border, 0.8);
       ctx.lineWidth = 1;

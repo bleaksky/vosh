@@ -47,6 +47,7 @@ import {
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeReadableHighlightsChanged,
+  subscribeFitGameColorsChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
   subscribeMigrationApplied,
@@ -81,6 +82,8 @@ import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
+import { fitThemesInPlay } from './lib/customThemeFits';
+import { setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
@@ -168,12 +171,12 @@ function applySplitDividerColor(color: string | null): void {
 }
 
 // Hand the native surface the chrome colors the page derives with its
-// theme tokens: the split divider, the selection, find matches in ANSI
-// yellow (28% for every match as Menus.dc.html draws them, stronger for
-// the current one), links in the accent, and the scrollbar in the
-// tertiary tone. A lifted prompt's band takes the selected row fill, with
-// its inset ring on a light theme. Runs on every theme apply, so light
-// themes never get the renderer's dark defaults.
+// theme tokens: the split divider, the selection and its text, find
+// matches in ANSI yellow (28% for every match as Menus.dc.html draws them,
+// stronger for the current one), links in the accent, and the scrollbar
+// in the tertiary tone. A lifted prompt's band takes the selected row
+// fill, with its inset ring on a light theme. Runs on every theme apply,
+// so light themes never get the renderer's dark defaults.
 function pushNativeChromeTokens(): void {
   const theme = findTheme(getCurrentThemeId());
   const tokens = themeTokens(theme);
@@ -181,6 +184,7 @@ function pushNativeChromeTokens(): void {
   void invoke('native_surface_set_tokens', {
     divider: tokens.sep,
     selection: tokens.selection,
+    selectionText: tokens.selectionText,
     findMatch: yellow ? toRgba(yellow, 0.28) : null,
     currentMatch: yellow ? toRgba(yellow, 0.6) : null,
     link: tokens.accent,
@@ -753,6 +757,24 @@ function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // Mark the root while the window is in the background, so frame.css
+  // can dim the window title to the tertiary tone the way the OS dims
+  // an inactive title bar.
+  useEffect(() => {
+    const root = document.documentElement;
+    const mark = () => {
+      root.dataset.windowFocus = document.hasFocus() ? 'focused' : 'unfocused';
+    };
+    mark();
+    window.addEventListener('focus', mark);
+    window.addEventListener('blur', mark);
+    return () => {
+      window.removeEventListener('focus', mark);
+      window.removeEventListener('blur', mark);
+      delete root.dataset.windowFocus;
+    };
+  }, []);
+
   // After a copy the caret should land back on the command line. The
   // terminal copy path dispatches `vosh:focus-input` explicitly; the
   // DOM `copy` listener is the catch-all for a browser-native copy of
@@ -987,6 +1009,8 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setFitGameColors(cfg.fit_game_colors);
+        fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
 
@@ -1053,6 +1077,8 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
+        setFitGameColors(cfg.fit_game_colors);
+        fitThemesInPlay(cfg);
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
       },
@@ -1184,6 +1210,21 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     subscribeBlinkTextChanged((value) => setBlinkChoice(value)).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts Fit game colors. The terminal, the prompt
+    // band and the panes draw from it at once.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeFitGameColorsChanged(setFitGameColors).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });

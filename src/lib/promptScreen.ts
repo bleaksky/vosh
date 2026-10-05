@@ -101,14 +101,14 @@ export function numberRuns(line: string): { start: number; end: number }[] {
   return runs;
 }
 
-/** The selection token over each line whole. */
+/** The accent tint over each line whole. */
 export function wholeMarks(lines: readonly string[]): RawMark[] {
   return lines
     .map((line, row) => ({ row, col: 0, width: cellsOf(line.trimEnd()), warn: false }))
     .filter((mark) => mark.width > 0);
 }
 
-/** The selection token over each number of `line` that `keep` names by
+/** The accent tint over each number of `line` that `keep` names by
  *  its place among the numbers. */
 export function numberMarks(line: string, keep: readonly boolean[]): RawMark[] {
   const chars = Array.from(line);

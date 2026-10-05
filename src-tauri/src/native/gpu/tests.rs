@@ -9,7 +9,7 @@ use super::bands::{
 use super::decor::{curl_coverage, line_instances, underline_rects, Decor};
 use super::frame::{build_frame, build_instances, FrameInputs, FrameQuads};
 use super::style::{
-    blend_over, blink_shown, blinks_visibly, color_to_rgba, draws_lines, linear_to_srgb,
+    blend_over, blink_shown, blinks_visibly, color_to_rgba, dimmed, draws_lines, linear_to_srgb,
     paint_to_rgba, resolve_chrome, rgb_to_rgba, styled_colors, underline_color, until_blink_flip,
     ChromePaint, ChromeTokens, Rgba, ANSI_16, CURRENT_MATCH_FALLBACK_ALPHA, DIVIDER_FALLBACK_ALPHA,
     FIND_MATCH_FALLBACK_ALPHA, SCROLLBAR_FALLBACK_ALPHA, SCROLLBAR_TRACK_SHARE,
@@ -646,6 +646,8 @@ fn chrome_falls_back_to_the_palette_without_tokens() {
     let chrome = resolve_chrome(ChromeTokens::UNSET, None, None, fg, yellow, blue);
     assert_eq!(chrome.divider, Paint::tint(fg, DIVIDER_FALLBACK_ALPHA));
     assert_eq!(chrome.selection, Paint::tint(fg, SELECTION_FALLBACK_ALPHA));
+    // Without a selection text each selected cell keeps its own color.
+    assert_eq!(chrome.selection_text, None);
     assert_eq!(
         chrome.find_match,
         Paint::tint(yellow, FIND_MATCH_FALLBACK_ALPHA)
@@ -677,6 +679,7 @@ fn chrome_prefers_tokens_and_the_divider_setting() {
     let tokens = ChromeTokens {
         divider: Some(token),
         selection: Some(token),
+        selection_text: Some(token),
         find_match: Some(token),
         current_match: Some(token),
         link: Some(token),
@@ -687,6 +690,7 @@ fn chrome_prefers_tokens_and_the_divider_setting() {
     let chrome = resolve_chrome(tokens, Some(setting), Some(theme_sel), grey, grey, grey);
     assert_eq!(chrome.divider, setting);
     assert_eq!(chrome.selection, token);
+    assert_eq!(chrome.selection_text, Some(token));
     assert_eq!(chrome.find_match, token);
     assert_eq!(chrome.current_match, token);
     assert_eq!(chrome.link, token);
@@ -1689,6 +1693,7 @@ fn frame_inputs(grid: &TermGrid) -> FrameInputs {
         chrome: ChromePaint {
             divider: paint(1, 2, 3, 1.0),
             selection: paint(60, 80, 120, 0.5),
+            selection_text: None,
             find_match: paint(200, 180, 0, 0.35),
             current_match: paint(255, 140, 0, 0.65),
             link: paint(90, 160, 255, 1.0),
@@ -1792,6 +1797,49 @@ fn find_matches_take_the_match_color_and_the_one_find_is_on_takes_its_own() {
     }
     for col in 6..10 {
         assert_eq!(ground_at(&frame, col, 0), current, "column {col}");
+    }
+}
+
+#[test]
+fn selected_cells_draw_in_the_selection_text_the_page_sends() {
+    // Red text, a dim word and plain text, with "d dim" selected.
+    let mut grid = TermGrid::new(12, 1);
+    grid.feed(b"\x1b[31mred \x1b[2mdim\x1b[0m word");
+    grid.start_selection(0, 2);
+    grid.extend_selection(0, 7, false);
+    assert_eq!(grid.selection_bounds(), Some((0, 2, 0, 6)));
+    let mut inputs = frame_inputs(&grid);
+    let glyph_colors = |frame: &FrameQuads| -> Vec<(usize, Rgba)> {
+        quads(frame, GLYPH_QUAD)
+            .iter()
+            .map(|g| ((g.offset[0] / 10.0) as usize, g.color))
+            .collect()
+    };
+    // Without a selection text every glyph keeps its own color, as the
+    // grid drew before the page sent one.
+    let own = glyph_colors(&lay_out(&grid, &inputs));
+    assert_eq!(own.len(), 10);
+    // With one, each selected glyph takes it, dim text at the dim share,
+    // and the rest keep their own.
+    let text = paint(0xf2, 0xef, 0xee, 1.0);
+    inputs.chrome.selection_text = Some(text);
+    let selected = glyph_colors(&lay_out(&grid, &inputs));
+    for ((col, got), (_, mine)) in selected.iter().zip(&own) {
+        let want = match col {
+            2 => paint_to_rgba(text),
+            4..=6 => dimmed(paint_to_rgba(text)),
+            _ => *mine,
+        };
+        assert_eq!(*got, want, "column {col}");
+        assert_eq!(got == mine, !(2..=6).contains(col), "column {col}");
+    }
+    // A hovered link still takes the link color over the selection text.
+    inputs.hover = Some((0, 4, 7));
+    let link = paint_to_rgba(inputs.chrome.link);
+    for (col, got) in glyph_colors(&lay_out(&grid, &inputs)) {
+        if (4..7).contains(&col) {
+            assert_eq!(got, link, "column {col}");
+        }
     }
 }
 

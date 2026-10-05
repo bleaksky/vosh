@@ -20,7 +20,7 @@ const paint: ThemePaint = {
   v: 1,
   follow: true,
   light: {
-    id: 'vellum',
+    id: 'rubric',
     appearance: 'light',
     vars: { '--bg': '#f4efe4', '--xterm-bg': '#f4efe4' },
   },
@@ -83,7 +83,7 @@ describe('startup', () => {
     await import('./main');
 
     expect(render).toHaveBeenCalledTimes(1);
-    expect(atRender).toEqual({ appearance: 'light', theme: 'vellum', bg: '#f4efe4' });
+    expect(atRender).toEqual({ appearance: 'light', theme: 'rubric', bg: '#f4efe4' });
   });
 
   it('imports the startup paint before anything else', () => {

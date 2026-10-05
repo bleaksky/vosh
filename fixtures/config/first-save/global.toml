@@ -1,10 +1,10 @@
-theme = "obsidian-ember"
+theme = "triad"
 auto_update = false
 keep_last_command = false
 font_family = "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace"
 font_size = 14
 follow_system_appearance = false
-light_theme = "vellum"
+light_theme = "rubric"
 dark_theme = ""
 terminal_line_height = "default"
 dock_layout = []

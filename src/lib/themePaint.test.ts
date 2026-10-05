@@ -13,7 +13,7 @@ import {
 } from './themePaint';
 
 const light: ThemePaintSide = {
-  id: 'vellum',
+  id: 'rubric',
   appearance: 'light',
   vars: { '--bg': '#f4efe4', '--text': '#2b2620', '--xterm-bg': '#f4efe4' },
 };
@@ -155,7 +155,7 @@ describe('prepaintTheme', () => {
       root: () => root,
     });
     expect(side).toEqual(light);
-    expect(root.attrs).toEqual({ 'data-theme': 'vellum', 'data-appearance': 'light' });
+    expect(root.attrs).toEqual({ 'data-theme': 'rubric', 'data-appearance': 'light' });
     expect(root.vars).toEqual(light.vars);
   });
 

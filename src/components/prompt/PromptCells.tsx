@@ -38,8 +38,8 @@ interface CellLineProps {
 }
 
 /** The ratio under which a color reads too dim on the selection token, so
- *  a marked value takes the terminal's text color, as the two 60s the game
- *  draws in 256 color 240 do on P3. */
+ *  a marked value takes the selection text, as the two 60s the game draws
+ *  in 256 color 240 do on P3. */
 const MARKED_MIN_CONTRAST = 3;
 
 function inMark(marks: readonly CellMark[], col: number): CellMark | null {
@@ -84,13 +84,13 @@ export function CellLine({
   const clipped = total > max;
   const kept = cut ? cut.kept : clipped ? Math.max(0, max - 2) : max;
   const runs = bandRuns(cells, env, kept);
-  const ground = parseHex(env.bg);
+  const ground = parseHex(env.selection);
   const face = (color: string, col: number): string => {
     const mark = inMark(marks, col);
     if (!mark || mark.warn) return color;
     const rgb = parseHex(color);
     if (!rgb || !ground) return color;
-    return contrast(rgb, ground) < MARKED_MIN_CONTRAST ? env.fg : color;
+    return contrast(rgb, ground) < MARKED_MIN_CONTRAST ? env.selectionText : color;
   };
   const shown = clipped ? kept + 1 : total;
   // A reader hears the line as its text, as far as it shows: each glyph

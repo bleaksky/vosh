@@ -5,6 +5,7 @@
 // is known for (Nord's frost accent, for example).
 
 import { CHROME_COLOR_KEYS, deriveChrome, type ChromeOverrides, type ChromeTokens } from './chrome';
+import { fitKey } from './gameFit';
 
 export interface XtermPalette {
   background: string;
@@ -31,22 +32,51 @@ export interface XtermPalette {
   brightWhite: string;
 }
 
+/** The license a theme's colors carry. public/theme-credits.txt keeps
+ *  the notice each one asks to travel with the colors. */
+export type ThemeLicense =
+  | 'MIT'
+  | 'GPL-3.0'
+  | 'GPL-3.0-or-later'
+  | 'Public domain'
+  | 'None published';
+
 export interface AppTheme {
   id: string;
   label: string;
   description: string;
+  /// Where the colors come from, named as a sentence names it (Nord, the
+  /// CGA palette), who made them, and the license they carry. Every
+  /// built in theme names all three, and public/theme-credits.txt keeps
+  /// the notices. A custom theme has none.
+  source?: string;
+  author?: string;
+  license?: ThemeLicense;
   xterm: XtermPalette;
+  /// The colors Fit game colors draws in play, the slots the game color
+  /// fit (lib/gameFit) moves off the published palette, from body text
+  /// and the 16 ANSI colors. A built in theme stores them computed
+  /// ahead, since a fit takes about two seconds, and gameFit.test.ts
+  /// fits each again with VOSH_FIT_THEMES=1. A custom theme keeps the
+  /// fit Settings made when you imported or changed it.
+  fitted?: Partial<XtermPalette>;
+  /// False keeps the published palette in play with Fit game colors on.
+  fitGameColors?: false;
   /// Chrome tokens this theme pins instead of deriving.
   chrome?: ChromeOverrides;
 }
 
 // ── Kanso Zen ───────────────────────────────────────────────────────
-// Default. Mirrors the user's Ghostty config exactly so the in-app
-// terminal renders identically to the one outside it.
+// Mirrors the user's Ghostty config exactly, so Settings and exports
+// match the terminal outside Vosh. In play Fit game colors retunes the
+// game colors (Themes review Q15).
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
-  description: 'Calm Japanese-inspired dark. Cool-blue accent, sage / gold / red semantics.',
+  description: 'Calm Japanese dark. Cool blue accent, with sage, gold and red for status.',
+  source: 'kanso.nvim',
+  author: 'Webhooked',
+  license: 'MIT',
   xterm: {
     background: '#090e13',
     foreground: '#c5c9c7',
@@ -71,19 +101,43 @@ const kansoZen: AppTheme = {
     brightCyan: '#7aa89f',
     brightWhite: '#c5c9c7',
   },
+  // The palette stays as the Ghostty config has it, and in play the fit
+  // retunes 16 slots to pass 44 of 46 (Q15).
+  fitted: {
+    foreground: '#c9cdcb',
+    black: '#656565',
+    red: '#d17f79',
+    green: '#d4e5c4',
+    yellow: '#d0be95',
+    blue: '#879fab',
+    cyan: '#a0b6b4',
+    white: '#b7bab7',
+    brightBlack: '#92979d',
+    brightRed: '#ff919a',
+    brightGreen: '#e9ffe9',
+    brightYellow: '#ffe8bf',
+    brightBlue: '#8cc2d8',
+    brightMagenta: '#bab1d1',
+    brightCyan: '#acdbd1',
+    brightWhite: '#f0f5f2',
+  },
   // Kanso's brand cool blue lives outside its terminal palette.
   chrome: { accent: '#b0c8d4' },
 };
 
 // ── Obsidian Ember ──────────────────────────────────────────────────
 // The Ember redesign palette. A warm near-black ground, pastel ANSI,
-// and an ember cursor the chrome takes as its single accent. The
-// derived panel, hairlines, and text tiers land on the approved One
-// Window canvas values.
+// and an ember cursor the theme pins as its single accent. The orange
+// sits 8.1 dE from the danger red, under the 12 the chrome rule asks of
+// an accent it picks itself, so without the pin the rule would take
+// Ember's magenta. The orange is what the name promises.
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
-  description: 'Near-black warm neutral ramp, single ember accent, pastel ANSI.',
+  description: 'Warm near black ground, pastel colors and a single ember accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
   xterm: {
     background: '#050403',
     foreground: '#c0bdbb',
@@ -108,17 +162,125 @@ const obsidianEmber: AppTheme = {
     brightCyan: '#97dde8',
     brightWhite: '#ece7e1',
   },
-  // The ember ink the approved canvas sets on accent buttons.
-  chrome: { onAccent: '#140b02' },
+  fitted: {
+    foreground: '#cecbc9',
+    red: '#d07166',
+    green: '#95e4b0',
+    yellow: '#d2af64',
+    blue: '#799ed6',
+    magenta: '#b08ac5',
+    cyan: '#79c3cf',
+    brightBlack: '#99948f',
+    brightRed: '#f59989',
+    brightGreen: '#c7ffd8',
+    brightYellow: '#f2cf8a',
+    brightBlue: '#9bbef1',
+    brightMagenta: '#d0aae2',
+    brightCyan: '#9de3ee',
+  },
+  // The ember accent, and the ember ink the approved canvas sets on
+  // accent buttons.
+  chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
-// ── Tokyo Night Storm ───────────────────────────────────────────────
+// ── Triad ───────────────────────────────────────────────────────────
+// Vosh's signature dark, under the sky it is named for. Each moon sits
+// on the slot moon.c paints it in: Lysenties silver in bright white,
+// Nercuros cyan in bright cyan, Dyphrities blood red in red, a scarlet
+// that stays apart from green for deuteranopes. The ground is a violet
+// night and body text a neutral stone, so both moons stand clear of it.
+// The cursor is Nercuros cyan, which the theme pins as its accent. It
+// passes all 46 game checks as it stands, so it keeps no fit.
+const triad: AppTheme = {
+  id: 'triad',
+  label: 'Triad',
+  description:
+    'The three moons of Aabahran over a violet night. Each moon keeps the color the game ' +
+    'paints it in, and Nercuros cyan is the accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
+  xterm: {
+    background: '#150c22',
+    foreground: '#dbdbda',
+    cursor: '#44d4e2',
+    cursorAccent: '#150c22',
+    selectionBackground: '#224458',
+    selectionForeground: '#dbdbda',
+    black: '#41464d',
+    red: '#fe6457',
+    green: '#45c6a8',
+    yellow: '#eeca71',
+    blue: '#78a0d5',
+    magenta: '#bb8eba',
+    cyan: '#a7c2c4',
+    white: '#b5babe',
+    brightBlack: '#98a0ab',
+    brightRed: '#ff9b8e',
+    brightGreen: '#aafddd',
+    brightYellow: '#ffeead',
+    brightBlue: '#94c2fb',
+    brightMagenta: '#dbade1',
+    brightCyan: '#84e6ff',
+    brightWhite: '#f4f8fb',
+  },
+  chrome: { accent: '#44d4e2' },
+};
+
+// ── Rubric ──────────────────────────────────────────────────────────
+// Vosh's signature light, a manuscript page. Body text is iron gall
+// ink, blue black, and room names the same ink faded to sepia. Hurt is
+// vermilion, alarms kermes, tells verdigris, the cabal lapis and says
+// umber. The bright slots are darker than the normal ones, so bold text
+// grows heavier on the paper instead of fading. The accent is the lapis
+// of the initials, so red in the window always means trouble. It passes
+// all 46 game checks as it stands, so it keeps no fit.
+const rubric: AppTheme = {
+  id: 'rubric',
+  label: 'Rubric',
+  description:
+    'Ink on parchment. Blue black text, red kept for trouble, and the lapis of the ' +
+    'initials as the accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
+  xterm: {
+    background: '#f0e5cf',
+    foreground: '#151d2a',
+    cursor: '#3656b1',
+    cursorAccent: '#f0e5cf',
+    selectionBackground: '#cbc8c9',
+    selectionForeground: '#151d2a',
+    black: '#2b2f38',
+    red: '#e15400',
+    green: '#007873',
+    yellow: '#5d4000',
+    blue: '#4e73c2',
+    magenta: '#b05684',
+    cyan: '#2c587b',
+    white: '#5e6770',
+    brightBlack: '#948170',
+    brightRed: '#970004',
+    brightGreen: '#004e47',
+    brightYellow: '#3b2200',
+    brightBlue: '#334eb1',
+    brightMagenta: '#8f3075',
+    brightCyan: '#003f56',
+    brightWhite: '#050911',
+  },
+  chrome: { accent: '#3656b1' },
+};
+
+// ── Tokyo Night ─────────────────────────────────────────────────────
 // Saturated blues, muted purples, signature deep navy. Accent on the
 // frost blue (`#7aa2f7`).
 const tokyoNight: AppTheme = {
   id: 'tokyo-night',
   label: 'Tokyo Night',
-  description: 'Storm variant. Cool blues, deep navy, frosted accents.',
+  description: 'Night variant. Cool blues, deep navy, frosted accents.',
+  source: 'Tokyo Night',
+  author: 'Enkia',
+  license: 'MIT',
   xterm: {
     background: '#1a1b26',
     foreground: '#c0caf5',
@@ -143,6 +305,26 @@ const tokyoNight: AppTheme = {
     brightCyan: '#7dcfff',
     brightWhite: '#c0caf5',
   },
+  fitted: {
+    foreground: '#bdc7f2',
+    black: '#2c2e36',
+    red: '#e86982',
+    green: '#bbed87',
+    cyan: '#70c2f2',
+    white: '#aab3d8',
+    brightBlack: '#8e97bb',
+    brightRed: '#ff94a5',
+    brightGreen: '#e0ffc4',
+    brightYellow: '#ffd08d',
+    brightBlue: '#a3c2ff',
+    brightMagenta: '#d4bfff',
+    brightCyan: '#a8deff',
+    brightWhite: '#dbe2ff',
+  },
+  // The frost blue it has always drawn, 23.3 dE from danger, the
+  // nearest status color. The chrome rule alone would take its magenta,
+  // the scheme's strongest hue.
+  chrome: { accent: '#7aa2f7' },
 };
 
 // ── Nord ────────────────────────────────────────────────────────────
@@ -151,6 +333,9 @@ const nord: AppTheme = {
   id: 'nord',
   label: 'Nord',
   description: 'Arctic palette. Polar nights base, frost accents.',
+  source: 'Nord',
+  author: 'Sven Greb',
+  license: 'MIT',
   xterm: {
     background: '#2e3440',
     foreground: '#d8dee9',
@@ -175,6 +360,23 @@ const nord: AppTheme = {
     brightCyan: '#8fbcbb',
     brightWhite: '#eceff4',
   },
+  fitted: {
+    black: '#3c4353',
+    red: '#c3656e',
+    green: '#96b07f',
+    yellow: '#e9c989',
+    blue: '#83a4c4',
+    magenta: '#bb95b4',
+    cyan: '#8cc5d5',
+    brightBlack: '#95a1b7',
+    brightRed: '#ff9ea5',
+    brightGreen: '#ceeab6',
+    brightYellow: '#ffeac1',
+    brightBlue: '#a3c4e5',
+    brightMagenta: '#dcb4d4',
+    brightCyan: '#b6e4e3',
+    brightWhite: '#feffff',
+  },
   // otty's Nord, measured from otty's own theme file. The panel and
   // floating surfaces stay on the terminal ground, and the text tiers
   // follow nord5 rather than the terminal's nord4 foreground. Danger
@@ -198,6 +400,9 @@ const gruvbox: AppTheme = {
   id: 'gruvbox',
   label: 'Gruvbox',
   description: 'Warm, retro, earthy. Yellow accent on warm dark.',
+  source: 'gruvbox',
+  author: 'Pavel Pertsev',
+  license: 'MIT',
   xterm: {
     background: '#282828',
     foreground: '#ebdbb2',
@@ -222,6 +427,23 @@ const gruvbox: AppTheme = {
     brightCyan: '#8ec07c',
     brightWhite: '#ebdbb2',
   },
+  fitted: {
+    foreground: '#e4d4ac',
+    black: '#383838',
+    red: '#e03c30',
+    green: '#cdce5d',
+    blue: '#66a6a9',
+    magenta: '#d582a7',
+    cyan: '#8ec590',
+    white: '#c5b59f',
+    brightBlack: '#a8998a',
+    brightRed: '#ff9583',
+    brightGreen: '#ecf068',
+    brightBlue: '#9dc0b2',
+    brightMagenta: '#f4a4b9',
+    brightCyan: '#b2e6a0',
+    brightWhite: '#ffefc5',
+  },
   chrome: { accent: '#fabd2f' },
 };
 
@@ -231,6 +453,9 @@ const catppuccin: AppTheme = {
   id: 'catppuccin',
   label: 'Catppuccin',
   description: 'Mocha variant. Soft pastels on a warm dark base.',
+  source: 'Catppuccin',
+  author: 'Catppuccin',
+  license: 'MIT',
   xterm: {
     background: '#1e1e2e',
     foreground: '#cdd6f4',
@@ -255,6 +480,19 @@ const catppuccin: AppTheme = {
     brightCyan: '#94e2d5',
     brightWhite: '#a6adc8',
   },
+  fitted: {
+    red: '#d5708d',
+    green: '#89c484',
+    yellow: '#f1dba8',
+    magenta: '#d4a2c7',
+    brightBlack: '#9498af',
+    brightRed: '#fe95b2',
+    brightGreen: '#adeba8',
+    brightYellow: '#fff1d2',
+    brightBlue: '#b5d2ff',
+    brightCyan: '#c4fff4',
+    brightWhite: '#edf1ff',
+  },
   chrome: { accent: '#f5c2e7' },
 };
 
@@ -267,6 +505,9 @@ const classicVivid: AppTheme = {
   id: 'classic-vivid',
   label: 'Classic Vivid',
   description: 'Saturated CGA/VGA primaries. Bright reds, greens, blues.',
+  source: 'the CGA palette',
+  author: 'IBM',
+  license: 'Public domain',
   xterm: {
     background: '#0a0a0a',
     foreground: '#cccccc',
@@ -293,20 +534,40 @@ const classicVivid: AppTheme = {
     brightCyan: '#00ffff',
     brightWhite: '#ffffff',
   },
+  // The fit lifts blue from Lc 0 to 39 in play and leaves 6 checks
+  // short, red at Lc 40.7 among them (Q17).
+  fitted: {
+    black: '#232323',
+    red: '#ef5746',
+    green: '#4cd546',
+    yellow: '#ffc6a2',
+    blue: '#4b82ff',
+    magenta: '#e756e4',
+    cyan: '#0badac',
+    white: '#b2b2b2',
+    brightBlack: '#959595',
+    brightRed: '#ff8574',
+    brightBlue: '#8a9bff',
+    brightMagenta: '#ff84fc',
+  },
   // Vivid amber accent, distinct from every ANSI status color and in
   // keeping with a CGA era highlight.
   chrome: { accent: '#ffaa00' },
 };
 
 // ── Dracula at Night ────────────────────────────────────────────────
-// Night-mode variant of Dracula. Same iconic ANSI palette (purple
-// accent #bd93f9, pinks / greens / cyans), darker chrome surfaces
-// for late-session reading. Reads as a deeper, calmer Dracula
-// without losing its color identity.
+// Dracula's text and its sixteen colors as its terminal ports ship
+// them, with the purple #bd93f9 as the accent, on a ground darker than
+// Dracula's for late sessions. The ground is #1a1c23 where Dracula has
+// #282a36, and black and the selection step down with it, #15161c for
+// #21222c and #363948 for #44475a.
 const dracula: AppTheme = {
   id: 'dracula',
   label: 'Dracula at Night',
-  description: 'Darker chrome variant of Dracula. Same iconic accents on deeper surfaces.',
+  description: 'Dracula on a darker ground, #1a1c23 where Dracula has #282a36.',
+  source: 'Dracula',
+  author: 'Zeno Rocha',
+  license: 'MIT',
   xterm: {
     background: '#1a1c23',
     foreground: '#f8f8f2',
@@ -331,6 +592,23 @@ const dracula: AppTheme = {
     brightCyan: '#a4ffff',
     brightWhite: '#ffffff',
   },
+  fitted: {
+    foreground: '#e4e4df',
+    black: '#2c2e34',
+    red: '#f2494b',
+    green: '#07d558',
+    yellow: '#e2eb7d',
+    blue: '#b68cf2',
+    magenta: '#f671be',
+    cyan: '#81dff3',
+    white: '#deded9',
+    brightBlack: '#8597cb',
+    brightRed: '#ff9692',
+    brightYellow: '#feffc9',
+    brightBlue: '#d7aeff',
+    brightMagenta: '#ff9ee2',
+    brightCyan: '#aeffff',
+  },
   chrome: { accent: '#bd93f9' },
 };
 
@@ -342,6 +620,9 @@ const monokai: AppTheme = {
   id: 'monokai',
   label: 'Monokai',
   description: 'Warm dark with the signature magenta accent.',
+  source: 'Monokai',
+  author: 'Wimer Hazenberg',
+  license: 'None published',
   xterm: {
     background: '#272822',
     foreground: '#f8f8f2',
@@ -366,51 +647,42 @@ const monokai: AppTheme = {
     brightCyan: '#a1efe4',
     brightWhite: '#f9f8f5',
   },
+  // Bright white has no room above body text, so the fit lowers body
+  // text to #e4e4df in play (Q19).
+  fitted: {
+    foreground: '#e4e4df',
+    black: '#363831',
+    red: '#ff648c',
+    green: '#bbf94d',
+    yellow: '#edb96f',
+    blue: '#52c7dd',
+    magenta: '#af84ff',
+    cyan: '#89d6cc',
+    white: '#deded9',
+    brightBlack: '#a09c87',
+    brightRed: '#ff99ad',
+    brightGreen: '#d8ffa4',
+    brightYellow: '#ffdbac',
+    brightBlue: '#76e8fe',
+    brightMagenta: '#c5aaff',
+    brightCyan: '#a9f8ec',
+    brightWhite: '#fffffd',
+  },
   chrome: { accent: '#f92672' },
 };
 
-// ── One Dark ────────────────────────────────────────────────────────
-// Atom editor classic. Cool slate background, soft pastel semantics,
-// blue accent (#61afef). Bright variants kept identical to base so a
-// trigger highlighting on bold colors does not jump.
-const oneDark: AppTheme = {
-  id: 'one-dark',
-  label: 'One Dark',
-  description: 'Atom-style cool slate. Soft pastel semantics, blue accent.',
-  xterm: {
-    background: '#282c34',
-    foreground: '#abb2bf',
-    cursor: '#abb2bf',
-    cursorAccent: '#282c34',
-    selectionBackground: '#3e4451',
-    selectionForeground: '#ffffff',
-    black: '#282c34',
-    red: '#e06c75',
-    green: '#98c379',
-    yellow: '#e5c07b',
-    blue: '#61afef',
-    magenta: '#c678dd',
-    cyan: '#56b6c2',
-    white: '#abb2bf',
-    brightBlack: '#5c6370',
-    brightRed: '#e06c75',
-    brightGreen: '#98c379',
-    brightYellow: '#e5c07b',
-    brightBlue: '#61afef',
-    brightMagenta: '#c678dd',
-    brightCyan: '#56b6c2',
-    brightWhite: '#ffffff',
-  },
-};
-
 // ── One Half Dark ───────────────────────────────────────────────────
-// Sublime Text / iTerm2 One Half Dark. Same color family as One
-// Dark with a brighter foreground (#dcdfe4) and a touch cooler
-// surface tones. Reads slightly higher-contrast at the same brightness.
+// One Half Dark as its Sublime Text and iTerm2 ports ship it. Atom's
+// One Dark colors with a brighter foreground (#dcdfe4), which lifts body
+// text from Lc 56 to Lc 83. It took the place of One Dark (Themes review
+// Q13), so a saved One Dark shows it (RETIRED_THEMES).
 const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
-  description: 'Brighter foreground variant of One Dark. Higher contrast.',
+  description: 'Cool slate in the style of Atom. Soft pastels, a bright foreground, blue accent.',
+  source: 'One Half',
+  author: 'Son A. Pham',
+  license: 'MIT',
   xterm: {
     background: '#282c34',
     foreground: '#dcdfe4',
@@ -435,6 +707,27 @@ const oneHalfDark: AppTheme = {
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
   },
+  fitted: {
+    black: '#373c44',
+    red: '#e9747d',
+    green: '#c6f3a6',
+    yellow: '#e0bc77',
+    blue: '#5faded',
+    magenta: '#cd7ee4',
+    cyan: '#66c5d1',
+    white: '#dbdee3',
+    brightBlack: '#939eb2',
+    brightRed: '#ff9da1',
+    brightGreen: '#e3ffd1',
+    brightYellow: '#ffdd9e',
+    brightBlue: '#90cbff',
+    brightMagenta: '#e9a2ff',
+    brightCyan: '#87e6f2',
+  },
+  // The blue it has always drawn, 19.6 dE from success, the nearest
+  // status color. The chrome rule alone would take its magenta, the
+  // scheme's strongest hue.
+  chrome: { accent: '#61afef' },
 };
 
 // ── Tango Dark ──────────────────────────────────────────────────────
@@ -445,6 +738,9 @@ const tangoDark: AppTheme = {
   id: 'tango-dark',
   label: 'Tango Dark',
   description: 'GNOME Terminal classic. Saturated primaries on a warm dark.',
+  source: 'the Tango Desktop Project',
+  author: 'the Tango Desktop Project',
+  license: 'Public domain',
   xterm: {
     background: '#2e3436',
     foreground: '#d3d7cf',
@@ -469,16 +765,43 @@ const tangoDark: AppTheme = {
     brightCyan: '#34e2e2',
     brightWhite: '#eeeeec',
   },
+  // The fit lifts blue and magenta past Lc 45 in play. Red stays at
+  // Lc 36.2, with 4 checks short in all (Q18).
+  fitted: {
+    foreground: '#d4d8d0',
+    black: '#3d4345',
+    red: '#fe4a3b',
+    green: '#a3f476',
+    yellow: '#dcb834',
+    blue: '#70a3e7',
+    magenta: '#bc94c2',
+    cyan: '#58ccce',
+    white: '#d6dad2',
+    brightBlack: '#adafab',
+    brightRed: '#ff8f82',
+    brightGreen: '#caffa6',
+    brightBlue: '#98c7f8',
+    brightMagenta: '#e4b4df',
+    brightCyan: '#4cf2f1',
+    brightWhite: '#fbfbf9',
+  },
+  // The bright blue it has always drawn, 28.3 dE from danger, the
+  // nearest status color. The chrome rule alone would take its green,
+  // the scheme's strongest hue.
+  chrome: { accent: '#729fcf' },
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
 // Re-thought from the original WCAG-AA stab: an off-black ground (so
 // it isn't a flat black void), pure white text, and a yellow cursor
-// the chrome takes as its accent.
+// the theme pins as its accent.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. White text on off-black, yellow accent.',
+  description: 'Maximum readability. White text on near black, yellow accent.',
+  source: 'Vosh',
+  author: 'James Wright',
+  license: 'GPL-3.0',
   xterm: {
     // Slight off-black instead of pure #000000. xterm.js can't be
     // told to override the 256-color cube; ANSI 256 codes like 022
@@ -508,43 +831,26 @@ const highContrast: AppTheme = {
     brightCyan: '#88ffff',
     brightWhite: '#ffffff',
   },
-};
-
-// ── Vellum ──────────────────────────────────────────────────────────
-// Vosh's own warm light theme, built by the same rule as the dark
-// ones: a paper ground, ink foreground, and ANSI slots dark enough to
-// read as text on the paper. The ink blue cursor becomes the accent.
-const vellum: AppTheme = {
-  id: 'vellum',
-  label: 'Vellum',
-  description: 'Warm paper light theme. Ink text, muted ANSI, ink blue accent.',
-  xterm: {
-    background: '#f7f4ee',
-    foreground: '#2a2622',
-    cursor: '#3f6690',
-    cursorAccent: '#f7f4ee',
-    // The accent at 45 percent over the paper. The terminal paints the
-    // selection at 40 percent of this, which lands on the canvas value
-    // of the accent at 18 percent.
-    selectionBackground: '#a4b4c4',
-    selectionForeground: '#2a2622',
-    black: '#2a2622',
-    red: '#a8453a',
-    green: '#4f7a3a',
-    yellow: '#94661a',
-    blue: '#3f6690',
-    magenta: '#7a4f8a',
-    cyan: '#357a78',
-    white: '#7c766e',
-    brightBlack: '#6b645c',
-    brightRed: '#c2574a',
-    brightGreen: '#5f9146',
-    brightYellow: '#b88226',
-    brightBlue: '#4d7cb0',
-    brightMagenta: '#9163a6',
-    brightCyan: '#3f9592',
-    brightWhite: '#3b3632',
+  // Bright white has no room above body text, so the fit lowers body
+  // text to #e4e4e4 in play (Q19).
+  fitted: {
+    foreground: '#e4e4e4',
+    black: '#242424',
+    red: '#fb5252',
+    green: '#1fdc29',
+    yellow: '#f4f447',
+    cyan: '#44f3f3',
+    brightBlack: '#969696',
+    brightRed: '#ff9291',
+    brightYellow: '#feffb5',
+    brightBlue: '#97c3ff',
+    brightMagenta: '#ff8dff',
+    brightCyan: '#b9fffe',
   },
+  // The yellow cursor it has always drawn as its accent. It sits 7.0 dE
+  // from the yellow warn tone, under the 12 the rule asks, so the chrome
+  // rule alone would take the magenta.
+  chrome: { accent: '#ffff00' },
 };
 
 // ── Rosé Pine ───────────────────────────────────────────────────────
@@ -555,6 +861,9 @@ const rosePine: AppTheme = {
   id: 'rose-pine',
   label: 'Rosé Pine',
   description: 'Muted rose, gold, and iris on a deep violet base.',
+  source: 'Rosé Pine',
+  author: 'Rosé Pine',
+  license: 'MIT',
   xterm: {
     background: '#191724',
     foreground: '#e0def4',
@@ -579,40 +888,50 @@ const rosePine: AppTheme = {
     brightCyan: '#ebbcba',
     brightWhite: '#e0def4',
   },
+  fitted: {
+    black: '#2b2940',
+    green: '#79bcd9',
+    yellow: '#f1bd73',
+    white: '#dedcf2',
+    brightBlack: '#9894b1',
+    brightRed: '#ff98b2',
+    brightGreen: '#9addfb',
+    brightYellow: '#ffdfb4',
+    brightBlue: '#bcf0f9',
+    brightMagenta: '#e1caff',
+    brightCyan: '#ffe1e0',
+    brightWhite: '#ffffff',
+  },
   chrome: { accent: '#c4a7e7' },
 };
 
 // ── Everforest ──────────────────────────────────────────────────────
-// sainnhe's Everforest (github.com/sainnhe/everforest, MIT) at its
-// medium background. The palette comes from autoload/everforest.vim
-// and the ANSI mapping from the Terminal section of
-// colors/everforest.vim, which repeats the eight colors for the bright
-// slots and maps black and white as below.
+// Everforest Dark at its medium background. The palette comes from
+// autoload/everforest.vim and the ANSI mapping from the Terminal section
+// of colors/everforest.vim, which repeats the eight colors for the
+// bright slots and maps black and white as below.
 //
-//   dark    bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
-//           red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
-//           purple #d699b6  aqua #83c092
-//           black bg3, white fg
-//   light   bg0 #fdf6e3  bg3 #e6e2cc  fg #5c6a72  bg_visual #eaedc8
-//           red #f85552  green #8da101  yellow #dfa000  blue #3a94c5
-//           purple #df69ba  aqua #35a77c
-//           black fg, white bg3
+//   bg0 #2d353b  bg3 #475258  fg #d3c6aa  bg_visual #543a48
+//   red #e67e80  green #a7c080  yellow #dbbc7f  blue #7fbbb3
+//   purple #d699b6  aqua #83c092
+//   black bg3, white fg
 //
-// The cursor is fg on bg0, Everforest's default reversed cursor. The
-// terminal paints the selection at 40 percent of selectionBackground,
-// so each variant stores the color that lands on its bg_visual there.
-// Everforest's green is the accent, the color its status line and
-// ports lead with.
+// The cursor is fg on bg0, Everforest's default reversed cursor, and the
+// selection is bg_visual. Everforest's green is the accent, the color
+// its status line and ports lead with.
 const everforestDark: AppTheme = {
   id: 'everforest-dark',
   label: 'Everforest Dark',
   description: 'Soft forest greens and warm earth tones on a gray green dark.',
+  source: 'Everforest',
+  author: 'sainnhe',
+  license: 'MIT',
   xterm: {
     background: '#2d353b',
     foreground: '#d3c6aa',
     cursor: '#d3c6aa',
     cursorAccent: '#2d353b',
-    selectionBackground: '#8f425c',
+    selectionBackground: '#543a48',
     selectionForeground: '#d3c6aa',
     black: '#475258',
     red: '#e67e80',
@@ -631,48 +950,22 @@ const everforestDark: AppTheme = {
     brightCyan: '#83c092',
     brightWhite: '#d3c6aa',
   },
-  chrome: { accent: '#a7c080' },
-};
-
-// The light variant keeps every published color but white and bright
-// white, which map to fg as on the dark variant, since bg3 sits at 1.2:1
-// on bg0 and would hide the white text games send. Green, yellow,
-// purple, and aqua sit between 2.1:1 and 2.8:1 on bg0 as published, and
-// the terminal draws them that way. The chat pane lifts the game colors
-// it draws on the panel (chatColors.ts). The published green sits under
-// 3:1 on bg0, so the accent pins it lifted to 3:1 on the panel and the
-// raised surface, the same color the chrome derives for success.
-const everforestLight: AppTheme = {
-  id: 'everforest-light',
-  label: 'Everforest Light',
-  description: 'Soft forest greens and warm ink on cream paper.',
-  xterm: {
-    background: '#fdf6e3',
-    foreground: '#5c6a72',
-    cursor: '#5c6a72',
-    cursorAccent: '#fdf6e3',
-    selectionBackground: '#cee0a0',
-    selectionForeground: '#5c6a72',
-    black: '#5c6a72',
-    red: '#f85552',
-    green: '#8da101',
-    yellow: '#dfa000',
-    blue: '#3a94c5',
-    magenta: '#df69ba',
-    cyan: '#35a77c',
-    // Everforest maps bg3 #e6e2cc here.
-    white: '#5c6a72',
-    brightBlack: '#5c6a72',
-    brightRed: '#f85552',
-    brightGreen: '#8da101',
-    brightYellow: '#dfa000',
-    brightBlue: '#3a94c5',
-    brightMagenta: '#df69ba',
-    brightCyan: '#35a77c',
-    // Everforest maps bg3 #e6e2cc here too.
-    brightWhite: '#5c6a72',
+  fitted: {
+    foreground: '#e1d4b8',
+    red: '#d06b6e',
+    green: '#c4de9d',
+    yellow: '#ccae71',
+    cyan: '#8cca9b',
+    brightBlack: '#96a3a9',
+    brightRed: '#ffa3a3',
+    brightGreen: '#e6ffc0',
+    brightYellow: '#edce90',
+    brightBlue: '#9fdcd3',
+    brightMagenta: '#f8b9d6',
+    brightCyan: '#acebbb',
+    brightWhite: '#fcefd2',
   },
-  chrome: { accent: '#809300' },
+  chrome: { accent: '#a7c080' },
 };
 
 // ── Green Screen ────────────────────────────────────────────────────
@@ -681,8 +974,8 @@ const everforestLight: AppTheme = {
 // ground is near black with the faintest green cast. Default text is
 // a softened phosphor green near 11:1, the reading level of the house
 // dark themes, where pure #00ff00 would glare at 14:1. The cursor is
-// the same phosphor at full glow and becomes the accent, and the
-// selection is a deeper phosphor green.
+// the same phosphor at full glow and the theme pins it as the accent,
+// and the selection is a deeper phosphor green.
 //
 // The sixteen slots are the CGA palette (#aa0000, #00aa00, #aa5500,
 // #0000aa, #aa00aa, #00aaaa, #aaaaaa, #555555, then the 55 and ff
@@ -694,6 +987,9 @@ const greenScreen: AppTheme = {
   id: 'green-screen',
   label: 'Green Screen',
   description: 'Old school terminal. Phosphor green text and classic CGA colors on black.',
+  source: 'the CGA palette',
+  author: 'IBM',
+  license: 'Public domain',
   xterm: {
     background: '#0a0e0b',
     foreground: '#84d48a',
@@ -718,15 +1014,37 @@ const greenScreen: AppTheme = {
     brightCyan: '#55ffff',
     brightWhite: '#ffffff',
   },
+  // The fit lifts blue to Lc 45.1 in play. Cyan at Lc 53.8 and bright
+  // blue at 58.8 stay short (Q17).
+  fitted: {
+    foreground: '#8dde93',
+    black: '#242424',
+    red: '#fa6150',
+    green: '#57de50',
+    yellow: '#ffcaa9',
+    blue: '#6091ff',
+    magenta: '#e757e5',
+    cyan: '#25b7b6',
+    white: '#b2b2b2',
+    brightBlack: '#969696',
+    brightRed: '#ff938c',
+    brightGreen: '#7eff7a',
+    brightBlue: '#9aaaff',
+    brightMagenta: '#ff84fd',
+  },
+  // The phosphor cursor it has always drawn as its accent. It sits 6.3
+  // dE from the green success tone, under the 12 the rule asks, so the
+  // chrome rule alone would take the magenta.
+  chrome: { accent: '#79f887' },
 };
 
 // ── Solarized ───────────────────────────────────────────────────────
-// Ethan Schoonover's Solarized (MIT licensed). The ground, the text, the
-// cursor, the normal colors, bright red (orange), and bright magenta
-// (violet) are his published values as his Xresources map them, save
-// white on the light theme (below). The canonical mapping fills bright
-// green, yellow, blue, and cyan with the grey base tones base01, base00,
-// base0, and base1. MUD text leans on those four. Aabahran prints say in
+// The ground, the text, the cursor, the normal colors, bright red
+// (orange), and bright magenta (violet) are Solarized's published values
+// as its Xresources map them, save white on the light theme (below).
+// The canonical mapping fills bright green, yellow, blue, and cyan with
+// the grey base tones base01, base00, base0, and base1. MUD text leans
+// on those four. Aabahran prints say in
 // bright yellow, newbie in bright green, cabal in bright blue, and clan
 // in bright cyan, so on the canonical mapping say turns grey, newbie
 // drops to the comment tone, and cabal matches plain text. Instead,
@@ -747,9 +1065,8 @@ const greenScreen: AppTheme = {
 // canonical base2 sits at 1.1:1 on base3.
 //
 // The selection takes the tones Solarized's own Visual mode uses, base01
-// dark and base1 light, because the terminal paints it at 40 percent and
-// the published base02 and base2 would barely show. Neither cursor
-// carries color, so the chrome pins Solarized blue as its accent.
+// dark and base1 light. Neither cursor carries color, so the chrome pins
+// Solarized blue as its accent.
 //
 // The dark theme also pins danger. A dark theme's chrome reads danger
 // from bright red, which Solarized fills with orange, so low HP and
@@ -757,10 +1074,20 @@ const greenScreen: AppTheme = {
 // Solarized red lifted with its hue held until it clears 3:1 on the
 // panel and the raised surface, the value the chrome derives from red
 // itself. The light theme reads plain red and needs no pin.
+//
+// The dark theme stays out of Fit game colors (Themes review Q20). Its
+// body text reads at Lc 39.5, far under the Lc 75 the game asks, and
+// that is what Solarized is. Fitted, it would stop looking like the
+// scheme you picked.
 const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
-  description: 'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue.',
+  description:
+    'Deep teal ground, muted grey text, blue accent. Bright colors keep their hue. ' +
+    'Body text is low contrast by design, so Fit game colors leaves this theme as it ships.',
+  source: 'Solarized',
+  author: 'Ethan Schoonover',
+  license: 'MIT',
   xterm: {
     background: '#002b36',
     foreground: '#839496',
@@ -785,6 +1112,7 @@ const solarizedDark: AppTheme = {
     brightCyan: '#4dbcb3',
     brightWhite: '#fdf6e3',
   },
+  fitGameColors: false,
   chrome: { accent: '#268bd2', danger: '#e8403a' },
 };
 
@@ -792,6 +1120,9 @@ const solarizedLight: AppTheme = {
   id: 'solarized-light',
   label: 'Solarized Light',
   description: 'Warm cream ground, slate text, blue accent. Bright colors keep their hue.',
+  source: 'Solarized',
+  author: 'Ethan Schoonover',
+  license: 'MIT',
   xterm: {
     background: '#fdf6e3',
     foreground: '#657b83',
@@ -816,12 +1147,310 @@ const solarizedLight: AppTheme = {
     brightCyan: '#00867e',
     brightWhite: '#002b36',
   },
+  fitted: {
+    foreground: '#42575f',
+    red: '#ff766a',
+    green: '#4d5900',
+    yellow: '#946f00',
+    blue: '#278cd3',
+    magenta: '#db3e88',
+    cyan: '#0a9189',
+    brightGreen: '#343d00',
+    brightYellow: '#715400',
+    brightBlue: '#006eac',
+    brightMagenta: '#6a6ec1',
+    brightCyan: '#00706a',
+  },
   chrome: { accent: '#268bd2' },
+};
+
+// ── Srcery ──────────────────────────────────────────────────────────
+// The Ghostty theme of srcery-terminal, as published. Its yellow cursor
+// is its warn color, so the theme pins its bright cyan as the accent.
+// The selection is the scheme's own cream under black text.
+const srcery: AppTheme = {
+  id: 'srcery',
+  label: 'Srcery',
+  description:
+    'Cream text on a warm black, with bright colors made for the terminal first. Bright cyan accent.',
+  source: 'Srcery',
+  author: 'Daniel Berg',
+  license: 'MIT',
+  xterm: {
+    background: '#121110',
+    foreground: '#fce8c3',
+    cursor: '#fed06e',
+    cursorAccent: '#121110',
+    selectionBackground: '#fce8c3',
+    selectionForeground: '#121110',
+    black: '#121110',
+    red: '#ef2f27',
+    green: '#519f50',
+    yellow: '#fbb829',
+    blue: '#2c78bf',
+    magenta: '#e02c6d',
+    cyan: '#0aaeb3',
+    white: '#c5b088',
+    brightBlack: '#917e6b',
+    brightRed: '#f75341',
+    brightGreen: '#98bc37',
+    brightYellow: '#fed06e',
+    brightBlue: '#68a8e4',
+    brightMagenta: '#ff5c8f',
+    brightCyan: '#2be4d0',
+    brightWhite: '#fce8c3',
+  },
+  // In play the fit moves 15 slots and passes 45 of 46. Red stays short
+  // at Lc 40.3 (Q1).
+  fitted: {
+    foreground: '#e8d5b0',
+    black: '#282625',
+    red: '#fe4135',
+    green: '#92e28f',
+    yellow: '#ecaa04',
+    blue: '#4f9ae3',
+    magenta: '#ff5589',
+    cyan: '#36c3c7',
+    brightBlack: '#a6937f',
+    brightRed: '#ff9483',
+    brightGreen: '#d1f878',
+    brightBlue: '#79baf7',
+    brightMagenta: '#ff90ac',
+    brightCyan: '#32e8d3',
+    brightWhite: '#fff0d3',
+  },
+  chrome: { accent: '#2be4d0' },
+};
+
+// ── Nightfly ────────────────────────────────────────────────────────
+// The Ghostty theme of vim-nightfly-colors, as published, Night Owl's
+// navy with its terminal colors reworked. Its cursor is gray, so the
+// theme pins its bright magenta, a violet, as the accent.
+const nightfly: AppTheme = {
+  id: 'nightfly',
+  label: 'Nightfly',
+  description:
+    'Deep navy night after Night Owl, with soft text, distinct bright colors and a violet accent.',
+  source: 'nightfly',
+  author: 'bluz71',
+  license: 'MIT',
+  xterm: {
+    background: '#011627',
+    foreground: '#bdc1c6',
+    cursor: '#9ca1aa',
+    cursorAccent: '#011627',
+    selectionBackground: '#b2ceee',
+    selectionForeground: '#080808',
+    black: '#1d3b53',
+    red: '#fc514e',
+    green: '#a1cd5e',
+    yellow: '#e3d18a',
+    blue: '#82aaff',
+    magenta: '#c792ea',
+    cyan: '#7fdbca',
+    white: '#a1aab8',
+    brightBlack: '#7c8f8f',
+    brightRed: '#ff5874',
+    brightGreen: '#21c7a8',
+    brightYellow: '#ecc48d',
+    brightBlue: '#82aaff',
+    brightMagenta: '#ae81ff',
+    brightCyan: '#7fdbca',
+    brightWhite: '#d6deeb',
+  },
+  // In play the fit moves 16 slots by small steps and passes 44 of 46.
+  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9 (Q1).
+  fitted: {
+    foreground: '#c9cdd2',
+    red: '#f24746',
+    green: '#96c152',
+    yellow: '#e9d68f',
+    blue: '#7aa1f6',
+    magenta: '#be89e1',
+    cyan: '#77d3c2',
+    white: '#aab4c2',
+    brightBlack: '#879b9b',
+    brightRed: '#ff939d',
+    brightGreen: '#62f5d4',
+    brightYellow: '#ffe7c6',
+    brightBlue: '#a2c1ff',
+    brightMagenta: '#c9b1ff',
+    brightCyan: '#98f5e3',
+    brightWhite: '#dfe8f5',
+  },
+  chrome: { accent: '#ae81ff' },
+};
+
+// ── Melange ─────────────────────────────────────────────────────────
+// The Ghostty themes of melange-nvim, as published. Neither cursor
+// carries a hue, cream on the dark one and brown on the light one, so
+// each pins its bright magenta as the accent, mauve on the dark ground
+// and plum on the light one.
+const melangeDark: AppTheme = {
+  id: 'melange-dark',
+  label: 'Melange Dark',
+  description:
+    'Warm coffee and clay. Muted earth colors on a dark brown ground, with a mauve accent.',
+  source: 'Melange',
+  author: 'Sergio Alejandro Vargas',
+  license: 'MIT',
+  xterm: {
+    background: '#292522',
+    foreground: '#ece1d7',
+    cursor: '#ece1d7',
+    cursorAccent: '#292522',
+    selectionBackground: '#403a36',
+    selectionForeground: '#ece1d7',
+    black: '#34302c',
+    red: '#bd8183',
+    green: '#78997a',
+    yellow: '#e49b5d',
+    blue: '#7f91b2',
+    magenta: '#b380b0',
+    cyan: '#7b9695',
+    white: '#c1a78e',
+    brightBlack: '#867462',
+    brightRed: '#d47766',
+    brightGreen: '#85b695',
+    brightYellow: '#ebc06d',
+    brightBlue: '#a3a9ce',
+    brightMagenta: '#cf9bc2',
+    brightCyan: '#89b3b6',
+    brightWhite: '#ece1d7',
+  },
+  // In play the fit moves 16 slots and passes 44 of 46. Yellow stays
+  // short at Lc 58.5 and red at Lc 41.5 (Q1).
+  fitted: {
+    black: '#393531',
+    red: '#c08485',
+    green: '#b7dab8',
+    yellow: '#eda365',
+    blue: '#899cbd',
+    magenta: '#bd8aba',
+    cyan: '#a0bcba',
+    white: '#ccb299',
+    brightBlack: '#aa9885',
+    brightRed: '#fe9d8a',
+    brightGreen: '#cbffdb',
+    brightYellow: '#f7cc79',
+    brightBlue: '#b1b8dd',
+    brightMagenta: '#deaad1',
+    brightCyan: '#b3dfe2',
+    brightWhite: '#fffefc',
+  },
+  chrome: { accent: '#cf9bc2' },
+};
+
+const melangeLight: AppTheme = {
+  id: 'melange-light',
+  label: 'Melange Light',
+  description:
+    'The light twin of Melange Dark. Warm brown ink on soft gray paper, with a plum accent.',
+  source: 'Melange',
+  author: 'Sergio Alejandro Vargas',
+  license: 'MIT',
+  xterm: {
+    background: '#f1f1f1',
+    foreground: '#54433a',
+    cursor: '#54433a',
+    cursorAccent: '#f1f1f1',
+    selectionBackground: '#d9d3ce',
+    selectionForeground: '#54433a',
+    black: '#e9e1db',
+    red: '#c77b8b',
+    green: '#6e9b72',
+    yellow: '#bc5c00',
+    blue: '#7892bd',
+    magenta: '#be79bb',
+    cyan: '#739797',
+    white: '#7d6658',
+    brightBlack: '#a98a78',
+    brightRed: '#bf0021',
+    brightGreen: '#3a684a',
+    brightYellow: '#a06d00',
+    brightBlue: '#465aa4',
+    brightMagenta: '#904180',
+    brightCyan: '#3d6568',
+    brightWhite: '#54433a',
+  },
+  // It passes 35 of 46 as published. In play the fit moves 9 slots,
+  // most of the change in the greens, and passes all 46.
+  fitted: {
+    black: '#dfd7d2',
+    red: '#c97c8c',
+    green: '#2c5631',
+    yellow: '#b85a00',
+    cyan: '#608383',
+    brightRed: '#c00222',
+    brightGreen: '#003218',
+    brightYellow: '#835900',
+    brightWhite: '#3e2e26',
+  },
+  chrome: { accent: '#904180' },
+};
+
+// ── Modus Vivendi ───────────────────────────────────────────────────
+// The dark theme of the Modus themes, as modus-themes.el resolves its
+// palette, built to WCAG AAA contrast and licensed GPL like Vosh. Its
+// cursor is white, so the theme pins its blue as the accent.
+const modusVivendi: AppTheme = {
+  id: 'modus-vivendi',
+  label: 'Modus Vivendi',
+  description: 'White text on pure black, built for the highest contrast. Clear blue accent.',
+  source: 'the Modus themes',
+  author: 'Protesilaos Stavrou',
+  license: 'GPL-3.0-or-later',
+  xterm: {
+    background: '#000000',
+    foreground: '#ffffff',
+    cursor: '#ffffff',
+    cursorAccent: '#000000',
+    selectionBackground: '#5a5a5a',
+    selectionForeground: '#ffffff',
+    black: '#000000',
+    red: '#ff5f59',
+    green: '#44bc44',
+    yellow: '#d0bc00',
+    blue: '#2fafff',
+    magenta: '#feacd0',
+    cyan: '#00d3d0',
+    white: '#a6a6a6',
+    brightBlack: '#595959',
+    brightRed: '#ff6b55',
+    brightGreen: '#00c06f',
+    brightYellow: '#fec43f',
+    brightBlue: '#79a8ff',
+    brightMagenta: '#b6a0ff',
+    brightCyan: '#6ae4b9',
+    brightWhite: '#ffffff',
+  },
+  // In play the fit lowers body text to #e4e4e4, so bold white reads
+  // above it, and lifts black to the dimmed ground Modus uses itself. It
+  // moves 15 slots and passes 45 of 46, with red short at Lc 43.5 (Q1).
+  fitted: {
+    foreground: '#e4e4e4',
+    black: '#1e1e1e',
+    red: '#f85954',
+    green: '#81f67e',
+    blue: '#25a8f8',
+    magenta: '#e797bb',
+    cyan: '#00cecb',
+    white: '#b1b1b1',
+    brightBlack: '#959595',
+    brightRed: '#ff9380',
+    brightGreen: '#aaffc8',
+    brightYellow: '#ffcd62',
+    brightBlue: '#90b7ff',
+    brightMagenta: '#c3b3ff',
+    brightCyan: '#6fe9bd',
+  },
+  chrome: { accent: '#2fafff' },
 };
 
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
-  vellum,
+  triad,
+  rubric,
   kansoZen,
   tokyoNight,
   nord,
@@ -830,7 +1459,6 @@ export const BUILTIN_THEMES: AppTheme[] = [
   catppuccin,
   dracula,
   monokai,
-  oneDark,
   oneHalfDark,
   solarizedDark,
   solarizedLight,
@@ -838,13 +1466,27 @@ export const BUILTIN_THEMES: AppTheme[] = [
   classicVivid,
   highContrast,
   everforestDark,
-  everforestLight,
   greenScreen,
+  srcery,
+  nightfly,
+  melangeDark,
+  melangeLight,
+  modusVivendi,
 ];
 
 /** The chrome tokens a theme paints the window with. */
 export function themeTokens(theme: AppTheme): ChromeTokens {
   return deriveChrome(theme.xterm, theme.chrome);
+}
+
+/** The palette the game draws in while you play. With Fit game colors on
+ *  (`fit`) it is the published palette with the theme's fitted slots laid
+ *  over it, unless the theme keeps out. Off, or for a theme with nothing
+ *  fitted, it is the published palette. The window tokens, Settings and
+ *  log exports read the published palette, theme.xterm. */
+export function playPalette(theme: AppTheme, fit: boolean): XtermPalette {
+  if (!fit || theme.fitGameColors === false || !theme.fitted) return theme.xterm;
+  return { ...theme.xterm, ...theme.fitted };
 }
 
 // User-authored themes, set by the Settings UI on load. Merged into
@@ -863,11 +1505,25 @@ export function onCustomThemesChanged(listener: () => void): () => void {
   };
 }
 
+// Fits the main window made this launch for custom themes in play that
+// keep none, by the colors they fit (gameFit fitKey). lib/customThemeFits
+// makes them, and no file holds them. Each list set later, a broadcast
+// from Settings included, lays a held fit on the theme with its colors
+// that keeps none, so the fit stays until Settings keeps one.
+const HELD_FITS = new Map<string, Partial<XtermPalette>>();
+
+function withHeldFit(theme: AppTheme): AppTheme {
+  if (theme.fitted) return theme;
+  const fitted = HELD_FITS.get(fitKey(theme.xterm));
+  return fitted ? { ...theme, fitted } : theme;
+}
+
 /** Replace the registered custom themes. The settings save path
  *  calls this whenever the user-authored list changes; subsequent
- *  iterations of THEMES include the new entries. */
+ *  iterations of THEMES include the new entries. A theme that keeps no
+ *  fit takes the one this window holds for its colors (holdFit). */
 export function setCustomThemes(themes: AppTheme[]): void {
-  CUSTOM_THEMES = themes.slice();
+  CUSTOM_THEMES = themes.map(withHeldFit);
   for (const listener of customThemeListeners) {
     try {
       listener();
@@ -875,6 +1531,18 @@ export function setCustomThemes(themes: AppTheme[]): void {
       // The new list is in place whatever a listener does with it.
     }
   }
+}
+
+/** The custom themes registered now. */
+export function customThemes(): readonly AppTheme[] {
+  return CUSTOM_THEMES;
+}
+
+/** Hold `fitted` in memory for the custom themes with the colors of
+ *  `palette` that keep no fit, and lay it on the ones registered now. */
+export function holdFit(palette: XtermPalette, fitted: Partial<XtermPalette>): void {
+  HELD_FITS.set(fitKey(palette), fitted);
+  setCustomThemes(CUSTOM_THEMES);
 }
 
 // Slots of the hand-authored chrome palette custom themes carried
@@ -935,20 +1603,23 @@ export function customThemeLabel(custom: { id: string; label: string }): string 
 /** Convert a CustomTheme record (the on-disk shape with bare maps)
  *  into a full AppTheme. The xterm map overlays a Kanso Zen base so
  *  missing slots fall back to a sensible default rather than rendering
- *  as undefined, and the chrome map becomes token overrides. The label
- *  is never blank (customThemeLabel). */
+ *  as undefined, and the chrome map becomes token overrides. The fit
+ *  Settings kept carries over. The label is never blank
+ *  (customThemeLabel). */
 export function customToAppTheme(custom: {
   id: string;
   label: string;
   description: string;
   xterm: Record<string, string>;
   chrome: Record<string, string>;
+  fitted?: Record<string, string>;
 }): AppTheme {
   return {
     id: custom.id,
     label: customThemeLabel(custom),
     description: custom.description,
     xterm: { ...kansoZen.xterm, ...(custom.xterm as Partial<XtermPalette>) },
+    ...(custom.fitted && { fitted: { ...(custom.fitted as Partial<XtermPalette>) } }),
     chrome: migrateCustomChrome(custom.chrome),
   };
 }
@@ -977,9 +1648,32 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
   },
 });
 
+/** The theme a config without a theme key reads, as Rust reads it
+ *  (default_theme in profile/ui.rs), and the theme Vosh falls back to.
+ *  It is not the theme a new install starts on. A new install starts on
+ *  Triad, which NEW_INSTALL_THEME in profile/set.rs writes to the first
+ *  config (Themes review Q3). */
 export const DEFAULT_THEME_ID = 'obsidian-ember';
 
+/** Themes Vosh no longer ships, each by the id of the theme that took
+ *  its place (Themes review Q13, Q14 and Q16). A saved pick keeps the
+ *  retired id until you pick another theme, so an older build that still
+ *  ships the theme reads it as it was, and this build shows the
+ *  successor. */
+export const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
+  ['one-dark', 'one-half-dark'],
+  ['vellum', 'rubric'],
+  ['everforest-light', 'melange-light'],
+]);
+
+/** The theme in `themes` that `id` shows: the one with that id, a custom
+ *  theme included, else the successor of a retired id. */
+export function themeShownBy(themes: readonly AppTheme[], id: string): AppTheme | undefined {
+  return themes.find((t) => t.id === id) ?? themes.find((t) => t.id === RETIRED_THEMES.get(id));
+}
+
+/** The theme `id` shows (themeShownBy), else Obsidian Ember. */
 export function findTheme(id: string | undefined): AppTheme {
   const all = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
-  return all.find((t) => t.id === id) ?? all[0];
+  return (id !== undefined && themeShownBy(all, id)) || all[0];
 }

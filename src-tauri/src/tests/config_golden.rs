@@ -299,6 +299,12 @@ fn full_theme() -> CustomTheme {
             ("accent".into(), "#ff9e64".into()),
             ("surface".into(), "#16161e".into()),
         ]),
+        // Decision Q2 of the Themes review keeps the game color fit of an
+        // imported theme with it. Two slots of this theme's real fit.
+        fitted: BTreeMap::from([
+            ("brightBlack".into(), "#94989f".into()),
+            ("red".into(), "#cb7b74".into()),
+        ]),
     }
 }
 
@@ -342,6 +348,10 @@ fn full_ui() -> UiConfig {
         theme_terminal_colors: Some(false),
         bright_bold: true,
         blink_text: Some(false),
+        // Written only while off, so on keeps the golden's bytes. The
+        // fit_game_colors tests in profile/ui.rs and ipc/ui_config.rs
+        // cover off.
+        fit_game_colors: true,
         // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in ipc/ui_config.rs cover off.
         readable_highlights: true,

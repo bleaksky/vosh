@@ -43,9 +43,9 @@ describe('moonColor', () => {
   });
 
   it('darkens a pale slot on a light theme and keeps its hue', () => {
-    const vellum = findTheme('vellum');
-    const tokens = themeTokens(vellum);
-    const pale = { ...vellum.xterm, brightCyan: '#9fe0dd' };
+    const rubric = findTheme('rubric');
+    const tokens = themeTokens(rubric);
+    const pale = { ...rubric.xterm, brightCyan: '#9fe0dd' };
     const color = moonColor('Nercuros', pale, tokens);
     expect(color).not.toBe('#9fe0dd');
     const bg = parseHex(tokens.bg)!;

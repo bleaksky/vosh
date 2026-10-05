@@ -22,7 +22,7 @@ vi.mock('./session', () => ({ getUiConfig }));
 const prefs = (patch: Partial<ThemePrefs> = {}): ThemePrefs => ({
   theme: 'nord',
   follow_system_appearance: false,
-  light_theme: 'vellum',
+  light_theme: 'rubric',
   dark_theme: 'tokyo-night',
   ...patch,
 });
@@ -36,7 +36,7 @@ describe('resolveActiveTheme', () => {
   it('shows the pair entry that matches the OS while follow is on', () => {
     const ui = prefs({ follow_system_appearance: true });
     expect(resolveActiveTheme(ui, true)).toBe('tokyo-night');
-    expect(resolveActiveTheme(ui, false)).toBe('vellum');
+    expect(resolveActiveTheme(ui, false)).toBe('rubric');
   });
 
   it('falls back to the manual pick when the pair entry is blank', () => {
@@ -48,9 +48,15 @@ describe('resolveActiveTheme', () => {
 
 describe('themeAppearance', () => {
   it('reads each theme by its derived chrome', () => {
-    expect(themeAppearance('vellum')).toBe('light');
+    expect(themeAppearance('rubric')).toBe('light');
     expect(themeAppearance('nord')).toBe('dark');
     expect(themeAppearance('obsidian-ember')).toBe('dark');
+  });
+
+  it('reads a retired id by the theme that took its place', () => {
+    expect(themeAppearance('vellum')).toBe('light');
+    expect(themeAppearance('everforest-light')).toBe('light');
+    expect(themeAppearance('one-dark')).toBe('dark');
   });
 });
 
@@ -65,14 +71,20 @@ describe('pickTheme', () => {
     expect(next).toEqual({ ...ui, dark_theme: 'rose-pine' });
     expect(resolveActiveTheme(next, true)).toBe('rose-pine');
     // A light OS keeps showing the light theme.
-    expect(resolveActiveTheme(next, false)).toBe('vellum');
+    expect(resolveActiveTheme(next, false)).toBe('rubric');
   });
 
   it('fills the light slot with a light pick while follow is on', () => {
     const ui = prefs({ follow_system_appearance: true, light_theme: 'classic-vivid' });
-    const next = pickTheme(ui, 'vellum');
-    expect(next).toEqual({ ...ui, light_theme: 'vellum' });
+    const next = pickTheme(ui, 'rubric');
+    expect(next).toEqual({ ...ui, light_theme: 'rubric' });
     expect(next.theme).toBe('nord');
+  });
+
+  it('fills the slot of the theme a retired id shows while follow is on', () => {
+    const ui = prefs({ follow_system_appearance: true });
+    expect(pickTheme(ui, 'one-dark')).toEqual({ ...ui, dark_theme: 'one-dark' });
+    expect(pickTheme(ui, 'everforest-light')).toEqual({ ...ui, light_theme: 'everforest-light' });
   });
 
   it('keeps the other fields of a whole config', () => {
@@ -121,10 +133,30 @@ describe('applyThemePrefs', () => {
 
   it('shows the manual pick and pins the window appearance while follow is off', async () => {
     const theme = await import('./theme');
-    expect(theme.applyThemePrefs(prefs({ theme: 'vellum' }))).toBe('vellum');
-    expect(theme.getCurrentThemeId()).toBe('vellum');
+    expect(theme.applyThemePrefs(prefs({ theme: 'rubric' }))).toBe('rubric');
+    expect(theme.getCurrentThemeId()).toBe('rubric');
     expect(setTheme).toHaveBeenLastCalledWith('light');
     expect(listeners).toHaveLength(0);
+  });
+
+  it('shows the successor of a retired id and keeps the saved id', async () => {
+    const theme = await import('./theme');
+    expect(theme.applyThemePrefs(prefs({ theme: 'vellum' }))).toBe('vellum');
+    expect(theme.getCurrentThemeId()).toBe('rubric');
+    expect(theme.getThemePrefs()?.theme).toBe('vellum');
+    expect(setTheme).toHaveBeenLastCalledWith('light');
+  });
+
+  it('follows the OS between the successors of retired ids', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(
+      prefs({ follow_system_appearance: true, light_theme: 'vellum', dark_theme: 'one-dark' }),
+    );
+    expect(theme.getCurrentThemeId()).toBe('one-half-dark');
+    flip(false);
+    expect(theme.getCurrentThemeId()).toBe('rubric');
+    flip(true);
+    expect(theme.getCurrentThemeId()).toBe('one-half-dark');
   });
 
   it('follows the OS and lets the window follow it too', async () => {
@@ -137,8 +169,8 @@ describe('applyThemePrefs', () => {
     expect(listeners).toHaveLength(1);
 
     flip(false);
-    expect(theme.getCurrentThemeId()).toBe('vellum');
-    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'vellum');
+    expect(theme.getCurrentThemeId()).toBe('rubric');
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'rubric');
 
     flip(true);
     expect(theme.getCurrentThemeId()).toBe('tokyo-night');
@@ -221,17 +253,17 @@ describe('the paint cache', () => {
   it('leaves the manual pick, tokens and terminal ground included', async () => {
     const theme = await import('./theme');
     const { findTheme, themeTokens } = await import('./themes');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     const paint = await cached();
     expect(paint?.follow).toBe(false);
     if (paint?.follow !== false) return;
-    const vellum = findTheme('vellum');
-    expect(paint.manual.id).toBe('vellum');
+    const rubric = findTheme('rubric');
+    expect(paint.manual.id).toBe('rubric');
     expect(paint.manual.appearance).toBe('light');
-    expect(paint.manual.vars['--bg']).toBe(themeTokens(vellum).bg);
-    expect(paint.manual.vars['--text']).toBe(themeTokens(vellum).text);
-    expect(paint.manual.vars['--xterm-bg']).toBe(vellum.xterm.background);
-    expect(paint.manual).toEqual(theme.themePaintSide(vellum));
+    expect(paint.manual.vars['--bg']).toBe(themeTokens(rubric).bg);
+    expect(paint.manual.vars['--text']).toBe(themeTokens(rubric).text);
+    expect(paint.manual.vars['--xterm-bg']).toBe(rubric.xterm.background);
+    expect(paint.manual).toEqual(theme.themePaintSide(rubric));
   });
 
   it('leaves both sides while the theme follows the system', async () => {
@@ -242,14 +274,43 @@ describe('the paint cache', () => {
     expect(paint).toEqual({
       v: 1,
       follow: true,
-      light: theme.themePaintSide(findTheme('vellum')),
+      light: theme.themePaintSide(findTheme('rubric')),
       dark: theme.themePaintSide(findTheme('tokyo-night')),
     });
     // An OS flip repaints and leaves the same pair.
     flip(false);
     paint = await cached();
-    expect(paint?.follow && paint.light.id).toBe('vellum');
+    expect(paint?.follow && paint.light.id).toBe('rubric');
     expect(paint?.follow && paint.dark.id).toBe('tokyo-night');
+  });
+
+  it('leaves the successor of a retired id at once, with no catalog to wait on', async () => {
+    const theme = await import('./theme');
+    const { findTheme } = await import('./themes');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    expect(rootAttrs['data-theme']).toBe('rubric');
+    const paint = await cached();
+    expect(paint?.follow === false && paint.manual).toEqual(
+      theme.themePaintSide(findTheme('rubric')),
+    );
+    // A retired id is not a custom theme this window has yet to load.
+    expect(getUiConfig).not.toHaveBeenCalled();
+  });
+
+  it('leaves Rubric for a saved vellum on the light side while following the system', async () => {
+    dark = false;
+    const theme = await import('./theme');
+    const { findTheme } = await import('./themes');
+    theme.applyThemePrefs(
+      prefs({ follow_system_appearance: true, light_theme: 'vellum', dark_theme: 'one-dark' }),
+    );
+    expect(rootAttrs['data-theme']).toBe('rubric');
+    expect(await cached()).toEqual({
+      v: 1,
+      follow: true,
+      light: theme.themePaintSide(findTheme('rubric')),
+      dark: theme.themePaintSide(findTheme('one-half-dark')),
+    });
   });
 
   it('skips a theme id that runs ahead of the fields that go with it', async () => {
@@ -262,7 +323,7 @@ describe('the paint cache', () => {
 
   it('leaves nothing before the window knows the fields', async () => {
     const theme = await import('./theme');
-    theme.applyTheme('vellum');
+    theme.applyTheme('rubric');
     expect(await cached()).toBeNull();
   });
 
@@ -291,9 +352,9 @@ describe('the paint cache', () => {
     invoke.mockClear();
     const theme = await import('./theme');
     const { findTheme, themeTokens } = await import('./themes');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     expect(backdrops()).toEqual([
-      { background: themeTokens(findTheme('vellum')).bg, appearance: 'light' },
+      { background: themeTokens(findTheme('rubric')).bg, appearance: 'light' },
     ]);
   });
 
@@ -305,7 +366,7 @@ describe('the paint cache', () => {
     flip(false);
     expect(backdrops()).toEqual([
       { background: themeTokens(findTheme('tokyo-night')).bg, appearance: null },
-      { background: themeTokens(findTheme('vellum')).bg, appearance: null },
+      { background: themeTokens(findTheme('rubric')).bg, appearance: null },
     ]);
   });
 
@@ -320,7 +381,7 @@ describe('the paint cache', () => {
   it('starts on the theme the startup paint put on screen', async () => {
     const first = await import('./theme');
     expect(first.getCurrentThemeId()).toBe('obsidian-ember');
-    first.applyThemePrefs(prefs({ theme: 'vellum' }));
+    first.applyThemePrefs(prefs({ theme: 'rubric' }));
 
     // The next window starts from that cache. The terminal reads the
     // id when it mounts, before the config arrives.
@@ -328,20 +389,20 @@ describe('the paint cache', () => {
     const { prepaintTheme } = await import('./themePaint');
     prepaintTheme();
     const theme = await import('./theme');
-    expect(theme.getCurrentThemeId()).toBe('vellum');
+    expect(theme.getCurrentThemeId()).toBe('rubric');
   });
 
   it('says whether the startup paint already shows the active theme', async () => {
     const first = await import('./theme');
-    first.applyThemePrefs(prefs({ theme: 'vellum' }));
+    first.applyThemePrefs(prefs({ theme: 'rubric' }));
 
     // The next window starts from that cache.
     vi.resetModules();
     const { prepaintTheme } = await import('./themePaint');
     const theme = await import('./theme');
-    expect(prepaintTheme()?.id).toBe('vellum');
+    expect(prepaintTheme()?.id).toBe('rubric');
     expect(theme.paintMatchesBoot()).toBe(false);
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     expect(theme.paintMatchesBoot()).toBe(true);
     theme.applyThemePrefs(prefs({ theme: 'nord' }));
     expect(theme.paintMatchesBoot()).toBe(false);
@@ -368,7 +429,7 @@ describe('the paint cache', () => {
   it('leaves the theme on screen once the saved theme turns out to be gone', async () => {
     const theme = await import('./theme');
     const { findTheme, themeTokens } = await import('./themes');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     invoke.mockClear();
     theme.applyThemePrefs(prefs({ theme: 'missing' }));
     expect(rootAttrs['data-theme']).toBe('obsidian-ember');
@@ -389,7 +450,7 @@ describe('the paint cache', () => {
 
   it('leaves the default theme for a blank theme field', async () => {
     const theme = await import('./theme');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     theme.applyThemePrefs(prefs({ theme: '' }));
     expect(rootAttrs['data-theme']).toBe('obsidian-ember');
     expect(await manualId()).toBe('obsidian-ember');
@@ -401,11 +462,11 @@ describe('the paint cache', () => {
       () => new Promise<{ custom_themes: unknown[] }>((resolve) => (answer = resolve)),
     );
     const theme = await import('./theme');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     invoke.mockClear();
     theme.applyThemePrefs(prefs({ theme: 'gone' }));
     expect(rootAttrs['data-theme']).toBe('obsidian-ember');
-    expect(await manualId()).toBe('vellum');
+    expect(await manualId()).toBe('rubric');
     expect(backdrops()).toEqual([]);
 
     // Another window had saved it, and the catalog brings it in.
@@ -454,7 +515,7 @@ describe('the paint cache', () => {
     setCustomThemes([customToAppTheme(night('#302010'))]);
     const paint = await cached();
     expect(paint?.follow === true && paint.dark.vars['--xterm-bg']).toBe('#302010');
-    expect(paint?.follow === true && paint.light.id).toBe('vellum');
+    expect(paint?.follow === true && paint.light.id).toBe('rubric');
     // The theme on screen did not change, so neither did the backdrop.
     expect(backdrops()).toEqual([]);
   });
@@ -518,7 +579,7 @@ describe('the paint cache', () => {
   const reportFor = async (bg: string) => {
     const theme = await import('./theme');
     const { customToAppTheme, setCustomThemes } = await import('./themes');
-    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: 'rubric' }));
     setCustomThemes([customToAppTheme(groundedOn(bg))]);
     invoke.mockClear();
     theme.applyThemePrefs(prefs({ theme: 'grounded' }));

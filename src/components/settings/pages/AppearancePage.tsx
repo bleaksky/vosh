@@ -6,6 +6,7 @@ import {
   panelFontChoices,
   panelSizeChoices,
   sizeChoices,
+  themeCaption,
 } from '../../../lib/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
@@ -28,20 +29,30 @@ import {
 } from '../../../lib/theme';
 import { parseThemeFile, ThemeFileError } from '../../../lib/themeImport';
 import { galleryThemes } from '../../../lib/themeThumb';
-import { BUILTIN_THEMES, customToAppTheme, setCustomThemes } from '../../../lib/themes';
+import {
+  BUILTIN_THEMES,
+  customToAppTheme,
+  findTheme,
+  RETIRED_THEMES,
+  setCustomThemes,
+  themeShownBy,
+} from '../../../lib/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
 import { AdvancedAppearance } from './appearance/AdvancedAppearance';
 import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';
+import { fitAndKeep } from './appearance/fitAndKeep';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
-// Theme holds Import… and the gallery of every theme, then follow
+// Theme holds Import… and the gallery of every theme, a caption that
+// describes the theme on screen and credits its colors, then follow
 // system appearance and the light and dark pair it switches between.
 // Terminal text holds the font, the size, the line height, whether MUD
-// text takes the theme's colors, whether Vosh keeps the colors your
-// triggers set readable on the theme, and whether a line the same as
+// text takes the theme's colors, whether play fits the game's colors to
+// the theme, whether Vosh keeps the colors your triggers set readable
+// on the theme, and whether a line the same as
 // the one before it shows once with a count. While that is on, two rows
 // under it choose whether the lines of a fight collapse, and whether
 // attack lines do. A link to either row shows them even while it is
@@ -126,10 +137,30 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     };
   }, []);
 
+  // A custom theme that keeps no fit is fitted once the page opens on
+  // your config, and keeps the fit: one imported before Vosh kept fits,
+  // one Vosh 0.8.1 saved, which drops the fit, and one whose fit Settings
+  // closed before it could keep.
+  const loaded = config !== null;
+  useEffect(() => {
+    for (const theme of configRef.current?.custom_themes ?? []) {
+      if (!theme.fitted) fitAndKeep(theme, update);
+    }
+    // The page asks once, when your config is there.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
   if (!config) return null;
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
-  const shown = activeThemeFor(config);
+  // The id of the theme a saved pick shows. A retired id shows its
+  // successor, which the gallery and the selects mark as chosen.
+  const shownId = (id: string) => themeShownBy(themes, id)?.id ?? id;
+  const shown = shownId(activeThemeFor(config));
+  const lightTheme = shownId(config.light_theme);
+  const darkTheme = shownId(config.dark_theme);
+  // An id no theme has draws the fallback theme, so the caption names it.
+  const caption = themeCaption(themes.find((t) => t.id === shown) ?? findTheme(shown));
   // While follow is on the arrow keys stay among the themes the OS
   // shows now, so stepping through the gallery never fills the other
   // slot and each step lands on the radio it checks.
@@ -174,14 +205,25 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     }
     const current = configRef.current;
     if (!current) return;
-    const taken = [...BUILTIN_THEMES.map((t) => t.id), ...current.custom_themes.map((t) => t.id)];
+    // A saved pick may still name a retired id, so an import never takes one.
+    const taken = [
+      ...BUILTIN_THEMES.map((t) => t.id),
+      ...RETIRED_THEMES.keys(),
+      ...current.custom_themes.map((t) => t.id),
+    ];
+    let theme: CustomTheme;
     try {
-      addTheme(parseThemeFile(file.name, text, taken));
+      theme = parseThemeFile(file.name, text, taken);
     } catch (e) {
       setImportError(
         e instanceof ThemeFileError ? e.message : 'Vosh could not read that theme file.',
       );
+      return;
     }
+    // The theme shows at once, and its game colors are fitted once,
+    // off the main thread, and kept with it.
+    addTheme(theme);
+    fitAndKeep(theme, update);
   };
 
   const fontValue = config.font_family || BUNDLED_FONTS[0].value;
@@ -230,6 +272,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             onPick={pick}
             appearance={arrowAppearance}
           />
+          {caption !== '' && <p className="st-meta st-theme-caption">{caption}</p>}
           <Row
             anchor="follow-system"
             label="Follow system appearance"
@@ -242,15 +285,15 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           </Row>
           <Row anchor="light-theme" label="Light theme">
             <Select
-              value={config.light_theme}
-              options={pairChoices(themes, 'light', config.light_theme)}
+              value={lightTheme}
+              options={pairChoices(themes, 'light', lightTheme)}
               onChange={(id) => setPrefs({ light_theme: id })}
             />
           </Row>
           <Row anchor="dark-theme" label="Dark theme">
             <Select
-              value={config.dark_theme}
-              options={pairChoices(themes, 'dark', config.dark_theme)}
+              value={darkTheme}
+              options={pairChoices(themes, 'dark', darkTheme)}
               onChange={(id) => setPrefs({ dark_theme: id })}
             />
           </Row>
@@ -287,6 +330,16 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
             onChange={(on) => update({ theme_terminal_colors: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="fit-game-colors"
+          label="Fit game colors"
+          description="While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published."
+        >
+          <Toggle
+            checked={config.fit_game_colors}
+            onChange={(on) => update({ fit_game_colors: on }, { now: true })}
           />
         </Row>
         <Row

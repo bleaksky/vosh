@@ -481,10 +481,10 @@ export function dockMapper(input: {
 
 /** The marks the card draws over your prompt. */
 export interface MarkLayout {
-  /** The part you picked: the selection token and a 1 px accent ring. */
+  /** The part you picked: the accent tint and a 1 px accent ring. */
   picked: Box[];
   /** Each value Vosh reads on the game's own line, or the whole line,
-   *  while the card reads your codes: the selection token alone (P2, P3). */
+   *  while the card reads your codes: the accent tint alone (P2, P3). */
   values: Box[];
   /** Parts Vosh cannot fill: a 1 px warn ring. */
   warn: Box[];
@@ -614,8 +614,8 @@ export function rawMarks(
 }
 
 /** The marks on the game's own line through `mapper`: each value in the
- *  selection token alone, and a run Vosh cannot read in the warn ring
- *  (P2, P3, P3b). */
+ *  accent tint alone, and a run Vosh cannot read in the warn ring (P2,
+ *  P3, P3b). */
 export function rawLayout(raw: readonly RawMark[], mapper: CellMapper): MarkLayout {
   const boxes = (warn: boolean) =>
     raw.filter((m) => m.warn === warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width));

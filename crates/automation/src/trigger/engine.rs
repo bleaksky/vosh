@@ -94,7 +94,15 @@ pub fn process_scoped(
     scope: MatchScope,
     key: StopKey,
 ) -> LineResult {
-    process_on_ground(store, original, &plain_text(original), scope, None, key)
+    process_on_ground(
+        store,
+        original,
+        &plain_text(original),
+        scope,
+        None,
+        None,
+        key,
+    )
 }
 
 /// Run the trigger store against a line or a prompt buffer, firing only
@@ -105,18 +113,36 @@ pub fn process_scoped(
 /// color the triggers paint text or an underline in, a true color or a
 /// 256 color past the 16, holds [`readable::READABLE_CONTRAST`] on what
 /// it draws on (see [`readable::lift_sgr`]). `None` leaves each color as
-/// the trigger set it. The game's own colors never change either way. A
+/// the trigger set it. That lift never reaches the game's own colors. A
 /// line no trigger matched keeps the bytes the game sent, and a highlight
-/// drawn over those bytes lifts its own open alone. A trigger Vosh stopped
-/// under `key`, the session the line came to, matches nothing.
+/// drawn over those bytes lifts its own open alone.
+///
+/// With `game_ground`, the same background, the game's own 256 colors
+/// past the 16 read at [`readable::GAME_LC`] on a light ground (see
+/// [`readable::lift_game_sgr`]), whether no trigger runs, none matches,
+/// or a highlight draws over them in place. A line a trigger rebuilt
+/// from its plain text keeps none of the game's codes, and the colors
+/// its triggers paint answer to `ground` alone. `None` leaves the game's
+/// colors as sent.
+///
+/// A trigger Vosh stopped under `key`, the session the line came to,
+/// matches nothing.
 pub fn process_on_ground(
     store: &TriggerStore,
     original: &[u8],
     plain: &str,
     scope: MatchScope,
     ground: Option<readable::Rgb>,
+    game_ground: Option<readable::Rgb>,
     key: StopKey,
 ) -> LineResult {
+    // The game's bytes with its faded 256 colors lifted, which every path
+    // below draws from in place of the bytes as sent. Only SGR parameters
+    // change, so `plain` still spells them.
+    let lifted = game_ground.map_or(Cow::Borrowed(original), |game| {
+        readable::lift_game_sgr(original, game)
+    });
+    let original: &[u8] = &lifted;
     if store.is_empty() {
         return LineResult {
             display: Some(bytes_to_string_lossy(original)),
@@ -1072,6 +1098,7 @@ mod tests {
             "Tolliver",
             MatchScope::Line,
             None,
+            None,
             SESSION,
         );
         assert_eq!(r.display.as_deref(), Some("\x1b[36mTolliver\x1b[0m"));
@@ -1770,7 +1797,7 @@ mod tests {
 
     fn on_ground(s: &TriggerStore, line: &[u8], ground: Option<readable::Rgb>) -> String {
         let plain = plain_text(line);
-        process_on_ground(s, line, &plain, MatchScope::Line, ground, SESSION)
+        process_on_ground(s, line, &plain, MatchScope::Line, ground, None, SESSION)
             .display
             .unwrap()
     }
@@ -1959,7 +1986,7 @@ mod tests {
             assert_eq!(on_ground(&s, line.as_bytes(), Some(NORD)), drawn(WEATHER));
             assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), drawn(lifted));
             // On every built in ground it reads, and it changes on the
-            // three light ones alone.
+            // light ones alone.
             let mut changed = Vec::new();
             for (theme, ground) in &grounds {
                 let want = readable::lift_to_contrast(WEATHER, *ground);
@@ -1975,7 +2002,7 @@ mod tests {
             }
             assert_eq!(
                 changed,
-                ["vellum", "solarized-light", "everforest-light"],
+                ["rubric", "solarized-light", "melange-light"],
                 "{plain}"
             );
         }
@@ -1997,5 +2024,64 @@ mod tests {
             );
             assert_eq!(on_ground(&s, line.as_bytes(), Some(VELLUM)), *line);
         }
+    }
+
+    const RUBRIC: readable::Rgb = (0xf0, 0xe5, 0xcf);
+
+    /// `line` through `s` with the game ground at `game` and no ground for
+    /// trigger colors.
+    fn on_game_ground(s: &TriggerStore, line: &[u8], game: Option<readable::Rgb>) -> String {
+        let plain = plain_text(line);
+        process_on_ground(s, line, &plain, MatchScope::Line, None, game, SESSION)
+            .display
+            .unwrap()
+    }
+
+    #[test]
+    fn the_game_256_colors_lift_on_every_path_that_keeps_them() {
+        // The white 255 tint ahead of the bank's name reads at Lc 0 on
+        // Rubric's parchment.
+        let tint = readable::lift_game_sgr(b"\x1b[38;5;255m", RUBRIC);
+        let tint = std::str::from_utf8(&tint).unwrap();
+        assert!(tint.starts_with("\x1b[38;2;"), "{tint:?}");
+        let lifted = BANK.replacen("\x1b[38;5;255m", tint, 1);
+        let in_place = store(vec![highlight("bank", "Bank", NamedColor::Cyan)]);
+        let cases = [
+            // No trigger runs.
+            (TriggerStore::new(), lifted.clone()),
+            // A trigger runs, and none matches.
+            (weather_store(), lifted.clone()),
+            // A highlight draws over the name in place, and the game's
+            // codes around it keep the lift.
+            (
+                in_place,
+                format!("{tint}\x1b[0;1;30mThe \x1b[0;36mBank\x1b[0;1;30m of Aabahran\x1b[0;0m\x1b[0;0m"),
+            ),
+        ];
+        for (s, want) in &cases {
+            assert_eq!(on_game_ground(s, BANK.as_bytes(), Some(RUBRIC)), *want);
+            // With no game ground the game's colors stay as sent.
+            let as_sent = on_game_ground(s, BANK.as_bytes(), None);
+            assert_eq!(as_sent, want.replacen(tint, "\x1b[38;5;255m", 1));
+        }
+    }
+
+    #[test]
+    fn a_rebuilt_line_keeps_the_colors_its_trigger_paints() {
+        // A Replace rebuilds the line from its plain text, so none of the
+        // game's codes are left to lift, and the game ground leaves the
+        // white 255 the trigger paints as set.
+        let s = store(vec![Trigger::new(
+            "weather",
+            "^It starts to rain\\.$",
+            TriggerAction::Replace {
+                template: "\x1b[38;5;255m$0\x1b[0m".into(),
+            },
+        )]);
+        let line = b"\x1b[0;1;37mIt starts to rain.\x1b[0;0m";
+        assert_eq!(
+            on_game_ground(&s, line, Some(RUBRIC)),
+            "\x1b[38;5;255mIt starts to rain.\x1b[0m"
+        );
     }
 }
