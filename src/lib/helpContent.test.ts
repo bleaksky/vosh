@@ -635,6 +635,12 @@ describe('the help on the one window', () => {
     expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
+  it('says which theme shows for a theme that left Vosh', () => {
+    expect(body('make-it-yours.switch-themes')).toContain(
+      'If you chose one, Vosh shows the theme that took its place until you pick another, One Half Dark for One Dark, Rubric for Vellum, and Melange Light for Everforest Light.',
+    );
+  });
+
   it('keeps the room and its people under the map', () => {
     const text = body('shape.use-the-map');
     expect(text).toContain('The first names the room you stand in. The name takes the color');
