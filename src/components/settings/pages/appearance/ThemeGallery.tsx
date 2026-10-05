@@ -1,8 +1,10 @@
 import { useId, useRef, type KeyboardEvent } from 'react';
 import { stepGalleryTheme } from '../../../../lib/appearanceSettings';
 import type { Appearance } from '../../../../lib/chrome';
+import { seenBy, type ColorVision } from '../../../../lib/gameFit';
 import { themeThumb } from '../../../../lib/themeThumb';
 import type { AppTheme } from '../../../../lib/themes';
+import { Segmented } from '../../ui';
 
 interface ThemeGalleryProps {
   /** Every theme in gallery order (galleryThemes). */
@@ -14,7 +16,20 @@ interface ThemeGalleryProps {
    *  OS asks for. The arrow keys then move only among themes of that
    *  appearance. */
   appearance?: Appearance | undefined;
+  /** The color vision the tiles show, Typical for the colors as they
+   *  are. With `onVision` the gallery draws the Vision switch above the
+   *  tiles. */
+  vision?: ColorVision | undefined;
+  onVision?: ((vision: ColorVision) => void) | undefined;
 }
+
+/** The Vision switch, after board 9 of the Themes review. */
+const VISIONS = [
+  { value: 'typical', label: 'Typical' },
+  { value: 'deuteranopia', label: 'Deuteranopia' },
+  { value: 'protanopia', label: 'Protanopia' },
+  { value: 'tritanopia', label: 'Tritanopia' },
+] as const;
 
 const STEPS: Readonly<Record<string, 1 | -1>> = {
   ArrowRight: 1,
@@ -28,9 +43,23 @@ const STEPS: Readonly<Record<string, 1 | -1>> = {
  *  under it. The arrow keys move the pick, as in any radio group, and
  *  focus goes with it. While follow system appearance is on they skip
  *  the themes of the other appearance, since a pick of one of those
- *  fills the other slot and leaves the theme on screen as it is. */
-export function ThemeGallery({ themes, selected, onPick, appearance }: ThemeGalleryProps) {
+ *  fills the other slot and leaves the theme on screen as it is.
+ *
+ *  The Vision switch above the tiles shows every tile as a player with
+ *  that color vision sees it, through the matrices the game color fit
+ *  measures with (gameFit seenBy), as board 9's Vision switch does. It
+ *  only previews, and never changes a theme. */
+export function ThemeGallery({
+  themes,
+  selected,
+  onPick,
+  appearance,
+  vision = 'typical',
+  onVision,
+}: ThemeGalleryProps) {
   const name = useId();
+  const visionLabel = useId();
+  const see = (color: string) => seenBy(color, vision);
   const radios = useRef(new Map<string, HTMLInputElement>());
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -50,6 +79,19 @@ export function ThemeGallery({ themes, selected, onPick, appearance }: ThemeGall
   return (
     <fieldset className="st-gallery">
       <legend className="st-visually-hidden">Theme</legend>
+      {onVision && (
+        <div className="st-gallery-bar">
+          <span id={visionLabel} className="st-meta">
+            Vision
+          </span>
+          <Segmented<ColorVision>
+            options={VISIONS}
+            value={vision}
+            onChange={onVision}
+            labelledBy={visionLabel}
+          />
+        </div>
+      )}
       <div className="st-gallery-grid" onKeyDown={onKeyDown}>
         {themes.map((theme) => {
           const thumb = themeThumb(theme);
@@ -67,13 +109,26 @@ export function ThemeGallery({ themes, selected, onPick, appearance }: ThemeGall
                 checked={theme.id === selected}
                 onChange={() => onPick(theme.id)}
               />
-              <span className="st-theme-tile" aria-hidden="true" style={{ background: thumb.bg }}>
-                <span className="st-theme-panel" style={{ background: thumb.panel }} />
-                <span className="st-theme-sep" style={{ background: thumb.sep }} />
-                <span className="st-theme-dot" style={{ background: thumb.accent }} />
-                <span className="st-theme-bar st-theme-bar-1" style={{ background: thumb.text }} />
-                <span className="st-theme-bar st-theme-bar-2" style={{ background: thumb.text }} />
-                <span className="st-theme-bar st-theme-bar-3" style={{ background: thumb.text }} />
+              <span
+                className="st-theme-tile"
+                aria-hidden="true"
+                style={{ background: see(thumb.bg) }}
+              >
+                <span className="st-theme-panel" style={{ background: see(thumb.panel) }} />
+                <span className="st-theme-sep" style={{ background: see(thumb.sep) }} />
+                <span className="st-theme-dot" style={{ background: see(thumb.accent) }} />
+                <span
+                  className="st-theme-bar st-theme-bar-1"
+                  style={{ background: see(thumb.text) }}
+                />
+                <span
+                  className="st-theme-bar st-theme-bar-2"
+                  style={{ background: see(thumb.text) }}
+                />
+                <span
+                  className="st-theme-bar st-theme-bar-3"
+                  style={{ background: see(thumb.text) }}
+                />
                 <span
                   className="st-theme-ring"
                   style={{ boxShadow: `inset 0 0 0 1px ${thumb.ring}` }}

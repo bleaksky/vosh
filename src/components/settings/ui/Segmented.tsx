@@ -21,6 +21,9 @@ export interface SegmentedProps<T extends string> {
    *  the Automation kind switcher's hidden `Kind`. Inside a Row the row
    *  label names it. */
   label?: string;
+  /** The id of a visible label outside a Row that names the group, like
+   *  the theme gallery's Vision switch. */
+  labelledBy?: string;
   className?: string;
 }
 
@@ -33,6 +36,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
   label,
+  labelledBy,
   className,
 }: SegmentedProps<T>) {
   const row = useRowIds();
@@ -40,7 +44,7 @@ export function Segmented<T extends string>({
     <div
       role="group"
       aria-label={label}
-      aria-labelledby={label === undefined ? row?.labelId : undefined}
+      aria-labelledby={labelledBy ?? (label === undefined ? row?.labelId : undefined)}
       aria-describedby={row?.descriptionId}
       className={cx('st-seg', className)}
     >

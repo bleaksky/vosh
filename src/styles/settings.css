@@ -1371,6 +1371,16 @@
   border: 0;
 }
 
+/* The Vision switch above the tiles, its label then the segments 12
+   apart, as board 9 of the Themes review sets it. */
+.st-gallery-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 0;
+}
+
 .st-gallery-grid {
   display: flex;
   flex-wrap: wrap;
