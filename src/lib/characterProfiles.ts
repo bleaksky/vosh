@@ -1,6 +1,6 @@
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
-import { KNOWN_WORLDS, worldName, type KnownWorld } from './knownWorlds';
+import { KNOWN_WORLDS, knownWorld, worldName } from './knownWorlds';
 
 // The words and choices Settings > Characters builds from the profile
 // index and the session: display names, the login toggle's character,
@@ -68,21 +68,12 @@ export interface WorldOption {
   port: number | null;
 }
 
-function cleanHost(host: string): string {
-  return host.trim().toLowerCase().replace(/\.$/, '');
-}
-
-function knownWorldFor(host: string): KnownWorld | undefined {
-  const clean = cleanHost(host);
-  return KNOWN_WORLDS.find((w) => clean === w.domain || clean.endsWith(`.${w.domain}`));
-}
-
 /** The select value for a host and port. A known world on its own port
  *  (or with no port) is one choice however its host is spelled. */
 export function worldKey(host: string | null | undefined, port: number | null | undefined): string {
-  const clean = host ? cleanHost(host) : '';
+  const clean = host ? host.trim().toLowerCase().replace(/\.$/, '') : '';
   if (clean.length === 0) return NO_WORLD;
-  const known = knownWorldFor(clean);
+  const known = knownWorld(clean);
   if (known && (port === null || port === undefined || port === known.port)) {
     return `world:${known.domain}`;
   }
