@@ -8,3 +8,9 @@ export function listJoin(items: readonly string[]): string {
   if (items.length <= 2) return items.join(' and ');
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
+
+/** A name's possessive, `Orla's`, and `Rhys's` for a name that ends in
+ *  s as well, so every name reads the same way. */
+export function possessive(name: string): string {
+  return `${name}'s`;
+}

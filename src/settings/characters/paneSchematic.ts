@@ -1,5 +1,5 @@
 import { isLeaf, type PaneNode, type PaneSplit, type PaneType } from '../../panel/paneLayout';
-import { listJoin } from '../../lib/text';
+import { listJoin, possessive } from '../../lib/text';
 
 // The small drawing of a profile's panel in Settings > Characters
 // (SettingsCharacters.dc.html, Panel layout). A 180 by 110 box with a
@@ -146,11 +146,6 @@ function labelFits(region: SchematicRegion): boolean {
 function labelY(rect: SchematicRect): number {
   if (rect.height >= LABEL_MIN_H) return rect.y + LABEL_Y;
   return rect.y + rect.height / 2 + LABEL_CENTER_DROP;
-}
-
-/** `Ilsabet's`, or `Rhys'` for a name that ends in s. */
-export function possessive(name: string): string {
-  return /s$/i.test(name) ? `${name}'` : `${name}'s`;
 }
 
 /** A node as a noun phrase: a pane's name, `Group and Chat side by

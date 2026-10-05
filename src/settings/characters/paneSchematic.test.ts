@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLayout, sanitize, type PaneSplit, type PaneType } from '../../panel/paneLayout';
-import { paneSchematic, possessive, schematicSentence } from './paneSchematic';
+import { paneSchematic, schematicSentence } from './paneSchematic';
 
 const LABELS: Record<PaneType, string> = {
   map: 'Map',
@@ -186,12 +186,5 @@ describe('paneSchematic', () => {
     expect(schematicSentence(mixed, labelFor, 'Ilsabet')).toBe(
       "Ilsabet's panel. Map over Affects on the left, Chat on the right, Vitals along the bottom.",
     );
-  });
-});
-
-describe('possessive', () => {
-  it('adds an apostrophe s, or an apostrophe after a final s', () => {
-    expect(possessive('Ilsabet')).toBe("Ilsabet's");
-    expect(possessive('Rhys')).toBe("Rhys'");
   });
 });
