@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import type { SessionMenuMode } from '../../lib/appMenu';
-import { shortcutLabel } from '../../lib/palette';
+import { shortcutLabel } from '../../lib/shortcuts';
 import {
   parseTarget,
   worldName,

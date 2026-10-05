@@ -10,7 +10,7 @@ import {
 import { checkForUpdate, installUpdateAndRelaunch } from '../../../ipc/updater';
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
-import { isMacPlatform, shortcutLabel } from '../../../lib/palette';
+import { isMacPlatform, shortcutLabel } from '../../../lib/shortcuts';
 import { savedSessionsText } from '../../../lib/logView';
 import { settingsSubpage } from '../../../lib/settingsNav';
 import { KNOWN_WORLDS, knownWorld, parseTarget, useSavedTarget } from '../../../lib/useConnection';

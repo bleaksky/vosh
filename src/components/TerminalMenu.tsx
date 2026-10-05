@@ -17,7 +17,7 @@ import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';
 import { openPaneSubmenu, type PaneSubmenuState } from '../lib/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import { shortcutLabel } from '../lib/palette';
+import { shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';
 import { SETTINGS_MENU, type SettingsMenuRow } from '../lib/settingsMenu';
 

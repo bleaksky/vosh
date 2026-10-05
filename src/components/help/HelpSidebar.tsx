@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { HELP_SECTIONS, type HelpTopic } from '../../lib/helpContent';
 import { helpSearchKey, sectionTopics } from '../../lib/helpNav';
-import { shortcutKeys } from '../../lib/palette';
+import { shortcutKeys } from '../../lib/shortcuts';
 import { scrollWithin } from '../../lib/scrollWithin';
 import { Keycap, SearchIcon, VisuallyHidden } from '../settings/ui';
 import { sectionIcon } from './sectionIcons';

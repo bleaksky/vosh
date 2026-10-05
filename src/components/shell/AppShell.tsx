@@ -7,7 +7,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
-import { isMacPlatform } from '../../lib/palette';
+import { isMacPlatform } from '../../lib/shortcuts';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../lib/paneLayout';
 
 // The One Window frame (SPEC 1). A CSS grid with the terminal column

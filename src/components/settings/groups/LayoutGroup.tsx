@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../../lib/affectsDisplay';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../../lib/paneLayout';
-import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
+import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/shortcuts';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
   AFFECTS_HOURS_MAX,

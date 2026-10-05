@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { FindOptions } from './Terminal';
-import { shortcutLabel } from '../lib/palette';
+import { shortcutLabel } from '../lib/shortcuts';
 
 export interface FindToolbarHandle {
   /** Focus the query input. Called when the toolbar is already open

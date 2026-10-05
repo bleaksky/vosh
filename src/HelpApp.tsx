@@ -14,7 +14,7 @@ import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, findTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { parseHex, toRgba } from './lib/color';
-import { isMacPlatform, shortcutKey } from './lib/palette';
+import { isMacPlatform, shortcutKey } from './lib/shortcuts';
 import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
 import {
   countMatches,

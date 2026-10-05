@@ -53,7 +53,7 @@ import {
 } from '../lib/maskedInput';
 import { recentNames } from '../lib/recentNames';
 import { nativeSurfaceEnabled } from './Terminal';
-import { isMacPlatform, shortcutKey } from '../lib/palette';
+import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 
 export interface InputHandle {
   focus: () => void;
