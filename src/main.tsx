@@ -10,7 +10,7 @@ import './styles/index.css';
 // Tag the document with the host OS so CSS can apply per-platform
 // tweaks. The two known cases that matter today:
 //   - Windows: the frameless-transparent Tauri window cannot composite
-//     behind rounded corners, so `border-radius` on `.app` leaks white
+//     behind rounded corners, so `border-radius` on `.shell` leaks white
 //     at the corners. CSS drops the radius when this attribute is
 //     `windows`.
 //   - Windows + Linux: WebView2 / WebKitGTK use the system scrollbar

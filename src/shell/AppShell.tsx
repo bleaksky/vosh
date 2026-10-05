@@ -151,7 +151,7 @@ export function AppShell({
   return (
     <main
       ref={rootRef}
-      className="app shell"
+      className="shell"
       data-panel={panelOpen ? 'open' : 'hidden'}
       style={frame}
       onMouseUp={onMouseUp}

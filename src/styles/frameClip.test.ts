@@ -22,11 +22,16 @@ describe('window frames', () => {
   });
 
   it('clips the main window frame', () => {
-    expect(clipped(frameCss, '.app.shell')).toMatch(/overflow: clip;/);
+    expect(clipped(frameCss, '.shell')).toMatch(/overflow: clip;/);
   });
 
   it('keeps overflow hidden on the Settings frame for a web view without clip', () => {
     const base = settingsCss.match(/\n\.st-app \{([^}]*)\}/);
+    expect(base?.[1]).toMatch(/overflow: hidden;/);
+  });
+
+  it('keeps overflow hidden on the main window frame for a web view without clip', () => {
+    const base = frameCss.match(/\n\.shell \{([^}]*)\}/);
     expect(base?.[1]).toMatch(/overflow: hidden;/);
   });
 });

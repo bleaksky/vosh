@@ -190,7 +190,7 @@
    The xterm copy stays mounted for sizing but is never shown, and the
    DOM owns the cursor over the pane, taking the shape the native
    surface asks for through --terminal-cursor. */
-html[data-underlay] .app.shell,
+html[data-underlay] .shell,
 html[data-underlay] .shell-slot-term,
 html[data-underlay] .terminal-area,
 html[data-underlay] .terminal-well,

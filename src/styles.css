@@ -61,31 +61,6 @@ body {
   background: transparent;
 }
 
-/* Rounded, single-surface Ghostty-style window. body is transparent so
-   the corners outside the radius are clipped from the OS window; .app
-   carries the only visible surface color, with a hairline outer border
-   reading as the window frame. Only the main window's AppShell root
-   carries .app, and its One Window frame (.app.shell) replaces the
-   border, radius, and top band per platform in styles/frame.css. */
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  background: var(--bg);
-  /* Ember window frame: full-strength hairline, 10px corners, and a
-     one-pixel top sheen so the window edge catches light the way the
-     approved canvas frame does. */
-  border: 1px solid var(--sep);
-  border-radius: 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-  /* The 6px top band the old top bar needed. `.app.shell` in
-     styles/frame.css sets padding 0, so the One Window title band
-     starts at the window edge. */
-  padding-top: 6px;
-}
-
 /* The wrapper ImportPanel puts around the migration wizard. It keeps
    the chrome font and size the Settings window used before
    milestone 2, independent of the user's terminal font. */
