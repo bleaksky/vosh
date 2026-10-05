@@ -8,6 +8,7 @@ import {
   type RoomPerson,
 } from '../../stores/gmcp/roomStore';
 import { findTheme, themeTokens } from '../../theme/themes';
+import mapCss from '../../styles/map.css?raw';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { MapBandRows } from './MapPane';
@@ -93,11 +94,11 @@ function band(
   }));
 }
 
-/** The declarations of one rule in panel.css. */
-function rule(selector: string): string {
-  const at = panelCss.indexOf(`\n${selector} {`);
+/** The declarations of one rule in `css`, map.css unless named. */
+function rule(selector: string, css = mapCss): string {
+  const at = css.indexOf(`\n${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
-  return panelCss.slice(at, panelCss.indexOf('}', at));
+  return css.slice(at, css.indexOf('}', at));
 }
 
 describe('the band under the map', () => {
@@ -214,7 +215,7 @@ describe('the band under the map', () => {
     expect(exits).toContain('overflow: hidden;');
     expect(exits).toContain('text-overflow: ellipsis;');
     // The 8px is the gap the value class leaves before the exits.
-    expect(rule('.pane-row-value')).toContain('margin-left: 8px;');
+    expect(rule('.pane-row-value', panelCss)).toContain('margin-left: 8px;');
   });
 
   it('fades the rooms the map box clips at its sides over 12 px', () => {

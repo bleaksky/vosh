@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import panelCss from '../styles/panel.css?raw';
+import mapCss from '../styles/map.css?raw';
 import frameCss from '../styles/frame.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import { TEXT_SIZES } from '../theme/appearanceSettings';
@@ -21,7 +22,12 @@ function rulesOf(css: string): { selector: string; body: string }[] {
   }));
 }
 
-const RULES = rulesOf(panelCss);
+// The map view's own rules size its glyphs in em, so only the map
+// pane's rules join the panel's.
+const RULES = [
+  ...rulesOf(panelCss),
+  ...rulesOf(mapCss).filter((r) => r.selector.includes('.pane-')),
+];
 const FRAME_RULES = rulesOf(frameCss);
 const TOKEN_RULES = rulesOf(tokensCss);
 

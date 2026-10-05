@@ -13,6 +13,7 @@
 @import './migration.css'; /* settings-app, settings-btn, migration- */
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
+@import './map.css'; /* server-view, map-, pane-map- */
 @import './settings.css'; /* st- */
 @import './prompt.css'; /* prompt-, pc-, and the st- rules of the Settings Prompt section */
 @import './help.css'; /* hp- */

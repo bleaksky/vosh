@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import baseCss from '../styles.css?raw';
 import frameCss from '../styles/frame.css?raw';
 import helpCss from '../styles/help.css?raw';
+import mapCss from '../styles/map.css?raw';
 import overlaysCss from '../styles/overlays.css?raw';
 import panelCss from '../styles/panel.css?raw';
 import promptCss from '../styles/prompt.css?raw';
@@ -81,6 +82,7 @@ function rules(css: string): { selector: string; body: string }[] {
 
 const SHEETS: Readonly<Record<string, string>> = {
   'styles.css': baseCss,
+  'styles/map.css': mapCss,
   'styles/tokens.css': tokensCss,
   'styles/frame.css': frameCss,
   'styles/panel.css': panelCss,
@@ -128,7 +130,7 @@ describe('the panel faces in the stylesheets', () => {
   it('finds the pane and status line rules in the sheets', () => {
     expect(PANE_RULES.length).toBeGreaterThan(150);
     const sheets = new Set(PANE_RULES.map((r) => r.sheet));
-    for (const sheet of ['styles.css', 'styles/frame.css', 'styles/panel.css']) {
+    for (const sheet of ['styles/map.css', 'styles/frame.css', 'styles/panel.css']) {
       expect(sheets.has(sheet), sheet).toBe(true);
     }
   });
