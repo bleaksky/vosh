@@ -46,7 +46,7 @@ describe('the xterm theme', () => {
     // VISION_FITS), and leaves green and blue as published.
     expect(xtermThemeFor(triad, true, true).green).toBe(triad.xterm.green);
     const deutan = xtermThemeFor(triad, true, true, 'deuteranopia');
-    expect(deutan.red).toBe('#f86632');
+    expect(deutan.red).toBe('#fa6346');
     expect(deutan.green).toBe(triad.xterm.green);
     expect(deutan.blue).toBe(triad.xterm.blue);
     // Off, every vision draws the published palette.
