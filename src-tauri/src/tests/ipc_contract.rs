@@ -12,6 +12,14 @@
 //! either side sends has a page listener, or sits on [`UNHEARD`] with its
 //! reason, so a rename at one of several senders fails too.
 //!
+//! Each side names its events once, as constants, the page in
+//! `src/ipc/events.ts` and the app in `src-tauri/src/app/events.rs`.
+//! Every constant there is named by its event's path in upper snake case,
+//! `session://prompt-vars` as `PROMPT_VARS`, so an event goes by one
+//! identifier on both sides. Every page listen, emit and emitChanged call
+//! names its event by a constant from events.ts, unless the name is built
+//! at run time, and events.ts holds no constant that no call names.
+//!
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
 //! and lists, so the scan reads the strings and not the calls. That holds
@@ -200,8 +208,23 @@ struct Contract {
     app_names: BTreeMap<String, BTreeSet<String>>,
     /// Every call the page makes with a name.
     calls: Vec<PageCall>,
+    /// The event constants of [`PAGE_EVENTS`] and [`APP_EVENTS`].
+    event_constants: Vec<EventConstant>,
     /// Code the scan cannot follow.
     problems: Vec<String>,
+}
+
+/// The page file that names every event the page hears or sends, and the
+/// app file that names every event the app sends.
+const PAGE_EVENTS: &str = "src/ipc/events.ts";
+const APP_EVENTS: &str = "src-tauri/src/app/events.rs";
+
+/// An event name a file holds as a constant.
+struct EventConstant {
+    /// [`PAGE_EVENTS`] or [`APP_EVENTS`].
+    file: &'static str,
+    ident: String,
+    name: String,
 }
 
 impl Contract {
@@ -325,6 +348,7 @@ fn contract() -> &'static Contract {
             commands: app.commands,
             app_names: app.names,
             calls: page.calls,
+            event_constants: page.events.into_iter().chain(app.events).collect(),
             problems: [app.problems, page.problems].concat(),
         }
     })
@@ -515,6 +539,76 @@ fn unheard_sends(contract: &Contract, families: &[AppFamily], unheard: &[Unheard
     failures
 }
 
+/// The identifier an event constant takes, its event's path in upper
+/// snake case.
+fn event_ident(name: &str) -> String {
+    let path = name.split_once("://").map_or(name, |(_, path)| path);
+    path.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Every event constant on either side is named by its event's path in
+/// upper snake case, so an event goes by one identifier on both.
+fn misnamed_event_constants(contract: &Contract) -> Vec<String> {
+    contract
+        .event_constants
+        .iter()
+        .filter(|c| c.ident != event_ident(&c.name))
+        .map(|c| {
+            format!(
+                "{} holds {} as {}. Name it by its path in upper snake case, {}.",
+                c.file,
+                c.name,
+                c.ident,
+                event_ident(&c.name)
+            )
+        })
+        .collect()
+}
+
+/// Every page call that hears or sends a name the source spells out
+/// names it by its constant from [`PAGE_EVENTS`], and every constant
+/// there names the event of a call. A name built at run time is left to
+/// [`BUILT_AT_RUN_TIME`].
+fn events_not_named_by_constant(contract: &Contract) -> Vec<String> {
+    let constants: BTreeMap<&str, &str> = contract
+        .event_constants
+        .iter()
+        .filter(|c| c.file == PAGE_EVENTS)
+        .map(|c| (c.ident.as_str(), c.name.as_str()))
+        .collect();
+    let mut failures = Vec::new();
+    let mut named = BTreeSet::new();
+    for call in contract.calls.iter().filter(|c| c.call != Call::Invoke) {
+        let Name::Fixed(name) = &call.name else {
+            continue;
+        };
+        if constants.get(call.arg.as_str()) == Some(&name.as_str()) {
+            named.insert(call.arg.as_str());
+        } else {
+            failures.push(format!(
+                "{} names {name} as {}. Name it by its constant in {PAGE_EVENTS}, and add \
+                 one there if it has none.",
+                call.at(),
+                call.arg
+            ));
+        }
+    }
+    for ident in constants.keys().filter(|i| !named.contains(*i)) {
+        failures.push(format!(
+            "{PAGE_EVENTS} holds {ident}, and no call names it. Remove it."
+        ));
+    }
+    failures
+}
+
 /// The list of every name the page and the app share, so a change to one
 /// shows as a diff in the commit that makes it.
 const NAMES_FILE: &str = "fixtures/ipc/names.txt";
@@ -649,6 +743,16 @@ fn every_name_built_at_run_time_is_on_the_list() {
     fail_with(unlisted_run_time_names(contract(), BUILT_AT_RUN_TIME));
 }
 
+#[test]
+fn every_event_constant_is_named_by_its_path() {
+    fail_with(misnamed_event_constants(contract()));
+}
+
+#[test]
+fn every_page_event_is_named_by_its_constant() {
+    fail_with(events_not_named_by_constant(contract()));
+}
+
 /// Every page call whose name is built at run time is on `list`, and
 /// every entry there matches a call.
 fn unlisted_run_time_names(contract: &Contract, list: &[BuiltAtRunTime]) -> Vec<String> {
@@ -756,6 +860,15 @@ fn the_scan_follows_every_page_call_and_app_file() {
     }
     assert!(contract.commands.contains_key("session_connect"));
     assert!(contract.app_names.contains_key("session://output"));
+    for file in [PAGE_EVENTS, APP_EVENTS] {
+        assert!(
+            contract
+                .event_constants
+                .iter()
+                .any(|c| c.file == file && c.name == "session://output"),
+            "the scan found no event constant in {file}"
+        );
+    }
 }
 
 /// A page call in `src/page.ts` for a contract built by hand.
@@ -845,12 +958,12 @@ fn each_check_rejects_the_case_it_guards() {
             invoke(Args::Unknown),
             page_call(Call::Invoke, "'unread'", fixed("unread")),
             page_call(Call::Invoke, "'unregistered'", fixed("unregistered")),
-            page_call(Call::Listen, "'vosh://sent'", fixed("vosh://sent")),
+            page_call(Call::Listen, "SENT", fixed("vosh://sent")),
             page_call(Call::Listen, "'vosh://built/x'", fixed("vosh://built/x")),
-            page_call(Call::Emit, "'vosh://page'", fixed("vosh://page")),
-            page_call(Call::Emit, "'vosh://quiet'", fixed("vosh://quiet")),
-            page_call(Call::Listen, "'vosh://page'", fixed("vosh://page")),
-            page_call(Call::Listen, "'vosh://unsent'", fixed("vosh://unsent")),
+            page_call(Call::Emit, "PAGE", fixed("vosh://page")),
+            page_call(Call::Emit, "QUIET", fixed("vosh://quiet")),
+            page_call(Call::Listen, "PAGE", fixed("vosh://page")),
+            page_call(Call::Listen, "UNSENT", fixed("vosh://unsent")),
             within(
                 "hear",
                 page_call(Call::Listen, "built", family("vosh://built/")),
@@ -864,13 +977,31 @@ fn each_check_rejects_the_case_it_guards() {
                 param: Some(0),
                 ..within("tell", page_call(Call::Emit, "event", Name::Unknown))
             },
-            via(page_call(Call::Emit, "'vosh://told'", fixed("vosh://told"))),
+            via(page_call(Call::Emit, "TOLD_EVENT", fixed("vosh://told"))),
             via(page_call(Call::Emit, "name", Name::Unknown)),
             PageCall {
                 param: Some(1),
                 ..within("misled", page_call(Call::Emit, "other", Name::Unknown))
             },
         ],
+        event_constants: [
+            (PAGE_EVENTS, "SENT", "vosh://sent"),
+            (PAGE_EVENTS, "PAGE", "vosh://page"),
+            (PAGE_EVENTS, "QUIET", "vosh://quiet"),
+            (PAGE_EVENTS, "UNSENT", "vosh://unsent"),
+            (PAGE_EVENTS, "TOLD_EVENT", "vosh://told"),
+            (PAGE_EVENTS, "STALE", "vosh://stale"),
+            (APP_EVENTS, "SENT", "vosh://sent"),
+            (APP_EVENTS, "PROMPT_VARS", "session://prompt-vars"),
+            (APP_EVENTS, "LOST_EVENT", "vosh://lost"),
+        ]
+        .into_iter()
+        .map(|(file, ident, name)| EventConstant {
+            file,
+            ident: ident.into(),
+            name: name.into(),
+        })
+        .collect(),
         problems: Vec::new(),
     };
     assert_rejects(
@@ -957,6 +1088,23 @@ fn each_check_rejects_the_case_it_guards() {
             "says misled passes emit its parameter 0,",
             "says misled passes on the names its callers give it,",
             "lists the listen in stale,",
+        ],
+    );
+    assert_rejects(
+        "misnamed_event_constants",
+        &misnamed_event_constants(&contract),
+        &[
+            "src/ipc/events.ts holds vosh://told as TOLD_EVENT. Name it by its path in \
+             upper snake case, TOLD.",
+            "src-tauri/src/app/events.rs holds vosh://lost as LOST_EVENT.",
+        ],
+    );
+    assert_rejects(
+        "events_not_named_by_constant",
+        &events_not_named_by_constant(&contract),
+        &[
+            "src/page.ts line 1 names vosh://built/x as 'vosh://built/x'.",
+            "src/ipc/events.ts holds STALE, and no call names it.",
         ],
     );
 }
@@ -2556,6 +2704,7 @@ fn reaches(file: &PageFile, fns: &[PageFn], name: &str, problems: &mut Vec<Strin
 
 struct Page {
     calls: Vec<PageCall>,
+    events: Vec<EventConstant>,
     problems: Vec<String>,
 }
 
@@ -2583,6 +2732,19 @@ fn read_page() -> Page {
             exported,
         });
     }
+    let events = files
+        .iter()
+        .filter(|f| f.path == PAGE_EVENTS)
+        .flat_map(|f| &f.consts)
+        .filter_map(|(ident, name)| match name {
+            Some(Name::Fixed(name)) => Some(EventConstant {
+                file: PAGE_EVENTS,
+                ident: ident.clone(),
+                name: name.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
     // A constant another file exports, when only one file exports it.
     let mut exported: BTreeMap<&str, Vec<&Name>> = BTreeMap::new();
     for file in &files {
@@ -2687,7 +2849,11 @@ fn read_page() -> Page {
             }
         }
     }
-    Page { calls, problems }
+    Page {
+        calls,
+        events,
+        problems,
+    }
 }
 
 // The app side.
@@ -3221,9 +3387,41 @@ fn registered(t: &[RustTok]) -> Result<BTreeSet<String>, String> {
     Ok(commands)
 }
 
+/// Each `const NAME: &str = "scheme://path";` in Rust code, as an event
+/// constant of [`APP_EVENTS`].
+fn app_event_constants(t: &[RustTok]) -> Vec<EventConstant> {
+    let word = |i: usize, w: &str| matches!(t.get(i), Some(RustTok::Ident(x)) if x == w);
+    let mut found = Vec::new();
+    for i in 0..t.len() {
+        let (true, Some(RustTok::Ident(ident)), Some(RustTok::Punct(':'))) =
+            (word(i, "const"), t.get(i + 1), t.get(i + 2))
+        else {
+            continue;
+        };
+        // Past `&str` or `&'static str`, whose lifetime lexes as a word.
+        let mut j = i + 3;
+        while t.get(j) == Some(&RustTok::Punct('&')) || word(j, "static") || word(j, "str") {
+            j += 1;
+        }
+        if let (Some(RustTok::Punct('=')), Some(RustTok::Str(name)), Some(RustTok::Punct(';'))) =
+            (t.get(j), t.get(j + 1), t.get(j + 2))
+        {
+            if name.contains("://") {
+                found.push(EventConstant {
+                    file: APP_EVENTS,
+                    ident: ident.clone(),
+                    name: name.clone(),
+                });
+            }
+        }
+    }
+    found
+}
+
 struct App {
     commands: BTreeMap<String, Option<Vec<Param>>>,
     names: BTreeMap<String, BTreeSet<String>>,
+    events: Vec<EventConstant>,
     problems: Vec<String>,
 }
 
@@ -3238,6 +3436,7 @@ fn read_app() -> App {
     let mut app = App {
         commands: BTreeMap::new(),
         names: BTreeMap::new(),
+        events: Vec::new(),
         problems: Vec::new(),
     };
     while let Some((file, test)) = queue.pop() {
@@ -3290,6 +3489,9 @@ fn read_app() -> App {
                 Ok(commands) => registered_names = commands,
                 Err(e) => app.problems.push(e),
             }
+        }
+        if rel == APP_EVENTS {
+            app.events = app_event_constants(&code.tokens);
         }
     }
     // A command defined once per platform must read the same keys on each.
