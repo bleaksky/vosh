@@ -22,7 +22,7 @@ import {
   WHITE,
   type Rgb,
 } from './color';
-import { checks, GAME_SLOTS } from './gameFit';
+import { checks, COLOR_VISIONS, GAME_SLOTS, holdsVision, type ColorVision } from './gameFit';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -34,6 +34,7 @@ import {
   setCustomThemes,
   themeShownBy,
   themeTokens,
+  visionFitOf,
   type XtermPalette,
 } from './themes';
 import credits from '../../public/theme-credits.txt?raw';
@@ -802,6 +803,148 @@ describe('fitted game colors', () => {
     const missed = (id: string) => misses(id).map((c) => `${c.id} ${c.value}`);
     expect(missed('harbor-dark')).toEqual(['T3 red Lc 40.8']);
     expect(missed('iceberg-dark')).toEqual(['T2 yellow Lc 58.1', 'T3 red Lc 37.8']);
+  });
+});
+
+describe('color vision fits', () => {
+  const OTHER: ColorVision[] = ['deuteranopia', 'protanopia', 'tritanopia'];
+  const KIND: Record<string, string> = {
+    deuteranopia: 'deutan',
+    protanopia: 'protan',
+    tritanopia: 'tritan',
+  };
+  const fitting = BUILTIN_THEMES.filter((t) => t.fitGameColors !== false);
+  // FNV-1a over a JSON string, to pin a large value in a few characters.
+  const digest = (text: string) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  };
+
+  // The 24 themes one-window (c5a6ebd0) shipped, their Typical fits and
+  // their play palettes with Fit game colors on, digested from that
+  // commit's themes.ts. Typical plays them byte for byte as it did.
+  it('plays Typical byte for byte as before color vision', () => {
+    const before = BUILTIN_THEMES.filter((t) => !['harbor-dark', 'iceberg-dark'].includes(t.id));
+    expect(before).toHaveLength(24);
+    expect(digest(JSON.stringify(before.map((t) => [t.id, t.fitted ?? null])))).toBe('84775ab7');
+    expect(digest(JSON.stringify(before.map((t) => [t.id, playPalette(t, true)])))).toBe(
+      '188ff686',
+    );
+    for (const theme of BUILTIN_THEMES) {
+      expect(playPalette(theme, true, 'typical'), theme.id).toEqual(playPalette(theme, true));
+      expect(visionFitOf(theme, 'typical'), theme.id).toBe(theme.fitted);
+    }
+  });
+
+  it('stores only the slots each fit moved, in hex', () => {
+    for (const theme of fitting) {
+      for (const vision of OTHER) {
+        for (const [slot, hex] of Object.entries(visionFitOf(theme, vision) ?? {})) {
+          const at = `${theme.id} ${vision} ${slot}`;
+          expect(GAME_SLOTS, at).toContain(slot);
+          expect(hex, at).toMatch(/^#[0-9a-f]{6}$/);
+          expect(hex, at).not.toBe(theme.xterm[slot as keyof XtermPalette]);
+        }
+      }
+    }
+  });
+
+  it('keeps Solarized Dark as published for every vision (Q20)', () => {
+    const dark = findTheme('solarized-dark');
+    for (const vision of COLOR_VISIONS) expect(playPalette(dark, true, vision)).toBe(dark.xterm);
+  });
+
+  it('plays the published palette for every vision while Fit game colors is off', () => {
+    for (const theme of BUILTIN_THEMES) {
+      for (const vision of COLOR_VISIONS) {
+        expect(playPalette(theme, false, vision), theme.id).toBe(theme.xterm);
+      }
+    }
+  });
+
+  // What each vision's fit leaves short of the floors it raises, the
+  // pairs lightness cannot part on that theme without giving up a floor
+  // Typical asks. Every theme left out holds them all.
+  const UNREACHED: Record<string, string[]> = {
+    'deuteranopia obsidian-ember': ['T7 deutan yellow/green 11.4'],
+    'deuteranopia triad': ['T7 deutan red/green 12.1'],
+    'deuteranopia kanso-zen': ['T7 deutan yellow/green 11.4'],
+    'deuteranopia tokyo-night': ['T7 deutan red/yellow 12.1', 'T7 deutan yellow/green 10.2'],
+    'deuteranopia gruvbox': ['T7 deutan yellow/green 10.3'],
+    'deuteranopia monokai': ['T7 deutan yellow/green 11.6'],
+    'deuteranopia one-half-dark': ['T7 deutan yellow/green 10.2'],
+    'deuteranopia tango-dark': ['T7 deutan yellow/green 10.3'],
+    'deuteranopia classic-vivid': ['T7 deutan yellow/green 11.4'],
+    'deuteranopia everforest-dark': ['T7 deutan yellow/green 10.6'],
+    'deuteranopia green-screen': ['T7 deutan yellow/green 10.1'],
+    'deuteranopia srcery': ['T7 deutan red/yellow 12.9', 'T7 deutan yellow/green 10.4'],
+    'deuteranopia melange-dark': ['T7 deutan yellow/green 11.9'],
+    'deuteranopia harbor-dark': ['T7 deutan yellow/green 10.2'],
+    'deuteranopia iceberg-dark': ['T7 deutan yellow/green 11'],
+    'protanopia triad': ['T7 protan yellow/green 12.4'],
+    'protanopia catppuccin': ['T7 protan yellow/green 10.2'],
+    'protanopia dracula': ['T7 protan yellow/green 12.2'],
+    'protanopia solarized-light': ['T7 protan red/green 10.7'],
+    'protanopia classic-vivid': ['T7 protan yellow/green 10.1'],
+    'protanopia green-screen': ['T7 protan yellow/green 10.1'],
+    'protanopia nightfly': ['T7 protan yellow/green 10.2'],
+    'protanopia melange-dark': ['T7 protan red/yellow 12.7'],
+  };
+
+  it('holds the floors each vision raises on every theme it can reach', () => {
+    const short: Record<string, string[]> = {};
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        const play = playPalette(theme, true, vision);
+        const missed = checks(play, vision)
+          .filter((c) => !c.ok && c.id.startsWith(`T7 ${KIND[vision]} `))
+          .map((c) => `${c.id} ${c.value}`);
+        if (missed.length > 0) short[`${vision} ${theme.id}`] = missed;
+        expect(holdsVision(play, vision), `${vision} ${theme.id}`).toBe(missed.length === 0);
+      }
+    }
+    expect(short).toEqual(UNREACHED);
+  });
+
+  it('misses no more of the floors a vision raises than the Typical fit', () => {
+    const raisedMisses = (play: XtermPalette, vision: ColorVision) =>
+      checks(play, vision).filter((c) => !c.ok && c.id.startsWith(`T7 ${KIND[vision]} `)).length;
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        const typical = raisedMisses(playPalette(theme, true), vision);
+        const own = raisedMisses(playPalette(theme, true, vision), vision);
+        expect(own, `${vision} ${theme.id}`).toBeLessThanOrEqual(typical);
+      }
+    }
+  });
+
+  it('plays the Typical fit for a vision whose floors it already holds', () => {
+    // Tritanopia raises only cyan against green, which most Typical fits
+    // already part far enough.
+    const kept = fitting.filter(
+      (t) => visionFitOf(t, 'tritanopia') === t.fitted && t.fitted !== undefined,
+    );
+    expect(kept.map((t) => t.id)).toEqual([
+      'kanso-zen',
+      'tokyo-night',
+      'rose-pine',
+      'gruvbox',
+      'monokai',
+      'one-half-dark',
+      'solarized-light',
+      'tango-dark',
+      'high-contrast',
+      'melange-light',
+      'harbor-dark',
+      'iceberg-dark',
+    ]);
+    for (const theme of kept) {
+      expect(playPalette(theme, true, 'tritanopia')).toEqual(playPalette(theme, true));
+    }
   });
 });
 
