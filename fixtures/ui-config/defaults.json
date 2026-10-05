@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written from what Rust sends. defaults is what ui_get_config sends for a profile that sets nothing under [ui], from UiConfigPayload in src-tauri/src/commands.rs, less the fields in passed_through. normalizeUiConfig in src/lib/session.ts fills a field that arrives missing or unknown with the same value. It reads an empty dark_theme as the current theme, and it takes each field in passed_through as Rust sends it, with no value of its own.",
+  "notes": "Hand written from what Rust sends. defaults is what ui_get_config sends for a profile that sets nothing under [ui], from UiConfigPayload in src-tauri/src/ipc/ui_config.rs, less the fields in passed_through. normalizeUiConfig in src/ipc/uiConfig.ts fills a field that arrives missing or unknown with the same value. It reads an empty dark_theme as the current theme, and it takes each field in passed_through as Rust sends it, with no value of its own.",
   "passed_through": ["auto_update", "font_family", "font_size"],
   "defaults": {
     "theme": "obsidian-ember",
