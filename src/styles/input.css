@@ -1,38 +1,27 @@
 /* The command line. The input row in your terminal font, the caret
    and its shapes, the caret mirror, the line gutter and the paste chip. */
 
-/* Mono opt-in. With chrome defaulting to Inter, the input row
-   explicitly takes a mono face, so it echoes commands in the user's
-   own terminal font and size. */
+/* The input band (SPEC 1). It spans the terminal at 40 tall or more,
+   in the --inputband fill with no border and no radius, and grows
+   while you compose several lines. It fills its slot in the shell grid
+   and never shrinks. Its position and z-index keep it painted over the
+   terminal while xterm's canvas lags a frame behind a resize. The row
+   sets your terminal font and size for everything in it, so a command
+   reads the same as you type it and as it echoes. The password input
+   shows the native caret in the accent, and the textarea hides it to
+   draw .input-caret. */
 .input-row {
-  font-family: var(--app-font-family);
-  font-size: var(--app-font-size);
-}
-
-/* Input row — Input.tsx owns the .input-row class. position+z-index
-   guarantee the input row paints above the terminal even when xterm's
-   canvas is one frame behind a container shrink (that lag was what
-   put xterm visually under the command bar previously). */
-
-.input-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px;
-  background: var(--panel);
-  border-top: 1px solid var(--divider);
-  border-bottom: 1px solid var(--divider);
   position: relative;
   z-index: 1;
-  /* Ember: the input caret glows in the accent color. The textarea
-     hides this native caret and paints the block caret below; the
-     password input keeps it (masked input, native caret). */
+  flex: 1 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: var(--input-band);
+  padding: 8px 16px;
+  background: var(--inputband);
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
   caret-color: var(--accent);
-  /* Lock to content height; never shrink. Without explicit
-     `flex: 0 0 auto` the column flex container can hand part of this
-     row's slot to the terminal when xterm hasn't refit yet, which paints
-     the input ON TOP of the terminal output. */
-  flex: 0 0 auto;
 }
 
 .input-row input {
@@ -83,8 +72,8 @@
   box-sizing: border-box;
   overflow-y: auto;
   max-height: 11em;
-  /* Ember: the native caret is invisible; Input.tsx paints the
-     glowing block caret at the measured position instead. */
+  /* The native caret is hidden, and Input.tsx paints the caret at the
+     measured position instead. */
   caret-color: transparent;
 }
 
@@ -120,11 +109,11 @@
   }
 }
 
-/* Caret shapes, chosen in Settings, general. Each modifier only
-   redraws the inside of the 7x15 anchor box the block already
+/* Caret shapes, the Caret shape row in Settings, Input. Each modifier
+   only redraws the inside of the 7x15 anchor box the block already
    occupies, so no shape can shift the caret's measured position or
-   the height of the input row. Shared with the settings picker
-   samples, which is why these carry no .input-caret prefix. */
+   the height of the input row. The Settings samples draw their own
+   shapes with st-caret-shape. */
 .caret-shape--block {
   width: 7px;
   height: 15px;
@@ -294,35 +283,18 @@
   }
 }
 
-/* ── Input band ────────────────────────────────────────────────────── */
-
-/* SPEC 1: full terminal width, 40 tall, --inputband fill, no border
-   and no radius. The prompt glyph sits at 16 in the tertiary tone and
-   the typed text starts at 32. It grows while you compose several
-   lines. */
-.shell .input-row {
-  flex: 1 0 auto;
-  min-height: var(--input-band);
-  box-sizing: border-box;
-  gap: 0;
-  padding: 8px 16px;
-  border: 0;
-  background: var(--inputband);
-}
-
-.shell .input-row .prompt {
+/* The prompt glyph sits 16 in, in the tertiary tone, so the text you
+   type starts at 32. */
+.input-row .prompt {
   flex: none;
   width: 16px;
   color: var(--tertiary);
   font-weight: 400;
 }
 
-.shell .input-row .input-gutter,
-.shell .input-row .paste-burst {
+/* The row sets no gap, so the gutter and the paste chip keep 8 px
+   before the text. */
+.input-row .input-gutter,
+.input-row .paste-burst {
   margin-right: 8px;
-}
-
-/* No glows (SPEC 3). */
-.shell .input-caret {
-  box-shadow: none;
 }
