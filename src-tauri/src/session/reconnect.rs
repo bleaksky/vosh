@@ -296,9 +296,10 @@ impl Redial {
         self.lost.at(here) && self.lost.character.as_deref() == Some(character)
     }
 
-    /// Dial at once in place of the wait under way.
+    /// Dial at once in place of the wait under way. Pressed while a try
+    /// dials, it does nothing, so the wait after that try runs its time.
     pub(crate) fn now(&self) {
-        self.now.notify_one();
+        self.now.notify_waiters();
     }
 
     /// Whether the series ended, at a try that connected or after its
@@ -739,6 +740,33 @@ mod tests {
         watch.take();
         watch.logged_in();
         assert_eq!(watch.expected(now), None, "a login on this link");
+    }
+
+    #[tokio::test]
+    async fn reconnect_now_ends_a_wait_under_way_and_leaves_none_for_the_next() {
+        let wake = Arc::new(Notify::new());
+        let redial = Redial {
+            task: tokio::spawn(async {}),
+            now: Arc::clone(&wake),
+            lost: Lost {
+                address: Address {
+                    host: "127.0.0.1".into(),
+                    port: 4000,
+                    tls: false,
+                },
+                character: None,
+                at: Instant::now(),
+            },
+        };
+        // Pressed while a try dials, with no wait under way.
+        redial.now();
+        let next = tokio::time::timeout(Duration::from_millis(50), wake.notified()).await;
+        assert!(next.is_err(), "the next wait runs its time");
+        let waiting = wake.notified();
+        redial.now();
+        tokio::time::timeout(Duration::from_millis(50), waiting)
+            .await
+            .expect("the wait under way ends");
     }
 
     #[test]
