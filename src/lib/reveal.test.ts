@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import appSource from '../App.tsx?raw';
+import appSource from '../shell/MainWindow.tsx?raw';
 import settingsSource from '../settings/SettingsWindow.tsx?raw';
 import { REPAINT_WAIT_MS, showAfterThemePaint, type RevealDeps } from './reveal';
 

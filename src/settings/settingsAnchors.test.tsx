@@ -2,7 +2,7 @@ import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../fixtures/links/settings-anchors.json';
 import { resolveHelpTarget } from '../help/helpNav';
-import { buildPaletteEntries, type PaletteDeps } from '../lib/palette';
+import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 import { defaultLayout, type PaneLeaf } from '../panel/paneLayout';
 import type { GameBlock } from '../prompt/promptSettings';
 import { type SessionIdentity } from '../ipc/characters';
