@@ -19,13 +19,11 @@ import {
   stepGalleryTheme,
   THEME_SLOT_GROUPS,
   themeCaption,
-  visionTextSide,
-  visionTunesWindow,
-  visionWindowSide,
   withBaseColor,
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
+import { COLOR_VISIONS } from './gameFit';
 import type { CustomTheme } from './session';
 import { pickTheme, resolveActiveTheme } from './theme';
 import { galleryThemes } from './themeThumb';
@@ -358,66 +356,44 @@ describe('themeCaption', () => {
 });
 
 describe('colorVisionNote', () => {
-  it('says nothing for Typical, or where a vision changes the game text and the window', () => {
-    expect(colorVisionNote(findTheme('nord'), 'typical', true)).toBe('');
-    expect(visionTunesWindow(findTheme('nord'), 'typical')).toBe(false);
-    expect(colorVisionNote(findTheme('rubric'), 'deuteranopia', true)).toBe('');
-    expect(visionTextSide(findTheme('rubric'), 'deuteranopia')).toBe('changes');
-    expect(visionWindowSide(findTheme('rubric'), 'deuteranopia')).toBe('changes');
-    expect(visionTunesWindow(findTheme('rubric'), 'deuteranopia')).toBe(true);
+  it('says nothing for Typical', () => {
+    expect(colorVisionNote('typical')).toBe('');
+    expect(colorVisionNote('typical', false)).toBe('');
   });
 
-  it('says the game text keeps its colors while Fit game colors or the theme colors are off', () => {
-    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', false)).toBe(
-      'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
-    );
-    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', true, false)).toBe(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. The window still follows Color vision.",
-    );
-    expect(colorVisionNote(findTheme('solarized-dark'), 'protanopia', true)).toBe(
-      'Game text keeps its published colors on Solarized Dark. The window still follows Color vision.',
-    );
-    expect(colorVisionNote(findTheme('nord'), 'tritanopia', false)).toBe(
-      "Game text keeps its published colors while Fit game colors is off, and Nord already keeps the window's status colors apart for tritanopia.",
+  // Every theme swaps the same families, so the line names no theme and
+  // says what turns into what.
+  it('says what each vision swaps, in the game text and the window', () => {
+    const redGreen =
+      "Greens turn blue, reds turn orange and blues turn violet, in the game text and in the window's status colors.";
+    expect(colorVisionNote('deuteranopia')).toBe(redGreen);
+    expect(colorVisionNote('protanopia')).toBe(redGreen);
+    expect(colorVisionNote('tritanopia')).toBe(
+      'Blues turn purple and magentas turn pink in the game text. The window keeps its status colors, which you already tell apart.',
     );
   });
 
-  it('says what a theme already keeps apart for the vision', () => {
-    expect(colorVisionNote(findTheme('kanso-zen'), 'protanopia', true)).toBe(
-      'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
+  it('says the game text keeps your base palette while the theme colors are off', () => {
+    expect(colorVisionNote('deuteranopia', false)).toBe(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window's greens still turn blue and its reds orange.",
     );
-    expect(colorVisionNote(findTheme('nord'), 'tritanopia', true)).toBe(
-      "Nord already keeps the window's status colors apart for tritanopia, so only the game text changes.",
-    );
-    expect(colorVisionNote(findTheme('kanso-zen'), 'tritanopia', true)).toBe(
-      'Kanso Zen already keeps these colors apart for tritanopia, so nothing changes.',
+    expect(colorVisionNote('protanopia', false)).toBe(colorVisionNote('deuteranopia', false));
+    expect(colorVisionNote('tritanopia', false)).toBe(
+      "Game text keeps your base palette while the theme's colors are off for MUD text, and the window keeps its status colors, so nothing changes.",
     );
   });
 
-  // Every step that would part Kanso Zen's game text further for a
-  // deuteranope fades red or runs a color into another, so its game text
-  // stays as it is and only the window changes.
-  it('says what a theme cannot part far enough to see', () => {
-    expect(visionTextSide(findTheme('kanso-zen'), 'deuteranopia')).toBe('kept');
-    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', true)).toBe(
-      'Only the window changes on Kanso Zen, since its game text cannot part visibly further for deuteranopia without fading or running into other colors.',
-    );
-    // The window swaps its status colors on every theme for a protanope,
-    // Iceberg Dark included.
-    expect(visionWindowSide(findTheme('iceberg-dark'), 'protanopia')).toBe('changes');
-  });
-
-  // Settings holds no fit for a custom theme, which the main window fits
-  // as it plays. A copy of Kanso Zen counts its game text as changing
-  // where its Typical fit misses a pair, and as kept apart where it
-  // holds them.
-  it('reads a custom theme by its Typical fit', () => {
-    const copy = customToAppTheme(copyTheme(findTheme('kanso-zen'), []));
-    expect(visionTextSide(copy, 'deuteranopia')).toBe('changes');
-    expect(colorVisionNote(copy, 'deuteranopia', true)).toBe('');
-    expect(colorVisionNote(copy, 'tritanopia', true)).toBe(
-      'Kanso Zen copy already keeps these colors apart for tritanopia, so nothing changes.',
-    );
+  it('leaves out the old notes on what a theme keeps or cannot part', () => {
+    for (const vision of COLOR_VISIONS) {
+      for (const on of [true, false]) {
+        const note = colorVisionNote(vision, on);
+        for (const old of ['already keeps', 'cannot part', 'Fit game colors', 'published']) {
+          expect(note, `${vision} ${on}`).not.toContain(old);
+        }
+        for (const theme of BUILTIN_THEMES) expect(note).not.toContain(theme.label);
+        expect(note).not.toMatch(/[;:\u2010-\u2015*]/);
+      }
+    }
   });
 });
 

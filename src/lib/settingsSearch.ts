@@ -139,9 +139,9 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Color vision',
     description:
-      "Vosh keeps hits, tells and says apart for the vision you pick, and the window's status colors too.",
+      'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
     keywords:
-      'color blind colorblind deuteranopia protanopia tritanopia red green blue yellow cvd accessibility danger warn success status window hue',
+      'color blind colorblind deuteranopia protanopia tritanopia red green blue yellow orange violet purple pink swap mode cvd accessibility danger warn success status window hue',
     target: at('appearance', 'text', 'color-vision'),
   },
   {
