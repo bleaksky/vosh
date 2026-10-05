@@ -76,7 +76,12 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
-        let (tick_step, apply) = gmcp_step(&mut p, &mut c, &msg, Instant::now());
+        let now = Instant::now();
+        let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
+        // A tell you got or a fight that starts on you rings its preset.
+        apply
+            .alerts
+            .extend(c.alerts.gmcp(&p, &msg, conn.stream.last_line(), now));
         (tick_step, apply.ran_under(p.open()))
     };
 

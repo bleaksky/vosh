@@ -9,6 +9,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio::time::Instant;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
@@ -29,10 +30,15 @@ pub(crate) enum ConnectionError {
     Tls(String),
 }
 
-/// Either a plain TCP stream or a TLS-wrapped one. The session loop owns
-/// this and reads or writes through it without branching on the variant.
+/// Either a plain TCP stream or a TLS-wrapped one, and when a line of
+/// yours last left on it. The session loop owns this and reads or writes
+/// through it without branching on the variant.
 pub(crate) struct Stream {
     io: Io,
+    /// When the last write that ended a line left, the commands you type
+    /// and those triggers, timers, the tick and Lua send. A telnet answer
+    /// ends no line, so it never counts.
+    last_line: Option<Instant>,
 }
 
 enum Io {
@@ -42,7 +48,10 @@ enum Io {
 
 impl Stream {
     fn new(io: Io) -> Self {
-        Self { io }
+        Self {
+            io,
+            last_line: None,
+        }
     }
 
     pub(crate) async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -54,9 +63,18 @@ impl Stream {
 
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
         match &mut self.io {
-            Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await,
-            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await,
+            Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
+            Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
         }
+        if buf.ends_with(b"\n") {
+            self.last_line = Some(Instant::now());
+        }
+        Ok(())
+    }
+
+    /// When a line of yours last left for the game, None before the first.
+    pub(crate) fn last_line(&self) -> Option<Instant> {
+        self.last_line
     }
 
     pub(crate) async fn flush(&mut self) -> std::io::Result<()> {
