@@ -308,7 +308,8 @@ describe('AffectsPaneView', () => {
     expect(wash).toContain('top: 1px');
     expect(wash).toContain('z-index: -1');
     expect(wash).toContain('background: var(--recast-wash)');
-    // Missing at 8 percent keeps a red name at 4.5 to 1 on Vellum.
+    // Missing at 8 percent keeps a red name at 4 to 1 or better on the
+    // light themes.
     expect(rule('[data-affects-tint] .pane-affect-missing')).toContain('var(--danger) 8%');
     // Running out takes board C's own tints.
     expect(rule('[data-affects-tint] .pane-affect-expiring')).toContain('var(--warn) 14%');

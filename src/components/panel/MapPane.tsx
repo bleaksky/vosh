@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react';
+import { usePlayPalette } from '../../lib/fitGameColors';
 import { roomNameColor, terrainLabel, type RoomNameGround } from '../../lib/roomName';
 import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../lib/stores/roomStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
@@ -18,19 +19,19 @@ import { exitsLabel } from './paneText';
 import { PaneTextSizeContext } from './paneTextSize';
 
 // The Map pane (SPEC 9): the server map drawing in a box inset 8 px
-// with radius 8, then a band of dense rows for the room you stand in
-// with its exits, a quiet row with its terrain and region, and the
-// people here. The room's name takes the theme color the terminal draws
-// it in for its sector (roomName.ts). The band's height follows the pane
-// alone, and the band is there from the first paint, so the drawing
-// keeps its size as you walk and as people come and go. A crowded room
-// counts the people past the last slot on that slot, and a short pane
-// gives up people slots before the terrain row, and that row before the
-// name.
+// with radius 8, then a band of dense rows for the room you stand in,
+// a quiet row with its terrain, region and exits, and the people here.
+// The room's name takes the theme color the terminal draws it in for
+// its sector (roomName.ts). The band's height follows the pane alone,
+// and the band is there from the first paint, so the drawing keeps its
+// size as you walk and as people come and go. A crowded room counts the
+// people past the last slot on that slot, and a short pane gives up
+// people slots before the terrain row, and that row before the name.
 
 export function MapPane() {
   const { info, people } = useRoom();
   const theme = useActiveTheme();
+  const palette = usePlayPalette();
   const ground = useMemo(() => themeTokens(theme), [theme]);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLUListElement | null>(null);
@@ -47,22 +48,17 @@ export function MapPane() {
         className="pane-rows pane-map-rows"
         style={{ '--band-rows': rows } as CSSProperties}
       >
-        <MapBandRows
-          info={info}
-          people={people}
-          rows={rows}
-          palette={theme.xterm}
-          ground={ground}
-        />
+        <MapBandRows info={info} people={people} rows={rows} palette={palette} ground={ground} />
       </ul>
     </>
   );
 }
 
-/** The band's rows for `rows` slots: the room's name and exits, its
- *  terrain and region, then the people here. The name and the terrain
+/** The band's rows for `rows` slots: the room's name, its terrain,
+ *  region and exits, then the people here. The name and the terrain
  *  rows are there before the first Room.Info, empty, so the first room
- *  moves nothing. */
+ *  moves nothing. A band with no terrain row keeps the exits beside the
+ *  name. */
 export function MapBandRows({
   info,
   people,
@@ -90,7 +86,7 @@ export function MapBandRows({
         <span className="pane-row-name" title={info?.name} style={color ? { color } : undefined}>
           {info?.name}
         </span>
-        {exits && (
+        {exits && !layout.where && (
           <span className="pane-row-value pane-map-exits" title={exits}>
             {exits}
           </span>
@@ -107,6 +103,11 @@ export function MapBandRows({
                 </span>
               )}
               {region}
+            </span>
+          )}
+          {exits && (
+            <span className="pane-map-exits" title={exits}>
+              {exits}
             </span>
           )}
         </li>

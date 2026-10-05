@@ -1,38 +1,71 @@
 // Chrome tokens derived from a terminal palette. The window chrome
-// (panel, hairlines, text tiers, status colors) follows the terminal
-// theme by a fixed rule instead of a hand authored second palette, so
-// any imported terminal theme dresses the whole window. The rule is
-// otty's, measured for the One Window design (SPEC section 4):
+// (panel, lines, text tiers, status colors) follows the terminal theme
+// by a fixed rule instead of a hand authored second palette, so any
+// imported terminal theme dresses the whole window. This is the one
+// ground rule:
 //
 //   appearance  OKLab L of the background below 0.6 is dark
-//   panel       background shifted in L (+0.04 dark, -0.021 light)
-//   hairlines   white or black at low alpha over the panel
-//   text tiers  the foreground, then the foreground over the panel at
-//               the alpha that reaches 6.0:1 (secondary) and 3.1:1
-//               (tertiary)
-//   title       white 55% (dark) or black 50% (light) over the ground
-//   raised      the ground shifted +0.06 (dark) or white (light)
-//   accent      the cursor when it carries color, else bright blue
-//   status      ANSI red, yellow, green lifted to 3:1 on the panel
+//   panel       the terminal ground itself, so the window is one surface
+//   lines       steps in OKLab L, white over a dark ground and black
+//               over a light one. The line (sep) steps 11, the divider
+//               6, hover 4 and a dark selected row 7, all over the
+//               panel, and the input band 2.5 over the ground. OKLab L
+//               runs so steep near pure black that a step of 11 lands
+//               on #040404 there, so on a dark ground each step keeps
+//               at least the alpha it takes on Obsidian Ember's #050403.
+//   raised      a white step of 6 on dark. On light, the paper lifted
+//               0.03 in OKLCH L at its own hue with half its chroma, so
+//               nothing floats or selects on pure white, and a light
+//               selected row is the raised paper.
+//   text tiers  the foreground, lifted at its hue to 6.0:1 on the panel
+//               when it reads under that, then the foreground over the
+//               panel at the alpha that reaches 6.0:1 (secondary) and
+//               3.1:1 (tertiary)
+//   title       the secondary tier. frame.css dims it to tertiary while
+//               the window is unfocused.
+//   status      ANSI red, yellow, green lifted at their hue to 3:1
 //   danger text danger lifted to 4.5:1, for words drawn in danger,
 //               while markers, dots, and meter fills keep danger
+//   accent      the cursor when it carries color, is not the text, and
+//               stands 12 dE from danger, warn and success. Else the
+//               scheme's green, yellow, blue, magenta or cyan, normal or
+//               bright, with the most chroma that stands as far. Else
+//               bright blue. Lifted at its hue to 3:1 on the panel.
+//   on accent   white, or the theme's dark end lifted down to 4.5:1
+//   selection   the scheme's own selection, opaque, when it stands a step
+//               of 6 off the ground and its own selection text, else the
+//               foreground, reads 4.5:1 on it. Else the accent over the
+//               ground at 0.28 on dark and 0.20 on light, with the text
+//               tier on it. The selection text token travels with the
+//               fill, so the window and both renderers draw one pair.
+//   controls    the field, the off switch track, the keycap ring, the
+//               menu highlight and the edge are washes, white on dark
+//               and black on light, at the alpha that steps the surface
+//               each sits on by WASH_STEP, with the same floor near
+//               black. A wash, so a field takes its step on the panel
+//               and on a raised card alike. A light field is the raised
+//               paper itself, never white.
 //
 // Tertiary and the status colors also draw on raised surfaces (menu
 // shortcuts, palette keycaps, a danger row), so their floors hold on
 // whichever of the panel and raised reads worse.
 //
-// A theme can pin any token with an override. Overridden base colors
-// (bg, panel, text, accent) feed the tokens derived from them.
+// A theme can pin any token with an override, and a pin wins as it
+// stands. Overridden base colors (bg, panel, raised, text, the status
+// colors) feed the tokens derived from them.
 
 import {
   BLACK,
   WHITE,
   composite,
   contrast,
+  deltaEOk,
+  liftAtHue,
+  oklabToRgb,
+  oklchToRgbInGamut,
   parseHex,
   rgbToOklab,
   rgbToOklch,
-  oklabToRgb,
   shiftLightness,
   solveAlphaForContrast,
   toHex,
@@ -47,11 +80,13 @@ export interface ChromeTokens {
   appearance: Appearance;
   /// Terminal ground. The title band and input band sit on it.
   bg: string;
-  /// Right panel ground.
+  /// Panel ground, the terminal ground unless a theme pins its own.
   panel: string;
   /// Strong hairline: the panel edge and split handles.
   sep: string;
-  /// Soft hairline between sections inside a pane.
+  /// Soft hairline between sections inside a pane. On dark it steps
+  /// the panel as far as raised does, so the two are one color, and a
+  /// line or ring on a floating surface takes sep or keyRing instead.
   divider: string;
   /// Selected row fill.
   selrow: string;
@@ -65,7 +100,7 @@ export interface ChromeTokens {
   secondary: string;
   /// Meta, captions, and caps labels, 3.1:1 on the panel.
   tertiary: string;
-  /// Window title in the title band.
+  /// Window title in the title band, the secondary tier.
   title: string;
   /// Floating surfaces: the palette, menus, dialogs.
   raised: string;
@@ -81,8 +116,23 @@ export interface ChromeTokens {
   /// Words drawn in the warn tone, 4.5:1 on the panel.
   warnText: string;
   success: string;
-  /// Terminal selection, the accent with alpha.
+  /// Terminal selection, opaque.
   selection: string;
+  /// Text drawn on the selection.
+  selectionText: string;
+  /// Control fill: text fields, selects, chips, and the segmented
+  /// track on dark.
+  field: string;
+  /// A switch track while the switch is off.
+  track: string;
+  /// The hovered or keyboard row on a floating surface.
+  menuHi: string;
+  /// Keycap ring, and the ring inside a color swatch, in Settings, on
+  /// the prompt card and in the pane menus.
+  keyRing: string;
+  /// Window edge, the ring inside a floating surface on dark, and the
+  /// edge a band on paper draws inside itself to read on its ground.
+  edge: string;
 }
 
 export type ChromeOverrides = Partial<ChromeTokens>;
@@ -109,37 +159,15 @@ export const CHROME_COLOR_KEYS = [
   'warnText',
   'success',
   'selection',
+  'selectionText',
+  'field',
+  'track',
+  'menuHi',
+  'keyRing',
+  'edge',
 ] as const satisfies readonly (keyof ChromeTokens)[];
 
 export type ChromeColorKey = (typeof CHROME_COLOR_KEYS)[number];
-
-// The measured constants. Alphas are for white (dark) or black
-// (light) composited over the named ground.
-const RECIPE = {
-  dark: {
-    panelShift: 0.04,
-    raisedShift: 0.06,
-    sep: 0.07,
-    divider: 0.05,
-    selrow: 0.07,
-    hover: 0.045,
-    inputband: 0.04,
-    title: 0.55,
-    selection: 0.22,
-  },
-  light: {
-    panelShift: -0.021,
-    // Light rows select and float on plain white.
-    raisedShift: 0,
-    sep: 0.09,
-    divider: 0.07,
-    selrow: 0,
-    hover: 0.04,
-    inputband: 0.035,
-    title: 0.5,
-    selection: 0.18,
-  },
-} as const;
 
 export const APPEARANCE_THRESHOLD = 0.6;
 export const SECONDARY_CONTRAST = 6.0;
@@ -147,10 +175,86 @@ export const TERTIARY_CONTRAST = 3.1;
 export const STATUS_CONTRAST = 3.0;
 export const STATUS_TEXT_CONTRAST = 4.5;
 export const ON_ACCENT_CONTRAST = 4.5;
+/// The accent, lifted at its hue to this contrast on the panel.
+const ACCENT_CONTRAST = 3.0;
 /// OKLCH chroma above which the cursor counts as a color of its own.
 const ACCENT_CHROMA = 0.05;
+/// An accent the rule picks stands this far from danger, warn and
+/// success, in OKLab dE times 100.
+export const ACCENT_APART = 12;
 /// Darkest ink on an accent fill never sits above this OKLab L.
 const INK_MAX_L = 0.24;
+
+/// The lightness steps, in OKLab L times 100, that the lines and fills
+/// take off the ground they draw over. The line steps 11 so it stands
+/// 5 off a menu, which steps 6.
+const STEP = {
+  sep: 11,
+  divider: 6,
+  hover: 4,
+  selrow: 7,
+  inputband: 2.5,
+  raised: 6,
+} as const;
+type Step = keyof typeof STEP;
+
+/// A light theme floats and selects on its paper lifted this far in
+/// OKLCH L, at its own hue with half its chroma, and no lighter than
+/// RAISED_LIGHT_MAX_L.
+const RAISED_LIGHT_LIFT = 0.03;
+const RAISED_LIGHT_MAX_L = 0.995;
+
+/// Obsidian Ember's ground. Below it OKLab L runs too steep to step by,
+/// so a step on a dark ground keeps at least the alpha it takes here.
+const NEAR_BLACK: Rgb = { r: 5, g: 4, b: 3 };
+
+/// The scheme's own selection draws when it stands this far off the
+/// ground, in OKLab L times 100, and its text reads this well on it.
+const SELECTION_STEP = 6;
+const SELECTION_TEXT_CONTRAST = 4.5;
+/// Otherwise the selection is the accent over the ground at this alpha.
+const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
+
+/// The steps the control washes take off the surface they sit on, in
+/// OKLab L times 100: the field, the track and the keycap ring off the
+/// panel, the menu highlight off raised, and the edge off the ground.
+/// Each is the step the fixed wash before them took there (Themes
+/// review Q10), white on Obsidian Ember and black on Vellum, so those
+/// two paint as they did. On dark the edge takes the 0.12 of the ring
+/// inside a floating surface, the ring board 11 draws. The window edge
+/// on Windows and Linux took 0.10 in the main window and 0.18 in
+/// Settings, so one edge moves each of them on Ember. On light every
+/// edge took 0.14. A light field is the raised paper, so it has no step.
+export const WASH_STEP = {
+  dark: {
+    field: 7.94, // white 0.06
+    track: 18.57, // white 0.16
+    keyRing: 16.53, // white 0.14
+    menuHi: 8.35, // white 0.08
+    edge: 14.46, // white 0.12
+  },
+  light: {
+    track: 10.39, // black 0.14
+    keyRing: 8.88, // black 0.12
+    menuHi: 3.86, // black 0.05
+    edge: 10.39, // black 0.14
+  },
+} as const;
+
+/// The scheme's own hues the accent may come from, normal and bright.
+/// Red stays out, since red in the window means trouble.
+const ACCENT_SLOTS = [
+  'green',
+  'brightGreen',
+  'yellow',
+  'brightYellow',
+  'blue',
+  'brightBlue',
+  'magenta',
+  'brightMagenta',
+  'cyan',
+  'brightCyan',
+] as const satisfies readonly (keyof XtermPalette)[];
 
 const FALLBACK_BG: Rgb = { r: 16, g: 18, b: 24 };
 const FALLBACK_FG: Rgb = { r: 204, g: 204, b: 204 };
@@ -165,6 +269,61 @@ function hexOr(value: string | undefined, fallback: Rgb): Rgb {
 function pick(override: string | undefined, derived: Rgb): { css: string; rgb: Rgb } {
   if (override === undefined || override === '') return { css: toHex(derived), rgb: derived };
   return { css: override, rgb: parseHex(override) ?? derived };
+}
+
+const lightness = (c: Rgb) => rgbToOklab(c).L * 100;
+
+/** The alpha, found by a binary search, at which `wash` over `ground`
+ *  sits `dl` away from it in OKLab L. */
+function washAlpha(wash: Rgb, ground: Rgb, dl: number): number {
+  const base = lightness(ground);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const a = (lo + hi) / 2;
+    if (Math.abs(lightness(composite(wash, ground, a)) - base) < dl) lo = a;
+    else hi = a;
+  }
+  return hi;
+}
+
+/** The lightness step between two colors, in OKLab L times 100. Below
+ *  NEAR_BLACK, where OKLab L runs too steep, a step counts as the one
+ *  that gives the same contrast on NEAR_BLACK. */
+function stepDL(a: Rgb, b: Rgb): number {
+  const base = lightness(NEAR_BLACK);
+  if (Math.min(lightness(a), lightness(b)) >= base) return Math.abs(lightness(a) - lightness(b));
+  const ratio = contrast(a, b);
+  if (ratio <= 1) return 0;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const alpha = (lo + hi) / 2;
+    if (contrast(composite(WHITE, NEAR_BLACK, alpha), NEAR_BLACK) < ratio) lo = alpha;
+    else hi = alpha;
+  }
+  return lightness(composite(WHITE, NEAR_BLACK, hi)) - base;
+}
+
+/// The alpha each step takes on NEAR_BLACK, worked out once.
+const NEAR_BLACK_ALPHA = Object.fromEntries(
+  Object.entries(STEP).map(([key, dl]) => [key, washAlpha(WHITE, NEAR_BLACK, dl)]),
+) as Record<Step, number>;
+
+/** The step named `key` over `ground`: white on dark, black on light. */
+function stepOver(ground: Rgb, key: Step, dark: boolean): Rgb {
+  const wash = dark ? WHITE : BLACK;
+  const alpha = washAlpha(wash, ground, STEP[key]);
+  return composite(wash, ground, dark ? Math.max(alpha, NEAR_BLACK_ALPHA[key]) : alpha);
+}
+
+/** A wash that steps `ground` by `dl` in OKLab L, as rgba(): white on
+ *  dark, black on light. On dark it keeps at least the alpha the same
+ *  step takes on NEAR_BLACK. */
+function washOver(ground: Rgb, dl: number, dark: boolean): string {
+  const wash = dark ? WHITE : BLACK;
+  const alpha = washAlpha(wash, ground, dl);
+  return toRgba(wash, dark ? Math.max(alpha, washAlpha(WHITE, NEAR_BLACK, dl)) : alpha);
 }
 
 /** Move `c` in OKLab lightness, away from `against`, until it reaches
@@ -186,51 +345,60 @@ export function appearanceOf(bg: Rgb): Appearance {
   return rgbToOklab(bg).L < APPEARANCE_THRESHOLD ? 'dark' : 'light';
 }
 
+/** The accent the rule picks before any lift: the colored cursor, else
+ *  the scheme hue with the most chroma, each only where it stands
+ *  ACCENT_APART from every status color, else bright blue. */
+function accentCandidate(x: XtermPalette, status: Rgb[]): Rgb {
+  const apart = (c: Rgb) => status.every((s) => deltaEOk(c, s) >= ACCENT_APART);
+  const cursor = parseHex(x.cursor);
+  if (
+    cursor !== null &&
+    rgbToOklch(cursor).C > ACCENT_CHROMA &&
+    toHex(cursor) !== toHex(hexOr(x.foreground, FALLBACK_FG)) &&
+    apart(cursor)
+  ) {
+    return cursor;
+  }
+  const hues = ACCENT_SLOTS.map((slot) => parseHex(x[slot]))
+    .filter((c): c is Rgb => c !== null)
+    .sort((a, b) => rgbToOklch(b).C - rgbToOklch(a).C);
+  return hues.find(apart) ?? hexOr(x.brightBlue, FALLBACK_BLUE);
+}
+
 /** Derive the chrome tokens for a terminal palette. Pure. */
 export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): ChromeTokens {
   const o = overrides;
   const bg = pick(o.bg, hexOr(x.background, FALLBACK_BG));
   const appearance = o.appearance ?? appearanceOf(bg.rgb);
   const dark = appearance === 'dark';
-  const r = RECIPE[appearance];
-  const wash = dark ? WHITE : BLACK;
-
-  const panel = pick(o.panel, shiftLightness(bg.rgb, r.panelShift));
-  // A foreground too dim for the secondary floor (One Dark) lifts to it
-  // so the text tiers stay ordered.
   const dir = dark ? 1 : -1;
-  const text = pick(
-    o.text,
-    liftToContrast(hexOr(x.foreground, FALLBACK_FG), panel.rgb, SECONDARY_CONTRAST, dir),
-  );
 
-  const cursor = parseHex(x.cursor);
-  const cursorIsColor =
-    cursor !== null &&
-    rgbToOklch(cursor).C > ACCENT_CHROMA &&
-    toHex(cursor) !== toHex(hexOr(x.foreground, FALLBACK_FG));
-  const accent = pick(o.accent, cursorIsColor ? cursor : hexOr(x.brightBlue, FALLBACK_BLUE));
-
-  // Ink for text on an accent fill: the theme's dark end held at or
-  // below L 0.24 and darkened further until it reads at 4.5:1, or white
-  // when white reads better on the accent.
-  const darkEnd = dark ? bg.rgb : text.rgb;
-  const darkLab = rgbToOklab(darkEnd);
-  const ink =
-    darkLab.L > INK_MAX_L ? shiftLightness(darkEnd, INK_MAX_L - darkLab.L) : { ...darkEnd };
-  const onAccent = pick(
-    o.onAccent,
-    contrast(WHITE, accent.rgb) >= contrast(ink, accent.rgb)
-      ? WHITE
-      : liftToContrast(ink, accent.rgb, ON_ACCENT_CONTRAST, -1),
-  );
-
-  const raised = pick(o.raised, dark ? shiftLightness(bg.rgb, r.raisedShift) : WHITE);
+  const panel = pick(o.panel, bg.rgb);
+  let raisedLight: Rgb = WHITE;
+  if (!dark) {
+    const paper = rgbToOklch(panel.rgb);
+    const lifted = oklchToRgbInGamut({
+      L: Math.min(RAISED_LIGHT_MAX_L, paper.L + RAISED_LIGHT_LIFT),
+      C: paper.C / 2,
+      h: paper.h,
+    });
+    raisedLight = { r: Math.round(lifted.r), g: Math.round(lifted.g), b: Math.round(lifted.b) };
+  }
+  const raised = pick(o.raised, dark ? stepOver(panel.rgb, 'raised', true) : raisedLight);
   const grounds = [panel.rgb, raised.rgb];
   const floor = (c: Rgb, target: number) =>
-    grounds.reduce((out, ground) => liftToContrast(out, ground, target, dir), c);
+    grounds.reduce((out, ground) => liftAtHue(out, ground, target, dir), c);
 
-  const secondary = solveAlphaForContrast(text.rgb, panel.rgb, SECONDARY_CONTRAST).color;
+  // A foreground too dim for the secondary floor (Solarized Dark) lifts
+  // to it so the text tiers stay ordered.
+  const text = pick(
+    o.text,
+    liftAtHue(hexOr(x.foreground, FALLBACK_FG), panel.rgb, SECONDARY_CONTRAST, dir),
+  );
+  const secondary = pick(
+    o.secondary,
+    solveAlphaForContrast(text.rgb, panel.rgb, SECONDARY_CONTRAST).color,
+  );
   // Tertiary is the foreground over the panel at the lowest alpha that
   // clears 3.1:1 on both grounds.
   let tertiary = text.rgb;
@@ -250,24 +418,64 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
   // A danger that clears 3:1 as a dot can still be too dim to read as
   // words (Nord's red sits near 3:1), so text takes its own tier.
   const dangerText = pick(o.dangerText, floor(danger.rgb, STATUS_TEXT_CONTRAST));
-  // The same for the warn tone: Vellum's yellow reads as a dot but only
-  // 4.23:1 as words on its panel.
+  // The same for the warn tone, a yellow that reads as a dot on paper
+  // but not as words.
   const warn = pick(o.warn, status(x.yellow, x.brightYellow, { r: 229, g: 192, b: 123 }));
   const warnText = pick(o.warnText, floor(warn.rgb, STATUS_TEXT_CONTRAST));
+  const success = pick(o.success, status(x.green, x.brightGreen, { r: 152, g: 195, b: 121 }));
+
+  const accent = pick(
+    o.accent,
+    liftAtHue(
+      accentCandidate(x, [danger.rgb, warn.rgb, success.rgb]),
+      panel.rgb,
+      ACCENT_CONTRAST,
+      dir,
+    ),
+  );
+
+  // Ink for text on an accent fill: the theme's dark end held at or
+  // below L 0.24 and darkened further until it reads at 4.5:1, or white
+  // when white reads better on the accent.
+  const darkEnd = dark ? bg.rgb : text.rgb;
+  const darkLab = rgbToOklab(darkEnd);
+  const ink =
+    darkLab.L > INK_MAX_L ? shiftLightness(darkEnd, INK_MAX_L - darkLab.L) : { ...darkEnd };
+  const onAccent = pick(
+    o.onAccent,
+    contrast(WHITE, accent.rgb) >= contrast(ink, accent.rgb)
+      ? WHITE
+      : liftAtHue(ink, accent.rgb, ON_ACCENT_CONTRAST, -1),
+  );
+
+  // The scheme's own selection and its text when the pair reads, else
+  // the accent over the ground with the text tier on it.
+  const schemeFill = parseHex(x.selectionBackground);
+  const schemeText = parseHex(x.selectionForeground) ?? hexOr(x.foreground, FALLBACK_FG);
+  const selection =
+    schemeFill !== null &&
+    stepDL(schemeFill, bg.rgb) >= SELECTION_STEP &&
+    contrast(schemeText, schemeFill) >= SELECTION_TEXT_CONTRAST
+      ? { fill: schemeFill, text: schemeText }
+      : { fill: composite(accent.rgb, bg.rgb, SELECTION_ALPHA[appearance]), text: text.rgb };
+
+  // The control washes. An override, like pick's, wins as it stands.
+  const steps = WASH_STEP[appearance];
+  const field = dark ? washOver(panel.rgb, WASH_STEP.dark.field, true) : raised.css;
 
   return {
     appearance,
     bg: bg.css,
     panel: panel.css,
-    sep: pick(o.sep, composite(wash, panel.rgb, r.sep)).css,
-    divider: pick(o.divider, composite(wash, panel.rgb, r.divider)).css,
-    selrow: pick(o.selrow, dark ? composite(WHITE, panel.rgb, r.selrow) : WHITE).css,
-    hover: pick(o.hover, composite(wash, panel.rgb, r.hover)).css,
-    inputband: pick(o.inputband, composite(wash, bg.rgb, r.inputband)).css,
+    sep: pick(o.sep, stepOver(panel.rgb, 'sep', dark)).css,
+    divider: pick(o.divider, stepOver(panel.rgb, 'divider', dark)).css,
+    selrow: pick(o.selrow, dark ? stepOver(panel.rgb, 'selrow', true) : raised.rgb).css,
+    hover: pick(o.hover, stepOver(panel.rgb, 'hover', dark)).css,
+    inputband: pick(o.inputband, stepOver(bg.rgb, 'inputband', dark)).css,
     text: text.css,
-    secondary: pick(o.secondary, secondary).css,
+    secondary: secondary.css,
     tertiary: pick(o.tertiary, tertiary).css,
-    title: pick(o.title, composite(wash, bg.rgb, r.title)).css,
+    title: pick(o.title, secondary.rgb).css,
     raised: raised.css,
     accent: accent.css,
     onAccent: onAccent.css,
@@ -275,8 +483,14 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
     dangerText: dangerText.css,
     warn: warn.css,
     warnText: warnText.css,
-    success: pick(o.success, status(x.green, x.brightGreen, { r: 152, g: 195, b: 121 })).css,
-    selection: o.selection ?? toRgba(accent.rgb, r.selection),
+    success: success.css,
+    selection: pick(o.selection, selection.fill).css,
+    selectionText: pick(o.selectionText, selection.text).css,
+    field: o.field || field,
+    track: o.track || washOver(panel.rgb, steps.track, dark),
+    menuHi: o.menuHi || washOver(raised.rgb, steps.menuHi, dark),
+    keyRing: o.keyRing || washOver(panel.rgb, steps.keyRing, dark),
+    edge: o.edge || washOver(bg.rgb, steps.edge, dark),
   };
 }
 

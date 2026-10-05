@@ -1,23 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { subscribeBaseAnsi } from './baseAnsi';
 import type { BandEnv } from './bandCells';
+import { useFitGameColors } from './fitGameColors';
 import { ansi16Of, xtermThemeFor } from './terminalTheme';
 import { getCurrentThemeId } from './theme';
-import { findTheme } from './themes';
+import { findTheme, onCustomThemesChanged, themeTokens } from './themes';
 
 // The colors terminal text outside the renderers draws with. The pinned
 // band and the prompt card read them, so a prompt looks there as it does
 // in the text.
 
-/** The colors the terminal draws with now: the theme's, or the base
- *  palette while "Use the theme's colors for MUD text" is off. It follows
- *  a theme change (every apply writes data-theme on the root) and an
- *  edit to the base palette. */
+/** The colors the terminal draws with now: the theme's, fitted while Fit
+ *  game colors is on, or the base palette while "Use the theme's colors
+ *  for MUD text" is off. It follows a theme change (every apply writes
+ *  data-theme on the root), a new custom theme list, which brings a
+ *  custom theme its fit, an edit to the base palette, and Fit game
+ *  colors. */
 export function useBandEnv(
   themeTerminalColors: boolean,
   brightBold: boolean,
   renderer: BandEnv['renderer'],
 ): BandEnv {
+  const fit = useFitGameColors();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);
@@ -25,22 +29,28 @@ export function useBandEnv(
     observer.observe(document.documentElement, {
       attributeFilter: ['data-theme', 'data-appearance'],
     });
-    const unsubscribe = subscribeBaseAnsi(bump);
+    const stopBase = subscribeBaseAnsi(bump);
+    const stopList = onCustomThemesChanged(bump);
     return () => {
       observer.disconnect();
-      unsubscribe();
+      stopBase();
+      stopList();
     };
   }, []);
   return useMemo(() => {
-    const resolved = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+    const theme = findTheme(getCurrentThemeId());
+    const resolved = xtermThemeFor(theme, themeTerminalColors, fit);
+    const { selection, selectionText } = themeTokens(theme);
     return {
       palette: ansi16Of(resolved),
       fg: resolved.foreground ?? '#cccccc',
       bg: resolved.background ?? '#101218',
+      selection,
+      selectionText,
       renderer,
       brightBold,
     };
     // tick marks a theme or palette change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, themeTerminalColors, brightBold, renderer]);
+  }, [tick, themeTerminalColors, fit, brightBold, renderer]);
 }

@@ -22,9 +22,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const kansoTheme = findTheme('kanso-zen');
-const vellumTheme = findTheme('vellum');
+const rubricTheme = findTheme('rubric');
 const kanso = themeTokens(kansoTheme);
-const vellum = themeTokens(vellumTheme);
+const rubric = themeTokens(rubricTheme);
 
 function room(data: Record<string, unknown>): RoomInfo {
   const base: RoomInfoBase | null = parseRoomInfo(data);
@@ -101,7 +101,9 @@ function rule(selector: string): string {
 }
 
 describe('the band under the map', () => {
-  it('names the room in its terminal color, with the terrain and region under it', () => {
+  // The exits moved from the name row to the end of the terrain row, so
+  // the room name has its whole row, as the theme boards draw it.
+  it('names the room in its terminal color, with the terrain, region and exits under it', () => {
     const rows = band(ICE_BARS, { people: [BARON] });
     expect(rows.map((r) => r.className)).toEqual([
       'pane-row pane-map-room',
@@ -112,23 +114,23 @@ describe('the band under the map', () => {
     const ink = roomNameColor(0, kansoTheme.xterm, kanso);
     expect(name.html).toBe(
       `<span class="pane-row-name" title="Between Ice Bars" style="color:${ink}">` +
-        'Between Ice Bars</span>' +
-        '<span class="pane-row-value pane-map-exits" title="west">west</span>',
+        'Between Ice Bars</span>',
     );
     expect(where.html).toBe(
       '<span class="pane-map-terrain">Inside</span>' +
         '<span class="pane-map-region" title="Coastal North">' +
-        '<span class="pane-map-sep" aria-hidden="true">·</span>Coastal North</span>',
+        '<span class="pane-map-sep" aria-hidden="true">·</span>Coastal North</span>' +
+        '<span class="pane-map-exits" title="west">west</span>',
     );
     expect(person.text).toBe('The Baron Helgardium');
   });
 
   it('draws the name from the theme the terminal draws it in', () => {
     const [onKanso] = band(ICE_BARS);
-    const [onVellum] = band(ICE_BARS, { theme: vellumTheme });
+    const [onRubric] = band(ICE_BARS, { theme: rubricTheme });
     expect(onKanso.color).toBe(roomNameColor(0, kansoTheme.xterm, kanso));
-    expect(onVellum.color).toBe(roomNameColor(0, vellumTheme.xterm, vellum));
-    expect(onKanso.color).not.toBe(onVellum.color);
+    expect(onRubric.color).toBe(roomNameColor(0, rubricTheme.xterm, rubric));
+    expect(onKanso.color).not.toBe(onRubric.color);
     // The 256 color tint do_look prints first never shows, since the
     // name's own code resets it.
     expect(onKanso.color).not.toBe('#eeeeee');
@@ -137,8 +139,11 @@ describe('the band under the map', () => {
   it('shows the terrain alone for an older build that sends no region', () => {
     const [name, where] = band(MISTY_LAKE);
     expect(name.color).toBe(roomNameColor(7, kansoTheme.xterm, kanso));
-    expect(name.text).toBe('A Misty Lakenorth east south west');
-    expect(where.html).toBe('<span class="pane-map-terrain">Deep Water</span>');
+    expect(name.text).toBe('A Misty Lake');
+    expect(where.html).toBe(
+      '<span class="pane-map-terrain">Deep Water</span>' +
+        '<span class="pane-map-exits" title="north east south west">north east south west</span>',
+    );
   });
 
   it('keeps the made up rhapsody room in the text color with an empty terrain row', () => {
@@ -174,6 +179,13 @@ describe('the band under the map', () => {
     expect(classes(1)).toEqual(['pane-row pane-map-room']);
   });
 
+  it('keeps the exits beside the name when the band has no terrain row', () => {
+    const [name] = band(ICE_BARS, { rows: 1 });
+    expect(name.html).toContain(
+      '</span><span class="pane-row-value pane-map-exits" title="west">west</span>',
+    );
+  });
+
   it('sets the terrain row in the quiet tier, and lets the region give way first', () => {
     expect(rule('.pane-map-where')).toContain('color: var(--tertiary);');
     // 11 px at a 12 px panel, scaled with the size (paneTextSize.test.ts).
@@ -185,13 +197,29 @@ describe('the band under the map', () => {
     expect(region).toContain('white-space: nowrap;');
   });
 
-  it('keeps a floor under the room name and lets the exits give way after it', () => {
-    const exits = rule('.pane-map-exits');
+  it('sets the exits at the right of the terrain row', () => {
+    const exits = rule('.pane-map-where .pane-map-exits');
+    expect(exits).toContain('margin-left: auto;');
+    expect(exits).toContain('padding-left: 8px;');
+    expect(exits).toContain('white-space: nowrap;');
+    // On a narrow panel they give way with an ellipsis.
+    expect(exits).toContain('min-width: 0;');
+    expect(exits).toContain('text-overflow: ellipsis;');
+  });
+
+  it('keeps a floor under the room name when the exits sit beside it', () => {
+    const exits = rule('.pane-map-room .pane-map-exits');
     expect(exits).toContain('max-width: calc(100% - 3em - 8px);');
     expect(exits).toContain('min-width: 0;');
     expect(exits).toContain('overflow: hidden;');
     expect(exits).toContain('text-overflow: ellipsis;');
     // The 8px is the gap the value class leaves before the exits.
     expect(rule('.pane-row-value')).toContain('margin-left: 8px;');
+  });
+
+  it('fades the rooms the map box clips at its sides over 12 px', () => {
+    const fade =
+      'linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);';
+    expect(rule('.pane-map-box')).toContain(`mask-image: ${fade}`);
   });
 });

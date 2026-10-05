@@ -1,24 +1,42 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
+  ACCENT_APART,
   CHROME_COLOR_KEYS,
   ON_ACCENT_CONTRAST,
   SECONDARY_CONTRAST,
   STATUS_CONTRAST,
   STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
+  WASH_STEP,
   type Appearance,
   type ChromeColorKey,
 } from './chrome';
-import { composite, contrast, deltaE2000, parseHex, rgbToOklch, type Rgb } from './color';
+import {
+  composite,
+  contrast,
+  deltaE2000,
+  deltaEOk,
+  parseHex,
+  rgbToOklab,
+  rgbToOklch,
+  WHITE,
+  type Rgb,
+} from './color';
+import { checks, GAME_SLOTS } from './gameFit';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
   customToAppTheme,
   findTheme,
   migrateCustomChrome,
+  playPalette,
+  RETIRED_THEMES,
+  setCustomThemes,
+  themeShownBy,
   themeTokens,
   type XtermPalette,
 } from './themes';
+import credits from '../../public/theme-credits.txt?raw';
 
 const hex = (h: string): Rgb => {
   const c = parseHex(h);
@@ -34,58 +52,91 @@ const paint = (color: string, ground: string): Rgb => {
   return composite({ r: +m[1], g: +m[2], b: +m[3] }, hex(ground), +m[4]);
 };
 
-interface CanvasSheet {
+// A lightness step in OKLab L times 100. Below Obsidian Ember's ground
+// OKLab L runs too steep to measure by, so there a step counts as the
+// one that gives the same contrast on Ember's ground.
+const EMBER_GROUND = hex('#050403');
+const lightness = (c: Rgb) => rgbToOklab(c).L * 100;
+function stepDL(a: Rgb, b: Rgb): number {
+  const base = lightness(EMBER_GROUND);
+  if (Math.min(lightness(a), lightness(b)) >= base) return Math.abs(lightness(a) - lightness(b));
+  const ratio = contrast(a, b);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const alpha = (lo + hi) / 2;
+    if (contrast(composite(WHITE, EMBER_GROUND, alpha), EMBER_GROUND) < ratio) lo = alpha;
+    else hi = alpha;
+  }
+  return lightness(composite(WHITE, EMBER_GROUND, hi)) - base;
+}
+
+interface TokenSheet {
   id: string;
   appearance: Appearance;
   tokens: Record<ChromeColorKey, string>;
 }
 
-// The approved One Window canvas tokens (SPEC section 4, the Palette
-// and Main artboards for onAccent). The canvas token sheet differs
-// only in Ember's title, #8e8e8e, which the second Ember entry covers.
-const NORD: CanvasSheet = {
+// The token sheets under the one ground rule (Themes review Q7, board
+// 11). The One Window canvas sheets predate it, so the panel now sits
+// on the ground, the lines step in lightness, and the title takes the
+// secondary tone. Ember's is the sheet the board draws, and Nord's is
+// the rule's with its pins. The light sheet is Rubric's from the
+// shortlist, since Rubric took Vellum's place (Q14) and Vellum's sheet
+// went with it. The selection is each scheme's own, opaque, with its
+// own text (Q9), where the canvas drew the accent with alpha. The
+// control washes (Q10) on Ember are the ones the stylesheets fixed, and
+// on Nord and Rubric they are the rule's, with Rubric's field its
+// raised paper.
+const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
   tokens: {
     bg: '#2e3440',
     panel: '#2e3440',
     sep: '#434c5e',
-    divider: '#383e4a',
+    divider: '#3e444f',
     selrow: '#3b4252',
-    hover: '#373d49',
-    inputband: '#363c48',
+    hover: '#393f4a',
+    inputband: '#353b46',
     text: '#e5e9f0',
     secondary: '#c0c7d3',
     tertiary: '#7b8294',
-    title: '#a1a4a9',
+    title: '#c0c7d3',
     raised: '#2e3440',
     accent: '#88c0d0',
-    onAccent: '#1b1f27',
+    onAccent: '#1a1f2a',
     danger: '#bf616a',
     dangerText: '#dc8a92',
     warn: '#ebcb8b',
     warnText: '#ebcb8b',
     success: '#a3be8c',
-    selection: 'rgba(136, 192, 208, 0.22)',
+    selection: '#4c566a',
+    selectionText: '#eceff4',
+    field: 'rgba(255, 255, 255, 0.102)',
+    track: 'rgba(255, 255, 255, 0.249)',
+    menuHi: 'rgba(255, 255, 255, 0.108)',
+    keyRing: 'rgba(255, 255, 255, 0.219)',
+    edge: 'rgba(255, 255, 255, 0.19)',
   },
 };
 
-const EMBER: CanvasSheet = {
+const EMBER: TokenSheet = {
   id: 'obsidian-ember',
   appearance: 'dark',
   tokens: {
     bg: '#050403',
-    panel: '#0c0a08',
-    sep: '#1d1b19',
-    divider: '#181614',
-    selrow: '#1d1b19',
-    hover: '#171513',
-    inputband: '#0f0e0d',
+    panel: '#050403',
+    sep: '#1b1a19',
+    divider: '#100f0e',
+    selrow: '#121110',
+    hover: '#0b0b0a',
+    inputband: '#080807',
     text: '#c0bdbb',
-    secondary: '#918e8c',
-    tertiary: '#62605e',
-    title: '#8e8c8b',
-    raised: '#100f0d',
+    secondary: '#8e8b89',
+    tertiary: '#63615f',
+    title: '#8e8b89',
+    raised: '#100f0e',
     accent: '#ef8f2f',
     onAccent: '#140b02',
     danger: '#ea8f80',
@@ -93,45 +144,54 @@ const EMBER: CanvasSheet = {
     warn: '#ecc985',
     warnText: '#ecc985',
     success: '#8fdaa8',
-    selection: 'rgba(239, 143, 47, 0.20)',
+    selection: '#201d1c',
+    selectionText: '#f2efee',
+    field: 'rgba(255, 255, 255, 0.06)',
+    track: 'rgba(255, 255, 255, 0.16)',
+    menuHi: 'rgba(255, 255, 255, 0.08)',
+    keyRing: 'rgba(255, 255, 255, 0.14)',
+    edge: 'rgba(255, 255, 255, 0.12)',
   },
 };
 
-const VELLUM: CanvasSheet = {
-  id: 'vellum',
+const RUBRIC: TokenSheet = {
+  id: 'rubric',
   appearance: 'light',
   tokens: {
-    bg: '#f7f4ee',
-    panel: '#f0ede7',
-    sep: '#dad8d2',
-    divider: '#dfdcd7',
-    selrow: '#ffffff',
-    hover: '#e6e4de',
-    inputband: '#eeebe6',
-    text: '#2a2622',
-    secondary: '#5c5853',
-    tertiary: '#898681',
-    title: '#7c7a77',
-    raised: '#ffffff',
-    accent: '#3f6690',
+    bg: '#f0e5cf',
+    panel: '#f0e5cf',
+    sep: '#cbc1af',
+    divider: '#dcd1bd',
+    selrow: '#f5efe4',
+    hover: '#e2d8c3',
+    inputband: '#e7ddc7',
+    text: '#151d2a',
+    secondary: '#525558',
+    tertiary: '#83817d',
+    title: '#525558',
+    raised: '#f5efe4',
+    accent: '#3656b1',
     onAccent: '#ffffff',
-    danger: '#a8453a',
-    dangerText: '#a8453a',
-    warn: '#94661a',
-    warnText: '#8f6213',
-    success: '#4f7a3a',
-    selection: 'rgba(63, 102, 144, 0.18)',
+    danger: '#e15400',
+    dangerText: '#b24100',
+    warn: '#5d4000',
+    warnText: '#5d4000',
+    success: '#007873',
+    selection: '#cbc8c9',
+    selectionText: '#151d2a',
+    field: '#f5efe4',
+    track: 'rgba(0, 0, 0, 0.146)',
+    menuHi: 'rgba(0, 0, 0, 0.052)',
+    keyRing: 'rgba(0, 0, 0, 0.124)',
+    edge: 'rgba(0, 0, 0, 0.146)',
   },
 };
 
-const SHEETS: CanvasSheet[] = [
-  NORD,
-  EMBER,
-  VELLUM,
-  { ...EMBER, tokens: { ...EMBER.tokens, title: '#8e8e8e' } },
-];
+// The canvas drew Ember's title in #8e8e8e on a second sheet. The title
+// is the secondary tone now, so that sheet is gone.
+const SHEETS: TokenSheet[] = [NORD, EMBER, RUBRIC];
 
-describe('built-in themes reproduce the approved canvas', () => {
+describe('built-in themes reproduce the one ground boards', () => {
   SHEETS.forEach((sheet, n) => {
     it(`${sheet.id} (sheet ${n + 1}) within delta E 2`, () => {
       const theme = findTheme(sheet.id);
@@ -179,6 +239,22 @@ describe('contrast floors', () => {
       expect(on('title', bg), 'title').toBeGreaterThanOrEqual(3);
       expect(on('accent', bg), 'accent').toBeGreaterThanOrEqual(3);
       expect(on('onAccent', hex(t.accent)), 'onAccent').toBeGreaterThanOrEqual(ON_ACCENT_CONTRAST);
+      // The window floors of the one ground rule. The 1 px line stands
+      // dL 8 to 12 off the ground, and 4 or more off a menu, where the
+      // menu separators draw in it.
+      const sep = stepDL(hex(t.sep), bg);
+      expect(sep, 'sep off the ground').toBeGreaterThanOrEqual(8);
+      expect(sep, 'sep off the ground').toBeLessThanOrEqual(12);
+      expect(stepDL(hex(t.sep), raised), 'sep off raised').toBeGreaterThanOrEqual(4);
+      // An accent the rule picks stands apart from every status color.
+      // A pinned one stays as the theme drew it.
+      if (theme.chrome?.accent === undefined) {
+        for (const key of ['danger', 'warn', 'success'] as const) {
+          expect(deltaEOk(hex(t.accent), hex(t[key])), `accent from ${key}`).toBeGreaterThanOrEqual(
+            ACCENT_APART,
+          );
+        }
+      }
     });
   }
 
@@ -204,7 +280,6 @@ describe('contrast floors', () => {
       catppuccin: '#f5c2e7',
       dracula: '#bd93f9',
       monokai: '#f92672',
-      'one-dark': '#61afef',
       'one-half-dark': '#61afef',
       'tango-dark': '#729fcf',
       'classic-vivid': '#ffaa00',
@@ -216,8 +291,141 @@ describe('contrast floors', () => {
   });
 });
 
+describe('control washes', () => {
+  // The surface each wash sits on and steps: the field, the track and
+  // the keycap ring the panel, the menu highlight raised, the edge the
+  // ground.
+  const SURFACE = {
+    field: 'panel',
+    track: 'panel',
+    keyRing: 'panel',
+    menuHi: 'raised',
+    edge: 'bg',
+  } as const;
+  type Wash = keyof typeof SURFACE;
+  const WASHES = Object.keys(SURFACE) as Wash[];
+
+  for (const theme of BUILTIN_THEMES) {
+    it(`${theme.id} stands each wash its step off its surface`, () => {
+      const t = themeTokens(theme);
+      const steps: Partial<Record<Wash, number>> = WASH_STEP[t.appearance];
+      for (const key of WASHES) {
+        const step = steps[key];
+        // A light field is the raised paper, below.
+        if (step === undefined) continue;
+        // Below Obsidian Ember's ground a wash keeps the alpha it takes
+        // on Ember's, so on Modus Vivendi's pure black it steps as it
+        // does there.
+        const surface = t[SURFACE[key]];
+        const ground = lightness(hex(surface)) < lightness(EMBER_GROUND) ? '#050403' : surface;
+        // A three place alpha and whole channels round a step by up to
+        // about 0.4.
+        expect(Math.abs(stepDL(paint(t[key], ground), hex(ground)) - step), key).toBeLessThan(0.5);
+      }
+    });
+  }
+
+  it('fields a light theme on its raised paper, never on white', () => {
+    const light = BUILTIN_THEMES.map(themeTokens).filter((t) => t.appearance === 'light');
+    expect(light.length).toBeGreaterThan(0);
+    for (const t of light) {
+      expect(t.field).toBe(t.raised);
+      expect(t.field).not.toBe('#ffffff');
+    }
+  });
+
+  it('paints Obsidian Ember within dE 1 of the washes the stylesheets fixed', () => {
+    const t = themeTokens(findTheme('obsidian-ember'));
+    // The edge is the ring inside a floating surface, white 0.12, which
+    // board 11 draws. The window edges took 0.10 and 0.18 and move to it.
+    const fixed: Record<Wash, number> = {
+      field: 0.06,
+      track: 0.16,
+      keyRing: 0.14,
+      menuHi: 0.08,
+      edge: 0.12,
+    };
+    for (const key of WASHES) {
+      const ground = t[SURFACE[key]];
+      const before = composite(WHITE, hex(ground), fixed[key]);
+      expect(deltaEOk(paint(t[key], ground), before), key).toBeLessThan(1);
+    }
+  });
+});
+
+describe('Triad and Rubric', () => {
+  it('follow Obsidian Ember, which stays first as the fallback', () => {
+    expect(BUILTIN_THEMES.slice(0, 3).map((t) => t.id)).toEqual([
+      'obsidian-ember',
+      'triad',
+      'rubric',
+    ]);
+    expect(findTheme('gone').id).toBe('obsidian-ember');
+    expect(themeTokens(findTheme('triad')).appearance).toBe('dark');
+    expect(themeTokens(findTheme('rubric')).appearance).toBe('light');
+  });
+
+  it('pass all 46 game checks as they stand, so they keep no fit', () => {
+    for (const id of ['triad', 'rubric']) {
+      const theme = findTheme(id);
+      const all = checks(theme.xterm);
+      expect(all, id).toHaveLength(46);
+      expect(
+        all.filter((c) => !c.ok),
+        id,
+      ).toEqual([]);
+      expect(theme.fitted, id).toBeUndefined();
+    }
+  });
+
+  it('take Nercuros cyan and lapis as the accent', () => {
+    expect(themeTokens(findTheme('triad')).accent).toBe('#44d4e2');
+    expect(themeTokens(findTheme('rubric')).accent).toBe('#3656b1');
+  });
+});
+
+describe('retired themes', () => {
+  afterEach(() => setCustomThemes([]));
+
+  it('give each retired id a successor Vosh ships (Q13, Q14 and Q16)', () => {
+    expect([...RETIRED_THEMES]).toEqual([
+      ['one-dark', 'one-half-dark'],
+      ['vellum', 'rubric'],
+      ['everforest-light', 'melange-light'],
+    ]);
+    const ids = BUILTIN_THEMES.map((t) => t.id);
+    for (const [retired, successor] of RETIRED_THEMES) {
+      expect(ids, retired).not.toContain(retired);
+      expect(findTheme(retired).id, retired).toBe(successor);
+    }
+  });
+
+  it('paint a saved vellum in the tokens of Rubric', () => {
+    expect(themeTokens(findTheme('vellum'))).toEqual(themeTokens(findTheme('rubric')));
+  });
+
+  it('let a custom theme with a retired id win over its successor', () => {
+    const mine = customToAppTheme({
+      id: 'vellum',
+      label: 'My Vellum',
+      description: '',
+      xterm: { background: '#f7f4ee', foreground: '#2a2622' },
+      chrome: {},
+    });
+    setCustomThemes([mine]);
+    expect(findTheme('vellum').label).toBe('My Vellum');
+    expect(themeShownBy([...BUILTIN_THEMES, mine], 'vellum')).toBe(mine);
+    expect(findTheme('one-dark').id).toBe('one-half-dark');
+  });
+
+  it('find nothing for an id no theme has and none retired', () => {
+    expect(themeShownBy(BUILTIN_THEMES, 'gone')).toBeUndefined();
+    expect(findTheme('gone').id).toBe('obsidian-ember');
+  });
+});
+
 describe('Everforest and Green Screen', () => {
-  const NEW_THEMES = ['everforest-dark', 'everforest-light', 'green-screen'];
+  const NEW_THEMES = ['everforest-dark', 'green-screen'];
   // Black and bright black stay near the ground on purpose in many
   // palettes, Everforest's own mapping included. Every other slot draws
   // game text.
@@ -244,24 +452,13 @@ describe('Everforest and Green Screen', () => {
     const ids = BUILTIN_THEMES.map((t) => t.id);
     for (const id of NEW_THEMES) expect(ids, id).toContain(id);
     expect(themeTokens(findTheme('everforest-dark')).appearance).toBe('dark');
-    expect(themeTokens(findTheme('everforest-light')).appearance).toBe('light');
     expect(themeTokens(findTheme('green-screen')).appearance).toBe('dark');
   });
 
-  // The colors Everforest and CGA publish under 3:1 on their own ground.
-  // The terminal draws them as published. The chat pane lifts them where
-  // it draws them on the panel (chatColors.test.ts).
+  // The colors CGA publishes under 3:1 on its own ground. The terminal
+  // draws them as published. The chat pane lifts them where it draws
+  // them on the panel (chatColors.test.ts).
   const PUBLISHED_FAINT: Record<string, readonly (typeof WORD_SLOTS)[number][]> = {
-    'everforest-light': [
-      'green',
-      'yellow',
-      'magenta',
-      'cyan',
-      'brightGreen',
-      'brightYellow',
-      'brightMagenta',
-      'brightCyan',
-    ],
     'green-screen': ['red', 'blue'],
   };
 
@@ -280,12 +477,12 @@ describe('Everforest and Green Screen', () => {
 
   it('keep the published Everforest and CGA colors', () => {
     const everforest: Partial<XtermPalette> = {
-      red: '#f85552',
-      green: '#8da101',
-      yellow: '#dfa000',
-      blue: '#3a94c5',
-      magenta: '#df69ba',
-      cyan: '#35a77c',
+      red: '#e67e80',
+      green: '#a7c080',
+      yellow: '#dbbc7f',
+      blue: '#7fbbb3',
+      magenta: '#d699b6',
+      cyan: '#83c092',
     };
     // Everforest repeats the six colors in the bright slots.
     const brights = Object.fromEntries(
@@ -294,7 +491,7 @@ describe('Everforest and Green Screen', () => {
         value,
       ]),
     );
-    expect(findTheme('everforest-light').xterm).toMatchObject({ ...everforest, ...brights });
+    expect(findTheme('everforest-dark').xterm).toMatchObject({ ...everforest, ...brights });
     expect(findTheme('green-screen').xterm).toMatchObject({
       black: '#000000',
       red: '#aa0000',
@@ -315,27 +512,12 @@ describe('Everforest and Green Screen', () => {
     });
   });
 
-  it('paint the Everforest selection on its bg_visual', () => {
-    const visual: Record<string, string> = {
-      'everforest-dark': '#543a48',
-      'everforest-light': '#eaedc8',
-    };
-    for (const [id, want] of Object.entries(visual)) {
-      const x = findTheme(id).xterm;
-      // The terminal paints the selection at 40 percent.
-      const painted = composite(hex(x.selectionBackground), hex(x.background), 0.4);
-      expect(deltaE2000(painted, hex(want)), id).toBeLessThan(1);
-    }
+  it('store the Everforest selection as its bg_visual', () => {
+    expect(findTheme('everforest-dark').xterm.selectionBackground).toBe('#543a48');
   });
 
   it('take Everforest green as the accent', () => {
     expect(themeTokens(findTheme('everforest-dark')).accent).toBe('#a7c080');
-    // The published green lifted to 3:1, the color the chrome also
-    // derives as success.
-    const light = themeTokens(findTheme('everforest-light'));
-    expect(light.accent).toBe(light.success);
-    expect(Math.abs(hue(light.accent) - hue('#8da101'))).toBeLessThan(2);
-    expect(contrast(hex(light.accent), hex(light.bg))).toBeGreaterThanOrEqual(3);
   });
 
   it('give Green Screen soft phosphor text on a green black ground', () => {
@@ -449,6 +631,16 @@ describe('Solarized', () => {
     }
   });
 
+  it('keeps the dark theme out of Fit game colors and says why (Q20)', () => {
+    expect(dark.fitGameColors).toBe(false);
+    expect(dark.fitted).toBeUndefined();
+    expect(dark.description).toContain('low contrast by design');
+    expect(light.fitGameColors).toBeUndefined();
+    expect(BUILTIN_THEMES.filter((t) => t.fitGameColors === false).map((t) => t.id)).toEqual([
+      'solarized-dark',
+    ]);
+  });
+
   it('keeps every slot game text reads off its ground', () => {
     const slots = [
       'white',
@@ -465,6 +657,102 @@ describe('Solarized', () => {
         expect(contrast(hex(theme.xterm[slot]), bg), `${theme.id} ${slot}`).toBeGreaterThan(2);
       }
     }
+  });
+});
+
+// The fits are computed ahead by lib/gameFit, and gameFit.test.ts fits
+// each again with VOSH_FIT_THEMES=1. These pin what the decisions say of them.
+describe('fitted game colors', () => {
+  const inPlay = (id: string) => playPalette(findTheme(id), true);
+  const misses = (id: string) => checks(inPlay(id)).filter((c) => !c.ok);
+  const value = (id: string, check: string) =>
+    checks(inPlay(id)).find((c) => c.id === check)?.value;
+
+  it('draws play in the fitted slots while Fit game colors is on (Q2)', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(inPlay('kanso-zen')).toEqual({ ...kanso.xterm, ...kanso.fitted });
+    expect(inPlay('kanso-zen').foreground).toBe('#c9cdcb');
+    expect(inPlay('kanso-zen').brightBlack).toBe('#92979d');
+    expect(inPlay('kanso-zen').brightWhite).toBe('#f0f5f2');
+    expect(inPlay('kanso-zen').background).toBe(kanso.xterm.background);
+    // Off, play draws the theme as published.
+    for (const theme of BUILTIN_THEMES)
+      expect(playPalette(theme, false), theme.id).toBe(theme.xterm);
+    // Solarized Dark keeps out, so play draws it as published (Q20).
+    const dark = findTheme('solarized-dark');
+    expect(playPalette(dark, true)).toBe(dark.xterm);
+  });
+
+  it('draws a custom theme in the fit it kept, and as published without one', () => {
+    const base = { id: 'dusk', label: 'Dusk', description: '', chrome: {} };
+    const xterm = { background: '#1a1b26', foreground: '#c0caf5' };
+    const kept = customToAppTheme({ ...base, xterm, fitted: { red: '#cb7b74' } });
+    expect(kept.fitted).toEqual({ red: '#cb7b74' });
+    expect(playPalette(kept, true)).toEqual({ ...kept.xterm, red: '#cb7b74' });
+    expect(playPalette(kept, false)).toBe(kept.xterm);
+    const none = customToAppTheme({ ...base, xterm });
+    expect(none.fitted).toBeUndefined();
+    expect(playPalette(none, true)).toBe(none.xterm);
+  });
+
+  it('stores only the slots the fit moved, from body text and the 16 colors', () => {
+    for (const theme of BUILTIN_THEMES) {
+      for (const [slot, hex] of Object.entries(theme.fitted ?? {})) {
+        expect(GAME_SLOTS, `${theme.id} ${slot}`).toContain(slot);
+        expect(hex, `${theme.id} ${slot}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(hex, `${theme.id} ${slot}`).not.toBe(theme.xterm[slot as keyof XtermPalette]);
+      }
+    }
+  });
+
+  it('lifts Kanso Zen to 44 of 46 in play and keeps its palette (Q15)', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(Object.keys(kanso.fitted ?? {})).toHaveLength(16);
+    expect(kanso.xterm.brightBlack).toBe('#5c6066');
+    expect(misses('kanso-zen')).toHaveLength(2);
+  });
+
+  it('accepts what Classic Vivid and Green Screen still miss (Q17)', () => {
+    expect(misses('classic-vivid')).toHaveLength(6);
+    expect(value('classic-vivid', 'T3 blue Lc')).toBe(39);
+    expect(value('classic-vivid', 'T3 red Lc')).toBe(40.7);
+    expect(value('green-screen', 'T3 blue Lc')).toBe(45.1);
+    expect(misses('green-screen').map((c) => `${c.id} ${c.value}`)).toEqual(
+      expect.arrayContaining(['T2 cyan Lc 53.8', 'T2 brightBlue Lc 58.8']),
+    );
+  });
+
+  it('lifts Tango Dark blue and magenta and leaves red at Lc 36.2 (Q18)', () => {
+    expect(misses('tango-dark')).toHaveLength(4);
+    expect(value('tango-dark', 'T3 blue Lc')).toBeGreaterThanOrEqual(45);
+    expect(value('tango-dark', 'T3 magenta Lc')).toBeGreaterThanOrEqual(45);
+    expect(value('tango-dark', 'T3 red Lc')).toBe(36.2);
+  });
+
+  it('sets bright white dL 8 above body text in the six of Q19', () => {
+    for (const id of [
+      'monokai',
+      'rose-pine',
+      'everforest-dark',
+      'tokyo-night',
+      'gruvbox',
+      'high-contrast',
+    ]) {
+      expect(value(id, 'T6 fg/brightWhite dL'), id).toBeGreaterThanOrEqual(8);
+    }
+    expect(findTheme('monokai').fitted?.foreground).toBe('#e4e4df');
+    expect(findTheme('high-contrast').fitted?.foreground).toBe('#e4e4e4');
+  });
+
+  it('leaves the new schemes short where the review said (Q1)', () => {
+    const missed = (id: string) => misses(id).map((c) => `${c.id} ${c.value}`);
+    expect(missed('srcery')).toEqual(['T3 red Lc 40.3']);
+    expect(missed('nightfly')).toEqual(['T3 red Lc 38.1', 'T6 yellow pair dE 7.9']);
+    expect(missed('melange-dark')).toEqual(['T2 yellow Lc 58.5', 'T3 red Lc 41.5']);
+    expect(missed('melange-light')).toEqual([]);
+    expect(missed('modus-vivendi')).toEqual(['T3 red Lc 43.5']);
+    // Melange Light passes 35 as published.
+    expect(checks(findTheme('melange-light').xterm).filter((c) => !c.ok)).toHaveLength(11);
   });
 });
 
@@ -520,7 +808,8 @@ describe('custom theme chrome', () => {
     });
     const t = themeTokens(custom);
     expect(t.accent).toBe('#ff3399');
-    expect(t.panel).toBe('#0c0a08');
+    // The panel sits on the terminal ground under the one ground rule.
+    expect(t.panel).toBe('#050403');
     expect(t.text).toBe('#c0bdbb');
     expect(t.warn).toBe('#ecc985');
   });
@@ -537,5 +826,94 @@ describe('customThemeLabel', () => {
   it('keeps a name you typed, without the spaces around it', () => {
     expect(customThemeLabel({ id: 'dusk', label: ' Dusk ' })).toBe('Dusk');
     expect(customToAppTheme({ ...base, id: 'dusk', label: 'Dusk' }).label).toBe('Dusk');
+  });
+});
+
+describe('theme credits', () => {
+  it('names the source, the author and the license of every built in theme', () => {
+    for (const theme of BUILTIN_THEMES) {
+      expect(theme.source?.trim(), theme.id).toBeTruthy();
+      expect(theme.author?.trim(), theme.id).toBeTruthy();
+      expect(theme.license, theme.id).toBeTruthy();
+    }
+  });
+
+  it('records Dracula as the source of Dracula at Night, on a darker ground', () => {
+    const night = findTheme('dracula');
+    expect(night.source).toBe('Dracula');
+    expect(night.license).toBe('MIT');
+    // Dracula's own ground is #282a36.
+    expect(night.xterm.background).toBe('#1a1c23');
+    expect(night.description).toContain('#282a36');
+  });
+
+  it('leaves a custom theme without a credit', () => {
+    const custom = customToAppTheme({
+      id: 'dusk',
+      label: 'Dusk',
+      description: 'Mine.',
+      xterm: {},
+      chrome: {},
+    });
+    expect(custom.source).toBeUndefined();
+    expect(custom.author).toBeUndefined();
+    expect(custom.license).toBeUndefined();
+  });
+});
+
+describe('public/theme-credits.txt', () => {
+  // Each section opens under a rule of equals signs. Its first line
+  // names the themes it covers, its Source line the work and its author.
+  const sections = credits
+    .split(/^=+$/m)
+    .slice(1)
+    .map((text) => {
+      const [title = '', ...rest] = text.trim().split('\n');
+      return { themes: title.split(/, | and /), body: rest.join('\n') };
+    });
+  const sectionFor = (label: string) => sections.find((s) => s.themes.includes(label));
+  const flat = (text: string) => text.replace(/\s+/g, ' ');
+  const PERMISSION =
+    'Permission is hereby granted, free of charge, to any person obtaining a copy of this ' +
+    'software and associated documentation files (the "Software"), to deal in the Software ' +
+    'without restriction';
+
+  it('credits every built in theme and its author', () => {
+    for (const theme of BUILTIN_THEMES) {
+      const section = sectionFor(theme.label);
+      expect(section, theme.id).toBeDefined();
+      const source = /^Source (.*)$/m.exec(section?.body ?? '')?.[1] ?? '';
+      expect(source.toLowerCase(), theme.id).toContain(String(theme.author).toLowerCase());
+    }
+  });
+
+  it('keeps the copyright line and the permission of every MIT theme', () => {
+    const mit = BUILTIN_THEMES.filter((t) => t.license === 'MIT');
+    expect(mit.length).toBeGreaterThan(0);
+    for (const theme of mit) {
+      const body = sectionFor(theme.label)?.body ?? '';
+      expect(body, theme.id).toMatch(/^Copyright \(c\) \d{4}\S* \S/m);
+      expect(flat(body), theme.id).toContain(PERMISSION);
+    }
+  });
+
+  it('keeps the MIT notice of the base16 scheme Monokai takes its colors from', () => {
+    const body = sectionFor('Monokai')?.body ?? '';
+    expect(body).toContain('Copyright (c) 2022 Tinted Theming');
+    expect(flat(body)).toContain(PERMISSION);
+  });
+
+  it('keeps the Apache License of the port Tokyo Night takes its slots from', () => {
+    const body = flat(sectionFor('Tokyo Night')?.body ?? '');
+    expect(body).toContain('Apache License Version 2.0, January 2004');
+    expect(body).toContain('TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION');
+    expect(body).toContain('END OF TERMS AND CONDITIONS');
+  });
+
+  it('keeps the copyright line of Modus Vivendi', () => {
+    expect(findTheme('modus-vivendi').license).toBe('GPL-3.0-or-later');
+    expect(sectionFor('Modus Vivendi')?.body).toContain(
+      'Copyright (C) 2019-2026 Free Software Foundation, Inc.',
+    );
   });
 });

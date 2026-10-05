@@ -49,19 +49,6 @@
   top: 56px;
 }
 
-/* Row highlight and keycap ring for floating surfaces (SPEC 7). Only
-   these two differ by appearance. The recipe itself is in tokens.css. */
-:root,
-:root[data-appearance='dark'] {
-  --ov-hl: rgba(255, 255, 255, 0.08);
-  --ov-key-ring: rgba(255, 255, 255, 0.14);
-}
-
-:root[data-appearance='light'] {
-  --ov-hl: rgba(0, 0, 0, 0.05);
-  --ov-key-ring: rgba(0, 0, 0, 0.12);
-}
-
 /* Keycaps: 20 square, radius 4, a ring and no fill, the glyph in the
    UI face. Spelled out keys (Ctrl, Shift) widen to fit. */
 .ov-keys {
@@ -81,7 +68,7 @@
   height: 20px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--ov-key-ring);
+  border: 1px solid var(--key-ring);
   border-radius: var(--r-key);
   background: none;
   box-sizing: border-box;
@@ -163,7 +150,7 @@
   flex: none;
   height: 1px;
   margin: 0 1px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .ov-pal-list {
@@ -246,7 +233,7 @@
 }
 
 .ov-pal-row.is-selected {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .ov-pal-row.is-danger {
@@ -348,7 +335,7 @@
 }
 
 .ov-menu-item.is-active {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .ov-menu-item.is-danger {
@@ -379,7 +366,7 @@
 .ov-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 /* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
@@ -469,7 +456,7 @@
 }
 
 .ov-find-btn:hover:not(:disabled) {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .ov-find-btn:disabled {
@@ -485,7 +472,7 @@
   flex: none;
   width: 1px;
   height: 16px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 /* The three match toggles draw their glyphs as text (SPEC 6). On is
@@ -680,7 +667,7 @@
 }
 
 .ov-button:hover {
-  background: var(--ov-hl);
+  background: var(--menu-hi);
 }
 
 .ov-button:focus-visible {

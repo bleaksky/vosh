@@ -21,6 +21,7 @@ pub(crate) fn theme(id: &str, background: &str) -> CustomTheme {
             .into_iter()
             .collect(),
         chrome: BTreeMap::new(),
+        fitted: BTreeMap::new(),
     }
 }
 

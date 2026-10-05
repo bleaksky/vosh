@@ -1,23 +1,26 @@
 /* One Window design tokens. src/lib/theme.ts writes the color tokens
    on :root at runtime from lib/chrome's derivation of the active
-   terminal theme. The values below are Obsidian Ember's, so the first
-   paint matches the default theme, and a test in lib/chrome.test.ts
-   holds them to that derivation. Every new component reads these names
-   and nothing else. */
+   terminal theme. The values below are Obsidian Ember's, the fallback
+   theme a config without a theme key reads, and a test in
+   lib/chrome.test.ts holds them to that derivation. They paint only
+   until the startup paint or the config brings your theme. A new
+   install starts on Triad, and its window stays hidden until the
+   config paints Triad, for half a second at most. Every new component
+   reads these names and nothing else. */
 
 :root {
   --bg: #050403;
-  --panel: #0c0a08;
-  --sep: #1d1b19;
-  --divider: #181614;
-  --selrow: #1d1b19;
-  --hover: #171513;
-  --inputband: #0f0e0d;
+  --panel: #050403;
+  --sep: #1b1a19;
+  --divider: #100f0e;
+  --selrow: #121110;
+  --hover: #0b0b0a;
+  --inputband: #080807;
   --text: #c0bdbb;
-  --secondary: #918e8c;
-  --tertiary: #646260;
-  --title: #8f8e8e;
-  --raised: #100f0d;
+  --secondary: #8e8b89;
+  --tertiary: #63615f;
+  --title: #8e8b89;
+  --raised: #100f0e;
   --accent: #ef8f2f;
   --on-accent: #140b02;
   --danger: #ea8f80;
@@ -25,7 +28,13 @@
   --warn: #ecc985;
   --warn-text: #ecc985;
   --success: #8fdaa8;
-  --selection: rgba(239, 143, 47, 0.22);
+  --selection: #201d1c;
+  --selection-text: #f2efee;
+  --field: rgba(255, 255, 255, 0.058);
+  --track: rgba(255, 255, 255, 0.158);
+  --menu-hi: rgba(255, 255, 255, 0.081);
+  --key-ring: rgba(255, 255, 255, 0.138);
+  --edge: rgba(255, 255, 255, 0.121);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
@@ -63,20 +72,24 @@
 }
 
 /* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
-   --ring-float is the edge alone, --shadow-float the whole recipe.
-   --edge-inset is the 1 px edge a small surface draws inside itself to
-   read on its ground, like a color swatch, or a prompt band on paper. */
+   --ring-float is the edge alone, a fixed black ring outside and on
+   dark the theme's --edge inside, and --shadow-float the whole recipe.
+   --edge is also the 1 px edge a prompt band on paper draws inside
+   itself to read on its ground. A color swatch rings in --key-ring.
+   --mark-tint is a mark over terminal text it cannot redraw, the prompt
+   card's marks on your prompt, where the opaque selection would hide the
+   glyphs. */
 :root,
 :root[data-appearance='dark'] {
-  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px var(--edge);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.4);
-  --edge-inset: rgba(255, 255, 255, 0.14);
+  --mark-tint: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 :root[data-appearance='light'] {
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.14);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.22);
-  --edge-inset: rgba(0, 0, 0, 0.14);
+  --mark-tint: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* Legacy aliases. styles.css and every component built before the One

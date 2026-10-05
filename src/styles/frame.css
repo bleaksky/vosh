@@ -42,12 +42,8 @@
   inset: 0;
   z-index: 60;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px var(--edge);
   pointer-events: none;
-}
-
-:root[data-appearance='light'] .app.shell::after {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
 
 /* macOS gives the main window a titled frame. The system rounds the
@@ -262,6 +258,12 @@
   line-height: 18px;
   font-weight: 400;
   white-space: nowrap;
+}
+
+/* The title dims to the tertiary tone while the window is in the
+   background. App.tsx writes the attribute from the window's focus. */
+:root[data-window-focus='unfocused'] .shell-title-button {
+  color: var(--tertiary);
 }
 
 .shell-title-button:hover {
@@ -528,7 +530,6 @@
    with radius 8, the label 12 inside the row, shortcuts in tertiary at
    the right, 1 px --divider separators. */
 .shell-menu {
-  --menu-hi: rgba(255, 255, 255, 0.08);
   position: fixed;
   z-index: 800;
   box-sizing: border-box;
@@ -540,10 +541,6 @@
   font-family: var(--font-ui);
   user-select: none;
   -webkit-user-select: none;
-}
-
-:root[data-appearance='light'] .shell-menu {
-  --menu-hi: rgba(0, 0, 0, 0.05);
 }
 
 .shell-menu-item {
@@ -600,7 +597,7 @@
 .shell-menu-sep {
   height: 1px;
   margin: 6px 12px;
-  background: var(--divider);
+  background: var(--sep);
 }
 
 .shell-menu-note {
@@ -659,7 +656,7 @@
   border: 0;
   border-radius: var(--r-row);
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--field);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -679,8 +676,8 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/* On paper the field is the raised paper, so it takes a hairline ring. */
 :root[data-appearance='light'] .shell-textfield {
-  background: #ffffff;
   box-shadow: inset 0 0 0 1px var(--sep);
 }
 
@@ -720,11 +717,7 @@
   width: 38px;
   height: 22px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-:root[data-appearance='light'] .shell-toggle-track {
-  background: rgba(0, 0, 0, 0.14);
+  background: var(--track);
 }
 
 .shell-toggle-track::after {

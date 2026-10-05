@@ -1,6 +1,8 @@
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import tokyoNight from '../../../../fixtures/themes/tokyonight_night.conf?raw';
 import type { SystemFontEntry, UiConfig } from '../../../lib/session';
+import type { XtermPalette } from '../../../lib/themes';
 import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
 
@@ -24,6 +26,21 @@ const invoke = vi.hoisted(() =>
 );
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+
+// The game color fit runs in a worker. Here it answers when a test says.
+const fitting = vi.hoisted(() => {
+  const asked: XtermPalette[] = [];
+  let answer: (fitted: Partial<XtermPalette> | null) => void = () => {};
+  const fitOffThread = vi.fn(
+    (palette: XtermPalette) =>
+      new Promise<Partial<XtermPalette> | null>((resolve) => {
+        asked.push(palette);
+        answer = resolve;
+      }),
+  );
+  return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
+});
+vi.mock('../../../lib/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -140,6 +157,112 @@ describe('AppearancePage', () => {
     });
   });
 
+  it('describes and credits the theme on screen under the gallery', async () => {
+    const caption = async (ui: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: ui,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const found = findAll(container, (el) =>
+        (el.getAttribute('class') ?? '').split(' ').includes('st-theme-caption'),
+      );
+      const shown = found.map((el) => ({
+        text: el.textContent,
+        className: el.getAttribute('class'),
+        after: el.parentNode?.childNodes[el.parentNode.childNodes.indexOf(el) - 1]?.nodeName,
+      }));
+      await act(async () => {
+        root.unmount();
+      });
+      return shown;
+    };
+
+    expect(await caption(config())).toEqual([
+      {
+        text:
+          'Arctic palette. Polar nights base, frost accents. ' +
+          'Its colors come from Nord by Sven Greb, under the MIT license.',
+        className: 'st-meta st-theme-caption',
+        after: 'FIELDSET',
+      },
+    ]);
+
+    const dusk = { id: 'dusk', label: 'Dusk', description: 'Low light.', xterm: {}, chrome: {} };
+    const custom = await caption({ ...config(), theme: 'dusk', custom_themes: [dusk] });
+    expect(custom.map((c) => c.text)).toEqual(['Low light.']);
+    const blank = { ...dusk, description: '' };
+    expect(await caption({ ...config(), theme: 'dusk', custom_themes: [blank] })).toEqual([]);
+  });
+
+  it('marks the theme a retired id shows as chosen, in the gallery and the selects', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    // The window above reads every media query as a match, so the OS is
+    // dark and the gallery shows the dark theme.
+    const ui = {
+      ...config(),
+      theme: 'vellum',
+      follow_system_appearance: true,
+      light_theme: 'vellum',
+      dark_theme: 'one-dark',
+    };
+    await act(async () => {
+      root.render(
+        createElement(AppearancePage, {
+          target: { group: 'appearance' },
+          navSeq: 0,
+          config: ui,
+          setConfig: () => undefined,
+          onError: () => undefined,
+          pathB: false,
+          navigate: () => undefined,
+          setLeaveGuard: () => undefined,
+        }),
+      );
+    });
+    const isChecked = (el: FakeElement) => (el as unknown as { checked?: boolean }).checked;
+    const radios = findAll(container, (el) => el.getAttribute('type') === 'radio');
+    expect(radios.filter(isChecked).map((el) => el.value)).toEqual(['one-half-dark']);
+    const select = (anchor: string) => {
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === anchor);
+      const [found] = findAll(row, (el) => el.nodeName === 'SELECT');
+      return found;
+    };
+    const isSelected = (el: FakeElement) => (el as unknown as { selected?: boolean }).selected;
+    for (const [anchor, saved, shown] of [
+      ['light-theme', 'vellum', 'rubric'],
+      ['dark-theme', 'one-dark', 'one-half-dark'],
+    ]) {
+      const options = select(anchor).options;
+      expect(
+        options.filter(isSelected).map((o) => o.value),
+        anchor,
+      ).toEqual([shown]);
+      // The retired theme gets no option of its own.
+      expect(
+        options.map((o) => o.value),
+        anchor,
+      ).not.toContain(saved);
+    }
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it('starts Blinking text off while your system reduces motion and keeps your choice', async () => {
     // The window above answers every media query, reduce motion among
     // them, as a match.
@@ -171,6 +294,54 @@ describe('AppearancePage', () => {
     await act(async () => {
       root.unmount();
     });
+  });
+
+  it('draws Fit game colors after the theme colors switch, on unless you turn it off', async () => {
+    const fitSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'fit-game-colors',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked, anchors };
+    };
+
+    const on = await fitSwitch(config());
+    expect(on.label).toContain('Fit game colors');
+    expect(on.label).toContain('Settings keeps the theme as published');
+    expect(on.checked).toBe(true);
+    const at = on.anchors.indexOf('fit-game-colors');
+    expect(on.anchors.slice(at - 1, at + 2)).toEqual([
+      'theme-colors',
+      'fit-game-colors',
+      'readable-highlights',
+    ]);
+    const off = await fitSwitch({ ...config(), fit_game_colors: false });
+    expect(off.checked).toBe(false);
   });
 
   it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {
@@ -554,6 +725,173 @@ describe('AppearancePage', () => {
     const own = await panelRow('panel-size', { ...config(), panel_font_size: 20 });
     expect(own.value).toBe('20');
     expect(own.options.at(-1)).toEqual({ label: '20 pt', value: '20' });
+  });
+
+  /** The page on `start`, under the config the Settings window keeps.
+   *  `shown()` is that config now, and `leave()` moves the window to
+   *  another page. */
+  async function openPage(start: UiConfig) {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let shown = start;
+    function Host({ page }: { page: boolean }) {
+      const [cfg, setCfg] = useState<UiConfig | null>(shown);
+      if (cfg) shown = cfg;
+      if (!page) return null;
+      return createElement(AppearancePage, {
+        target: { group: 'appearance' },
+        navSeq: 0,
+        config: cfg,
+        setConfig: (next) => setCfg((c) => next(c)),
+        onError: () => undefined,
+        pathB: false,
+        navigate: () => undefined,
+        setLeaveGuard: () => undefined,
+      });
+    }
+    await act(async () => {
+      root.render(createElement(Host, { page: true }));
+    });
+    return {
+      container,
+      shown: () => shown,
+      leave: () =>
+        act(async () => {
+          root.render(createElement(Host, { page: false }));
+        }),
+      close: () =>
+        act(async () => {
+          root.unmount();
+        }),
+    };
+  }
+
+  async function importTokyoNight(container: FakeNode) {
+    const [input] = findAll(container, (el) => el.getAttribute('type') === 'file');
+    const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
+    const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
+    await act(async () => {
+      props.onChange({
+        target: {
+          files: [{ name: 'tokyonight_night.conf', text: async () => tokyoNight }],
+          value: '',
+        },
+      });
+    });
+  }
+
+  it('adds an imported theme at once and keeps its fit once the fit answers', async () => {
+    fitting.asked.length = 0;
+    const page = await openPage(config());
+    await importTokyoNight(page.container);
+    // The theme is in and on screen before the fit answers. The built
+    // in Tokyo Night holds its id.
+    const [theme] = page.shown().custom_themes;
+    expect(theme.id).toBe('tokyo-night-2');
+    expect(page.shown().theme).toBe(theme.id);
+    expect(theme).not.toHaveProperty('fitted');
+    expect(fitting.asked).toHaveLength(1);
+    expect(fitting.asked[0].background).toBe(theme.xterm.background);
+    await act(async () => {
+      fitting.answer({ red: '#f8809b', brightBlack: '#6d7498' });
+    });
+    expect(page.shown().custom_themes[0].fitted).toEqual({
+      red: '#f8809b',
+      brightBlack: '#6d7498',
+    });
+    expect(page.shown().custom_themes[0].xterm).toEqual(theme.xterm);
+    await page.close();
+  });
+
+  it('keeps the fit of an imported theme that answers after you leave the page', async () => {
+    fitting.asked.length = 0;
+    const page = await openPage(config());
+    await importTokyoNight(page.container);
+    expect(fitting.asked).toHaveLength(1);
+    await page.leave();
+    await act(async () => {
+      fitting.answer({ red: '#f8809b' });
+    });
+    expect(page.shown().custom_themes[0].fitted).toEqual({ red: '#f8809b' });
+    await page.close();
+  });
+
+  it('fits each custom theme that keeps no fit once the page opens', async () => {
+    fitting.asked.length = 0;
+    const triad = BUILTIN_THEMES.find((t) => t.id === 'triad');
+    const custom = (
+      id: string,
+      xterm: Record<string, string>,
+      fitted?: Record<string, string>,
+    ) => ({
+      id,
+      label: id,
+      description: '',
+      xterm,
+      chrome: {},
+      ...(fitted && { fitted }),
+    });
+    const dusk = custom('dusk', { background: '#1a1b26', foreground: '#c0caf5' });
+    const start = {
+      ...config(),
+      custom_themes: [
+        dusk,
+        // Kept its fit already.
+        custom('paper', { background: '#f7f4ee', foreground: '#2a2a2a' }, { red: '#a8322c' }),
+        // Passes every check, so a fit would move nothing.
+        custom('calm', { ...(triad?.xterm as unknown as Record<string, string>) }),
+      ],
+    };
+    const page = await openPage(start);
+    expect(fitting.asked).toHaveLength(1);
+    expect(fitting.asked[0].background).toBe('#1a1b26');
+    await act(async () => {
+      fitting.answer({ red: '#cb7b74' });
+    });
+    const kept = page.shown().custom_themes;
+    expect(kept.map((t) => t.fitted)).toEqual([{ red: '#cb7b74' }, { red: '#a8322c' }, undefined]);
+    await page.close();
+  });
+
+  it('keeps an imported theme off the id of a retired theme', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let shown: UiConfig = { ...config(), dark_theme: 'one-dark' };
+    function Host() {
+      const [cfg, setCfg] = useState<UiConfig | null>(shown);
+      if (cfg) shown = cfg;
+      return createElement(AppearancePage, {
+        target: { group: 'appearance' },
+        navSeq: 0,
+        config: cfg,
+        setConfig: (next) => setCfg((c) => next(c)),
+        onError: () => undefined,
+        pathB: false,
+        navigate: () => undefined,
+        setLeaveGuard: () => undefined,
+      });
+    }
+    await act(async () => {
+      root.render(createElement(Host));
+    });
+    const [input] = findAll(container, (el) => el.getAttribute('type') === 'file');
+    const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
+    const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
+    // A One Dark file you import. Your saved One Dark still shows One
+    // Half Dark, not the import.
+    const oneDark = tokyoNight.replace('## name: Tokyo Night', '## name: One Dark');
+    await act(async () => {
+      props.onChange({
+        target: { files: [{ name: 'one_dark.conf', text: async () => oneDark }], value: '' },
+      });
+    });
+    expect(shown.custom_themes.map((t) => t.id)).toEqual(['one-dark-2']);
+    expect(shown.dark_theme).toBe('one-dark');
+    await act(async () => {
+      root.unmount();
+    });
   });
 
   it('saves the choice you press in each row', async () => {

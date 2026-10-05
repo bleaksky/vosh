@@ -91,7 +91,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Appearance, from the approved board.
   {
     label: 'Theme',
-    keywords: 'colors palette gallery dark light nord ember vellum',
+    keywords: 'colors palette gallery dark light nord ember rubric vellum one everforest',
     target: at('appearance', 'theme'),
   },
   {
@@ -128,6 +128,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     description: 'Turn this off to keep the exact colors your MUD sends.',
     keywords: 'ansi tint',
     target: at('appearance', 'text', 'theme-colors'),
+  },
+  {
+    label: 'Fit game colors',
+    description:
+      'While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published.',
+    keywords: 'contrast faint legible readable ansi room names published play',
+    target: at('appearance', 'text', 'fit-game-colors'),
   },
   {
     label: 'Keep highlight colors readable',

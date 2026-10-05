@@ -1,24 +1,31 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getFitGameColors, subscribeFitGameColors } from './fitGameColors';
 
-// Keep highlight colors readable. The session lifts each fixed color a
-// trigger paints text in, a true color or a 256 color past the 16, until it
-// reads on the terminal background, so it needs that background while the
-// setting is on. Each Terminal reports its theme's background here on every
-// theme change, and the main window reports the setting. The command
-// carries the background while the setting is on and null while it is off,
-// and goes out only when that changes.
+// Keep highlight colors readable, and Fit game colors. The session lifts
+// each fixed color a trigger paints text in, a true color or a 256 color
+// past the 16, until it reads on the terminal background, so it needs that
+// background while the setting is on. While Fit game colors is on it lifts
+// the 256 colors past the 16 the game sends text in on a light background,
+// so it needs the background then too, as `game`. Each Terminal reports its
+// theme's background here on every theme change, the main window reports
+// Keep highlight colors readable, and the fit store reports Fit game
+// colors. The command carries each background while its setting is on and
+// null while it is off, and goes out only when either changes.
 
 let readable = true;
 let ground: string | null = null;
 // What the session holds now. Undefined until the first report.
-let sent: string | null | undefined;
+let sent: { background: string | null; game: string | null } | undefined;
 
 function report(): void {
-  const next = readable ? ground : null;
-  if (next === sent) return;
-  sent = next;
-  void invoke('highlight_ground_set', { background: next }).catch(() => {});
+  const background = readable ? ground : null;
+  const game = getFitGameColors() ? ground : null;
+  if (sent?.background === background && sent.game === game) return;
+  sent = { background, game };
+  void invoke('highlight_ground_set', { background, game }).catch(() => {});
 }
+
+subscribeFitGameColors(report);
 
 /** The Keep highlight colors readable setting changed, or loaded. */
 export function setReadableHighlights(on: boolean): void {
