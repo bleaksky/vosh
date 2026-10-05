@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultLayout } from '../lib/paneLayout';
 
-// The Characters wrappers in session.ts. Tauri takes camelCase argument
+// The Characters wrappers in src/ipc. Tauri takes camelCase argument
 // keys from JS, and an optional profile must reach the backend as null
 // rather than go missing, so these pin the exact calls.
 const tauri = vi.hoisted(() => ({
@@ -18,17 +18,17 @@ vi.mock('@tauri-apps/api/event', () => ({
   }),
 }));
 
+const { trackedAffectsSet } = await import('./affects');
 const {
   paneLayoutReset,
-  profileCreate,
   profileDetailGet,
   profileSetLogin,
   profileSetWorld,
   sessionIdentityGet,
   subscribeProfileChanged,
   subscribeSessionIdentity,
-  trackedAffectsSet,
-} = await import('../lib/session');
+} = await import('./characters');
+const { profileCreate } = await import('./profiles');
 
 const fire = (event: string, payload: unknown) => tauri.handlers.get(event)?.({ payload });
 
