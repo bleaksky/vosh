@@ -4,7 +4,7 @@
 // from this table so a tile in either mode reads the same.
 
 import { textPx } from '../paneTextSize';
-import { oklabToRgb, parseHex, rgbToOklab, toHex } from '../../theme/color';
+import { hexToRgba, oklabToRgb, parseHex, rgbToOklab, toHex } from '../../theme/color';
 import { readPanelFace, readPanelTextPx } from '../panelFace';
 
 export interface SectorTheme {
@@ -200,14 +200,4 @@ export function sectorIndex(code: string | undefined): number {
 
 export function sectorForCode(code: string | undefined): SectorTheme {
   return SECTORS[sectorIndex(code)];
-}
-
-// Convert a hex string like "#aabbcc" to an rgba() string at the given alpha.
-export function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return hex;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }

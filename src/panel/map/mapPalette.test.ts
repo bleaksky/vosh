@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { parseHex } from '../../theme/color';
 import { SECTORS, roomFill, sectorForCode, sectorIndex } from './mapPalette';
+
+describe('SECTORS', () => {
+  // The glyphs and the Squares borders take a halo or a border at an
+  // alpha through hexToRgba, which hands any other text back as it is.
+  it('writes every color in hex', () => {
+    for (const sector of Object.values(SECTORS)) {
+      for (const color of [sector.fill, sector.border, sector.halo]) {
+        expect(parseHex(color), `${sector.name} ${color}`).not.toBeNull();
+      }
+    }
+  });
+});
 
 describe('sectorForCode', () => {
   it('colors desert, lava and snow as Map.Tiles sends them, as numbers', () => {
