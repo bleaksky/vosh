@@ -276,11 +276,12 @@ pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
 pub(crate) const NATIVE_COPIED: &str = "vosh://native-copied";
 /// A click the page forwarded to the native surface ended. The page
 /// cancels the press, so no DOM mouseup follows, and the command line
-/// takes focus from this instead. The payload is null. `MainWindow` hears it.
+/// takes focus from this instead. The payload is null.
+/// `useNativeSurfaceBridge` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
 /// The pointer over the native surface wants another cursor. The
-/// payload is the CSS cursor name. `MainWindow` hears it.
+/// payload is the CSS cursor name. `useNativeSurfaceBridge` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 

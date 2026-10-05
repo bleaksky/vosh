@@ -10,7 +10,7 @@ import {
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal } from '../terminal/Terminal';
 import type { TerminalHandle } from '../terminal/terminalHandle';
-import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from '../terminal/terminalRenderer';
+import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { Resizable } from '../terminal/Resizable';
 import { UpdateNotice } from './overlays/UpdateNotice';
@@ -33,16 +33,9 @@ import { listTriggers, presetsInstall, presetsRemove } from '../ipc/automation';
 import {
   nativeSurfaceFind,
   nativeSurfaceFindClear,
-  nativeSurfaceReady,
   nativeSurfaceScroll,
-  nativeSurfaceSetBlinkText,
   nativeSurfaceSetBrightBold,
   nativeSurfaceSetDividerColor,
-  nativeSurfaceSetPromptBands,
-  nativeSurfaceSetPromptReach,
-  nativeSurfaceSetTokens,
-  onTerminalClicked,
-  onTerminalCursor,
 } from '../ipc/nativeSurface';
 import {
   promptConfigGet,
@@ -86,14 +79,7 @@ import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from '../pan
 import { PRESETS, presetTriggers } from '../automation/presets';
 import { presetLaunchPlan } from '../automation/automationRecords';
 import { listenForQuitFlush } from '../lib/pendingWrites';
-import {
-  customToAppTheme,
-  findTheme,
-  resolveThemeTerminalColors,
-  setCustomThemes,
-  themeTokens,
-} from '../theme/themes';
-import { parseHex, toRgba } from '../theme/color';
+import { customToAppTheme, resolveThemeTerminalColors, setCustomThemes } from '../theme/themes';
 import { setBaseAnsi } from '../theme/baseAnsi';
 import { setReadableHighlights } from '../terminal/highlightGround';
 import { fitThemesInPlay } from '../theme/customThemeFits';
@@ -138,11 +124,11 @@ import { PromptDock } from '../prompt/PromptDock';
 import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { notePageWrite, usePinnedDockRows } from '../stores/session/pinnedPromptStore';
-import { usePromptReach } from '../stores/session/promptReachStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
 import { noteReader } from '../terminal/readerBusy';
 import { resolveBlinkText, useReduceMotion } from '../lib/blink';
 import { listenSplitDrag, SplitDrag } from '../terminal/splitDrag';
+import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
 // inside the panel, the caret goes back to the command line: a hidden
@@ -170,30 +156,6 @@ function applySplitDividerColor(color: string | null): void {
   if (nativeSurfaceEnabled()) {
     void nativeSurfaceSetDividerColor(color).catch(() => {});
   }
-}
-
-// Hand the native surface the chrome colors the page derives with its
-// theme tokens: the split divider, the selection and its text, find
-// matches in ANSI yellow (28% for every match as Menus.dc.html draws them,
-// stronger for the current one), links in the accent, and the scrollbar
-// in the tertiary tone. A lifted prompt's band takes the selected row
-// fill, with its inset ring on a light theme. Runs on every theme apply,
-// so light themes never get the renderer's dark defaults.
-function pushNativeChromeTokens(): void {
-  const theme = findTheme(getCurrentThemeId());
-  const tokens = themeTokens(theme);
-  const yellow = parseHex(theme.xterm.yellow);
-  void nativeSurfaceSetTokens({
-    divider: tokens.sep,
-    selection: tokens.selection,
-    selectionText: tokens.selectionText,
-    findMatch: yellow ? toRgba(yellow, 0.28) : null,
-    currentMatch: yellow ? toRgba(yellow, 0.6) : null,
-    link: tokens.accent,
-    scrollbar: tokens.tertiary,
-    selrow: tokens.selrow,
-    appearance: tokens.appearance,
-  }).catch(() => {});
 }
 
 const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
@@ -319,12 +281,6 @@ function MainWindow() {
       void nativeSurfaceSetBrightBold(on).catch(() => {});
     }
   };
-  // The native grid blinks while Blinking text is on and draws steady
-  // while it is off, from the next frame.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    void nativeSurfaceSetBlinkText(blinkText).catch(() => {});
-  }, [blinkText]);
   // Direct ref on the terminal-area wrapper so we can attach a
   // non-passive wheel listener. JSX onWheel is passive in some
   // React versions and silently no-ops preventDefault, which would
@@ -888,45 +844,13 @@ function MainWindow() {
     };
   }, []);
 
-  // The native surface sits under the page (macOS), which draws over it.
-  // Mark the root so CSS leaves the terminal pane unpainted and hides the
-  // xterm copy.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    // Leave the pane transparent only once the backend confirms the
-    // surface is up. It installs during setup, usually before this runs,
-    // so poll briefly. If it never comes up, reload onto xterm for the
-    // rest of the session instead of showing a see-through hole.
-    let cancelled = false;
-    let tries = 0;
-    const check = () => {
-      void nativeSurfaceReady()
-        .catch(() => false)
-        .then((ready) => {
-          if (cancelled) return;
-          if (ready) {
-            document.documentElement.dataset.underlay = '1';
-            return;
-          }
-          tries += 1;
-          if (tries < 30) {
-            window.setTimeout(check, 100);
-            return;
-          }
-          try {
-            sessionStorage.setItem(NATIVE_FAILED_KEY, '1');
-          } catch {
-            return;
-          }
-          window.location.reload();
-        });
-    };
-    check();
-    return () => {
-      cancelled = true;
-      delete document.documentElement.dataset.underlay;
-    };
-  }, []);
+  // Keep the native surface under the page in step with this window.
+  useNativeSurfaceBridge({
+    blinkText,
+    promptLifted,
+    cardBand,
+    focusInput: () => inputRef.current?.focus(),
+  });
 
   // Start every pane and status line store at launch so any package
   // that arrives while a pane is closed (or has not yet been opened)
@@ -1142,81 +1066,6 @@ function MainWindow() {
   useTauriEvent(subscribeSplitDividerChanged, (color) => {
     applySplitDividerColor(color);
   });
-
-  // The native grid draws a band under each lifted prompt while your
-  // prompt shows lifted, and under your design while the prompt card
-  // draws it in the text (the 2026-09-30 addendum, item 2). xterm keeps
-  // its own ground while the card is open, so In the text stays as it
-  // is there and the card's marks still show.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    void nativeSurfaceSetPromptBands(promptLifted === true || cardBand).catch(() => {});
-  }, [promptLifted, cardBand]);
-
-  // The band under the open row reaches past its last glyph for the
-  // prompt card's line break mark and caret.
-  const promptReach = usePromptReach();
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    void nativeSurfaceSetPromptReach(promptReach).catch(() => {});
-  }, [promptReach]);
-
-  // Keep the native surface's chrome colors on the theme. Every theme
-  // apply, from this window, a broadcast, or a profile switch, writes
-  // data-theme on the root, so one observer catches them all.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    pushNativeChromeTokens();
-    const observer = new MutationObserver(pushNativeChromeTokens);
-    observer.observe(document.documentElement, { attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
-
-  // Under the underlay the DOM owns the pointer over the terminal, but
-  // only the native surface knows what sits under it: the split divider
-  // wants a resize cursor and an armed link wants a hand. It reports the
-  // cursor on each change and the sizer takes it through a variable.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    const root = document.documentElement;
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void onTerminalCursor((cursor) => {
-      if (cursor === 'row-resize' || cursor === 'pointer') {
-        root.style.setProperty('--terminal-cursor', cursor);
-      } else {
-        root.style.removeProperty('--terminal-cursor');
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-      root.style.removeProperty('--terminal-cursor');
-    };
-  }, []);
-
-  // The page cancels each press it forwards to the native surface, so no
-  // DOM mouseup follows. The backend emits an event on release instead,
-  // and the input focuses here, matching the DOM mouseup handler that
-  // covers the rest of the window.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void onTerminalClicked(() => {
-      inputRef.current?.focus();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
 
   // Live-flip the terminal palette mode when the user toggles the
   // setting. The Terminal component re-applies the palette on the
