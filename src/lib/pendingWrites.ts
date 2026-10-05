@@ -60,13 +60,13 @@ export function createPendingWrites(): PendingWrites {
 /** This window's writers. */
 export const pendingWrites = createPendingWrites();
 
-/** One value sent after a pause, the latest one winning, like the
- *  Settings autosave. Flush sends the waiting value at once. */
+/** One value sent after a pause, like the Settings autosave, which
+ *  merges each edit into the save waiting. Flush sends the waiting value
+ *  at once. */
 export interface DebouncedWrite<T> {
-  /** Send `value` after `delayMs`, in place of any value waiting. */
-  schedule: (value: T, delayMs: number) => void;
-  /** Change the value waiting, if there is one. */
-  patch: (fn: (value: T) => T) => void;
+  /** Send the value `next` makes of the one waiting, or of null when
+   *  none waits, after `delayMs`. */
+  schedule: (next: (waiting: T | null) => T, delayMs: number) => void;
   hasPending: () => boolean;
   /** Send the waiting value now. Resolves once `send` has. */
   flush: () => Promise<void>;
@@ -90,13 +90,10 @@ export function createDebouncedWrite<T>(send: (value: T) => Promise<void>): Debo
     if (next) await send(next.value);
   };
   return {
-    schedule(value, delayMs) {
+    schedule(next, delayMs) {
       stopTimer();
-      waiting = { value };
+      waiting = { value: next(waiting ? waiting.value : null) };
       timer = setTimeout(() => void flush(), delayMs);
-    },
-    patch(fn) {
-      if (waiting) waiting = { value: fn(waiting.value) };
     },
     hasPending: () => waiting !== null,
     flush,

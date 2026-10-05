@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
+import { pendingWrites } from '../lib/pendingWrites';
+import { queueSettingsChange } from '../settings/useSettingsAutoSave';
 import { isOwnThemeEcho } from '../theme/theme';
 import { getUiConfig, normalizeUiConfig, type RawUiConfig, type UiConfig } from './uiConfig';
-import {
-  broadcastUiConfigChanges,
-  followReplacedUiConfig,
-  primeUiConfigThemePrefs,
-  setUiConfig,
-} from './uiConfigSave';
+import { broadcastUiConfigChanges, followReplacedUiConfig, setUiConfig } from './uiConfigSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -30,11 +27,10 @@ describe('broadcastUiConfigChanges theme events', () => {
   it('sends the resolved theme and the four theme fields when they change', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ theme: 'nord' }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
 
     // Follow on, and outside a browser the OS reads as light.
-    await broadcastUiConfigChanges({ ...base, follow_system_appearance: true });
+    await broadcastUiConfigChanges({ ...base, follow_system_appearance: true }, base);
     expect(sent).toHaveBeenCalledWith('vosh://theme-changed', 'vellum');
     expect(sent).toHaveBeenCalledWith('vosh://theme-prefs-changed', {
       theme: 'nord',
@@ -47,9 +43,8 @@ describe('broadcastUiConfigChanges theme events', () => {
   it('stays quiet when a pair entry the OS is not showing changes', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ theme: 'nord', follow_system_appearance: true }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, dark_theme: 'dracula' });
+    await broadcastUiConfigChanges({ ...base, dark_theme: 'dracula' }, base);
     const events = sent.mock.calls.map(([event]) => event);
     expect(events).toContain('vosh://theme-prefs-changed');
     expect(events).not.toContain('vosh://theme-changed');
@@ -60,9 +55,8 @@ describe('broadcastUiConfigChanges font event', () => {
   it('sends the panel font with the terminal font when only the panel font changes', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ font_size: 14 }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, panel_font: 'system' });
+    await broadcastUiConfigChanges({ ...base, panel_font: 'system' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://font-changed', {
       family: base.font_family,
       size: 14,
@@ -70,16 +64,18 @@ describe('broadcastUiConfigChanges font event', () => {
       panelSize: 12,
     });
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, panel_font: 'system' });
+    await broadcastUiConfigChanges(
+      { ...base, panel_font: 'system' },
+      { ...base, panel_font: 'system' },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://font-changed');
   });
 
   it('sends the panel size with the fonts when only the panel size changes', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ font_size: 14 }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, panel_font_size: 0 });
+    await broadcastUiConfigChanges({ ...base, panel_font_size: 0 }, base);
     expect(sent).toHaveBeenCalledWith('vosh://font-changed', {
       family: base.font_family,
       size: 14,
@@ -92,9 +88,8 @@ describe('broadcastUiConfigChanges font event', () => {
 describe('own theme echoes', () => {
   it('knows the theme this window just sent', async () => {
     const base = normalizeUiConfig(raw({ theme: 'nord' }));
-    await broadcastUiConfigChanges(base);
     const next = { ...base, theme: 'gruvbox' };
-    await broadcastUiConfigChanges(next);
+    await broadcastUiConfigChanges(next, base);
     expect(isOwnThemeEcho('gruvbox')).toBe(true);
     expect(isOwnThemeEcho({ ...next })).toBe(true);
     expect(isOwnThemeEcho('dracula')).toBe(false);
@@ -105,8 +100,7 @@ describe('own theme echoes', () => {
     vi.useFakeTimers();
     try {
       const base = normalizeUiConfig(raw({ theme: 'nord' }));
-      await broadcastUiConfigChanges(base);
-      await broadcastUiConfigChanges({ ...base, theme: 'monokai' });
+      await broadcastUiConfigChanges({ ...base, theme: 'monokai' }, base);
       expect(isOwnThemeEcho('monokai')).toBe(true);
       vi.advanceTimersByTime(1000);
       expect(isOwnThemeEcho('monokai')).toBe(false);
@@ -118,11 +112,9 @@ describe('own theme echoes', () => {
   it('does not send theme fields another window already sent', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ theme: 'nord' }));
-    await broadcastUiConfigChanges(base);
     const picked = { ...base, follow_system_appearance: true, dark_theme: 'dracula' };
-    primeUiConfigThemePrefs(picked);
     sent.mockClear();
-    await broadcastUiConfigChanges(picked);
+    await broadcastUiConfigChanges(picked, picked);
     const events = sent.mock.calls.map(([event]) => event);
     expect(events).not.toContain('vosh://theme-prefs-changed');
     expect(events).not.toContain('vosh://theme-changed');
@@ -172,13 +164,11 @@ describe('a replaced UI config', () => {
 
   const settle = () => new Promise((done) => setTimeout(done, 0));
 
-  it('keeps the loaded values when Settings saves after a #profile load', async () => {
-    // Settings opened on a profile that counts down with the icon, and
-    // its last save sent those.
+  it('saves only the font size when Settings changes it after a #profile load', async () => {
+    // Settings opened on a profile that counts down with the icon.
     const opened = normalizeUiConfig(
       raw({ tick_count: 'down', chip_style: 'icon_value', vitals_density: 'line' }),
     );
-    await setUiConfig(opened);
     let config = opened;
     const replace = await follow((next) => {
       config = next;
@@ -196,28 +186,20 @@ describe('a replaced UI config', () => {
     const sent = vi.mocked(emit);
     saved.mockClear();
     sent.mockClear();
-    await setUiConfig({ ...config, font_size: 16 });
-    const [command, args] = saved.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({
-      font_size: 16,
-      tick_count: 'up',
-      chip_style: 'value_only',
-      vitals_density: 'rows',
-    });
+    const failed = vi.fn();
+    queueSettingsChange(config, { font_size: 16 }, 0, { saved: () => {}, failed });
+    await pendingWrites.flushAll();
+    expect(failed).not.toHaveBeenCalled();
+    expect(saved.mock.calls).toEqual([
+      ['ui_set_fields', { fields: [{ field: 'font_size', value: 16 }], profile: null }],
+    ]);
     // The main window sends every loaded value to every window after
-    // the replace, so the save sends only what you changed.
-    const events = sent.mock.calls.map(([event]) => event);
-    expect(events).toContain('vosh://font-changed');
-    expect(events).not.toContain('vosh://tick-count-changed');
-    expect(events).not.toContain('vosh://chip-style-changed');
-    expect(events).not.toContain('vosh://vitals-density-changed');
+    // the replace, so the save tells them only what you changed.
+    expect(sent.mock.calls.map(([event]) => event)).toEqual(['vosh://font-changed']);
   });
 
   it('has the main window send every loaded field, even one it sent before', async () => {
     // The main window last sent these values at a profile switch.
-    // Settings then saved others, and its saves never move the main
-    // window's last broadcast, so a diff there would skip them.
     const loaded = raw({
       echo_macros: false,
       input_echo_caret: false,

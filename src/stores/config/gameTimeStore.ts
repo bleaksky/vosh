@@ -5,11 +5,10 @@ import { createStore } from '../store';
 
 // The clock the status line reads the game time on, from UiConfig
 // game_time. The same wiring as the tick count store: seeded from
-// ui_get_config, kept live by vosh://game-time-changed, which
-// setUiConfig emits to every window when Settings saves and the backend
-// sends after a switch, a #profile load or reset, or an import, and
-// refetched on vosh://profile-switched since each character keeps its
-// own.
+// ui_get_config, kept live by vosh://game-time-changed, which the
+// Settings save emits to every window and the backend sends after a
+// switch, a #profile load or reset, or an import, and refetched on
+// vosh://profile-switched since each character keeps its own.
 
 const store = createStore<GameTime>('24h');
 let started = false;

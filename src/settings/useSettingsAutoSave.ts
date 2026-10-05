@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../lib/pendingWrites';
-import { affectsDisplayFields, subscribeAffectsDisplayChanged } from '../ipc/affects';
-import { subscribeUiConfigReplaced, type UiConfig } from '../ipc/uiConfig';
-import { isOwnAffectsDisplayEcho, setUiConfig } from '../ipc/uiConfigSave';
-import { useTauriEvent } from '../ipc/useTauriEvent';
 import {
-  applyThemePrefs,
-  isOwnThemeEcho,
-  subscribeThemeChanges,
-  subscribeThemePrefs,
-} from '../theme/theme';
+  setUiFields,
+  subscribeUiConfigReplaced,
+  type UiConfig,
+  type UiFields,
+} from '../ipc/uiConfig';
+import { broadcastUiConfigChanges } from '../ipc/uiConfigSave';
+import { useTauriEvent } from '../ipc/useTauriEvent';
+import { applyThemePrefs } from '../theme/theme';
 import type { SetUiConfig } from './pageTypes';
 
 export interface AutoSaveOptions {
@@ -18,35 +17,48 @@ export interface AutoSaveOptions {
   now?: boolean;
 }
 
-/** Patch the window's config copy and save the whole snapshot. A patch
- *  can also be worked out from the latest copy, for an answer that lands
- *  after the page that asked for it closed. Null leaves the copy as it
- *  is. */
+/** Patch the window's config copy and save the fields the patch names.
+ *  A patch can also be worked out from the latest copy, for an answer
+ *  that lands after the page that asked for it closed. Null leaves the
+ *  copy as it is. */
 export type UpdateConfig = (
-  patch: Partial<UiConfig> | ((latest: UiConfig) => Partial<UiConfig> | null),
+  patch: UiFields | ((latest: UiConfig) => UiFields | null),
   options?: AutoSaveOptions,
 ) => void;
 
 /** One save waiting on the debounce, with the page that asked for it. */
 interface AutoSave {
-  cfg: UiConfig;
+  /** Every patch you made while the save waited, merged. */
+  fields: UiFields;
+  /** What those fields held before your first edit in this save. */
+  before: UiFields;
+  /** The config copy as of your last edit. */
+  after: UiConfig;
   saved: () => void;
   failed: (error: unknown) => void;
 }
 
-// Every page in the window saves through this one writer. Each save
-// sends the whole config snapshot, built from the window's latest copy,
-// so the newest snapshot holds every earlier edit. One writer sends only
-// the newest, and an older snapshot can never land after it, which two
-// writers flushed together on close could do. The save waiting on the
-// debounce goes at once when the Settings window closes and when Vosh
-// quits, through pendingWrites.
+/** The fields the shown theme comes from. */
+const THEME_FIELDS: readonly (keyof UiFields)[] = [
+  'theme',
+  'follow_system_appearance',
+  'light_theme',
+  'dark_theme',
+  'custom_themes',
+];
+
+// Every page in the window saves through this one writer. An edit made
+// while a save waits merges into it, so one save carries every edit and
+// an earlier value of a field never lands after a later one. The save
+// waiting on the debounce goes at once when the Settings window closes
+// and when Vosh quits, through pendingWrites.
 const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
   try {
-    // The backend turns a save away when it replaced the config after
-    // this copy was read, and the window reads the new one instead.
-    if (!(await setUiConfig(job.cfg))) return;
-    applyThemePrefs(job.cfg);
+    await setUiFields(job.fields);
+    await broadcastUiConfigChanges(job.after, { ...job.after, ...job.before });
+    // The copy a save holds can be older than a theme the palette picked
+    // since, and applying it would put the old theme back on Settings.
+    if (THEME_FIELDS.some((field) => field in job.fields)) applyThemePrefs(job.after);
     job.saved();
   } catch (e) {
     job.failed(e);
@@ -54,12 +66,36 @@ const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
 });
 pendingWrites.register(() => autoSave.flush());
 
-// Debounced auto-save shared by the config-backed editors. Text inputs
-// can fire many updates in a row while the user types; the debounce
-// coalesces them into one setUiConfig call after typing settles.
-// setUiConfig owns every cross-window emit and dedupes against the
-// previous snapshot, so callers only get the local theme refresh and
-// the saved indicator.
+/** Queue `change`, made on the copy `prev`, on the window's writer, and
+ *  return the copy after it. */
+export function queueSettingsChange(
+  prev: UiConfig,
+  change: UiFields,
+  delayMs: number,
+  report: Pick<AutoSave, 'saved' | 'failed'>,
+): UiConfig {
+  const after = { ...prev, ...change };
+  const before: UiFields = Object.fromEntries(
+    Object.keys(change).map((field) => [field, prev[field as keyof UiFields]]),
+  );
+  // Merging the same change twice gives the same save, since React can
+  // run a state updater twice.
+  autoSave.schedule(
+    (waiting) => ({
+      fields: { ...waiting?.fields, ...change },
+      before: { ...before, ...waiting?.before },
+      after,
+      ...report,
+    }),
+    delayMs,
+  );
+  return after;
+}
+
+// Debounced auto-save shared by the config-backed editors. A text field
+// can fire many updates in a row while you type, and the debounce
+// gathers them into one save once typing settles. The save tells every
+// other window what changed, so a page only shows the saved indicator.
 export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string | null) => void) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const onErrorRef = useRef(onError);
@@ -71,16 +107,10 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       if (!prev) return prev;
       const change = typeof patch === 'function' ? patch(prev) : patch;
       if (!change) return prev;
-      const next = { ...prev, ...change };
-      autoSave.schedule(
-        {
-          cfg: next,
-          saved: () => setSavedAt(Date.now()),
-          failed: (e) => onErrorRef.current(String(e)),
-        },
-        options.now ? 0 : 250,
-      );
-      return next;
+      return queueSettingsChange(prev, change, options.now ? 0 : 250, {
+        saved: () => setSavedAt(Date.now()),
+        failed: (e) => onErrorRef.current(String(e)),
+      });
     });
   };
   // Leaving the page sends the waiting save at once too.
@@ -90,40 +120,12 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
     },
     [],
   );
-  // A save still waiting on the debounce holds the previous profile's
-  // snapshot. Drop it when the backend replaces the whole config, on a
-  // profile switch, #profile load, #profile reset, or an import. The
-  // backend would turn it away anyway, as it does a save built on the
-  // old copy in the moment before SettingsWindow has read the new one.
+  // The backend replaces the whole config on a profile switch, #profile
+  // load, #profile reset, or an import. A save still waiting holds
+  // fields you changed on the profile it replaced, and the page names no
+  // profile yet, so the save would write them to the new one. Drop it.
   useTauriEvent(subscribeUiConfigReplaced, () => {
     autoSave.drop();
-  });
-  // A theme picked in another window while a save waits patches it, so
-  // the save does not put the old theme back. The theme id another
-  // window applied is the manual pick only while follow system
-  // appearance is off. This window's own save comes back too, and is
-  // skipped.
-  useTauriEvent(subscribeThemeChanges, (themeId) => {
-    if (isOwnThemeEcho(themeId)) return;
-    autoSave.patch((job) =>
-      job.cfg.follow_system_appearance ? job : { ...job, cfg: { ...job.cfg, theme: themeId } },
-    );
-  });
-  // The four theme fields another window saved, like a palette pick
-  // that filled the light or dark entry while follow is on.
-  useTauriEvent(subscribeThemePrefs, (prefs) => {
-    if (isOwnThemeEcho(prefs)) return;
-    autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...prefs } }));
-  });
-  // An affects style or marker picked in the pane menu while a save
-  // waits patches it the same way, so the save does not put the old
-  // pick back.
-  useTauriEvent(subscribeAffectsDisplayChanged, (display) => {
-    if (isOwnAffectsDisplayEcho(display)) return;
-    autoSave.patch((job) => ({
-      ...job,
-      cfg: { ...job.cfg, ...affectsDisplayFields(display) },
-    }));
   });
   // Fade the "saved." indicator after 1.5s so it does not linger as
   // stale chrome long after the user actually saved.

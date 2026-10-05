@@ -11,8 +11,8 @@ import {
   normalizeAffectsThresholds,
   setAffectsDisplay,
 } from './affects';
-import { normalizeUiConfig, type RawUiConfig } from './uiConfig';
-import { broadcastUiConfigChanges, isOwnAffectsDisplayEcho, setUiConfig } from './uiConfigSave';
+import { normalizeUiConfig, setUiFields, type RawUiConfig, type UiFields } from './uiConfig';
+import { broadcastUiConfigChanges, isOwnAffectsDisplayEcho } from './uiConfigSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -109,29 +109,22 @@ describe('affects display', () => {
     });
   });
 
-  it('saves every field with the rest of the config', async () => {
+  it('saves each field alone through ui_set_fields', async () => {
     const sent = vi.mocked(invoke);
-    sent.mockClear();
-    await setUiConfig(
-      normalizeUiConfig(
-        raw({
-          affects_style: 'countdown',
-          affects_marker: 'square',
-          affects_tint: true,
-          affects_running_out_hours: 5,
-          affects_almost_gone_hours: 2,
-        }),
-      ),
-    );
-    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({
+    const chosen: UiFields = {
       affects_style: 'countdown',
       affects_marker: 'square',
       affects_tint: true,
       affects_running_out_hours: 5,
       affects_almost_gone_hours: 2,
-    });
+    };
+    for (const [field, value] of Object.entries(chosen)) {
+      sent.mockClear();
+      await setUiFields({ [field]: value });
+      expect(sent.mock.calls).toEqual([
+        ['ui_set_fields', { fields: [{ field, value }], profile: null }],
+      ]);
+    }
   });
 
   it('saves a pick from the pane menu alone, never the whole config', async () => {
@@ -151,9 +144,8 @@ describe('affects display', () => {
   it('tells every window when a save changes it, and knows its own echo', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, affects_style: 'chips' });
+    await broadcastUiConfigChanges({ ...base, affects_style: 'chips' }, base);
     const display = {
       style: 'chips',
       marker: 'dot',
@@ -166,9 +158,15 @@ describe('affects display', () => {
     expect(isOwnAffectsDisplayEcho({ ...display, style: 'countdown' })).toBe(false);
     expect(isOwnAffectsDisplayEcho({ ...display, running_out: 3 })).toBe(false);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, affects_style: 'chips' });
+    await broadcastUiConfigChanges(
+      { ...base, affects_style: 'chips' },
+      { ...base, affects_style: 'chips' },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://affects-display-changed');
-    await broadcastUiConfigChanges({ ...base, affects_style: 'chips', affects_tint: true });
+    await broadcastUiConfigChanges(
+      { ...base, affects_style: 'chips', affects_tint: true },
+      { ...base, affects_style: 'chips' },
+    );
     expect(sent).toHaveBeenCalledWith('vosh://affects-display-changed', {
       style: 'chips',
       marker: 'dot',
@@ -178,12 +176,15 @@ describe('affects display', () => {
     });
     // A new threshold tells every window too.
     sent.mockClear();
-    await broadcastUiConfigChanges({
-      ...base,
-      affects_style: 'chips',
-      affects_tint: true,
-      affects_running_out_hours: 4,
-    });
+    await broadcastUiConfigChanges(
+      {
+        ...base,
+        affects_style: 'chips',
+        affects_tint: true,
+        affects_running_out_hours: 4,
+      },
+      { ...base, affects_style: 'chips', affects_tint: true },
+    );
     expect(sent).toHaveBeenCalledWith('vosh://affects-display-changed', {
       style: 'chips',
       marker: 'dot',

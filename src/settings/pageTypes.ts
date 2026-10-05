@@ -1,9 +1,9 @@
 import type { UiConfig } from '../ipc/uiConfig';
 import type { SettingsTarget } from '../lib/settingsNav';
 
-/** Replace the window's UiConfig copy. Every save sends the whole
- *  snapshot, so a page edits through this and never keeps its own
- *  copy of the config. */
+/** Replace the window's UiConfig copy. A page edits through this and
+ *  never keeps its own copy of the config, so every page shows your
+ *  latest edit and each save knows what a field held before it. */
 export type SetUiConfig = (updater: (prev: UiConfig | null) => UiConfig | null) => void;
 
 /** Asked before the frame leaves a page for another group. Return true

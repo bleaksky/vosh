@@ -326,9 +326,8 @@ describe('vitals density', () => {
   it('tells every window when it changes', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, vitals_density: 'line' });
+    await broadcastUiConfigChanges({ ...base, vitals_density: 'line' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
   });
 });
@@ -339,22 +338,24 @@ describe('Fit game colors', () => {
     expect(normalizeUiConfig(raw({ fit_game_colors: false })).fit_game_colors).toBe(false);
   });
 
-  it('saves with the rest of the config and tells every window when it changes', async () => {
+  it('saves alone through ui_set_fields and tells every window when it changes', async () => {
     const invoked = vi.mocked(invoke);
     invoked.mockClear();
     const off = { ...normalizeUiConfig(raw()), fit_game_colors: false };
-    await setUiConfig(off);
-    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({ fit_game_colors: false });
+    await setUiFields({ fit_game_colors: false });
+    expect(invoked.mock.calls).toEqual([
+      ['ui_set_fields', { fields: [{ field: 'fit_game_colors', value: false }], profile: null }],
+    ]);
 
     const sent = vi.mocked(emit);
-    await broadcastUiConfigChanges(off);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    await broadcastUiConfigChanges({ ...off, fit_game_colors: true }, off);
     expect(sent).toHaveBeenCalledWith('vosh://fit-game-colors-changed', true);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...off, fit_game_colors: true });
+    await broadcastUiConfigChanges(
+      { ...off, fit_game_colors: true },
+      { ...off, fit_game_colors: true },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://fit-game-colors-changed');
   });
 });
@@ -365,22 +366,27 @@ describe('Keep highlight colors readable', () => {
     expect(normalizeUiConfig(raw({ readable_highlights: false })).readable_highlights).toBe(false);
   });
 
-  it('saves with the rest of the config and tells every window when it changes', async () => {
+  it('saves alone through ui_set_fields and tells every window when it changes', async () => {
     const invoked = vi.mocked(invoke);
     invoked.mockClear();
     const off = { ...normalizeUiConfig(raw()), readable_highlights: false };
-    await setUiConfig(off);
-    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({ readable_highlights: false });
+    await setUiFields({ readable_highlights: false });
+    expect(invoked.mock.calls).toEqual([
+      [
+        'ui_set_fields',
+        { fields: [{ field: 'readable_highlights', value: false }], profile: null },
+      ],
+    ]);
 
     const sent = vi.mocked(emit);
-    await broadcastUiConfigChanges(off);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...off, readable_highlights: true });
+    await broadcastUiConfigChanges({ ...off, readable_highlights: true }, off);
     expect(sent).toHaveBeenCalledWith('vosh://readable-highlights-changed', true);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...off, readable_highlights: true });
+    await broadcastUiConfigChanges(
+      { ...off, readable_highlights: true },
+      { ...off, readable_highlights: true },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain(
       'vosh://readable-highlights-changed',
     );
@@ -393,14 +399,13 @@ describe('Collapse repeated lines', () => {
     expect(normalizeUiConfig(raw({ collapse_repeats: true })).collapse_repeats).toBe(true);
   });
 
-  it('saves with the rest of the config, which the session reads for the next line', async () => {
+  it('saves alone through ui_set_fields, and the session reads it for the next line', async () => {
     const invoked = vi.mocked(invoke);
     invoked.mockClear();
-    const on = { ...normalizeUiConfig(raw()), collapse_repeats: true };
-    await setUiConfig(on);
-    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({ collapse_repeats: true });
+    await setUiFields({ collapse_repeats: true });
+    expect(invoked.mock.calls).toEqual([
+      ['ui_set_fields', { fields: [{ field: 'collapse_repeats', value: true }], profile: null }],
+    ]);
   });
 
   it('reads In a fight on and Attack lines off for a config saved before them', () => {
@@ -414,22 +419,21 @@ describe('Collapse repeated lines', () => {
     expect(chosen.collapse_attack_lines).toBe(true);
   });
 
-  it('saves In a fight and Attack lines with the rest of the config', async () => {
+  it('saves In a fight and Attack lines alone through ui_set_fields', async () => {
     const invoked = vi.mocked(invoke);
     invoked.mockClear();
-    const chosen = {
-      ...normalizeUiConfig(raw()),
-      collapse_repeats: true,
-      collapse_fight_lines: false,
-      collapse_attack_lines: true,
-    };
-    await setUiConfig(chosen);
-    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({
-      collapse_fight_lines: false,
-      collapse_attack_lines: true,
-    });
+    await setUiFields({ collapse_fight_lines: false });
+    await setUiFields({ collapse_attack_lines: true });
+    expect(invoked.mock.calls).toEqual([
+      [
+        'ui_set_fields',
+        { fields: [{ field: 'collapse_fight_lines', value: false }], profile: null },
+      ],
+      [
+        'ui_set_fields',
+        { fields: [{ field: 'collapse_attack_lines', value: true }], profile: null },
+      ],
+    ]);
   });
 });
 
@@ -478,35 +482,28 @@ describe('vitals options', () => {
     expect(normalizeVitalsOptions({ hide_when_pinned: false }).hide_when_pinned).toBe(false);
   });
 
-  it('saves each one with the rest of the config', async () => {
+  it('saves each one alone through ui_set_fields', async () => {
     const sent = vi.mocked(invoke);
-    sent.mockClear();
-    await setUiConfig(
-      normalizeUiConfig(
-        raw({
-          vitals_values: 'current',
-          vitals_meter: 'bar',
-          vitals_warn_thirds: true,
-          vitals_hide_when_pinned: false,
-        }),
-      ),
-    );
-    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({
+    const chosen: UiFields = {
       vitals_values: 'current',
       vitals_meter: 'bar',
       vitals_warn_thirds: true,
       vitals_hide_when_pinned: false,
-    });
+    };
+    for (const [field, value] of Object.entries(chosen)) {
+      sent.mockClear();
+      await setUiFields({ [field]: value });
+      expect(sent.mock.calls).toEqual([
+        ['ui_set_fields', { fields: [{ field, value }], profile: null }],
+      ]);
+    }
   });
 
   it('tells every window when one changes, and only then', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' });
+    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
       values: 'current-max',
       meter: 'none',
@@ -514,9 +511,15 @@ describe('vitals options', () => {
       hide_when_pinned: true,
     });
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' });
+    await broadcastUiConfigChanges(
+      { ...base, vitals_meter: 'none' },
+      { ...base, vitals_meter: 'none' },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://vitals-options-changed');
-    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none', vitals_warn_thirds: true });
+    await broadcastUiConfigChanges(
+      { ...base, vitals_meter: 'none', vitals_warn_thirds: true },
+      { ...base, vitals_meter: 'none' },
+    );
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
       values: 'current-max',
       meter: 'none',
@@ -524,12 +527,15 @@ describe('vitals options', () => {
       hide_when_pinned: true,
     });
     sent.mockClear();
-    await broadcastUiConfigChanges({
-      ...base,
-      vitals_meter: 'none',
-      vitals_warn_thirds: true,
-      vitals_hide_when_pinned: false,
-    });
+    await broadcastUiConfigChanges(
+      {
+        ...base,
+        vitals_meter: 'none',
+        vitals_warn_thirds: true,
+        vitals_hide_when_pinned: false,
+      },
+      { ...base, vitals_meter: 'none', vitals_warn_thirds: true },
+    );
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
       values: 'current-max',
       meter: 'none',
@@ -553,24 +559,26 @@ describe('tick count', () => {
     );
   });
 
-  it('saves with the rest of the config', async () => {
+  it('saves alone through ui_set_fields', async () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
-    await setUiConfig(normalizeUiConfig(raw({ tick_count: 'down' })));
-    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config.tick_count).toBe('down');
+    await setUiFields({ tick_count: 'down' });
+    expect(sent.mock.calls).toEqual([
+      ['ui_set_fields', { fields: [{ field: 'tick_count', value: 'down' }], profile: null }],
+    ]);
   });
 
   it('tells every window when a save changes it', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ tick_count: 'up' }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
+    await broadcastUiConfigChanges({ ...base, tick_count: 'down' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://tick-count-changed', 'down');
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
+    await broadcastUiConfigChanges(
+      { ...base, tick_count: 'down' },
+      { ...base, tick_count: 'down' },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://tick-count-changed');
   });
 });
@@ -586,24 +594,23 @@ describe('game time', () => {
     expect(normalizeUiConfig(raw({ game_time: '12h' })).game_time).toBe('12h');
   });
 
-  it('saves with the rest of the config', async () => {
+  it('saves alone through ui_set_fields', async () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
-    await setUiConfig(normalizeUiConfig(raw({ game_time: '12h' })));
-    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config.game_time).toBe('12h');
+    await setUiFields({ game_time: '12h' });
+    expect(sent.mock.calls).toEqual([
+      ['ui_set_fields', { fields: [{ field: 'game_time', value: '12h' }], profile: null }],
+    ]);
   });
 
   it('tells every window when a save changes it', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, game_time: '12h' });
+    await broadcastUiConfigChanges({ ...base, game_time: '12h' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://game-time-changed', '12h');
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, game_time: '12h' });
+    await broadcastUiConfigChanges({ ...base, game_time: '12h' }, { ...base, game_time: '12h' });
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://game-time-changed');
   });
 });
@@ -622,12 +629,14 @@ describe('chip style', () => {
   it('tells every window when a save changes it', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ chip_style: 'value_only' }));
-    await broadcastUiConfigChanges(base);
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' });
+    await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://chip-style-changed', 'icon_value');
     sent.mockClear();
-    await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' });
+    await broadcastUiConfigChanges(
+      { ...base, chip_style: 'icon_value' },
+      { ...base, chip_style: 'icon_value' },
+    );
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://chip-style-changed');
   });
 });

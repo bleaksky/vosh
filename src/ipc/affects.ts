@@ -231,9 +231,9 @@ export async function subscribeAffectsDisplayChanged(
   });
 }
 
-/** Save an affects display pick alone, for the pane menu. A full
- *  setUiConfig from the main window would write its stale copy of every
- *  other field. The backend tells every window. */
+/** Save an affects display pick alone, for the pane menu, since the
+ *  main window keeps no copy of the other fields. The backend tells
+ *  every window. */
 export async function setAffectsDisplay(patch: Partial<AffectsDisplay>): Promise<void> {
   await invoke('ui_set_affects_display', {
     style: patch.style ?? null,

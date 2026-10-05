@@ -5,8 +5,8 @@ import { Row, Segmented, type SegmentedOption } from '../../ui';
 
 // The clock the main window's status line reads the game time on, from
 // UiConfig game_time. It sits under the Tick and time row and writes
-// through the same debounced save, and setUiConfig tells every window,
-// so the status line follows at once. Its search anchor is
+// through the same debounced save, which tells every window, so the
+// status line follows at once. Its search anchor is
 // layout:status#game-time, so it belongs in the Layout section with the
 // id `status`.
 

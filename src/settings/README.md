@@ -8,7 +8,7 @@ A page is the component its folder is named for, like `layout/LayoutPage.tsx`, a
 
 - `target` is where the page should land. `target.section` and `target.anchor` come from the nav, a deep link, or a search hit.
 - `navSeq` goes up on every navigation, even to the same target. React to it when the target changes state on the page, like the Automation kind or the Characters profile.
-- `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Every save sends the whole snapshot, so never keep a second copy of the config.
+- `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Never keep a second copy of the config, since every page shows this one and each save reads what a field held from it.
 - `pathB` is true in loadout mode.
 - `navigate(target)` goes somewhere else in Settings.
 - `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation uses it to ask before it drops unsaved changes. Clear it with null when the page unmounts.
@@ -17,7 +17,7 @@ Register a page in `PAGES` in `SettingsWindow.tsx`. A page that pins its own bar
 
 A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it.
 
-A page that saves as you go takes `update` from `useSettingsAutoSave`, beside the frame. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
+A page that saves as you go takes `update` from `useSettingsAutoSave`, beside the frame. `update(patch)` patches the config copy and saves the fields the patch names once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
 `characters/CharactersPage.tsx` is the Characters board and `appearance/AppearancePage.tsx` the Appearance board, each with its parts beside it. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `automation/AutomationPage.tsx` is the Automation board, described under Automation below.
 
