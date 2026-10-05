@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
-import { onGmcpPackage } from '../../ipc/session';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { drawMap3D } from './map3dDraw';
 import { DEFAULT_MAP_3D_VIEW, MAP_3D_VIEW_KEY, loadMap3dView, type Map3dView } from './map3dView';
@@ -7,11 +6,17 @@ import { MAP_COLORS, mapInks, mapThemeSignature } from './mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from './mapStyle';
 import { readPanelMarkFace, readPanelTextPx, subscribePanelFace } from '../panelFace';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from './mapZoom';
-import { gridDims, playerCellOf, type MapTilesPayload } from './mapTiles';
+import { gridDims, playerCellOf } from './mapTiles';
 import { computeAnchor, drawSquares, drawTileset } from './mapPaint';
 import { GlyphsOverlay } from './GlyphsOverlay';
 import { subscribeThemeChanges } from '../../theme/theme';
 import { pushToast } from '../../stores/toasts';
+import {
+  getMapTiles,
+  startMapTiles,
+  subscribeMapTiles,
+  type TilesSnap,
+} from '../../stores/gmcp/mapTilesStore';
 import { MapPaneControls } from './MapPaneControls';
 import { textPx } from '../paneTextSize';
 import { useMapGestures } from './useMapGestures';
@@ -55,29 +60,6 @@ function loadZoom(): number {
   }
 }
 
-type TilesSnap = { payload: MapTilesPayload; json: string };
-
-// The last Map.Tiles push, kept at module scope. Map.Tiles arrives
-// only when you move, so a map that remounts (moved in the panel, or
-// shown again after you hide the panel) draws the last map at once
-// instead of a blank box until your next step. It also outlives a
-// disconnect, so the panel keeps showing where you logged out.
-let lastTiles: TilesSnap | null = null;
-const tilesListeners = new Set<(snap: TilesSnap) => void>();
-let tilesStarted = false;
-
-function startTilesCache(): void {
-  if (tilesStarted) return;
-  tilesStarted = true;
-  void onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
-    const payload = data ?? ({} as MapTilesPayload);
-    const json = JSON.stringify(payload);
-    if (lastTiles && lastTiles.json === json) return;
-    lastTiles = { payload, json };
-    for (const cb of tilesListeners) cb(lastTiles);
-  });
-}
-
 interface MapViewProps {
   /** What the pane says until the first Map.Tiles arrives. */
   emptyText?: string;
@@ -96,7 +78,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // content matches the current payload without re-stringifying
   // current state, and gives GlyphsOverlay a cheap content-equality
   // key for its memo comparison.
-  const [tilesSnap, setTilesSnap] = useState<TilesSnap | null>(() => lastTiles);
+  const [tilesSnap, setTilesSnap] = useState<TilesSnap | null>(getMapTiles);
   const tiles = tilesSnap?.payload ?? null;
   const [style, setStyle] = useState<Style>(loadStyle);
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
@@ -174,16 +156,13 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   }, [tilesetUrl]);
 
   // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
-  // the draw effect. The cache drops a push whose JSON matches the
+  // the draw effect. mapTilesStore drops a push whose JSON matches the
   // last one, so server re-sends with identical content cause no
   // repaint and no glyph DOM rebuild.
   useEffect(() => {
-    startTilesCache();
-    setTilesSnap(lastTiles);
-    tilesListeners.add(setTilesSnap);
-    return () => {
-      tilesListeners.delete(setTilesSnap);
-    };
+    startMapTiles();
+    setTilesSnap(getMapTiles());
+    return subscribeMapTiles(setTilesSnap);
   }, []);
 
   // draw() closes over this render's tiles/style/tileset/zoom. The
