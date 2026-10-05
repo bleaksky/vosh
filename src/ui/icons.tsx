@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 
-// The SPEC 6 icon set for Settings: 16 unit strokes at 1.25, round caps
-// and joins, drawn in currentColor so each control sets the tone. At
-// 12 px the stroke keeps its 1.25 px weight through vector-effect, the
-// way the boards draw the chevrons and the chip close icon.
+// The SPEC 6 icon set that Settings, Help and the prompt card draw: 16
+// unit strokes at 1.25, round caps and joins, drawn in currentColor so
+// each control sets the tone. At 12 px the stroke keeps its 1.25 px
+// weight through vector-effect, the way the boards draw the chevrons and
+// the chip close icon.
 
 interface IconProps {
   /** Rendered size in px. 16 unless a recipe says 12. */

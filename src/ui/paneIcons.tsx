@@ -1,5 +1,6 @@
-// The panel's icons, from the One Window icon set (SPEC section 6):
-// 16 px grid, 1.25 stroke in currentColor.
+// The icons the panes and the terminal's right click menu draw, from
+// the One Window icon set (SPEC section 6): 16 px grid, 1.25 stroke in
+// currentColor.
 
 interface IconProps {
   size?: number;
