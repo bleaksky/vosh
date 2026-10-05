@@ -61,6 +61,13 @@ export function toRgba(c: Rgb, alpha: number): string {
   return `rgba(${channel(c.r)}, ${channel(c.g)}, ${channel(c.b)}, ${a})`;
 }
 
+/** A 3 or 6 digit hex color as `rgba(r, g, b, a)`. Any other text comes
+ *  back unchanged. */
+export function hexToRgba(hex: string, alpha: number): string {
+  const c = parseHex(hex);
+  return c ? toRgba(c, alpha) : hex;
+}
+
 function toLinear(v: number): number {
   const c = v / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

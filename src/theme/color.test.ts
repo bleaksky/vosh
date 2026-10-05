@@ -4,6 +4,7 @@ import {
   contrast,
   deltaE2000,
   deltaE2000Lab,
+  hexToRgba,
   luminance,
   oklchToRgb,
   oklchToRgbInGamut,
@@ -42,6 +43,15 @@ describe('parseHex and toHex', () => {
   it('rounds and clamps when formatting', () => {
     expect(toHex({ r: 12.6, g: -4, b: 300 })).toBe('#0d00ff');
     expect(toRgba({ r: 136, g: 192, b: 208 }, 0.22)).toBe('rgba(136, 192, 208, 0.22)');
+  });
+});
+
+describe('hexToRgba', () => {
+  it('gives hex at an alpha, and any other text back unchanged', () => {
+    expect(hexToRgba('#88c0d0', 0.28)).toBe('rgba(136, 192, 208, 0.28)');
+    expect(hexToRgba('ABC', 0.5)).toBe('rgba(170, 187, 204, 0.5)');
+    expect(hexToRgba('rgba(1, 2, 3, 0.5)', 0.8)).toBe('rgba(1, 2, 3, 0.5)');
+    expect(hexToRgba('#11223344', 1)).toBe('#11223344');
   });
 });
 

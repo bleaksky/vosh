@@ -8,6 +8,7 @@ import {
   type RegionOnScreen,
   type ScreenCell,
 } from '../prompt/promptPointer';
+import { hexToRgba } from '../theme/color';
 import type { PaneSizer } from './paneSizer';
 import type { BufferView, LineMark } from './splitDrag';
 import type { RegionWriter } from './terminalRegion';
@@ -147,12 +148,6 @@ export interface HandleParts {
 const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
   const rootStyle = getComputedStyle(document.documentElement);
   const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#7aa2f7';
-  const toRgba = (hex: string, alpha: number): string => {
-    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
-    if (!m) return hex;
-    const n = parseInt(m[1], 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-  };
   // The SearchAddon draws non-active matches BELOW the text and the
   // active match ABOVE it. So a non-active match can carry an accent
   // tint (the glyphs paint on top and stay legible), but the active
@@ -162,8 +157,8 @@ const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
   // outline (and its own tint shows through from the below-text
   // highlight layer the addon also draws for it).
   return {
-    matchBackground: toRgba(accent, 0.28),
-    matchBorder: toRgba(accent, 0.5),
+    matchBackground: hexToRgba(accent, 0.28),
+    matchBorder: hexToRgba(accent, 0.5),
     matchOverviewRuler: accent,
     activeMatchBackground: 'transparent',
     activeMatchBorder: accent,

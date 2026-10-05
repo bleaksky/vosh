@@ -2,7 +2,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranMapPacket } from '../../test/aabahranGmcp';
-import { hexToRgba, roomFill, sectorForCode } from './mapPalette';
+import { hexToRgba } from '../../theme/color';
+import { roomFill, sectorForCode } from './mapPalette';
 import {
   DOOR_COLORS,
   corridors,

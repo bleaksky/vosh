@@ -2,7 +2,8 @@
 // MapView sizes and clears, with your room at its middle, and the Glyphs
 // grid takes each cell's classes from cellClass.
 
-import { MAP_COLORS, hexToRgba, lightAppearance, roomFill, sectorForCode } from './mapPalette';
+import { hexToRgba } from '../../theme/color';
+import { MAP_COLORS, lightAppearance, roomFill, sectorForCode } from './mapPalette';
 import { readPanelMarkFace } from '../panelFace';
 import {
   DOOR_COLORS,
