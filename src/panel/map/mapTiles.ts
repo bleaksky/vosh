@@ -2,9 +2,9 @@ import { SECTORS, UNKNOWN_GLYPH, sectorForCode, sectorGlyphColor } from './mapPa
 
 // Reading a Map.Tiles packet. Aabahran builds the grid in generate_map
 // (minimap.c) and writes it in gmcp_send_map (gmcp.c). The painters in
-// mapPaint.ts and the glyph overlay in MapView draw what these functions
-// read, so the rooms, the corridors and the glyph grid can be checked
-// against real packets without a canvas.
+// mapPaint.ts and the glyph overlay in GlyphsOverlay.tsx draw what these
+// functions read, so the rooms, the corridors and the glyph grid can be
+// checked against real packets without a canvas.
 
 /// One cell of the server-side map grid (player's floor only).
 /// Per the Aabahran GMCP wiki:
