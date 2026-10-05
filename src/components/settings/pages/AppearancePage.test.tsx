@@ -420,11 +420,11 @@ describe('AppearancePage', () => {
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
     expect(picked.label).toContain(
-      'Blues turn purple and magentas turn pink in the game text. The window keeps its status colors, which you already tell apart.',
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
     );
     const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
     const swapped =
-      "Greens turn blue, reds turn orange and blues turn violet, in the game text and in the window's status colors.";
+      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
     expect((await visionRow(kanso)).label).toContain(swapped);
     // Fit game colors off swaps the published colors, so the row says
     // the same.
@@ -433,7 +433,7 @@ describe('AppearancePage', () => {
     // your base palette.
     const base = await visionRow({ ...kanso, theme_terminal_colors: false });
     expect(base.label).toContain(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. The window's greens still turn blue and its reds orange.",
+      "Game text keeps your base palette while the theme's colors are off for MUD text. In the window success turns blue and danger leans toward orange.",
     );
   });
 
