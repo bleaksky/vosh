@@ -1,7 +1,9 @@
 // The theme fields of the UI config and the themes a profile starts
-// with, your custom themes, and the event that carries them.
+// with, your custom themes, and the events that carry a theme pick, the
+// theme fields and your custom themes to every window.
 
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { ThemePrefs } from '../lib/theme';
 import { uniqueThemeId } from '../lib/themeImport';
 import {
   BUILTIN_THEMES,
@@ -10,7 +12,7 @@ import {
   themeShownBy,
   themeTokens,
 } from '../lib/themes';
-import { CUSTOM_THEMES_CHANGED } from './events';
+import { CUSTOM_THEMES_CHANGED, THEME_CHANGED, THEME_PREFS_CHANGED } from './events';
 import type { RawUiConfig } from './uiConfig';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
@@ -94,4 +96,30 @@ export async function subscribeCustomThemesChanged(
   return listen<CustomTheme[]>(CUSTOM_THEMES_CHANGED, (event) => {
     cb(Array.isArray(event.payload) ? event.payload : []);
   });
+}
+
+/** Tell every window, this one included, your custom themes after an
+ *  edit, before the save sends them. */
+export function emitCustomThemesChanged(themes: CustomTheme[]): Promise<void> {
+  return emit(CUSTOM_THEMES_CHANGED, themes);
+}
+
+/** Tell every window, this one included, the theme id to show. */
+export function emitThemeChanged(id: string): Promise<void> {
+  return emit(THEME_CHANGED, id);
+}
+
+/** Hear the theme id a window picked or saved. */
+export function subscribeThemeChanged(cb: (id: string) => void): Promise<UnlistenFn> {
+  return listen<string>(THEME_CHANGED, (event) => cb(event.payload));
+}
+
+/** Tell every window, this one included, the four theme fields. */
+export function emitThemePrefsChanged(prefs: ThemePrefs): Promise<void> {
+  return emit(THEME_PREFS_CHANGED, prefs);
+}
+
+/** Hear the theme fields another window saved. */
+export function subscribeThemePrefsChanged(cb: (payload: unknown) => void): Promise<UnlistenFn> {
+  return listen<unknown>(THEME_PREFS_CHANGED, (event) => cb(event.payload));
 }

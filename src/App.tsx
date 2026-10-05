@@ -7,7 +7,6 @@ import {
   useState,
   type MouseEvent,
 } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   NATIVE_FAILED_KEY,
@@ -34,7 +33,6 @@ import {
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
 import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
-import { FONT_CHANGED, THEME_TERMINAL_COLORS_CHANGED } from './ipc/events';
 import {
   nativeSurfaceFind,
   nativeSurfaceFindClear,
@@ -68,9 +66,10 @@ import {
   subscribeBaseAnsiChanged,
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
+  subscribeFontChanged,
+  subscribeThemeTerminalColorsChanged,
   normalizeTerminalLineHeight,
   TERMINAL_LINE_HEIGHTS,
-  type FontChange,
   type TerminalLineHeight,
 } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
@@ -1151,8 +1150,7 @@ function App() {
     // do not cross webviews, so we listen via the Tauri event bus here.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<FontChange>(FONT_CHANGED, (event) => {
-      const detail = event.payload;
+    subscribeFontChanged((detail) => {
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
       setPanelFont(normalizePanelFont(detail.panel));
@@ -1350,8 +1348,8 @@ function App() {
     // prop change without recreating xterm.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => {
-      setThemeTerminalColors(Boolean(event.payload));
+    subscribeThemeTerminalColorsChanged((on) => {
+      setThemeTerminalColors(Boolean(on));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

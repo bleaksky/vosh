@@ -54,7 +54,6 @@ import {
   type Pointing,
 } from '../../lib/promptPieces';
 import { notMatchingLine, shownPreview } from '../../lib/promptSettings';
-import type { PromptShowState } from '../../lib/promptShow';
 import { sessionIdentityGet, type SessionIdentity } from '../../ipc/characters';
 import { profilesList } from '../../ipc/profiles';
 import {
@@ -79,6 +78,7 @@ import {
   type PromptLineTrigger,
   type PromptPreset,
   type PromptState,
+  type PromptShowState,
 } from '../../ipc/prompt';
 import {
   promptDescribe,

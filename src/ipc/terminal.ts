@@ -173,6 +173,17 @@ export async function loadScrollback(feedNative = false): Promise<ScrollbackLoad
   return { bytes: new Uint8Array(res.bytes), seededNative: res.seeded_native };
 }
 
+/** The terminal background the session lifts trigger colors against
+ *  while Keep highlight colors readable is on, and the one it fits game
+ *  colors against while Fit game colors is on, each null while its
+ *  setting is off. lib/highlightGround.ts says when each goes. */
+export function highlightGroundSet(ground: {
+  background: string | null;
+  game: string | null;
+}): Promise<void> {
+  return invoke('highlight_ground_set', { ...ground });
+}
+
 /** Forget the lines kept for the next launch, and on the native renderer
  *  the grid's history too. xterm clears its own buffer. */
 export async function scrollbackClear(): Promise<void> {

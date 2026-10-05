@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { emit, listen } from '@tauri-apps/api/event';
-import { CONNECTION_TARGET_CHANGED } from '../ipc/events';
 import { profileResolveMatch, profileSwitch, profilesList } from '../ipc/profiles';
-import { connectSession, disconnectSession, onGmcpPackage, onState } from '../ipc/session';
+import {
+  connectSession,
+  disconnectSession,
+  emitConnectionTargetChanged,
+  onGmcpPackage,
+  onState,
+  subscribeConnectionTargetChanged,
+} from '../ipc/session';
 import { pushToast } from './toasts';
 
 // The session the title band shows and the session menu drives. Moved
@@ -104,7 +109,7 @@ function storeTarget(target: ConnectionTarget): void {
 /** Save where Connect and ⌘R dial, and tell every window. */
 export function saveConnectionTarget(target: ConnectionTarget): void {
   storeTarget(target);
-  emit(CONNECTION_TARGET_CHANGED, target).catch(() => {
+  emitConnectionTargetChanged(target).catch(() => {
     // No other window to tell. Storage still holds the target.
   });
 }
@@ -114,8 +119,8 @@ export function saveConnectionTarget(target: ConnectionTarget): void {
 export function subscribeConnectionTarget(cb: (target: ConnectionTarget) => void): () => void {
   let cancelled = false;
   let unlisten: (() => void) | undefined;
-  listen<unknown>(CONNECTION_TARGET_CHANGED, (event) => {
-    const target = parseTarget(event.payload);
+  subscribeConnectionTargetChanged((payload) => {
+    const target = parseTarget(payload);
     if (target && !cancelled) cb(target);
   })
     .then((fn) => {

@@ -1,4 +1,3 @@
-import { emit } from '@tauri-apps/api/event';
 import { useEffect, useRef, useState } from 'react';
 import {
   copyTheme,
@@ -7,8 +6,7 @@ import {
   removeCustomTheme,
   THEME_SLOT_GROUPS,
 } from '../../../../lib/appearanceSettings';
-import { CUSTOM_THEMES_CHANGED, THEME_CHANGED } from '../../../../ipc/events';
-import type { CustomTheme } from '../../../../ipc/theme';
+import { emitCustomThemesChanged, emitThemeChanged, type CustomTheme } from '../../../../ipc/theme';
 import type { UiConfig } from '../../../../ipc/uiConfig';
 import {
   activeThemeFor,
@@ -93,8 +91,8 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
       // repaints with the new colors while you drag the picker. A name
       // or description edit waits for the save.
       applyTheme(id);
-      void emit(CUSTOM_THEMES_CHANGED, list)
-        .then(() => emit(THEME_CHANGED, id))
+      void emitCustomThemesChanged(list)
+        .then(() => emitThemeChanged(id))
         .catch(() => {});
     }
     update({ custom_themes: list });

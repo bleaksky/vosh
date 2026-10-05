@@ -12,7 +12,7 @@ import {
   lentRows,
   type CellSize,
 } from '../../lib/promptBand';
-import type { PromptShowState } from '../../lib/promptShow';
+import type { PromptShowState } from '../../ipc/prompt';
 import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
 import { parseSgrCells, PLAIN, shownColumns } from '../../lib/sgrCells';
 import { RegionWriter } from '../../lib/terminalRegion';

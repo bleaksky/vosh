@@ -16,15 +16,6 @@ import {
   type Macro,
 } from '../ipc/automation';
 import {
-  ECHO_MACROS_CHANGED,
-  INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
-  INPUT_ECHO_COLOR_CHANGED,
-  KEEP_LAST_CHANGED,
-  PASTE_LINE_DELAY_CHANGED,
-  SPELLCHECK_PROMPT_CHANGED,
-} from '../ipc/events';
-import {
   nativeSurfaceCopy,
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
@@ -39,7 +30,18 @@ import {
   stopWalk,
   type QuickKey,
 } from '../ipc/session';
-import { getUiConfig, normalizeInputCursorStyle, type InputCursorStyle } from '../ipc/uiConfig';
+import {
+  getUiConfig,
+  normalizeInputCursorStyle,
+  subscribeEchoMacrosChanged,
+  subscribeInputCursorStyleChanged,
+  subscribeInputEchoCaretChanged,
+  subscribeInputEchoColorChanged,
+  subscribeKeepLastChanged,
+  subscribePasteLineDelayChanged,
+  subscribeSpellcheckPromptChanged,
+  type InputCursorStyle,
+} from '../ipc/uiConfig';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import {
   draftAfterMaskChange,
@@ -49,7 +51,6 @@ import {
   planSubmit,
 } from '../lib/maskedInput';
 import { recentNames } from '../lib/recentNames';
-import { listen } from '@tauri-apps/api/event';
 import { nativeSurfaceEnabled } from './Terminal';
 import { isMacPlatform, shortcutKey } from '../lib/palette';
 
@@ -388,14 +389,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         setCursorStyle(cfg.input_cursor_style);
       })
       .catch(() => {});
-    listen<boolean>(KEEP_LAST_CHANGED, (event) => {
-      keepLastRef.current = Boolean(event.payload);
+    subscribeKeepLastChanged((on) => {
+      keepLastRef.current = Boolean(on);
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenKeep = fn;
     });
-    listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => {
-      const n = Number(event.payload);
+    subscribePasteLineDelayChanged((ms) => {
+      const n = Number(ms);
       if (Number.isFinite(n) && n >= 0) {
         pasteDelayRef.current = Math.min(10_000, Math.floor(n));
       }
@@ -403,33 +404,32 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenPaste = fn;
     });
-    listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => {
-      setSpellcheckPrompt(Boolean(event.payload));
+    subscribeSpellcheckPromptChanged((on) => {
+      setSpellcheckPrompt(Boolean(on));
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenSpell = fn;
     });
-    listen<string>(INPUT_CURSOR_STYLE_CHANGED, (event) => {
-      setCursorStyle(normalizeInputCursorStyle(event.payload));
+    subscribeInputCursorStyleChanged((style) => {
+      setCursorStyle(normalizeInputCursorStyle(style));
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenCursor = fn;
     });
-    listen<string | null>(INPUT_ECHO_COLOR_CHANGED, (event) => {
-      const next = event.payload;
+    subscribeInputEchoColorChanged((next) => {
       echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenEcho = fn;
     });
-    listen<boolean>(ECHO_MACROS_CHANGED, (event) => {
-      echoMacrosRef.current = Boolean(event.payload);
+    subscribeEchoMacrosChanged((on) => {
+      echoMacrosRef.current = Boolean(on);
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenEchoMacros = fn;
     });
-    listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => {
-      echoCaretRef.current = Boolean(event.payload);
+    subscribeInputEchoCaretChanged((on) => {
+      echoCaretRef.current = Boolean(on);
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenEchoCaret = fn;

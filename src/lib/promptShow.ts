@@ -7,59 +7,16 @@
 // connect or disconnect.
 
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { PROMPT_STATUS } from '../ipc/events';
 import { subscribeProfileSwitched } from '../ipc/profiles';
 import {
-  normalizePromptShow,
   onGamePromptSeen,
+  onPromptStatus,
+  promptShowGet,
   subscribePromptConfigChanged,
   type PromptShow,
+  type PromptShowState,
 } from '../ipc/prompt';
 import { onState } from '../ipc/session';
-
-export interface PromptShowState {
-  show: PromptShow;
-  /** The profile has a capture that reads a prompt. */
-  capture: boolean;
-  /** Draw your prompt is on. */
-  draw: boolean;
-  /** The game sent Char.Prompt this session. */
-  gameSent: boolean;
-  /** The rows the pinned band keeps, the most any prompt the capture
-   *  reads can take. */
-  zone: number;
-  /** You turned prompts off in the game. */
-  promptsOff: boolean;
-}
-
-interface RawPromptShowState {
-  show?: unknown;
-  capture?: unknown;
-  draw?: unknown;
-  game_sent?: unknown;
-  zone?: unknown;
-  prompts_off?: unknown;
-}
-
-/** A state from what prompt_show_get returned, the text and nothing
- *  read for anything it did not say. */
-export function normalizePromptShowState(raw: RawPromptShowState | null): PromptShowState {
-  const zone = typeof raw?.zone === 'number' && Number.isFinite(raw.zone) ? raw.zone : 1;
-  return {
-    show: normalizePromptShow(raw?.show),
-    capture: raw?.capture === true,
-    draw: raw?.draw === true,
-    gameSent: raw?.game_sent === true,
-    zone: Math.min(6, Math.max(1, Math.round(zone))),
-    promptsOff: raw?.prompts_off === true,
-  };
-}
-
-export async function promptShowGet(): Promise<PromptShowState> {
-  return normalizePromptShowState(await invoke<RawPromptShowState | null>('prompt_show_get'));
-}
 
 /** Call `cb` on everything that can change where your prompt shows or
  *  whether the profile reads one. Returns the unsubscribe. */
@@ -76,7 +33,7 @@ export function subscribePromptShowChanges(cb: () => void): () => void {
   keep(subscribeProfileSwitched(() => cb()));
   keep(onGamePromptSeen(() => cb()));
   keep(onState(() => cb()));
-  keep(listen<unknown>(PROMPT_STATUS, () => cb()));
+  keep(onPromptStatus(() => cb()));
   return () => {
     closed = true;
     for (const un of unlisteners) un();

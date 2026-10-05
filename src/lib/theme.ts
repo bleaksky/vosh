@@ -10,9 +10,14 @@
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
 
-import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { THEME_CHANGED, THEME_PREFS_CHANGED } from '../ipc/events';
+import {
+  emitThemeChanged,
+  emitThemePrefsChanged,
+  subscribeThemeChanged,
+  subscribeThemePrefsChanged,
+} from '../ipc/theme';
 import { getUiConfig } from '../ipc/uiConfig';
 import { windowBackdropSet } from '../ipc/windows';
 import { tokensToCssVars, type Appearance } from './chrome';
@@ -395,7 +400,7 @@ async function refreshAndReapply(choice: string): Promise<void> {
 export async function applyAndBroadcastTheme(choice: string): Promise<void> {
   applyTheme(choice);
   try {
-    await emit(THEME_CHANGED, choice);
+    await emitThemeChanged(choice);
   } catch {
     // Tauri unavailable; local apply is the persistent fallback.
   }
@@ -404,14 +409,14 @@ export async function applyAndBroadcastTheme(choice: string): Promise<void> {
 export async function subscribeThemeChanges(
   callback: (themeId: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>(THEME_CHANGED, (event) => {
-    if (typeof event.payload !== 'string') return;
+  return subscribeThemeChanged((id) => {
+    if (typeof id !== 'string') return;
     // No same-id guard. applyTheme is idempotent, and on startup the
     // local applyTheme runs before the broadcast lands, so the guard
     // would skip the only chance the Terminal has to pick up its
     // initial xterm palette.
-    applyTheme(event.payload);
-    callback(event.payload);
+    applyTheme(id);
+    callback(id);
   });
 }
 
@@ -422,7 +427,7 @@ export function getCurrentThemeId(): string {
 /** Tell every window the theme fields changed. */
 export async function broadcastThemePrefs(prefs: ThemePrefs): Promise<void> {
   try {
-    await emit(THEME_PREFS_CHANGED, themePrefsOf(prefs));
+    await emitThemePrefsChanged(themePrefsOf(prefs));
   } catch {
     // Tauri unavailable; the local copy is already current.
   }
@@ -443,8 +448,8 @@ function isThemePrefs(value: unknown): value is ThemePrefs {
 export async function subscribeThemePrefs(
   callback: (prefs: ThemePrefs) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(THEME_PREFS_CHANGED, (event) => {
-    if (isThemePrefs(event.payload)) callback(themePrefsOf(event.payload));
+  return subscribeThemePrefsChanged((payload) => {
+    if (isThemePrefs(payload)) callback(themePrefsOf(payload));
   });
 }
 

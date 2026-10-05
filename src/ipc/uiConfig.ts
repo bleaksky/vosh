@@ -21,11 +21,20 @@ import {
   BRIGHT_BOLD_CHANGED,
   CHAT_COLORS_CHANGED,
   CHIP_STYLE_CHANGED,
+  ECHO_MACROS_CHANGED,
   FIT_GAME_COLORS_CHANGED,
+  FONT_CHANGED,
   GAME_TIME_CHANGED,
+  INPUT_CURSOR_STYLE_CHANGED,
+  INPUT_ECHO_CARET_CHANGED,
+  INPUT_ECHO_COLOR_CHANGED,
+  KEEP_LAST_CHANGED,
+  PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
+  SPELLCHECK_PROMPT_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
+  THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
   UI_CONFIG_REPLACED,
   VITALS_DENSITY_CHANGED,
@@ -730,4 +739,54 @@ export async function subscribeBaseAnsiChanged(
         : null,
     );
   });
+}
+
+/** Hear the terminal font and size and the panel font and size saved in
+ *  Settings. */
+export function subscribeFontChanged(cb: (change: FontChange) => void): Promise<UnlistenFn> {
+  return listen<FontChange>(FONT_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Keep last command change. */
+export function subscribeKeepLastChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(KEEP_LAST_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Use the theme's colors for MUD text change. */
+export function subscribeThemeTerminalColorsChanged(
+  cb: (on: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Sent command color change, null for the default. */
+export function subscribeInputEchoColorChanged(
+  cb: (color: string | null) => void,
+): Promise<UnlistenFn> {
+  return listen<string | null>(INPUT_ECHO_COLOR_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Show the commands your macros send change. */
+export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Mark your commands change. */
+export function subscribeInputEchoCaretChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Wait between pasted lines change, in ms. */
+export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
+  return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Check spelling when you chat change. */
+export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Caret shape change. */
+export function subscribeInputCursorStyleChanged(cb: (style: string) => void): Promise<UnlistenFn> {
+  return listen<string>(INPUT_CURSOR_STYLE_CHANGED, (event) => cb(event.payload));
 }

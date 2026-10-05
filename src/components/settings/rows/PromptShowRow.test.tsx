@@ -1,12 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { PROMPT_SHOW_LABELS, promptShowLock } from '../../../lib/promptShow';
 import {
   normalizePromptShowState,
-  PROMPT_SHOW_LABELS,
-  promptShowLock,
+  type PromptShow,
   type PromptShowState,
-} from '../../../lib/promptShow';
-import type { PromptShow } from '../../../ipc/prompt';
+} from '../../../ipc/prompt';
 import { SETTINGS_ROWS } from '../../../lib/settingsSearch';
 import { PromptShowField } from './PromptShowRow';
 

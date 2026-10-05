@@ -1,10 +1,5 @@
-import {
-  PROMPT_SHOW_HELP,
-  PROMPT_SHOW_LABELS,
-  promptShowLock,
-  type PromptShowState,
-} from '../../../lib/promptShow';
-import { PROMPT_SHOWS, type PromptShow } from '../../../ipc/prompt';
+import { PROMPT_SHOW_HELP, PROMPT_SHOW_LABELS, promptShowLock } from '../../../lib/promptShow';
+import { PROMPT_SHOWS, type PromptShow, type PromptShowState } from '../../../ipc/prompt';
 import { Row, Segmented, type SegmentedOption } from '../ui';
 
 // Where your prompt shows, from the profile's [prompt] show. It sits

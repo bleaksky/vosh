@@ -1,4 +1,4 @@
-import type { PromptShowState } from './promptShow';
+import type { PromptShowState } from '../ipc/prompt';
 import type { VitalsMeter, VitalsValues } from '../ipc/uiConfig';
 import { vitalPercent } from './stores/vitalsStore';
 
