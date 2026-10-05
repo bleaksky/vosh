@@ -5,6 +5,7 @@
 // to 60 percent in linear light, and draws bright colors in the bold face
 // only while Bright bold is on.
 
+import { fromLinear, toHex, toLinear, toRgba, type Rgb } from '../theme/color';
 import type { Cell, CellAttrs, CellColor } from './sgrCells';
 
 export interface BandEnv {
@@ -48,21 +49,12 @@ export function decorationLine(look: BandCellLook): string | undefined {
   return lines.length > 0 ? lines.join(' ') : undefined;
 }
 
-type Rgb = [number, number, number];
-
+/** The color of the first six hex digits, black without them. */
 function parseHex(hex: string): Rgb {
   const m = /^#?([0-9a-f]{6})/i.exec(hex.trim());
-  if (!m) return [0, 0, 0];
+  if (!m) return { r: 0, g: 0, b: 0 };
   const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function hexOf([r, g, b]: Rgb): string {
-  const h = (v: number) =>
-    Math.max(0, Math.min(255, Math.round(v)))
-      .toString(16)
-      .padStart(2, '0');
-  return `#${h(r)}${h(g)}${h(b)}`;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
 /** xterm's 256 color table past the 16: the 6x6x6 cube, then 24 grays. */
@@ -71,10 +63,10 @@ export function indexedRgb(n: number, palette: readonly string[]): Rgb {
   if (n < 232) {
     const i = n - 16;
     const v = (c: number) => (c === 0 ? 0 : 55 + c * 40);
-    return [v(Math.floor(i / 36)), v(Math.floor((i % 36) / 6)), v(i % 6)];
+    return { r: v(Math.floor(i / 36)), g: v(Math.floor((i % 36) / 6)), b: v(i % 6) };
   }
   const gray = 8 + (n - 232) * 10;
-  return [gray, gray, gray];
+  return { r: gray, g: gray, b: gray };
 }
 
 function colorRgb(color: CellColor, palette: readonly string[]): Rgb {
@@ -83,15 +75,9 @@ function colorRgb(color: CellColor, palette: readonly string[]): Rgb {
     case 'indexed':
       return indexedRgb(color.n, palette);
     case 'rgb':
-      return [color.r, color.g, color.b];
+      return { r: color.r, g: color.g, b: color.b };
   }
 }
-
-const toLinear = (c: number) => {
-  const v = c / 255;
-  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-};
-const toSrgb = (v: number) => 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
 
 /** A bright ANSI color, 8 to 15, named or indexed. */
 function isBright(color: CellColor | null): boolean {
@@ -117,22 +103,20 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
   const fgColor = brightened(attrs.fg, attrs.bold);
   let fg: Rgb = fgColor ? colorRgb(fgColor, env.palette) : parseHex(env.fg);
   if (attrs.dim && env.renderer === 'native') {
-    fg = fg.map((c) => toSrgb(toLinear(c) * 0.6)) as Rgb;
+    const dimmed = (c: number) => fromLinear(toLinear(c) * 0.6);
+    fg = { r: dimmed(fg.r), g: dimmed(fg.g), b: dimmed(fg.b) };
   }
   const bgRgb: Rgb | null = attrs.bg ? colorRgb(attrs.bg, env.palette) : null;
   let color: string;
   let background: string | null;
   if (attrs.inverse) {
-    color = hexOf(bgRgb ?? parseHex(env.bg));
-    background = hexOf(fg);
+    color = toHex(bgRgb ?? parseHex(env.bg));
+    background = toHex(fg);
   } else {
-    color = hexOf(fg);
-    background = bgRgb ? hexOf(bgRgb) : null;
+    color = toHex(fg);
+    background = bgRgb ? toHex(bgRgb) : null;
   }
-  if (attrs.dim && env.renderer === 'xterm') {
-    const [r, g, b] = parseHex(color);
-    color = `rgba(${r}, ${g}, ${b}, 0.5)`;
-  }
+  if (attrs.dim && env.renderer === 'xterm') color = toRgba(parseHex(color), 0.5);
   // xterm hides concealed text. The native grid draws it.
   if (attrs.hidden && env.renderer === 'xterm') color = 'transparent';
   const bold = env.renderer === 'native' && isBright(fgColor) ? env.brightBold : attrs.bold;
@@ -149,7 +133,7 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
             style: styled ? UNDERLINE_STYLES[attrs.underline] : 'solid',
             color:
               styled && attrs.underlineColor
-                ? hexOf(colorRgb(attrs.underlineColor, env.palette))
+                ? toHex(colorRgb(attrs.underlineColor, env.palette))
                 : null,
           }
         : null,

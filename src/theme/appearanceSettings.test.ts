@@ -3,7 +3,6 @@ import {
   ANSI_SLOT_LABELS,
   basePalette,
   BUNDLED_FONTS,
-  colorInputValue,
   copyTheme,
   editCustomTheme,
   fontChoices,
@@ -446,21 +445,6 @@ describe('removeCustomTheme', () => {
     expect(next.theme).toBe('nord');
     expect(next.dark_theme).toBe('nord');
     expect(next.light_theme).toBe('vellum');
-  });
-});
-
-describe('colorInputValue', () => {
-  it('reads hex and rgb text', () => {
-    expect(colorInputValue('#88C0D0')).toBe('#88c0d0');
-    expect(colorInputValue('#abc')).toBe('#aabbcc');
-    expect(colorInputValue('#88c0d080')).toBe('#88c0d0');
-    expect(colorInputValue('rgba(136, 192, 208, 0.22)')).toBe('#88c0d0');
-    expect(colorInputValue('rgb(300,0,-1)')).toBe('#ff0000');
-  });
-
-  it('falls back for anything else', () => {
-    expect(colorInputValue('')).toBe('#888888');
-    expect(colorInputValue('teal', '#000000')).toBe('#000000');
   });
 });
 

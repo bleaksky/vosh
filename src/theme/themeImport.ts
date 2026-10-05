@@ -9,6 +9,7 @@
 // are missing.
 
 import type { CustomTheme } from '../ipc/theme';
+import { toHex } from './color';
 
 export type ThemeFileFormat = 'ghostty' | 'iterm2' | 'kitty' | 'alacritty-toml' | 'alacritty-yaml';
 
@@ -91,11 +92,6 @@ function unquote(value: string): string {
   return v;
 }
 
-const hex2 = (n: number) =>
-  Math.max(0, Math.min(255, Math.round(n)))
-    .toString(16)
-    .padStart(2, '0');
-
 /** A color as lowercase #rrggbb, or null when the value is not one.
  *  Reads #rgb, #rrggbb, #rrggbbaa (alpha dropped), the same without the
  *  hash, 0xrrggbb, and X11 rgb:r/g/b. */
@@ -104,7 +100,7 @@ export function normalizeColor(raw: string): string | null {
   const x11 = /^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i.exec(v);
   if (x11) {
     const channel = (h: string) => (parseInt(h, 16) / (16 ** h.length - 1)) * 255;
-    return `#${hex2(channel(x11[1]))}${hex2(channel(x11[2]))}${hex2(channel(x11[3]))}`;
+    return toHex({ r: channel(x11[1]), g: channel(x11[2]), b: channel(x11[3]) });
   }
   if (/^0x[0-9a-f]{6}$/i.test(v)) v = v.slice(2);
   else if (v.startsWith('#')) v = v.slice(1);
@@ -170,7 +166,8 @@ function readIterm(text: string): Slots {
     };
     const rgb = [component('Red'), component('Green'), component('Blue')];
     if (rgb.every(Number.isFinite)) {
-      colors.set(m[1].trim(), `#${rgb.map((c) => hex2(c * 255)).join('')}`);
+      const [r, g, b] = rgb.map((c) => c * 255);
+      colors.set(m[1].trim(), toHex({ r, g, b }));
     }
   }
   const get = (key: string) => colors.get(key) ?? colors.get(`${key} (Dark)`);

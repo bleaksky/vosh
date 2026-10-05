@@ -6,6 +6,7 @@
 // components stay about layout.
 
 import { cellWidth } from '../terminal/sgrCells';
+import { toHex } from '../theme/color';
 import { layoutPrompt, type PieceSpan, type RegionOnScreen } from './promptPointer';
 import type {
   PromptColorChoice,
@@ -208,8 +209,6 @@ export function swatchOf(color: PromptColorChoice): Swatch {
   }
 }
 
-const hex2 = (n: number) => n.toString(16).padStart(2, '0');
-
 /** What the Custom field shows: the color as #rrggbb when it is one no
  *  swatch names, with `palette` giving a theme or 256 color its hex, and
  *  empty otherwise. */
@@ -235,7 +234,7 @@ export function byValueName(color: PromptColorChoice): string | null {
 export function colorHex(color: PromptColorChoice, palette: (index: number) => string): string {
   switch (color.kind) {
     case 'rgb':
-      return `#${hex2(color.r)}${hex2(color.g)}${hex2(color.b)}`;
+      return toHex(color);
     case 'index':
     case 'named':
       return palette(color.index);

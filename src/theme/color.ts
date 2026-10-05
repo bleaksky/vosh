@@ -68,12 +68,14 @@ export function hexToRgba(hex: string, alpha: number): string {
   return c ? toRgba(c, alpha) : hex;
 }
 
-function toLinear(v: number): number {
+/** An sRGB channel, 0..255, in linear light, 0..1. */
+export function toLinear(v: number): number {
   const c = v / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
-function fromLinear(v: number): number {
+/** A linear light channel, 0..1, back to sRGB 0..255, unrounded and unclamped. */
+export function fromLinear(v: number): number {
   const c = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
   return c * 255;
 }

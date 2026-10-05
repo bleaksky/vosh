@@ -137,8 +137,7 @@ const dECvd = (a: string, b: string, kind: Cvd) => {
 
 /** The color xterm draws for 256 color index `n`, 16 to 255. */
 export function xterm256(n: number): string {
-  const [r, g, b] = indexedRgb(n, []);
-  return toHex({ r, g, b });
+  return toHex(indexedRgb(n, []));
 }
 
 /** The 256 color indexes the game sends whatever the theme. 240 is the
