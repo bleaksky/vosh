@@ -35,6 +35,12 @@
   --menu-hi: rgba(255, 255, 255, 0.081);
   --key-ring: rgba(255, 255, 255, 0.138);
   --edge: rgba(255, 255, 255, 0.121);
+  /* theme.ts also writes this one as rgba, since the map canvas reads
+     it and a canvas fill cannot parse color-mix in every webview. */
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  /* The split scrollback divider. Layout's split divider color writes
+     yours over it. */
+  --split-divider: var(--tertiary);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,

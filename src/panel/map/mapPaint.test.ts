@@ -55,9 +55,9 @@ const FAINT = '#7c8394';
 const MARK_FACE = 'Iosevka, monospace';
 const VARS: Record<string, string> = {
   '--panel': GROUND,
-  '--c-accent': ACCENT,
-  '--c-accent-soft': ACCENT_SOFT,
-  '--c-text-faint': FAINT,
+  '--accent': ACCENT,
+  '--accent-soft': ACCENT_SOFT,
+  '--tertiary': FAINT,
   '--font-panel-mark': MARK_FACE,
 };
 

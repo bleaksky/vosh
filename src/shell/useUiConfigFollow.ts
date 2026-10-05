@@ -50,9 +50,9 @@ import { customToAppTheme, resolveThemeTerminalColors, setCustomThemes } from '.
 function applySplitDividerColor(color: string | null): void {
   const root = document.documentElement;
   if (color && color.length > 0) {
-    root.style.setProperty('--c-split-divider', color);
+    root.style.setProperty('--split-divider', color);
   } else {
-    root.style.removeProperty('--c-split-divider');
+    root.style.removeProperty('--split-divider');
   }
   // The native surface draws its own divider; keep it in the same color.
   if (nativeSurfaceEnabled()) {

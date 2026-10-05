@@ -93,7 +93,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
   // Bumps when the theme changes so the draw effect re-runs and the
-  // canvas picks up the new --c-surface / --c-accent CSS vars that
+  // canvas picks up the new --panel / --accent CSS vars that
   // MAP_COLORS reads through its getters.
   const [themeVersion, setThemeVersion] = useState(0);
 

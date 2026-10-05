@@ -147,7 +147,7 @@ export interface HandleParts {
 // returns empty (early-mount race in WKWebView).
 const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
   const rootStyle = getComputedStyle(document.documentElement);
-  const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#7aa2f7';
+  const accent = rootStyle.getPropertyValue('--accent').trim() || '#7aa2f7';
   // The SearchAddon draws non-active matches BELOW the text and the
   // active match ABOVE it. So a non-active match can carry an accent
   // tint (the glyphs paint on top and stay legible), but the active

@@ -22,8 +22,8 @@
 }
 
 /* Font stacks and the floating shadow recipe. Colors live in
-   styles/tokens.css, where the `--c-*` names alias the theme tokens
-   src/theme/theme.ts writes at runtime. */
+   styles/tokens.css as the theme tokens src/theme/theme.ts writes at
+   runtime. */
 
 :root {
   --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
@@ -53,7 +53,7 @@ body,
   padding: 0;
   height: 100%;
   background: transparent;
-  color: var(--c-text);
+  color: var(--text);
   /* Ember: chrome is Inter by default; the terminal and game-data
      surfaces opt back into mono explicitly. Chrome type does NOT
      scale with the user's terminal font size. */
@@ -84,7 +84,7 @@ body {
   /* Firefox / spec form. WebKit ignores this; WebView2 supports it
      since edge 121. */
   scrollbar-width: thin;
-  scrollbar-color: var(--c-border-strong, #555) transparent;
+  scrollbar-color: var(--sep) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -97,14 +97,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--c-border-strong, #555);
+  background: var(--sep);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--c-text-faint, #888);
+  background: var(--tertiary);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
@@ -124,11 +124,11 @@ body {
   flex-direction: column;
   height: 100vh;
   width: 100vw;
-  background: var(--c-surface);
+  background: var(--bg);
   /* Ember window frame: full-strength hairline, 10px corners, and a
      one-pixel top sheen so the window edge catches light the way the
      approved canvas frame does. */
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--sep);
   border-radius: 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
@@ -146,7 +146,7 @@ body {
      itself (theme.ts exposes the active xterm background as --xterm-bg)
      so the well reads as one continuous surface instead of a two-tone
      ring. Falls back to the chrome surface before the theme applies. */
-  background: var(--xterm-bg, var(--c-surface));
+  background: var(--xterm-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -223,7 +223,7 @@ body {
    exists when only one pane is present). */
 .terminal-pane .xterm .xterm-viewport,
 .terminal-pane .xterm .xterm-screen {
-  background-color: var(--xterm-bg, var(--c-surface));
+  background-color: var(--xterm-bg);
 }
 
 /* Hide the history pane content while it primes (mounts, loads
@@ -240,11 +240,11 @@ body {
 
 /* Style the resizable handle so it reads as the split divider. The
    base carved-channel handle is transparent, which would make the
-   split boundary invisible inside the well; --c-split-divider lets
+   split boundary invisible inside the well; --split-divider lets
    the user pick the line color from Settings. Hover and drag still
    show the base rule's ember tick. */
 .terminal-pane-history.resizable .resizable-handle {
-  background: var(--c-split-divider, var(--c-text-faint));
+  background: var(--split-divider);
   flex: 0 0 2px;
 }
 
@@ -261,7 +261,7 @@ body {
   right: 24px;
   font-size: 0.78em;
   font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--c-muted, #888);
+  color: var(--secondary);
   background: rgba(0, 0, 0, 0.45);
   padding: 2px 8px;
   border-radius: 3px;
@@ -294,7 +294,7 @@ body {
   top: 0;
   left: 0;
   overflow: hidden;
-  background: var(--c-surface);
+  background: var(--bg);
   /* Padding deliberately NOT here. xterm-addon-fit reads the host
      clientHeight (includes parent padding) but subtracts only the
      padding of xterm.element itself when computing available rows.
@@ -354,15 +354,15 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   align-items: center;
   gap: 10px;
   padding: 9px 16px;
-  background: var(--c-surface-pane);
-  border-top: 1px solid var(--c-border);
-  border-bottom: 1px solid var(--c-border);
+  background: var(--panel);
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
   position: relative;
   z-index: 1;
   /* Ember: the input caret glows in the accent color. The textarea
      hides this native caret and paints the block caret below; the
      password input keeps it (masked input, native caret). */
-  caret-color: var(--c-accent);
+  caret-color: var(--accent);
   /* Lock to content height; never shrink. Without explicit
      `flex: 0 0 auto` the column flex container can hand part of this
      row's slot to the terminal when xterm hasn't refit yet, which paints
@@ -373,7 +373,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .input-row input {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--c-text);
+  color: var(--text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -390,15 +390,15 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .input-row input::placeholder {
-  color: var(--c-text-dim);
+  color: var(--tertiary);
 }
 
 /* Selection highlight inside the input bar uses the theme accent
    so the keep-last-command restored line reads clearly against the
    surface, instead of falling back to the OS blue. */
 .input-row input::selection {
-  background: var(--c-accent-soft);
-  color: var(--c-text-strong);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 /* Multi-line command prompt. Mirrors the single-line input but allows
    Shift+Enter to grow the box; Input.tsx autosizes the height to fit
@@ -406,7 +406,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .input-row textarea {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--c-text);
+  color: var(--text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -433,7 +433,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   box-sizing: border-box;
   width: 7px;
   height: 15px;
-  background: var(--c-accent);
+  background: var(--accent);
   pointer-events: none;
   animation: vosh-caret-blink 1.1s steps(1, end) infinite;
 }
@@ -469,7 +469,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   width: 7px;
   height: 15px;
   background: transparent;
-  border: 1px solid var(--c-accent);
+  border: 1px solid var(--accent);
 }
 
 .caret-shape--half_block {
@@ -519,11 +519,11 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   padding: 2px 0;
 }
 .input-row textarea::placeholder {
-  color: var(--c-text-dim);
+  color: var(--tertiary);
 }
 .input-row textarea::selection {
-  background: var(--c-accent-soft);
-  color: var(--c-text-strong);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 /* Top-align the row only while composing multiple lines so the prompt,
    gutter, and first text line share a baseline. Single-line prompts keep
@@ -542,7 +542,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   max-height: 11em;
   overflow: hidden;
   text-align: right;
-  color: var(--c-text-dim);
+  color: var(--tertiary);
   user-select: none;
   font-variant-numeric: tabular-nums;
   min-width: 1.5em;
@@ -564,26 +564,26 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   gap: 6px;
   padding: 1px 6px;
   font-variant-numeric: tabular-nums;
-  color: var(--c-text-faint);
-  border: 1px solid var(--c-border);
+  color: var(--tertiary);
+  border: 1px solid var(--divider);
   border-radius: 2px;
-  background: var(--c-surface-deep);
+  background: var(--panel);
   white-space: nowrap;
   flex: 0 0 auto;
 }
 
 .paste-burst::before {
   content: '[';
-  color: var(--c-text-dim);
+  color: var(--tertiary);
 }
 
 .paste-burst::after {
   content: ']';
-  color: var(--c-text-dim);
+  color: var(--tertiary);
 }
 
 .paste-burst-tag {
-  color: var(--c-accent);
+  color: var(--accent);
   text-transform: lowercase;
   letter-spacing: 0.04em;
 }
@@ -591,7 +591,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .paste-burst-count {
   display: inline-flex;
   align-items: baseline;
-  color: var(--c-text);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -601,17 +601,17 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .paste-burst-slash {
-  color: var(--c-text-dim);
+  color: var(--tertiary);
   margin: 0 1px;
   font-weight: 400;
 }
 
 .paste-burst-total {
-  color: var(--c-text);
+  color: var(--text);
 }
 
 .paste-burst-hint {
-  color: var(--c-text-dim);
+  color: var(--tertiary);
   font-size: 0.92em;
 }
 
@@ -622,10 +622,10 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 @keyframes vosh-paste-pulse {
   0%,
   100% {
-    border-top-color: var(--c-border);
+    border-top-color: var(--divider);
   }
   50% {
-    border-top-color: var(--c-accent-soft);
+    border-top-color: var(--accent-soft);
   }
 }
 
@@ -643,8 +643,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
    landed — the border is the affordance now. */
 .settings-btn {
   background: transparent;
-  color: var(--c-accent);
-  border: 1px solid var(--c-border);
+  color: var(--accent);
+  border: 1px solid var(--divider);
   border-radius: 6px;
   padding: 2px 10px;
   font-family: inherit;
@@ -655,13 +655,13 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .settings-btn:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-border-hover);
+  color: var(--text);
+  border-color: var(--sep);
 }
 
 .settings-btn:disabled {
-  color: var(--c-text-dim);
-  border-color: var(--c-border-soft);
+  color: var(--tertiary);
+  border-color: var(--divider);
   cursor: not-allowed;
 }
 
@@ -681,8 +681,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-wizard {
-  background: var(--c-surface-pane);
-  border: 1px solid var(--c-border-strong);
+  background: var(--panel);
+  border: 1px solid var(--sep);
   border-radius: 10px;
   width: 100%;
   max-width: 880px;
@@ -697,18 +697,18 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--c-border);
-  background: var(--c-surface-deep);
+  border-bottom: 1px solid var(--divider);
+  background: var(--panel);
 }
 
 .migration-wizard-title {
-  color: var(--c-accent);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .migration-wizard-close {
   background: transparent;
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   border: none;
   cursor: pointer;
   font-family: inherit;
@@ -717,7 +717,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-wizard-close:hover {
-  color: var(--c-text);
+  color: var(--text);
 }
 
 .migration-wizard-body {
@@ -731,12 +731,12 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 .migration-wizard-status,
 .migration-wizard-error {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   padding: 8px 0;
 }
 
 .migration-wizard-error {
-  color: var(--c-muted-red, #c4746e);
+  color: var(--danger);
 }
 
 .migration-wizard-applied {
@@ -744,19 +744,19 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
-  border-left: 2px solid var(--c-accent);
+  background: var(--selrow);
+  border: 1px solid var(--divider);
+  border-left: 2px solid var(--accent);
   border-radius: 2px;
 }
 
 .migration-wizard-applied-title {
-  color: var(--c-accent);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .migration-wizard-applied-body {
-  color: var(--c-text);
+  color: var(--text);
   font-size: 0.9em;
   line-height: 1.45;
 }
@@ -767,12 +767,12 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   justify-content: space-between;
   gap: 14px;
   padding: 10px 14px;
-  border-top: 1px solid var(--c-border);
-  background: var(--c-surface-deep);
+  border-top: 1px solid var(--divider);
+  background: var(--panel);
 }
 
 .migration-wizard-hint {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.85em;
   line-height: 1.4;
   flex: 1 1 auto;
@@ -794,25 +794,25 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-section-title {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.85em;
   font-weight: 600;
   text-transform: lowercase;
   letter-spacing: 0.04em;
   margin: 0;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--divider);
 }
 
 .migration-hint,
 .migration-hint-inline {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.82em;
   line-height: 1.45;
 }
 
 .migration-empty {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-style: italic;
   padding: 6px 0;
 }
@@ -831,8 +831,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 .migration-list-item {
   padding: 4px 8px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
+  background: var(--selrow);
+  border: 1px solid var(--divider);
   border-radius: 2px;
 }
 
@@ -847,19 +847,19 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   align-items: baseline;
   gap: 6px;
   padding: 4px 10px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
+  background: var(--selrow);
+  border: 1px solid var(--divider);
   border-radius: 2px;
 }
 
 .migration-count-chip-n {
-  color: var(--c-accent);
+  color: var(--accent);
   font-weight: 600;
   font-size: 1.05em;
 }
 
 .migration-count-chip-l {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.85em;
 }
 
@@ -868,9 +868,9 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border-strong);
-  border-left: 2px solid var(--c-muted-red, #c4746e);
+  background: var(--selrow);
+  border: 1px solid var(--sep);
+  border-left: 2px solid var(--danger);
   border-radius: 2px;
 }
 
@@ -883,15 +883,15 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .migration-kind-tag {
   padding: 1px 6px;
   font-size: 0.75em;
-  background: var(--c-surface-deep);
-  border: 1px solid var(--c-border);
+  background: var(--panel);
+  border: 1px solid var(--divider);
   border-radius: 2px;
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   text-transform: lowercase;
 }
 
 .migration-conflict-name {
-  color: var(--c-text);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -915,24 +915,24 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-variant-source {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
 }
 
 .migration-variant-state {
   padding: 0 5px;
   font-size: 0.78em;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--divider);
   border-radius: 2px;
-  color: var(--c-text-faint);
+  color: var(--tertiary);
 }
 
 .migration-variant-state.is-on {
-  color: var(--c-accent);
-  border-color: var(--c-accent);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .migration-variant-body {
-  color: var(--c-text);
+  color: var(--text);
   font-family: inherit;
   word-break: break-all;
 }
@@ -942,8 +942,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   flex-direction: column;
   gap: 4px;
   padding: 8px 10px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
+  background: var(--selrow);
+  border: 1px solid var(--divider);
   border-radius: 2px;
 }
 
@@ -954,12 +954,12 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-loadout-name {
-  color: var(--c-accent);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .migration-loadout-desc {
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.85em;
 }
 
@@ -972,10 +972,10 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .migration-group-tag {
   padding: 1px 6px;
   font-size: 0.78em;
-  background: var(--c-surface-deep);
-  border: 1px solid var(--c-border);
+  background: var(--panel);
+  border: 1px solid var(--divider);
   border-radius: 2px;
-  color: var(--c-text-faint);
+  color: var(--tertiary);
 }
 
 .migration-preset-change {
@@ -986,7 +986,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 
 .migration-preset-verb {
-  color: var(--c-text);
+  color: var(--text);
   font-size: 0.85em;
 }
 
@@ -1026,7 +1026,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   top: 50%;
   transform: translate(-50%, -50%);
   border-radius: 2px;
-  background: var(--c-accent);
+  background: var(--accent);
   opacity: 0;
   transition: opacity 120ms ease-out;
   pointer-events: none;
@@ -1051,7 +1051,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 .resizable-handle.is-dragging::after {
   opacity: 1;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--c-accent) 45%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .resizable-handle-vertical.is-dragging::after {
   width: 56px;
@@ -1191,6 +1191,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--c-text-faint);
+  color: var(--tertiary);
   font-size: 0.85em;
 }

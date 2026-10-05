@@ -88,17 +88,17 @@ export function CodeEditor({
       EditorView.theme(
         {
           '&': {
-            background: 'var(--c-surface, #1c1d24)',
-            color: 'var(--c-text, #cdd0d6)',
+            background: 'var(--bg)',
+            color: 'var(--text)',
             fontFamily: "'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace",
             fontSize: '13px',
             borderRadius: '3px',
-            border: '1px solid var(--c-border, #2a2c34)',
+            border: '1px solid var(--divider)',
             ...(fill ? { height: '100%' } : {}),
           },
           '&.cm-focused': {
             outline: 'none',
-            borderColor: 'var(--c-accent, #87a987)',
+            borderColor: 'var(--accent)',
           },
           '.cm-scroller': {
             ...(fill ? { height: '100%', overflow: 'auto' } : { minHeight, maxHeight }),
@@ -106,22 +106,22 @@ export function CodeEditor({
           },
           '.cm-content': {
             padding: inline ? '3px 6px' : '6px',
-            caretColor: 'var(--c-text, #cdd0d6)',
+            caretColor: 'var(--text)',
           },
           '.cm-gutters': {
-            background: 'var(--c-bg, #15161b)',
-            color: 'var(--c-text-faint, #6b6f78)',
+            background: 'var(--bg)',
+            color: 'var(--tertiary)',
             border: 'none',
-            borderRight: '1px solid var(--c-border, #2a2c34)',
+            borderRight: '1px solid var(--divider)',
           },
           '.cm-activeLine, .cm-activeLineGutter': {
             background: 'transparent',
           },
           '.cm-selectionBackground, ::selection': {
-            background: 'var(--c-accent-soft, rgba(135, 169, 135, 0.25))',
+            background: 'var(--accent-soft)',
           },
           '.cm-cursor': {
-            borderLeftColor: 'var(--c-text, #cdd0d6)',
+            borderLeftColor: 'var(--text)',
           },
         },
         { dark: true },

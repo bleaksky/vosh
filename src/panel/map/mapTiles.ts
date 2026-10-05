@@ -527,7 +527,7 @@ export function glyphGrid(payload: MapTilesPayload): GlyphGrid | null {
   // travel both ways). Door state (cell.d) picks the connector
   // color: open → gray, closed → amber, locked → red, hidden →
   // pink + dashed glyph (see DOOR_COLORS / DOOR_GLYPHS).
-  const OPEN_COLOR = 'var(--c-border-strong, var(--c-border))';
+  const OPEN_COLOR = 'var(--sep)';
   const connectorColor = (state: DoorState | null): string =>
     state && state !== 'open' ? DOOR_COLORS[state] : OPEN_COLOR;
   for (let r = 0; r < rows; r++) {
