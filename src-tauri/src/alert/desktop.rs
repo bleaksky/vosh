@@ -13,8 +13,20 @@ use tauri_plugin_notification::NotificationExt;
 
 use super::banner::{Banner, Permission};
 
-/// Post `banner`, with the system's sound when `sound` says so.
-pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound: bool) {
+/// The sound a banner asks the system for. Windows names its default
+/// toast sound, and Linux a name from the freedesktop sound naming spec,
+/// which a server that plays sounds knows.
+#[cfg(windows)]
+const SOUND: &str = "Default";
+#[cfg(not(windows))]
+const SOUND: &str = "message-new-instant";
+
+/// Post `banner`, with the system's sound when `sound` says so. Returns
+/// whether the system plays that sound in place of the page's tone. On
+/// Windows it does while Windows Settings lets Vosh show toasts, though
+/// Focus Assist may still hush one. A Linux server may play no sound at
+/// all, so there the page's tone plays as well.
+pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound: bool) -> bool {
     let mut title = banner.title.clone();
     if let Some(label) = &banner.label {
         title = format!("{title} \u{b7} {label}");
@@ -25,10 +37,19 @@ pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound
         .title(title)
         .body(banner.body());
     if sound {
-        builder = builder.sound("Default");
+        builder = builder.sound(SOUND);
     }
     if let Err(e) = builder.show() {
         tracing::warn!(error = %e, "the banner did not go out");
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        sound && windows_setting() == Permission::Granted
+    }
+    #[cfg(not(windows))]
+    {
+        false
     }
 }
 
