@@ -101,7 +101,7 @@ pub(crate) async fn aliases_import(
 }
 
 /// Snapshot of every keyboard macro binding. Used by the Settings
-/// macros tab to render the existing list and by Input.tsx (via the
+/// macros tab to render the existing list and by useMacroKeys.ts (via the
 /// same payload) to seed its in-memory binding lookup before any
 /// `vosh://macros-changed` event fires.
 #[tauri::command]
