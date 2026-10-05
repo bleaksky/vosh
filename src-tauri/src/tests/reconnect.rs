@@ -596,3 +596,44 @@ async fn a_yes_to_connect_anyway_during_the_wait_ends_the_series_before_its_try(
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn disconnect_while_a_try_connects_leaves_no_link_up() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    let (gate, held) = std::sync::mpsc::channel();
+    *h.state.redial_gate.lock().expect("the gate") = Some(gate);
+    h.servers[0].cut();
+    let (_, _, done) = clock.next().await;
+    let _ = done.send(());
+    // The try reached the game and waits before it takes the slot.
+    let go_on = tokio::task::spawn_blocking(move || held.recv_timeout(Duration::from_secs(5)))
+        .await
+        .expect("the wait")
+        .expect("the try connected");
+    // Your Disconnect comes while the try holds, and the try then goes on.
+    let session = h.state.session(Some(h.first)).expect("the session");
+    let (app, state) = (h.app.handle().clone(), h.state.clone());
+    let disconnecting = {
+        let session = session.clone();
+        tokio::spawn(async move { crate::session::disconnect(&app, &state, &session).await })
+    };
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    go_on.send(()).expect("the try waits");
+    disconnecting.await.expect("the disconnect");
+    assert!(
+        session.slot.lock().await.is_none(),
+        "the link the try opened stays up"
+    );
+    // The end of the series cut the try short or found it reached the
+    // game, and the page hears one of the two.
+    let heard = kinds(&h, h.first);
+    assert!(
+        heard == ["waiting", "dialing", "cancelled"] || heard == ["waiting", "dialing", "reached"],
+        "{heard:?}"
+    );
+    clock.stays_quiet().await;
+    h.finish(grid).await;
+}

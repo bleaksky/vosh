@@ -99,6 +99,11 @@ pub(crate) struct AppState {
     /// one: each wait goes to the test, which ends it.
     #[cfg(test)]
     pub(crate) redial_clock: std::sync::Mutex<Option<RedialClock>>,
+    /// In a test build, the gate a redial that connected waits at before
+    /// it takes the slot, while a test holds one. See
+    /// [`crate::session::reconnect::hold_try`].
+    #[cfg(test)]
+    pub(crate) redial_gate: std::sync::Mutex<Option<RedialGate>>,
 }
 
 /// Where a redial in a test build sends each wait: the session, how long
@@ -109,6 +114,11 @@ pub(crate) type RedialClock = tokio::sync::mpsc::UnboundedSender<(
     std::time::Duration,
     tokio::sync::oneshot::Sender<()>,
 )>;
+
+/// Where a redial in a test build that connected sends the sender that
+/// lets it go on.
+#[cfg(test)]
+pub(crate) type RedialGate = std::sync::mpsc::Sender<std::sync::mpsc::Sender<()>>;
 
 impl AppState {
     /// The session map, held for one step that takes no other lock.
@@ -330,6 +340,8 @@ impl Default for AppState {
             banners: crate::alert::banner::Banners::default(),
             #[cfg(test)]
             redial_clock: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            redial_gate: std::sync::Mutex::new(None),
         }
     }
 }
