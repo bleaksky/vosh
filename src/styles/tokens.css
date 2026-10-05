@@ -48,7 +48,13 @@
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
     sans-serif;
+  /* The terminal face and size. The windows write yours over them. */
+  --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+  --app-font-size: 14px;
   --font-mud: var(--app-font-family);
+  /* The bundled monospace face, for the glyph map and the scroll depth
+     indicator. */
+  --font-mono: 'JetBrainsMono Bundled', Menlo, 'SF Mono', monospace;
   /* The panes and the status line, one name for each face they were
      designed in. Under Panel text Font As designed, the default, the
      main window writes no --panel-font-family (src/panel/panelFont.ts)
@@ -78,22 +84,11 @@
      does (frame.css). */
   --status-line: round(28px * var(--panel-text-px, 12) / 12, 1px);
   --panel-w: 300px;
-}
 
-/* Font stacks and the floating shadow recipe. */
-
-:root {
-  --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
-  --app-font-size: 14px;
-
-  /* Ember chrome type system. The terminal keeps --app-font-family;
-     everything around it draws from these two stacks. */
+  /* Inter and the wizard's shadow. Only html and body in base.css and
+     the migration wizard read them, until D23 retires both. New chrome
+     takes --font-ui, and a new floating surface --shadow-float. */
   --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrainsMono Bundled', Menlo, 'SF Mono', monospace;
-
-  /* Floating-layer shadow recipe. Menus, toolbars, tooltips, toasts,
-     and modals all share it so every floating surface reads as one
-     generation of chrome. */
   --float:
     0 18px 44px -14px rgba(0, 0, 0, 0.6), 0 6px 18px -10px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
