@@ -10,7 +10,7 @@ import {
 } from '../../../lib/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
-import { resolveThemeTerminalColors, type CustomTheme } from '../../../ipc/theme';
+import type { CustomTheme } from '../../../ipc/theme';
 import {
   listSystemFonts,
   type SystemFontEntry,
@@ -32,6 +32,7 @@ import {
   BUILTIN_THEMES,
   customToAppTheme,
   findTheme,
+  resolveThemeTerminalColors,
   RETIRED_THEMES,
   setCustomThemes,
   themeShownBy,

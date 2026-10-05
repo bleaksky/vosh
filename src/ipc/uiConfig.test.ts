@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import uiDefaults from '../../fixtures/ui-config/defaults.json';
-import { freeBuiltinThemeIds, seedDarkTheme, type CustomTheme } from './theme';
+import type { CustomTheme } from './theme';
 import {
   GAME_TIMES,
   getUiConfig,
@@ -22,7 +22,13 @@ import {
 } from './uiConfig';
 import { broadcastUiConfigChanges, setUiConfig } from './uiConfigSave';
 import { galleryThemes } from '../lib/themeThumb';
-import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from '../lib/themes';
+import {
+  BUILTIN_THEMES,
+  customToAppTheme,
+  findTheme,
+  freeBuiltinThemeIds,
+  setCustomThemes,
+} from '../lib/themes';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -76,36 +82,6 @@ describe('normalizeUiConfig appearance fields', () => {
     expect(normalizeUiConfig(raw({ terminal_line_height: 'roomy' })).terminal_line_height).toBe(
       'default',
     );
-  });
-});
-
-describe('seedDarkTheme', () => {
-  it('takes the current theme when it is dark', () => {
-    expect(seedDarkTheme('nord', [])).toBe('nord');
-    expect(seedDarkTheme('obsidian-ember', [])).toBe('obsidian-ember');
-  });
-
-  it('falls back to Obsidian Ember for a light or unknown theme', () => {
-    expect(seedDarkTheme('rubric', [])).toBe('obsidian-ember');
-    expect(seedDarkTheme('system', [])).toBe('obsidian-ember');
-    expect(seedDarkTheme('gone', [])).toBe('obsidian-ember');
-  });
-
-  it('reads custom themes by their own background', () => {
-    const themes = [custom('night-ink', '#000000'), custom('paper', '#ffffff')];
-    expect(seedDarkTheme('night-ink', themes)).toBe('night-ink');
-    expect(seedDarkTheme('paper', themes)).toBe('obsidian-ember');
-  });
-
-  it('reads a retired id by the theme that took its place', () => {
-    // A saved One Dark shows One Half Dark, so it seeds a dark theme of
-    // One Half Dark under the id you saved.
-    expect(seedDarkTheme('one-dark', [])).toBe('one-dark');
-    expect(findTheme(seedDarkTheme('one-dark', [])).id).toBe('one-half-dark');
-    expect(seedDarkTheme('vellum', [])).toBe('obsidian-ember');
-    expect(seedDarkTheme('everforest-light', [])).toBe('obsidian-ember');
-    // A custom theme with a retired id wins over the successor.
-    expect(seedDarkTheme('one-dark', [custom('one-dark', '#ffffff')])).toBe('obsidian-ember');
   });
 });
 

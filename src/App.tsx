@@ -56,7 +56,7 @@ import {
 import { promptPreviewSet } from './ipc/promptDesign';
 import { disconnectSession, setWindowSize, onState, type StatePayload } from './ipc/session';
 import { terminalLocalWrite } from './ipc/terminal';
-import { resolveThemeTerminalColors, subscribeCustomThemesChanged } from './ipc/theme';
+import { subscribeCustomThemesChanged } from './ipc/theme';
 import {
   getUiConfig,
   subscribeBrightBoldChanged,
@@ -89,7 +89,13 @@ import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from './lib/
 import { PRESETS, presetTriggers } from './lib/presets';
 import { presetLaunchPlan } from './lib/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
-import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
+import {
+  customToAppTheme,
+  findTheme,
+  resolveThemeTerminalColors,
+  setCustomThemes,
+  themeTokens,
+} from './lib/themes';
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
