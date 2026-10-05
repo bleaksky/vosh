@@ -7,7 +7,7 @@ import { Input, type InputHandle } from '../input/Input';
 import { Resizable } from '../terminal/Resizable';
 import { UpdateNotice } from './overlays/UpdateNotice';
 import { Toasts } from './overlays/Toasts';
-import { FindToolbar, type FindToolbarHandle } from '../terminal/FindToolbar';
+import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
@@ -21,7 +21,6 @@ import {
   usePanelLayout,
 } from '../panel/panelLayoutStore';
 import { addPaneType, togglePane } from '../panel/paneActions';
-import { nativeSurfaceFind, nativeSurfaceFindClear } from '../ipc/nativeSurface';
 import {
   promptConfigGet,
   promptConfigSet,
@@ -77,6 +76,7 @@ import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { notePageWrite, usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
+import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 import { useScrollbackSplit } from './useScrollbackSplit';
 import { useUiConfigFollow } from './useUiConfigFollow';
@@ -150,16 +150,6 @@ function MainWindow() {
   // React versions and silently no-ops preventDefault, which would
   // let xterm scroll the live pane underneath us.
   const terminalAreaRef = useRef<HTMLDivElement | null>(null);
-  // Scrollback find toolbar. Opens on Cmd+F (macOS) or Ctrl+F (other
-  // platforms). Drives xterm's SearchAddon. The live pane always owns
-  // iteration (selection + cached search term live on its addon, so
-  // pressing Enter advances one match each time). The history pane
-  // mirrors the search in parallel so a scrollback match has a
-  // visible highlight up top while the live pane stays anchored to
-  // its tail. A search whose match lands inside the live viewport
-  // skips the split entirely.
-  const [findOpen, setFindOpen] = useState(false);
-  const findToolbarRef = useRef<FindToolbarHandle | null>(null);
   // ⌘K command palette.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Close window (⌘W on macOS) while a session is live asks first,
@@ -185,13 +175,6 @@ function MainWindow() {
   );
   // The card draws your design over the band of Lifted in the text.
   const [cardBand, setCardBand] = useState(false);
-  // Match count from live's SearchAddon. Drives the "3 / 12" badge in
-  // the find toolbar. `index` of -1 means the active match was lost
-  // (e.g. after the toolbar opened but before the first search ran).
-  const [findResults, setFindResults] = useState<{ index: number; count: number }>({
-    index: -1,
-    count: 0,
-  });
 
   // A preview the prompt card left on before this window loaded again
   // would go on drawing on your prompt, so the window clears it as it
@@ -372,29 +355,26 @@ function MainWindow() {
     };
   }, []);
 
-  const closeFind = () => {
-    termRef.current?.clearSearch();
-    historyTermRef.current?.clearSearch();
-    if (nativeSurfaceEnabled()) {
-      void nativeSurfaceFindClear().catch(() => {});
-    }
-    clearQueuedSearch();
-    setFindResults({ index: -1, count: 0 });
-    setFindOpen(false);
-    inputRef.current?.focus();
-  };
+  // Find in scrollback. A match up in scrollback shows in the split.
+  const { findOpen, openFind, findToolbarRef, findResults, closeFind, submitFind, onFindResults } =
+    useFind({
+      termRef,
+      historyTermRef,
+      focusInput: () => inputRef.current?.focus(),
+      showHistoryMatch,
+      hideHistoryMatch,
+      clearQueuedSearch,
+    });
+
   const closePalette = () => {
     setPaletteOpen(false);
     inputRef.current?.focus();
   };
 
   // Esc closes the open surface on top and nothing under it (see
-  // lib/escapeStack). The find bar closes from anywhere, so a click
-  // that drifted focus away (or the split auto-closing when history
-  // scrolled back to its tail) still leaves Esc working. The palette
-  // handles Esc inside itself, where it first steps back out of a
-  // submenu.
-  useEscape(findOpen, closeFind);
+  // lib/escapeStack). useFind above registers the find bar first. The
+  // palette handles Esc inside itself, where it first steps back out of
+  // a submenu.
   useEscape(paletteOpen, closePalette, () => document.querySelector('.ov-palette'));
   useEscape(terminalMenu !== null, () => {
     setTerminalMenu(null);
@@ -552,75 +532,6 @@ function MainWindow() {
     }
   });
 
-  // Run a find call from the toolbar. The live pane is the
-  // authoritative iterator: each call advances its SearchAddon
-  // selection + cachedSearchTerm, so pressing Enter walks through
-  // matches in order. The history pane is a passive mirror, used
-  // only when the active match falls outside the live viewport.
-  //
-  // Strategy per call:
-  //   1. Advance live.findNext (or findPrevious). If no match, close
-  //      any open split and clear history decorations.
-  //   2. If after the call live is still anchored to its tail, the
-  //      match is in the visible viewport. Close the split if it had
-  //      been opened for a prior scrollback match.
-  //   3. Otherwise the active match is up in scrollback. Snap live
-  //      back to its tail (without clearing live's search state, so
-  //      iteration survives), open the split, and run the same search
-  //      on the history pane so its decorations + viewport land on
-  //      a matching line.
-  const submitFind = (
-    query: string,
-    opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean },
-    direction: 'next' | 'previous',
-  ): boolean => {
-    if (query.length === 0) return false;
-
-    // Native surface: the grid owns search, scroll-to-match, and the
-    // highlight. Route to the native command and feed the count back to
-    // the toolbar; no xterm split is involved.
-    if (nativeSurfaceEnabled()) {
-      void nativeSurfaceFind({
-        query,
-        regex: opts.regex ?? false,
-        caseSensitive: opts.caseSensitive ?? false,
-        wholeWord: opts.wholeWord ?? false,
-        forward: direction === 'next',
-      })
-        .then(([current, total]) => {
-          setFindResults({ index: total > 0 ? current - 1 : -1, count: total });
-        })
-        .catch(() => {});
-      return true;
-    }
-
-    const live = termRef.current;
-    if (!live) return false;
-
-    const hit = direction === 'next' ? live.findNext(query, opts) : live.findPrevious(query, opts);
-    if (!hit) {
-      hideHistoryMatch();
-      return false;
-    }
-
-    if (live.isAtBottom()) {
-      // Match landed inside the live viewport. Decorations on live
-      // are visible; no split needed. Tear down the split if it had
-      // been opened for an earlier scrollback match.
-      hideHistoryMatch();
-      return true;
-    }
-
-    // Match is up in scrollback. Pin live back to its tail so it
-    // keeps streaming; live's SearchAddon selection + cachedSearchTerm
-    // survive the scroll, which is what lets the next call advance.
-    // Mirror the search into the history pane so the user can see
-    // the highlighted match up there.
-    live.scrollToBottom();
-    showHistoryMatch(query, opts, direction);
-    return true;
-  };
-
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
   const inputElement = (
@@ -661,7 +572,7 @@ function MainWindow() {
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: openHelpWindow,
-    openFind: () => setFindOpen(true),
+    openFind,
     openSettings: openSettingsWindow,
     openSettingsTab,
     connect: () => void connection.connect(),
@@ -720,9 +631,9 @@ function MainWindow() {
       case 'find':
         // Open just the toolbar. Whether to open the split is decided
         // per search: only when a match would scroll the live pane up
-        // off its tail (see submitFind above).
+        // off its tail (see submitFind in useFind.ts).
         if (finding) findToolbarRef.current?.focus();
-        else setFindOpen(true);
+        else openFind();
         return;
       case 'settings':
         openSettingsWindow();
@@ -890,9 +801,7 @@ function MainWindow() {
             // After the restored scrollback, so what launch has to tell
             // you lands below it instead of scrolling away above.
             onScrollbackLoaded={() => void showLaunchNotices(writeLive)}
-            onResultsChanged={(event) =>
-              setFindResults({ index: event.resultIndex, count: event.resultCount })
-            }
+            onResultsChanged={onFindResults}
             onCellSize={setCellSize}
             lifted={promptLifted}
             lentRows={dockLent}
@@ -955,7 +864,7 @@ function MainWindow() {
           y={terminalMenu.y}
           termRef={termRef}
           inputRef={inputRef}
-          onOpenFind={() => setFindOpen(true)}
+          onOpenFind={openFind}
           onCustomizePrompt={() => openPromptCard('design')}
           onClose={() => setTerminalMenu(null)}
         />
