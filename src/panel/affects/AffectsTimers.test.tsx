@@ -5,11 +5,11 @@ import type { PaneLeaf } from '../paneLayout';
 import { groupCurrentAffects, type CurrentAffect } from '../../stores/gmcp/affectsStore';
 import type { TrackedAffect } from '../../ipc/affects';
 import { aabahranPacket } from '../../test/aabahranGmcp';
-import { AffectsPaneView } from './AffectsTimers';
+import { TimersView } from './AffectsTimers';
 import { PaneLeafContext } from '../paneActions';
 import { PaneTextSizeContext } from '../paneTextSize';
 
-// The stores behind AffectsPane reach the Tauri bridge. AffectsPaneView,
+// The stores behind AffectsPane reach the Tauri bridge. TimersView,
 // under test, draws from plain values and never calls it.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -31,7 +31,7 @@ function draw(
 ): string {
   return renderToStaticMarkup(
     <PaneLeafContext.Provider value={LEAF}>
-      <AffectsPaneView current={current} tracked={tracked} hidden={hidden} box={box} />
+      <TimersView current={current} tracked={tracked} hidden={hidden} box={box} />
     </PaneLeafContext.Provider>,
   );
 }
@@ -96,7 +96,7 @@ function rule(selector: string): string {
 
 const list = (name: string) => groupCurrentAffects(aabahranPacket(name).data);
 
-describe('AffectsPaneView', () => {
+describe('TimersView', () => {
   it('waits for your affects before the first list', () => {
     expect(draw(null, false)).toContain('Affects appear when you log in.');
   });
@@ -213,7 +213,7 @@ describe('AffectsPaneView', () => {
     expect(html).not.toContain('data-affects-marker');
     const dot = renderToStaticMarkup(
       <PaneLeafContext.Provider value={LEAF}>
-        <AffectsPaneView
+        <TimersView
           current={ILSABET}
           tracked={ILSABET_TRACKED}
           hidden={false}
@@ -229,7 +229,7 @@ describe('AffectsPaneView', () => {
     for (const marker of ['square', 'plus_minus', 'none'] as const) {
       const html = renderToStaticMarkup(
         <PaneLeafContext.Provider value={LEAF}>
-          <AffectsPaneView
+          <TimersView
             current={ILSABET}
             tracked={ILSABET_TRACKED}
             hidden={false}
@@ -283,7 +283,7 @@ describe('AffectsPaneView', () => {
     const drawTint = (tint: boolean) =>
       renderToStaticMarkup(
         <PaneLeafContext.Provider value={LEAF}>
-          <AffectsPaneView
+          <TimersView
             current={ILSABET}
             tracked={ILSABET_TRACKED}
             hidden={false}
@@ -339,7 +339,7 @@ describe('AffectsPaneView', () => {
   const drawAt = (thresholds?: { runningOut: number; almostGone: number }) =>
     renderToStaticMarkup(
       <PaneLeafContext.Provider value={LEAF}>
-        <AffectsPaneView
+        <TimersView
           current={EDGES}
           tracked={EDGES_TRACKED}
           hidden={false}
@@ -405,12 +405,12 @@ describe('AffectsPaneView', () => {
   });
 });
 
-describe('AffectsPaneView at your terminal size', () => {
+describe('TimersView at your terminal size', () => {
   const at = (size: number) =>
     renderToStaticMarkup(
       <PaneTextSizeContext.Provider value={size}>
         <PaneLeafContext.Provider value={LEAF}>
-          <AffectsPaneView
+          <TimersView
             current={ILSABET}
             tracked={ILSABET_TRACKED}
             hidden={false}

@@ -6,7 +6,7 @@ import { useAffects, useAffectsHidden } from '../../stores/gmcp/affectsStore';
 import { useTrackedAffects } from '../../stores/config/trackedAffectsStore';
 import { ChipsView } from './AffectsChips';
 import { CountdownView } from './AffectsCountdown';
-import { AffectsPaneView } from './AffectsTimers';
+import { TimersView } from './AffectsTimers';
 
 // Timers first (AffectsTimers.tsx) is one of four styles you pick in
 // Settings, Layout, Affects or the pane menu. Countdown
@@ -55,7 +55,7 @@ export function AffectsPane() {
     );
   }
   return (
-    <AffectsPaneView
+    <TimersView
       current={current}
       tracked={tracked}
       hidden={hidden}

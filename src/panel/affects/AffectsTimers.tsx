@@ -42,7 +42,7 @@ import { usePaneText } from '../paneTextSize';
 // about to drop yellow or red. The body carries data-affects-tint while
 // it is on.
 
-export interface AffectsPaneViewProps {
+export interface TimersViewProps {
   /** Your affects, or null until the server sends the list. */
   current: readonly AffectInput[] | null;
   tracked: readonly TrackedInput[];
@@ -61,7 +61,7 @@ export interface AffectsPaneViewProps {
 }
 
 /** The pane drawn from plain values, so each state renders in a test. */
-export function AffectsPaneView({
+export function TimersView({
   current,
   tracked,
   hidden,
@@ -69,7 +69,7 @@ export function AffectsPaneView({
   marker = 'dot',
   tint = false,
   thresholds = DEFAULT_AFFECT_THRESHOLDS,
-}: AffectsPaneViewProps) {
+}: TimersViewProps) {
   const rows = useMemo(
     () => affectsPaneRows(current, tracked, hidden, thresholds),
     [current, tracked, hidden, thresholds],
