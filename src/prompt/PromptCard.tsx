@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -13,16 +12,10 @@ import type { CellSize } from './pinnedDock';
 import {
   type CardRequest,
   cardShowState,
-  codeReaderStep,
-  codesSourceLine,
-  firstCapture,
   headerButtons,
-  localStamp,
   moreItems,
   openingStep,
-  savedCapture,
   savedForName,
-  withCapture,
   withDesign,
   withShow,
   withStart,
@@ -30,16 +23,15 @@ import {
   type MoreItemId,
 } from './cardRules';
 import { followCardProfile } from './promptCardSync';
-import { numberMarks, wholeMarks, type ScreenAsk } from './promptScreen';
 import { warnedPieces } from './promptWarn';
 import { LAYOUT_TOKENS, type LayoutId } from './pickerRows';
 import {
   deleteOp,
   insertOps,
   insertPlace,
+  NOWHERE,
   pickAnnouncement,
   pickable,
-  rawMarks,
   step as stepPick,
   type Pointing,
 } from './promptPieces';
@@ -49,22 +41,15 @@ import { profilesList } from '../ipc/profiles';
 import {
   onPromptState,
   onPromptStatus,
-  promptCandidates,
   promptCardOpen,
   promptCodeReaderSet,
   promptCompile,
   promptConfigGet,
   promptDesignsList,
-  promptLineTriggers,
   promptStateGet,
   promptWatch,
   subscribePromptConfigChanged,
-  type PromptCapture,
-  type PromptCheckRead,
-  type PromptCompileReport,
-  type PromptConfig,
   type PromptDesign,
-  type PromptLineTrigger,
   type PromptPreset,
   type PromptState,
   type PromptShowState,
@@ -82,6 +67,7 @@ import { keepFocus, type FocusKeeper } from '../lib/focusKeeper';
 import { useGamePrompt } from '../stores/gmcp/gamePromptStore';
 import { pushToast } from '../stores/toasts';
 import { useBandEnv } from './useBandEnv';
+import { useCaptureSteps } from './useCaptureSteps';
 import { useCardPlace } from './useCardPlace';
 import { useDesignEdits } from './useDesignEdits';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
@@ -90,12 +76,11 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
-import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
+import { LineTriggers } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
 import { DesignFoot } from './PromptFoot';
-import { PointName, PointPick, type PointedLine } from './PromptPoint';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
@@ -159,8 +144,6 @@ interface PromptCardProps {
 const LAMENT_NOTE =
   "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
 
-const NOWHERE: Pointing = { picked: null, caret: null };
-
 export function PromptCard({
   host,
   show,
@@ -184,12 +167,6 @@ export function PromptCard({
   const previewRef = useRef<PromptPreviewName>('now');
   const [moreAt, setMoreAt] = useState<HTMLElement | null>(null);
   const [confirmForget, setConfirmForget] = useState(false);
-  // The code reader for another game, once you choose it in More.
-  const [codesChosen, setCodesChosen] = useState(false);
-  const [entryCodes, setEntryCodes] = useState<{ prompt: string; fprompt: string } | null>(null);
-  const [request, setRequest] = useState<CodesRequest | null>(null);
-  const [pointed, setPointed] = useState<PointedLine | null>(null);
-  const [pickFrom, setPickFrom] = useState(0);
   const [presets, setPresets] = useState<PromptPreset[]>([]);
   const [designs, setDesigns] = useState<PromptDesign[]>([]);
   const [view, setView] = useState<CardView>(opening.view === 'text' ? 'text' : 'design');
@@ -203,13 +180,6 @@ export function PromptCard({
     template: string;
     data: PromptDescribed;
   } | null>(null);
-  const [newest, setNewest] = useState<PromptCheckRead | null>(null);
-  // The game's newest line, which P2 marks whole while no row shows it.
-  const [newestLine, setNewestLine] = useState<string | null>(null);
-  // The line B2 proposes, and the one P15 names, as the terminal marks
-  // them.
-  const [pointShown, setPointShown] = useState<ScreenAsk | null>(null);
-  const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
   const insertRef = useRef<((token: string) => void) | null>(null);
   // Where the caret was in Edit as text, kept while Insert value… is open.
   const textCaret = useRef<{ start: number; end: number } | null>(null);
@@ -222,10 +192,36 @@ export function PromptCard({
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
   const cellW = useCellWidth(monoFamily);
   const measure = useLabelMeasure(11);
+  const {
+    forsaken,
+    gameSent,
+    codesChosen,
+    openRow,
+    screen,
+    raw,
+    body: stepBody,
+    lineTriggers,
+    setLineTriggers,
+    resetSteps,
+    changeCodes,
+    chooseCodeReader,
+    forget,
+  } = useCaptureSteps({
+    step,
+    setStep,
+    state,
+    knownHost,
+    game,
+    config,
+    save,
+    setPointing,
+    setConfirmForget,
+    refresh,
+    env,
+    cellW,
+    measure,
+  });
 
-  const forsaken =
-    codesChosen || (state?.forsaken ?? false) || knownHost || config?.capture.kind === 'aabahran';
-  const gameSent = (state?.new_build ?? false) || game !== null;
   // Lament leaves with the Forsaken Lands rules, and the card draws Now
   // until they come back, as Settings does. Your pick stays, so a
   // profile that opens again keeps Lament, and the Preview menu always
@@ -249,11 +245,7 @@ export function PromptCard({
         setStep(null);
         setPointing(NOWHERE);
         setView('design');
-        setRequest(null);
-        setEntryCodes(null);
-        setCodesChosen(false);
-        setPointed(null);
-        setLineTriggers([]);
+        resetSteps();
         setMoreAt(null);
         setConfirmForget(false);
       }
@@ -325,7 +317,7 @@ export function PromptCard({
       // Your live prompt comes back as the card closes.
       void promptPreviewSet(null).catch(() => {});
     };
-  }, [forgetEdits, opens, take]);
+  }, [forgetEdits, opens, resetSteps, take]);
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
@@ -485,81 +477,18 @@ export function PromptCard({
     setMoreAt(null);
     switch (id) {
       case 'change-codes':
-        setEntryCodes(
-          config?.capture.kind === 'aabahran'
-            ? { prompt: config.capture.prompt, fprompt: config.capture.fprompt }
-            : null,
-        );
-        setStep('codes-entry');
+        changeCodes();
         return;
       case 'point':
         setStep('point');
         return;
       case 'use-codes':
-        setCodesChosen(true);
-        setEntryCodes(null);
-        setRequest(null);
-        setStep(codeReaderStep(gameSent && game !== null));
+        chooseCodeReader();
         return;
       case 'forget':
         setConfirmForget(true);
         return;
     }
-  };
-
-  // The codes P3 reads: the ones the game sent on the new build, or the
-  // ones you told Vosh on P2.
-  const codes: CodesRequest | null =
-    gameSent && game && !request
-      ? {
-          prompt: game.prompt,
-          fprompt: game.fprompt,
-          typed: false,
-          source: 'gmcp',
-          seenAt: localStamp(new Date(game.receivedAt)),
-        }
-      : request;
-
-  /** Save a capture, and the first time this profile reads your prompt,
-   *  name the Line triggers that matched it (D6). */
-  const saveCapture = (next: PromptCapture) => {
-    if (!config) return;
-    const first = firstCapture(config.capture);
-    save(withCapture(config, next));
-    setStep('start');
-    if (first) {
-      void promptLineTriggers(next)
-        .then(setLineTriggers)
-        .catch(() => setLineTriggers([]));
-    }
-  };
-
-  const useCodes = (report: PromptCompileReport) => {
-    if (!codes) return;
-    saveCapture(savedCapture(report, codes.source, codes.seenAt));
-  };
-
-  const useNames = (report: PromptCompileReport) => {
-    const shape = report.shapes[0];
-    if (!shape) return;
-    saveCapture({
-      kind: 'regex',
-      lines: shape.lines,
-      settle: shape.settle,
-      names: report.names,
-      seen_at: localStamp(new Date()),
-      source: 'session',
-    });
-  };
-
-  const forget = () => {
-    setConfirmForget(false);
-    if (!config) return;
-    const next: PromptConfig = { ...config, capture: { kind: 'none' } };
-    save(next);
-    setRequest(null);
-    setPointing(NOWHERE);
-    setStep(openingStep({ capture: next.capture, forsaken, gameSent }));
   };
 
   // The picker's search takes focus when you reach Insert value… from
@@ -661,139 +590,14 @@ export function PromptCard({
       ? (pieces.find((p) => p.piece === pointing.picked) ?? null)
       : null;
 
-  // The marks on your prompt: your design's parts while the card draws
-  // it, or the values Vosh reads on the game's own line while it reads
-  // your codes.
-  const openRow = state?.open_row ?? null;
-  // With no row open, as before the profile reads a prompt, the marks
-  // find the game's line on screen.
-  const noRow = openRow === null;
-  useEffect(() => {
-    if (step !== 'codes-entry' || !noRow) return;
-    let alive = true;
-    void promptCandidates()
-      .then((groups) => {
-        const entries = groups.flatMap((g) => g.entries);
-        const latest = entries.reduce<(typeof entries)[number] | null>(
-          (a, b) => (a === null || b.id > a.id ? b : a),
-          null,
-        );
-        if (alive) setNewestLine(latest?.plain ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [step, noRow, refresh]);
-  const screen = useMemo<ScreenAsk | null>(() => {
-    if (step === 'point' || step === 'name') return pointShown;
-    if (!noRow) return null;
-    if (step === 'codes-entry' && newestLine) {
-      return { lines: newestLine.split('\n'), mode: 'tail', marks: wholeMarks };
-    }
-    if (step === 'codes' && newest) {
-      return {
-        lines: newest.plain.split('\n'),
-        mode: 'tail',
-        marks: (shown) => rawMarks({ raw_lines: shown, raw_from: 0 }, newest, false),
-      };
-    }
-    return null;
-  }, [step, noRow, newestLine, newest, pointShown]);
-  const showPick = useCallback(
-    (plain: string | null) =>
-      setPointShown(plain ? { lines: [plain], mode: 'shape', marks: wholeMarks } : null),
-    [],
-  );
-  const showNames = useCallback(
-    (shown: { line: string; named: boolean[] } | null) =>
-      setPointShown(
-        shown
-          ? {
-              lines: [shown.line],
-              mode: 'shape',
-              marks: (found) => numberMarks(found[0] ?? '', shown.named),
-            }
-          : null,
-      ),
-    [],
-  );
-
   let body: ReactNode = null;
   if (config && step) {
     switch (step) {
       case 'codes-entry':
-        body = (
-          <CodesEntry
-            key="codes-entry"
-            initial={entryCodes}
-            onRead={(next) => {
-              setRequest(next);
-              setStep('codes');
-            }}
-            onPoint={() => setStep('point')}
-            onGameSent={() => {
-              setRequest(null);
-              setStep('codes');
-            }}
-          />
-        );
-        break;
       case 'codes':
-        body = codes ? (
-          <CodesRead
-            request={codes}
-            sourceLine={codes.source === 'gmcp' ? codesSourceLine(game) : null}
-            capture={config.capture}
-            secondary={
-              codes.source === 'gmcp'
-                ? { label: 'Point at the line instead', onClick: () => setStep('point') }
-                : {
-                    label: 'Change codes',
-                    onClick: () => {
-                      setEntryCodes({ prompt: codes.prompt, fprompt: codes.fprompt });
-                      setStep('codes-entry');
-                    },
-                  }
-            }
-            onUse={useCodes}
-            onNewest={setNewest}
-            refresh={refresh}
-            env={env}
-            cellW={cellW}
-            measure={measure}
-          />
-        ) : null;
-        break;
       case 'point':
-        body = (
-          <PointPick
-            start={pickFrom}
-            onRead={(line, group) => {
-              setPointed(line);
-              setPickFrom(group);
-              setStep('name');
-            }}
-            onShow={showPick}
-          />
-        );
-        break;
       case 'name':
-        body = pointed ? (
-          <PointName
-            line={pointed}
-            onUse={useNames}
-            onPickAnother={() => {
-              setPickFrom((g) => g + 1);
-              setStep('point');
-            }}
-            refresh={refresh}
-            env={env}
-            cellW={cellW}
-            measure={measure}
-            onShow={showNames}
-          />
-        ) : null;
+        body = stepBody;
         break;
       case 'start':
       case 'rest': {
@@ -906,17 +710,6 @@ export function PromptCard({
       }
     }
   }
-
-  // The marks on your prompt: your design's parts while the card draws
-  // it, or the values Vosh reads on the game's own line while it reads
-  // your codes.
-
-  const raw =
-    step === 'codes-entry' && openRow
-      ? rawMarks(openRow, null, true)
-      : step === 'codes' && openRow
-        ? rawMarks(openRow, newest, false)
-        : null;
 
   const header =
     view === 'picker' && editing ? (

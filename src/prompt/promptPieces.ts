@@ -28,6 +28,9 @@ export interface Pointing {
   caret: number | null;
 }
 
+/** No part picked and no caret. */
+export const NOWHERE: Pointing = { picked: null, caret: null };
+
 type PieceShape = Pick<PromptPiece, 'piece' | 'kind' | 'shows'>;
 
 /** The parts you can pick, in order: every part that takes cells, each
