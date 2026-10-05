@@ -102,6 +102,8 @@ function MainWindow() {
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  // Puts the caret back on the command line.
+  const focusInput = () => inputRef.current?.focus();
   // Write text the page draws itself (your typed echo, error notices) to
   // xterm, and through terminal_local_write to the native grid and the
   // session on either renderer. The session closes the open row, since
@@ -171,7 +173,7 @@ function MainWindow() {
   const closePromptCard = () => {
     setPromptCard(null);
     setCardBand(false);
-    inputRef.current?.focus();
+    focusInput();
   };
 
   // Customize… in Settings, and anything else in another window, opens
@@ -220,7 +222,7 @@ function MainWindow() {
     termRef,
     historyTermRef,
     terminalAreaRef,
-    focusInput: () => inputRef.current?.focus(),
+    focusInput,
   });
 
   // Showing, hiding, or resizing the panel changes the terminal
@@ -272,7 +274,7 @@ function MainWindow() {
       return;
     const selection = window.getSelection?.();
     if (selection && selection.toString().length > 0) return;
-    inputRef.current?.focus();
+    focusInput();
   };
 
   // Tauri reports a window-level focus event when the OS brings the
@@ -280,9 +282,8 @@ function MainWindow() {
   // unfocused, or alt-tabbed in). Focusing the input here is the
   // "click-to-type" affordance the user expects on every reactivation.
   useEffect(() => {
-    const onFocus = () => inputRef.current?.focus();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    window.addEventListener('focus', focusInput);
+    return () => window.removeEventListener('focus', focusInput);
   }, []);
 
   // Mark the root while the window is in the background, so frame.css
@@ -311,7 +312,6 @@ function MainWindow() {
   // and the copy listener defers a frame so the clipboard reads the
   // selection before focus moves off it.
   useEffect(() => {
-    const focusInput = () => inputRef.current?.focus();
     const onCopy = () => {
       if ((document.activeElement as HTMLElement | null)?.closest('.input-row, input, textarea'))
         return;
@@ -330,7 +330,7 @@ function MainWindow() {
     useFind({
       termRef,
       historyTermRef,
-      focusInput: () => inputRef.current?.focus(),
+      focusInput,
       showHistoryMatch,
       hideHistoryMatch,
       clearQueuedSearch,
@@ -338,7 +338,7 @@ function MainWindow() {
 
   const closePalette = () => {
     setPaletteOpen(false);
-    inputRef.current?.focus();
+    focusInput();
   };
 
   // Esc closes the open surface on top and nothing under it (see
@@ -348,7 +348,7 @@ function MainWindow() {
   useEscape(paletteOpen, closePalette, () => document.querySelector('.ov-palette'));
   useEscape(terminalMenu !== null, () => {
     setTerminalMenu(null);
-    inputRef.current?.focus();
+    focusInput();
   });
 
   // Start every pane and status line store at launch so any package
@@ -407,8 +407,8 @@ function MainWindow() {
       findToolbarRef,
       paletteOpen,
       setPaletteOpen,
-      togglePanel: () => togglePanelKeepingCaret(() => inputRef.current?.focus()),
-      focusInput: () => inputRef.current?.focus(),
+      togglePanel: () => togglePanelKeepingCaret(focusInput),
+      focusInput,
       panelOpen,
       shownPanes,
       termRef,
@@ -436,7 +436,7 @@ function MainWindow() {
     blinkText,
     promptLifted,
     cardBand,
-    focusInput: () => inputRef.current?.focus(),
+    focusInput,
   });
 
   useEffect(() => {
@@ -636,12 +636,12 @@ function MainWindow() {
         <TitleBand
           connection={connection}
           panelOpen={panelOpen}
-          onTogglePanel={() => togglePanelKeepingCaret(() => inputRef.current?.focus())}
+          onTogglePanel={() => togglePanelKeepingCaret(focusInput)}
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           onOpenSettings={() => runCommand('settings')}
           paneTree={panelLayout?.root ?? null}
           onAddPane={addPaneType}
-          onMenuClosed={() => inputRef.current?.focus()}
+          onMenuClosed={focusInput}
         />
       }
       terminal={terminalAreaElement}
