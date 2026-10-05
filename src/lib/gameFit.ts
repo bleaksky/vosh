@@ -219,13 +219,13 @@ export const HUE_TURN_FAR = 40;
 
 /** The family of each color a fit may turn, and the OKLCH hue it never
  *  turns past, so it still reads as its own color to a typical eye. Red
- *  turns toward orange and stops at coral, 40, past orange red at 35
- *  and short of dark orange at 58. Green turns toward teal and stops at
- *  turquoise, 185, short of the 195 of teal and cyan. Cyan turns toward
- *  blue and stops at 240, short of dodger blue at 253. A color already
- *  at or past its limit keeps its hue. */
+ *  turns toward orange and stops at 33, past tomato at 32 and short of
+ *  orange red at 35. Green turns toward teal and stops at 165, past
+ *  medium spring green at 157 and short of aquamarine at 169. Cyan
+ *  turns toward blue and stops at 240, short of dodger blue at 253. A
+ *  color already at or past its limit keeps its hue. */
 export type TurnFamily = 'red' | 'green' | 'cyan';
-export const HUE_LIMIT: Readonly<Record<TurnFamily, number>> = { red: 40, green: 185, cyan: 240 };
+export const HUE_LIMIT: Readonly<Record<TurnFamily, number>> = { red: 33, green: 165, cyan: 240 };
 
 /** How far a color of `family` at OKLCH hue `hue` may turn under
  *  `bound` degrees. */
@@ -565,9 +565,10 @@ const CYAN_PAIRS: readonly CuePair[] = [
  *  as that vision sees them: the pairs any vision keeps apart, and tells
  *  in green against says in bright yellow and against yellow. A pair the
  *  vision keeps apart never comes nearer than the Typical fit has it,
- *  unless it stays past its target. Any other may come nearer, but never
- *  under VISION_GUARD, or under where the Typical fit has it if that is
- *  less. */
+ *  unless it stays past its target. Any other may come nearer, but by no
+ *  more than a quarter of where the Typical fit has it (GUARD_SHARE), and
+ *  never under VISION_GUARD, or under where the Typical fit has it if
+ *  that is less, so tells in green keep clear of yells in cyan. */
 export const GUARDED_PAIRS: readonly CuePair[] = [
   ...RED_PAIRS,
   ...CYAN_PAIRS,
@@ -579,6 +580,11 @@ export const GUARDED_PAIRS: readonly CuePair[] = [
  *  for that vision lets two cue colors or two status colors it does not
  *  part come, the floor the Themes review asks of most T7 pairs. */
 export const VISION_GUARD = 10;
+
+/** The share of where the Typical fit has a guarded cue pair that the
+ *  vision does not keep apart (GUARDED_PAIRS) which a fit for that
+ *  vision holds it to, as the vision sees it. */
+export const GUARD_SHARE = 0.75;
 
 /** The text colors a cue color must never run into: body text, and the
  *  white and bold white the game writes whole sentences in. A fit for a
@@ -1057,7 +1063,9 @@ export function fit(
     guards: [
       ...GUARDED_PAIRS.map(([a, b], i) => {
         const seen = dECvd(from[a], from[b], kind);
-        const floor = targets.includes(GUARDED_PAIRS[i]) ? dE(from[a], from[b]) : VISION_GUARD;
+        const floor = targets.includes(GUARDED_PAIRS[i])
+          ? dE(from[a], from[b])
+          : Math.max(VISION_GUARD, GUARD_SHARE * seen);
         return [a, b, Math.min(seen, floor)] as const;
       }),
       ...textGuards(vision).map(

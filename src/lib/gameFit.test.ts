@@ -243,17 +243,18 @@ describe('color vision', () => {
 
   // The fit themes.ts ships for Triad under Deuteranopia. Lighter green
   // would run into body text and darker green into its floor, so only red
-  // moves, turning 11 degrees toward orange. Triad still passes all 46
-  // checks.
+  // moves, turning 5 degrees toward orange to its limit at 33. Triad
+  // still passes all 46 checks.
   it('fits Triad for a deuteranope, lightness first and then a small turn', () => {
     const fitted = fit(TRIAD, 'deuteranopia', {});
-    expect(fitted).toEqual({ red: '#f86632' });
+    expect(fitted).toEqual({ red: '#fa6346' });
     const play = { ...TRIAD, ...fitted };
     expect(short(play)).toEqual([]);
     expect(visionChecks(play, TRIAD, 'deuteranopia').map((c) => c.value)).toEqual([
-      13.5, 25.4, 15.7,
+      12.1, 25.1, 15.6,
     ]);
-    expect(hue(play.red) - hue(TRIAD.red)).toBeCloseTo(11, 0);
+    expect(hue(play.red) - hue(TRIAD.red)).toBeCloseTo(5, 0);
+    expect(hue(play.red)).toBeCloseTo(HUE_LIMIT.red, 0);
   });
 
   it('keeps every color a vision moves clear of body text, white and bold white', () => {
@@ -293,13 +294,22 @@ describe('color vision', () => {
 
   it('turns a hue up to the bound and never past its family limit', () => {
     expect([HUE_TURN, HUE_TURN_FAR]).toEqual([30, 40]);
-    expect(HUE_LIMIT).toEqual({ red: 40, green: 185, cyan: 240 });
-    expect(turnRoom('red', 5, HUE_TURN)).toBe(30);
-    expect(turnRoom('red', 5, HUE_TURN_FAR)).toBe(35);
-    expect(turnRoom('red', 29, HUE_TURN_FAR)).toBe(11);
+    expect(HUE_LIMIT).toEqual({ red: 33, green: 165, cyan: 240 });
+    // Red stops past tomato and short of orange red, green past medium
+    // spring green and short of aquamarine, and cyan short of dodger blue.
+    expect(hue('#ff6347')).toBeLessThan(HUE_LIMIT.red);
+    expect(hue('#ff4500')).toBeGreaterThan(HUE_LIMIT.red);
+    expect(hue('#00fa9a')).toBeLessThan(HUE_LIMIT.green);
+    expect(hue('#7fffd4')).toBeGreaterThan(HUE_LIMIT.green);
+    expect(hue('#1e90ff')).toBeGreaterThan(HUE_LIMIT.cyan);
+    expect(turnRoom('red', 0, HUE_TURN)).toBe(30);
+    expect(turnRoom('red', 0, HUE_TURN_FAR)).toBe(33);
+    expect(turnRoom('red', 29, HUE_TURN_FAR)).toBe(4);
     expect(turnRoom('red', 42, HUE_TURN_FAR)).toBe(0);
-    expect(turnRoom('green', 142, HUE_TURN_FAR)).toBe(40);
-    expect(turnRoom('green', 172, HUE_TURN)).toBe(13);
+    expect(turnRoom('green', 120, HUE_TURN)).toBe(30);
+    expect(turnRoom('green', 120, HUE_TURN_FAR)).toBe(40);
+    expect(turnRoom('green', 142, HUE_TURN_FAR)).toBe(23);
+    expect(turnRoom('green', 172, HUE_TURN)).toBe(0);
     expect(turnRoom('cyan', 200, HUE_TURN_FAR)).toBe(40);
     // A turn of nothing gives the color back.
     expect(turnHue({ r: 254, g: 100, b: 87 }, 0)).toEqual({ r: 254, g: 100, b: 87 });
