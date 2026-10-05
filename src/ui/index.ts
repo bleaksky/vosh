@@ -1,7 +1,8 @@
 // The kit every window shares. Settings, Help and the prompt card build
-// from these, so the geometry and the One Window tokens live in one
-// place (src/styles/settings.css). README.md beside this file lists each
-// one and its props.
+// from these, so each piece keeps its geometry and its One Window tokens
+// in one place. The controls draw from src/styles/controls.css, and the
+// sections, cards and rows from src/styles/settings.css. README.md
+// beside this file lists each one and its props.
 //
 // MenuSurface with menuPlacement, ConfirmDialog, CodeEditor and
 // WindowControls are imported by path. CodeEditor would load CodeMirror

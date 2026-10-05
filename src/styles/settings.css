@@ -1,7 +1,7 @@
-/* Settings window (milestone 2). The frame, the sidebar, and the
-   primitives in src/ui. Every rule sits under an
-   st- class and reads the One Window tokens, the control tones among
-   them, for the SPEC 4 settings controls. Geometry follows the approved
+/* Settings window (milestone 2). The frame, the sidebar, the content
+   column, the sections, cards and rows, and each page. Every rule sits
+   under an st- class and reads the One Window tokens. The controls the
+   pages draw live in controls.css. Geometry follows the approved
    boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
    The root is not under .settings-app. That wrapper and .settings-btn
    live in migration.css, for the migration wizard ImportPanel opens. */
