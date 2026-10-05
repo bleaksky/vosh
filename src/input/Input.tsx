@@ -519,7 +519,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         // so the user can press Enter to resend. setSelectionRange
         // selects the whole value; the OS paints the standard text-
         // selection highlight (overridden by the ::selection rule in
-        // styles.css to use the theme accent).
+        // input.css to use the theme accent).
         setValue(composed);
         requestAnimationFrame(() => {
           const el = inputRef.current;
