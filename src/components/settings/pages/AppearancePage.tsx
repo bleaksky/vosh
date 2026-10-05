@@ -8,6 +8,7 @@ import {
   sizeChoices,
   themeCaption,
 } from '../../../lib/appearanceSettings';
+import { toColorVision, type ColorVision } from '../../../lib/gameFit';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
 import {
@@ -46,14 +47,15 @@ import { ThemeGallery } from './appearance/ThemeGallery';
 import { fitAndKeep } from './appearance/fitAndKeep';
 
 // Appearance, from the approved board (SettingsAppearance.dc.html).
-// Theme holds Import… and the gallery of every theme, a caption that
-// describes the theme on screen and credits its colors, then follow
-// system appearance and the light and dark pair it switches between.
-// Terminal text holds the font, the size, the line height, whether MUD
-// text takes the theme's colors, whether play fits the game's colors to
-// the theme, whether Vosh keeps the colors your triggers set readable
-// on the theme, and whether a line the same as
-// the one before it shows once with a count. While that is on, two rows
+// Theme holds Import… and the gallery of every theme, with a Vision
+// switch that previews the tiles as each color vision sees them, a
+// caption that describes the theme on screen and credits its colors,
+// then follow system appearance and the light and dark pair it switches
+// between. Terminal text holds the font, the size, the line height,
+// whether MUD text takes the theme's colors, whether play fits the
+// game's colors to the theme and for which color vision, whether Vosh
+// keeps the colors your triggers set readable on the theme, and whether
+// a line the same as the one before it shows once with a count. While that is on, two rows
 // under it choose whether the lines of a fight collapse, and whether
 // attack lines do. A link to either row shows them even while it is
 // off, so search lands on them. Panel text holds the font and the size
@@ -65,6 +67,13 @@ const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
   { value: 'default', label: 'Default' },
   { value: 'loose', label: 'Loose' },
+] as const;
+
+const COLOR_VISIONS = [
+  { value: 'typical', label: 'Typical' },
+  { value: 'deuteranopia', label: 'Deuteranopia' },
+  { value: 'protanopia', label: 'Protanopia' },
+  { value: 'tritanopia', label: 'Tritanopia' },
 ] as const;
 
 // The four formats parseThemeFile reads. macOS lists every file anyway,
@@ -110,6 +119,9 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   const { update } = useSettingsAutoSave(setConfig, onError);
   const [advancedOpen, setAdvancedOpen] = useState(() => opensAdvanced(target));
   const [importError, setImportError] = useState<string | null>(null);
+  // The vision the gallery previews. It shows the Color vision you
+  // picked until you switch it, and it never saves.
+  const [preview, setPreview] = useState<ColorVision | null>(null);
   const [installedFonts, setInstalledFonts] = useState<SystemFontEntry[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const hintId = useId();
@@ -271,6 +283,8 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             selected={shown}
             onPick={pick}
             appearance={arrowAppearance}
+            vision={preview ?? config.color_vision}
+            onVision={setPreview}
           />
           {caption !== '' && <p className="st-meta st-theme-caption">{caption}</p>}
           <Row
@@ -340,6 +354,17 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={config.fit_game_colors}
             onChange={(on) => update({ fit_game_colors: on }, { now: true })}
+          />
+        </Row>
+        <Row
+          anchor="color-vision"
+          label="Color vision"
+          description="Fit game colors keeps hits, tells and says apart for the vision you pick."
+        >
+          <Select
+            value={config.color_vision}
+            options={COLOR_VISIONS}
+            onChange={(vision) => update({ color_vision: toColorVision(vision) }, { now: true })}
           />
         </Row>
         <Row

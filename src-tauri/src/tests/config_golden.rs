@@ -353,6 +353,8 @@ fn full_ui() -> UiConfig {
         // fit_game_colors tests in profile/ui.rs and ipc/ui_config.rs
         // cover off.
         fit_game_colors: true,
+        // Written only off Typical, the default.
+        color_vision: "deuteranopia".into(),
         // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in ipc/ui_config.rs cover off.
         readable_highlights: true,
@@ -658,6 +660,7 @@ fn full_global() -> GlobalConfig {
         follow_system_appearance: Some(true),
         light_theme: Some("kanso-pearl".into()),
         dark_theme: Some("tokyo-night".into()),
+        color_vision: Some("protanopia".into()),
         terminal_line_height: Some("compact".into()),
         panel_font: Some("system".into()),
         panel_font_size: Some(0),

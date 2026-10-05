@@ -39,6 +39,8 @@ pub(crate) struct UiConfigPayload {
     #[serde(default)]
     pub blink_text: Option<bool>,
     pub fit_game_colors: bool,
+    /// `typical`, `deuteranopia`, `protanopia` or `tritanopia`.
+    pub color_vision: String,
     pub readable_highlights: bool,
     pub collapse_repeats: bool,
     pub collapse_fight_lines: bool,
@@ -103,6 +105,7 @@ impl UiConfigPayload {
             bright_bold: ui.bright_bold,
             blink_text: ui.blink_text,
             fit_game_colors: ui.fit_game_colors,
+            color_vision: ui.color_vision.clone(),
             readable_highlights: ui.readable_highlights,
             collapse_repeats: ui.collapse_repeats,
             collapse_fight_lines: ui.collapse_fight_lines,
@@ -159,6 +162,7 @@ impl UiConfigPayload {
             bright_bold,
             blink_text,
             fit_game_colors,
+            color_vision,
             readable_highlights,
             collapse_repeats,
             collapse_fight_lines,
@@ -205,6 +209,7 @@ impl UiConfigPayload {
         ui.bright_bold = bright_bold;
         ui.blink_text = blink_text;
         ui.fit_game_colors = fit_game_colors;
+        ui.color_vision = crate::profile::ui::coerce_color_vision(color_vision);
         ui.readable_highlights = readable_highlights;
         ui.collapse_repeats = collapse_repeats;
         ui.collapse_fight_lines = collapse_fight_lines;
@@ -825,6 +830,18 @@ mod tests {
         assert!(through_payload(&ui).fit_game_colors);
         ui.fit_game_colors = false;
         assert!(!through_payload(&ui).fit_game_colors);
+    }
+
+    #[test]
+    fn color_vision_round_trips_and_coerces_an_unknown_one() {
+        let mut ui = UiConfig::default();
+        assert_eq!(through_payload(&ui).color_vision, "typical");
+        for vision in crate::profile::ui::COLOR_VISIONS {
+            ui.color_vision = vision.into();
+            assert_eq!(through_payload(&ui).color_vision, vision);
+        }
+        ui.color_vision = "deutan".into();
+        assert_eq!(through_payload(&ui).color_vision, "typical");
     }
 
     #[test]

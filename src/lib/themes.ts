@@ -5,7 +5,7 @@
 // is known for (Nord's frost accent, for example).
 
 import { CHROME_COLOR_KEYS, deriveChrome, type ChromeOverrides, type ChromeTokens } from './chrome';
-import { fitKey } from './gameFit';
+import { fitKey, GAME_SLOTS, type ColorVision } from './gameFit';
 
 export interface XtermPalette {
   background: string;
@@ -1429,6 +1429,118 @@ const modusVivendi: AppTheme = {
   chrome: { accent: '#2fafff' },
 };
 
+// ── Harbor Dark ─────────────────────────────────────────────────────
+// The GitHub Dark Default palette of GitHub's theme for VS Code, as
+// published, under a name of its own, since GitHub is a trademark
+// (Themes review Q6). GitHub publishes no terminal selection, so the
+// selection is its list selection, #6e768166 laid over the ground. The
+// blue cursor is the accent the review picked, and the theme pins it.
+const harborDark: AppTheme = {
+  id: 'harbor-dark',
+  label: 'Harbor Dark',
+  description: 'Bright text on a blue black ground, with clear colors and a blue accent.',
+  source: 'GitHub Dark Default',
+  author: 'GitHub',
+  license: 'MIT',
+  xterm: {
+    background: '#0d1117',
+    foreground: '#e6edf3',
+    cursor: '#2f81f7',
+    cursorAccent: '#0d1117',
+    selectionBackground: '#343941',
+    selectionForeground: '#e6edf3',
+    black: '#484f58',
+    red: '#ff7b72',
+    green: '#3fb950',
+    yellow: '#d29922',
+    blue: '#58a6ff',
+    magenta: '#bc8cff',
+    cyan: '#39c5cf',
+    white: '#b1bac4',
+    brightBlack: '#6e7681',
+    brightRed: '#ffa198',
+    brightGreen: '#56d364',
+    brightYellow: '#e3b341',
+    brightBlue: '#79c0ff',
+    brightMagenta: '#d2a8ff',
+    brightCyan: '#56d4dd',
+    brightWhite: '#ffffff',
+  },
+  // In play the fit moves 11 slots and passes 45 of 46. Red stays short
+  // at Lc 40.8.
+  fitted: {
+    foreground: '#dee5eb',
+    red: '#e4635c',
+    green: '#7af185',
+    yellow: '#e1a837',
+    blue: '#56a4fd',
+    brightBlack: '#8e97a2',
+    brightGreen: '#b9ffbc',
+    brightYellow: '#fccc5d',
+    brightBlue: '#82c4ff',
+    brightMagenta: '#d6b0ff',
+    brightCyan: '#6ae6ef',
+  },
+  chrome: { accent: '#2f81f7' },
+};
+
+// ── Iceberg Dark ────────────────────────────────────────────────────
+// The dark terminal colors of iceberg.vim, as published. Its cursor is
+// the gray of its text, so the theme pins its magenta, a soft violet,
+// as the accent the review picked.
+const icebergDark: AppTheme = {
+  id: 'iceberg-dark',
+  label: 'Iceberg Dark',
+  description: 'A blue gray night with muted pastel colors and a soft violet accent.',
+  source: 'Iceberg',
+  author: 'cocopon',
+  license: 'MIT',
+  xterm: {
+    background: '#161821',
+    foreground: '#c6c8d1',
+    cursor: '#c6c8d1',
+    cursorAccent: '#161821',
+    selectionBackground: '#272c42',
+    selectionForeground: '#c6c8d1',
+    black: '#1e2132',
+    red: '#e27878',
+    green: '#b4be82',
+    yellow: '#e2a478',
+    blue: '#84a0c6',
+    magenta: '#a093c7',
+    cyan: '#89b8c2',
+    white: '#c6c8d1',
+    brightBlack: '#6b7089',
+    brightRed: '#e98989',
+    brightGreen: '#c0ca8e',
+    brightYellow: '#e9b189',
+    brightBlue: '#91acd1',
+    brightMagenta: '#ada0d3',
+    brightCyan: '#95c4ce',
+    brightWhite: '#d2d4de',
+  },
+  // In play the fit moves 15 slots and passes 44 of 46. Yellow stays
+  // short at Lc 58.1 and red at Lc 37.8.
+  fitted: {
+    foreground: '#cbcdd6',
+    black: '#272b3c',
+    red: '#d16869',
+    green: '#cfda9c',
+    yellow: '#e0a276',
+    blue: '#809bc1',
+    cyan: '#8cbbc5',
+    brightBlack: '#9196b0',
+    brightRed: '#f99897',
+    brightGreen: '#f1fbbd',
+    brightYellow: '#fdc49b',
+    brightBlue: '#9fbbe0',
+    brightMagenta: '#c0b3e7',
+    brightCyan: '#acdce6',
+    brightWhite: '#e6e9f3',
+  },
+  chrome: { accent: '#a093c7' },
+};
+
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
   triad,
@@ -1454,7 +1566,165 @@ export const BUILTIN_THEMES: AppTheme[] = [
   melangeDark,
   melangeLight,
   modusVivendi,
+  harborDark,
+  icebergDark,
 ];
+
+// ── Color vision fits ───────────────────────────────────────────────
+// The fit of each built in theme for each color vision that moves
+// anything past its Typical fit, worked out ahead like `fitted` (lib/
+// gameFit fit). A vision a theme leaves out plays the Typical fit, which
+// either holds the floors the vision raises already or is as far apart
+// as lightness parts its pairs without giving up a check. Each string
+// holds the colors of GAME_SLOTS in order, body text then the 16 ANSI
+// colors, with a dot for a slot the fit leaves as published.
+// gameFit.test.ts fits each again with VOSH_FIT_THEMES=1.
+type OtherVision = Exclude<ColorVision, 'typical'>;
+const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>> = {
+  'obsidian-ember': {
+    deuteranopia:
+      '#cecbc9 . #d07166 #9ae9b5 #d2af64 #799ed6 #b08ac5 #79c3cf . #99948f #f59989 #d1ffdf #f2cf8a #9bbef1 #d0aae2 #9de3ee .',
+    tritanopia:
+      '#cecbc9 . #d07166 #95e4b0 #d2af64 #799ed6 #b08ac5 #75beca . #99948f #f59989 #c7ffd8 #f2cf8a #9bbef1 #d0aae2 #9de3ee .',
+  },
+  triad: {
+    deuteranopia: '. . #fb6154 #52d1b3 #f8d47a . . . . . . . #fff3c7 . . . .',
+    protanopia: '. . . #44c6a8 #fbd77d . . . . . . . #fff5cd . . . .',
+  },
+  rubric: {
+    deuteranopia: '. . . . . . . . . . #9a0607 #04514a . . . . .',
+    protanopia: '. . #ec5f18 #007773 . . . . . . #960004 #0e564f . . . . .',
+    tritanopia: '. . . #077b75 . . . #2a5678 . . . . . . . #003d54 .',
+  },
+  nord: {
+    deuteranopia:
+      '. #3c4353 #c3656e #98b281 . #83a4c4 #bb95b4 #8cc5d5 . #95a1b7 #ff9ea5 #d7f3bf #ffecc6 #a3c4e5 #dcb4d4 #b6e4e3 #feffff',
+    protanopia:
+      '. #3c4353 #c3656e #96b07f #eacb8b #83a4c4 #bb95b4 #8cc5d5 . #95a1b7 #ff9ea5 #ceeab6 #ffecc6 #a3c4e5 #dcb4d4 #b6e4e3 #feffff',
+    tritanopia:
+      '. #3c4353 #c3656e #96b07f #e9c989 #83a4c4 #bb95b4 #92cbdb . #95a1b7 #ff9ea5 #ceeab6 #ffeac1 #a3c4e5 #dcb4d4 #bcebe9 #feffff',
+  },
+  'rose-pine': {
+    deuteranopia:
+      '. #2b2940 #ea6e91 #85c8e5 #f1bd73 . . . #dedcf2 #9894b1 #ff97b1 #bbe9ff #ffdfb4 #bcf0f9 #e1caff #ffe1e0 #ffffff',
+  },
+  gruvbox: {
+    deuteranopia:
+      '#e4d4ac #383838 #e03c31 #dedf6e #e0a12e #66a6a9 #d582a7 #8ec590 #c5b59f #a8998a #ff9583 #faffa7 #ffc33a #9dc0b2 #f4a4b9 #b2e6a0 #ffefc5',
+  },
+  catppuccin: {
+    deuteranopia:
+      '. . #d5708e #89c484 #f1dba8 . #d4a2c7 . . #9498af #fe95b2 #b7f4b1 #fff1d2 #b5d2ff . #c4fff4 #edf1ff',
+    tritanopia:
+      '. . #d5708d #88c483 #f1dba8 . #d4a2c7 . . #9498af #fe95b2 #adeba8 #fff1d2 #b5d2ff . #c4fff4 #edf1ff',
+  },
+  dracula: {
+    deuteranopia:
+      '#e4e4df #2c2e34 #f2494b #07d558 #e2eb7d #b68cf2 #f671be #81dff3 #deded9 #8597cb #ff9692 #94ffac #feffc9 #d7aeff #ff9ee2 #aeffff .',
+    tritanopia:
+      '#e4e4df #2c2e34 #f2494b #08d558 #e2eb7d #b68cf2 #f671be #87e5f9 #deded9 #8597cb #ff9692 . #feffc9 #d7aeff #ff9ee2 #c6ffff .',
+  },
+  monokai: {
+    deuteranopia:
+      '#e4e4df #363831 #ff648c #bbf94d #ecb76e #52c7dd #af84ff #89d6cc #deded9 #a09c87 #ff99ae #d8ffa4 #ffdbac #76e8fe #c5aaff #a9f8ec #fffffd',
+  },
+  'solarized-light': {
+    protanopia:
+      '#42575f . #ff766a #465200 #946f00 #278cd3 #db3e88 #0a9189 . . . #2d3600 #715400 #006eac #6a6ec1 #00706a .',
+  },
+  'classic-vivid': {
+    deuteranopia:
+      '. #232323 #ef5746 #4dd546 #ffc6a2 #4b82ff #e756e4 #0badac #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
+    protanopia:
+      '. #232323 #ef5746 #4cd545 #ffc6a2 #4b82ff #e756e4 #0badac #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
+    tritanopia:
+      '. #232323 #ef5746 #4dd646 #ffc6a2 #4b82ff #e756e4 #0badac #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
+  },
+  'high-contrast': {
+    protanopia:
+      '#e4e4e4 #242424 #fb5252 #1fdc29 #f5f548 . . #44f3f3 . #969696 #ff9291 . #feffb6 #97c3ff #ff8dff #b9fffe .',
+  },
+  'everforest-dark': {
+    deuteranopia:
+      '#e1d4b8 . #d06b6e #cae4a3 #ccae71 . . #8cca9b . #96a3a9 #ffa3a3 #efffd7 #edce90 #9fdcd3 #f8b9d6 #acebbb #fcefd2',
+    tritanopia:
+      '#e1d4b8 . #d06b6e #c5df9d #ccae71 . . #8cca9b . #96a3a9 #ffa3a3 #e7ffc4 #edce90 #9fdcd3 #f8b9d6 #acebbb #fcefd2',
+  },
+  'green-screen': {
+    deuteranopia:
+      '#8dde93 #242424 #fa6150 #57de50 #ffcba9 #6091ff #e757e5 #25b7b6 #b2b2b2 #969696 #ff938c #7eff7a . #9aaaff #ff84fd . .',
+  },
+  srcery: {
+    deuteranopia:
+      '#e8d5b0 #282625 #fe4135 #9eef9c #f6b421 #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #e5ffb3 #ffd786 #79baf7 #ff90ac #32e8d3 #fff0d3',
+    tritanopia:
+      '#e8d5b0 #282625 #fe4135 #94e391 #ecaa04 #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #d1f978 . #79baf7 #ff90ac #32e8d3 #fff0d3',
+  },
+  nightfly: {
+    deuteranopia:
+      '#c9cdd2 . #f24746 #96c152 #e9d78f #7aa1f6 #be89e1 #77d3c2 #aab4c2 #879b9b #ff939d #6dfedd #ffe7c6 #a2c1ff #c9b1ff #98f5e3 #dfe8f5',
+    protanopia:
+      '#c9cdd2 . #f24746 #96c152 #e9d78f #7aa1f6 #be89e1 #77d3c2 #aab4c2 #879b9b #ff939d #62f5d4 #ffe7c6 #a2c1ff #c9b1ff #98f5e3 #dfe8f5',
+    tritanopia:
+      '#c9cdd2 . #f24746 #96c152 #e9d68f #7aa1f6 #be89e1 #7cd8c7 #aab4c2 #879b9b #ff939d #62f5d4 #ffe7c6 #a2c1ff #c9b1ff #9dfae8 #dfe8f5',
+  },
+  'melange-dark': {
+    deuteranopia:
+      '. #393531 #c08486 #bde0bf #f4aa6b #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #e0ffe9 #fed37f #b1b8dd #deaad1 #b3dfe2 #fffefc',
+    protanopia:
+      '. #393531 #c08486 #bce0be #f5ab6c #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #dfffe8 #ffd481 #b1b8dd #deaad1 #b3dfe2 #fffefc',
+    tritanopia:
+      '. #393531 #c08485 #bde0bf #eda365 #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #e0ffe9 #f7cc79 #b1b8dd #deaad1 #b3dfe2 #fffefc',
+  },
+  'melange-light': {
+    deuteranopia:
+      '. #dfd7d2 #ce8291 #2c5631 #b85a00 . . #608383 . . #c00222 #003218 #835900 . . . #3e2e26',
+    protanopia:
+      '. #dfd7d2 #c97c8c #244e2a #b85a00 . . #608383 . . #c51126 #003017 #835900 . . . #3e2e26',
+  },
+  'modus-vivendi': {
+    deuteranopia:
+      '#e4e4e4 #1e1e1e #f85954 #86fc83 . #25a8f8 #e797bb #00cecb #b1b1b1 #959595 #ff9380 #afffcb #ffcd62 #90b7ff #c3b3ff #6fe9bd .',
+    tritanopia:
+      '#e4e4e4 #1e1e1e #f85954 #82f77e . #25a8f8 #e797bb #00cdca #b1b1b1 #959595 #ff9380 #aaffc8 #ffcd62 #90b7ff #c3b3ff #6fe9bd .',
+  },
+  'iceberg-dark': {
+    deuteranopia:
+      '#cbcdd6 #272b3c #d16869 #d8e2a5 #e0a276 #809bc1 . #8cbbc5 . #9196b0 #f99897 #f8ffda #fdc49b #9fbbe0 #c0b3e7 #acdce6 #e6e9f3',
+  },
+};
+
+const BUILTIN_BY_ID = new Map(BUILTIN_THEMES.map((t) => [t.id, t]));
+const VISION_FIT_CACHE = new Map<string, Partial<XtermPalette>>();
+
+/** The fit `theme` plays in for `vision`. Typical plays the theme's own
+ *  fit (`fitted`). Another vision plays the fit a built in theme stores
+ *  for it, else the Typical fit, which is then as far as the fit for the
+ *  vision gets (VISION_FITS). A custom theme plays the fit this window
+ *  holds for the vision (holdVisionFit), and its Typical fit until one
+ *  lands. Undefined where nothing is fitted. */
+export function visionFitOf(
+  theme: AppTheme,
+  vision: ColorVision,
+): Partial<XtermPalette> | undefined {
+  if (vision === 'typical') return theme.fitted;
+  // A custom theme never holds a built in id, and the palette check
+  // keeps a copy with other colors on its own fit.
+  if (BUILTIN_BY_ID.get(theme.id)?.xterm !== theme.xterm) return customVisionFit(theme, vision);
+  const row = VISION_FITS[theme.id]?.[vision];
+  if (row === undefined) return theme.fitted;
+  const key = `${vision} ${theme.id}`;
+  let fitted = VISION_FIT_CACHE.get(key);
+  if (!fitted) {
+    const slots: Partial<XtermPalette> = {};
+    row.split(' ').forEach((hex, i) => {
+      if (hex !== '.') slots[GAME_SLOTS[i]] = hex;
+    });
+    fitted = slots;
+    VISION_FIT_CACHE.set(key, fitted);
+  }
+  return fitted;
+}
 
 /** The chrome tokens a theme paints the window with. */
 export function themeTokens(theme: AppTheme): ChromeTokens {
@@ -1462,13 +1732,20 @@ export function themeTokens(theme: AppTheme): ChromeTokens {
 }
 
 /** The palette the game draws in while you play. With Fit game colors on
- *  (`fit`) it is the published palette with the theme's fitted slots laid
- *  over it, unless the theme keeps out. Off, or for a theme with nothing
- *  fitted, it is the published palette. The window tokens, Settings and
- *  log exports read the published palette, theme.xterm. */
-export function playPalette(theme: AppTheme, fit: boolean): XtermPalette {
-  if (!fit || theme.fitGameColors === false || !theme.fitted) return theme.xterm;
-  return { ...theme.xterm, ...theme.fitted };
+ *  (`fit`) it is the published palette with the slots the theme fits for
+ *  your color vision laid over it (visionFitOf), unless the theme keeps
+ *  out. Off, or for a theme with nothing fitted, it is the published
+ *  palette. The window tokens, Settings and log exports read the
+ *  published palette, theme.xterm. */
+export function playPalette(
+  theme: AppTheme,
+  fit: boolean,
+  vision: ColorVision = 'typical',
+): XtermPalette {
+  if (!fit || theme.fitGameColors === false) return theme.xterm;
+  const fitted = visionFitOf(theme, vision);
+  if (!fitted || Object.keys(fitted).length === 0) return theme.xterm;
+  return { ...theme.xterm, ...fitted };
 }
 
 // User-authored themes, set by the Settings UI on load. Merged into
@@ -1485,6 +1762,41 @@ export function onCustomThemesChanged(listener: () => void): () => void {
   return () => {
     customThemeListeners.delete(listener);
   };
+}
+
+// Fits for a color vision the main window made this launch for custom
+// themes in play, by the vision and the colors they fit. No file holds
+// them. lib/customThemeFits makes them when play asks for one this
+// window holds none of (onMissingVisionFit).
+const HELD_VISION_FITS = new Map<string, Partial<XtermPalette>>();
+let askVisionFit: ((theme: AppTheme, vision: ColorVision) => void) | undefined;
+
+function customVisionFit(theme: AppTheme, vision: ColorVision): Partial<XtermPalette> | undefined {
+  const held = HELD_VISION_FITS.get(`${vision} ${fitKey(theme.xterm)}`);
+  if (held) return held;
+  askVisionFit?.(theme, vision);
+  return theme.fitted;
+}
+
+/** Hand play a way to fit a custom theme for a vision this window holds
+ *  no fit of. The main window sets it (lib/customThemeFits). Elsewhere
+ *  play keeps the Typical fit. */
+export function onMissingVisionFit(ask: (theme: AppTheme, vision: ColorVision) => void): void {
+  askVisionFit = ask;
+}
+
+/** Hold `fitted` in memory as the fit for `vision` of the custom themes
+ *  with the colors of `palette`, and tell every listener. Each such theme
+ *  comes back as a new object, so a view that keeps the theme it drew
+ *  draws again. */
+export function holdVisionFit(
+  palette: XtermPalette,
+  vision: ColorVision,
+  fitted: Partial<XtermPalette>,
+): void {
+  const key = fitKey(palette);
+  HELD_VISION_FITS.set(`${vision} ${key}`, fitted);
+  setCustomThemes(CUSTOM_THEMES.map((t) => (fitKey(t.xterm) === key ? { ...t } : t)));
 }
 
 // Fits the main window made this launch for custom themes in play that

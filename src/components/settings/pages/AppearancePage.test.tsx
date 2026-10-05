@@ -338,10 +338,84 @@ describe('AppearancePage', () => {
     expect(on.anchors.slice(at - 1, at + 2)).toEqual([
       'theme-colors',
       'fit-game-colors',
-      'readable-highlights',
+      'color-vision',
     ]);
     const off = await fitSwitch({ ...config(), fit_game_colors: false });
     expect(off.checked).toBe(false);
+  });
+
+  it('draws Color vision beside Fit game colors, Typical until you pick another', async () => {
+    const visionRow = async (cfg: UiConfig, pick?: string) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      let saved: UiConfig | null = null;
+      await act(async () => {
+        root.render(
+          createElement(AppearancePage, {
+            target: { group: 'appearance' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: (next) => {
+              saved = next(cfg);
+            },
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'color-vision',
+      );
+      const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
+      const options = select.options.map((o) => ({ label: o.textContent, value: o.value }));
+      const value = select.options.find(
+        (o) => (o as unknown as { selected?: boolean }).selected,
+      )?.value;
+      if (pick !== undefined) {
+        // The fake DOM sends no events, so call the handler React keeps.
+        const key = Object.keys(select).find((k) => k.startsWith('__reactProps$'));
+        const props = key
+          ? (select as unknown as Record<string, { onChange?: (e: unknown) => void }>)[key]
+          : undefined;
+        await act(async () => {
+          props?.onChange?.({ target: { value: pick } });
+        });
+      }
+      await act(async () => {
+        root.unmount();
+      });
+      return { anchors, label: row.textContent, options, value, saved: saved as UiConfig | null };
+    };
+
+    const typical = await visionRow(config(), 'deuteranopia');
+    const at = typical.anchors.indexOf('color-vision');
+    expect(typical.anchors.slice(at - 1, at + 2)).toEqual([
+      'fit-game-colors',
+      'color-vision',
+      'readable-highlights',
+    ]);
+    expect(typical.label).toContain('Color vision');
+    expect(typical.label).toContain(
+      'Fit game colors keeps hits, tells and says apart for the vision you pick.',
+    );
+    expect(typical.options).toEqual([
+      { label: 'Typical', value: 'typical' },
+      { label: 'Deuteranopia', value: 'deuteranopia' },
+      { label: 'Protanopia', value: 'protanopia' },
+      { label: 'Tritanopia', value: 'tritanopia' },
+    ]);
+    expect(typical.value).toBe('typical');
+    // A pick saves with the rest of the config.
+    expect(typical.saved?.color_vision).toBe('deuteranopia');
+    const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
+    expect(picked.value).toBe('tritanopia');
   });
 
   it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {
