@@ -80,9 +80,7 @@
   --panel-w: 300px;
 }
 
-/* Font stacks and the floating shadow recipe. Colors live in
-   styles/tokens.css as the theme tokens src/theme/theme.ts writes at
-   runtime. */
+/* Font stacks and the floating shadow recipe. */
 
 :root {
   --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
