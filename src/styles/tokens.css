@@ -41,6 +41,9 @@
   /* The split scrollback divider. Layout's split divider color writes
      yours over it. */
   --split-divider: var(--tertiary);
+  /* The terminal ground. theme.ts writes the theme's xterm background
+     over it. */
+  --xterm-bg: var(--bg);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
@@ -96,32 +99,4 @@
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.14);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.22);
   --mark-tint: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-/* Legacy aliases. styles.css and every component built before the One
-   Window shell read the --c-* names, so each maps to its nearest token
-   until those components move to the new names. */
-:root {
-  --c-surface: var(--bg);
-  --c-surface-deep: var(--panel);
-  --c-surface-pane: var(--panel);
-  --c-surface-emphasis: var(--selrow);
-  --c-text-strong: var(--text);
-  --c-text: var(--text);
-  --c-text-muted: var(--secondary);
-  --c-text-faint: var(--tertiary);
-  --c-text-dim: var(--tertiary);
-  --c-border-soft: var(--divider);
-  --c-border: var(--divider);
-  --c-border-strong: var(--sep);
-  --c-border-hover: var(--sep);
-  --c-accent: var(--accent);
-  /* theme.ts also writes this one as rgba, since the map canvas reads
-     it and a canvas fill cannot parse color-mix in every webview. */
-  --c-accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
-  /* Referenced by styles.css and CodeEditor but never defined before. */
-  --c-muted: var(--secondary);
-  --c-muted-red: var(--danger);
-  --c-bg: var(--bg);
-  --xterm-bg: var(--bg);
 }
