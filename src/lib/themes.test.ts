@@ -1285,11 +1285,14 @@ describe('window status colors for a color vision', () => {
           }
           if (v[key] === t[key] || rgbToOklch(hex(t[key])).C < 0.05) continue;
           const dh = turned(t[key], v[key]);
-          if (key === 'warn') {
+          const room =
+            key === 'warn' ? 0 : turnRoom(FAMILY[key], rgbToOklch(hex(t[key])).h, HUE_TURN_FAR);
+          // A color with no room to turn keeps its hue, give or take the
+          // rounding of a step in lightness.
+          if (room === 0) {
             expect(Math.abs(dh), at).toBeLessThan(3);
             continue;
           }
-          const room = turnRoom(FAMILY[key], rgbToOklch(hex(t[key])).h, HUE_TURN_FAR);
           expect(dh, at).toBeGreaterThan(-3);
           expect(dh, at).toBeLessThanOrEqual(room + 1.5);
         }
@@ -1327,6 +1330,26 @@ describe('window status colors for a color vision', () => {
         expect(sees(v.warn, v.success, vision), `${at} warn/success`).toBeGreaterThanOrEqual(
           apart - 1e-9,
         );
+      }
+    }
+  });
+
+  // A success mark never reads as the words beside it. Each status color
+  // stays as far from the text and secondary tiers, as the vision sees
+  // them, as the Typical color stands, or VISION_GUARD if that is less.
+  it('keeps every status color clear of the text and secondary tiers', () => {
+    for (const vision of OTHER) {
+      for (const theme of BUILTIN_THEMES) {
+        const t = themeTokens(theme);
+        const v = themeTokens(theme, vision);
+        for (const key of ['danger', 'warn', 'success'] as const) {
+          for (const tier of ['text', 'secondary'] as const) {
+            const at = `${vision} ${theme.id} ${key}/${tier}`;
+            expect(v[tier], at).toBe(t[tier]);
+            const floor = Math.min(sees(t[key], t[tier], vision), VISION_GUARD);
+            expect(sees(v[key], v[tier], vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
+          }
+        }
       }
     }
   });
@@ -1405,6 +1428,10 @@ describe('window status colors for a color vision', () => {
           pinned ? sees(t.accent, t[key], vision) : Infinity,
         );
         if (sees(t.accent, color, vision) < accentFloor) why.push('accent');
+        for (const tier of ['text', 'secondary'] as const) {
+          const floor = Math.min(sees(t[key], t[tier], vision), VISION_GUARD);
+          if (sees(color, t[tier], vision) < floor) why.push(`${key}/${tier}`);
+        }
         if (step === 'turn' && family) {
           const room = turnRoom(family, rgbToOklch(hex(t[key])).h, HUE_TURN_FAR);
           if (turned(t[key], v[key]) + 4 > room + 1) why.push(`${key} hue limit`);
@@ -1422,19 +1449,26 @@ describe('window status colors for a color vision', () => {
   // Each pair the window leaves short of its target for each vision, how
   // far it gets of how far it needs, and what stops it going further.
   const WINDOW_SHORT: Record<string, string> = {
+    'deuteranopia nord': 'danger/success 15.7 of 23.3. danger 3:1 floor, success/secondary, trade',
+    'deuteranopia gruvbox': 'danger/warn 21.8 of 24.6. danger 3:1 floor, warn/success, warn/text',
     'deuteranopia dracula':
-      'danger/success 34.0 of 37.8. danger 3:1 floor, danger hue limit, success chroma, trade',
+      'danger/success 30.5 of 37.8. danger 3:1 floor, danger hue limit, success/text, trade, warn/success',
     'deuteranopia monokai':
-      'danger/success 30.4 of 43.4. danger 3:1 floor, success chroma, warn/success',
+      'danger/success 30.4 of 43.4, danger/warn 25.8 of 29.5. danger 3:1 floor, success chroma, success/text, warn/text',
+    'deuteranopia one-half-dark':
+      'danger/success 20.0 of 23.8. danger 3:1 floor, success/text, warn/success',
     'deuteranopia tango-dark':
-      'danger/success 23.5 of 37.5, danger/warn 24.4 of 34.2. accent, danger 3:1 floor, danger hue limit, success chroma, success hue limit, warn chroma, warn/success',
+      'danger/success 14.8 of 37.5, danger/warn 24.4 of 34.2. accent, warn chroma, warn/success',
     'deuteranopia classic-vivid':
       'danger/success 36.5 of 52.0, danger/warn 42.1 of 45.7. danger 3:1 floor, danger hue limit, success chroma, warn chroma, warn/success',
     'deuteranopia green-screen':
       'danger/success 37.5 of 44.2. danger 3:1 floor, danger hue limit, success chroma',
-    'protanopia triad': 'danger/success 22.6 of 24.7. success hue limit, unseen',
+    'deuteranopia srcery':
+      'danger/success 22.6 of 27.9. danger 3:1 floor, danger hue limit, warn/success',
     'protanopia rubric': 'danger/warn 24.3 of 26.9. danger chroma, warn/success',
-    'protanopia iceberg-dark': 'danger/success 14.9 of 17.1. unseen',
+    'protanopia rose-pine':
+      'danger/success 23.8 of 27.0. danger chroma, danger hue limit, danger/warn, success 3:1 floor, success hue limit',
+    'protanopia iceberg-dark': 'danger/success 14.9 of 17.1. success/text, unseen',
   };
 
   it('parts danger from success and warn as far as a typical eye sees them, or names the pair it cannot reach and why', () => {
