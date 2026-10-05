@@ -929,15 +929,23 @@ impl Default for UiConfig {
     }
 }
 
+/// The theme a file without the key reads, and the fallback. A new
+/// install starts on Triad instead, which `NEW_INSTALL_THEME` in
+/// profile/set.rs writes before the first launch (Themes review Q3).
 fn default_theme() -> String {
     "obsidian-ember".to_string()
 }
 
+/// The light theme a file without the key reads. Vellum is retired, and
+/// the frontend shows Rubric for it (`RETIRED_THEMES` in themes.ts),
+/// while Vosh 0.8.1 still reads it as Vellum. A new install starts with
+/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs (Q4).
 fn default_light_theme() -> String {
     "vellum".to_string()
 }
 
-/// Trim a light theme pick and turn a blank one into `vellum`.
+/// Trim a light theme pick and turn a blank one into `vellum`, which
+/// shows Rubric.
 pub(crate) fn coerce_light_theme(value: String) -> String {
     match value.trim() {
         "" => default_light_theme(),

@@ -1999,7 +1999,9 @@ export function normalizeAffectsDisplay(raw: unknown): AffectsDisplay {
 /** The light theme a profile that never chose one is saved with, as
  *  Rust saves it (default_light_theme in profile/ui.rs). Vosh retired
  *  Vellum for Rubric (Themes review Q14), so the id shows Rubric
- *  (RETIRED_THEMES), and Vosh 0.8.1 still reads it as Vellum. */
+ *  (RETIRED_THEMES), and Vosh 0.8.1 still reads it as Vellum. A new
+ *  install starts with Rubric itself, which NEW_INSTALL_LIGHT_THEME in
+ *  profile/set.rs writes (Q4). */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
 /** The dark theme a profile that never saved one starts with: its
