@@ -3,9 +3,9 @@
 // replaced.
 
 import { emit, type UnlistenFn } from '@tauri-apps/api/event';
-import { noteThemeEcho, resolveActiveTheme, systemPrefersDark, themePrefsOf } from '../theme/theme';
+import { resolveActiveTheme, systemPrefersDark, themePrefsOf } from '../theme/theme';
 import { resolveThemeTerminalColors } from '../theme/themes';
-import { affectsDisplayOf, normalizeAffectsDisplay, type AffectsDisplay } from './affects';
+import { affectsDisplayOf } from './affects';
 import {
   AFFECTS_DISPLAY_CHANGED,
   BASE_ANSI_CHANGED,
@@ -85,16 +85,13 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(CUSTOM_THEMES_CHANGED, config.custom_themes, before?.custom_themes, deepEqual);
   // The four theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
-  // is `theme` unless follow is on. Both come back to this window too,
-  // so note them first as its own.
+  // is `theme` unless follow is on.
   const prefs = themePrefsOf(config);
   const prevPrefs = before ? themePrefsOf(before) : undefined;
-  if (!prevPrefs || !deepEqual(prefs, prevPrefs)) noteThemeEcho(prefs);
   await emitChanged(THEME_PREFS_CHANGED, prefs, prevPrefs, deepEqual);
   const systemDark = systemPrefersDark();
   const shown = resolveActiveTheme(config, systemDark);
   const prevShown = before ? resolveActiveTheme(before, systemDark) : undefined;
-  if (shown !== prevShown) noteThemeEcho(shown);
   await emitChanged(THEME_CHANGED, shown, prevShown);
   await emitChanged<FontChange>(
     FONT_CHANGED,
@@ -164,7 +161,6 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(GAME_TIME_CHANGED, config.game_time, before?.game_time);
   const display = affectsDisplayOf(config);
   const prevDisplay = before ? affectsDisplayOf(before) : undefined;
-  if (!prevDisplay || !deepEqual(display, prevDisplay)) noteAffectsDisplayEcho(display);
   await emitChanged(AFFECTS_DISPLAY_CHANGED, display, prevDisplay, deepEqual);
   await emitChanged(
     TRACKED_AFFECTS_CHANGED,
@@ -206,24 +202,4 @@ export async function followReplacedUiConfig(
       .catch(onError);
   };
   return subscribeUiConfigReplaced(reread);
-}
-
-// Every window hears its own affects display broadcast too. One this
-// window sent in the last second is its own echo, and adopting it could
-// undo a newer pick made while that save was in flight.
-const AFFECTS_DISPLAY_ECHO_MS = 1000;
-let affectsDisplayEchoes: { key: string; at: number }[] = [];
-
-function noteAffectsDisplayEcho(display: AffectsDisplay): void {
-  const now = Date.now();
-  affectsDisplayEchoes = affectsDisplayEchoes.filter((e) => now - e.at < AFFECTS_DISPLAY_ECHO_MS);
-  affectsDisplayEchoes.push({ key: JSON.stringify(normalizeAffectsDisplay(display)), at: now });
-}
-
-/** Whether an affects display heard on the bus is this window's own
- *  broadcast coming back. */
-export function isOwnAffectsDisplayEcho(display: AffectsDisplay): boolean {
-  const now = Date.now();
-  const key = JSON.stringify(normalizeAffectsDisplay(display));
-  return affectsDisplayEchoes.some((e) => e.key === key && now - e.at < AFFECTS_DISPLAY_ECHO_MS);
 }

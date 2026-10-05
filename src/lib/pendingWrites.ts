@@ -67,7 +67,8 @@ export interface DebouncedWrite<T> {
   /** Send the value `next` makes of the one waiting, or of null when
    *  none waits, after `delayMs`. */
   schedule: (next: (waiting: T | null) => T, delayMs: number) => void;
-  hasPending: () => boolean;
+  /** The value waiting, or null when none waits. */
+  waiting: () => T | null;
   /** Send the waiting value now. Resolves once `send` has. */
   flush: () => Promise<void>;
   /** Forget the waiting value. */
@@ -95,7 +96,7 @@ export function createDebouncedWrite<T>(send: (value: T) => Promise<void>): Debo
       waiting = { value: next(waiting ? waiting.value : null) };
       timer = setTimeout(() => void flush(), delayMs);
     },
-    hasPending: () => waiting !== null,
+    waiting: () => (waiting ? waiting.value : null),
     flush,
     drop() {
       stopTimer();

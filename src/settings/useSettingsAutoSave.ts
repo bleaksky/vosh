@@ -47,12 +47,17 @@ const THEME_FIELDS: readonly (keyof UiFields)[] = [
   'custom_themes',
 ];
 
+/** The saves on their way to the backend. A pick sent at once can go
+ *  while an earlier save still waits on its answer. */
+const sending = new Set<AutoSave>();
+
 // Every page in the window saves through this one writer. An edit made
 // while a save waits merges into it, so one save carries every edit and
 // an earlier value of a field never lands after a later one. The save
 // waiting on the debounce goes at once when the Settings window closes
 // and when Vosh quits, through pendingWrites.
 const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
+  sending.add(job);
   try {
     await setUiFields(job.fields);
     await broadcastUiConfigChanges(job.after, { ...job.after, ...job.before });
@@ -62,9 +67,20 @@ const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
     job.saved();
   } catch (e) {
     job.failed(e);
+  } finally {
+    sending.delete(job);
   }
 });
 pendingWrites.register(() => autoSave.flush());
+
+/** Whether the save waiting or a save on its way holds any of `fields`.
+ *  Settings hears its own broadcasts too, and one can carry a value
+ *  older than a pick you made while its save ran, so the window keeps
+ *  its own value of a field a save holds. */
+export function settingsSaveHolds(fields: readonly (keyof UiFields)[]): boolean {
+  const saves = [autoSave.waiting(), ...sending];
+  return saves.some((save) => save !== null && fields.some((field) => field in save.fields));
+}
 
 /** Queue `change`, made on the copy `prev`, on the window's writer, and
  *  return the copy after it. */
@@ -123,7 +139,8 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   // The backend replaces the whole config on a profile switch, #profile
   // load, #profile reset, or an import. A save still waiting holds
   // fields you changed on the profile it replaced, and the page names no
-  // profile yet, so the save would write them to the new one. Drop it.
+  // profile yet, so the save would write them to the new one. Drop it,
+  // and with it the fields it held.
   useTauriEvent(subscribeUiConfigReplaced, () => {
     autoSave.drop();
   });

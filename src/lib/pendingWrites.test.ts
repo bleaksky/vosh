@@ -181,7 +181,7 @@ describe('a debounced write', () => {
     expect(sent).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(sent).toEqual([2]);
-    expect(write.hasPending()).toBe(false);
+    expect(write.waiting()).toBeNull();
   });
 
   it('forgets a dropped value', async () => {

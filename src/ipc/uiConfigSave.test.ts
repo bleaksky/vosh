@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import { pendingWrites } from '../lib/pendingWrites';
 import { queueSettingsChange } from '../settings/useSettingsAutoSave';
-import { isOwnThemeEcho } from '../theme/theme';
 import { getUiConfig, normalizeUiConfig, type RawUiConfig, type UiConfig } from './uiConfig';
 import { broadcastUiConfigChanges, followReplacedUiConfig } from './uiConfigSave';
 
@@ -49,6 +48,17 @@ describe('broadcastUiConfigChanges theme events', () => {
     expect(events).toContain('vosh://theme-prefs-changed');
     expect(events).not.toContain('vosh://theme-changed');
   });
+
+  it('does not send theme fields another window already sent', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ theme: 'nord' }));
+    const picked = { ...base, follow_system_appearance: true, dark_theme: 'dracula' };
+    sent.mockClear();
+    await broadcastUiConfigChanges(picked, picked);
+    const events = sent.mock.calls.map(([event]) => event);
+    expect(events).not.toContain('vosh://theme-prefs-changed');
+    expect(events).not.toContain('vosh://theme-changed');
+  });
 });
 
 describe('broadcastUiConfigChanges font event', () => {
@@ -82,42 +92,6 @@ describe('broadcastUiConfigChanges font event', () => {
       panel: '',
       panelSize: 0,
     });
-  });
-});
-
-describe('own theme echoes', () => {
-  it('knows the theme this window just sent', async () => {
-    const base = normalizeUiConfig(raw({ theme: 'nord' }));
-    const next = { ...base, theme: 'gruvbox' };
-    await broadcastUiConfigChanges(next, base);
-    expect(isOwnThemeEcho('gruvbox')).toBe(true);
-    expect(isOwnThemeEcho({ ...next })).toBe(true);
-    expect(isOwnThemeEcho('dracula')).toBe(false);
-    expect(isOwnThemeEcho({ ...next, theme: 'dracula' })).toBe(false);
-  });
-
-  it('forgets an echo after a second', async () => {
-    vi.useFakeTimers();
-    try {
-      const base = normalizeUiConfig(raw({ theme: 'nord' }));
-      await broadcastUiConfigChanges({ ...base, theme: 'monokai' }, base);
-      expect(isOwnThemeEcho('monokai')).toBe(true);
-      vi.advanceTimersByTime(1000);
-      expect(isOwnThemeEcho('monokai')).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('does not send theme fields another window already sent', async () => {
-    const sent = vi.mocked(emit);
-    const base = normalizeUiConfig(raw({ theme: 'nord' }));
-    const picked = { ...base, follow_system_appearance: true, dark_theme: 'dracula' };
-    sent.mockClear();
-    await broadcastUiConfigChanges(picked, picked);
-    const events = sent.mock.calls.map(([event]) => event);
-    expect(events).not.toContain('vosh://theme-prefs-changed');
-    expect(events).not.toContain('vosh://theme-changed');
   });
 });
 
