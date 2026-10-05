@@ -21,11 +21,7 @@ import {
   usePanelLayout,
 } from '../panel/panelLayoutStore';
 import { addPaneType, togglePane } from '../panel/paneActions';
-import {
-  nativeSurfaceFind,
-  nativeSurfaceFindClear,
-  nativeSurfaceScroll,
-} from '../ipc/nativeSurface';
+import { nativeSurfaceFind, nativeSurfaceFindClear } from '../ipc/nativeSurface';
 import {
   promptConfigGet,
   promptConfigSet,
@@ -81,9 +77,8 @@ import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { notePageWrite, usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
-import { noteReader } from '../terminal/readerBusy';
-import { listenSplitDrag, SplitDrag } from '../terminal/splitDrag';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
+import { useScrollbackSplit } from './useScrollbackSplit';
 import { useUiConfigFollow } from './useUiConfigFollow';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
@@ -155,14 +150,6 @@ function MainWindow() {
   // React versions and silently no-ops preventDefault, which would
   // let xterm scroll the live pane underneath us.
   const terminalAreaRef = useRef<HTMLDivElement | null>(null);
-  // splitOpen state needs to be read inside the wheel handler. The
-  // handler is registered once and runs many times, so we mirror the
-  // state into a ref to avoid stale closures.
-  const splitOpenRef = useRef(false);
-  // Split-scrollback state. When true, a second xterm appears above the
-  // live one and shows the same buffer scrolled back so you can read
-  // earlier output while live combat keeps streaming below.
-  const [splitOpen, setSplitOpen] = useState(false);
   // Scrollback find toolbar. Opens on Cmd+F (macOS) or Ctrl+F (other
   // platforms). Drives xterm's SearchAddon. The live pane always owns
   // iteration (selection + cached search term live on its addon, so
@@ -198,25 +185,6 @@ function MainWindow() {
   );
   // The card draws your design over the band of Lifted in the text.
   const [cardBand, setCardBand] = useState(false);
-  // History pane readiness: flips true once the history Terminal has
-  // finished loading scrollback after its mount. We queue any pending
-  // mirror search through pendingFindRef until the history is ready,
-  // since findNext on an empty buffer would silently return no match.
-  const [historyReady, setHistoryReady] = useState(false);
-  // Live-pane row count captured at the moment the split opens, before
-  // the live pane refits to its post-split smaller height. Used by
-  // onScrollbackLoaded to position the history viewport so its bottom
-  // row is the line that was immediately above the live pane's top
-  // row — i.e. opening the split produces zero apparent motion.
-  // Reading termRef.getSize().rows inside onScrollbackLoaded was
-  // unreliable: that callback may fire before or after the live pane
-  // refits, and the answer is different in each case.
-  const preSplitLiveRowsRef = useRef(0);
-  const pendingFindRef = useRef<{
-    query: string;
-    opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean };
-    direction: 'next' | 'previous';
-  } | null>(null);
   // Match count from live's SearchAddon. Drives the "3 / 12" badge in
   // the find toolbar. `index` of -1 means the active match was lost
   // (e.g. after the toolbar opened but before the first search ran).
@@ -224,13 +192,6 @@ function MainWindow() {
     index: -1,
     count: 0,
   });
-  // History pane scroll depth, driven by the Terminal's onScrollPosition
-  // callback. Drives the "↑ N / max" indicator in the top-right of the
-  // history pane.
-  const [historyScrollPos, setHistoryScrollPos] = useState<{
-    back: number;
-    max: number;
-  } | null>(null);
 
   // A preview the prompt card left on before this window loaded again
   // would go on drawing on your prompt, so the window clears it as it
@@ -287,139 +248,27 @@ function MainWindow() {
     };
   }, []);
 
-  // Reset the history-pane scroll-depth indicator whenever the split
-  // closes. The history Terminal unmounts and the next mount will fire
-  // its own onScrollPosition; keeping the prior value here would flash
-  // stale numbers for one paint before being overwritten.
-  useEffect(() => {
-    if (!splitOpen) setHistoryScrollPos(null);
-    splitOpenRef.current = splitOpen;
-    // Reading back in the split leaves your prompt's clock as it is.
-    noteReader('split', splitOpen);
-  }, [splitOpen]);
-
-  // Reset history readiness whenever the split closes. The next time
-  // the split opens, the history Terminal remounts and the
-  // onScrollbackLoaded callback will set this back to true.
-  useEffect(() => {
-    if (!splitOpen) setHistoryReady(false);
-  }, [splitOpen]);
-
-  // Reveal the split as soon as its scrollback lands, not on a fixed
-  // timer. The history pane's xterm is held at `visibility: hidden` (the
-  // priming class) until `historyReady` flips true, which normally
-  // happens in onScrollbackLoaded — but that runs off an xterm
-  // write-drain callback that intermittently never fires, stranding the
-  // pane hidden and blank. So poll each frame: the moment the buffer
-  // holds real content, position it, reveal it, and repaint a few frames
-  // (the DOM renderer otherwise leaves the freshly shown rows blank).
-  // A ~1.5s ceiling reveals it anyway so an empty or never-arriving
-  // buffer can't strand it hidden. Idempotent with the onScrollbackLoaded
-  // path, which still runs when it does fire.
-  useEffect(() => {
-    if (!splitOpen) return;
-    let raf = 0;
-    let done = false;
-    let tries = 0;
-    const repaintBurst = () => {
-      let frames = 0;
-      const repaint = () => {
-        historyTermRef.current?.refresh();
-        if (++frames < 6) requestAnimationFrame(repaint);
-      };
-      requestAnimationFrame(repaint);
-    };
-    const tick = () => {
-      const h = historyTermRef.current;
-      if (h && !done) {
-        const size = h.contentSize();
-        if (size.bufferLength > size.rows + 1) {
-          done = true;
-          const scrollBack = preSplitLiveRowsRef.current;
-          h.scrollToBottom();
-          if (scrollBack > 0) h.scrollLines(-scrollBack);
-          setHistoryReady(true);
-          repaintBurst();
-          return;
-        }
-      }
-      if (++tries < 90) {
-        raf = requestAnimationFrame(tick);
-      } else {
-        setHistoryReady(true);
-        repaintBurst();
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [splitOpen]);
-
-  // Drain a queued search once the split has opened and the history
-  // pane finishes loading scrollback. submitFind enqueues here when a
-  // live-pane search would have scrolled the live pane off its tail —
-  // we hand the search off to the history pane and run it as soon as
-  // history is ready to receive it.
-  useEffect(() => {
-    if (!splitOpen || !historyReady) return;
-    const pending = pendingFindRef.current;
-    if (!pending) return;
-    pendingFindRef.current = null;
-    const handle = historyTermRef.current;
-    if (!handle) return;
-    if (pending.direction === 'next') handle.findNext(pending.query, pending.opts);
-    else handle.findPrevious(pending.query, pending.opts);
-  }, [splitOpen, historyReady]);
-
-  // Sync selections between the live and history panes so only one
-  // can be active at a time. Without this, dragging a selection in
-  // the history pane while a stale live-pane selection lingers
-  // produces two simultaneous selections that compete for the copy
-  // shortcut (the live pane's wins) — confusing the user who only
-  // sees the history-pane highlight. Reactive cross-clear means
-  // the most recent gesture is always the one that "owns" the
-  // selection.
-  useEffect(() => {
-    if (!historyReady) return;
-    const live = termRef.current;
-    const hist = historyTermRef.current;
-    if (!live || !hist) return;
-    const unsubLive = live.onSelectionChange(() => {
-      if (live.hasSelection()) hist.clearSelection();
-    });
-    const unsubHist = hist.onSelectionChange(() => {
-      if (hist.hasSelection()) live.clearSelection();
-    });
-    return () => {
-      unsubLive();
-      unsubHist();
-    };
-  }, [historyReady]);
-
-  // A drag that starts on the history pane's text and goes below it
-  // scrolls the history down and hands its selection to the live pane
-  // when the split closes at the bottom (src/terminal/splitDrag.ts). One
-  // controller for the window's life, since the drag outlives the split.
-  // The wheel and Page Down tell it when they take the history to its
-  // bottom, so a drag carries on through that close too.
-  const historyReadyRef = useRef(false);
-  useEffect(() => {
-    historyReadyRef.current = historyReady;
-  }, [historyReady]);
-  const splitDragRef = useRef<SplitDrag | null>(null);
-  useEffect(() => {
-    const drag = new SplitDrag({
-      history: () =>
-        splitOpenRef.current && historyReadyRef.current ? historyTermRef.current : null,
-      live: () => termRef.current,
-      closeSplit: () => setSplitOpen(false),
-    });
-    splitDragRef.current = drag;
-    const stop = listenSplitDrag(window, drag, nativeSurfaceEnabled);
-    return () => {
-      stop();
-      splitDragRef.current = null;
-    };
-  }, []);
+  // The scrollback split on xterm: the history pane, the wheel and keys
+  // that open and page it, and the find match it shows from scrollback.
+  const {
+    splitOpen,
+    historyReady,
+    historyScrollPos,
+    toggleSplit,
+    middleClick,
+    pageSplit,
+    exitSplit,
+    onHistoryLoaded,
+    onHistoryScroll,
+    showHistoryMatch,
+    hideHistoryMatch,
+    clearQueuedSearch,
+  } = useScrollbackSplit({
+    termRef,
+    historyTermRef,
+    terminalAreaRef,
+    focusInput: () => inputRef.current?.focus(),
+  });
 
   // Showing, hiding, or resizing the panel changes the terminal
   // column's width. FitAddon's own internal observers do not always
@@ -435,89 +284,12 @@ function MainWindow() {
     return () => cancelAnimationFrame(id);
   }, [panelOpen, panelWidth]);
 
-  // Wheel listener attached in capture phase with passive:false so we
-  // fire BEFORE the xterm canvas inside terminal-area sees the event.
-  // Without capture phase, xterm's own bubble-phase handler scrolls
-  // the live pane first and preventDefault is too late; the live pane
-  // would scroll along with the history pane any time the cursor hovered
-  // over it during a wheel gesture. stopPropagation guarantees the
-  // event never reaches xterm at all when we handle it ourselves.
-  useEffect(() => {
-    const el = terminalAreaRef.current;
-    if (!el) return;
-    // Accumulate raw deltaY so high-frequency touchpad events
-    // (~60 small deltas/sec on macOS) don't compound into a runaway
-    // scroll. Each PX_PER_LINE pixels of accumulated delta = one
-    // line scrolled in the history pane; CRITICAL: we
-    // preventDefault on every event we're "handling" — even when
-    // the accumulator hasn't ticked over a line yet — otherwise
-    // small touchpad deltas leak through to xterm and scroll the
-    // LIVE pane while the user thinks they're scrolling history.
-    const PX_PER_LINE = 12;
-    let wheelAccum = 0;
-    const onWheel = (e: globalThis.WheelEvent) => {
-      // Native surface: the sizer forwards the wheel to the native
-      // grid, which scrolls and splits its own display. Opening the
-      // DOM split here would lay xterm's history pane over the grid.
-      if (nativeSurfaceEnabled()) return;
-      if (e.deltaY === 0) return;
-      const scrollingUp = e.deltaY < 0;
-      const splitOpen = splitOpenRef.current;
-      // Decide whether this event belongs to us or to xterm's live
-      // pane handler: up-scroll always belongs to us (it opens the
-      // split or scrolls history); down-scroll belongs to us only
-      // when the split is already open. Anything else falls
-      // through to xterm.
-      const ours = scrollingUp || splitOpen;
-      if (!ours) return;
-      e.preventDefault();
-      e.stopPropagation();
-      // Direction change resets the accumulator so a fresh swipe
-      // doesn't inherit leftover delta from the previous direction.
-      if (wheelAccum !== 0 && Math.sign(e.deltaY) !== Math.sign(wheelAccum)) {
-        wheelAccum = 0;
-      }
-      // First up-scroll opens the split without consuming the
-      // accumulator — gives the user a single "intent" gesture
-      // before history starts moving.
-      if (scrollingUp && !splitOpen) {
-        preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
-        setSplitOpen(true);
-        wheelAccum = 0;
-        return;
-      }
-      wheelAccum += e.deltaY;
-      const lines = Math.trunc(wheelAccum / PX_PER_LINE);
-      if (lines === 0) return;
-      wheelAccum -= lines * PX_PER_LINE;
-      historyTermRef.current?.scrollLines(lines);
-      if (lines > 0) {
-        queueMicrotask(() => {
-          if (!historyTermRef.current?.isAtBottom()) return;
-          splitDragRef.current?.historyBottomed();
-          setSplitOpen(false);
-        });
-      }
-    };
-    el.addEventListener('wheel', onWheel, { passive: false, capture: true });
-    return () => el.removeEventListener('wheel', onWheel, { capture: true });
-  }, []);
-
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
-  // actual interactive element.
+  // actual interactive element. A middle click goes to the split.
   const handleTerminalMouseUp = (event: MouseEvent<HTMLDivElement>) => {
-    // Middle-click (scroll-wheel click) closes the split-scrollback
-    // view and snaps the live pane to the bottom. Standard "remove
-    // scrollback break" gesture for users coming from other clients.
     if (event.button === 1) {
-      event.preventDefault();
-      if (splitOpen) setSplitOpen(false);
-      termRef.current?.scrollToBottom();
-      // Snapping the scrollback back to the bottom is a "get me back to
-      // typing" gesture, so return the caret to the command line rather
-      // than leaving focus on the terminal surface.
-      inputRef.current?.focus();
+      middleClick(event);
       return;
     }
     focusInputFromClick(event);
@@ -606,7 +378,7 @@ function MainWindow() {
     if (nativeSurfaceEnabled()) {
       void nativeSurfaceFindClear().catch(() => {});
     }
-    pendingFindRef.current = null;
+    clearQueuedSearch();
     setFindResults({ index: -1, count: 0 });
     setFindOpen(false);
     inputRef.current?.focus();
@@ -648,25 +420,6 @@ function MainWindow() {
   // layout still reaches them by the physical key.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
-
-  // Open or close the scrollback split, the keyboard twin of a middle
-  // click. The native grid splits itself when it scrolls back, so it
-  // pages up into history or snaps back to the tail. xterm mounts the
-  // history pane above the live one.
-  const toggleSplit = () => {
-    if (nativeSurfaceEnabled()) {
-      void nativeSurfaceScroll('toggle').catch(() => {});
-      return;
-    }
-    if (splitOpenRef.current) {
-      setSplitOpen(false);
-      termRef.current?.scrollToBottom();
-      return;
-    }
-    // Same pre-split row capture as the wheel and PageUp paths.
-    preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
-    setSplitOpen(true);
-  };
   useEffect(() => {
     const mac = isMacPlatform();
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -846,10 +599,7 @@ function MainWindow() {
 
     const hit = direction === 'next' ? live.findNext(query, opts) : live.findPrevious(query, opts);
     if (!hit) {
-      if (splitOpen) {
-        historyTermRef.current?.clearSearch();
-        setSplitOpen(false);
-      }
+      hideHistoryMatch();
       return false;
     }
 
@@ -857,10 +607,7 @@ function MainWindow() {
       // Match landed inside the live viewport. Decorations on live
       // are visible; no split needed. Tear down the split if it had
       // been opened for an earlier scrollback match.
-      if (splitOpen) {
-        historyTermRef.current?.clearSearch();
-        setSplitOpen(false);
-      }
+      hideHistoryMatch();
       return true;
     }
 
@@ -870,16 +617,7 @@ function MainWindow() {
     // Mirror the search into the history pane so the user can see
     // the highlighted match up there.
     live.scrollToBottom();
-    if (!splitOpen) {
-      pendingFindRef.current = { query, opts, direction };
-      preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
-      setSplitOpen(true);
-    } else if (historyTermRef.current && historyReady) {
-      if (direction === 'next') historyTermRef.current.findNext(query, opts);
-      else historyTermRef.current.findPrevious(query, opts);
-    } else {
-      pendingFindRef.current = { query, opts, direction };
-    }
+    showHistoryMatch(query, opts, direction);
     return true;
   };
 
@@ -902,48 +640,8 @@ function MainWindow() {
         // that gap.
         historyTermRef.current?.write(text);
       }}
-      onScrollTerminal={(pages) => {
-        // Native surface: the grid pages its own display in place
-        // (Input invokes native_surface_scroll alongside this), so
-        // the DOM split stays closed. Opening it would lay xterm's
-        // history pane over the grid.
-        if (nativeSurfaceEnabled()) return;
-        // Split-scrollback gesture. The live pane (termRef) stays
-        // anchored to the tail. PageUp opens the split if closed;
-        // the history Terminal mounts on that state change and its
-        // onReady does the initial scroll, so we don't touch the
-        // ref here (it is null until the mount completes).
-        if (pages < 0) {
-          if (!splitOpen) {
-            // Same pre-split row capture as the wheel path: without it
-            // onScrollbackLoaded scrolls back zero rows and the history
-            // pane opens showing a duplicate of the live tail.
-            preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
-            setSplitOpen(true);
-            return;
-          }
-          historyTermRef.current?.scrollPages(pages);
-          return;
-        }
-        if (!splitOpen) return;
-        historyTermRef.current?.scrollPages(pages);
-        // After the page-down lands, close the split if we paged
-        // all the way back to the live tail.
-        queueMicrotask(() => {
-          if (!historyTermRef.current?.isAtBottom()) return;
-          splitDragRef.current?.historyBottomed();
-          setSplitOpen(false);
-        });
-      }}
-      onExitSplit={() => {
-        // Esc always snaps the live pane back to the bottom AND
-        // closes the split if it is open. So a user who scrolled
-        // up via mouse wheel or PageUp gets jumped back to the
-        // live tail with one keystroke whether the split is
-        // showing or not.
-        if (splitOpen) setSplitOpen(false);
-        termRef.current?.scrollToBottom();
-      }}
+      onScrollTerminal={pageSplit}
+      onExitSplit={exitSplit}
     />
   );
 
@@ -1169,29 +867,8 @@ function MainWindow() {
               onReady={(handle) => {
                 historyTermRef.current = handle;
               }}
-              onScrollbackLoaded={() => {
-                // Position the history pane so its bottom row is the
-                // line immediately above the live pane's full row
-                // range. The live pane is `position: absolute` with
-                // both top and bottom pinned (overlay model), so its
-                // xterm renders the full terminal-area row count even
-                // while the history overlay covers part of it. If
-                // history's bottom landed inside live's row range the
-                // same lines would render in both panes — opaque
-                // overlay hides that visually, but the scroll-depth
-                // indicator still makes more sense when the panes
-                // describe disjoint buffer regions. Pre-split live
-                // rows captured in the wheel handler because reading
-                // the live pane's size here is racey.
-                // Fast path: when the load callback fires, position and
-                // reveal immediately. The frame-polled effect above also
-                // positions / reveals / repaints, so this is idempotent and
-                // a no-op when the callback never fires.
-                const scrollBack = preSplitLiveRowsRef.current;
-                if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
-                setHistoryReady(true);
-              }}
-              onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
+              onScrollbackLoaded={onHistoryLoaded}
+              onScrollPosition={onHistoryScroll}
             />
             {historyScrollPos && historyScrollPos.max > 0 && (
               <div className="scrollback-indicator" aria-live="polite">
