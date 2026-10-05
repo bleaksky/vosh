@@ -75,7 +75,7 @@ const GENERIC_FAMILIES = new Set([
   'unset',
 ]);
 
-// The family the bundled JetBrains Mono goes by in styles.css.
+// The family the bundled JetBrains Mono goes by in fonts.css.
 const BUNDLED_FAMILY = 'JetBrainsMono Bundled';
 
 // The family Berkeley Mono went by while Vosh bundled it, which saved
@@ -131,7 +131,7 @@ export function loadFontStack(stack: string): void {
     const name = piece.trim().replace(/^["']|["']$/g, '');
     if (!name) continue;
     if (GENERIC_FAMILIES.has(name.toLowerCase())) continue;
-    // Bundled families ship via static @font-face in styles.css and
+    // Bundled families ship via static @font-face in fonts.css and
     // are not resolvable through the system enumeration.
     if (name.endsWith('Bundled')) continue;
     loadSystemFont(name);
