@@ -403,8 +403,10 @@ describe('AppearancePage', () => {
     ]);
     expect(typical.label).toContain('Color vision');
     expect(typical.label).toContain(
-      'Fit game colors keeps hits, tells and says apart for the vision you pick.',
+      "Vosh keeps hits, tells and says apart for the vision you pick, and the window's status colors too.",
     );
+    // Typical changes nothing, so the row says nothing more.
+    expect(typical.label).not.toContain('Game text');
     expect(typical.options).toEqual([
       { label: 'Typical', value: 'typical' },
       { label: 'Deuteranopia', value: 'deuteranopia' },
@@ -416,6 +418,25 @@ describe('AppearancePage', () => {
     expect(typical.saved?.color_vision).toBe('deuteranopia');
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
+    // Nord changes its game text and its window for a tritanope, so the
+    // row says nothing more.
+    expect(picked.label).not.toContain('already');
+    // While Fit game colors is off, the row says the game text keeps its
+    // published colors and the window still follows.
+    const off = await visionRow({
+      ...config(),
+      color_vision: 'tritanopia',
+      fit_game_colors: false,
+    });
+    expect(off.label).toContain(
+      'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
+    );
+    // Kanso Zen's Typical fit already keeps the game text apart for a
+    // protanope, so the row says only the window changes.
+    const kanso = await visionRow({ ...config(), theme: 'kanso-zen', color_vision: 'protanopia' });
+    expect(kanso.label).toContain(
+      'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
+    );
   });
 
   it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {

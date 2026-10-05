@@ -1,10 +1,11 @@
 // The Appearance page's choices and edits, kept pure so they can be
 // tested without a window: what the Font and Size selects of Terminal
 // text and Panel text, and the Light theme and Dark theme selects,
-// offer, and how custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
+// offer, what the Color vision row says of the theme on screen, and how
+// custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
 // applies and saves the results.
 
-import type { Appearance } from './chrome';
+import { CHROME_COLOR_KEYS, type Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
 import {
   normalizePanelFont,
@@ -16,11 +17,13 @@ import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
-import { fitKey } from './gameFit';
+import { fitKey, needsVisionFit, type ColorVision } from './gameFit';
 import {
+  BUILTIN_THEMES,
   customToAppTheme,
   DEFAULT_THEME_ID,
   themeTokens,
+  visionFitOf,
   type AppTheme,
   type ThemeLicense,
   type XtermPalette,
@@ -216,6 +219,57 @@ export function themeCaption(theme: AppTheme): string {
     );
   }
   return parts.filter((part) => part !== '').join(' ');
+}
+
+// ── Color vision ─────────────────────────────────────────────────────
+
+/** Whether `vision` changes any color the window paints `theme` in. */
+export function visionTunesWindow(theme: AppTheme, vision: ColorVision): boolean {
+  if (vision === 'typical') return false;
+  const typical = themeTokens(theme);
+  const seen = themeTokens(theme, vision);
+  return CHROME_COLOR_KEYS.some((key) => seen[key] !== typical[key]);
+}
+
+/** The quiet line under the Color vision row for `theme`, the theme on
+ *  screen. It says what the vision leaves as it is: the game text while
+ *  Fit game colors is off or the theme keeps out of it, and whatever the
+ *  theme already keeps apart for the vision. Empty under Typical, and
+ *  where the vision changes both the game text and the window. */
+export function colorVisionNote(
+  theme: AppTheme,
+  vision: ColorVision,
+  fitGameColors: boolean,
+): string {
+  if (vision === 'typical') return '';
+  const name = theme.label;
+  const window = visionTunesWindow(theme, vision);
+  if (!fitGameColors || theme.fitGameColors === false) {
+    const why = fitGameColors ? `on ${name}` : 'while Fit game colors is off';
+    return window
+      ? `Game text keeps its published colors ${why}. The window still follows Color vision.`
+      : `Game text keeps its published colors ${why}, and ${name} already keeps the window's status colors apart for ${vision}.`;
+  }
+  // A built in theme ships its fit for the vision, which is its Typical
+  // fit where no game color can move without fading. Settings holds no
+  // fit for a custom theme, which the main window fits as it plays.
+  const holds = !needsVisionFit(theme.xterm, vision, theme.fitted);
+  const builtin = BUILTIN_THEMES.find((t) => t.id === theme.id)?.xterm === theme.xterm;
+  const text = !holds && (!builtin || visionFitOf(theme, vision) !== theme.fitted);
+  if (!text && !window) {
+    return holds
+      ? `${name} already keeps these colors apart for ${vision}, so nothing changes.`
+      : `Nothing on ${name} changes for ${vision}.`;
+  }
+  if (!text) {
+    return holds
+      ? `${name} already keeps the game text apart for ${vision}, so only the window changes.`
+      : `${name} keeps its game text as Typical draws it for ${vision}, and only the window changes.`;
+  }
+  if (!window) {
+    return `${name} already keeps the window's status colors apart for ${vision}, so only the game text changes.`;
+  }
+  return '';
 }
 
 // ── Custom themes ────────────────────────────────────────────────────
