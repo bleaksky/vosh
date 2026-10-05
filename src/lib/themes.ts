@@ -272,8 +272,8 @@ const rubric: AppTheme = {
 };
 
 // ── Tokyo Night ─────────────────────────────────────────────────────
-// Saturated blues, muted purples, signature deep navy. Accent on the
-// frost blue (`#7aa2f7`).
+// Saturated blues, muted purples, signature deep navy. The window rule
+// takes its magenta as the accent, clear of every status color.
 const tokyoNight: AppTheme = {
   id: 'tokyo-night',
   label: 'Tokyo Night',
@@ -321,10 +321,6 @@ const tokyoNight: AppTheme = {
     brightCyan: '#a8deff',
     brightWhite: '#dbe2ff',
   },
-  // The frost blue it has always drawn, 23.3 dE from danger, the
-  // nearest status color. The chrome rule alone would take its magenta,
-  // the scheme's strongest hue.
-  chrome: { accent: '#7aa2f7' },
 };
 
 // ── Nord ────────────────────────────────────────────────────────────
@@ -679,7 +675,7 @@ const monokai: AppTheme = {
 const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
-  description: 'Cool slate in the style of Atom. Soft pastels, a bright foreground, blue accent.',
+  description: 'Cool slate in the style of Atom. Soft pastels, a bright foreground, purple accent.',
   source: 'One Half',
   author: 'Son A. Pham',
   license: 'MIT',
@@ -724,10 +720,6 @@ const oneHalfDark: AppTheme = {
     brightMagenta: '#e9a2ff',
     brightCyan: '#87e6f2',
   },
-  // The blue it has always drawn, 19.6 dE from success, the nearest
-  // status color. The chrome rule alone would take its magenta, the
-  // scheme's strongest hue.
-  chrome: { accent: '#61afef' },
 };
 
 // ── Tango Dark ──────────────────────────────────────────────────────
@@ -785,20 +777,17 @@ const tangoDark: AppTheme = {
     brightCyan: '#4cf2f1',
     brightWhite: '#fbfbf9',
   },
-  // The bright blue it has always drawn, 28.3 dE from danger, the
-  // nearest status color. The chrome rule alone would take its green,
-  // the scheme's strongest hue.
-  chrome: { accent: '#729fcf' },
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
 // Re-thought from the original WCAG-AA stab: an off-black ground (so
-// it isn't a flat black void), pure white text, and a yellow cursor
-// the theme pins as its accent.
+// it isn't a flat black void) and pure white text. Its yellow cursor
+// sits too near the warn tone, so the window rule takes its magenta as
+// the accent.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. White text on near black, yellow accent.',
+  description: 'Maximum readability. White text on near black, magenta accent.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
@@ -847,10 +836,6 @@ const highContrast: AppTheme = {
     brightMagenta: '#ff8dff',
     brightCyan: '#b9fffe',
   },
-  // The yellow cursor it has always drawn as its accent. It sits 7.0 dE
-  // from the yellow warn tone, under the 12 the rule asks, so the chrome
-  // rule alone would take the magenta.
-  chrome: { accent: '#ffff00' },
 };
 
 // ── Rosé Pine ───────────────────────────────────────────────────────
@@ -974,8 +959,9 @@ const everforestDark: AppTheme = {
 // ground is near black with the faintest green cast. Default text is
 // a softened phosphor green near 11:1, the reading level of the house
 // dark themes, where pure #00ff00 would glare at 14:1. The cursor is
-// the same phosphor at full glow and the theme pins it as the accent,
-// and the selection is a deeper phosphor green.
+// the same phosphor at full glow, and the selection is a deeper
+// phosphor green. The cursor sits too near the success tone, so the
+// window rule takes the magenta as the accent.
 //
 // The sixteen slots are the CGA palette (#aa0000, #00aa00, #aa5500,
 // #0000aa, #aa00aa, #00aaaa, #aaaaaa, #555555, then the 55 and ff
@@ -1032,10 +1018,6 @@ const greenScreen: AppTheme = {
     brightBlue: '#9aaaff',
     brightMagenta: '#ff84fd',
   },
-  // The phosphor cursor it has always drawn as its accent. It sits 6.3
-  // dE from the green success tone, under the 12 the rule asks, so the
-  // chrome rule alone would take the magenta.
-  chrome: { accent: '#79f887' },
 };
 
 // ── Solarized ───────────────────────────────────────────────────────

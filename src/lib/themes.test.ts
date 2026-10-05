@@ -270,20 +270,24 @@ describe('contrast floors', () => {
     }
   });
 
-  it('keeps the accent each theme shipped before chrome was derived', () => {
+  // A pin keeps the accent a theme always drew. Tokyo Night, One Half
+  // Dark, Tango Dark, High Contrast and Green Screen pin none, so the rule
+  // picks a hue clear of every status color (your answer on October 4).
+  it('keeps each pinned accent and lets the rule pick the rest', () => {
     const accents: Record<string, string> = {
       'obsidian-ember': '#ef8f2f',
       'kanso-zen': '#b0c8d4',
-      'tokyo-night': '#7aa2f7',
+      'tokyo-night': '#bb9af7',
       nord: '#88c0d0',
       gruvbox: '#fabd2f',
       catppuccin: '#f5c2e7',
       dracula: '#bd93f9',
       monokai: '#f92672',
-      'one-half-dark': '#61afef',
-      'tango-dark': '#729fcf',
+      'one-half-dark': '#c678dd',
+      'tango-dark': '#4e9a06',
       'classic-vivid': '#ffaa00',
-      'high-contrast': '#ffff00',
+      'high-contrast': '#ff55ff',
+      'green-screen': '#ff55ff',
     };
     for (const [id, accent] of Object.entries(accents)) {
       expect(themeTokens(findTheme(id)).accent, id).toBe(accent);
@@ -532,9 +536,10 @@ describe('Everforest and Green Screen', () => {
     expect(text).toBeGreaterThanOrEqual(10);
     expect(text).toBeLessThan(12);
     expect(Math.abs(hue(x.foreground) - hue('#00ff00'))).toBeLessThan(10);
-    // The green cursor becomes the accent and tints the selection.
+    // The cursor and the selection glow green. The cursor sits too near
+    // the success tone to be the accent, so the rule takes the magenta.
     const t = themeTokens(findTheme('green-screen'));
-    expect(t.accent).toBe(x.cursor);
+    expect(t.accent).toBe('#ff55ff');
     for (const green of [x.cursor, x.selectionBackground]) {
       expect(Math.abs(hue(green) - hue('#00ff00')), green).toBeLessThan(10);
     }
