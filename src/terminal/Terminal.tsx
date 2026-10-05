@@ -12,8 +12,6 @@ import {
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../theme/baseAnsi';
 import {
-  nativeSurfaceSetBounds,
-  nativeSurfaceSetCellMetrics,
   nativeSurfaceSetFont,
   nativeSurfaceSetTheme,
   onNativeGridSize,
@@ -38,20 +36,14 @@ import { remeasureWhenLoaded } from './terminalFont';
 import { nativeSurfaceEnabled } from './terminalRenderer';
 import { cellInGrid, regionFromCursor, regionFromXterm } from '../prompt/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
-import {
-  GameSizeReport,
-  gameSize,
-  keepTail,
-  keptRows,
-  nativeBottomBounds,
-  spareAbove,
-} from './terminalRows';
+import { GameSizeReport, gameSize, keepTail } from './terminalRows';
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
 import { XtermBlink } from './xterm/xtermBlink';
 import { loadWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
+import { PaneSizer } from './paneSizer';
 import type { TerminalHandle } from './terminalHandle';
 
 // Report the active theme's terminal background to the session, which
@@ -308,38 +300,22 @@ export function Terminal({
       applyLift(term);
     }
 
-    // Where xterm sits in its pane. While it keeps to the bottom, the host
-    // moves down by the pixels its rows leave over, and the sizer clips
-    // what the host then reaches past its bottom, which the band covers.
-    // xterm maps the pointer from its screen's own box, so selections and
-    // links follow. Under the native surface the bounds carry it instead.
-    let placedTop = '0px';
-    const placeGrid = () => {
-      const pane = sizingRef.current;
-      const box = containerRef.current;
-      if (!pane || !box) return;
-      let top = 0;
-      const cell = term.dimensions?.css?.cell?.height;
-      if (anchorRef.current && !quietRef.current && !nativeSurfaceEnabled() && cell) {
-        const dpr = window.devicePixelRatio || 1;
-        const height = pane.getBoundingClientRect().height;
-        top = spareAbove(height, term.rows + lentRef.current, cell, dpr);
-      }
-      const next = `${top}px`;
-      if (next === placedTop) return;
-      placedTop = next;
-      box.style.top = next;
-    };
-
-    // Fit xterm to its pane, less the rows the pinned band borrows. The
-    // FitAddon only proposes the size, so the lent rows come off here.
-    const fitKept = () => {
-      const dims = fit.proposeDimensions();
-      if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
-      writer.resize(dims.cols, keptRows(dims.rows, lentRef.current));
-      placeGrid();
-    };
-    fitKeptRef.current = fitKept;
+    // Sizes the pane and places the grid in it, for xterm and the native
+    // grid alike (src/terminal/paneSizer.ts).
+    const sizer = sizingRef.current;
+    const host = containerRef.current;
+    const paneSizer = new PaneSizer({
+      term,
+      fit,
+      sizer,
+      host,
+      resize: (cols, rows) => writer.resize(cols, rows),
+      lent: () => lentRef.current,
+      anchor: () => anchorRef.current,
+      quiet: () => quietRef.current,
+      onCellSize: () => onCellSizeRef.current,
+    });
+    fitKeptRef.current = () => paneSizer.fitKept();
 
     // GPU renderer. xterm's WebGL addon must run after term.open() and
     // it reads the host element's pixel size when it allocates the
@@ -348,230 +324,24 @@ export function Terminal({
     // syncScrollArea because the renderer swap and a scheduled fit()
     // ran in the same frame, leaving `_renderer.value` undefined; the
     // straightforward order (sync + fit, then swap) avoids that.
-    const safeFit = () => {
-      // When the native surface owns the pane it is the size authority and
-      // resizes xterm via the native-grid-size event. The FitAddon sizes
-      // xterm from its own cells, so letting it fit here would fight the
-      // native grid.
-      if (!quietRef.current && nativeSurfaceEnabled()) return;
-      try {
-        fitKept();
-      } catch {
-        // ignore resize before layout settles
-      }
-    };
-    safeFit();
+    paneSizer.safeFit();
     const webgl = loadWebgl(term, blink, quietRef.current);
-    requestAnimationFrame(safeFit);
-    setTimeout(safeFit, 50);
-    setTimeout(safeFit, 200);
-    setTimeout(safeFit, 800);
+    requestAnimationFrame(paneSizer.safeFit);
+    setTimeout(paneSizer.safeFit, 50);
+    setTimeout(paneSizer.safeFit, 200);
+    setTimeout(paneSizer.safeFit, 800);
     termRef.current = term;
     fitRef.current = fit;
+    reportCellMetricsRef.current = () => paneSizer.reportCellMetrics();
+    relayoutRef.current = () => paneSizer.relayout();
+    paneSizer.start();
+    refitCellRef.current = () => paneSizer.refitCell();
 
-    // The actual fix. Read the sizing wrapper's bounding rect every
-    // frame and explicitly write width/height in pixels onto the
-    // terminal-host element. xterm-addon-fit reads the host's
-    // computed `height` style (not its clientHeight); without an
-    // explicit pixel height, computed height comes back wrong in some
-    // Tauri/WebKit layout passes — opening DevTools forces a layout
-    // and the value goes right, but otherwise it stays stale.
-    let lastW = 0;
-    let lastH = 0;
-    const sizer = sizingRef.current;
-    const host = containerRef.current;
-
-    // Tier 3 (docs/native-renderer.md): report this pane's screen
-    // rectangle to the native wgpu surface so it tracks the terminal.
-    // Live pane only, and only while the surface draws it.
-    //
-    // The rows the pinned band borrows go along, so the grid gives them
-    // up in the same frame as the new bounds, and the game keeps its size.
-    // While the grid keeps to the bottom of the pane under the underlay,
-    // the bounds start lower by the pixels its rows leave over
-    // (`nativeSpare`), and pointer positions count from there.
-    const nativeSurfaceOn = !quietRef.current && nativeSurfaceEnabled();
-    let lastNativeBounds = '';
-    let nativeSpare = 0;
-    const reportNativeBounds = () => {
-      if (!nativeSurfaceOn || !sizer) return;
-      const r = sizer.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const lent = lentRef.current;
-      let { top, height } = r;
-      nativeSpare = 0;
-      if (anchorRef.current && nativeSurfaceEnabled()) {
-        const cellPx = Math.round(term.dimensions?.device?.cell?.height ?? 0);
-        const placed = nativeBottomBounds(r.top, r.height, dpr, cellPx);
-        ({ top, height } = placed);
-        nativeSpare = placed.spare;
-      }
-      const key = `${Math.round(r.left)},${top},${Math.round(r.width)},${height},${dpr},${lent}`;
-      if (key === lastNativeBounds) return;
-      lastNativeBounds = key;
-      void nativeSurfaceSetBounds({
-        x: r.left,
-        y: top,
-        width: r.width,
-        height,
-        dpr,
-        lent,
-      }).catch(() => {});
-    };
-
-    // Report xterm's exact device cell size so the surface grid matches the
-    // webview's spacing instead of deriving it from font metrics. The cell
-    // size is stable across pane resizes; it changes on font, dpr, and line
-    // height changes. The line height is in the cell: xterm multiplies its
-    // glyph box by it and centers the box in the cell, so the box height
-    // rides along and the surface puts its baseline where xterm's is.
-    let lastCellMetrics = '';
-    const reportCellMetrics = () => {
-      if (!nativeSurfaceOn) return;
-      const device = term.dimensions?.device;
-      const cell = device?.cell;
-      if (!device || !cell?.width || !cell?.height) return;
-      const width = Math.round(cell.width);
-      const height = Math.round(cell.height);
-      const charHeight = Math.round(device.char?.height ?? 0);
-      const key = `${width},${height},${charHeight}`;
-      if (key === lastCellMetrics) return;
-      lastCellMetrics = key;
-      void nativeSurfaceSetCellMetrics({
-        width,
-        height,
-        charHeight: charHeight > 0 ? charHeight : null,
-      }).catch(() => {});
-    };
-    reportCellMetricsRef.current = reportCellMetrics;
-
-    // The cell size a band outside the grid lays its characters out on.
-    // The native grid draws xterm's device cell rounded to whole pixels
-    // (reportCellMetrics above), and xterm draws its own.
-    let lastCellSize = '';
-    const reportCellSize = () => {
-      if (!onCellSizeRef.current) return;
-      const cell = term.dimensions?.device?.cell;
-      if (!cell?.width || !cell?.height) return;
-      const dpr = window.devicePixelRatio || 1;
-      const native = !quietRef.current && nativeSurfaceEnabled();
-      const width = (native ? Math.round(cell.width) : cell.width) / dpr;
-      const height = (native ? Math.round(cell.height) : cell.height) / dpr;
-      const key = `${width},${height},${term.cols}`;
-      if (key === lastCellSize) return;
-      lastCellSize = key;
-      onCellSizeRef.current({ width, height, cols: term.cols });
-    };
-
-    const sync = () => {
-      if (!sizer || !host) return;
-      reportNativeBounds();
-      reportCellMetrics();
-      reportCellSize();
-      // A pane a fraction of a pixel taller fits the same rows and leaves
-      // a different spare.
-      placeGrid();
-      const rect = sizer.getBoundingClientRect();
-      const w = Math.floor(rect.width);
-      const h = Math.floor(rect.height);
-      if (w === lastW && h === lastH) return;
-      lastW = w;
-      lastH = h;
-      host.style.width = `${w}px`;
-      host.style.height = `${h}px`;
-      safeFit();
-      // Fit may have just established or changed the cell dimensions.
-      reportCellMetrics();
-      reportCellSize();
-    };
-
-    // The pinned band borrows more or fewer rows, or the grid starts or
-    // stops keeping to the bottom. The pane keeps its size, so nothing
-    // above notices: xterm fits and places itself again, or the native
-    // grid hears of it with its bounds.
-    relayoutRef.current = () => {
-      if (nativeSurfaceOn) reportNativeBounds();
-      else safeFit();
-      placeGrid();
-    };
-
-    // Resizable broadcasts `vosh:resize-progress` { size } from
-    // its pointermove handler — fires synchronously inside the
-    // same JS task that just set the wrapper's CSS height. We
-    // run sync + fit + anchor restore in that same task so
-    // wrapper, xterm, and scroll all update before the browser
-    // paints. Anything async (React state, ResizeObserver) would
-    // land in a separate paint and the user would see a brief
-    // mismatched intermediate frame — the "jitter" that every
-    // previous attempt produced. For quiet panes (split-scrollback
-    // history) the viewport top is saved before fit and restored
-    // after so the larger viewport exposes new rows BELOW the old
-    // bottom instead of pushing old content down. That's what
-    // makes the drag look like a continuous curtain: the new
-    // rows xterm exposes match the rows that were just at the
-    // top of the live pane (both buffers are in sync because
-    // they both consume the same session://output stream).
-    const onResizeProgress = (_event: Event) => {
-      if (!sizer || !host) return;
-      const rect = sizer.getBoundingClientRect();
-      const w = Math.floor(rect.width);
-      const h = Math.floor(rect.height);
-      if (w === lastW && h === lastH) return;
-      lastW = w;
-      lastH = h;
-      host.style.width = `${w}px`;
-      host.style.height = `${h}px`;
-      safeFit();
-      // No explicit refresh or viewport restore. xterm's resize
-      // adjusts the buffer dimensions; the WebGL renderer's own
-      // debounced redraw paints once after the drag settles, which
-      // matches what the DOM renderer does — both panes look
-      // stationary during the drag and the divider slides cleanly
-      // between them. Forcing a per-frame refresh produced the
-      // curtain effect (content shifted per drag frame); doing
-      // scrollLines or scrollToLine produced oscillation. Leaving
-      // it alone gives the right visual.
-    };
-    window.addEventListener('vosh:resize-progress', onResizeProgress);
-
-    const handleWindowResize = sync;
-    window.addEventListener('resize', handleWindowResize);
-    const observer = new ResizeObserver(sync);
-    if (sizer) observer.observe(sizer);
-    observer.observe(document.body);
-
-    // Keep a resize sync alive after mount as a backup for the rare
-    // Tauri/WebKit case where ResizeObserver misses a one-shot chrome
-    // change. The split-scrollback history pane (quiet) needs a
-    // per-frame sync: it mounts transiently when the split opens and
-    // must be fully fit by the time onScrollbackLoaded positions its
-    // viewport, otherwise that first scroll lands on blank rows and only
-    // a second scroll re-renders it. The live pane uses a low-frequency
-    // interval instead, because a per-frame getBoundingClientRect there
-    // stacked a layout reflow onto every combat-round write and stole
-    // frames from the renderer.
-    let rafPoll = 0;
-    let intervalPoll: ReturnType<typeof setInterval> | undefined;
-    if (quietRef.current) {
-      const pollLoop = () => {
-        sync();
-        rafPoll = requestAnimationFrame(pollLoop);
-      };
-      rafPoll = requestAnimationFrame(pollLoop);
-    } else {
-      intervalPoll = setInterval(sync, 250);
-    }
-
-    // Fits the pane to a cell xterm measured again once a face loaded, and
-    // reports the cell. Under the native surface the fit waits for the
-    // grid, which hears the new cell.
-    refitCellRef.current = () => {
-      safeFit();
-      reportCellMetrics();
-      reportCellSize();
-    };
-
-    const detachUnderlayInput = forwardUnderlayPointer(sizer, quietRef.current, () => nativeSpare);
+    const detachUnderlayInput = forwardUnderlayPointer(
+      sizer,
+      quietRef.current,
+      () => paneSizer.nativeSpare,
+    );
 
     let unsubOutput: (() => void) | undefined;
     // The native surface is the size authority while it owns the pane. It
@@ -731,8 +501,8 @@ export function Terminal({
     // above, with the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
-      reportCellSize();
-      placeGrid();
+      paneSizer.reportCellSize();
+      paneSizer.placeGrid();
       // Same tail-anchor rationale as in onOutput below: a resize
       // shifts baseY without moving viewportY, which can land the
       // live pane above its tail. Snap on resize so the freeze
@@ -872,7 +642,7 @@ export function Terminal({
         mirror.write(() => writer.local(text));
       },
       outputTaken: () => outputTaken,
-      fit: () => fitKept(),
+      fit: () => paneSizer.fitKept(),
       focus: () => term.focus(),
       clear: () => term.clear(),
       scrollPages: (n) => term.scrollPages(n),
@@ -989,9 +759,9 @@ export function Terminal({
           const r = sizer.getBoundingClientRect();
           const grid = {
             left: r.left,
-            top: r.top + nativeSpare,
+            top: r.top + paneSizer.nativeSpare,
             width: r.width,
-            height: r.height - nativeSpare,
+            height: r.height - paneSizer.nativeSpare,
           };
           return cellInGrid(clientX, clientY, grid, {
             width: Math.round(device.width) / dpr,
@@ -1011,7 +781,7 @@ export function Terminal({
           const dpr = window.devicePixelRatio || 1;
           return (
             sizer.getBoundingClientRect().top +
-            nativeSpare +
+            paneSizer.nativeSpare +
             row * (Math.round(device.height) / dpr)
           );
         }
@@ -1029,7 +799,7 @@ export function Terminal({
           const r = sizer.getBoundingClientRect();
           return {
             left: r.left,
-            top: r.top + nativeSpare,
+            top: r.top + paneSizer.nativeSpare,
             cellW: Math.round(device.width) / dpr,
             cellH: Math.round(device.height) / dpr,
           };
@@ -1112,11 +882,7 @@ export function Terminal({
     window.addEventListener('keydown', onCopyKey, true);
 
     return () => {
-      if (rafPoll) cancelAnimationFrame(rafPoll);
-      if (intervalPoll) clearInterval(intervalPoll);
-      observer.disconnect();
-      window.removeEventListener('resize', handleWindowResize);
-      window.removeEventListener('vosh:resize-progress', onResizeProgress);
+      paneSizer.stop();
       window.removeEventListener('keydown', onCopyKey, true);
       detachUnderlayInput?.();
       if (naws_timer) clearTimeout(naws_timer);
