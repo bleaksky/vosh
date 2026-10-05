@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import { aabahranPacket } from '../test/aabahranGmcp';
 import { groupCurrentAffects, parseAffectsPacket } from './affectsStore';
 
 describe('parseAffectsPacket', () => {

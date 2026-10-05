@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Moons } from '../../lib/stores/worldStore';
+import type { Moons } from '../../stores/worldStore';
 import { findTheme, themeTokens } from '../../lib/themes';
 import { moonColor } from './moonColors';
 import { statusMoons } from './statusMoons';

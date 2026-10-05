@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TickConfig, TickPayload } from '../../ipc/tick';
-import type { TickCount } from '../../ipc/uiConfig';
+import type { TickConfig, TickPayload } from '../ipc/tick';
+import type { TickCount } from '../ipc/uiConfig';
 import { computeTick, DEFAULT_TICK_WARN_SECS, shownTick } from './tickStore';
 
 /** A report `elapsed_ms` into a tick of `interval_ms`, the way the

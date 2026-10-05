@@ -1,5 +1,5 @@
 import type { ChromeTokens } from '../../lib/chrome';
-import { moonAlignment, moonTitle, type Moons } from '../../lib/stores/worldStore';
+import { moonAlignment, moonTitle, type Moons } from '../../stores/worldStore';
 import type { XtermPalette } from '../../lib/themes';
 import { moonColor } from './moonColors';
 import type { ClockMoons } from './StatusClock';

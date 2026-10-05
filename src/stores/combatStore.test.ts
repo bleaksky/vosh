@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import { aabahranPacket } from '../test/aabahranGmcp';
 import { parseCombat } from './combatStore';
 
 const fixture = (name: string) => parseCombat(aabahranPacket(name).data);

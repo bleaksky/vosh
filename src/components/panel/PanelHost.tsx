@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { PANE_TYPES, setWeights, type PaneType } from '../../lib/paneLayout';
 import type { PromptShowState } from '../../ipc/prompt';
-import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
+import { useVitalsOptions } from '../../stores/vitalsOptionsStore';
 import { panelShowsVitals } from '../../lib/vitalsView';
 import { AffectsPane } from './AffectsPane';
 import { ChatPane } from './ChatPane';

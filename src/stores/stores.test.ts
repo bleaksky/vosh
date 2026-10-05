@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import { aabahranPacket } from '../test/aabahranGmcp';
 
 // Drives the stores through a fake Tauri event bus, so the channel
 // names, the disconnect handling and the start wiring are checked the
@@ -29,7 +29,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 // The tick sound is Web Audio, so the store tests only check when it
 // plays.
 const playTickSound = vi.hoisted(() => vi.fn());
-vi.mock('../tickSound', () => ({ playTickSound }));
+vi.mock('../lib/tickSound', () => ({ playTickSound }));
 
 function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
@@ -76,7 +76,7 @@ async function load() {
     affectsDisplay: await import('./affectsDisplayStore'),
     chatColors: await import('./chatColorsStore'),
     affectFull: await import('./affectFullStore'),
-    group: await import('../groupStore'),
+    group: await import('../lib/groupStore'),
     gamePrompt: await import('./gamePromptStore'),
   };
 }

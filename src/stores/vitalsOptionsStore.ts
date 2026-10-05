@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import {
   DEFAULT_VITALS_OPTIONS,
   getUiConfig,
   subscribeVitalsOptionsChanged,
   vitalsOptionsOf,
   type VitalsOptions,
-} from '../../ipc/uiConfig';
+} from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // The active profile's vitals options for the panel footer and the

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import { aabahranPacket } from '../test/aabahranGmcp';
 import { parseGamePrompt } from './gamePromptStore';
 
 const fixture = (name: string) => parseGamePrompt(aabahranPacket(name).data);

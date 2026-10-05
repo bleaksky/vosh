@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaneLeaf } from '../../lib/paneLayout';
 import { DEFAULT_AFFECTS_DISPLAY, type AffectsDisplay } from '../../ipc/affects';
-import type { CurrentAffect } from '../../lib/stores/affectsStore';
+import type { CurrentAffect } from '../../stores/affectsStore';
 import { AffectsPane } from './AffectsPane';
 import { PaneLeafContext } from './paneActions';
 
@@ -20,21 +20,21 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-vi.mock('../../lib/stores/affectsDisplayStore', () => ({
+vi.mock('../../stores/affectsDisplayStore', () => ({
   useAffectsDisplay: () => scene.display,
 }));
-vi.mock('../../lib/stores/affectsStore', () => ({
+vi.mock('../../stores/affectsStore', () => ({
   useAffects: () => scene.current,
   useAffectsHidden: () => false,
 }));
-vi.mock('../../lib/stores/trackedAffectsStore', () => ({
+vi.mock('../../stores/trackedAffectsStore', () => ({
   useTrackedAffects: () => [
     { name: 'sanctuary', label: null },
     { name: 'bless', label: null },
     { name: 'fly', label: null },
   ],
 }));
-vi.mock('../../lib/stores/affectFullStore', () => ({
+vi.mock('../../stores/affectFullStore', () => ({
   useAffectFull: () => ({ fly: 10 }),
 }));
 

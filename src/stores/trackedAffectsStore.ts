@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeTrackedAffectsChanged, type TrackedAffect } from '../../ipc/affects';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { getUiConfig } from '../../ipc/uiConfig';
+import { subscribeTrackedAffectsChanged, type TrackedAffect } from '../ipc/affects';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { getUiConfig } from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // The active profile's tracked affects. Seeded from ui_get_config,

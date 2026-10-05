@@ -91,7 +91,7 @@ import {
 } from '../../ipc/promptDesign';
 import { useEscape } from '../../lib/escapeStack';
 import { keepFocus, type FocusKeeper } from '../../lib/focusKeeper';
-import { useGamePrompt } from '../../lib/stores/gamePromptStore';
+import { useGamePrompt } from '../../stores/gamePromptStore';
 import { pushToast } from '../../lib/toasts';
 import { useBandEnv } from '../../lib/useBandEnv';
 import { useCellWidth, useLabelMeasure } from '../../lib/useCellWidth';

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { getUiConfig, subscribeChipStyleChanged, type ChipStyle } from '../../ipc/uiConfig';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { getUiConfig, subscribeChipStyleChanged, type ChipStyle } from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // How the status line draws the tick, the game time, and the moons,

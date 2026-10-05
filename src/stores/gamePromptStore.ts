@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { onGmcpPackage, onState } from '../ipc/session';
 import { createStore } from './store';
 
 // Your prompt settings in the game, from Char.Prompt. Aabahran sends

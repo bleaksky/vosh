@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import {
   onPromptGagWithoutReader,
   promptGagsWithoutReader,
   subscribePromptConfigChanged,
-} from '../../ipc/prompt';
-import { onState } from '../../ipc/session';
-import { subscribeUiConfigReplaced } from '../../ipc/uiConfig';
+} from '../ipc/prompt';
+import { onState } from '../ipc/session';
+import { subscribeUiConfigReplaced } from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // The triggers that hid your prompt this session while the profile reads

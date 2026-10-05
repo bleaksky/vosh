@@ -1,15 +1,15 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { onState } from '../../ipc/session';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { onState } from '../ipc/session';
 import {
   onTick,
   subscribeTickConfigChanged,
   tickGetConfig,
   type TickConfig,
   type TickPayload,
-} from '../../ipc/tick';
-import { type TickCount } from '../../ipc/uiConfig';
-import { playTickSound } from '../tickSound';
+} from '../ipc/tick';
+import { type TickCount } from '../ipc/uiConfig';
+import { playTickSound } from '../lib/tickSound';
 import { createStore } from './store';
 
 // The tick for the status line. The backend tick timer is the source.

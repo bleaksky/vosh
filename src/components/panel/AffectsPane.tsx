@@ -9,10 +9,10 @@ import {
   type TrackedInput,
 } from '../../lib/affectsView';
 import type { AffectsMarker } from '../../ipc/affects';
-import { useAffectFull } from '../../lib/stores/affectFullStore';
-import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
-import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
-import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
+import { useAffectFull } from '../../stores/affectFullStore';
+import { useAffectsDisplay } from '../../stores/affectsDisplayStore';
+import { useAffects, useAffectsHidden } from '../../stores/affectsStore';
+import { useTrackedAffects } from '../../stores/trackedAffectsStore';
 import { ChipsView } from './AffectsChips';
 import { CountdownView } from './AffectsCountdown';
 import { affectsGrid, type AffectsCell } from './affectsGrid';

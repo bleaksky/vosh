@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import type { AffectFulls } from '../affectsView';
-import { affectFullGet, subscribeAffectFullChanged } from '../../ipc/affects';
-import { onState } from '../../ipc/session';
+import type { AffectFulls } from '../lib/affectsView';
+import { affectFullGet, subscribeAffectFullChanged } from '../ipc/affects';
+import { onState } from '../ipc/session';
 import { createStore } from './store';
 
 // How full each affect was cast, for the Affects pane's gauges (the

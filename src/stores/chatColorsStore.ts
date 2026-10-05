@@ -4,9 +4,9 @@ import {
   normalizeChatColors,
   sameChatColors,
   type ChatColors,
-} from '../chatColors';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { getChatColorsTable, subscribeChatColorsChanged } from '../../ipc/uiConfig';
+} from '../lib/chatColors';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { getChatColorsTable, subscribeChatColorsChanged } from '../ipc/uiConfig';
 import { createStore } from './store';
 
 // The active profile's chat channel colors for the chat pane and its

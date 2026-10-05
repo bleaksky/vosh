@@ -1,6 +1,6 @@
 import { liftToContrast, STATUS_TEXT_CONTRAST, type ChromeTokens } from '../../lib/chrome';
 import { parseHex, toHex } from '../../lib/color';
-import type { WorldTime } from '../../lib/stores/worldStore';
+import type { WorldTime } from '../../stores/worldStore';
 import type { XtermPalette } from '../../lib/themes';
 
 // The game time's daylight tint and whether its sun is up. The old

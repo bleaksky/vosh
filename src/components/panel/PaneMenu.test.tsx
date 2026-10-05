@@ -34,14 +34,14 @@ vi.mock('./MenuSurface', async (actual) => ({
 }));
 // The display the menu reads, the default unless a test picks a style.
 const shown = vi.hoisted(() => ({ style: null as string | null }));
-vi.mock('../../lib/stores/affectsDisplayStore', async () => {
+vi.mock('../../stores/affectsDisplayStore', async () => {
   const { DEFAULT_AFFECTS_DISPLAY } = await import('../../ipc/affects');
   return {
     useAffectsDisplay: () =>
       shown.style ? { ...DEFAULT_AFFECTS_DISPLAY, style: shown.style } : DEFAULT_AFFECTS_DISPLAY,
   };
 });
-vi.mock('../../lib/stores/chatColorsStore', () => ({ useChatColors: () => new Map() }));
+vi.mock('../../stores/chatColorsStore', () => ({ useChatColors: () => new Map() }));
 // The layout the menu splits, none unless a test lays one out.
 const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
 vi.mock('./panelLayoutStore', async (actual) => ({

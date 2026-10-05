@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { getTarget, onState, onTarget, type TargetPayload } from '../../ipc/session';
+import { getTarget, onState, onTarget, type TargetPayload } from '../ipc/session';
 import { createStore } from './store';
 
 // The client target you set with the target command, for the status
