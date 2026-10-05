@@ -66,13 +66,15 @@ fn line_pass(
     // Lua registered triggers wrote, so one apply takes both.
     outcome.append(run_trigger_scripts(p, c, &result));
     let mut apply = script::apply_actions(p, c, outcome);
-    // The alerts ride on the match, so a line a trigger hides rings too.
+    // The alerts ride on the match, so a line a trigger hides rings too,
+    // and so does a line that names you.
     apply.alerts.extend(
         result
             .alerts
             .iter()
             .map(|alert| crate::alert::Alert::of_trigger(alert, plain)),
     );
+    apply.alerts.extend(c.alerts.line(p, plain));
     LinePass {
         result,
         tick_step,

@@ -11,11 +11,14 @@
 //!   each to the 10 second cap the session keeps, posts the banner,
 //!   bounces the Dock or flashes the taskbar, and tells the page through
 //!   `session://alert`, which plays the tone.
+//! - [`presets`] matches the five presets from GMCP, the text and the
+//!   link, and keeps the low latch, the Rust twin of `nextLow`.
 //! - [`banner`] is where a banner goes, the system or, in a test build,
 //!   a list the test reads, so no test ever posts one.
 
 pub(crate) mod banner;
 pub(crate) mod focus;
+pub(crate) mod presets;
 
 #[cfg(target_os = "macos")]
 mod mac;

@@ -101,6 +101,10 @@ pub(crate) struct Connection {
     /// Lua stops under, made from the session's id. A trigger or an alias
     /// whose Lua Vosh stopped here stays on in every other session.
     pub(crate) stop_key: StopKey,
+    /// What the alert presets follow on the connection: your name, the
+    /// low latch on your health and whom you fight. See
+    /// [`crate::alert::presets::Watch`].
+    pub(crate) alerts: crate::alert::presets::Watch,
 }
 
 impl Connection {
@@ -115,6 +119,7 @@ impl Connection {
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
+        self.alerts.reset();
         had
     }
 

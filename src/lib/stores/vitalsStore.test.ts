@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import latch from '../../../fixtures/alerts/low-latch.json';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import {
   holdPromptVitals,
@@ -138,6 +139,26 @@ describe('low latch', () => {
     const first = nextVitals(null, full);
     expect(nextVitals(first, { ...full })).toBe(first);
     expect(nextVitals(first, null)).toBeNull();
+  });
+});
+
+// fixtures/alerts/low-latch.json holds this latch to its Rust twin, which
+// rings the Low health alert (next_low in src-tauri/src/alert/presets.rs).
+describe('the low latch the Low health alert shares', () => {
+  it('steps as the shared cases say', () => {
+    for (const step of latch.steps) {
+      expect(nextLow(step.was, step.current, step.max), JSON.stringify(step)).toBe(step.low);
+    }
+  });
+
+  it('runs through hidden vitals as the shared cases say', () => {
+    for (const run of latch.runs) {
+      let prev: ReturnType<typeof nextVitals> = null;
+      for (const v of run.vitals) {
+        prev = nextVitals(prev, { ...full, hp: v.hp, maxhp: v.maxhp }, v.hidden);
+        expect(prev?.low.hp, JSON.stringify(v)).toBe(v.low);
+      }
+    }
   });
 });
 
