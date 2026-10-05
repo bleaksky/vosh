@@ -3,8 +3,9 @@
 //! `NSUserNotificationCenter` there, which drops banners, so Vosh keeps a
 //! small module of its own. It posts, answers a click by selecting the
 //! session, lets a banner show while Vosh is in front when its alert asks
-//! for that. It also plays a system sound through `NSSound`, which Alerts
-//! Q4 names for a window too hidden to play its own tone.
+//! for that, and reads whether you allow banners and asks. It also plays
+//! a system sound through `NSSound`, which Alerts Q4 names for a window
+//! too hidden to play its own tone.
 //!
 //! `UNUserNotificationCenter` works only in a bundled app. A dev build runs
 //! from no bundle and touching the center there aborts, so every call
@@ -16,19 +17,22 @@
 #![allow(unsafe_code)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
+use block2::RcBlock;
 use objc2_06::rc::Retained;
 use objc2_06::runtime::{AnyClass, AnyObject, Bool, ProtocolObject};
 use objc2_06::{define_class, msg_send, AnyThread};
-use objc2_foundation::{NSBundle, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::{
-    UNMutableNotificationContent, UNNotification, UNNotificationPresentationOptions,
-    UNNotificationRequest, UNNotificationResponse, UNNotificationSound, UNUserNotificationCenter,
+    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
+    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
+    UNNotificationSettings, UNNotificationSound, UNUserNotificationCenter,
     UNUserNotificationCenterDelegate,
 };
 
-use super::banner::Banner;
+use super::banner::{Banner, Permission};
 use crate::sessions::SessionId;
 
 /// What a click on a banner does, given the session the banner names.
@@ -161,6 +165,70 @@ pub(super) fn post(banner: &Banner, sound: bool) {
         None,
     );
     center.addNotificationRequest_withCompletionHandler(&request, None);
+}
+
+/// Whether you allow Vosh's banners, as System Settings says. Waits up
+/// to two seconds for the answer, so call it off the main thread.
+pub(super) fn permission() -> Permission {
+    let Some(center) = center() else {
+        return Permission::Unavailable;
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = Mutex::new(tx);
+    let block = RcBlock::new(move |settings: std::ptr::NonNull<UNNotificationSettings>| {
+        // SAFETY: the center hands a settings object that lives through
+        // the call.
+        let status = unsafe { settings.as_ref() }.authorizationStatus();
+        if let Ok(tx) = tx.lock() {
+            let _ = tx.send(status);
+        }
+    });
+    center.getNotificationSettingsWithCompletionHandler(&block);
+    match rx.recv_timeout(Duration::from_secs(2)) {
+        Ok(status) => permission_of(status),
+        Err(_) => Permission::Unavailable,
+    }
+}
+
+/// Ask macOS to let Vosh post banners, which shows its own question the
+/// first time. Hands the answer to `answer` once you choose.
+pub(super) fn ask(answer: Box<dyn FnOnce(Permission) + Send>) {
+    let Some(center) = center() else {
+        answer(Permission::Unavailable);
+        return;
+    };
+    let answer = Mutex::new(Some(answer));
+    let block = RcBlock::new(move |granted: Bool, _error: *mut NSError| {
+        let taken = answer.lock().ok().and_then(|mut a| a.take());
+        if let Some(answer) = taken {
+            answer(if granted.as_bool() {
+                Permission::Granted
+            } else {
+                Permission::Denied
+            });
+        }
+    });
+    center.requestAuthorizationWithOptions_completionHandler(
+        UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+        &block,
+    );
+}
+
+fn permission_of(status: UNAuthorizationStatus) -> Permission {
+    match status {
+        UNAuthorizationStatus::NotDetermined => Permission::NotAsked,
+        UNAuthorizationStatus::Denied => Permission::Denied,
+        _ => Permission::Granted,
+    }
+}
+
+/// Open the Notifications page of System Settings at Vosh.
+pub(super) fn open_settings() -> Result<(), String> {
+    std::process::Command::new("/usr/bin/open")
+        .arg("x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.aabahran.vosh")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Vosh could not open System Settings ({e})."))
 }
 
 /// The system sound that stands in for the tone `sound`.

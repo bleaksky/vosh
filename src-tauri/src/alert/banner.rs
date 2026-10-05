@@ -38,6 +38,21 @@ impl Banner {
     }
 }
 
+/// Whether you allow Vosh's banners, as the system says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Permission {
+    Granted,
+    Denied,
+    /// Vosh has not asked yet, so the next ask shows the system's
+    /// question. Only macOS asks.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    NotAsked,
+    /// This build cannot post banners, such as a dev build with no
+    /// bundle on macOS or a Windows Vosh that is not installed.
+    Unavailable,
+}
+
 /// `vosh://session-selected`: Vosh selected a session itself, as a click
 /// on a banner does, so every window follows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -193,6 +208,49 @@ pub(crate) fn install<R: tauri::Runtime>(app: &AppHandle<R>) {
     }
     #[cfg(not(target_os = "macos"))]
     let _ = app;
+}
+
+/// Whether you allow Vosh's banners. Waits on the system, so call it off
+/// the main thread.
+pub(crate) fn permission() -> Permission {
+    #[cfg(target_os = "macos")]
+    {
+        super::mac::permission()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        super::desktop::permission()
+    }
+}
+
+/// Ask the system to let Vosh post banners, and wait for your answer.
+/// Only macOS asks, and elsewhere the answer is what the system says now.
+#[cfg_attr(not(target_os = "macos"), allow(clippy::unused_async))]
+pub(crate) async fn ask() -> Permission {
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        super::mac::ask(Box::new(move |answer| {
+            let _ = tx.send(answer);
+        }));
+        rx.await.unwrap_or(Permission::Unavailable)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        super::desktop::permission()
+    }
+}
+
+/// Open the system's notification settings at Vosh.
+pub(crate) fn open_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        super::mac::open_settings()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        super::desktop::open_settings()
+    }
 }
 
 /// Select `session` and bring the main window to the front, as a click

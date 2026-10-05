@@ -31,6 +31,10 @@ pub(crate) const TELLS: &str = "alert_tells";
 pub(crate) const NAME: &str = "alert_name";
 pub(crate) const ATTACKED: &str = "alert_attacked";
 pub(crate) const LOW_HEALTH: &str = "alert_low_health";
+pub(crate) const CONNECTION: &str = "alert_connection";
+
+/// Every alert preset, in the order the Alerts category lists them.
+pub(crate) const PRESETS: [&str; 5] = [TELLS, NAME, ATTACKED, LOW_HEALTH, CONNECTION];
 
 /// Below this percent your health turns low, as `LEDGER_LOW_ENTER`.
 const LOW_ENTER: i64 = 20;

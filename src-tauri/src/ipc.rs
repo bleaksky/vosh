@@ -2,6 +2,7 @@
 //! list in [`handler`] that registers them.
 
 pub(crate) mod affects;
+pub(crate) mod alerts;
 pub(crate) mod automation;
 pub(crate) mod characters;
 pub(crate) mod loadouts;
@@ -89,6 +90,11 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         loadouts::loadouts_set_active,
         tick::tick_get_config,
         tick::tick_set_config,
+        alerts::alert_presets_get,
+        alerts::alert_presets_set,
+        alerts::alerts_permission,
+        alerts::alerts_ask_permission,
+        alerts::alerts_open_settings,
         profiles::profile_get_scope,
         profiles::profile_set_scope,
         windows::open_settings_window,
