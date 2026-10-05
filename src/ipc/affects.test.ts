@@ -127,7 +127,7 @@ describe('affects display', () => {
     }
   });
 
-  it('saves a pick from the pane menu alone, never the whole config', async () => {
+  it('saves a pick from the pane menu alone', async () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
     await setAffectsDisplay({ marker: 'none' });
@@ -138,7 +138,6 @@ describe('affects display', () => {
       runningOut: null,
       almostGone: null,
     });
-    expect(sent.mock.calls.map(([command]) => command)).not.toContain('ui_set_config');
   });
 
   it('tells every window when a save changes it, and knows its own echo', async () => {

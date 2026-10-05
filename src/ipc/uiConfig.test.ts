@@ -23,7 +23,7 @@ import {
   type UiConfig,
   type UiFields,
 } from './uiConfig';
-import { broadcastUiConfigChanges, setUiConfig } from './uiConfigSave';
+import { broadcastUiConfigChanges } from './uiConfigSave';
 import { galleryThemes } from '../theme/themeThumb';
 import {
   BUILTIN_THEMES,
@@ -107,14 +107,21 @@ describe('a retired theme id', () => {
     expect(normalizeUiConfig(raw()).light_theme).toBe('vellum');
     const invoked = vi.mocked(invoke);
     invoked.mockClear();
-    await setUiConfig(saved);
-    const [command, args] = invoked.mock.calls[0] as [string, { config: Record<string, unknown> }];
-    expect(command).toBe('ui_set_config');
-    expect(args.config).toMatchObject({
-      theme: 'one-dark',
-      light_theme: 'vellum',
-      dark_theme: 'everforest-light',
-    });
+    const { theme, light_theme, dark_theme } = saved;
+    await setUiFields({ theme, light_theme, dark_theme });
+    expect(invoked.mock.calls).toEqual([
+      [
+        'ui_set_fields',
+        {
+          fields: [
+            { field: 'theme', value: 'one-dark' },
+            { field: 'light_theme', value: 'vellum' },
+            { field: 'dark_theme', value: 'everforest-light' },
+          ],
+          profile: null,
+        },
+      ],
+    ]);
   });
 });
 

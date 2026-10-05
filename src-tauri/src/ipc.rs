@@ -70,7 +70,6 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         terminal::scrollback_load,
         terminal::scrollback_clear,
         ui_config::ui_get_config,
-        ui_config::ui_set_config,
         ui_config::ui_set_fields,
         updater::updater_check,
         updater::updater_install_and_relaunch,
