@@ -399,10 +399,6 @@ impl TickRuntime {
         }
     }
 
-    /// Update the last observed world hour. Returns true when the value
-    /// actually changed, which is a real tick. The first observation
-    /// primes the state without a tick, so you do not see a spurious tick
-    /// the moment you connect.
     /// Follow the day or night of a World.Time packet `data`. Returns the
     /// new one when it turned.
     pub(crate) fn observe_daylight(&mut self, data: &serde_json::Value) -> Option<Daylight> {
@@ -410,6 +406,10 @@ impl TickRuntime {
         (self.daylight.replace(now) != Some(now)).then_some(now)
     }
 
+    /// Update the last observed world hour. Returns true when the value
+    /// actually changed, which is a real tick. The first observation
+    /// primes the state without a tick, so you do not see a spurious tick
+    /// the moment you connect.
     pub(crate) fn observe_world_hour(&mut self, hour: &str) -> bool {
         match &self.last_world_hour {
             Some(prev) if prev == hour => false,
