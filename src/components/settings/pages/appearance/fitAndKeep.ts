@@ -1,7 +1,7 @@
 import { keepFit } from '../../../../lib/appearanceSettings';
 import { fitOffThread } from '../../../../lib/fitOffThread';
 import { fitKey, needsFit } from '../../../../lib/gameFit';
-import type { CustomTheme } from '../../../../ipc/uiConfig';
+import type { CustomTheme } from '../../../../ipc/theme';
 import { customToAppTheme, setCustomThemes } from '../../../../lib/themes';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 

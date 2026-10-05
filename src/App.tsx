@@ -58,15 +58,14 @@ import {
 import { promptPreviewSet } from './ipc/promptDesign';
 import { disconnectSession, setWindowSize, onState, type StatePayload } from './ipc/session';
 import { terminalLocalWrite } from './ipc/terminal';
+import { resolveThemeTerminalColors, subscribeCustomThemesChanged } from './ipc/theme';
 import {
   getUiConfig,
-  resolveThemeTerminalColors,
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeReadableHighlightsChanged,
   subscribeFitGameColorsChanged,
   subscribeBaseAnsiChanged,
-  subscribeCustomThemesChanged,
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,

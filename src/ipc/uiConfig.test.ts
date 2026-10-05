@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import uiDefaults from '../../fixtures/ui-config/defaults.json';
+import { freeBuiltinThemeIds, seedDarkTheme, type CustomTheme } from './theme';
 import {
-  freeBuiltinThemeIds,
   GAME_TIMES,
   getUiConfig,
   normalizeChipStyle,
@@ -15,10 +15,8 @@ import {
   normalizeVitalsMeter,
   normalizeVitalsOptions,
   normalizeVitalsValues,
-  seedDarkTheme,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
-  type CustomTheme,
   type RawUiConfig,
   type UiConfig,
 } from './uiConfig';

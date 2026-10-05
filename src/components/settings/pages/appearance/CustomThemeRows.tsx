@@ -8,7 +8,8 @@ import {
   THEME_SLOT_GROUPS,
 } from '../../../../lib/appearanceSettings';
 import { CUSTOM_THEMES_CHANGED, THEME_CHANGED } from '../../../../ipc/events';
-import type { CustomTheme, UiConfig } from '../../../../ipc/uiConfig';
+import type { CustomTheme } from '../../../../ipc/theme';
+import type { UiConfig } from '../../../../ipc/uiConfig';
 import {
   activeThemeFor,
   applyTheme,

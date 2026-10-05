@@ -8,7 +8,7 @@
 // only fails when the 16 ANSI colors, the background, or the foreground
 // are missing.
 
-import type { CustomTheme } from '../ipc/uiConfig';
+import type { CustomTheme } from '../ipc/theme';
 
 export type ThemeFileFormat = 'ghostty' | 'iterm2' | 'kitty' | 'alacritty-toml' | 'alacritty-yaml';
 
