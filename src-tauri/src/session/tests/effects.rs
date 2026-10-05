@@ -160,12 +160,14 @@ fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
 }
 
 #[test]
-fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
+fn a_reset_from_a_timer_turns_away_a_pane_layout_write_from_before_it() {
     let state = AppState::default();
     let mut p = Profile::default();
     let mut c = Connection::default();
     let mut effects = LineEffects::default();
-    let before = state.ui_config_generation();
+    // pane_layout_set refuses a tree edited at any generation but the
+    // current one.
+    let before = state.panes_generation();
     let _ = super::run_and_note_line(
         &state,
         &mut p,
@@ -175,7 +177,7 @@ fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
         &mut effects,
         None,
     );
-    assert!(state.ui_config_generation() > before);
+    assert_ne!(state.panes_generation(), before);
 }
 
 #[test]

@@ -362,9 +362,9 @@ pub(super) fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 /// Run `line` through the input pipeline and note what it asks of the
 /// saved profile. Call with the profile lock held, and the connection's
 /// after it. A `#profile reset`, or a `#profile load` that reads its file,
-/// swaps the live UI config and panes, so their generations move in the
-/// same step. The profile file it reads holds none of the shared settings,
-/// so `shared` goes back over the result.
+/// swaps the live UI config and panes, so the panes generation moves in
+/// the same step. The profile file it reads holds none of the shared
+/// settings, so `shared` goes back over the result.
 pub(super) fn run_and_note_line(
     state: &AppState,
     p: &mut Profile,
@@ -380,7 +380,7 @@ pub(super) fn run_and_note_line(
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
-        state.note_ui_config_replaced();
+        state.bump_panes_generation();
     }
     ran
 }

@@ -220,9 +220,8 @@ async fn move_session(
     let beside_a_count = p.players(&others).any(|other| other.connected());
     session.play(to.clone());
     // Under the same locks as the move, so a pane layout write edited
-    // from the old profile's tree, or a whole config save read from the
-    // old profile, is refused from here on.
-    state.note_ui_config_replaced();
+    // from the old profile's tree is refused from here on.
+    state.bump_panes_generation();
 
     // The connection did not change, so it keeps what it holds and takes
     // only the next profile's tick settings and [prompt] table. The
