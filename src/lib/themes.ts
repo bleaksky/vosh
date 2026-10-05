@@ -5,7 +5,7 @@
 // is known for (Nord's frost accent, for example).
 
 import { CHROME_COLOR_KEYS, deriveChrome, type ChromeOverrides, type ChromeTokens } from './chrome';
-import { fitKey } from './gameFit';
+import { fitKey, GAME_SLOTS, type ColorVision } from './gameFit';
 
 export interface XtermPalette {
   background: string;
@@ -1570,19 +1570,211 @@ export const BUILTIN_THEMES: AppTheme[] = [
   icebergDark,
 ];
 
+// ── Color vision fits ───────────────────────────────────────────────
+// The fit of each built in theme for each color vision whose raised
+// floors its Typical fit misses, worked out ahead like `fitted` (lib/
+// gameFit fit). A vision a theme leaves out plays the Typical fit, which
+// already holds its floors. Each string holds the colors of GAME_SLOTS
+// in order, body text then the 16 ANSI colors, with a dot for a slot the
+// fit leaves as published. gameFit.test.ts fits each again with
+// VOSH_FIT_THEMES=1.
+type OtherVision = Exclude<ColorVision, 'typical'>;
+const VISION_FITS: Readonly<Record<string, Partial<Record<OtherVision, string>>>> = {
+  'obsidian-ember': {
+    deuteranopia:
+      '#cecbc9 . #c4675c #99e8b5 #d1ae63 #799ed6 . #77c1cd . #99948f #f59989 #d0ffde #f1ce89 #9bbef1 #d4aee6 #9be1ec .',
+    tritanopia:
+      '#cecbc9 . #cf7166 #95e4b0 #d2af64 #799ed6 #b38ec8 #74beca . #99948f #f49989 #c7ffd8 #f2cf8b #9bbef1 #d3aee5 #97dee9 .',
+  },
+  triad: {
+    deuteranopia: '#dcdcdb . . #53d1b3 #f9d57c . . . . . . . #fff4ca #98c6ff #e0b2e6 . .',
+    protanopia: '. . . #44c6a8 #fbd77d . . . . . . . #fff5cd . . . .',
+  },
+  rubric: {
+    deuteranopia: '. . . . . . . . . . . #002522 . . . . .',
+    protanopia: '. . . #006561 . . . #1b4769 . . #a11410 #002522 . . . #002f42 .',
+    tritanopia: '. . . #077b75 . . . #2a5678 . . . . . . . #003d54 .',
+  },
+  'kanso-zen': {
+    deuteranopia:
+      '#c9cdcb . #b96a65 #cddebd #c2b189 . . #a0b6b4 #b0b3b0 #91969c #ff919a #e9ffe9 #efcc8c #91c7dd #bab1d1 #acdbd2 #e3e8e5',
+    protanopia:
+      '#c9cdcb . #c3736d #cbddbc #c3b189 #849da8 . #a0b6b4 #b0b3b0 #91969c #ff919a #e6ffe5 #efcc8d #8abfd6 #bab1d1 #acdbd1 #e3e8e5',
+  },
+  'tokyo-night': {
+    deuteranopia:
+      '#bdc7f2 #2d2e37 #e4657e #b8ea85 #dcac65 #769df2 #b291ee #6dbfef #aab3d8 #8e97bb #ff94a5 #e0ffc3 #fecc84 #9cbdff #ceb5ff #a2dcff #dbe2ff',
+  },
+  nord: {
+    deuteranopia:
+      '. #3b4353 #bb5d67 #96b07f #e9c989 #83a4c4 #bb95b4 #8cc5d5 #d5dbe6 #95a1b7 #ffa2a8 #d9f5c1 #ffeac1 #a3c4e5 #dcb4d4 #b6e4e3 #f9fcff',
+    protanopia:
+      '. #3c4353 #d1717a #c3deab #cfb071 #83a4c4 #bb95b4 #8cc5d5 . #95a1b7 #ffa2a8 #e4ffce #f1d090 #a3c4e5 #dcb4d4 #b6e4e3 #feffff',
+    tritanopia:
+      '. #3c4353 #e38189 #d4f1bd #e1c282 #83a4c4 #bb95b4 #8cc5d5 . #95a1b7 #ffa5ab #edffdf #ffe3ab #a2c4e5 #dcb4d4 #b6e4e3 #feffff',
+  },
+  'rose-pine': {
+    deuteranopia:
+      '. #2b2940 . #86c9e6 #f1bd73 . #c0a3e3 . #dedcf2 #9894b1 #ff98b2 #bceaff #ffdfb4 #bcf0f9 #dfc5ff #ffe1e0 #ffffff',
+  },
+  gruvbox: {
+    deuteranopia:
+      '#e5d5ad #383838 #e64235 #ddde6d #e6a836 #66a6a9 #d582a7 #8ec58f #c5b59f #a8998a #ff9583 #faffa0 #ffcc65 #9dc0b2 #f4a4b9 #b2e6a0 #fff0c8',
+  },
+  catppuccin: {
+    deuteranopia:
+      '#ccd5f3 . #c05d7b #7eb97a #e7d09d #739de2 #dfaed2 #92e0d3 . #9498af #fe95b2 #b7f4b1 #fff1d1 #94bdff #ffcff2 #bcfff3 #ebf0ff',
+    protanopia:
+      '. . #d46f8d #87c383 #f1daa7 . #d4a2c6 . . #9498af #fe95b1 #aeeba8 #fff1d2 #b5d2ff . #c4fff4 #edf1ff',
+    tritanopia:
+      '. . #d46f8d #88c383 #f1daa7 #759fe4 #d4a2c6 . . #9498af #fe95b1 #aeeba8 #fff1d2 #97bfff . #c4fff4 #edf1ff',
+  },
+  dracula: {
+    deuteranopia:
+      '#e4e4de #2c2e34 #e94043 #07d558 #e2eb7d #b88ef4 . #81dff3 #deded9 #8597cb #ff9692 #94ffad #feffc9 #d8b0ff #ffa8e4 #aeffff .',
+    protanopia:
+      '#e4e4df #2c2e34 #eb4245 #00ce54 #e2eb7d #b48bf0 #f671be #82e0f4 #deded9 #8597cb #ff9692 . #feffca . #ff9ee2 #b3ffff .',
+    tritanopia:
+      '#e4e4df #2c2e34 #f04749 #00d356 #e0e97b . . #86e4f8 #deded9 #8597cb #ff9692 . #feffc4 #dab6ff #ffa8e4 #c3ffff .',
+  },
+  monokai: {
+    deuteranopia:
+      '#e4e4df #373831 #f72471 #b6f346 #e2ae64 #52c7dd #af84ff #81cec3 #deded9 #a09c87 #ff89a3 #d8ffa3 #ffd090 #76e8fe #c5abff . #ffffff',
+  },
+  'one-half-dark': {
+    deuteranopia:
+      '. #373c44 #d5636c #beeb9f #d8b46f #5aa8e8 #cd7ee4 #67c6d2 #dbdee3 #939eb2 #ff9da1 #e3ffd0 #fad48e #86c7ff #e9a2ff #88e7f3 .',
+  },
+  'solarized-light': {
+    protanopia:
+      '#42575f . #ff766a #6c7c00 #6d5100 #278cd3 #d33782 #0a9289 . . #d85725 #455000 #4c3800 #006eac #6468bb #00716b .',
+  },
+  'tango-dark': {
+    deuteranopia:
+      '. #3d4345 #e32d21 #99e96b #cfab1f #6fa3e6 #bb93c1 #57cccd . #9ea19c #ff8e82 #c9ffa5 . #95c3f5 #e1b1dc #4bf1f1 #f7f7f5',
+  },
+  'classic-vivid': {
+    deuteranopia:
+      '. #232323 #e64f40 #4cd545 #ffc6a2 #4b82ff #e756e5 #0badac #b2b2b2 #959595 #ff8271 . . #8a9bff #ff84fc . .',
+    protanopia:
+      '. #232323 #ef5747 #4cd545 #ffc6a2 #4b82ff #e756e5 #0badac #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
+    tritanopia:
+      '. #232323 #ef5747 #4cd545 #ffc6a2 #4b82ff #e756e5 #00a6a6 #b2b2b2 #959595 #ff8574 . . #8a9bff #ff84fc . .',
+  },
+  'high-contrast': {
+    deuteranopia:
+      '#e4e4e4 #242424 #f3494b #21dd2a #f5f548 #54a9fe . #44f3f3 . #969696 #ff9291 . #feffb6 #95c3ff #ff8dff #b9fffe .',
+    protanopia:
+      '#e4e4e4 #242424 #f44a4c #06d51c #f5f548 #54a9fe . #44f3f3 . #969696 #ff9291 . #feffb6 #95c3ff #ff8dff #b9fffe .',
+  },
+  'everforest-dark': {
+    deuteranopia:
+      '#e1d4b8 . #ca6568 #cae4a2 #d0b275 . . #8cca9b . #96a3a9 #ffa3a3 #efffd8 #f2d294 #9fdcd3 #f8b9d6 #acebbb #fcefd2',
+    tritanopia:
+      '#e1d4b8 . #d67072 #cae4a2 #d2b376 . . #8cca9b . #96a3a9 #ffa3a3 #eeffd7 #f3d496 #9fdcd3 #f8b9d6 #acebbb #fcefd2',
+  },
+  'green-screen': {
+    deuteranopia:
+      '#8dde93 #242424 #f05847 #56de4f #ffcaa8 #4e84ff #e757e5 #23b6b5 #b2b2b2 #969696 #ff938c #7eff7a . #8c9cff #ff84fd . .',
+    protanopia:
+      '#8ede93 #242424 #f96150 #56de4f #ffcaa8 #4e84ff #e757e5 #23b6b5 #b2b2b2 #969696 #ff938c #7eff7a . #8c9cff #ff84fd . .',
+    tritanopia:
+      '#8dde93 #242424 #f96150 #56de4f #ffcaa8 #4e84ff #e757e5 #13afaf #b2b2b2 #969696 #ff938c #7eff7a . #8c9cff #ff84fd . .',
+  },
+  srcery: {
+    deuteranopia:
+      '#e6d2ae #282625 #ff5c4e #9eee9b #f7b421 #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #e5ffb1 #ffd886 #79baf7 #ff90ac #32e8d3 #ffedca',
+    tritanopia:
+      '#e7d3af #282625 #ff483b #94e491 #eeac0c #4f9ae3 #ff5589 #36c3c7 . #a6937f #ff9483 #d3fa7a #ffd16f #79baf7 #ff90ac #32e8d3 #ffeecd',
+  },
+  nightfly: {
+    deuteranopia:
+      '#c9cdd2 . #e73c3d #95c051 #e9d68f #769df1 #be89e1 #6bc7b7 #abb4c2 #879b9b #ff939d #6dfedd #ffe7c6 #9cbdff #c9b1ff #8ce8d6 #dfe8f5',
+    protanopia:
+      '#c9cdd2 . #f24746 #96c152 #e9d78f #82aafe #bc88df #6ac6b5 #aab4c2 #879b9b #ff939d #63f5d4 #ffe7c6 #adc8ff #c8afff #8ae7d5 #dfe8f5',
+    tritanopia:
+      '#c9cdd2 . #f24746 #96c152 #e9d68f . #be89e1 . #aab4c2 #879b9a #ff939d #63f5d4 #ffe7c6 #adc8ff #c9b1ff #a0fdeb #dfe8f5',
+  },
+  'melange-dark': {
+    deuteranopia:
+      '. #393531 #b97d80 #bde0be #eca364 #899cbd #bd8aba #a0bcba #ccb298 #aa9885 #fe9d8a #dfffe9 #f7cc78 #b1b8dd #deaad1 #b3dfe2 #fffefc',
+    protanopia:
+      '. #393531 #c18486 #b7dab8 #eea466 #899cbd #bd8aba #a0bcba #ccb299 #aa9885 #fe9d8a #cbffdb #f8cd79 #b1b8dd #deaad1 #b3dfe2 #fffefc',
+    tritanopia:
+      '#eadfd5 #393531 #c48889 #bde0bf #f1a769 #899cbd #bd8aba #a0bcba #ccb298 #aa9885 #fe9d8a #e0ffe9 #fbd07c #b1b8dd #deaad1 #b3dfe2 #fffbf7',
+  },
+  'melange-light': {
+    deuteranopia:
+      '#55443b #dfd7d2 #d08494 #2e5833 . . . #608383 . . #c10422 #013319 #875b00 . . . #3f2f27',
+    protanopia: '. #dfd7d2 #cc7f8f #26502c . . . #608383 . . #c51126 #003017 #875b00 . . . #3e2e26',
+  },
+  'modus-vivendi': {
+    deuteranopia:
+      '#e4e4e4 #1e1e1e #e24441 #83f87f #c7b400 #1ea5f4 #e898bc #00d1cf #b1b1b1 #959595 #ff9380 #adffc9 . #8cb4ff #c4b4ff #72ecc0 .',
+    tritanopia:
+      '#e4e4e4 #1e1e1e #fb5b56 #83f980 #d2be07 . #f6a4c8 #00cecb #b1b1b1 #959595 #ff9380 #aeffca #ffcf6a #98bdff #cfc4ff #6fe9bd .',
+  },
+  'harbor-dark': {
+    deuteranopia:
+      '#dfe5eb . #d85852 #7af185 #e1a837 #56a4fd . . . #8e97a2 . #b9ffbc #fccc5d #81c4ff #d6b0ff #6ae5ee .',
+  },
+  'iceberg-dark': {
+    deuteranopia:
+      '#cbcdd6 #272b3c #ca6364 #d6e1a4 #e4a67a . . #8bbbc5 . #9196b0 #f99897 #f7ffd5 #ffc9a2 #a4c0e5 #c0b3e7 #acdbe5 #e6e9f3',
+  },
+};
+
+const BUILTIN_BY_ID = new Map(BUILTIN_THEMES.map((t) => [t.id, t]));
+const VISION_FIT_CACHE = new Map<string, Partial<XtermPalette>>();
+
+/** The fit `theme` plays in for `vision`. Typical plays the theme's own
+ *  fit (`fitted`). Another vision plays the fit a built in theme stores
+ *  for it, else the Typical fit, which then holds the vision's floors.
+ *  Undefined where nothing is fitted. */
+export function visionFitOf(
+  theme: AppTheme,
+  vision: ColorVision,
+): Partial<XtermPalette> | undefined {
+  if (vision === 'typical') return theme.fitted;
+  const row = VISION_FITS[theme.id]?.[vision];
+  // A custom theme never holds a built in id, and the palette check
+  // keeps a copy with other colors on its own fit.
+  if (row === undefined || BUILTIN_BY_ID.get(theme.id)?.xterm !== theme.xterm) {
+    return theme.fitted;
+  }
+  const key = `${vision} ${theme.id}`;
+  let fitted = VISION_FIT_CACHE.get(key);
+  if (!fitted) {
+    const slots: Partial<XtermPalette> = {};
+    row.split(' ').forEach((hex, i) => {
+      if (hex !== '.') slots[GAME_SLOTS[i]] = hex;
+    });
+    fitted = slots;
+    VISION_FIT_CACHE.set(key, fitted);
+  }
+  return fitted;
+}
+
 /** The chrome tokens a theme paints the window with. */
 export function themeTokens(theme: AppTheme): ChromeTokens {
   return deriveChrome(theme.xterm, theme.chrome);
 }
 
 /** The palette the game draws in while you play. With Fit game colors on
- *  (`fit`) it is the published palette with the theme's fitted slots laid
- *  over it, unless the theme keeps out. Off, or for a theme with nothing
- *  fitted, it is the published palette. The window tokens, Settings and
- *  log exports read the published palette, theme.xterm. */
-export function playPalette(theme: AppTheme, fit: boolean): XtermPalette {
-  if (!fit || theme.fitGameColors === false || !theme.fitted) return theme.xterm;
-  return { ...theme.xterm, ...theme.fitted };
+ *  (`fit`) it is the published palette with the slots the theme fits for
+ *  your color vision laid over it (visionFitOf), unless the theme keeps
+ *  out. Off, or for a theme with nothing fitted, it is the published
+ *  palette. The window tokens, Settings and log exports read the
+ *  published palette, theme.xterm. */
+export function playPalette(
+  theme: AppTheme,
+  fit: boolean,
+  vision: ColorVision = 'typical',
+): XtermPalette {
+  if (!fit || theme.fitGameColors === false) return theme.xterm;
+  const fitted = visionFitOf(theme, vision);
+  if (!fitted || Object.keys(fitted).length === 0) return theme.xterm;
+  return { ...theme.xterm, ...fitted };
 }
 
 // User-authored themes, set by the Settings UI on load. Merged into

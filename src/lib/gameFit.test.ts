@@ -5,6 +5,7 @@ import {
   COLOR_VISIONS,
   fit,
   GAME_FIXED_COLORS,
+  GAME_SLOTS,
   holdsVision,
   needsFit,
   seenBy,
@@ -12,7 +13,7 @@ import {
   xterm256,
   type ColorVision,
 } from './gameFit';
-import { BUILTIN_THEMES, findTheme, type XtermPalette } from './themes';
+import { BUILTIN_THEMES, findTheme, visionFitOf, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
 // check as it stands.
@@ -261,17 +262,20 @@ describe('color vision', () => {
   });
 });
 
-// Every built in theme ships its fit worked out ahead, in themes.ts.
-// After a change to a published palette or to the fit, fit each one
-// again, about two seconds a theme, with
+// Every built in theme ships its fit worked out ahead, in themes.ts,
+// for Typical and for each other color vision (VISION_FITS). After a
+// change to a published palette or to the fit, fit each one again,
+// about two seconds a theme for Typical and up to eight for another
+// vision, with
 //
 //   VOSH_FIT_THEMES=1 npx vitest run src/lib/gameFit.test.ts
 //
-// A theme that now fits to other colors fails and prints the block to
-// paste in its place.
+// A theme that now fits to other colors fails and prints the block or
+// the row to paste in its place.
 describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () => {
   const block = (fitted: Partial<XtermPalette>) =>
     ['fitted: {', ...Object.entries(fitted).map(([k, v]) => `  ${k}: '${v}',`), '},'].join('\n');
+  const row = (fitted: Partial<XtermPalette>) => GAME_SLOTS.map((k) => fitted[k] ?? '.').join(' ');
 
   for (const theme of BUILTIN_THEMES) {
     it(theme.id, { timeout: 30_000 }, () => {
@@ -285,5 +289,16 @@ describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () =
       const want = Object.keys(fresh).length > 0 ? fresh : undefined;
       expect(theme.fitted, `${theme.id} now fits to\n${block(fresh)}`).toEqual(want);
     });
+    for (const vision of COLOR_VISIONS.filter((v) => v !== 'typical')) {
+      it(`${theme.id} ${vision}`, { timeout: 60_000 }, () => {
+        if (theme.fitGameColors === false) return;
+        // The Typical fit themes.ts ships, which the test above holds to
+        // the fitter, so each vision reads it as fit() would.
+        const fresh = fit(theme.xterm, vision, theme.fitted ?? {});
+        const now = visionFitOf(theme, vision) ?? {};
+        const kept = fresh === (theme.fitted ?? {}) ? 'the Typical fit' : `'${row(fresh)}'`;
+        expect(now, `${theme.id} ${vision} now fits to ${kept}`).toEqual(fresh);
+      });
+    }
   }
 });
