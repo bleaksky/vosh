@@ -359,8 +359,8 @@ describe('colorVisionNote', () => {
   it('says nothing for Typical, or where a vision changes the game text and the window', () => {
     expect(colorVisionNote(findTheme('nord'), 'typical', true)).toBe('');
     expect(visionTunesWindow(findTheme('nord'), 'typical')).toBe(false);
-    expect(colorVisionNote(findTheme('nord'), 'deuteranopia', true)).toBe('');
-    expect(visionTunesWindow(findTheme('nord'), 'deuteranopia')).toBe(true);
+    expect(colorVisionNote(findTheme('rubric'), 'deuteranopia', true)).toBe('');
+    expect(visionTunesWindow(findTheme('rubric'), 'deuteranopia')).toBe(true);
   });
 
   it('says the game text keeps its published colors while Fit game colors is off', () => {
@@ -377,7 +377,7 @@ describe('colorVisionNote', () => {
       'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
     );
     expect(colorVisionNote(findTheme('triad'), 'tritanopia', true)).toBe(
-      "Triad already keeps the window's status colors apart for tritanopia, so only the game text changes.",
+      'Triad already keeps these colors apart for tritanopia, so nothing changes.',
     );
     // Every step that would part Catppuccin's red from its green for a
     // protanope fades a color, so its game text stays as it is.

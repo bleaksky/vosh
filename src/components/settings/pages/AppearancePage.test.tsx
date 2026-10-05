@@ -418,14 +418,16 @@ describe('AppearancePage', () => {
     expect(typical.saved?.color_vision).toBe('deuteranopia');
     const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
     expect(picked.value).toBe('tritanopia');
-    // Nord changes its game text and its window for a tritanope, so the
-    // row says nothing more.
-    expect(picked.label).not.toContain('already');
+    // Nord already keeps its window apart for a tritanope, so the row says
+    // only the game text changes.
+    expect(picked.label).toContain(
+      "Nord already keeps the window's status colors apart for tritanopia, so only the game text changes.",
+    );
     // While Fit game colors is off, the row says the game text keeps its
     // published colors and the window still follows.
     const off = await visionRow({
       ...config(),
-      color_vision: 'tritanopia',
+      color_vision: 'deuteranopia',
       fit_game_colors: false,
     });
     expect(off.label).toContain(

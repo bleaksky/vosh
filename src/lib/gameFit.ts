@@ -28,9 +28,10 @@
 // apart as a typical eye sees it in the Typical fit (visionChecks). It
 // moves lightness first, and turns a hue a little only where lightness
 // leaves a pair short (HUE_TURN). No color it moves runs into body text,
-// white or bold white (textGuards). A built in theme ships them in
-// themes.ts (VISION_FITS) where the fit for a vision moves anything, and
-// gameFit.test.ts fits them again with VOSH_FIT_THEMES=1.
+// white or bold white (textGuards), and a fit that moves no color far
+// enough to see keeps the Typical fit (VISIBLE_CHANGE). A built in theme
+// ships them in themes.ts (VISION_FITS) where the fit for a vision moves
+// anything, and gameFit.test.ts fits them again with VOSH_FIT_THEMES=1.
 
 import { indexedRgb } from './bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
@@ -594,6 +595,35 @@ export const GUARD_SHARE = 0.75;
  *  reads as body text. */
 export const TEXT_SLOTS: readonly GameSlot[] = ['foreground', 'white', 'brightWhite'];
 
+/** How far short of its target, in OKLab dE times 100, a pair may stand
+ *  and still count as apart: the least difference OKLab counts as one
+ *  an eye tells. */
+export const VISION_SLACK = 2;
+
+/** The least change, in OKLab dE times 100, a fit for a color vision
+ *  makes to the color it moves most. A fit that moves nothing this far
+ *  is a change no one sees, so the fit keeps the Typical colors, and
+ *  the Color vision row counts a change only this large. */
+export const VISIBLE_CHANGE = 3;
+
+/** The most any slot of `keys` moves from `a` to `b`, in OKLab dE times
+ *  100 as a typical eye sees it. A color that is not hex counts as no
+ *  move when it stays the same and as a move past any bound when not. */
+export function largestMove<K extends string>(
+  a: Readonly<Record<K, string>>,
+  b: Readonly<Record<K, string>>,
+  keys: readonly K[],
+): number {
+  let most = 0;
+  for (const k of keys) {
+    if (a[k] === b[k]) continue;
+    const p = parseHex(a[k]);
+    const q = parseHex(b[k]);
+    most = Math.max(most, p && q ? deltaEOk(p, q) : Infinity);
+  }
+  return most;
+}
+
 /** The cue pairs a fit for `vision` keeps apart. Every vision other
  *  than Typical keeps red apart from green, bright yellow and yellow,
  *  and Tritanopia also keeps cyan apart from green and blue. Typical
@@ -617,7 +647,8 @@ export interface VisionCheck {
 
 /** Each pair `vision` keeps apart (visionPairs), measured in `p` through
  *  that vision against what a typical eye sees of it in `typical`, the
- *  Typical fit laid over the published colors. */
+ *  Typical fit laid over the published colors. A pair within
+ *  VISION_SLACK of its target counts as apart. */
 export function visionChecks(
   p: XtermPalette,
   typical: XtermPalette,
@@ -628,14 +659,15 @@ export function visionChecks(
   return visionPairs(vision).map(([a, b]) => {
     const need = dE(typical[a], typical[b]);
     const value = dECvd(p[a], p[b], kind);
-    return { id: `${a}/${b}`, value: +value.toFixed(1), need: +need.toFixed(1), ok: value >= need };
+    const ok = value >= need - VISION_SLACK;
+    return { id: `${a}/${b}`, value: +value.toFixed(1), need: +need.toFixed(1), ok };
   });
 }
 
 /** Whether `p` keeps every pair `vision` keeps apart at least as far
- *  apart, seen through it, as a typical eye sees it in `typical`. A
- *  palette that holds them as its Typical fit stands needs no fit for
- *  the vision. Typical holds every palette. */
+ *  apart, seen through it, as a typical eye sees it in `typical`, give
+ *  or take VISION_SLACK. A palette that holds them as its Typical fit
+ *  stands needs no fit for the vision. Typical holds every palette. */
 export function holdsVision(p: XtermPalette, typical: XtermPalette, vision: ColorVision): boolean {
   return visionChecks(p, typical, vision).every((c) => c.ok);
 }
@@ -1035,8 +1067,9 @@ const cheapest = <S extends Search>(runs: S[]) =>
  *  red, green and for a tritanope cyan up to HUE_TURN degrees, kept
  *  where it parts the pairs further, and where that still leaves one
  *  short, one more up to HUE_TURN_FAR, kept where it closes FAR_GAIN
- *  more of the gap. Where nothing parts a pair at all, the fit is the
- *  Typical fit. That takes up to two seconds. */
+ *  more of the gap. Where the best of them moves no color as far as
+ *  VISIBLE_CHANGE, the fit is the Typical fit. That takes up to two
+ *  seconds. */
 export function fit(
   src: XtermPalette,
   vision: ColorVision = 'typical',
@@ -1088,7 +1121,8 @@ export function fit(
     if (far.gap < best.gap - FAR_GAIN) best = far;
   }
   const p = best.palette;
-  // Every step that parts a pair further gives something up.
-  if (GAME_SLOTS.every((k) => p[k] === from[k])) return base;
+  // Where every step that parts a pair further gives something up, or
+  // the best moves no color far enough to see, the Typical fit plays.
+  if (largestMove(from, p, GAME_SLOTS) < VISIBLE_CHANGE) return base;
   return movedFrom(src, p);
 }

@@ -12,6 +12,7 @@ import {
   HUE_LIMIT,
   HUE_TURN,
   HUE_TURN_FAR,
+  largestMove,
   needsFit,
   needsVisionFit,
   seenApart,
@@ -22,8 +23,10 @@ import {
   turnHue,
   turnRoom,
   turnSlots,
+  VISIBLE_CHANGE,
   visionChecks,
   visionPairs,
+  VISION_SLACK,
   visionSlots,
   xterm256,
 } from './gameFit';
@@ -223,6 +226,19 @@ describe('color vision', () => {
     );
   });
 
+  // Kanso Zen's Typical fit stands cyan 0.3 nearer green, as a tritanope
+  // sees them, than a typical eye sees them, less than VISION_SLACK, so
+  // the pair counts as apart.
+  it('counts a pair within VISION_SLACK of its target as apart', () => {
+    expect(VISION_SLACK).toBe(2);
+    const kanso = findTheme('kanso-zen');
+    const typical = { ...kanso.xterm, ...kanso.fitted };
+    expect(visionChecks(typical, typical, 'tritanopia').find((c) => c.id === 'cyan/green')).toEqual(
+      { id: 'cyan/green', value: 14.4, need: 14.7, ok: true },
+    );
+    expect(holdsVision(typical, typical, 'tritanopia')).toBe(true);
+  });
+
   it('reads a saved vision and takes anything else as Typical', () => {
     expect(COLOR_VISIONS.map(toColorVision)).toEqual(COLOR_VISIONS);
     expect(toColorVision('deutan')).toBe('typical');
@@ -241,20 +257,40 @@ describe('color vision', () => {
     expect(needsVisionFit({ ...TRIAD, red: 'crimson' }, 'deuteranopia')).toBe(false);
   });
 
-  // The fit themes.ts ships for Triad under Deuteranopia. Lighter green
-  // would run into body text and darker green into its floor, so only red
-  // moves, turning 5 degrees toward orange to its limit at 33. Triad
-  // still passes all 46 checks.
-  it('fits Triad for a deuteranope, lightness first and then a small turn', () => {
-    const fitted = fit(TRIAD, 'deuteranopia', {});
-    expect(fitted).toEqual({ red: '#fa6346' });
-    const play = { ...TRIAD, ...fitted };
-    expect(short(play)).toEqual([]);
-    expect(visionChecks(play, TRIAD, 'deuteranopia').map((c) => c.value)).toEqual([
-      12.1, 25.1, 15.6,
+  // The fit themes.ts ships for Tango Dark under Protanopia. Green
+  // lightens and turns 16 degrees toward teal, from 136 to 151, and
+  // yellow lightens a touch, so a protanope sees red as far from green
+  // and from yellow as a typical eye does. Every check the Typical fit
+  // passes still passes, and none it misses falls further short.
+  it('fits Tango Dark for a protanope, lightness first and then a small turn', () => {
+    const tango = findTheme('tango-dark');
+    const typical = { ...tango.xterm, ...tango.fitted };
+    const play = { ...tango.xterm, ...fit(tango.xterm, 'protanopia', tango.fitted) };
+    expect(GAME_SLOTS.filter((k) => play[k] !== typical[k])).toEqual(['green', 'yellow']);
+    expect([play.green, play.yellow]).toEqual(['#7bffa3', '#e0bc3a']);
+    expect(visionChecks(typical, typical, 'protanopia').map((c) => c.value)).toEqual([
+      36.5, 36.7, 22.8,
     ]);
-    expect(hue(play.red) - hue(TRIAD.red)).toBeCloseTo(5, 0);
-    expect(hue(play.red)).toBeCloseTo(HUE_LIMIT.red, 0);
+    expect(visionChecks(play, typical, 'protanopia').map((c) => c.value)).toEqual([38.9, 36.7, 24]);
+    expect(holdsVision(play, typical, 'protanopia')).toBe(true);
+    expect(hue(play.green) - hue(typical.green)).toBeCloseTo(16, 0);
+    expect(short(play)).toEqual(['T2 brightRed Lc 53.2', 'T3 red Lc 36.2', 'T6 green pair dE 7.7']);
+  });
+
+  // Every step that would part Triad's red from its green for a
+  // deuteranope fades red or green under its floor or brings green into
+  // body text, and red reaches its hue limit after 4 degrees. That best
+  // fit moves red 1.9, too little to see, so Triad plays its Typical
+  // colors for a deuteranope. Kanso Zen does the same.
+  it('keeps the Typical fit where the best fit moves no color far enough to see', () => {
+    expect(VISIBLE_CHANGE).toBe(3);
+    expect(needsVisionFit(TRIAD, 'deuteranopia')).toBe(true);
+    const none = {};
+    expect(fit(TRIAD, 'deuteranopia', none)).toBe(none);
+    expect(largestMove(TRIAD, { ...TRIAD, red: '#fa6346' }, GAME_SLOTS)).toBeCloseTo(1.9, 1);
+    const kanso = findTheme('kanso-zen');
+    expect(needsVisionFit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(true);
+    expect(fit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(kanso.fitted);
   });
 
   it('keeps every color a vision moves clear of body text, white and bold white', () => {
@@ -267,6 +303,9 @@ describe('color vision', () => {
       ['red', 'white'],
       ['red', 'brightWhite'],
     ]);
+    // A color that is not hex moves past any bound.
+    expect(largestMove(TRIAD, TRIAD, GAME_SLOTS)).toBe(0);
+    expect(largestMove(TRIAD, { ...TRIAD, red: 'crimson' }, GAME_SLOTS)).toBe(Infinity);
   });
 
   it('moves only the colors of the pairs a vision keeps apart and their twins', () => {
