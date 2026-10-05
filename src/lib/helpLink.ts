@@ -1,6 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
-import { HELP_GOTO } from '../ipc/events';
+import { emitHelpGoto, openHelpWindow } from '../ipc/windows';
 import { rankTopics, resolveHelpTarget } from './helpNav';
 
 // Opening Help from another window, the twin of settingsLink.ts. The
@@ -13,13 +11,6 @@ import { rankTopics, resolveHelpTarget } from './helpNav';
 /** Where a cold open finds its target. */
 export const HELP_PENDING_KEY = 'vosh.help.pending';
 
-/** Open Help, or bring it forward, where it is. */
-export function openHelpWindow(): void {
-  invoke('open_help_window').catch((e: unknown) => {
-    console.error('[help] open_help_window failed', e);
-  });
-}
-
 /** Open Help on `target`, a topic id like `shape.prompt-show`, a topic
  *  number like `9.3`, or words to search for. */
 export function openHelpTopic(target: string): void {
@@ -28,7 +19,7 @@ export function openHelpTopic(target: string): void {
   } catch {
     // Storage unavailable. The event still reaches an open window.
   }
-  void emit(HELP_GOTO, target);
+  void emitHelpGoto(target);
   openHelpWindow();
 }
 

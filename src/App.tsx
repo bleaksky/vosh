@@ -34,7 +34,7 @@ import {
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
 import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
-import { FONT_CHANGED, HELP_OPEN, THEME_TERMINAL_COLORS_CHANGED } from './ipc/events';
+import { FONT_CHANGED, THEME_TERMINAL_COLORS_CHANGED } from './ipc/events';
 import {
   nativeSurfaceFind,
   nativeSurfaceFindClear,
@@ -75,6 +75,7 @@ import {
   type TerminalLineHeight,
 } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
+import { menuCopy, openHelpWindow, openSettingsWindow, subscribeHelpOpen } from './ipc/windows';
 import { subscribeMigrationApplied } from './ipc/wizard';
 import {
   applyAndBroadcastTheme,
@@ -111,7 +112,6 @@ import {
   buildMenuState,
   commandRepeats,
   listenAppMenu,
-  menuCopy,
   pageHasSelection,
   requestSessionMenu,
   resolveShortcut,
@@ -119,8 +119,8 @@ import {
 } from './lib/appMenu';
 import { getImmState, subscribeImmState } from './lib/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
-import { helpNoMatchNotice, helpOpensOn, openHelpTopic, openHelpWindow } from './lib/helpLink';
+import { openSettingsTab } from './lib/settingsLink';
+import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
@@ -891,8 +891,8 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen<string>(HELP_OPEN, (event) => {
-      const words = typeof event.payload === 'string' ? event.payload.trim() : '';
+    subscribeHelpOpen((payload) => {
+      const words = typeof payload === 'string' ? payload.trim() : '';
       if (!helpOpensOn(words)) {
         if (words.length > 0) {
           writeLiveRef.current(`\x1b[38;5;244m${helpNoMatchNotice(words)}\x1b[0m\r\n`);

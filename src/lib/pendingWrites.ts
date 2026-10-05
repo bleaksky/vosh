@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { FLUSH_PENDING_WRITES } from '../ipc/events';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { pendingWritesFlushed, subscribeFlushPendingWrites } from '../ipc/windows';
 
 // Writes a window holds back for a moment, and the one place that sends
 // them all at once. Settings saves a change after a short pause, the
@@ -196,23 +195,19 @@ export async function runCloseRequest(steps: {
 
 // ── Quit ────────────────────────────────────────────────────────────
 
-/** The command a window answers the backend's quit request with, once
- *  it has sent what it held. */
-const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
-
 /** Send what this window holds when the backend asks on quit, then tell
  *  the backend, which waits a short time for every window before it
  *  writes the profile and exits. The backend asks each window once a
  *  round, so every request gets an answer. */
 export function listenForQuitFlush(options: { commitFocus?: boolean } = {}): Promise<UnlistenFn> {
-  return listen<unknown>(FLUSH_PENDING_WRITES, () => {
+  return subscribeFlushPendingWrites(() => {
     void answerQuitFlush(options.commitFocus === true);
   });
 }
 
 async function answerQuitFlush(commitFocus: boolean): Promise<void> {
   await sendPendingWrites({ commitFocus });
-  await invoke(FLUSH_DONE_COMMAND).catch((e: unknown) =>
+  await pendingWritesFlushed().catch((e: unknown) =>
     console.error('[writes] telling the backend failed', e),
   );
 }

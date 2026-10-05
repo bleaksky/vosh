@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { HELP_FIND, HELP_GOTO } from './ipc/events';
 import { getUiConfig, type UiConfig } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
+import { subscribeHelpFind, subscribeHelpGoto } from './ipc/windows';
 import {
   applyThemePrefs,
   getCurrentThemeId,
@@ -214,10 +213,10 @@ export function HelpApp() {
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void listen<string>(HELP_GOTO, (event) => {
-      if (typeof event.payload !== 'string') return;
+    void subscribeHelpGoto((link) => {
+      if (typeof link !== 'string') return;
       clearPendingTarget();
-      const target = resolveHelpTarget(event.payload);
+      const target = resolveHelpTarget(link);
       if (target) land(target);
       void getCurrentWindow().setFocus();
     }).then((fn) => {
@@ -247,7 +246,7 @@ export function HelpApp() {
     document.addEventListener('keydown', onKey);
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen(HELP_FIND, focusSearch)
+    subscribeHelpFind(focusSearch)
       .then((fn) => {
         if (cancelled) fn();
         else unlisten = fn;
