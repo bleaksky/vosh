@@ -689,3 +689,16 @@ describe('the worlds each preset suits', () => {
     }
   });
 });
+
+describe('the Disarms and fading buffs preset', () => {
+  const sends = (name: string) =>
+    presetTriggers(presetById('disarm_buff_fade')!)
+      .find((t) => t.name === name)!
+      .actions.filter((a) => a.kind === 'send')
+      .map((a) => a.template);
+
+  it('takes a secondary weapon back with dual and a primary with wield', () => {
+    expect(sends('disarm.secondary')).toEqual(['get 1.;dual 1.']);
+    expect(sends('disarm.primary')).toEqual(['get 1.;wield 1.']);
+  });
+});
