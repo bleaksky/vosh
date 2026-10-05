@@ -11,6 +11,7 @@ import {
   onTerminalClicked,
   onTerminalCursor,
 } from '../ipc/nativeSurface';
+import { useTauriEvent } from '../ipc/useTauriEvent';
 import { getCurrentThemeId } from '../theme/theme';
 import { findTheme, themeTokens } from '../theme/themes';
 import { parseHex, toRgba } from '../theme/color';
@@ -165,22 +166,8 @@ export function useNativeSurfaceBridge({
   // DOM mouseup follows. The backend emits an event on release instead,
   // and the input focuses here, matching the DOM mouseup handler that
   // covers the rest of the window.
-  useEffect(() => {
-    if (!nativeSurfaceEnabled()) return;
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void onTerminalClicked(() => {
-      focusInput();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-    // The window passes a focusInput that reads its input ref as it
-    // runs, so the one from mount stays right.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useTauriEvent(
+    (cb) => (nativeSurfaceEnabled() ? onTerminalClicked(cb) : Promise.resolve(() => {})),
+    () => focusInput(),
+  );
 }
