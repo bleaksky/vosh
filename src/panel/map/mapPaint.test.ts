@@ -15,14 +15,14 @@ import {
   type MapTilesPayload,
 } from './mapTiles';
 import {
-  GlyphsOverlay,
   cellClass,
   computeAnchor,
   depthAlphaForRing,
   drawOffFloorOverlay,
   drawSquares,
   drawTileset,
-} from './MapView';
+} from './mapPaint';
+import { GlyphsOverlay } from './MapView';
 
 // The packets come from fixtures/gmcp/aabahran/map, built by the game's
 // own generate_map and gmcp_send_map over its area files.
