@@ -1,0 +1,347 @@
+/* The map. The map view's canvas host and glyph grid, then the map pane
+   around it with its drawing, its style and zoom button, and its rows. */
+
+/* MapView internals, the layout its canvas renderer expects. */
+
+.server-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-canvas-host {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-canvas-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* HTML glyph overlay. Sits absolutely positioned over the canvas
+   and is translated so the player cell (`@`) lands at the host's
+   geometric center. It draws in the glyph face, the bundled monospace
+   face under As designed and the panel face under any other Panel
+   font, and every cell keeps a box in em, so any font tiles, matching
+   tintin's character-grid map. The translate baseline is (50%, 50%) of
+   the host; the inline transform on .map-glyph-grid shifts the grid by
+   (-playerCol * 1em, -playerRow * 1em) to land the player there. */
+.map-glyph-grid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-family: var(--font-panel-glyph);
+  font-weight: 700;
+  line-height: 1;
+  white-space: pre;
+  pointer-events: none;
+  user-select: none;
+  /* font-size + transform set inline so zoom and player offset both
+     flow from a single source of truth in the component. */
+}
+
+.map-glyph-row {
+  display: block;
+  white-space: nowrap;
+}
+
+/* The doubled output grid alternates room rows with bridge rows.
+   Each row's height is set explicitly so cells in the row align on
+   the same baseline regardless of glyph content. */
+.map-glyph-row-room {
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-row-bridge {
+  height: 0.35em;
+  line-height: 0.35em;
+}
+
+/* Per-cell sizing. Rooms keep a 1em × 1em box so the sector glyph
+   has room to render cleanly. Bridge cells (the in-between cells
+   that hold `─` or `│` connectors) are 0.35em — narrow enough to
+   crunch the map toward squares-mode density while keeping the
+   connection chars visible. Hardcoded (instead of a CSS var) so the
+   computed cell pitch in JS and the rendered pitch in DOM cannot
+   drift; the JS side uses BRIDGE_EM = 0.35 to match. */
+.map-glyph-cell {
+  display: inline-block;
+  text-align: center;
+  vertical-align: top;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.map-glyph-cell-room {
+  width: 1em;
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-cell-hbridge {
+  width: 0.35em;
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-cell-vbridge {
+  width: 1em;
+  height: 0.35em;
+  line-height: 0.35em;
+}
+
+.map-glyph-cell-corner {
+  width: 0.35em;
+  height: 0.35em;
+}
+
+/* Player marker. Bold yellow `@` with a faint background-color halo
+   so the eye locks on it even on a busy map. */
+.map-glyph-player {
+  background: rgba(255, 215, 0, 0.16);
+  border-radius: 1px;
+}
+
+/* Off-floor cells (rooms one floor above / below / multi-z away).
+   Visible enough that the player can see structure on adjacent
+   floors at a glance, dim enough that the eye does not confuse them
+   with same-floor cells. Above/below could carry a hue shift here
+   to distinguish direction, but the alpha drop is the primary cue. */
+.map-glyph-above,
+.map-glyph-below,
+.map-glyph-far {
+  opacity: 0.32;
+}
+
+.map-glyph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tertiary);
+  font-size: 0.85em;
+}
+
+/* ── Map ─────────────────────────────────────────────────────────── */
+
+.pane-map {
+  padding-bottom: round(8px * var(--mud-scale), 1px);
+}
+
+/* The drawing: inset 8, radius 8, no fill or border of its own. The
+   map paints on the panel's color, so the rooms sit in the pane with
+   no box around them. It takes the height the rows leave and keeps at
+   least 96 px. The rooms it clips at its sides fade out over 12 px
+   instead of ending in half squares. */
+.pane-map-box {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 96px;
+  margin: 0 8px;
+  border-radius: var(--r-row);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+
+.pane-map-box .server-view {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The 3D style turns and tilts as you drag it, so it shows the open
+   hand, and it takes a Tab stop for its arrow keys. */
+.pane-map-box .map-canvas-host.is-3d {
+  cursor: grab;
+  touch-action: none;
+}
+
+.pane-map-box .map-canvas-host:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: var(--r-row);
+}
+
+/* The fade would hide the sides of that ring, so the drawing shows
+   whole while it has the keyboard. */
+.pane-map-box:has(.map-canvas-host:focus-visible) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.pane-map-empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: round(3px * var(--mud-scale), 1px) 4px round(3px * var(--mud-scale), 1px) 10px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  color: var(--tertiary);
+  pointer-events: none;
+}
+
+/* The map's style and zoom button, in the drawing's bottom right
+   corner. It shows while you point at the map, tab to it, or have its
+   menu open, so the drawing stands alone at rest. It sits on the
+   panel's own color to stay readable over rooms. */
+.pane-map-tools {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  background-color: var(--panel);
+  color: var(--tertiary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  cursor: default;
+}
+
+.pane-map-box:hover .pane-map-tools,
+.pane-map-tools:focus-visible,
+.pane-map-tools[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.pane-map-tools:hover {
+  background-image: linear-gradient(var(--hover), var(--hover));
+  color: var(--secondary);
+}
+
+.pane-map-tools[aria-expanded='true'] {
+  background-image: linear-gradient(var(--selrow), var(--selrow));
+  color: var(--secondary);
+}
+
+/* A light theme's selected fill is white, so it takes a ring. */
+:root[data-appearance='light'] .pane-map-tools[aria-expanded='true'] {
+  box-shadow: 0 0 0 1px var(--sep);
+}
+
+.pane-map-tools:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pane-map-tools svg {
+  display: block;
+}
+
+/* The zoom percent on the menu's Actual size row. */
+.pane-map-zoom {
+  flex: none;
+  margin-left: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-map-tools {
+    transition: none;
+  }
+}
+
+/* The band holds as many rows as MapPane sets in --band-rows, filled or
+   not, so the drawing above it keeps one height while you walk. It
+   gives way only once the drawing is at its floor, and MapPane then
+   sets fewer rows. The room row stays. */
+.pane-map-rows {
+  flex: 0 1 auto;
+  height: calc(var(--mud-row) * var(--band-rows, 1));
+  min-height: var(--mud-row);
+  margin-top: round(4px * var(--mud-scale), 1px);
+  overflow: hidden;
+}
+
+.pane-map-exits,
+.pane-map-count {
+  font-weight: 400;
+  color: var(--tertiary);
+}
+
+/* The exits sit at the right of the terrain row, so the room name has
+   its whole row. On a narrow panel they give way with an ellipsis once
+   the row runs short. */
+.pane-map-where .pane-map-exits {
+  min-width: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A band with no terrain row keeps the exits beside the name. They keep
+   their full width until the name is down to a floor of 3em, then give
+   way with an ellipsis, so six exits in a wide face never push the name
+   out of its row. The 8px is the gap .pane-row-value leaves before the
+   exits. */
+.pane-map-room .pane-map-exits {
+  min-width: 0;
+  max-width: calc(100% - 3em - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-map-person .pane-row-name {
+  color: var(--secondary);
+}
+
+.pane-map-more .pane-row-name {
+  color: var(--tertiary);
+}
+
+/* The room's terrain and region, a quiet caption under its name. It
+   sits at the top of its row so it reads with the name above it, and
+   the people keep their distance below. Where the row runs short, the
+   region gives way with an ellipsis and takes its dot along, so the
+   row never ends on a stray dot. */
+.pane-map-where {
+  align-items: flex-start;
+  font-size: round(11px * var(--mud-scale), 1px);
+  line-height: round(14px * var(--mud-scale), 1px);
+  color: var(--tertiary);
+}
+
+.pane-map-terrain {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pane-map-region {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-map-sep {
+  margin: 0 5px;
+}

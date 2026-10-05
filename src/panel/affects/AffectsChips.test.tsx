@@ -297,7 +297,7 @@ describe('ChipsView', () => {
     expect(rule('.pane-chip-harmful')).toContain('var(--danger) 55%');
     const chips = panelCss.slice(
       panelCss.indexOf('/* Board Affects C'),
-      panelCss.indexOf('/* ── Map'),
+      panelCss.indexOf('/* ── Group'),
     );
     expect(chips).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(chips).not.toContain('dashed');
@@ -383,7 +383,7 @@ describe('Draining chips', () => {
     // theme changes only the red fill and the yellow hours, by the
     // theme's own appearance, never by its id.
     const drainCss = panelCss
-      .slice(drainAt, panelCss.indexOf('/* ── Map'))
+      .slice(drainAt, panelCss.indexOf('/* ── Group'))
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\s+/g, ' ');
     const selectors = [...drainCss.matchAll(/([^{}]+)\{[^}]*\}/g)].flatMap((m) =>
