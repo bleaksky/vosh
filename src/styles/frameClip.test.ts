@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import frameCss from '../styles/frame.css?raw';
-import settingsCss from '../styles/settings.css?raw';
+import frameCss from './frame.css?raw';
+import settingsCss from './settings.css?raw';
 
 // A frame that clips with overflow hidden still scrolls from script,
 // and a search hit once slid the whole Help window up that way. The
