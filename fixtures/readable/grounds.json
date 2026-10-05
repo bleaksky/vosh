@@ -24,7 +24,9 @@
     { "theme": "nightfly", "background": "#011627" },
     { "theme": "melange-dark", "background": "#292522" },
     { "theme": "melange-light", "background": "#f1f1f1" },
-    { "theme": "modus-vivendi", "background": "#000000" }
+    { "theme": "modus-vivendi", "background": "#000000" },
+    { "theme": "harbor-dark", "background": "#0d1117" },
+    { "theme": "iceberg-dark", "background": "#161821" }
   ],
   "colors": {
     "true_color": ["#8fa7d9"],

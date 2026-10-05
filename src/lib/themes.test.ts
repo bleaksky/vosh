@@ -288,6 +288,8 @@ describe('contrast floors', () => {
       'classic-vivid': '#ffaa00',
       'high-contrast': '#ff55ff',
       'green-screen': '#ff55ff',
+      'harbor-dark': '#2f81f7',
+      'iceberg-dark': '#a093c7',
     };
     for (const [id, accent] of Object.entries(accents)) {
       expect(themeTokens(findTheme(id)).accent, id).toBe(accent);
@@ -758,6 +760,48 @@ describe('fitted game colors', () => {
     expect(missed('modus-vivendi')).toEqual(['T3 red Lc 43.5']);
     // Melange Light passes 35 as published.
     expect(checks(findTheme('melange-light').xterm).filter((c) => !c.ok)).toHaveLength(11);
+  });
+
+  // The palettes the Themes review read into shortlist.json and the fits
+  // its survey computed (metrics/fit-survey.json, github-dark-default and
+  // iceberg-dark), which you picked on October 5.
+  it('ships Harbor Dark and Iceberg Dark as the review drew them', () => {
+    const harbor = findTheme('harbor-dark');
+    const iceberg = findTheme('iceberg-dark');
+    expect(BUILTIN_THEMES.slice(-3).map((t) => t.id)).toEqual([
+      'modus-vivendi',
+      'harbor-dark',
+      'iceberg-dark',
+    ]);
+    expect([harbor.label, harbor.source, harbor.author]).toEqual([
+      'Harbor Dark',
+      'GitHub Dark Default',
+      'GitHub',
+    ]);
+    expect([iceberg.label, iceberg.source, iceberg.author]).toEqual([
+      'Iceberg Dark',
+      'Iceberg',
+      'cocopon',
+    ]);
+    expect(Object.values(harbor.xterm).join(' ')).toBe(
+      '#0d1117 #e6edf3 #2f81f7 #0d1117 #343941 #e6edf3 #484f58 #ff7b72 #3fb950 #d29922 ' +
+        '#58a6ff #bc8cff #39c5cf #b1bac4 #6e7681 #ffa198 #56d364 #e3b341 #79c0ff #d2a8ff ' +
+        '#56d4dd #ffffff',
+    );
+    expect(Object.values(iceberg.xterm).join(' ')).toBe(
+      '#161821 #c6c8d1 #c6c8d1 #161821 #272c42 #c6c8d1 #1e2132 #e27878 #b4be82 #e2a478 ' +
+        '#84a0c6 #a093c7 #89b8c2 #c6c8d1 #6b7089 #e98989 #c0ca8e #e9b189 #91acd1 #ada0d3 ' +
+        '#95c4ce #d2d4de',
+    );
+    // The review counts 26 and 15 of 46 as published.
+    expect(checks(harbor.xterm).filter((c) => c.ok)).toHaveLength(26);
+    expect(checks(iceberg.xterm).filter((c) => c.ok)).toHaveLength(15);
+    // The survey moves 11 and 15 slots and leaves these short.
+    expect(Object.keys(harbor.fitted ?? {})).toHaveLength(11);
+    expect(Object.keys(iceberg.fitted ?? {})).toHaveLength(15);
+    const missed = (id: string) => misses(id).map((c) => `${c.id} ${c.value}`);
+    expect(missed('harbor-dark')).toEqual(['T3 red Lc 40.8']);
+    expect(missed('iceberg-dark')).toEqual(['T2 yellow Lc 58.1', 'T3 red Lc 37.8']);
   });
 });
 
