@@ -11,11 +11,12 @@ import {
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { pushToast } from '../toasts';
 
-// The session the title band shows and the session menu drives. Moved
-// out of the old top bar chip so the connect logic lives in MainWindow for
-// the life of the window instead of in whichever control happens to
-// be mounted. The palette's connect entry and the Cmd+R shortcut call
-// it through MainWindow.
+// The session the title band shows and the session menu drives, with
+// the saved target Connect dials and the worlds known by name.
+// MainWindow mounts the hook once, so the connection state lives as long
+// as the window and not only while the session menu or another control
+// that shows it is mounted. The palette's connect entry and the Cmd+R
+// shortcut call it through MainWindow.
 
 export type ConnectionStatus =
   | { kind: 'idle' }
