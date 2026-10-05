@@ -897,6 +897,19 @@ describe('public/theme-credits.txt', () => {
     }
   });
 
+  it('keeps the MIT notice of the base16 scheme Monokai takes its colors from', () => {
+    const body = sectionFor('Monokai')?.body ?? '';
+    expect(body).toContain('Copyright (c) 2022 Tinted Theming');
+    expect(flat(body)).toContain(PERMISSION);
+  });
+
+  it('keeps the Apache License of the port Tokyo Night takes its slots from', () => {
+    const body = flat(sectionFor('Tokyo Night')?.body ?? '');
+    expect(body).toContain('Apache License Version 2.0, January 2004');
+    expect(body).toContain('TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION');
+    expect(body).toContain('END OF TERMS AND CONDITIONS');
+  });
+
   it('keeps the copyright line of Modus Vivendi', () => {
     expect(findTheme('modus-vivendi').license).toBe('GPL-3.0-or-later');
     expect(sectionFor('Modus Vivendi')?.body).toContain(

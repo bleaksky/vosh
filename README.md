@@ -57,7 +57,7 @@ npm run typecheck
 
 GPL v3. See `LICENSE`.
 
-The built in themes come from many authors. `public/theme-credits.txt` names the source, the author and the license of each one and keeps every MIT notice in full. Vite copies it into each build, so the notices ship with every copy of Vosh.
+The built in themes come from many authors. `public/theme-credits.txt` names the source, the author and the license of each one and keeps in full every notice their licenses ask for, MIT and Apache alike. Vite copies it into each build, so the notices ship with every copy of Vosh.
 
 ## Contributing
 
