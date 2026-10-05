@@ -40,10 +40,10 @@ import {
   familyOf,
   GAME_SLOTS,
   holdsCheck,
+  HUE_CHROMA_KEEP,
   KEPT_PAIRS,
   KEPT_SLACK,
   L_REACH,
-  largestMove,
   LEAD_SLOTS,
   MISS_SLACK,
   MOVE_MIN,
@@ -972,30 +972,118 @@ describe('color vision swaps', () => {
     }
   });
 
-  // Each family the vision turns lands inside its window, give or take
-  // the rounding to a hex color, which bends the hue of a pale color
-  // more. Every other cue color keeps its hue within 3 degrees.
-  it('turns each family into its window and keeps the hue of every other', () => {
+  // Whether `slot` of `p` sits in the window its family turns to, give
+  // or take the rounding to a hex color, which bends the hue of a pale
+  // color more. A family the vision does not turn sits in none.
+  const inWindow = (vision: Other, p: XtermPalette, slot: AnsiSlot) => {
+    const target = SWAP_TARGETS[vision][familyOf(slot)];
+    if (!target) return false;
+    const now = lch(p[slot]);
+    const slack = 1 + 0.2 / Math.max(now.C, 0.01);
+    return Math.abs(hueOff(now.h, target.hue)) <= target.reach + slack;
+  };
+  // How far the swap moves `slot` of `p`, as a typical eye sees it,
+  // where the slot turned into its window. A turned family that keeps
+  // its own hue counts as no move.
+  const turnedMove = (c: Case, p: XtermPalette, slot: AnsiSlot) =>
+    inWindow(c.vision, p, slot) ? deltaEOk(hex(c.start[slot]), hex(p[slot])) : 0;
+  // The chroma `slot` of `p` keeps at least: a turned color CHROMA_KEEP
+  // of its start chroma or of its target's, and a color that keeps its
+  // hue HUE_CHROMA_KEEP of its start chroma.
+  const chromaFloor = (c: Case, p: XtermPalette, slot: AnsiSlot) => {
+    const target = SWAP_TARGETS[c.vision][familyOf(slot)];
+    const from = lch(c.start[slot]).C;
+    if (target && inWindow(c.vision, p, slot)) return CHROMA_KEEP * Math.min(from, target.chroma);
+    return from > 0.04 ? HUE_CHROMA_KEEP * from : 0;
+  };
+
+  // The colors of a family the vision turns that keep their own hue,
+  // because no hue in their window holds the firm floors: on Catppuccin
+  // and Tokyo Night the theme's own text, yells and cabal fill the
+  // blues, so tells keep their green, and on many fitted themes newbie
+  // chat in bold green sits so near white that as a blue it would run
+  // into cabal, clan or body text.
+  const KEEP_HUE: Record<string, string> = {
+    'deuteranopia obsidian-ember fitted': 'brightGreen',
+    'protanopia obsidian-ember fitted': 'brightGreen',
+    'protanopia obsidian-ember published': 'brightGreen',
+    'tritanopia obsidian-ember fitted': 'brightBlue',
+    'deuteranopia triad published': 'brightGreen',
+    'protanopia triad published': 'brightGreen',
+    'deuteranopia tokyo-night fitted': 'red green brightGreen',
+    'deuteranopia tokyo-night published': 'green brightGreen',
+    'protanopia tokyo-night fitted': 'green brightGreen',
+    'protanopia tokyo-night published': 'green brightGreen',
+    'deuteranopia nord fitted': 'blue',
+    'deuteranopia rose-pine fitted': 'red',
+    'deuteranopia rose-pine published': 'red',
+    'protanopia rose-pine fitted': 'red brightBlue',
+    'protanopia rose-pine published': 'red blue',
+    'tritanopia gruvbox fitted': 'brightBlue',
+    'deuteranopia catppuccin fitted': 'brightGreen',
+    'deuteranopia catppuccin published': 'green brightGreen',
+    'protanopia catppuccin fitted': 'green brightGreen',
+    'protanopia catppuccin published': 'green brightGreen',
+    'protanopia dracula fitted': 'brightGreen',
+    'deuteranopia monokai fitted': 'blue',
+    'protanopia monokai fitted': 'red brightGreen brightBlue',
+    'protanopia monokai published': 'red blue',
+    'deuteranopia one-half-dark fitted': 'brightGreen',
+    'protanopia one-half-dark fitted': 'red brightGreen brightBlue',
+    'tritanopia one-half-dark fitted': 'magenta',
+    'protanopia solarized-dark published': 'red',
+    'deuteranopia tango-dark fitted': 'blue brightGreen',
+    'protanopia tango-dark fitted': 'blue brightGreen',
+    'deuteranopia classic-vivid fitted': 'brightGreen',
+    'protanopia classic-vivid fitted': 'brightGreen',
+    'deuteranopia high-contrast fitted': 'brightGreen',
+    'deuteranopia high-contrast published': 'brightGreen',
+    'protanopia high-contrast fitted': 'red blue brightGreen',
+    'protanopia high-contrast published': 'red brightGreen',
+    'deuteranopia everforest-dark fitted': 'red',
+    'tritanopia everforest-dark fitted': 'brightBlue',
+    'deuteranopia green-screen fitted': 'blue',
+    'protanopia green-screen fitted': 'blue',
+    'tritanopia srcery fitted': 'brightBlue',
+    'deuteranopia nightfly published': 'brightGreen',
+    'protanopia nightfly fitted': 'brightGreen',
+    'protanopia nightfly published': 'brightGreen',
+    'deuteranopia melange-dark fitted': 'red',
+    'deuteranopia melange-dark published': 'red',
+    'protanopia melange-light published': 'red',
+    'deuteranopia modus-vivendi published': 'brightBlue',
+    'protanopia modus-vivendi fitted': 'brightGreen',
+    'deuteranopia harbor-dark fitted': 'red brightGreen',
+    'protanopia harbor-dark fitted': 'blue brightGreen',
+    'protanopia harbor-dark published': 'brightBlue',
+    'deuteranopia iceberg-dark fitted': 'brightGreen',
+    'deuteranopia iceberg-dark published': 'brightBlue',
+    'protanopia iceberg-dark fitted': 'brightGreen brightBlue',
+    'protanopia iceberg-dark published': 'brightGreen',
+  };
+
+  it('turns each family into its window, or keeps its hue where KEEP_HUE names it', () => {
+    const kept: Record<string, string> = {};
     for (const c of CASES) {
+      const own: string[] = [];
       for (const slot of CUE_SLOTS) {
-        const at = `${c.at} ${slot}`;
-        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
-        const now = lch(c.own[slot]);
-        if (target) {
-          const slack = 1 + 0.2 / Math.max(now.C, 0.01);
-          expect(Math.abs(hueOff(now.h, target.hue)), at).toBeLessThanOrEqual(target.reach + slack);
-        } else if (c.own[slot] !== c.start[slot] && lch(c.start[slot]).C >= 0.04) {
-          expect(Math.abs(hueOff(now.h, lch(c.start[slot]).h)), at).toBeLessThan(3);
+        if (inWindow(c.vision, c.own, slot)) continue;
+        if (SWAP_TARGETS[c.vision][familyOf(slot)]) own.push(slot);
+        if (c.own[slot] !== c.start[slot] && lch(c.start[slot]).C >= 0.04) {
+          const off = Math.abs(hueOff(lch(c.own[slot]).h, lch(c.start[slot]).h));
+          expect(off, `${c.at} ${slot}`).toBeLessThan(3);
         }
       }
+      if (own.length > 0) kept[c.at] = own.join(' ');
     }
+    expect(kept).toEqual(KEEP_HUE);
   });
 
   // No swap gives up a check its start passes or falls more than
   // MISS_SLACK further short of one it misses, leaving out the T7 pairs
   // another vision sees through. No color moves more than L_REACH in
-  // lightness, red keeps its side of yellow and bold yellow, and a
-  // turned color keeps CHROMA_KEEP of its chroma, or of its target's.
+  // lightness, red keeps its side of yellow and bold yellow, and every
+  // color keeps its chroma floor (chromaFloor).
   it('holds every check, the reach in lightness, red against yellow and the chroma', () => {
     for (const c of CASES) {
       const held = checks(c.start);
@@ -1013,11 +1101,7 @@ describe('color vision swaps', () => {
         const at = `${c.at} ${slot}`;
         const moved = Math.abs(lch(c.own[slot]).L - lch(c.start[slot]).L);
         expect(moved, at).toBeLessThanOrEqual(L_REACH + 1e-9);
-        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
-        if (target) {
-          const keep = CHROMA_KEEP * Math.min(lch(c.start[slot]).C, target.chroma);
-          expect(lch(c.own[slot]).C, at).toBeGreaterThanOrEqual(keep - 1e-9);
-        }
+        expect(lch(c.own[slot]).C, at).toBeGreaterThanOrEqual(chromaFloor(c, c.own, slot) - 1e-9);
       }
       for (const y of ['yellow', 'brightYellow'] as const) {
         const was = lch(c.start.red).L - lch(c.start[y]).L;
@@ -1028,11 +1112,27 @@ describe('color vision swaps', () => {
     }
   });
 
-  // The floors and targets of the swap below the checks, firmest first
-  // (gameFit swapFor): each color clear of body text, white and bold
-  // white, the kept pairs, the channels at CHANNEL_LEAST, the lead
-  // color's move, the channel and cue floors and the parted pairs.
-  // Each reads `p`, the palette in play, against `start`.
+  // Every two channels, newbie chat and immortal talk among them, stand
+  // CHANNEL_LEAST apart on every theme, or as far as at the start if that
+  // is less, as the vision sees them and as a typical eye does.
+  it('keeps every two channels CHANNEL_LEAST apart on every theme', () => {
+    for (const c of CASES) {
+      for (const [a, b] of CHANNEL_PAIRS) {
+        const at = `${c.at} ${a}/${b}`;
+        const seen = Math.min(sees(c.start, a, b, c.vision), CHANNEL_LEAST);
+        expect(sees(c.own, a, b, c.vision), at).toBeGreaterThanOrEqual(seen - 1e-9);
+        const typical = Math.min(apart(c.start, a, b), CHANNEL_LEAST);
+        expect(apart(c.own, a, b), `${at} typical`).toBeGreaterThanOrEqual(typical - 1e-9);
+      }
+    }
+  });
+
+  // The floors and targets of the swap below the firm ones, firmest
+  // first (gameFit swapFor): each color clear of body text, white and
+  // bold white, the kept pairs, a turned color's move, the lead color's
+  // move, the channel and cue floors and the parted pairs. Each reads
+  // `p`, the palette in play, against the start. The channels at
+  // CHANNEL_LEAST stand with the checks, firmest of all.
   interface Rule {
     id: string;
     tier: number;
@@ -1040,7 +1140,8 @@ describe('color vision swaps', () => {
     value: (p: XtermPalette) => number;
     need: number;
   }
-  const rulesOf = ({ start, vision }: Case): Rule[] => {
+  const rulesOf = (c: Case): Rule[] => {
+    const { start, vision } = c;
     const out: Rule[] = [];
     const pair = (
       id: string,
@@ -1064,6 +1165,7 @@ describe('color vision swaps', () => {
         need: Math.min(apart(start, a, b), most) - less,
       });
     };
+    for (const p of CHANNEL_PAIRS) pair('least', 0, p, CHANNEL_LEAST);
     for (const k of CUE_SLOTS) {
       for (const t of TEXT_SLOTS) pair('text', 1, [k, t], VISION_GUARD, VISION_SLACK);
     }
@@ -1076,22 +1178,29 @@ describe('color vision swaps', () => {
         need: sees(start, a, b, vision) - KEPT_SLACK,
       });
     }
-    for (const p of CHANNEL_PAIRS) pair('least', 2, p, CHANNEL_LEAST);
+    const plain = CUE_SLOTS.slice(0, 6).filter((k) => SWAP_TARGETS[vision][familyOf(k)]);
+    out.push({
+      id: 'show',
+      tier: 2,
+      slots: plain,
+      value: (p) => Math.max(...plain.map((k) => turnedMove(c, p, k))),
+      need: MOVE_MIN.lead,
+    });
     LEAD_SLOTS[vision].forEach((k, i) => {
       out.push({
         id: `move ${k}`,
         tier: 3,
         slots: [k],
-        value: (p) => deltaEOk(hex(start[k]), hex(p[k])),
+        value: (p) => turnedMove(c, p, k),
         need: i === 0 ? MOVE_MIN.lead : MOVE_MIN.bold,
       });
     });
-    for (const p of CHANNEL_PAIRS) pair('channel', 4, p, CHANNEL_FLOOR);
-    for (const p of CUE_PAIRS) pair('cue', 4, p, CUE_FLOOR);
+    for (const p of CHANNEL_PAIRS) pair('channel', 5, p, CHANNEL_FLOOR);
+    for (const p of CUE_PAIRS) pair('cue', 5, p, CUE_FLOOR);
     for (const [a, b] of PARTED_PAIRS[vision]) {
       out.push({
         id: `part ${a}/${b}`,
-        tier: 5,
+        tier: 6,
         slots: [a, b],
         value: (p) => sees(p, a, b, vision),
         need: Math.min(PART_MIN[vision], apart(start, a, b)) - VISION_SLACK,
@@ -1118,9 +1227,7 @@ describe('color vision swaps', () => {
       });
       for (const slot of CUE_SLOTS) {
         if (Math.abs(lch(p[slot]).L - lch(c.start[slot]).L) > L_REACH) why.push(`${slot} reach`);
-        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
-        const keep = target ? CHROMA_KEEP * Math.min(lch(c.start[slot]).C, target.chroma) : 0;
-        if (lch(p[slot]).C < keep) why.push(`${slot} chroma`);
+        if (lch(p[slot]).C < chromaFloor(c, p, slot)) why.push(`${slot} chroma`);
       }
       return why;
     };
@@ -1128,22 +1235,30 @@ describe('color vision swaps', () => {
       const now = r.value(c.own);
       for (const k of r.slots) {
         if (!CUE_SLOTS.includes(k as AnsiSlot)) continue;
-        // Steps the swap could take: lightness at the color's hue and the
-        // chroma it aims for, and for a turned color its hue.
+        // Steps the swap could take: lightness, and for a turned color its
+        // hue, or for a color of a turned family that keeps its hue, the
+        // turn to its target.
         const target = SWAP_TARGETS[c.vision][familyOf(k as AnsiSlot)];
         const from = lch(c.start[k]);
+        const turned = inWindow(c.vision, c.own, k as AnsiSlot);
         const o = {
           L: lch(c.own[k]).L,
-          C: target ? Math.max(from.C, target.chroma) : from.C,
-          h: target ? lch(c.own[k]).h : from.h,
+          C: target && turned ? Math.max(from.C, target.chroma) : from.C,
+          h: target && turned ? lch(c.own[k]).h : from.h,
         };
         const steps = [-0.02, 0.02].map((d) => ({ ...o, L: Math.max(0, Math.min(1, o.L + d)) }));
-        if (target) steps.push({ ...o, h: o.h - 2.5 }, { ...o, h: o.h + 2.5 });
+        if (target && turned) steps.push({ ...o, h: o.h - 2.5 }, { ...o, h: o.h + 2.5 });
+        if (target && !turned) {
+          for (const side of [-1, 0, 1]) {
+            const C = Math.max(from.C, target.chroma);
+            steps.push({ L: o.L, C, h: target.hue + side * target.reach });
+          }
+        }
         for (const step of steps) {
           const p = { ...c.own, [k]: toHex(oklchToRgbInGamut(step)) };
           if (r.value(p) <= now + 0.05) continue;
           const why = holds(p);
-          if (target && Math.abs(hueOff(step.h, target.hue)) > target.reach + 0.5) {
+          if (target && turned && Math.abs(hueOff(step.h, target.hue)) > target.reach + 0.5) {
             why.push(`${k} hue window`);
           }
           for (const q of rules) {
@@ -1164,78 +1279,147 @@ describe('color vision swaps', () => {
   // Each rule each swap leaves short, how far it gets of how far it
   // needs, and what stops it going further.
   const SWAP_SHORT: Record<string, string> = {
+    'deuteranopia obsidian-ember fitted':
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, text brightGreen/brightWhite',
+    'deuteranopia obsidian-ember published':
+      'channel green/brightBlue 4.3 of 6.0, channel brightGreen/brightBlue 4.7 of 6.0. T2 green Lc, brightGreen chroma, channel brightBlue/brightMagenta, channel brightGreen/brightBlue, channel brightGreen/brightCyan, channel green/brightBlue, least brightGreen/brightBlue, least brightGreen/brightCyan, least green/brightBlue',
+    'protanopia obsidian-ember fitted':
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least brightGreen/brightCyan, text brightGreen/brightWhite',
     'protanopia obsidian-ember published':
-      'channel brightBlue/brightCyan 5.5 of 6.0. channel green/brightBlue, cue brightGreen/brightBlue, least green/brightBlue, text brightCyan/brightWhite',
+      'move brightGreen 0.0 of 6.0, channel green/brightMagenta 5.9 of 6.0. T2 brightMagenta Lc, brightGreen chroma, channel green/brightBlue, least brightGreen/brightBlue',
+    'tritanopia obsidian-ember fitted':
+      'move brightBlue 0.0 of 6.0. T6 blue pair dE, least brightBlue/brightMagenta, text brightBlue/foreground, text brightBlue/white',
+    'tritanopia obsidian-ember published':
+      'channel yellow/brightMagenta 5.1 of 5.1, channel brightYellow/brightBlue 5.3 of 6.0. T6 blue bright step dL, T6 blue pair dE, T6 magenta pair dE, T7 red/yellow dL, channel brightRed/brightMagenta, channel yellow/brightBlue, kept red/yellow, text brightBlue/foreground, text brightYellow/brightWhite',
+    'deuteranopia triad published':
+      'move brightGreen 0.0 of 6.0, channel brightBlue/brightMagenta 4.6 of 4.8. T6 magenta pair dE, brightGreen chroma, channel brightMagenta/brightCyan, channel cyan/brightMagenta, channel green/brightBlue, least cyan/brightMagenta, least green/brightBlue, text brightGreen/brightWhite, text brightGreen/foreground',
     'protanopia triad published':
-      'channel green/brightMagenta 4.7 of 6.0. T2 green Lc, channel brightBlue/brightMagenta, green hue window, least brightBlue/brightMagenta',
+      'move brightGreen 0.0 of 6.0, channel green/brightBlue 4.7 of 6.0, channel brightBlue/brightMagenta 4.0 of 4.3, part green/brightYellow 17.6 of 18.0. T6 blue pair dE, T6 magenta pair dE, brightGreen chroma, channel brightBlue/brightMagenta, channel green/brightBlue, channel green/brightCyan, channel green/brightMagenta, green hue window, least brightBlue/brightMagenta, least brightGreen/brightCyan, least green/brightBlue, move green, show, text brightGreen/brightWhite, text brightGreen/foreground, text green/foreground',
+    'tritanopia triad published':
+      'channel brightRed/brightMagenta 5.9 of 6.0. T2 brightRed Lc, T6 red pair dE, T7 red/brightRed dL, channel brightBlue/brightMagenta, channel yellow/brightMagenta',
+    'protanopia rubric published':
+      'channel brightMagenta/brightCyan 4.1 of 6.0. channel brightGreen/brightCyan, channel green/brightMagenta',
     'deuteranopia tokyo-night fitted':
-      'text green/white 7.4 of 8.0, text brightGreen/foreground 2.1 of 8.0, text brightGreen/white 7.0 of 8.0, channel green/cyan 5.0 of 6.0, channel green/cyan typical 5.0 of 6.0. T2 green Lc, T6 cyan pair dE, T6 green pair dE, channel green/blue, cue green/magenta, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text cyan/foreground',
+      'show 8.5 of 12.0, move green 0.0 of 12.0, move brightGreen 0.0 of 6.0, channel brightBlue/brightMagenta typical 5.1 of 6.0, part brightRed/brightGreen 14.6 of 18.0, part green/brightYellow 4.6 of 9.6. T3 blue Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan red/yellow, blue hue window, brightBlue hue window, brightGreen chroma, channel brightMagenta/brightCyan, channel brightRed/brightYellow, channel cyan/brightBlue, channel green/brightGreen, channel yellow/brightRed, green chroma, kept red/brightYellow, kept red/yellow, least brightMagenta/brightCyan, least cyan/brightBlue, text brightGreen/brightWhite, text brightMagenta/brightWhite, text green/brightWhite',
     'deuteranopia tokyo-night published':
-      'text green/white 7.3 of 8.0, text brightGreen/white 7.3 of 8.0, least green/brightMagenta 2.8 of 4.0, channel green/brightBlue 4.6 of 6.0, channel green/brightMagenta 2.8 of 6.0, cue brightGreen/brightMagenta 2.8 of 3.0. T2 brightBlue Lc, T2 brightGreen Lc, T2 green Lc, T6 green bright step dL, brightBlue hue window, channel green/blue, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, cue green/magenta, least green/brightBlue, least green/brightMagenta, text brightMagenta/brightWhite, text brightMagenta/foreground, text green/white',
+      'move green 0.0 of 12.0, move brightGreen 0.0 of 6.0. brightGreen chroma, green chroma',
     'protanopia tokyo-night fitted':
-      'text green/foreground 6.5 of 8.0, text green/white 5.3 of 8.0, text brightGreen/foreground 2.8 of 8.0, text brightGreen/brightWhite 5.5 of 8.0, channel green/cyan 5.0 of 6.0, channel green/cyan typical 5.1 of 6.0, channel green/brightBlue 5.6 of 6.0. T2 green Lc, T6 cyan pair dE, T6 green pair dE, brightGreen hue window, channel brightBlue/brightCyan, cue brightGreen/brightBlue, text brightBlue/brightWhite, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text cyan/brightWhite, text cyan/foreground, text green/white',
+      'move green 0.0 of 12.0, move brightGreen 0.0 of 6.0, part green/brightYellow 7.2 of 9.6. T6 green pair dE, T6 yellow pair dE, brightGreen chroma, brightYellow chroma, channel brightGreen/brightYellow, channel green/brightCyan, green chroma, text brightGreen/brightWhite, text brightYellow/brightWhite, text green/brightWhite',
     'protanopia tokyo-night published':
-      'text green/foreground 7.2 of 8.0, text green/white 5.5 of 8.0, text green/brightWhite 7.2 of 8.0, text brightGreen/foreground 7.2 of 8.0, text brightGreen/white 5.5 of 8.0, text brightGreen/brightWhite 7.2 of 8.0, channel green/brightMagenta 4.8 of 6.0. T2 brightGreen Lc, T2 brightMagenta Lc, T2 green Lc, T6 green bright step dL, channel brightBlue/brightMagenta, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text green/brightWhite, text green/foreground, text green/white',
+      'show 9.1 of 12.0, move green 0.0 of 12.0, move brightGreen 0.0 of 6.0, channel brightBlue/brightMagenta typical 5.9 of 6.0. T6 blue bright step dL, blue hue window, brightBlue hue window, brightGreen chroma, channel brightMagenta/brightCyan, channel cyan/brightMagenta, green chroma, least brightGreen/brightCyan, least cyan/brightGreen, least green/brightCyan, least green/cyan, text brightGreen/brightWhite, text brightGreen/foreground, text brightMagenta/brightWhite, text brightMagenta/foreground, text brightMagenta/white, text green/brightWhite, text green/foreground',
+    'protanopia nord fitted':
+      'channel green/blue 4.9 of 6.0. T3 blue Lc, channel green/brightBlue, channel green/brightMagenta, missed',
+    'tritanopia nord fitted':
+      'channel yellow/brightBlue 5.2 of 6.0, channel brightRed/brightMagenta 6.0 of 6.0. T2 brightRed Lc, T6 blue pair dE, T6 yellow pair dE, brightBlue hue window, brightMagenta hue window, channel brightBlue/brightMagenta, channel yellow/brightMagenta, least yellow/brightMagenta, move brightBlue',
     'deuteranopia rose-pine fitted':
-      'move green 5.6 of 12.0, move brightGreen 3.6 of 6.0. T6 green pair dE, brightGreen chroma, brightGreen hue window, green hue window, text brightGreen/foreground, text brightGreen/white',
+      'move green 5.6 of 12.0, move brightGreen 3.6 of 6.0, channel green/brightBlue 5.0 of 6.0, part red/green 14.7 of 18.0, part brightRed/brightGreen 15.7 of 18.0. T2 brightRed Lc, T2 green Lc, T3 red Lc, T6 green pair dE, T6 red pair dE, T7 red/brightRed dL, brightGreen chroma, brightGreen hue window, channel brightBlue/brightMagenta, channel brightGreen/brightBlue, channel brightGreen/brightMagenta, channel green/blue, channel green/brightBlue, channel yellow/brightRed, green hue window, kept red/yellow, least brightGreen/brightBlue, least brightGreen/brightMagenta, least green/brightBlue, text brightGreen/foreground, text brightGreen/white',
+    'deuteranopia rose-pine published':
+      'part red/green 16.3 of 18.0. T6 red bright step dL, green hue window, kept red/brightYellow, kept red/yellow, move green, show',
     'protanopia rose-pine fitted':
-      'move green 6.6 of 12.0, move brightGreen 3.4 of 6.0, channel green/brightBlue 4.8 of 6.0, part green/brightYellow 16.4 of 18.0. T2 brightBlue Lc, T6 blue pair dE, T6 green pair dE, brightBlue hue window, brightBlue reach, brightGreen chroma, channel green/brightBlue, channel green/brightMagenta, green hue window, least green/brightBlue, move green, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text brightYellow/brightWhite, text green/white',
+      'show 9.8 of 12.0, move green 5.8 of 12.0, move brightGreen 2.5 of 6.0, channel green/blue 4.2 of 6.0. T2 green Lc, T6 green pair dE, T6 red pair dE, brightGreen chroma, green hue window, kept blue/magenta, kept red/brightYellow, kept red/yellow, least brightGreen/brightMagenta, least green/blue, move green, show, text blue/foreground, text blue/white, text brightGreen/foreground, text brightGreen/white',
+    'protanopia rose-pine published':
+      'part red/green 10.8 of 18.0. T3 red Lc, T6 green bright step dL, channel green/brightMagenta, green reach, kept red/brightYellow, kept red/yellow',
+    'tritanopia rose-pine fitted':
+      'channel cyan/brightBlue 5.2 of 6.0, channel cyan/brightMagenta 5.0 of 6.0, channel brightYellow/brightMagenta 4.6 of 5.4. T2 brightBlue Lc, T6 blue pair dE, T6 cyan pair dE, T6 magenta pair dE, brightBlue hue window, brightMagenta hue window, channel brightMagenta/brightCyan, channel brightYellow/brightCyan, channel brightYellow/brightMagenta, channel cyan/brightBlue, channel cyan/brightMagenta, channel yellow/brightMagenta, kept cyan/green, least brightMagenta/brightCyan, least brightYellow/brightCyan, least brightYellow/brightMagenta, least cyan/brightMagenta, least yellow/brightMagenta, text brightYellow/brightWhite',
+    'protanopia gruvbox fitted':
+      'channel brightGreen/brightBlue 5.3 of 6.0. brightBlue hue window, brightGreen chroma, brightGreen hue window, channel green/brightBlue, least green/brightBlue',
     'tritanopia gruvbox fitted':
-      'channel brightBlue/brightMagenta 4.5 of 6.0. T2 brightMagenta Lc, T6 magenta pair dE, brightMagenta hue window, text brightBlue/foreground, text brightBlue/white',
+      'move brightBlue 0.0 of 6.0. T2 brightBlue Lc, T6 blue pair dE, least brightBlue/brightMagenta, text brightBlue/white',
     'tritanopia gruvbox published':
-      'part green/blue 10.6 of 13.0. T3 blue Lc, T6 green pair dE, blue hue window, text green/white',
+      'part green/blue 10.6 of 13.0. T3 blue Lc, T6 green pair dE, blue hue window, move blue, show, text green/white',
     'deuteranopia catppuccin fitted':
-      'text brightGreen/foreground 3.9 of 8.0, text brightGreen/foreground typical 7.6 of 8.0, text brightGreen/white 4.9 of 8.0. T6 green pair dE, brightGreen chroma, brightGreen hue window, text brightGreen/foreground, text brightGreen/white',
+      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 11.7 of 18.0. T2 brightRed Lc, T6 red pair dE, brightGreen chroma, brightRed hue window, channel brightGreen/brightBlue, channel brightGreen/brightMagenta, channel brightGreen/brightYellow, channel cyan/brightGreen, channel yellow/brightGreen, least brightGreen/brightBlue, least brightGreen/brightMagenta, least yellow/brightGreen, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
     'deuteranopia catppuccin published':
-      'text green/brightWhite 7.7 of 8.0, text brightGreen/brightWhite 7.7 of 8.0, least green/brightBlue 2.0 of 4.0, channel green/brightBlue 2.0 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 brightBlue Lc, T6 green bright step dL, text brightBlue/white, text brightGreen/white, text green/white',
+      'move green 0.0 of 12.0, move brightGreen 0.0 of 6.0, part brightRed/brightGreen 16.0 of 18.0. T2 brightRed Lc, brightGreen chroma, brightRed hue window, channel brightGreen/brightCyan, channel brightGreen/brightMagenta, channel brightGreen/brightYellow, channel cyan/brightGreen, channel yellow/brightGreen, green chroma, least brightGreen/brightMagenta, text brightGreen/foreground, text green/foreground, text green/white',
     'protanopia catppuccin fitted':
-      'text green/white 6.5 of 8.0, text brightGreen/foreground 1.9 of 8.0, text brightGreen/foreground typical 6.2 of 8.0, text brightGreen/brightWhite 6.5 of 8.0. T2 green Lc, T6 green pair dE, brightGreen chroma, brightGreen hue window, green hue window, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
+      'move green 0.0 of 12.0, move brightGreen 0.0 of 6.0, channel brightGreen/brightYellow 5.5 of 6.0, part green/yellow 10.7 of 14.1, part green/brightYellow 17.3 of 18.0. T2 green Lc, T6 yellow bright step dL, T6 yellow pair dE, brightGreen chroma, brightYellow chroma, channel brightGreen/brightMagenta, channel brightYellow/brightCyan, channel cyan/brightGreen, channel green/brightBlue, channel green/brightMagenta, channel green/brightRed, channel yellow/brightGreen, channel yellow/brightYellow, least brightYellow/brightCyan, least green/brightBlue, least yellow/brightGreen, part red/green, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text green/white',
     'protanopia catppuccin published':
-      'text green/white 5.2 of 8.0, text brightGreen/white 5.2 of 8.0, channel green/brightBlue 5.6 of 6.0. T2 brightBlue Lc, T6 green bright step dL, brightBlue hue window, text brightGreen/brightWhite, text brightGreen/white, text green/brightWhite, text green/foreground, text green/white',
-    'tritanopia dracula fitted': 'move blue 9.4 of 12.0. T6 blue pair dE, blue hue window',
+      'move green 0.0 of 12.0, move brightGreen 0.0 of 6.0. brightGreen chroma, least green/brightMagenta, text brightGreen/foreground, text brightGreen/white, text green/foreground, text green/white',
+    'deuteranopia dracula published':
+      'channel cyan/brightGreen 6.0 of 6.0. T2 cyan Lc, channel brightGreen/brightBlue, least brightGreen/brightBlue',
+    'protanopia dracula fitted':
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least cyan/brightGreen, text brightGreen/foreground, text brightGreen/white',
+    'tritanopia dracula fitted':
+      'show 9.6 of 12.0, move blue 9.6 of 12.0, channel brightRed/brightBlue 5.2 of 6.0. T6 blue pair dE, channel brightRed/brightMagenta, channel yellow/brightBlue, least brightRed/brightMagenta, text brightBlue/foreground, text brightBlue/white',
     'deuteranopia monokai fitted':
-      'kept blue/magenta 8.3 of 11.1, least green/blue 3.1 of 4.0, channel green/blue 3.1 of 6.0, channel green/brightMagenta 4.0 of 6.0, channel brightBlue/brightMagenta 4.8 of 6.0, channel brightBlue/brightMagenta typical 5.1 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 green Lc, T3 magenta Lc, T6 blue pair dE, T6 magenta pair dE, blue hue window, brightBlue chroma, brightGreen chroma, channel brightBlue/brightMagenta, channel green/blue, channel green/brightMagenta, cue brightGreen/brightBlue, kept blue/magenta, least brightBlue/brightMagenta, least green/blue, least green/brightMagenta, text brightGreen/foreground, text brightGreen/white',
+      'channel green/brightMagenta 4.2 of 6.0, channel brightGreen/brightBlue 4.0 of 6.0, channel brightBlue/brightMagenta 4.0 of 6.0, channel brightBlue/brightMagenta typical 4.8 of 6.0, channel green/blue typical 5.7 of 6.0, part brightRed/brightGreen 16.1 of 18.0. T2 brightMagenta Lc, T2 brightRed Lc, T2 green Lc, T6 blue bright step dL, T6 blue pair dE, T6 magenta pair dE, T6 red pair dE, T7 red/brightRed dL, brightBlue chroma, brightGreen chroma, channel brightBlue/brightMagenta, channel brightGreen/brightBlue, channel brightGreen/brightCyan, channel brightGreen/brightMagenta, channel cyan/blue, channel green/blue, channel green/brightBlue, channel green/brightMagenta, channel yellow/brightRed, green reach, kept blue/magenta, least brightBlue/brightMagenta, least brightGreen/brightBlue, least green/blue, least green/brightMagenta, missed, text brightGreen/foreground, text brightGreen/white',
     'protanopia monokai fitted':
-      'text brightYellow/foreground 4.5 of 4.6, kept blue/magenta 8.9 of 16.2, least green/brightMagenta 3.2 of 4.0, channel green/blue 5.1 of 6.0, channel green/brightBlue 4.0 of 6.0, channel green/brightMagenta 3.2 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 brightMagenta Lc, T2 green Lc, T3 magenta Lc, T6 blue pair dE, T6 green pair dE, T6 magenta pair dE, T6 yellow pair dE, blue hue window, brightBlue chroma, brightGreen chroma, channel brightBlue/brightMagenta, channel green/blue, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, green reach, kept blue/magenta, kept red/brightYellow, least green/blue, least green/brightBlue, least green/brightMagenta, text brightGreen/foreground, text brightGreen/white',
+      'move brightGreen 0.0 of 6.0, channel green/blue 4.9 of 6.0. T2 green Lc, T6 blue bright step dL, blue chroma, blue hue window, brightGreen chroma, green hue window, green reach, least brightGreen/brightCyan, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
     'protanopia monokai published':
-      'kept blue/magenta 18.7 of 21.2. T3 magenta Lc, T6 blue bright step dL, blue chroma, blue hue window',
+      'channel green/blue 4.3 of 6.0. T6 blue bright step dL, T6 green bright step dL, green chroma, green hue window, kept blue/magenta, text green/brightWhite, text green/foreground, text green/white',
+    'tritanopia monokai fitted':
+      'channel yellow/brightRed 5.7 of 6.0. T2 brightRed Lc, T6 red pair dE, T7 red/brightRed dL, channel yellow/brightMagenta',
+    'deuteranopia one-half-dark fitted':
+      'move brightGreen 0.0 of 6.0, channel yellow/brightRed 5.3 of 5.5, part brightRed/brightGreen 13.2 of 18.0. T7 deutan red/yellow, brightGreen chroma, brightRed chroma, brightRed hue window, channel yellow/brightRed, kept red/yellow, least yellow/brightRed, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text brightRed/foreground, text brightRed/white',
     'protanopia one-half-dark fitted':
-      'channel green/cyan 5.9 of 6.0, channel green/brightBlue 4.6 of 6.0, channel green/brightMagenta 4.0 of 6.0, cue brightGreen/brightBlue 1.2 of 3.0. T2 brightMagenta Lc, T2 cyan Lc, T2 green Lc, T6 green bright step dL, T6 green pair dE, T6 magenta pair dE, brightBlue chroma, brightGreen hue window, brightGreen reach, channel brightBlue/brightCyan, channel green/blue, channel green/brightBlue, channel green/brightMagenta, channel green/cyan, green reach, least green/brightBlue, least green/brightMagenta, text brightBlue/foreground, text brightBlue/white',
+      'move brightGreen 0.0 of 6.0, channel green/brightBlue 5.1 of 6.0, channel green/brightMagenta 4.0 of 6.0. T2 brightMagenta Lc, T2 green Lc, T6 magenta pair dE, brightGreen chroma, channel brightBlue/brightCyan, channel green/blue, channel green/brightBlue, channel green/brightMagenta, channel green/cyan, least green/brightBlue, least green/brightMagenta, text brightBlue/foreground, text brightBlue/white, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
+    'tritanopia one-half-dark fitted':
+      'channel yellow/brightRed 4.9 of 6.0, channel yellow/brightBlue 5.4 of 6.0. T2 yellow Lc, T7 red/yellow dL, brightBlue hue window, brightRed chroma, channel brightRed/brightBlue, channel brightRed/brightYellow, kept red/yellow, least brightRed/brightYellow, text brightBlue/foreground, text brightBlue/white, text brightRed/foreground, text brightRed/white',
+    'deuteranopia tango-dark fitted':
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
     'protanopia tango-dark fitted':
-      'channel green/brightBlue 4.5 of 6.0, channel green/brightMagenta 4.5 of 6.0. T2 brightMagenta Lc, T2 green Lc, T6 green bright step dL, T6 magenta pair dE, brightBlue chroma, channel brightBlue/brightCyan, channel green/brightBlue, channel green/brightMagenta, least green/brightBlue, least green/brightMagenta, text brightBlue/foreground, text brightBlue/white',
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least brightGreen/brightCyan, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
+    'tritanopia tango-dark fitted':
+      'channel yellow/brightMagenta 4.3 of 5.0. T2 yellow Lc, channel brightBlue/brightMagenta, kept red/yellow',
     'deuteranopia classic-vivid fitted':
-      'channel brightBlue/brightMagenta 4.1 of 6.0, cue brightGreen/brightMagenta 1.4 of 3.0. T6 green pair dE, brightGreen chroma, channel brightBlue/brightMagenta, channel green/brightBlue, cue brightGreen/brightBlue, least brightBlue/brightMagenta, least green/brightBlue, text brightGreen/foreground, text brightMagenta/foreground',
+      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 14.6 of 18.0. T2 brightRed Lc, T6 red pair dE, T7 red/brightRed dL, brightGreen chroma, channel brightGreen/brightCyan, channel yellow/brightGreen, least brightGreen/brightCyan, least yellow/brightGreen, text brightGreen/foreground',
     'protanopia classic-vivid fitted':
-      'text brightGreen/foreground 7.4 of 8.0, part green/yellow 17.7 of 18.0. T2 green Lc, T6 yellow bright step dL, brightGreen chroma, brightGreen hue window, channel green/brightBlue, channel green/brightMagenta, text yellow/brightWhite',
+      'move brightGreen 0.0 of 6.0, part green/yellow 17.4 of 18.0. T2 green Lc, T6 yellow bright step dL, brightGreen chroma, channel green/brightBlue, channel green/brightMagenta, channel yellow/brightCyan, text brightGreen/foreground, text yellow/brightWhite, yellow chroma',
+    'deuteranopia high-contrast fitted':
+      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 14.0 of 18.0. T2 brightRed Lc, brightGreen chroma, brightRed hue window, channel brightGreen/brightCyan, channel brightGreen/brightYellow, channel cyan/brightGreen, least cyan/brightGreen, text brightGreen/foreground, text brightGreen/white',
+    'deuteranopia high-contrast published':
+      'move brightGreen 0.0 of 6.0, channel green/brightMagenta 5.5 of 6.0. T2 brightMagenta Lc, T6 magenta bright step dL, T6 magenta pair dE, brightGreen chroma, channel brightBlue/brightMagenta, channel green/cyan, green chroma, least brightBlue/brightMagenta, least brightGreen/brightCyan, least cyan/brightGreen, text brightGreen/brightWhite, text brightGreen/foreground, text green/white',
     'protanopia high-contrast fitted':
-      'cue brightGreen/brightBlue 2.8 of 3.0. T6 green pair dE, brightBlue chroma, brightGreen hue window, text brightBlue/foreground, text brightBlue/white',
+      'move brightGreen 0.0 of 6.0, channel brightBlue/brightMagenta 5.2 of 6.0. T2 brightMagenta Lc, T6 blue pair dE, T6 magenta pair dE, brightGreen chroma, channel green/brightBlue, least cyan/brightGreen, least green/brightBlue, text brightGreen/foreground, text brightGreen/white',
+    'protanopia high-contrast published':
+      'move brightGreen 0.0 of 6.0, channel green/brightBlue 6.0 of 6.0. T2 brightBlue Lc, T6 blue pair dE, brightGreen chroma, channel brightBlue/brightMagenta, text brightGreen/white, text green/white',
+    'protanopia everforest-dark fitted':
+      'channel yellow/brightRed 4.5 of 6.0. T2 brightRed Lc, T2 yellow Lc, T6 yellow pair dE, brightRed hue window, channel cyan/brightRed, channel yellow/cyan, kept red/yellow, least cyan/brightRed, text brightRed/white, text yellow/white',
     'tritanopia everforest-dark fitted':
-      'text brightBlue/white 6.6 of 8.0, channel brightBlue/brightMagenta 5.5 of 6.0. T2 brightBlue Lc, T6 blue pair dE, brightBlue hue window, cue brightYellow/brightMagenta, text brightMagenta/brightWhite, text brightMagenta/foreground',
+      'move brightBlue 0.0 of 6.0. brightBlue chroma, text brightBlue/brightWhite, text brightBlue/foreground',
+    'deuteranopia green-screen fitted':
+      'channel green/brightBlue 4.0 of 6.0, channel brightGreen/brightMagenta 4.3 of 6.0. T2 green Lc, brightGreen chroma, channel brightBlue/brightMagenta, channel brightGreen/brightCyan, least brightBlue/brightMagenta, least brightGreen/brightCyan',
+    'protanopia green-screen fitted':
+      'part green/yellow 14.7 of 18.0. T6 green pair dE, T6 yellow bright step dL, channel green/brightBlue, channel yellow/brightCyan, text yellow/brightWhite, yellow chroma',
     'tritanopia srcery fitted':
-      'text brightBlue/white 7.5 of 8.0. brightBlue hue window, text brightBlue/foreground',
+      'move brightBlue 0.0 of 6.0. T2 brightBlue Lc, T6 blue pair dE, text brightBlue/white',
+    'tritanopia srcery published':
+      'channel brightYellow/brightBlue 5.8 of 6.0. T6 yellow bright step dL, T6 yellow pair dE, brightBlue hue window, channel yellow/brightYellow, kept red/brightYellow, text brightBlue/white',
     'deuteranopia nightfly fitted':
-      'channel brightBlue/brightMagenta typical 5.1 of 6.0. T6 magenta pair dE, brightBlue hue window, channel green/brightMagenta, cue brightGreen/brightBlue, text brightBlue/foreground',
+      'channel brightBlue/brightMagenta typical 4.2 of 6.0. T6 magenta pair dE, brightBlue hue window, channel brightGreen/brightBlue, channel green/brightMagenta, least brightGreen/brightBlue, text brightBlue/foreground',
+    'deuteranopia nightfly published':
+      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 16.1 of 18.0. T2 brightGreen Lc, T6 green bright step dL, T6 green pair dE, channel brightGreen/brightBlue, channel brightGreen/brightMagenta, least brightGreen/brightBlue',
     'protanopia nightfly fitted':
-      'channel green/brightBlue 4.5 of 6.0, channel green/brightMagenta 4.0 of 6.0. T2 brightMagenta Lc, T6 green pair dE, T6 magenta pair dE, brightBlue chroma, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, least green/brightBlue, least green/brightMagenta, text brightBlue/brightWhite, text brightBlue/foreground, text green/foreground',
+      'move brightGreen 0.0 of 6.0, channel green/brightBlue 4.5 of 6.0, channel green/brightMagenta 4.0 of 6.0, part green/brightYellow 17.7 of 18.0. T2 brightMagenta Lc, T6 magenta pair dE, brightBlue chroma, brightGreen chroma, channel brightYellow/brightCyan, channel green/brightBlue, channel green/brightMagenta, least brightYellow/brightCyan, least green/brightBlue, least green/brightMagenta, text brightBlue/brightWhite, text brightBlue/foreground, text brightGreen/brightWhite, text brightGreen/foreground, text green/foreground',
     'protanopia nightfly published':
-      'text brightGreen/brightWhite 6.7 of 8.0. T6 green pair dE, brightGreen chroma, text brightGreen/foreground',
-    'tritanopia melange-dark fitted': 'move blue 11.5 of 12.0. blue hue window, text blue/white',
+      'move brightGreen 0.0 of 6.0. T2 brightGreen Lc, T6 green pair dE, least brightGreen/brightBlue, least green/brightGreen',
+    'deuteranopia melange-dark fitted':
+      'channel brightGreen/brightBlue 4.5 of 6.0, channel brightGreen/brightCyan 5.9 of 6.0, channel brightGreen/brightCyan typical 6.0 of 6.0, part red/green 17.1 of 18.0, part brightRed/brightGreen 14.4 of 18.0. T3 red Lc, T6 green pair dE, T7 deutan red/yellow, channel brightGreen/brightBlue, channel brightGreen/brightCyan, channel green/brightBlue, channel yellow/brightRed, green hue window, kept red/yellow, least brightGreen/brightBlue, least brightGreen/brightCyan, least green/brightBlue, least yellow/brightRed, text brightCyan/brightWhite, text brightCyan/foreground',
+    'protanopia melange-dark fitted':
+      'channel green/brightBlue 5.6 of 6.0, channel brightGreen/brightCyan 4.7 of 6.0, channel brightGreen/brightCyan typical 5.2 of 6.0. T2 brightBlue Lc, T6 blue pair dE, T6 green pair dE, brightBlue hue window, brightGreen hue window, channel green/brightGreen, text brightCyan/brightWhite',
+    'tritanopia melange-dark fitted': 'show 11.5 of 12.0, move blue 11.5 of 12.0. text blue/white',
     'tritanopia melange-dark published':
-      'move blue 11.4 of 12.0, cue red/blue 2.8 of 3.0. T3 red Lc, blue hue window, move blue, text blue/white',
+      'show 11.4 of 12.0, move blue 11.4 of 12.0, channel yellow/brightMagenta 6.0 of 6.0, cue red/blue 2.8 of 3.0. T2 yellow Lc, T3 red Lc, T7 red/yellow dL, channel brightYellow/brightMagenta, kept red/yellow, move blue, show, text blue/white',
+    'protanopia melange-light published':
+      'part red/green 14.2 of 14.6. T7 protan red/brightYellow, T7 protan red/yellow, channel green/brightMagenta, channel red/cyan, green hue window, green reach, kept red/brightYellow, kept red/yellow, least red/cyan',
+    'deuteranopia modus-vivendi fitted':
+      'channel green/brightBlue 5.0 of 6.0, channel brightGreen/brightMagenta 5.2 of 6.0. T2 green Lc, brightBlue hue window, brightGreen chroma, channel brightBlue/brightMagenta, channel green/blue, least brightBlue/brightMagenta, text brightGreen/foreground',
     'protanopia modus-vivendi fitted':
-      'channel green/brightBlue 5.3 of 6.0. T2 brightBlue Lc, T6 blue pair dE, T6 green pair dE, brightBlue hue window, channel green/brightMagenta, least green/brightMagenta',
+      'move brightGreen 0.0 of 6.0, channel green/brightMagenta 4.6 of 6.0. brightGreen chroma, brightMagenta chroma, channel green/brightBlue, green hue window, text brightGreen/brightWhite, text brightGreen/foreground, text brightMagenta/foreground',
+    'deuteranopia harbor-dark fitted':
+      'move brightGreen 0.0 of 6.0, channel brightBlue/brightCyan 5.9 of 6.0, part brightRed/brightGreen 16.6 of 18.0. T2 brightRed Lc, brightGreen chroma, channel brightBlue/brightMagenta, channel yellow/brightRed, least brightBlue/brightMagenta, text brightCyan/foreground, text brightGreen/brightWhite, text brightGreen/foreground',
     'protanopia harbor-dark fitted':
-      'channel green/brightBlue 4.7 of 6.0, channel brightBlue/brightMagenta typical 5.3 of 6.0, cue brightGreen/brightMagenta 1.5 of 3.0. T2 green Lc, T6 green pair dE, brightBlue chroma, brightBlue hue window, channel brightBlue/brightMagenta, channel brightCyan/brightMagenta, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, cue brightGreen/brightMagenta, least brightBlue/brightMagenta, least green/brightBlue, text brightGreen/foreground, text brightMagenta/foreground',
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least brightGreen/brightCyan, text brightGreen/brightWhite, text brightGreen/foreground',
+    'protanopia harbor-dark published':
+      'channel green/brightMagenta 4.2 of 6.0, channel brightGreen/brightMagenta 5.3 of 6.0, channel brightBlue/brightCyan 4.8 of 6.0. T2 brightMagenta Lc, T2 green Lc, T6 cyan bright step dL, T6 cyan pair dE, brightBlue chroma, channel brightGreen/brightBlue, channel brightGreen/brightCyan, channel brightGreen/brightMagenta, channel cyan/brightCyan, channel green/brightMagenta, green hue window, least brightGreen/brightMagenta, least cyan/brightCyan, least green/brightMagenta, move green, text brightBlue/foreground, text brightCyan/white, text brightGreen/white',
     'deuteranopia iceberg-dark fitted':
-      'text brightGreen/foreground 6.5 of 8.0, text brightGreen/white 6.5 of 8.0, channel green/brightMagenta 5.9 of 6.0, channel brightBlue/brightMagenta typical 4.0 of 5.0, cue brightGreen/brightBlue 2.7 of 3.0. T2 green Lc, T6 green pair dE, T6 magenta pair dE, brightBlue hue window, brightGreen hue window, channel brightBlue/brightCyan, channel brightBlue/brightMagenta, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, least brightBlue/brightMagenta, text brightBlue/foreground, text brightGreen/foreground, text brightGreen/white',
-    'deuteranopia iceberg-dark published':
-      'channel brightBlue/brightMagenta typical 4.6 of 4.8. T2 brightBlue Lc, T6 blue bright step dL, T6 blue pair dE, brightBlue hue window, channel brightCyan/brightMagenta, channel green/brightMagenta',
+      'move brightGreen 0.0 of 6.0, channel green/brightMagenta 5.9 of 6.0, part brightRed/brightGreen 17.9 of 18.0. T2 green Lc, brightGreen chroma, brightRed hue window, channel brightBlue/brightMagenta, channel yellow/brightRed, least brightBlue/brightMagenta, text brightGreen/brightWhite',
     'protanopia iceberg-dark fitted':
-      'text brightGreen/foreground 5.5 of 8.0, text brightGreen/white 6.5 of 8.0, text brightGreen/brightWhite 6.9 of 7.4, channel green/brightMagenta 4.2 of 6.0, channel brightBlue/brightMagenta typical 4.2 of 5.0. T2 green Lc, T6 green pair dE, T6 magenta pair dE, brightBlue hue window, channel brightBlue/brightCyan, channel brightBlue/brightMagenta, channel green/brightMagenta, cue brightGreen/brightBlue, green hue window, least brightBlue/brightMagenta, least green/brightMagenta, text brightBlue/brightWhite, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text brightMagenta/foreground',
+      'move brightGreen 0.0 of 6.0, channel green/brightBlue 5.5 of 6.0, channel green/brightMagenta 4.8 of 6.0. T2 green Lc, brightGreen chroma, channel brightBlue/brightCyan, channel brightBlue/brightMagenta, green hue window, text brightBlue/foreground, text brightBlue/white, text brightGreen/brightWhite, text brightMagenta/foreground',
     'protanopia iceberg-dark published':
-      'channel brightBlue/brightMagenta typical 4.7 of 4.8. T2 brightBlue Lc, brightBlue hue window, channel green/brightMagenta',
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least brightGreen/brightCyan, text brightGreen/brightWhite',
     'tritanopia iceberg-dark published':
-      'part green/blue 12.1 of 13.0. T3 blue Lc, T6 green bright step dL, T6 green pair dE, blue hue window, cue blue/magenta, move blue, text green/brightWhite, text green/foreground, text green/white',
+      'part green/blue 13.0 of 13.0. T3 blue Lc, blue hue window, move blue, text green/brightWhite, text green/foreground, text green/white',
   };
 
   it('keeps every floor and target, or names the rule short and what stops it', () => {
@@ -1244,6 +1428,8 @@ describe('color vision swaps', () => {
       const rules = rulesOf(c);
       const short = rules.filter((r) => r.value(c.own) < r.need - 1e-9);
       if (short.length === 0) continue;
+      // The channels, the text and the kept pairs hold on every theme.
+      for (const r of short) expect(r.tier, `${c.at} ${r.id}`).toBeGreaterThan(1);
       const items = short.map(
         (r) => `${r.id} ${r.value(c.own).toFixed(1)} of ${r.need.toFixed(1)}`,
       );
@@ -1252,39 +1438,32 @@ describe('color vision swaps', () => {
     expect(report).toEqual(SWAP_SHORT);
   });
 
-  // No channel comes nearer another than CHANNEL_LEAST, or than it stood
-  // at the start if that is less, except where SWAP_SHORT names it.
-  it('keeps the channels apart wherever SWAP_SHORT names no exception', () => {
-    for (const c of CASES) {
-      for (const [a, b] of CHANNEL_PAIRS) {
-        const at = `${c.at} ${a}/${b}`;
-        const floor = Math.min(sees(c.start, a, b, c.vision), CHANNEL_LEAST);
-        if (SWAP_SHORT[c.at]?.includes(`least ${a}/${b} `)) continue;
-        expect(sees(c.own, a, b, c.vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
-      }
-    }
-  });
-
   // The swap shows on every theme. The lead color, green or for a
-  // tritanope blue, moves at least MOVE_MIN.lead and its bold twin
-  // MOVE_MIN.bold as a typical eye sees them, and so some cue color
-  // moves MOVE_MIN.lead. SWAP_SHORT names the few where the lead color
-  // already sits near its target, such as Rose Pine's pine green, which
-  // is a blue, and Dracula's blue, which is a purple. There the lead
-  // moves less, and some cue color still moves MOVE_MIN.bold.
-  it('moves the lead color far enough to see on every theme', () => {
+  // tritanope blue, or where it cannot another plain color the vision
+  // turns, moves at least MOVE_MIN.lead as a typical eye sees it.
+  // SHOW_SHORT names the cases where none can, with the move that shows
+  // most: where the lead already sits near its target, such as Rose
+  // Pine's pine green, which is a blue, and Dracula's and Melange Dark's
+  // blue, which lean purple, and Tokyo Night, whose yells and text are
+  // blue already.
+  const SHOW_SHORT: Record<string, string> = {
+    'deuteranopia tokyo-night fitted': 'blue 8.5',
+    'protanopia tokyo-night published': 'blue 9.1',
+    'protanopia rose-pine fitted': 'blue 9.8',
+    'tritanopia dracula fitted': 'blue 9.6',
+    'tritanopia melange-dark fitted': 'blue 11.5',
+    'tritanopia melange-dark published': 'blue 11.4',
+  };
+
+  it('moves a turned color far enough to see on every theme', () => {
+    const report: Record<string, string> = {};
     for (const c of CASES) {
-      const [lead, bold] = LEAD_SLOTS[c.vision];
-      const most = largestMove(c.start, c.own, CUE_SLOTS);
-      if (SWAP_SHORT[c.at]?.includes('move ')) {
-        expect(most, c.at).toBeGreaterThanOrEqual(MOVE_MIN.bold);
-        continue;
-      }
-      expect(most, c.at).toBeGreaterThanOrEqual(MOVE_MIN.lead);
-      const move = (k: Slot) => deltaEOk(hex(c.start[k]), hex(c.own[k]));
-      expect(move(lead), c.at).toBeGreaterThanOrEqual(MOVE_MIN.lead);
-      expect(move(bold), c.at).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+      const plain = CUE_SLOTS.slice(0, 6).filter((k) => SWAP_TARGETS[c.vision][familyOf(k)]);
+      const moves = plain.map((k) => [k, turnedMove(c, c.own, k)] as const);
+      const [slot, most] = moves.reduce((win, m) => (m[1] > win[1] ? m : win));
+      if (most < MOVE_MIN.lead) report[c.at] = `${slot} ${most.toFixed(1)}`;
     }
+    expect(report).toEqual(SHOW_SHORT);
   });
 
   // Kanso Zen's soft palette changed nothing you could see under the

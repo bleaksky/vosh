@@ -5,6 +5,7 @@ import {
   CHANNEL_FLOOR,
   CHANNEL_LEAST,
   CHANNEL_PAIRS,
+  CHANNEL_SLOTS,
   checks,
   CHROMA_KEEP,
   COLOR_VISIONS,
@@ -16,6 +17,7 @@ import {
   GAME_FIXED_COLORS,
   GAME_SLOTS,
   holdsCheck,
+  HUE_CHROMA_KEEP,
   KEPT_PAIRS,
   KEPT_SLACK,
   L_REACH,
@@ -37,6 +39,7 @@ import {
   VISION_SLACK,
   xterm256,
 } from './gameFit';
+import { GAME_CHANNEL_SLOTS } from './gameChannels';
 import { BUILTIN_THEMES, findTheme, typicalStart, visionFitOf, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
@@ -182,22 +185,20 @@ describe('fit', () => {
 // fit, and Solarized Dark for a protanope from its published colors.
 const KANSO_DEUTAN: readonly string[] = [
   'red #d67f46',
-  'green #79baf7',
-  'blue #8b90db',
-  'brightRed #fc9b6a',
+  'green #83bcfc',
+  'blue #918ed9',
+  'brightRed #fd9a6d',
   'brightGreen #dfeeff',
-  'brightBlue #c9bdff',
-  'brightCyan #afded4',
+  'brightBlue #d2bbff',
 ];
 const SOLARIZED_PROTAN: readonly string[] = [
-  'red #db3421',
-  'green #1ca5ee',
-  'yellow #b58901',
+  'red #dc332f',
+  'green #0ebefd',
   'blue #8879d7',
   'magenta #d23581',
   'brightRed #c65100',
-  'brightGreen #81daff',
-  'brightBlue #ccbbff',
+  'brightGreen #76d9ff',
+  'brightBlue #ae8dea',
 ];
 
 describe('color vision', () => {
@@ -283,9 +284,8 @@ describe('color vision', () => {
     expect(PART_MIN).toEqual({ typical: 0, deuteranopia: 20, protanopia: 20, tritanopia: 15 });
     expect(MOVE_MIN).toEqual({ lead: 12, bold: 6 });
     expect([MOVE_WANT, MISS_SLACK, L_REACH, CHANNEL_FLOOR, CUE_FLOOR]).toEqual([15, 1, 0.15, 6, 3]);
-    expect([VISION_GUARD, VISION_SLACK, KEPT_SLACK, CHANNEL_LEAST, CHROMA_KEEP]).toEqual([
-      10, 2, 0.5, 4, 0.75,
-    ]);
+    expect([VISION_GUARD, VISION_SLACK, KEPT_SLACK, CHANNEL_LEAST]).toEqual([10, 2, 0.5, 4]);
+    expect([CHROMA_KEEP, HUE_CHROMA_KEEP]).toEqual([0.75, 0.6]);
     expect(TEXT_SLOTS).toEqual(['foreground', 'white', 'brightWhite']);
     expect(PARTED_PAIRS.deuteranopia).toEqual([
       ['red', 'green'],
@@ -311,14 +311,53 @@ describe('color vision', () => {
       ['red', 'green'],
     ]);
     expect([PARTED_PAIRS.typical, KEPT_PAIRS.typical]).toEqual([[], []]);
-    // The game's channels, and every other two cue colors of a weight.
-    expect(CHANNEL_PAIRS).toHaveLength(16);
-    expect(CUE_PAIRS).toHaveLength(19);
+    // Every two of the ten channel colors, tells and yells against blue
+    // text, and every other two cue colors of a weight.
+    expect(CHANNEL_PAIRS).toHaveLength(47);
+    expect(CUE_PAIRS).toHaveLength(7);
     const key = ([a, b]: readonly string[]) => [a, b].sort().join('/');
     const channels = new Set(CHANNEL_PAIRS.map(key));
     for (const pair of CUE_PAIRS) {
       expect(channels.has(key(pair)), key(pair)).toBe(false);
       expect(pair[0].startsWith('bright'), key(pair)).toBe(pair[1].startsWith('bright'));
+    }
+  });
+
+  // The swap reads the channels from the table the chat pane colors
+  // them by, so newbie chat in bold green and immortal talk in bold red
+  // stand apart from every other channel too, and from hits on you.
+  it('keeps every two channels apart, from the table the chat pane reads', () => {
+    expect(CHANNEL_SLOTS).toEqual([
+      'red',
+      'green',
+      'yellow',
+      'cyan',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan',
+    ]);
+    for (const slot of GAME_CHANNEL_SLOTS.values()) {
+      if (CUE_SLOTS.includes(slot)) expect(CHANNEL_SLOTS, slot).toContain(slot);
+    }
+    expect(GAME_CHANNEL_SLOTS.get('newbie')).toBe('brightGreen');
+    expect(GAME_CHANNEL_SLOTS.get('immortal')).toBe('brightRed');
+    const key = ([a, b]: readonly string[]) => [a, b].sort().join('/');
+    const pairs = new Set(CHANNEL_PAIRS.map(key));
+    for (const pair of [
+      ['brightGreen', 'brightBlue'],
+      ['brightGreen', 'brightCyan'],
+      ['brightGreen', 'brightMagenta'],
+      ['brightGreen', 'cyan'],
+      ['brightGreen', 'green'],
+      ['brightRed', 'yellow'],
+      ['brightRed', 'brightYellow'],
+      ['green', 'blue'],
+      ['cyan', 'blue'],
+    ]) {
+      expect(pairs.has(key(pair)), key(pair)).toBe(true);
     }
   });
 
@@ -419,13 +458,20 @@ describe('color vision', () => {
 
   // Triad passes every check as it stands, and Kanso Zen's Typical fit
   // already kept every pair the old fit kept apart for a protanope. The
-  // swap changes both all the same.
+  // swap changes both all the same. Triad's bold green as a blue would
+  // run into its cabal and clan colors, so newbie chat keeps its green
+  // for a deuteranope and a protanope.
   it('swaps a palette whatever it already keeps apart', { timeout: 60_000 }, () => {
     for (const vision of ['deuteranopia', 'protanopia', 'tritanopia'] as const) {
       const [lead, bold] = LEAD_SLOTS[vision];
       const play = { ...TRIAD, ...swapFor(TRIAD, vision) };
       expect(moved(TRIAD[lead], play[lead]), vision).toBeGreaterThanOrEqual(MOVE_MIN.lead);
-      expect(moved(TRIAD[bold], play[bold]), vision).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+      if (vision === 'tritanopia') {
+        expect(moved(TRIAD[bold], play[bold]), vision).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+      } else {
+        const hue = (c: string) => rgbToOklch(hex(c)).h;
+        expect(Math.abs(hue(play[bold]) - hue(TRIAD[bold])), vision).toBeLessThan(3);
+      }
     }
     const kanso = findTheme('kanso-zen');
     const typical = { ...kanso.xterm, ...kanso.fitted };
