@@ -196,6 +196,45 @@ fn being_attacked_stays_quiet_when_a_groupmate_tanks_or_you_began_the_fight() {
 }
 
 #[test]
+fn being_attacked_alone_rings_whatever_the_game_calls_you() {
+    let p = with_on(&[ATTACKED]);
+    let now = Instant::now();
+    // In shadowform the game calls you `a shadow` (act_info.c:198), and
+    // a solo fighter is the tank of their own group.
+    let shadow = built(
+        "Char.Combat",
+        r#"{"target":"a Blackwatch guard","condition":"quite a few wounds","hp_pct":54,"tank":{"name":"a shadow","hp_pct":78}}"#,
+    );
+    let mut watch = orla(&p);
+    assert_eq!(
+        watch.gmcp(&p, &packet("group-info-solo.gmcp"), None, now),
+        None
+    );
+    let alert = watch.gmcp(&p, &shadow, None, now).expect("you are alone");
+    assert_eq!(alert.title, "A Blackwatch guard attacked you");
+    // In a group the same tank is a groupmate the list names.
+    let group = built(
+        "Group.Info",
+        r#"{"leader":"Maren","members":[{"id":1,"name":"Maren","level":40,"class":"warrior","hp_pct":90,"mana_pct":100,"move_pct":95,"tnl":800},{"id":2,"name":"a shadow","level":38,"class":"thief","hp_pct":78,"mana_pct":60,"move_pct":88,"tnl":900},{"id":3,"name":"Orla","level":50,"class":"dark-knight","hp_pct":64,"mana_pct":71,"move_pct":90,"tnl":1250}]}"#,
+    );
+    let mut watch = orla(&p);
+    assert_eq!(watch.gmcp(&p, &group, None, now), None);
+    assert_eq!(
+        watch.gmcp(&p, &shadow, None, now),
+        None,
+        "a groupmate tanks"
+    );
+    // Under lamented tears the game hides the group, and a tank by
+    // another name stays someone else.
+    let mut watch = orla(&p);
+    assert_eq!(
+        watch.gmcp(&p, &packet("group-info-hidden.gmcp"), None, now),
+        None
+    );
+    assert_eq!(watch.gmcp(&p, &shadow, None, now), None);
+}
+
+#[test]
 fn your_name_rings_as_a_whole_word_with_its_capital_once_char_status_names_you() {
     let p = with_on(&[NAME]);
     // `$n looks at $N.`, act_info.c:1054.
