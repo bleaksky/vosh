@@ -9,7 +9,6 @@ import {
   STATUS_PART,
   STATUS_SWAP,
   STATUS_TEXT_CONTRAST,
-  statusKeptApart,
   TERTIARY_CONTRAST,
   WASH_STEP,
   type Appearance,
@@ -30,28 +29,31 @@ import {
 } from './color';
 import type { AnsiSlot } from './baseAnsi';
 import {
+  CHANNEL_FLOOR,
+  CHANNEL_LEAST,
+  CHANNEL_PAIRS,
   checks,
   CHROMA_KEEP,
-  COLOR_VISIONS,
+  CUE_FLOOR,
+  CUE_PAIRS,
+  CUE_SLOTS,
+  familyOf,
   GAME_SLOTS,
-  GUARD_SHARE,
-  GUARDED_PAIRS,
   holdsCheck,
-  holdsVision,
-  HUE_TURN_FAR,
+  KEPT_PAIRS,
   KEPT_SLACK,
+  L_REACH,
   largestMove,
+  LEAD_SLOTS,
+  MISS_SLACK,
+  MOVE_MIN,
+  PART_MIN,
+  PARTED_PAIRS,
   seenApart,
-  textGuards,
-  turnHue,
-  turnRoom,
-  turnSlots,
-  VISIBLE_CHANGE,
+  SWAP_TARGETS,
+  TEXT_SLOTS,
   VISION_GUARD,
   VISION_SLACK,
-  visionChecks,
-  visionPairs,
-  visionSlots,
   type ColorVision,
 } from './gameFit';
 import {
@@ -65,6 +67,7 @@ import {
   setCustomThemes,
   themeShownBy,
   themeTokens,
+  typicalStart,
   visionFitOf,
   type AppTheme,
   type XtermPalette,
@@ -83,12 +86,6 @@ const paint = (color: string, ground: string): Rgb => {
   const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(color);
   if (!m) return hex(color);
   return composite({ r: +m[1], g: +m[2], b: +m[3] }, hex(ground), +m[4]);
-};
-
-// How far `to` sits up OKLCH hue from `from`, in degrees either way.
-const turned = (from: string, to: string) => {
-  const d = rgbToOklch(hex(to)).h - rgbToOklch(hex(from)).h;
-  return d > 180 ? d - 360 : d < -180 ? d + 360 : d;
 };
 
 // A lightness step in OKLab L times 100. Below Obsidian Ember's ground
@@ -844,9 +841,10 @@ describe('fitted game colors', () => {
   });
 });
 
-describe('color vision fits', () => {
-  const OTHER: ColorVision[] = ['deuteranopia', 'protanopia', 'tritanopia'];
-  const fitting = BUILTIN_THEMES.filter((t) => t.fitGameColors !== false);
+describe('color vision swaps', () => {
+  const OTHER = ['deuteranopia', 'protanopia', 'tritanopia'] as const;
+  type Other = (typeof OTHER)[number];
+  type Slot = (typeof GAME_SLOTS)[number];
   // FNV-1a over a JSON string, to pin a large value in a few characters.
   const digest = (text: string) => {
     let h = 0x811c9dc5;
@@ -856,32 +854,44 @@ describe('color vision fits', () => {
     }
     return h.toString(16).padStart(8, '0');
   };
-  type Slot = (typeof GAME_SLOTS)[number];
   const sees = (p: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
     seenApart(hex(p[a]), hex(p[b]), vision);
-  // How far a check falls outside its target, as the fit measures it.
+  const apart = (p: XtermPalette, a: Slot, b: Slot) => deltaEOk(hex(p[a]), hex(p[b]));
+  const lch = (c: string) => rgbToOklch(hex(c));
+  // How far a check falls outside its target, as the swap measures it.
   const gap = (need: string, value: number) => {
     if (need.startsWith('>=')) return Math.max(0, +need.slice(2) - value);
     const [a, b] = need.split('..').map(Number);
     return Math.max(0, a - value, value - b);
   };
-  // The floor a fit for `vision` holds each guarded pair to: a pair the
-  // vision keeps apart where the Typical fit has it or at its target,
-  // any other where the Typical fit has it or at three quarters of that,
-  // and never under VISION_GUARD.
-  const guardFloor = (typical: XtermPalette, a: AnsiSlot, b: AnsiSlot, vision: ColorVision) => {
-    const seen = sees(typical, a, b, vision);
-    const kept = visionPairs(vision).some(([x, y]) => x === a && y === b);
-    const cap = kept
-      ? deltaEOk(hex(typical[a]), hex(typical[b]))
-      : Math.max(VISION_GUARD, GUARD_SHARE * seen);
-    return Math.min(seen, cap);
-  };
-  // The floor a fit for `vision` holds each color it moves to from body
-  // text, white and bold white: where the Typical fit has it, or
-  // VISION_GUARD if that is less.
-  const textFloor = (typical: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
-    Math.min(sees(typical, a, b, vision), VISION_GUARD);
+  // How far hue `h` sits from `target`, in degrees either way.
+  const hueOff = (h: number, target: number) => ((h - target + 540) % 360) - 180;
+
+  // Every built in theme under each other vision, from each start it
+  // plays: the Typical fit while Fit game colors is on, and the
+  // published colors while it is off. A theme whose Typical fit is
+  // empty, and Solarized Dark, play the published start alone.
+  interface Case {
+    at: string;
+    theme: AppTheme;
+    vision: Other;
+    fit: boolean;
+    start: XtermPalette;
+    own: XtermPalette;
+  }
+  const CASES: Case[] = BUILTIN_THEMES.flatMap((theme) =>
+    OTHER.flatMap((vision) => {
+      const fitted = Object.keys(typicalStart(theme, true)).length > 0;
+      return (fitted ? [true, false] : [false]).map((fit) => ({
+        at: `${vision} ${theme.id} ${fit ? 'fitted' : 'published'}`,
+        theme,
+        vision,
+        fit,
+        start: playPalette(theme, fit),
+        own: playPalette(theme, fit, vision),
+      }));
+    }),
+  );
 
   // The 24 themes one-window (c5a6ebd0) shipped, their Typical fits and
   // their play palettes with Fit game colors on, digested from that
@@ -894,7 +904,9 @@ describe('color vision fits', () => {
       '188ff686',
     );
     for (const theme of BUILTIN_THEMES) {
-      expect(playPalette(theme, true, 'typical'), theme.id).toEqual(playPalette(theme, true));
+      for (const fit of [true, false]) {
+        expect(playPalette(theme, fit, 'typical'), theme.id).toEqual(playPalette(theme, fit));
+      }
       expect(visionFitOf(theme, 'typical'), theme.id).toBe(theme.fitted);
     }
   });
@@ -918,357 +930,391 @@ describe('color vision fits', () => {
     }
   });
 
-  it('stores only the slots each fit moved, in hex', () => {
-    for (const theme of fitting) {
-      for (const vision of OTHER) {
-        for (const [slot, color] of Object.entries(visionFitOf(theme, vision) ?? {})) {
-          const at = `${theme.id} ${vision} ${slot}`;
-          expect(GAME_SLOTS, at).toContain(slot);
-          expect(color, at).toMatch(/^#[0-9a-f]{6}$/);
-          expect(color, at).not.toBe(theme.xterm[slot as keyof XtermPalette]);
-        }
+  it('stores only the slots each swap moved, in hex', () => {
+    for (const c of CASES) {
+      for (const [slot, color] of Object.entries(visionFitOf(c.theme, c.vision, c.fit) ?? {})) {
+        expect(GAME_SLOTS, `${c.at} ${slot}`).toContain(slot);
+        expect(color, `${c.at} ${slot}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(color, `${c.at} ${slot}`).not.toBe(c.theme.xterm[slot as Slot]);
       }
     }
   });
 
-  it('keeps Solarized Dark as published for every vision (Q20)', () => {
-    const dark = findTheme('solarized-dark');
-    for (const vision of COLOR_VISIONS) expect(playPalette(dark, true, vision)).toBe(dark.xterm);
-  });
-
-  it('plays the published palette for every vision while Fit game colors is off', () => {
+  // The swap starts from what Typical plays: the Typical fit with Fit
+  // game colors on, and the published colors with it off or on Solarized
+  // Dark. It moves only the twelve cue colors, so body text, white, bold
+  // white, black and bold black play as the start has them.
+  it('starts from the palette Typical plays and moves only the cue colors', () => {
+    for (const c of CASES) {
+      expect(c.start, c.at).toEqual({ ...c.theme.xterm, ...typicalStart(c.theme, c.fit) });
+      for (const slot of GAME_SLOTS.filter((k) => !CUE_SLOTS.includes(k as AnsiSlot))) {
+        expect(c.own[slot], `${c.at} ${slot}`).toBe(c.start[slot]);
+      }
+      expect(
+        CUE_SLOTS.some((k) => c.own[k] !== c.start[k]),
+        c.at,
+      ).toBe(true);
+    }
     for (const theme of BUILTIN_THEMES) {
-      for (const vision of COLOR_VISIONS) {
-        expect(playPalette(theme, false, vision), theme.id).toBe(theme.xterm);
+      if (Object.keys(typicalStart(theme, true)).length > 0) continue;
+      for (const vision of OTHER) {
+        expect(playPalette(theme, true, vision), `${vision} ${theme.id}`).toEqual(
+          playPalette(theme, false, vision),
+        );
       }
+    }
+    // Solarized Dark keeps out of Fit game colors under Typical, and
+    // swaps from its published colors under every other vision.
+    const dark = findTheme('solarized-dark');
+    expect(playPalette(dark, true)).toBe(dark.xterm);
+    for (const vision of OTHER) {
+      expect(playPalette(dark, true, vision)).not.toEqual(dark.xterm);
     }
   });
 
-  // A vision's fit holds to the Typical fit. It passes every check the
-  // Typical fit passes, and on each check the Typical fit misses it falls
-  // no further short, so no color reads fainter on its ground than the
-  // Typical fit has it. It leaves only the T7 pairs another vision sees
-  // through.
-  it('gives up no check the Typical fit passes and falls no further short of one it misses', () => {
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const held = checks(playPalette(theme, true));
-        checks(playPalette(theme, true, vision)).forEach((c, i) => {
-          if (!holdsCheck(c.id, vision)) return;
-          const at = `${vision} ${theme.id} ${c.id} ${held[i].value} to ${c.value}`;
-          if (held[i].ok) expect(c.ok, at).toBe(true);
-          else
-            expect(gap(c.need, c.value), at).toBeLessThanOrEqual(gap(held[i].need, held[i].value));
-        });
-      }
-    }
-  });
-
-  it('moves only the colors of the pairs a vision keeps apart and their twins', () => {
-    for (const vision of OTHER) {
-      const moves = visionSlots(vision);
-      for (const theme of fitting) {
-        const typical = playPalette(theme, true);
-        const own = playPalette(theme, true, vision);
-        for (const slot of GAME_SLOTS.filter((k) => !moves.includes(k))) {
-          expect(own[slot], `${vision} ${theme.id} ${slot}`).toBe(typical[slot]);
+  // Each family the vision turns lands inside its window, give or take
+  // the rounding to a hex color, which bends the hue of a pale color
+  // more. Every other cue color keeps its hue within 3 degrees.
+  it('turns each family into its window and keeps the hue of every other', () => {
+    for (const c of CASES) {
+      for (const slot of CUE_SLOTS) {
+        const at = `${c.at} ${slot}`;
+        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
+        const now = lch(c.own[slot]);
+        if (target) {
+          const slack = 1 + 0.2 / Math.max(now.C, 0.01);
+          expect(Math.abs(hueOff(now.h, target.hue)), at).toBeLessThanOrEqual(target.reach + slack);
+        } else if (c.own[slot] !== c.start[slot] && lch(c.start[slot]).C >= 0.04) {
+          expect(Math.abs(hueOff(now.h, lch(c.start[slot]).h)), at).toBeLessThan(3);
         }
       }
     }
   });
 
-  it('brings no cue pair nearer, as the vision sees it, than its guard', () => {
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const typical = playPalette(theme, true);
-        const own = playPalette(theme, true, vision);
-        for (const [a, b] of GUARDED_PAIRS) {
-          const floor = guardFloor(typical, a, b, vision);
-          const at = `${vision} ${theme.id} ${a}/${b}`;
-          expect(sees(own, a, b, vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
+  // No swap gives up a check its start passes or falls more than
+  // MISS_SLACK further short of one it misses, leaving out the T7 pairs
+  // another vision sees through. No color moves more than L_REACH in
+  // lightness, red keeps its side of yellow and bold yellow, and a
+  // turned color keeps CHROMA_KEEP of its chroma, or of its target's.
+  it('holds every check, the reach in lightness, red against yellow and the chroma', () => {
+    for (const c of CASES) {
+      const held = checks(c.start);
+      checks(c.own).forEach((check, i) => {
+        if (!holdsCheck(check.id, c.vision)) return;
+        const at = `${c.at} ${check.id} ${held[i].value} to ${check.value}`;
+        if (held[i].ok) expect(check.ok, at).toBe(true);
+        else {
+          expect(gap(check.need, check.value), at).toBeLessThanOrEqual(
+            gap(held[i].need, held[i].value) + MISS_SLACK,
+          );
         }
+      });
+      for (const slot of CUE_SLOTS) {
+        const at = `${c.at} ${slot}`;
+        const moved = Math.abs(lch(c.own[slot]).L - lch(c.start[slot]).L);
+        expect(moved, at).toBeLessThanOrEqual(L_REACH + 1e-9);
+        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
+        if (target) {
+          const keep = CHROMA_KEEP * Math.min(lch(c.start[slot]).C, target.chroma);
+          expect(lch(c.own[slot]).C, at).toBeGreaterThanOrEqual(keep - 1e-9);
+        }
+      }
+      for (const y of ['yellow', 'brightYellow'] as const) {
+        const was = lch(c.start.red).L - lch(c.start[y]).L;
+        if (Math.abs(was) < 0.02) continue;
+        const now = lch(c.own.red).L - lch(c.own[y]).L;
+        expect(Math.sign(now), `${c.at} red/${y}`).toBe(Math.sign(was));
       }
     }
   });
 
-  // A tell in green never reads as body text. Each color a vision moves
-  // stays as far from body text, white and bold white, as the vision
-  // sees them, as the Typical fit has it, or VISION_GUARD if that is
-  // less.
-  it('keeps every color it moves clear of body text, white and bold white', () => {
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const typical = playPalette(theme, true);
-        const own = playPalette(theme, true, vision);
-        for (const [a, b] of textGuards(vision)) {
-          const at = `${vision} ${theme.id} ${a}/${b}`;
-          const floor = textFloor(typical, a, b, vision);
-          expect(sees(own, a, b, vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
-        }
-      }
+  // The floors and targets of the swap below the checks, firmest first
+  // (gameFit swapFor): each color clear of body text, white and bold
+  // white, the kept pairs, the channels at CHANNEL_LEAST, the lead
+  // color's move, the channel and cue floors and the parted pairs.
+  // Each reads `p`, the palette in play, against `start`.
+  interface Rule {
+    id: string;
+    tier: number;
+    slots: readonly Slot[];
+    value: (p: XtermPalette) => number;
+    need: number;
+  }
+  const rulesOf = ({ start, vision }: Case): Rule[] => {
+    const out: Rule[] = [];
+    const pair = (
+      id: string,
+      tier: number,
+      [a, b]: readonly [Slot, Slot],
+      most: number,
+      less = 0,
+    ) => {
+      out.push({
+        id: `${id} ${a}/${b}`,
+        tier,
+        slots: [a, b],
+        value: (p) => sees(p, a, b, vision),
+        need: Math.min(sees(start, a, b, vision), most) - less,
+      });
+      out.push({
+        id: `${id} ${a}/${b} typical`,
+        tier,
+        slots: [a, b],
+        value: (p) => apart(p, a, b),
+        need: Math.min(apart(start, a, b), most) - less,
+      });
+    };
+    for (const k of CUE_SLOTS) {
+      for (const t of TEXT_SLOTS) pair('text', 1, [k, t], VISION_GUARD, VISION_SLACK);
     }
-  });
-
-  // Red, green and for a tritanope cyan turn up OKLCH hue, at most
-  // HUE_TURN_FAR and never past their family's limit. Every other color
-  // keeps its hue, give or take the rounding of a step in lightness.
-  it('turns no hue past its bound or its family limit', () => {
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const typical = playPalette(theme, true);
-        const own = playPalette(theme, true, vision);
-        for (const slot of visionSlots(vision)) {
-          if (own[slot] === typical[slot] || rgbToOklch(hex(typical[slot])).C < 0.05) continue;
-          const at = `${vision} ${theme.id} ${slot}`;
-          const family = turnSlots(vision).find((f) => f === slot);
-          const dh = turned(typical[slot], own[slot]);
-          if (!family) {
-            expect(Math.abs(dh), at).toBeLessThan(3);
-            continue;
-          }
-          const room = turnRoom(family, rgbToOklch(hex(theme.xterm[slot])).h, HUE_TURN_FAR);
-          expect(dh, at).toBeGreaterThan(-3);
-          expect(dh, at).toBeLessThanOrEqual(room + 1.5);
-        }
-      }
+    for (const [a, b] of KEPT_PAIRS[vision]) {
+      out.push({
+        id: `kept ${a}/${b}`,
+        tier: 1,
+        slots: [a, b],
+        value: (p) => sees(p, a, b, vision),
+        need: sees(start, a, b, vision) - KEPT_SLACK,
+      });
     }
-  });
-
-  // What stops each step that would part a pair further: a check the fit
-  // holds that the step gives up or falls further short of, a cue pair
-  // it brings under its guard, the hue limit where a turn has no room
-  // left, or trade where nothing stops the step and the fit spent the
-  // room on another pair.
-  const gameBlockers = (theme: AppTheme, vision: ColorVision, a: AnsiSlot, b: AnsiSlot) => {
-    const typical = playPalette(theme, true);
-    const own = playPalette(theme, true, vision);
-    const kept = visionFitOf(theme, vision) === theme.fitted;
-    const held = checks(typical);
-    const now = sees(own, a, b, vision);
+    for (const p of CHANNEL_PAIRS) pair('least', 2, p, CHANNEL_LEAST);
+    LEAD_SLOTS[vision].forEach((k, i) => {
+      out.push({
+        id: `move ${k}`,
+        tier: 3,
+        slots: [k],
+        value: (p) => deltaEOk(hex(start[k]), hex(p[k])),
+        need: i === 0 ? MOVE_MIN.lead : MOVE_MIN.bold,
+      });
+    });
+    for (const p of CHANNEL_PAIRS) pair('channel', 4, p, CHANNEL_FLOOR);
+    for (const p of CUE_PAIRS) pair('cue', 4, p, CUE_FLOOR);
+    for (const [a, b] of PARTED_PAIRS[vision]) {
+      out.push({
+        id: `part ${a}/${b}`,
+        tier: 5,
+        slots: [a, b],
+        value: (p) => sees(p, a, b, vision),
+        need: Math.min(PART_MIN[vision], apart(start, a, b)) - VISION_SLACK,
+      });
+    }
+    return out;
+  };
+  // What stops each step that would bring a short rule nearer its
+  // target: a firmer rule, or one as firm, that the step breaks, the
+  // window a turned hue may not leave, or a check, the reach in
+  // lightness or the chroma the swap holds. Where nothing stops it the
+  // search missed the step.
+  const blockersOf = (c: Case, rules: Rule[], short: Rule[]) => {
     const out = new Set<string>();
-    for (const k of [a, b]) {
-      const lch = rgbToOklch(hex(own[k]));
-      const family = turnSlots(vision).find((f) => f === k);
-      const steps: [string, string][] = [-0.02, 0.02].map((d) => [
-        'L',
-        toHex(oklchToRgbInGamut({ ...lch, L: Math.max(0, Math.min(1, lch.L + d)) })),
-      ]);
-      if (family) steps.push(['turn', toHex(turnHue(hex(own[k]), 4))]);
-      for (const [step, color] of steps) {
-        const p = { ...own, [k]: color };
-        if (sees(p, a, b, vision) <= now + 0.05) continue;
-        const why: string[] = [];
-        checks(p).forEach((c, i) => {
-          if (!holdsCheck(c.id, vision)) return;
-          if (held[i].ok ? !c.ok : gap(c.need, c.value) > gap(held[i].need, held[i].value)) {
-            why.push(c.id);
+    const held = checks(c.start);
+    const holds = (p: XtermPalette) => {
+      const why: string[] = [];
+      checks(p).forEach((check, i) => {
+        if (!holdsCheck(check.id, c.vision)) return;
+        const miss = held[i].ok
+          ? !check.ok
+          : gap(check.need, check.value) > gap(held[i].need, held[i].value) + MISS_SLACK;
+        if (miss) why.push(check.id);
+      });
+      for (const slot of CUE_SLOTS) {
+        if (Math.abs(lch(p[slot]).L - lch(c.start[slot]).L) > L_REACH) why.push(`${slot} reach`);
+        const target = SWAP_TARGETS[c.vision][familyOf(slot)];
+        const keep = target ? CHROMA_KEEP * Math.min(lch(c.start[slot]).C, target.chroma) : 0;
+        if (lch(p[slot]).C < keep) why.push(`${slot} chroma`);
+      }
+      return why;
+    };
+    for (const r of short) {
+      const now = r.value(c.own);
+      for (const k of r.slots) {
+        if (!CUE_SLOTS.includes(k as AnsiSlot)) continue;
+        // Steps the swap could take: lightness at the color's hue and the
+        // chroma it aims for, and for a turned color its hue.
+        const target = SWAP_TARGETS[c.vision][familyOf(k as AnsiSlot)];
+        const from = lch(c.start[k]);
+        const o = {
+          L: lch(c.own[k]).L,
+          C: target ? Math.max(from.C, target.chroma) : from.C,
+          h: target ? lch(c.own[k]).h : from.h,
+        };
+        const steps = [-0.02, 0.02].map((d) => ({ ...o, L: Math.max(0, Math.min(1, o.L + d)) }));
+        if (target) steps.push({ ...o, h: o.h - 2.5 }, { ...o, h: o.h + 2.5 });
+        for (const step of steps) {
+          const p = { ...c.own, [k]: toHex(oklchToRgbInGamut(step)) };
+          if (r.value(p) <= now + 0.05) continue;
+          const why = holds(p);
+          if (target && Math.abs(hueOff(step.h, target.hue)) > target.reach + 0.5) {
+            why.push(`${k} hue window`);
           }
-        });
-        for (const [x, y] of GUARDED_PAIRS) {
-          if (sees(p, x, y, vision) < guardFloor(typical, x, y, vision)) why.push(`${x}/${y}`);
+          for (const q of rules) {
+            if (q === r || q.tier > r.tier) continue;
+            const after = q.value(p);
+            if (after < q.need - 1e-9 && after < q.value(c.own) - 1e-9) {
+              why.push(q.id.replace(/ typical$/, ''));
+            }
+          }
+          if (why.length === 0) why.push('missed');
+          why.forEach((w) => out.add(w));
         }
-        for (const [x, y] of textGuards(vision)) {
-          if (sees(p, x, y, vision) < textFloor(typical, x, y, vision)) why.push(`${x}/${y}`);
-        }
-        const c0 = rgbToOklch(hex(theme.xterm[k])).C;
-        if (c0 > 0.04 && rgbToOklch(hex(color)).C < 0.6 * c0) why.push(`${k} chroma`);
-        if (step === 'turn' && family) {
-          const room = turnRoom(family, rgbToOklch(hex(theme.xterm[k])).h, HUE_TURN_FAR);
-          if (turned(theme.xterm[k], own[k]) + 4 > room + 1) why.push(`${k} hue limit`);
-        }
-        // Nothing stops the step. Where the fit kept the Typical fit, the
-        // best it found moved no color far enough to see (unseen), and
-        // else it spent the room on another pair (trade).
-        if (why.length === 0) why.push(kept ? 'unseen' : 'trade');
-        why.forEach((w) => out.add(w));
       }
     }
     return [...out].sort();
   };
 
-  // Each pair each vision's fit leaves short of its target, how far it
-  // gets of how far it needs, and what stops it going further.
-  const GAME_SHORT: Record<string, string> = {
-    'deuteranopia obsidian-ember':
-      'red/green 19.3 of 28.6, red/brightYellow 21.6 of 23.9, red/yellow 12 of 15.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, green/brightWhite, green/brightYellow, green/foreground, green/white, green/yellow',
-    'deuteranopia triad':
-      'red/green 10.5 of 30.3, red/brightYellow 24 of 30.5, red/yellow 14.7 of 22.6. T3 red Lc, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, cyan/green, green hue limit, green/white, red/brightYellow, red/yellow',
-    'deuteranopia rubric':
-      'red/green 22.9 of 29.1. T3 red Lc, cyan/green, green hue limit, red hue limit',
-    'deuteranopia kanso-zen':
-      'red/green 21.3 of 25.1, red/yellow 12.2 of 15.4. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, green/brightWhite, green/brightYellow, green/foreground, green/yellow, yellow/foreground',
-    'deuteranopia tokyo-night':
-      'red/green 21.1 of 33.2, red/yellow 12 of 18.1. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, green/yellow',
-    'deuteranopia nord':
-      'red/green 10.1 of 19.7, red/brightYellow 32.2 of 34.4, red/yellow 23.4 of 26. T3 red Lc, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, red/yellow, unseen',
-    'deuteranopia rose-pine':
-      'red/green 10.1 of 23, red/brightYellow 22.3 of 26.7, red/yellow 15.7 of 20.7. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green hue limit, red/brightYellow, red/yellow',
-    'deuteranopia gruvbox':
-      'red/green 21.7 of 31.9, red/brightYellow 23 of 28.6, red/yellow 12.1 of 19.6. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/foreground, green/foreground, green/yellow',
-    'deuteranopia catppuccin':
-      'red/green 10 of 24.3, red/brightYellow 29.1 of 32.1, red/yellow 23.4 of 26.9. T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, cyan/green, yellow/brightWhite',
-    'deuteranopia dracula':
-      'red/green 13.5 of 39.1, red/brightYellow 32.1 of 39.8, red/yellow 25.4 of 35.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, green/yellow, red/yellow',
-    'deuteranopia monokai':
-      'red/green 22.5 of 39.6, red/brightYellow 19.7 of 26.6, red/yellow 12.5 of 20.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green/brightYellow, green/yellow',
-    'deuteranopia one-half-dark':
-      'red/green 21.2 of 30.8, red/brightYellow 21.5 of 25.4, red/yellow 12.1 of 17.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, brightYellow/foreground, brightYellow/white, green/brightWhite, green/yellow',
-    'deuteranopia solarized-light':
-      'red/green 32.3 of 35.1. T3 red Lc, T6 green pair dE, green/brightYellow',
-    'deuteranopia tango-dark':
-      'red/green 20.8 of 38.9, red/brightYellow 27.4 of 34.7, red/yellow 12 of 23.9. T3 red Lc, T6 green bright step dL, T6 green pair dE, T7 deutan red/yellow, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/brightYellow, green/yellow, red/yellow',
-    'deuteranopia classic-vivid':
-      'red/green 10.2 of 35.9, red/brightYellow 30 of 40.5, red/yellow 20.7 of 24.4. T3 red Lc, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/yellow, red/brightYellow, red/green, yellow chroma',
-    'deuteranopia high-contrast':
-      'red/green 14.1 of 40.8, red/brightYellow 28.9 of 37.8, red/yellow 25.9 of 37.4. T3 red Lc, T6 green pair dE, T6 yellow bright step dL, T6 yellow pair dE, brightYellow chroma, brightYellow/brightWhite, brightYellow/foreground, green/brightYellow, green/yellow',
-    'deuteranopia everforest-dark':
-      'red/green 21.5 of 28.2, red/brightYellow 21.8 of 24.8, red/yellow 12 of 16.8. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, brightYellow/brightWhite, green/brightWhite, green/yellow, yellow/foreground, yellow/white',
-    'deuteranopia green-screen':
-      'red/green 10 of 35.8, red/brightYellow 27 of 37.2, red/yellow 18.6 of 22.8. T3 red Lc, T6 green pair dE, T7 deutan red/green, T7 deutan yellow/green, brightYellow chroma, brightYellow/brightWhite, green/foreground, green/yellow, red/green, yellow chroma',
-    'deuteranopia srcery':
-      'red/green 19.8 of 36.1, red/brightYellow 21.4 of 28.9, red/yellow 12.7 of 21.7. T3 red Lc, T6 yellow pair dE, brightYellow/brightWhite, brightYellow/foreground, green hue limit, green/brightWhite, green/foreground, trade',
-    'deuteranopia nightfly':
-      'red/green 10 of 30, red/brightYellow 28.7 of 34.5, red/yellow 22.1 of 30.3. T3 red Lc, T6 yellow pair dE, T7 deutan red/green, brightYellow chroma, brightYellow/brightWhite, red/green, unseen',
-    'deuteranopia melange-dark':
-      'red/green 17.6 of 21.6. T3 red Lc, T6 green pair dE, cyan/green, green/brightYellow, green/foreground, red/brightYellow',
-    'deuteranopia melange-light':
-      'red/green 26.5 of 30.8. green/brightWhite, green/foreground, unseen',
-    'deuteranopia modus-vivendi':
-      'red/green 19 of 38.8, red/brightYellow 19.5 of 26, red/yellow 12.2 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, green/brightYellow, green/yellow',
-    'deuteranopia harbor-dark':
-      'red/green 19.5 of 36.2, red/yellow 12 of 17.7. T3 red Lc, T6 green pair dE, T7 deutan yellow/green, green/brightYellow, green/yellow',
-    'deuteranopia iceberg-dark':
-      'red/green 21.9 of 27.6, red/yellow 12.1 of 14.3. T3 red Lc, T6 green pair dE, T6 yellow pair dE, T7 deutan yellow/green, green/brightWhite, green/yellow',
-    'protanopia triad':
-      'red/green 18.6 of 30.3. T3 red Lc, T7 protan yellow/green, cyan/green, green hue limit, green/foreground, green/white, green/yellow, unseen',
-    'protanopia rubric':
-      'red/green 12.3 of 29.1, red/brightYellow 32 of 37.5, red/yellow 21.8 of 26.9. T3 red Lc, T6 yellow pair dE, brightYellow/foreground, cyan/green, green hue limit, green/white, red hue limit',
-    'protanopia nord': 'red/green 17.6 of 19.7. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia rose-pine':
-      'red/green 16.2 of 23. T3 red Lc, T6 green pair dE, cyan/green, green/white, red/yellow',
-    'protanopia catppuccin':
-      'red/green 19.4 of 24.3. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/yellow',
-    'protanopia dracula': 'red/green 27.7 of 39.1. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia monokai':
-      'red/green 35.6 of 39.6. T3 red Lc, T6 green bright step dL, T6 green pair dE',
-    'protanopia solarized-light':
-      'red/green 21.8 of 35.1, red/yellow 12.9 of 21.9. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/yellow',
-    'protanopia classic-vivid':
-      'red/green 26.1 of 35.9. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia high-contrast':
-      'red/green 28.7 of 40.8. T3 red Lc, T6 green pair dE, T7 protan yellow/green, cyan/green, green/brightYellow, green/yellow',
-    'protanopia green-screen':
-      'red/green 25.7 of 35.8. T3 red Lc, T6 green pair dE, T7 protan yellow/green, green/brightYellow, green/foreground, green/yellow',
-    'protanopia srcery':
-      'red/green 32.8 of 36.1. T3 red Lc, T6 green pair dE, green/brightWhite, green/foreground',
-    'protanopia nightfly': 'red/green 24.2 of 30. T3 red Lc, T7 protan yellow/green, green/yellow',
-    'protanopia melange-light': 'red/green 21 of 30.8. green/foreground, unseen',
-    'protanopia modus-vivendi':
-      'red/green 34.4 of 38.8, red/yellow 22.1 of 25. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE',
-    'protanopia harbor-dark': 'red/green 32.8 of 36.2. T3 red Lc, T6 green pair dE, unseen',
-    'tritanopia obsidian-ember':
-      'cyan/green 8.6 of 11.9, cyan/blue 8.5 of 10.7. T6 cyan pair dE, T6 green pair dE, T7 tritan cyan/green, cyan/blue, cyan/green, unseen',
-    'tritanopia rubric':
-      'cyan/green 8.5 of 10.5. T2 green Lc, T6 cyan pair dE, cyan hue limit, green hue limit',
-    'tritanopia tokyo-night':
-      'red/brightYellow 23 of 25.1, red/yellow 15.1 of 18.1, cyan/green 14.9 of 22.5. T2 cyan Lc, T3 red Lc, T6 green pair dE, T6 yellow pair dE, brightYellow/brightWhite, green/brightWhite, green/brightYellow',
-    'tritanopia rose-pine': 'red/yellow 17.3 of 20.7. T3 red Lc, T6 yellow pair dE',
-    'tritanopia gruvbox':
-      'red/brightYellow 25.1 of 28.6, red/yellow 17.5 of 19.6. T3 red Lc, T6 yellow pair dE, brightYellow/foreground, yellow/white',
-    'tritanopia dracula': 'cyan/green 8.3 of 21.8. T6 cyan pair dE, unseen',
-    'tritanopia monokai':
-      'red/yellow 18.2 of 20.9, cyan/green 14.7 of 19.7. T2 cyan Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, green chroma',
-    'tritanopia solarized-light':
-      'red/green 32.4 of 35.1. T3 red Lc, T6 green pair dE, cyan/green, green/brightYellow, green/foreground, green/white',
-    'tritanopia tango-dark':
-      'cyan/green 12.5 of 19.1, cyan/blue 8.7 of 13. T2 cyan Lc, T3 blue Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, cyan/blue, cyan/green',
-    'tritanopia classic-vivid':
-      'red/brightYellow 37.5 of 40.5, cyan/green 17.4 of 19.5, cyan/blue 6.2 of 19.4. T2 cyan Lc, T3 blue Lc, T3 red Lc, T6 green bright step dL, T6 green pair dE, brightYellow chroma, brightYellow/brightWhite, cyan/blue, trade',
-    'tritanopia high-contrast': 'cyan/green 11.5 of 22.3. T6 cyan pair dE, red/green',
-    'tritanopia everforest-dark': 'cyan/blue 3.9 of 6.4. T6 cyan pair dE, cyan/green, unseen',
-    'tritanopia green-screen':
-      'cyan/green 14.2 of 19.3, cyan/blue 5.9 of 17.4. T2 cyan Lc, T3 blue Lc, T6 green bright step dL, T6 green pair dE, cyan/blue, trade',
-    'tritanopia srcery': 'cyan/green 9.8 of 15. T6 green bright step dL, T6 green pair dE, trade',
-    'tritanopia melange-dark':
-      'red/brightYellow 18.5 of 21.8, red/yellow 10.8 of 12.9. T3 red Lc, T6 yellow pair dE, brightYellow/foreground, yellow/white',
-    'tritanopia modus-vivendi':
-      'red/yellow 22.4 of 25, cyan/green 9.5 of 18.2, cyan/blue 11 of 14.1. T3 blue Lc, T3 red Lc, T6 cyan pair dE, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, T7 tritan cyan/green, cyan/green, trade',
-    'tritanopia harbor-dark':
-      'red/yellow 15.4 of 17.7, cyan/green 10.1 of 18.7. T3 red Lc, T6 green bright step dL, T6 green pair dE, T6 yellow pair dE, green hue limit, trade',
+  // Each rule each swap leaves short, how far it gets of how far it
+  // needs, and what stops it going further.
+  const SWAP_SHORT: Record<string, string> = {
+    'protanopia obsidian-ember published':
+      'channel brightBlue/brightCyan 5.5 of 6.0. channel green/brightBlue, cue brightGreen/brightBlue, least green/brightBlue, text brightCyan/brightWhite',
+    'protanopia triad published':
+      'channel green/brightMagenta 4.7 of 6.0. T2 green Lc, channel brightBlue/brightMagenta, green hue window, least brightBlue/brightMagenta',
+    'deuteranopia tokyo-night fitted':
+      'text green/white 7.4 of 8.0, text brightGreen/foreground 2.1 of 8.0, text brightGreen/white 7.0 of 8.0, channel green/cyan 5.0 of 6.0, channel green/cyan typical 5.0 of 6.0. T2 green Lc, T6 cyan pair dE, T6 green pair dE, channel green/blue, cue green/magenta, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text cyan/foreground',
+    'deuteranopia tokyo-night published':
+      'text green/white 7.3 of 8.0, text brightGreen/white 7.3 of 8.0, least green/brightMagenta 2.8 of 4.0, channel green/brightBlue 4.6 of 6.0, channel green/brightMagenta 2.8 of 6.0, cue brightGreen/brightMagenta 2.8 of 3.0. T2 brightBlue Lc, T2 brightGreen Lc, T2 green Lc, T6 green bright step dL, brightBlue hue window, channel green/blue, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, cue green/magenta, least green/brightBlue, least green/brightMagenta, text brightMagenta/brightWhite, text brightMagenta/foreground, text green/white',
+    'protanopia tokyo-night fitted':
+      'text green/foreground 6.5 of 8.0, text green/white 5.3 of 8.0, text brightGreen/foreground 2.8 of 8.0, text brightGreen/brightWhite 5.5 of 8.0, channel green/cyan 5.0 of 6.0, channel green/cyan typical 5.1 of 6.0, channel green/brightBlue 5.6 of 6.0. T2 green Lc, T6 cyan pair dE, T6 green pair dE, brightGreen hue window, channel brightBlue/brightCyan, cue brightGreen/brightBlue, text brightBlue/brightWhite, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text cyan/brightWhite, text cyan/foreground, text green/white',
+    'protanopia tokyo-night published':
+      'text green/foreground 7.2 of 8.0, text green/white 5.5 of 8.0, text green/brightWhite 7.2 of 8.0, text brightGreen/foreground 7.2 of 8.0, text brightGreen/white 5.5 of 8.0, text brightGreen/brightWhite 7.2 of 8.0, channel green/brightMagenta 4.8 of 6.0. T2 brightGreen Lc, T2 brightMagenta Lc, T2 green Lc, T6 green bright step dL, channel brightBlue/brightMagenta, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text green/brightWhite, text green/foreground, text green/white',
+    'deuteranopia rose-pine fitted':
+      'move green 5.6 of 12.0, move brightGreen 3.6 of 6.0. T6 green pair dE, brightGreen chroma, brightGreen hue window, green hue window, text brightGreen/foreground, text brightGreen/white',
+    'protanopia rose-pine fitted':
+      'move green 6.6 of 12.0, move brightGreen 3.4 of 6.0, channel green/brightBlue 4.8 of 6.0, part green/brightYellow 16.4 of 18.0. T2 brightBlue Lc, T6 blue pair dE, T6 green pair dE, brightBlue hue window, brightBlue reach, brightGreen chroma, channel green/brightBlue, channel green/brightMagenta, green hue window, least green/brightBlue, move green, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text brightYellow/brightWhite, text green/white',
+    'tritanopia gruvbox fitted':
+      'channel brightBlue/brightMagenta 4.5 of 6.0. T2 brightMagenta Lc, T6 magenta pair dE, brightMagenta hue window, text brightBlue/foreground, text brightBlue/white',
+    'tritanopia gruvbox published':
+      'part green/blue 10.6 of 13.0. T3 blue Lc, T6 green pair dE, blue hue window, text green/white',
+    'deuteranopia catppuccin fitted':
+      'text brightGreen/foreground 3.9 of 8.0, text brightGreen/foreground typical 7.6 of 8.0, text brightGreen/white 4.9 of 8.0. T6 green pair dE, brightGreen chroma, brightGreen hue window, text brightGreen/foreground, text brightGreen/white',
+    'deuteranopia catppuccin published':
+      'text green/brightWhite 7.7 of 8.0, text brightGreen/brightWhite 7.7 of 8.0, least green/brightBlue 2.0 of 4.0, channel green/brightBlue 2.0 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 brightBlue Lc, T6 green bright step dL, text brightBlue/white, text brightGreen/white, text green/white',
+    'protanopia catppuccin fitted':
+      'text green/white 6.5 of 8.0, text brightGreen/foreground 1.9 of 8.0, text brightGreen/foreground typical 6.2 of 8.0, text brightGreen/brightWhite 6.5 of 8.0. T2 green Lc, T6 green pair dE, brightGreen chroma, brightGreen hue window, green hue window, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
+    'protanopia catppuccin published':
+      'text green/white 5.2 of 8.0, text brightGreen/white 5.2 of 8.0, channel green/brightBlue 5.6 of 6.0. T2 brightBlue Lc, T6 green bright step dL, brightBlue hue window, text brightGreen/brightWhite, text brightGreen/white, text green/brightWhite, text green/foreground, text green/white',
+    'tritanopia dracula fitted': 'move blue 9.4 of 12.0. T6 blue pair dE, blue hue window',
+    'deuteranopia monokai fitted':
+      'kept blue/magenta 8.3 of 11.1, least green/blue 3.1 of 4.0, channel green/blue 3.1 of 6.0, channel green/brightMagenta 4.0 of 6.0, channel brightBlue/brightMagenta 4.8 of 6.0, channel brightBlue/brightMagenta typical 5.1 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 green Lc, T3 magenta Lc, T6 blue pair dE, T6 magenta pair dE, blue hue window, brightBlue chroma, brightGreen chroma, channel brightBlue/brightMagenta, channel green/blue, channel green/brightMagenta, cue brightGreen/brightBlue, kept blue/magenta, least brightBlue/brightMagenta, least green/blue, least green/brightMagenta, text brightGreen/foreground, text brightGreen/white',
+    'protanopia monokai fitted':
+      'text brightYellow/foreground 4.5 of 4.6, kept blue/magenta 8.9 of 16.2, least green/brightMagenta 3.2 of 4.0, channel green/blue 5.1 of 6.0, channel green/brightBlue 4.0 of 6.0, channel green/brightMagenta 3.2 of 6.0, cue brightGreen/brightBlue 2.0 of 3.0. T2 brightMagenta Lc, T2 green Lc, T3 magenta Lc, T6 blue pair dE, T6 green pair dE, T6 magenta pair dE, T6 yellow pair dE, blue hue window, brightBlue chroma, brightGreen chroma, channel brightBlue/brightMagenta, channel green/blue, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, green reach, kept blue/magenta, kept red/brightYellow, least green/blue, least green/brightBlue, least green/brightMagenta, text brightGreen/foreground, text brightGreen/white',
+    'protanopia monokai published':
+      'kept blue/magenta 18.7 of 21.2. T3 magenta Lc, T6 blue bright step dL, blue chroma, blue hue window',
+    'protanopia one-half-dark fitted':
+      'channel green/cyan 5.9 of 6.0, channel green/brightBlue 4.6 of 6.0, channel green/brightMagenta 4.0 of 6.0, cue brightGreen/brightBlue 1.2 of 3.0. T2 brightMagenta Lc, T2 cyan Lc, T2 green Lc, T6 green bright step dL, T6 green pair dE, T6 magenta pair dE, brightBlue chroma, brightGreen hue window, brightGreen reach, channel brightBlue/brightCyan, channel green/blue, channel green/brightBlue, channel green/brightMagenta, channel green/cyan, green reach, least green/brightBlue, least green/brightMagenta, text brightBlue/foreground, text brightBlue/white',
+    'protanopia tango-dark fitted':
+      'channel green/brightBlue 4.5 of 6.0, channel green/brightMagenta 4.5 of 6.0. T2 brightMagenta Lc, T2 green Lc, T6 green bright step dL, T6 magenta pair dE, brightBlue chroma, channel brightBlue/brightCyan, channel green/brightBlue, channel green/brightMagenta, least green/brightBlue, least green/brightMagenta, text brightBlue/foreground, text brightBlue/white',
+    'deuteranopia classic-vivid fitted':
+      'channel brightBlue/brightMagenta 4.1 of 6.0, cue brightGreen/brightMagenta 1.4 of 3.0. T6 green pair dE, brightGreen chroma, channel brightBlue/brightMagenta, channel green/brightBlue, cue brightGreen/brightBlue, least brightBlue/brightMagenta, least green/brightBlue, text brightGreen/foreground, text brightMagenta/foreground',
+    'protanopia classic-vivid fitted':
+      'text brightGreen/foreground 7.4 of 8.0, part green/yellow 17.7 of 18.0. T2 green Lc, T6 yellow bright step dL, brightGreen chroma, brightGreen hue window, channel green/brightBlue, channel green/brightMagenta, text yellow/brightWhite',
+    'protanopia high-contrast fitted':
+      'cue brightGreen/brightBlue 2.8 of 3.0. T6 green pair dE, brightBlue chroma, brightGreen hue window, text brightBlue/foreground, text brightBlue/white',
+    'tritanopia everforest-dark fitted':
+      'text brightBlue/white 6.6 of 8.0, channel brightBlue/brightMagenta 5.5 of 6.0. T2 brightBlue Lc, T6 blue pair dE, brightBlue hue window, cue brightYellow/brightMagenta, text brightMagenta/brightWhite, text brightMagenta/foreground',
+    'tritanopia srcery fitted':
+      'text brightBlue/white 7.5 of 8.0. brightBlue hue window, text brightBlue/foreground',
+    'deuteranopia nightfly fitted':
+      'channel brightBlue/brightMagenta typical 5.1 of 6.0. T6 magenta pair dE, brightBlue hue window, channel green/brightMagenta, cue brightGreen/brightBlue, text brightBlue/foreground',
+    'protanopia nightfly fitted':
+      'channel green/brightBlue 4.5 of 6.0, channel green/brightMagenta 4.0 of 6.0. T2 brightMagenta Lc, T6 green pair dE, T6 magenta pair dE, brightBlue chroma, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, least green/brightBlue, least green/brightMagenta, text brightBlue/brightWhite, text brightBlue/foreground, text green/foreground',
+    'protanopia nightfly published':
+      'text brightGreen/brightWhite 6.7 of 8.0. T6 green pair dE, brightGreen chroma, text brightGreen/foreground',
+    'tritanopia melange-dark fitted': 'move blue 11.5 of 12.0. blue hue window, text blue/white',
+    'tritanopia melange-dark published':
+      'move blue 11.4 of 12.0, cue red/blue 2.8 of 3.0. T3 red Lc, blue hue window, move blue, text blue/white',
+    'protanopia modus-vivendi fitted':
+      'channel green/brightBlue 5.3 of 6.0. T2 brightBlue Lc, T6 blue pair dE, T6 green pair dE, brightBlue hue window, channel green/brightMagenta, least green/brightMagenta',
+    'protanopia harbor-dark fitted':
+      'channel green/brightBlue 4.7 of 6.0, channel brightBlue/brightMagenta typical 5.3 of 6.0, cue brightGreen/brightMagenta 1.5 of 3.0. T2 green Lc, T6 green pair dE, brightBlue chroma, brightBlue hue window, channel brightBlue/brightMagenta, channel brightCyan/brightMagenta, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, cue brightGreen/brightMagenta, least brightBlue/brightMagenta, least green/brightBlue, text brightGreen/foreground, text brightMagenta/foreground',
+    'deuteranopia iceberg-dark fitted':
+      'text brightGreen/foreground 6.5 of 8.0, text brightGreen/white 6.5 of 8.0, channel green/brightMagenta 5.9 of 6.0, channel brightBlue/brightMagenta typical 4.0 of 5.0, cue brightGreen/brightBlue 2.7 of 3.0. T2 green Lc, T6 green pair dE, T6 magenta pair dE, brightBlue hue window, brightGreen hue window, channel brightBlue/brightCyan, channel brightBlue/brightMagenta, channel green/brightBlue, channel green/brightMagenta, cue brightGreen/brightBlue, least brightBlue/brightMagenta, text brightBlue/foreground, text brightGreen/foreground, text brightGreen/white',
+    'deuteranopia iceberg-dark published':
+      'channel brightBlue/brightMagenta typical 4.6 of 4.8. T2 brightBlue Lc, T6 blue bright step dL, T6 blue pair dE, brightBlue hue window, channel brightCyan/brightMagenta, channel green/brightMagenta',
+    'protanopia iceberg-dark fitted':
+      'text brightGreen/foreground 5.5 of 8.0, text brightGreen/white 6.5 of 8.0, text brightGreen/brightWhite 6.9 of 7.4, channel green/brightMagenta 4.2 of 6.0, channel brightBlue/brightMagenta typical 4.2 of 5.0. T2 green Lc, T6 green pair dE, T6 magenta pair dE, brightBlue hue window, channel brightBlue/brightCyan, channel brightBlue/brightMagenta, channel green/brightMagenta, cue brightGreen/brightBlue, green hue window, least brightBlue/brightMagenta, least green/brightMagenta, text brightBlue/brightWhite, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white, text brightMagenta/foreground',
+    'protanopia iceberg-dark published':
+      'channel brightBlue/brightMagenta typical 4.7 of 4.8. T2 brightBlue Lc, brightBlue hue window, channel green/brightMagenta',
+    'tritanopia iceberg-dark published':
+      'part green/blue 12.1 of 13.0. T3 blue Lc, T6 green bright step dL, T6 green pair dE, blue hue window, cue blue/magenta, move blue, text green/brightWhite, text green/foreground, text green/white',
   };
 
-  it('parts every pair as far as a typical eye sees it in the Typical fit, or names the pair it cannot reach and why', () => {
+  it('keeps every floor and target, or names the rule short and what stops it', () => {
     const report: Record<string, string> = {};
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const typical = playPalette(theme, true);
-        const own = playPalette(theme, true, vision);
-        const missed = visionChecks(own, typical, vision).filter((c) => !c.ok);
-        if (missed.length === 0) continue;
-        const why = new Set<string>();
-        for (const c of missed) {
-          const [a, b] = c.id.split('/') as [AnsiSlot, AnsiSlot];
-          gameBlockers(theme, vision, a, b).forEach((w) => why.add(w));
-        }
-        const pairs = missed.map((c) => `${c.id} ${c.value} of ${c.need}`).join(', ');
-        report[`${vision} ${theme.id}`] = `${pairs}. ${[...why].sort().join(', ')}`;
-      }
+    for (const c of CASES) {
+      const rules = rulesOf(c);
+      const short = rules.filter((r) => r.value(c.own) < r.need - 1e-9);
+      if (short.length === 0) continue;
+      const items = short.map(
+        (r) => `${r.id} ${r.value(c.own).toFixed(1)} of ${r.need.toFixed(1)}`,
+      );
+      report[c.at] = `${items.join(', ')}. ${blockersOf(c, rules, short).join(', ')}`;
     }
-    expect(report).toEqual(GAME_SHORT);
+    expect(report).toEqual(SWAP_SHORT);
   });
 
-  // Where the Typical fit misses a target, the fit for the vision moves
-  // some color far enough to see, or keeps the Typical fit, and
-  // GAME_SHORT says what stops each step that would part the pair
-  // further. Where the Typical fit holds, the fit is the Typical fit.
-  it('changes every theme for every vision its Typical fit misses, or names why not, and none it holds', () => {
-    for (const vision of OTHER) {
-      for (const theme of fitting) {
-        const at = `${vision} ${theme.id}`;
-        const typical = playPalette(theme, true);
-        const same = visionFitOf(theme, vision) === theme.fitted;
-        if (holdsVision(typical, typical, vision)) {
-          expect(same, at).toBe(true);
-        } else if (same) {
-          expect(GAME_SHORT[at], at).toBeDefined();
-        } else {
-          const moved = largestMove(typical, playPalette(theme, true, vision), GAME_SLOTS);
-          expect(moved, at).toBeGreaterThanOrEqual(VISIBLE_CHANGE);
-        }
+  // No channel comes nearer another than CHANNEL_LEAST, or than it stood
+  // at the start if that is less, except where SWAP_SHORT names it.
+  it('keeps the channels apart wherever SWAP_SHORT names no exception', () => {
+    for (const c of CASES) {
+      for (const [a, b] of CHANNEL_PAIRS) {
+        const at = `${c.at} ${a}/${b}`;
+        const floor = Math.min(sees(c.start, a, b, c.vision), CHANNEL_LEAST);
+        if (SWAP_SHORT[c.at]?.includes(`least ${a}/${b} `)) continue;
+        expect(sees(c.own, a, b, c.vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
       }
     }
   });
 
-  // Kanso Zen's Typical fit misses the targets for a deuteranope, and
-  // GAME_SHORT shows every step that would part its game text further
-  // fading red or running a color into another, so its game text keeps
-  // the Typical fit and the window changes plainly. A protanope sees its
-  // game text apart already, and the window changes. A tritanope sees
-  // every pair apart already, within VISION_SLACK, so nothing changes.
-  it('changes Kanso Zen plainly where it misses a target, and leaves it where it holds', () => {
+  // The swap shows on every theme. The lead color, green or for a
+  // tritanope blue, moves at least MOVE_MIN.lead and its bold twin
+  // MOVE_MIN.bold as a typical eye sees them, and so some cue color
+  // moves MOVE_MIN.lead. SWAP_SHORT names the few where the lead color
+  // already sits near its target, such as Rose Pine's pine green, which
+  // is a blue, and Dracula's blue, which is a purple. There the lead
+  // moves less, and some cue color still moves MOVE_MIN.bold.
+  it('moves the lead color far enough to see on every theme', () => {
+    for (const c of CASES) {
+      const [lead, bold] = LEAD_SLOTS[c.vision];
+      const most = largestMove(c.start, c.own, CUE_SLOTS);
+      if (SWAP_SHORT[c.at]?.includes('move ')) {
+        expect(most, c.at).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+        continue;
+      }
+      expect(most, c.at).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+      const move = (k: Slot) => deltaEOk(hex(c.start[k]), hex(c.own[k]));
+      expect(move(lead), c.at).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+      expect(move(bold), c.at).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+    }
+  });
+
+  // Kanso Zen's soft palette changed nothing you could see under the
+  // old fit. The swap moves its lead color at least MOVE_MIN.lead under
+  // every vision, with Fit game colors on and off, and turns its window's
+  // success blue under deuteranopia and protanopia.
+  it('changes Kanso Zen plainly', () => {
     const kanso = findTheme('kanso-zen');
-    const text = (vision: ColorVision) =>
-      largestMove(playPalette(kanso, true), playPalette(kanso, true, vision), GAME_SLOTS);
-    const window = (vision: ColorVision) =>
-      largestMove(themeTokens(kanso), themeTokens(kanso, vision), CHROME_COLOR_KEYS);
-    const typical = playPalette(kanso, true);
-    expect(holdsVision(typical, typical, 'deuteranopia')).toBe(false);
-    expect(GAME_SHORT['deuteranopia kanso-zen']).not.toContain('unseen');
-    expect(text('deuteranopia')).toBe(0);
-    expect(window('deuteranopia')).toBeGreaterThanOrEqual(STATUS_MOVE_MIN);
-    expect(holdsVision(typical, typical, 'protanopia')).toBe(true);
-    expect(text('protanopia')).toBe(0);
-    expect(window('protanopia')).toBeGreaterThan(VISIBLE_CHANGE);
-    expect(holdsVision(typical, typical, 'tritanopia')).toBe(true);
-    const pinned = Boolean(kanso.chrome?.accent);
-    expect(statusKeptApart(themeTokens(kanso), 'tritanopia', pinned)).toBe(true);
-    expect(text('tritanopia') + window('tritanopia')).toBe(0);
-    // Deuteranopia parts danger from success in the window, which a
-    // deuteranope sees 2.9 apart under Typical.
-    const t = themeTokens(kanso);
-    const deut = themeTokens(kanso, 'deuteranopia');
-    expect(seenApart(hex(t.danger), hex(t.success), 'deuteranopia')).toBeCloseTo(2.9, 1);
-    expect(seenApart(hex(deut.danger), hex(deut.success), 'deuteranopia')).toBeGreaterThan(20.2);
+    for (const vision of OTHER) {
+      const [lead] = LEAD_SLOTS[vision];
+      for (const fit of [true, false]) {
+        const typical = playPalette(kanso, fit);
+        const own = playPalette(kanso, fit, vision);
+        expect(
+          deltaEOk(hex(typical[lead]), hex(own[lead])),
+          `${vision} ${fit}`,
+        ).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+      }
+    }
+    for (const vision of ['deuteranopia', 'protanopia'] as const) {
+      const t = themeTokens(kanso);
+      const v = themeTokens(kanso, vision);
+      expect(deltaEOk(hex(t.success), hex(v.success)), vision).toBeGreaterThanOrEqual(
+        STATUS_MOVE_MIN,
+      );
+      const h = lch(v.success).h;
+      expect(h, vision).toBeGreaterThanOrEqual(205);
+      expect(h, vision).toBeLessThanOrEqual(255);
+    }
+    expect(themeTokens(kanso, 'tritanopia').success).toBe(themeTokens(kanso).success);
   });
 });
 
@@ -1282,7 +1328,7 @@ describe('window status colors for a color vision', () => {
 
   // A tritanope tells red, yellow and green apart, so the window keeps
   // its status colors. TRITAN_NEAR names the themes where a tritanope
-  // sees danger nearer warn than 6, or nearer success than
+  // sees danger nearer warn than CHANNEL_FLOOR, or nearer success than
   // STATUS_PART, or as far as a typical eye sees them if less, minus
   // VISION_SLACK.
   const TRITAN_NEAR: Record<string, string> = { 'harbor-dark': 'danger/warn 3.8' };
@@ -1295,7 +1341,7 @@ describe('window status colors for a color vision', () => {
       for (const key of KEYS) expect(v[key], `${theme.id} ${key}`).toBe(t[key]);
       const items: string[] = [];
       const warn = sees(t.danger, t.warn, 'tritanopia');
-      if (warn < 6) items.push(`danger/warn ${warn.toFixed(1)}`);
+      if (warn < CHANNEL_FLOOR) items.push(`danger/warn ${warn.toFixed(1)}`);
       const success = sees(t.danger, t.success, 'tritanopia');
       const part = Math.min(STATUS_PART, deltaEOk(hex(t.danger), hex(t.success))) - VISION_SLACK;
       if (success < part) items.push(`danger/success ${success.toFixed(1)} of ${part.toFixed(1)}`);

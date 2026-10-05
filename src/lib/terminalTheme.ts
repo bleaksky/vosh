@@ -1,6 +1,7 @@
 // The xterm theme the terminal draws with, from the chrome theme, the
 // "Use the theme's colors for MUD text" setting, Fit game colors and the
-// color vision it fits for, which the selection follows too. The
+// color vision the game colors swap for, which the selection follows
+// too. The
 // pinned prompt band and the native renderer resolve their colors from
 // the same palette, so a prompt on the band looks as it would in the
 // text, on either renderer.
@@ -23,8 +24,8 @@ export function xtermThemeFor(
   fit: boolean,
   vision: ColorVision = 'typical',
 ): ITheme {
-  // The play palette, fitted for your color vision while Fit game colors
-  // is on. Tinted mode
+  // The play palette, fitted while Fit game colors is on and swapped for
+  // your color vision. Tinted mode
   // lets it color server output; otherwise the BASE palette applies, the
   // canonical xterm-256 chart unless the user replaced slots in the
   // themes tab (lib/baseAnsi). Either way the theme owns the surfaces

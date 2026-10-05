@@ -22,16 +22,16 @@
 // the fit while Fit game colors is on (playPalette in themes.ts,
 // fitGameColors).
 //
-// A color vision other than Typical gets fits of its own. Each starts
-// from the Typical fit and moves the colors of the cue pairs the vision
-// confuses until, seen through that vision, each pair stands as far
-// apart as a typical eye sees it in the Typical fit (visionChecks). It
-// moves lightness first, and turns a hue a little only where lightness
-// leaves a pair short (HUE_TURN). No color it moves runs into body text,
-// white or bold white (textGuards), and a fit that moves no color far
-// enough to see keeps the Typical fit (VISIBLE_CHANGE). A built in theme
-// ships them in themes.ts (VISION_FITS) where the fit for a vision moves
-// anything, and gameFit.test.ts fits them again with VOSH_FIT_THEMES=1.
+// A color vision other than Typical swaps the colors that vision runs
+// together for ones it tells apart, the way color blind modes in games
+// do (swapFor). For deuteranopia and protanopia green turns blue, red
+// turns toward vermilion and blue turns violet. For tritanopia blue turns
+// purple and magenta turns pink (SWAP_TARGETS). The swap starts from the
+// palette Typical plays, the Typical fit or the published colors, and
+// then settles the lightness of every cue color and the hue of each
+// turned one inside its window, by floors in strict order. A built in
+// theme ships its swaps in themes.ts (VISION_FITS), and gameFit.test.ts
+// works them out again with VOSH_FIT_THEMES=1.
 
 import { indexedRgb } from './bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
@@ -161,12 +161,11 @@ const dECvd = (a: string, b: string, kind: Cvd) => {
 
 // ── Color vision ───────────────────────────────────────────────────
 
-/** The color vision Vosh keeps the cue colors apart for, from UiConfig
+/** The color vision Vosh swaps the cue colors for, from UiConfig
  *  color_vision. Typical asks the 46 checks as they stand, and every
  *  fit for Typical is the one before color vision. Each other vision
- *  keeps the pairs visionPairs names as far apart, seen through it, as
- *  a typical eye sees them in the Typical fit, in the game text while
- *  Fit game colors is on and in the window's status colors (chrome
+ *  swaps the colors it runs together for ones it tells apart, in the
+ *  game text (swapFor) and in the window's status colors (chrome
  *  deriveChrome). */
 export type ColorVision = 'typical' | 'deuteranopia' | 'protanopia' | 'tritanopia';
 
@@ -212,39 +211,6 @@ export function seenApart(a: Rgb, b: Rgb, vision: ColorVision): number {
   const p = seenLab(a, vision);
   const q = seenLab(b, vision);
   return 100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
-}
-
-/** How far a fit for a color vision may turn a cue color's hue, in
- *  degrees of OKLCH hue. A fit turns a hue only where lightness alone
- *  leaves a pair short of its target, and only as far as the target
- *  asks, up to HUE_TURN. Where HUE_TURN still leaves a pair short it
- *  may go on to HUE_TURN_FAR. Neither takes a color past HUE_LIMIT. The
- *  window's status colors turn by the same bounds (chrome deriveChrome). */
-export const HUE_TURN = 30;
-export const HUE_TURN_FAR = 40;
-
-/** The family of each color a fit may turn, and the OKLCH hue it never
- *  turns past, so it still reads as its own color to a typical eye. Red
- *  turns toward orange and stops at 33, past tomato at 32 and short of
- *  orange red at 35. Green turns toward teal and stops at 165, past
- *  medium spring green at 157 and short of aquamarine at 169. Cyan
- *  turns toward blue and stops at 240, short of dodger blue at 253. A
- *  color already at or past its limit keeps its hue. */
-export type TurnFamily = 'red' | 'green' | 'cyan';
-export const HUE_LIMIT: Readonly<Record<TurnFamily, number>> = { red: 33, green: 165, cyan: 240 };
-
-/** How far a color of `family` at OKLCH hue `hue` may turn under
- *  `bound` degrees. */
-export function turnRoom(family: TurnFamily, hue: number, bound: number): number {
-  return Math.max(0, Math.min(bound, HUE_LIMIT[family] - hue));
-}
-
-/** The color `c` turned `degrees` up OKLCH hue at its own lightness and
- *  chroma, giving up chroma only where sRGB runs out, and rounded. */
-export function turnHue(c: Rgb, degrees: number): Rgb {
-  const lch = rgbToOklch(c);
-  const out = oklchToRgbInGamut({ ...lch, h: (lch.h + degrees) % 360 });
-  return { r: Math.round(out.r), g: Math.round(out.g), b: Math.round(out.b) };
 }
 
 // ── The fixed colors the game sends ────────────────────────────────
@@ -314,14 +280,6 @@ const PAIRS: readonly (readonly [AnsiSlot, AnsiSlot])[] = [
   ['cyan', 'brightCyan'],
   ['white', 'brightWhite'],
 ];
-
-// The bold twin of each plain color, and the plain twin of each bold.
-const TWIN: Partial<Record<GameSlot, AnsiSlot>> = Object.fromEntries(
-  PAIRS.flatMap(([n, b]) => [
-    [n, b],
-    [b, n],
-  ]),
-);
 
 /** The cue pairs a protanope and a deuteranope must still tell apart,
  *  each with its dE floor. */
@@ -598,28 +556,6 @@ function shortfall(p: XtermPalette): number {
   return s;
 }
 
-// How far a check falls outside its target, 0 when it is inside, to
-// the tenth checks() reports.
-function gap(c: GameCheck): number {
-  if (c.need.startsWith('>=')) return Math.max(0, +c.need.slice(2) - c.value);
-  const [a, b] = c.need.split('..').map(Number);
-  return Math.max(0, a - c.value, c.value - b);
-}
-
-// Whether `p` holds every check `held` passes, and falls no further
-// short than `held` on each check it misses. A fit for a color vision
-// holds to the checks of the Typical fit this way, so no color drops
-// under a floor the Typical fit holds, and a color the Typical fit
-// leaves short, such as a dim red, gets no fainter. The T7 pairs
-// measured through another vision are for players who see through it,
-// and a fit for `kind` leaves them out.
-function keeps(p: XtermPalette, held: readonly GameCheck[], kind: Cvd): boolean {
-  return checks(p).every((c, i) => {
-    if (seenThroughOther(c.id, kind)) return true;
-    return held[i].ok ? c.ok : gap(c) <= gap(held[i]);
-  });
-}
-
 // Whether check `id` measures a pair through a color vision other than
 // `kind`.
 function seenThroughOther(id: string, kind: Cvd): boolean {
@@ -627,66 +563,43 @@ function seenThroughOther(id: string, kind: Cvd): boolean {
   return seen !== null && seen[1] !== kind;
 }
 
-/** Whether a fit for `vision` holds the check `id` as the Typical fit
- *  has it: every check but a T7 pair measured through another vision. */
+/** Whether a swap for `vision` holds the check `id` as its start has
+ *  it: every check but a T7 pair measured through another vision, which
+ *  is for the players who see through that one. */
 export function holdsCheck(id: string, vision: ColorVision): boolean {
   const kind = CVD_OF[vision];
   return !kind || !seenThroughOther(id, kind);
 }
 
-// ── What a color vision keeps apart ────────────────────────────────
+// ── The swap for a color vision ────────────────────────────────────
 
-type CuePair = readonly [AnsiSlot, AnsiSlot];
+/** Two cue colors. */
+export type CuePair = readonly [AnsiSlot, AnsiSlot];
 
-// Hits on you in red against tells in green and says in bright yellow,
-// and HP at 20 percent in red against HP at 40 percent in yellow.
-const RED_PAIRS: readonly CuePair[] = [
-  ['red', 'green'],
-  ['red', 'brightYellow'],
-  ['red', 'yellow'],
-];
-// Yells in cyan against tells in green and against blue.
-const CYAN_PAIRS: readonly CuePair[] = [
-  ['cyan', 'green'],
-  ['cyan', 'blue'],
-];
-/** The cue pairs a fit for a color vision keeps from running together
- *  as that vision sees them: the pairs any vision keeps apart, and tells
- *  in green against says in bright yellow and against yellow. A pair the
- *  vision keeps apart never comes nearer than the Typical fit has it,
- *  unless it stays past its target. Any other may come nearer, but by no
- *  more than a quarter of where the Typical fit has it (GUARD_SHARE), and
- *  never under VISION_GUARD, or under where the Typical fit has it if
- *  that is less, so tells in green keep clear of yells in cyan. */
-export const GUARDED_PAIRS: readonly CuePair[] = [
-  ...RED_PAIRS,
-  ...CYAN_PAIRS,
-  ['green', 'brightYellow'],
-  ['green', 'yellow'],
+/** A family of cue colors, a plain color and its bold twin. */
+export type CueFamily = 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan';
+
+/** The twelve colors a swap may move, the six cue families plain and
+ *  bold. Body text, white, bold white, black and bold black never move. */
+export const CUE_SLOTS: readonly AnsiSlot[] = [
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'brightRed',
+  'brightGreen',
+  'brightYellow',
+  'brightBlue',
+  'brightMagenta',
+  'brightCyan',
 ];
 
-/** How near, in OKLab dE times 100 as a color vision sees them, a fit
- *  for that vision lets two cue colors or two status colors it does not
- *  part come, the floor the Themes review asks of most T7 pairs. */
-export const VISION_GUARD = 10;
-
-/** The share of where the Typical fit has a guarded cue pair that the
- *  vision does not keep apart (GUARDED_PAIRS) which a fit for that
- *  vision holds it to, as the vision sees it. */
-export const GUARD_SHARE = 0.75;
-
-/** The text colors a cue color must never run into: body text, and the
- *  white and bold white the game writes whole sentences in. A fit for a
- *  color vision keeps each color it moves (visionSlots) from coming
- *  nearer each of them, as that vision sees them, than the Typical fit
- *  has it, or VISION_GUARD if that is less, so a tell in green never
- *  reads as body text. */
-export const TEXT_SLOTS: readonly GameSlot[] = ['foreground', 'white', 'brightWhite'];
-
-/** How far short of its target, in OKLab dE times 100, a pair may stand
- *  and still count as apart: the least difference OKLab counts as one
- *  an eye tells. */
-export const VISION_SLACK = 2;
+/** The family a cue color belongs to. */
+export function familyOf(slot: AnsiSlot): CueFamily {
+  return (slot.startsWith('bright') ? slot.slice(6).toLowerCase() : slot) as CueFamily;
+}
 
 /** Where a swap turns a family: the OKLCH hue it aims for, how far
  *  either side of it the solve may settle, in degrees, and the least
@@ -697,21 +610,198 @@ export interface SwapTarget {
   chroma: number;
 }
 
+// Tells in green leave the yellow side for the blue pole, hits in red
+// move toward vermilion, which a protanope sees brighter, and blue turns
+// violet so blue text never reads as a tell. Red stops short of orange,
+// so HP at 20 percent stays apart from HP at 40 percent in yellow.
+const RED_GREEN_SWAP: Readonly<Partial<Record<CueFamily, SwapTarget>>> = {
+  green: { hue: 240, reach: 15, chroma: 0.11 },
+  red: { hue: 45, reach: 15, chroma: 0.13 },
+  blue: { hue: 290, reach: 10, chroma: 0.11 },
+};
+
+/** The families each vision turns, both twins of each, the swaps color
+ *  blind palettes and games use. For deuteranopia and protanopia green
+ *  turns blue, red toward vermilion and blue violet. For tritanopia blue
+ *  turns purple, apart from yells in cyan and tells in green, and magenta
+ *  pink to leave room for it. Every other family keeps its hue and
+ *  chroma, and only its lightness may move: yellow and cyan under every
+ *  vision, magenta under deuteranopia and protanopia, and green under
+ *  tritanopia, since turning them runs bold cyan, bold magenta and tells
+ *  into body text. Typical turns none. */
+export const SWAP_TARGETS: Readonly<
+  Record<ColorVision, Readonly<Partial<Record<CueFamily, SwapTarget>>>>
+> = {
+  typical: {},
+  deuteranopia: RED_GREEN_SWAP,
+  protanopia: RED_GREEN_SWAP,
+  tritanopia: {
+    blue: { hue: 320, reach: 10, chroma: 0.12 },
+    magenta: { hue: 355, reach: 10, chroma: 0.1 },
+  },
+};
+
+/** The color that carries the change you see, and its bold twin: green
+ *  for deuteranopia and protanopia, blue for tritanopia. */
+export const LEAD_SLOTS: Readonly<Record<ColorVision, readonly AnsiSlot[]>> = {
+  typical: [],
+  deuteranopia: ['green', 'brightGreen'],
+  protanopia: ['green', 'brightGreen'],
+  tritanopia: ['blue', 'brightBlue'],
+};
+
+/** How far the lead color and its bold twin move at least, in OKLab dE
+ *  times 100 as a typical eye sees them, so the swap shows. */
+export const MOVE_MIN = { lead: 12, bold: 6 } as const;
+
+/** How far the lead color moves where every firmer floor leaves room. */
+export const MOVE_WANT = 15;
+
+/** The pairs a vision runs together that the swap exists to part. Each
+ *  stands, as the vision sees it, at least PART_MIN apart, or as far as a
+ *  typical eye sees it at the start if that is less, give or take
+ *  VISION_SLACK. Hits on you in red against tells in green, bold red
+ *  against bold green, and tells against faction in yellow and says in
+ *  bold yellow. For tritanopia yells in cyan and tells in green against
+ *  blue, and clan in bold cyan against cabal in bold blue. */
+export const PARTED_PAIRS: Readonly<Record<ColorVision, readonly CuePair[]>> = {
+  typical: [],
+  deuteranopia: [
+    ['red', 'green'],
+    ['brightRed', 'brightGreen'],
+    ['green', 'yellow'],
+    ['green', 'brightYellow'],
+  ],
+  protanopia: [
+    ['red', 'green'],
+    ['brightRed', 'brightGreen'],
+    ['green', 'yellow'],
+    ['green', 'brightYellow'],
+  ],
+  tritanopia: [
+    ['cyan', 'blue'],
+    ['green', 'blue'],
+    ['brightCyan', 'brightBlue'],
+  ],
+};
+
+/** How far apart a parted pair stands at least, per vision. Purple sits
+ *  nearer the middle of a tritanope's axis than cyan does, so tritanopia
+ *  asks less. */
+export const PART_MIN: Readonly<Record<ColorVision, number>> = {
+  typical: 0,
+  deuteranopia: 20,
+  protanopia: 20,
+  tritanopia: 15,
+};
+
+/** The pairs a vision runs together that the swap cannot part further
+ *  without breaking a firmer floor. Each comes no nearer, as the vision
+ *  sees it, than at the start, give or take KEPT_SLACK: HP at 20 and 40
+ *  percent in red and yellow, hits on you against says in bold yellow,
+ *  blue against magenta, and for tritanopia yells against tells and red
+ *  against green. */
+export const KEPT_PAIRS: Readonly<Record<ColorVision, readonly CuePair[]>> = {
+  typical: [],
+  deuteranopia: [
+    ['red', 'yellow'],
+    ['red', 'brightYellow'],
+    ['blue', 'magenta'],
+  ],
+  protanopia: [
+    ['red', 'yellow'],
+    ['red', 'brightYellow'],
+    ['blue', 'magenta'],
+  ],
+  tritanopia: [
+    ['cyan', 'green'],
+    ['red', 'yellow'],
+    ['red', 'brightYellow'],
+    ['red', 'green'],
+  ],
+};
+
 /** How much nearer than at the start a kept pair may come, in OKLab dE
  *  times 100. */
 export const KEPT_SLACK = 0.5;
+
+/** The pairs of the game's own channels, from the server's color codes:
+ *  tells in green, says in bold yellow, faction in yellow, yells in cyan,
+ *  cabal in bold blue, clan in bold cyan, group tells in bold magenta and
+ *  hits on you in red. A swap keeps each pair at least CHANNEL_FLOOR
+ *  apart, or as far as at the start if that is less, both as the vision
+ *  sees them and as a typical eye does. */
+export const CHANNEL_PAIRS: readonly CuePair[] = [
+  ['red', 'green'],
+  ['brightRed', 'brightGreen'],
+  ['red', 'yellow'],
+  ['red', 'brightYellow'],
+  ['green', 'yellow'],
+  ['green', 'brightYellow'],
+  ['green', 'cyan'],
+  ['green', 'blue'],
+  ['green', 'brightBlue'],
+  ['green', 'brightCyan'],
+  ['green', 'brightMagenta'],
+  ['brightGreen', 'brightYellow'],
+  ['cyan', 'blue'],
+  ['brightBlue', 'brightCyan'],
+  ['brightBlue', 'brightMagenta'],
+  ['brightCyan', 'brightMagenta'],
+];
+
+const pairKey = ([a, b]: CuePair) => [a, b].sort().join('/');
+const CHANNEL_KEYS = new Set(CHANNEL_PAIRS.map(pairKey));
+
+/** Every other two cue colors of the same weight, which a swap keeps at
+ *  least CUE_FLOOR apart, or as far as at the start if that is less. */
+export const CUE_PAIRS: readonly CuePair[] = [CUE_SLOTS.slice(0, 6), CUE_SLOTS.slice(6)].flatMap(
+  (row) =>
+    row.flatMap((a, i) =>
+      row
+        .slice(i + 1)
+        .map((b) => [a, b] as const)
+        .filter((pair) => !CHANNEL_KEYS.has(pairKey(pair))),
+    ),
+);
+
+/** The floors of channel pairs and of other cue pairs, in OKLab dE
+ *  times 100. */
+export const CHANNEL_FLOOR = 6;
+export const CUE_FLOOR = 3;
+
+/** How near two channels come at the very least, firmer than the visible
+ *  change, so tells never read as cabal or group tells: twice
+ *  VISION_SLACK, or as near as they stood at the start if that is less. */
+export const CHANNEL_LEAST = 4;
+
+/** How near, in OKLab dE times 100, a swap lets a color it moves come to
+ *  body text, white and bold white, give or take VISION_SLACK, unless
+ *  they stood nearer at the start. The window keeps each status color as
+ *  far from the text beside it. */
+export const VISION_GUARD = 10;
+
+/** The text colors a cue color must never run into: body text, and the
+ *  white and bold white the game writes whole sentences in. */
+export const TEXT_SLOTS: readonly GameSlot[] = ['foreground', 'white', 'brightWhite'];
+
+/** How far short of its target, in OKLab dE times 100, a pair may stand
+ *  and still count as apart: the least difference OKLab counts as one
+ *  an eye tells. */
+export const VISION_SLACK = 2;
+
+/** How much further short of its target a check the start misses may
+ *  fall under a swap. */
+export const MISS_SLACK = 1;
+
+/** How far a swap may move a color in OKLCH lightness from the start. */
+export const L_REACH = 0.15;
 
 /** The share of its chroma a turned color keeps at least: of its own at
  *  the start, or of its target chroma if that is less. Lightness alone
  *  could clear every distance by lifting a color to white, which shows
  *  no color at all. */
 export const CHROMA_KEEP = 0.75;
-
-/** The least change, in OKLab dE times 100, a fit for a color vision
- *  makes to the color it moves most. A fit that moves nothing this far
- *  is a change no one sees, so the fit keeps the Typical colors, and
- *  the Color vision row counts a change only this large. */
-export const VISIBLE_CHANGE = 3;
 
 /** The most any slot of `keys` moves from `a` to `b`, in OKLab dE times
  *  100 as a typical eye sees it. A color that is not hex counts as no
@@ -731,100 +821,14 @@ export function largestMove<K extends string>(
   return most;
 }
 
-/** The cue pairs a fit for `vision` keeps apart. Every vision other
- *  than Typical keeps red apart from green, bright yellow and yellow,
- *  and Tritanopia also keeps cyan apart from green and blue. Typical
- *  names none. */
-export function visionPairs(vision: ColorVision): readonly CuePair[] {
-  const kind = CVD_OF[vision];
-  if (!kind) return [];
-  return kind === 'tritan' ? [...RED_PAIRS, ...CYAN_PAIRS] : RED_PAIRS;
-}
+// ── The Typical search ─────────────────────────────────────────────
 
-/** One cue pair as a color vision sees it. `value` is how far apart the
- *  vision sees the two colors of a palette, and `need` how far apart a
- *  typical eye sees them in the Typical fit, each in OKLab dE times 100
- *  to one decimal. */
-export interface VisionCheck {
-  id: string;
-  value: number;
-  need: number;
-  ok: boolean;
-}
-
-/** Each pair `vision` keeps apart (visionPairs), measured in `p` through
- *  that vision against what a typical eye sees of it in `typical`, the
- *  Typical fit laid over the published colors. A pair within
- *  VISION_SLACK of its target counts as apart. */
-export function visionChecks(
-  p: XtermPalette,
-  typical: XtermPalette,
-  vision: ColorVision,
-): VisionCheck[] {
-  const kind = CVD_OF[vision];
-  if (!kind) return [];
-  return visionPairs(vision).map(([a, b]) => {
-    const need = dE(typical[a], typical[b]);
-    const value = dECvd(p[a], p[b], kind);
-    const ok = value >= need - VISION_SLACK;
-    return { id: `${a}/${b}`, value: +value.toFixed(1), need: +need.toFixed(1), ok };
-  });
-}
-
-/** Whether `p` keeps every pair `vision` keeps apart at least as far
- *  apart, seen through it, as a typical eye sees it in `typical`, give
- *  or take VISION_SLACK. A palette that holds them as its Typical fit
- *  stands needs no fit for the vision. Typical holds every palette. */
-export function holdsVision(p: XtermPalette, typical: XtermPalette, vision: ColorVision): boolean {
-  return visionChecks(p, typical, vision).every((c) => c.ok);
-}
-
-/** The slots a fit for `vision` may move, the slots of the pairs it
- *  keeps apart and the bold or plain twin of each, which T6 ties to it.
- *  Every other slot keeps its Typical fit. Typical names none. */
-export function visionSlots(vision: ColorVision): readonly GameSlot[] {
-  const named = new Set<GameSlot>();
-  for (const [a, b] of visionPairs(vision)) {
-    for (const k of [a, b]) {
-      for (const pair of PAIRS) if (pair.includes(k)) pair.forEach((s) => named.add(s));
-    }
-  }
-  return GAME_SLOTS.filter((k) => named.has(k));
-}
-
-/** Each color a fit for `vision` moves (visionSlots) against body text,
- *  white and bold white (TEXT_SLOTS), the pairs it keeps from running
- *  together as that vision sees them. Typical names none. */
-export function textGuards(vision: ColorVision): readonly (readonly [GameSlot, GameSlot])[] {
-  return visionSlots(vision).flatMap((k) => TEXT_SLOTS.map((t) => [k, t] as const));
-}
-
-/** The slots a fit for `vision` may turn in hue, each up OKLCH hue
- *  (turnHue): red toward orange and green toward teal for every vision,
- *  and cyan toward blue for a tritanope. Their bold twins keep their
- *  hue. Typical names none. */
-export function turnSlots(vision: ColorVision): readonly TurnFamily[] {
-  const kind = CVD_OF[vision];
-  if (!kind) return [];
-  return kind === 'tritan' ? ['red', 'green', 'cyan'] : ['red', 'green'];
-}
-
-// ── The searches ───────────────────────────────────────────────────
-
-// The Typical search's steps and seeds, and what a step of distance
-// costs every search.
+// The search's steps and seeds, and what a step of distance costs.
 const ITERS = 9000;
 const SEEDS = [11, 23, 37];
 const MOVE_WEIGHT = 0.35;
-// What each degree of a turned hue costs a fit for a color vision, so
-// it turns only as far as parting a pair asks.
-const TURN_WEIGHT = 0.1;
-// A turn past HUE_TURN must close at least this much of the pairs' gap,
-// in OKLab dE times 100, or the fit keeps the smaller turn.
-const FAR_GAIN = 0.5;
 
 type Lightness = Record<GameSlot, number>;
-type Turns = Partial<Record<GameSlot, number>>;
 
 interface Search {
   cost: number;
@@ -898,212 +902,423 @@ function search(src: XtermPalette, seed: number, start: XtermPalette | undefined
   return best;
 }
 
-// What a search for a color vision holds to.
-interface Hold {
-  kind: Cvd;
-  // The Typical fit laid over the published colors. The search starts
-  // here and measures each move from here.
-  from: XtermPalette;
-  // checks() of `from`, the floors no step may give up.
-  held: readonly GameCheck[];
-  // The slots the search may move (visionSlots), and the ones it may
-  // turn (turnSlots).
-  slots: readonly GameSlot[];
-  turns: readonly TurnFamily[];
-  // The pairs the vision keeps apart, each with its target, how far
-  // apart a typical eye sees it in `from`.
-  pairs: readonly (readonly [AnsiSlot, AnsiSlot, number])[];
-  // The cue pairs, and each color the search moves against body text,
-  // white and bold white, each with the distance, as the vision sees it,
-  // it may not drop under (GUARDED_PAIRS, TEXT_SLOTS).
-  guards: readonly (readonly [GameSlot, GameSlot, number])[];
-}
+// ── The swap search ────────────────────────────────────────────────
 
-interface VisionState {
-  L: Lightness;
-  turn: Turns;
-}
+// The slots a swap reads: the twelve cue colors it may move, then the
+// text colors it keeps them clear of, which never move.
+const SWAP_READS: readonly GameSlot[] = [...CUE_SLOTS, ...TEXT_SLOTS];
+const READ_AT = new Map<GameSlot, number>(SWAP_READS.map((k, i) => [k, i]));
+const readAt = (k: GameSlot) => READ_AT.get(k) as number;
 
-interface VisionRun extends Search {
-  state: VisionState;
-  // How far the pairs fall short of their targets, summed, in OKLab dE
-  // times 100.
-  gap: number;
-}
+// The grids the swap sweeps: every slot alone over lightness and every
+// two slots together, each step in OKLCH L, a turned hue in degrees, and
+// the finer steps it refines with, each reaching four steps either way.
+const SWEEP_L = 0.01;
+const SWEEP_PAIR_L = 0.03;
+const SWEEP_HUE = 2.5;
+const SWEEP_PASSES = 3;
+const REFINE_L = [0.005, 0.0025] as const;
+const REFINE_HUE = [-3, -2, -1, -0.5, 0.5, 1, 2, 3] as const;
+const REFINE_PASSES = 6;
+// Where in its window each turned hue starts, as a share of its reach.
+const HUE_STARTS = [0, -1, 1] as const;
 
-// The pairs' shortfall the way shortfall() sums the checks', and their
-// gap in dE.
-function pairShort(p: XtermPalette, hold: Hold): { short: number; gap: number } {
-  let short = 0;
-  let missed = 0;
-  for (const [a, b, need] of hold.pairs) {
-    const v = dECvd(p[a], p[b], hold.kind);
-    if (v >= need) continue;
-    short += (need - v) / need + 0.05;
-    missed += need - v;
+// The soft cost of a swap, under every floor: each dE a parted pair
+// stands short of its target, a color kept under 75 percent of the
+// chroma it aims for, each 0.01 of OKLCH lightness moved and each degree
+// of hue off the target.
+const SOFT_PART = 10;
+const SOFT_CHROMA_SHARE = 0.75;
+const SOFT_CHROMA = 400;
+const SOFT_L = 0.35;
+const SOFT_HUE = 0.1;
+// How far apart other cue pairs stand where the room allows.
+const CUE_WANT = 6;
+
+// The tiers a swap scores a palette on, firmest first, then the soft
+// cost (swapFor). A palette that does better on an earlier tier always
+// wins, so a later tier never buys an earlier one.
+const HOLD = 0;
+const CLEAR = 1;
+const LEAST = 2;
+const SHOW = 3;
+const FLOOR = 4;
+const PART = 5;
+const WANT = 6;
+const ROOM = 7;
+const SOFT = 8;
+const TIER_COUNT = 9;
+const TIE = 1e-9;
+
+function betterTiers(a: readonly number[], b: readonly number[]): boolean {
+  for (let i = 0; i < TIER_COUNT; i += 1) {
+    if (a[i] < b[i] - TIE) return true;
+    if (a[i] > b[i] + TIE) return false;
   }
-  return { short, gap: missed };
+  return false;
 }
 
-// The grids a vision search sweeps, coarse to fine: the step in OKLCH
-// lightness, how many steps it reaches each way, and the step in
-// degrees of hue a turn takes.
-const SWEEPS: readonly (readonly [number, number, number])[] = [
-  [0.02, 15, 2],
-  [0.01, 4, 1],
-  [0.005, 4, 1],
-  [0.0025, 4, 1],
-];
-// How many times a sweep goes over the slots before it gives up.
-const PASSES = 6;
+// A floor on one pair: where the two slots sit in SWAP_READS, and how
+// far apart they stand at the start as the vision sees them and as a
+// typical eye does, up to a cap.
+type Floor = readonly [number, number, number, number];
 
-// A search for a color vision over the lightness of the slots `hold`
-// names, and the hue of the ones it may turn, each turn up to `bound`
-// degrees. It starts from `start` and sweeps one grid at a time, coarse
-// to fine: each slot over its lightness and its turn together, each
-// slot with its twin over both their lightness, and two slots with
-// their twins by one step together, keeping each step that lowers the
-// cost. It takes no step that gives up a check the Typical
-// fit passes or falls further short of one it misses, or that brings a
-// guarded pair too near. The cost is how far the pairs fall short of
-// their targets, then the total distance from the Typical fit, the
-// degrees turned, and the same charge on chroma as the Typical search.
-function visionSearch(src: XtermPalette, hold: Hold, start: VisionState, bound: number): VisionRun {
-  const base = oklchOf(src);
-  const home = oklchOf(hold.from);
-  const at = (k: GameSlot, L: number, turn: number) => {
-    const o = base[k];
-    if (turn === 0 && Math.abs(L - o.L) < 1e-9) return { hex: src[k], C: o.C };
-    if (turn === 0 && Math.abs(L - home[k].L) < 1e-9) return { hex: hold.from[k], C: home[k].C };
-    const h = (o.h + turn) % 360;
-    const hex = toHex(oklchToRgbInGamut({ L: Math.max(0, Math.min(1, L)), C: o.C, h }));
-    return { hex, C: rgbToOklch(rgb(hex)).C };
-  };
-  const cost = (state: VisionState): VisionRun => {
-    const p = { ...src };
-    let drained = 0;
-    let turned = 0;
-    for (const k of GAME_SLOTS) {
-      const turn = state.turn[k] ?? 0;
-      const { hex, C } = at(k, state.L[k], turn);
-      p[k] = hex;
-      turned += turn;
-      const c0 = base[k].C;
-      if (c0 > 0.04 && C < 0.6 * c0) drained += (0.6 * c0 - C) / c0;
+interface SwapState {
+  L: Float64Array;
+  dh: Float64Array;
+}
+
+interface Scored {
+  tiers: number[];
+  state: SwapState;
+  tones: Tone[];
+}
+
+/** Swap the colors `vision` runs together in `src`, a published
+ *  palette, starting from `start`, the slots Typical plays over it: the
+ *  Typical fit, or nothing for the published colors. Returns the slots
+ *  of the swapped palette that differ from `src`. Typical swaps nothing
+ *  and returns `start`.
+ *
+ *  Each family the vision turns (SWAP_TARGETS) takes a hue inside its
+ *  window and at least its target chroma, giving up only what sRGB
+ *  cannot hold. A search then settles the lightness of all twelve cue
+ *  colors and the hue of each turned one, from up to six starts: the
+ *  lightness of `start` and the published lightness of the turned
+ *  colors, each with the turned hues at their target and at either end
+ *  of their window (HUE_STARTS). It scores each palette on tiers in
+ *  strict order, so a later tier never buys an earlier one:
+ *
+ *  1. Every check `start` passes still passes, and one it misses falls
+ *     no more than MISS_SLACK further short (holdsCheck). No color moves
+ *     more than L_REACH in lightness, red stays on its side of yellow
+ *     and bold yellow where they stood 0.02 apart, and a turned color
+ *     keeps CHROMA_KEEP of its chroma, or of its target chroma if less.
+ *  2. Each color stays at least VISION_GUARD, or as far as at the start
+ *     if that is less, minus VISION_SLACK, from body text, white and
+ *     bold white, seen and typical. Each kept pair (KEPT_PAIRS) comes no
+ *     nearer, seen, than at the start, minus KEPT_SLACK.
+ *  3. Each channel pair keeps CHANNEL_LEAST, or as far as at the start
+ *     if that is less, seen and typical.
+ *  4. The lead color moves at least MOVE_MIN.lead and its bold twin
+ *     MOVE_MIN.bold, as a typical eye sees them (LEAD_SLOTS).
+ *  5. Each channel pair keeps CHANNEL_FLOOR and every other cue pair of
+ *     a weight CUE_FLOOR, or as far as at the start if that is less,
+ *     seen and typical.
+ *  6. Each parted pair (PARTED_PAIRS) stands PART_MIN apart, seen, or as
+ *     far as a typical eye sees it at the start if that is less, minus
+ *     VISION_SLACK.
+ *  7. The lead color moves MOVE_WANT.
+ *  8. Each channel pair keeps VISION_GUARD and every other cue pair 6,
+ *     and each color VISION_GUARD from the text, or as far as at the
+ *     start if that is less.
+ *
+ *  Under them a soft cost keeps each color near its start lightness,
+ *  near its target hue and at its chroma. A swap takes about two
+ *  seconds, so a built in theme stores its swaps (themes.ts VISION_FITS)
+ *  and a custom theme swaps in a worker (fitOffThread). */
+export function swapFor(
+  src: XtermPalette,
+  vision: ColorVision,
+  start: Partial<XtermPalette> = {},
+): Partial<XtermPalette> {
+  const kind = CVD_OF[vision];
+  if (!kind) return start;
+  const from: XtermPalette = { ...src, ...start };
+  const targets = SWAP_TARGETS[vision];
+  const n = CUE_SLOTS.length;
+
+  const tones = new Map<string, Tone>();
+  const toneAt = (hex: string) => {
+    let tone = tones.get(hex);
+    if (!tone) {
+      tone = toneOf(hex);
+      tones.set(hex, tone);
     }
-    const closer = hold.guards.some(([a, b, floor]) => dECvd(p[a], p[b], hold.kind) < floor);
-    if (closer || !keeps(p, hold.held, hold.kind)) {
-      return { cost: Infinity, gap: Infinity, palette: p, state };
-    }
-    let move = 0;
-    for (const k of GAME_SLOTS) move += dE(hold.from[k], p[k]);
-    const { short, gap: missed } = pairShort(p, hold);
-    const total = short * 100 + (move * MOVE_WEIGHT) / 10 + turned * TURN_WEIGHT + drained * 400;
-    return { cost: total, gap: missed, palette: p, state };
+    return tone;
   };
-  const { slots, turns } = hold;
-  // How far each slot may turn, under the bound and its family's limit.
-  const room: Turns = {};
-  for (const k of turns) room[k] = turnRoom(k, base[k].h, bound);
-  // Each pair of slots, each with its twin where the search may move it.
-  const family = (k: GameSlot) => {
-    const twin = TWIN[k];
-    return twin && slots.includes(twin) ? [k, twin] : [k];
-  };
-  const groups: GameSlot[][] = [];
-  slots.forEach((a, i) => {
-    for (const b of slots.slice(i + 1)) {
-      const group = [...new Set([...family(a), ...family(b)])];
-      if (!groups.some((g) => g.length === group.length && g.every((k) => group.includes(k)))) {
-        groups.push(group);
-      }
+  const begin = SWAP_READS.map((k) => toneAt(from[k]));
+  const lch = CUE_SLOTS.map((k) => rgbToOklch(rgb(from[k])));
+  const target = CUE_SLOTS.map((k) => targets[familyOf(k)] ?? null);
+  const want = CUE_SLOTS.map((_, i) => Math.max(lch[i].C, target[i]?.chroma ?? 0));
+  const keepChroma = CUE_SLOTS.map(
+    (_, i) => CHROMA_KEEP * Math.min(lch[i].C, target[i]?.chroma ?? 0),
+  );
+  const turned = CUE_SLOTS.map((_, i) => i).filter((i) => target[i] !== null);
+
+  // The color slot `i` takes at lightness `L` and, for a turned family,
+  // `dh` degrees off its target hue.
+  const made = CUE_SLOTS.map(() => new Map<number, Tone>());
+  const colorAt = (i: number, L: number, dh: number): Tone => {
+    const turn = target[i];
+    if (!turn && Math.abs(L - lch[i].L) < 1e-9) return begin[i];
+    const key = Math.round(L * 1e5) * 4096 + Math.round((dh + 100) * 10);
+    let tone = made[i].get(key);
+    if (!tone) {
+      const h = turn ? (turn.hue + dh + 360) % 360 : lch[i].h;
+      const c = oklchToRgbInGamut({ L: Math.max(0, Math.min(1, L)), C: want[i], h });
+      tone = toneAt(toHex(c));
+      made[i].set(key, tone);
     }
+    return tone;
+  };
+
+  const seenOf = (a: Tone, b: Tone) => labDE(seenTone(a, kind), seenTone(b, kind));
+  const typicalOf = (a: Tone, b: Tone) => labDE(a.lab, b.lab);
+  const floorsOf = (pairs: readonly (readonly [GameSlot, GameSlot])[], most: number): Floor[] =>
+    pairs.map(([a, b]) => {
+      const i = readAt(a);
+      const j = readAt(b);
+      return [
+        i,
+        j,
+        Math.min(seenOf(begin[i], begin[j]), most),
+        Math.min(typicalOf(begin[i], begin[j]), most),
+      ] as const;
+    });
+  const textPairs = CUE_SLOTS.flatMap((k) => TEXT_SLOTS.map((t) => [k, t] as const));
+  const textFloors = floorsOf(textPairs, VISION_GUARD);
+  const channelFloors = floorsOf(CHANNEL_PAIRS, Infinity);
+  const cueFloors = floorsOf(CUE_PAIRS, Infinity);
+  const kept = KEPT_PAIRS[vision].map(([a, b]) => {
+    const i = readAt(a);
+    const j = readAt(b);
+    return [i, j, seenOf(begin[i], begin[j]) - KEPT_SLACK] as const;
   });
-  let best = cost(start);
-  const consider = (state: VisionState) => {
-    const c = cost(state);
-    if (c.cost >= best.cost) return false;
-    best = c;
-    return true;
+  const parted = PARTED_PAIRS[vision].map(([a, b]) => {
+    const i = readAt(a);
+    const j = readAt(b);
+    return [i, j, Math.min(PART_MIN[vision], typicalOf(begin[i], begin[j]))] as const;
+  });
+  const [leadSlot, boldSlot] = LEAD_SLOTS[vision].map(readAt);
+  const red = readAt('red');
+  const sides = (['yellow', 'brightYellow'] as const)
+    .map((y) => [readAt(y), begin[red].lab.L - begin[readAt(y)].lab.L] as const)
+    .filter(([, was]) => Math.abs(was) >= 0.02);
+
+  // The checks as the start has them, and which a swap holds.
+  const toneFor =
+    (list: readonly Tone[]): ToneOf =>
+    (k) => {
+      const i = READ_AT.get(k as GameSlot);
+      return i === undefined ? toneAt(from[k]) : list[i];
+    };
+  const held = measure(toneFor(begin));
+  const holds = CHECK_SPEC.map(([id]) => holdsCheck(id, vision));
+  const ranges = CHECK_SPEC.map(([, need], i): readonly [number, number] => {
+    if (i === T4_AT) return [T.dimMin, held.dimTop];
+    if (need.startsWith('>=')) return [+need.slice(2), Infinity];
+    const [lo, hi] = need.split('..').map(Number);
+    return [lo, hi];
+  });
+  const gapOf = (i: number, value: number) => {
+    const v = +value.toFixed(1);
+    return Math.max(0, ranges[i][0] - v, v - ranges[i][1]);
   };
-  const clamp = (L: number) => Math.max(0, Math.min(1, L));
-  for (const [step, reach, turnStep] of SWEEPS) {
-    for (let pass = 0; pass < PASSES; pass += 1) {
+  const heldGap = held.values.map((v, i) => gapOf(i, v));
+
+  const score = (state: SwapState): Scored => {
+    const list = begin.slice();
+    for (let i = 0; i < n; i += 1) list[i] = colorAt(i, state.L[i], state.dh[i]);
+    const tiers = new Array<number>(TIER_COUNT).fill(0);
+    // 1. The checks, the reach in lightness, red's side of yellow and
+    // the chroma of a turned color.
+    const now = measure(toneFor(list));
+    for (let i = 0; i < now.oks.length; i += 1) {
+      if (!holds[i]) continue;
+      if (held.oks[i]) {
+        if (!now.oks[i]) tiers[HOLD] += 1 + Math.max(0.05, gapOf(i, now.values[i]));
+      } else if (!now.oks[i]) {
+        const over = gapOf(i, now.values[i]) - heldGap[i];
+        if (over > MISS_SLACK) tiers[HOLD] += 1 + over;
+      }
+    }
+    for (let i = 0; i < n; i += 1) {
+      const d = Math.abs(list[i].lab.L - begin[i].lab.L);
+      if (d > L_REACH) tiers[HOLD] += 1 + (d - L_REACH) * 100;
+    }
+    for (const [y, was] of sides) {
+      const diff = list[red].lab.L - list[y].lab.L;
+      if (Math.sign(diff) !== Math.sign(was)) tiers[HOLD] += 1 + Math.abs(diff) * 100;
+    }
+    for (const i of turned) {
+      const C = Math.hypot(list[i].lab.a, list[i].lab.b);
+      if (C < keepChroma[i] - TIE) tiers[HOLD] += 1 + (keepChroma[i] - C) * 100;
+    }
+    // 2 and 8. Clear of the text, and the kept pairs.
+    for (const [i, j, seenFloor, typicalFloor] of textFloors) {
+      const s = seenOf(list[i], list[j]);
+      const t = typicalOf(list[i], list[j]);
+      if (s < seenFloor - VISION_SLACK - TIE) tiers[CLEAR] += 1 + (seenFloor - VISION_SLACK - s);
+      if (t < typicalFloor - VISION_SLACK - TIE) {
+        tiers[CLEAR] += 1 + (typicalFloor - VISION_SLACK - t);
+      }
+      if (s < seenFloor - TIE) tiers[ROOM] += 1 + (seenFloor - s);
+      if (t < typicalFloor - TIE) tiers[ROOM] += 1 + (typicalFloor - t);
+    }
+    for (const [i, j, floor] of kept) {
+      const s = seenOf(list[i], list[j]);
+      if (s < floor - TIE) tiers[CLEAR] += 1 + (floor - s);
+    }
+    // 4 and 7. How far the lead color moves.
+    const lead = typicalOf(begin[leadSlot], list[leadSlot]);
+    const bold = typicalOf(begin[boldSlot], list[boldSlot]);
+    if (lead < MOVE_MIN.lead) tiers[SHOW] += 1 + (MOVE_MIN.lead - lead);
+    if (bold < MOVE_MIN.bold) tiers[SHOW] += 1 + (MOVE_MIN.bold - bold);
+    if (lead < MOVE_WANT) tiers[WANT] += 1 + (MOVE_WANT - lead);
+    // 3, 5 and 8. The channel and cue pairs.
+    const pairs = (floors: readonly Floor[], least: number, firm: number, soft: number) => {
+      for (const [i, j, seenStart, typicalStart] of floors) {
+        const s = seenOf(list[i], list[j]);
+        const t = typicalOf(list[i], list[j]);
+        for (const [tier, most] of [
+          [LEAST, least],
+          [FLOOR, firm],
+          [ROOM, soft],
+        ] as const) {
+          const sf = Math.min(seenStart, most);
+          const tf = Math.min(typicalStart, most);
+          if (s < sf - TIE) tiers[tier] += 1 + (sf - s);
+          if (t < tf - TIE) tiers[tier] += 1 + (tf - t);
+        }
+      }
+    };
+    pairs(channelFloors, CHANNEL_LEAST, CHANNEL_FLOOR, VISION_GUARD);
+    pairs(cueFloors, 0, CUE_FLOOR, CUE_WANT);
+    // 6. The parted pairs, and their shortfall under the soft cost.
+    for (const [i, j, need] of parted) {
+      const s = seenOf(list[i], list[j]);
+      if (s < need - VISION_SLACK - TIE) tiers[PART] += 1 + (need - VISION_SLACK - s);
+      if (s < need) tiers[SOFT] += SOFT_PART * (need - s);
+    }
+    for (let i = 0; i < n; i += 1) {
+      const C = Math.hypot(list[i].lab.a, list[i].lab.b);
+      const w = want[i];
+      if (w > 0.04 && C < SOFT_CHROMA_SHARE * w) {
+        tiers[SOFT] += ((SOFT_CHROMA_SHARE * w - C) / w) * SOFT_CHROMA;
+      }
+      tiers[SOFT] += Math.abs(state.L[i] - lch[i].L) * 100 * SOFT_L;
+      tiers[SOFT] += Math.abs(state.dh[i]) * SOFT_HUE;
+    }
+    return { tiers, state, tones: list };
+  };
+
+  const clamp = (L: number) => Math.max(0.02, Math.min(0.995, L));
+  // The lightness grid a slot sweeps, inside its reach.
+  const gridOf = (i: number, step: number) => {
+    const out: number[] = [];
+    const lo = Math.max(0.02, lch[i].L - L_REACH - step / 2);
+    const hi = Math.min(0.995, lch[i].L + L_REACH + step / 2);
+    for (let k = Math.ceil(lo / step); k * step <= hi + 1e-9; k += 1) {
+      out.push(+(k * step).toFixed(4));
+    }
+    return out;
+  };
+  const sweep = CUE_SLOTS.map((_, i) => gridOf(i, SWEEP_L));
+  const sweepPair = CUE_SLOTS.map((_, i) => gridOf(i, SWEEP_PAIR_L));
+  // The bold twin of each plain cue color, and the plain twin of each
+  // bold, which CUE_SLOTS lists half a row apart.
+  const twinAt = CUE_SLOTS.map((_, i) => (i + n / 2) % n);
+
+  const run = (first: SwapState): Scored => {
+    let best = score(first);
+    const consider = (L: Float64Array, dh: Float64Array) => {
+      const next = score({ L, dh });
+      if (!betterTiers(next.tiers, best.tiers)) return false;
+      best = next;
+      return true;
+    };
+    const withL = (i: number, L: number, j = -1, Lj = 0) => {
+      const out = best.state.L.slice();
+      out[i] = L;
+      if (j >= 0) out[j] = Lj;
+      return out;
+    };
+    const withHue = (i: number, d: number) => {
+      const out = best.state.dh.slice();
+      out[i] = d;
+      return out;
+    };
+    for (let pass = 0; pass < SWEEP_PASSES; pass += 1) {
       let moved = false;
-      for (const k of slots) {
-        // The slot over its lightness and its turn.
-        const now = best.state;
-        const t0 = now.turn[k] ?? 0;
-        const most = room[k] ?? 0;
-        const turnsTried: number[] = [t0];
-        if (most > 0) {
-          const span = step === SWEEPS[0][0] ? most : 2 * turnStep;
-          for (let t = Math.max(0, t0 - span); t <= Math.min(most, t0 + span); t += turnStep) {
-            if (t !== t0) turnsTried.push(t);
-          }
+      for (let i = 0; i < n; i += 1) {
+        for (const L of sweep[i]) {
+          if (L !== best.state.L[i]) moved = consider(withL(i, L), best.state.dh) || moved;
         }
-        for (let i = -reach; i <= reach; i += 1) {
-          for (const t of turnsTried) {
-            if (i === 0 && t === t0) continue;
-            const L = { ...now.L, [k]: clamp(now.L[k] + i * step) };
-            moved =
-              consider({ L, turn: t === 0 ? omit(now.turn, k) : { ...now.turn, [k]: t } }) || moved;
-          }
+      }
+      for (const i of turned) {
+        const reach = target[i]?.reach ?? 0;
+        for (let d = -reach; d <= reach + 1e-9; d += SWEEP_HUE) {
+          if (d !== best.state.dh[i]) moved = consider(best.state.L, withHue(i, d)) || moved;
         }
-        // The slot and its twin over both their lightness.
-        const twin = TWIN[k];
-        if (!twin || !slots.includes(twin) || GAME_SLOTS.indexOf(twin) < GAME_SLOTS.indexOf(k)) {
-          continue;
+        // The hue and the lightness together, since a turned color may
+        // need both to clear its neighbors.
+        for (let d = -reach; d <= reach + 1e-9; d += SWEEP_HUE) {
+          for (const L of sweepPair[i]) moved = consider(withL(i, L), withHue(i, d)) || moved;
         }
-        const pair = best.state;
-        for (let i = -reach; i <= reach; i += 1) {
-          for (let j = -reach; j <= reach; j += 1) {
-            if (i === 0 || j === 0) continue;
-            const L = {
-              ...pair.L,
-              [k]: clamp(pair.L[k] + i * step),
-              [twin]: clamp(pair.L[twin] + j * step),
-            };
-            moved = consider({ L, turn: pair.turn }) || moved;
+        // And with the lightness of its twin, which the bold step ties
+        // to it.
+        const j = twinAt[i];
+        for (let d = -reach; d <= reach + 1e-9; d += SWEEP_HUE) {
+          for (const Li of sweepPair[i]) {
+            for (const Lj of sweepPair[j]) {
+              moved = consider(withL(i, Li, j, Lj), withHue(i, d)) || moved;
+            }
           }
         }
       }
-      // Two slots and their twins together, as one step, so colors that
-      // floors tie to each other move as one where each alone would break
-      // one, such as green with yellow and bright yellow for a protanope.
-      for (const group of groups) {
-        const now = best.state;
-        for (let i = -reach; i <= reach; i += 1) {
-          if (i === 0) continue;
-          const L = { ...now.L };
-          for (const k of group) L[k] = clamp(now.L[k] + i * step);
-          moved = consider({ L, turn: now.turn }) || moved;
+      for (let i = 0; i < n; i += 1) {
+        for (let j = i + 1; j < n; j += 1) {
+          for (const Li of sweepPair[i]) {
+            for (const Lj of sweepPair[j]) {
+              moved = consider(withL(i, Li, j, Lj), best.state.dh) || moved;
+            }
+          }
         }
       }
       if (!moved) break;
     }
-  }
-  // Last, try each turned hue at every whole degree up to its turn, and
-  // keep the smallest turn that costs no more.
-  for (const k of turns) {
-    const now = best.state.turn[k] ?? 0;
-    for (let t = 0; t < now; t += 1) {
-      const turn = t === 0 ? omit(best.state.turn, k) : { ...best.state.turn, [k]: t };
-      const c = cost({ L: best.state.L, turn });
-      if (c.cost <= best.cost) {
-        best = c;
-        break;
+    for (const step of REFINE_L) {
+      for (let pass = 0; pass < REFINE_PASSES; pass += 1) {
+        let moved = false;
+        for (let i = 0; i < n; i += 1) {
+          for (let k = -4; k <= 4; k += 1) {
+            if (k === 0) continue;
+            moved = consider(withL(i, clamp(best.state.L[i] + k * step)), best.state.dh) || moved;
+          }
+        }
+        for (const i of turned) {
+          const reach = target[i]?.reach ?? 0;
+          for (const d of REFINE_HUE) {
+            const dh = Math.max(-reach, Math.min(reach, best.state.dh[i] + d));
+            if (dh !== best.state.dh[i]) moved = consider(best.state.L, withHue(i, dh)) || moved;
+          }
+        }
+        if (!moved) break;
       }
     }
-  }
-  return best;
-}
+    return best;
+  };
 
-// `turns` without the turn of `k`.
-function omit(turns: Turns, k: GameSlot): Turns {
-  const out = { ...turns };
-  delete out[k];
-  return out;
+  // The starts: the lightness Typical plays and the published lightness
+  // of each turned color, each with the turned colors at their target
+  // hue and at either end of their window.
+  const home = Float64Array.from(lch, (c) => c.L);
+  const published = Float64Array.from(CUE_SLOTS, (k, i) =>
+    target[i] ? rgbToOklch(rgb(src[k])).L : lch[i].L,
+  );
+  const lights = published.some((L, i) => L !== home[i]) ? [home, published] : [home];
+  const runs = lights.flatMap((L) =>
+    HUE_STARTS.map((side) =>
+      run({ L, dh: Float64Array.from(target, (t) => (t ? side * t.reach : 0)) }),
+    ),
+  );
+  const best = runs.reduce((win, r) => (betterTiers(r.tiers, win.tiers) ? r : win));
+  const p = { ...from };
+  CUE_SLOTS.forEach((k, i) => {
+    p[k] = best.tones[i].hex;
+  });
+  return movedFrom(src, p);
 }
 
 /** The colors fit() reads, the ground, body text and the 16 ANSI
@@ -1124,23 +1339,6 @@ export function needsFit(p: XtermPalette): boolean {
   }
 }
 
-/** Whether a fit of `p` for `vision` can move anything past `typical`,
- *  its Typical fit: false where the Typical fit already keeps every
- *  pair the vision keeps apart, and for a palette with a color that is
- *  not hex. */
-export function needsVisionFit(
-  p: XtermPalette,
-  vision: ColorVision,
-  typical: Partial<XtermPalette> = {},
-): boolean {
-  try {
-    const from = { ...p, ...typical };
-    return !holdsVision(from, from, vision);
-  } catch {
-    return false;
-  }
-}
-
 // The slots of `p` that differ from `src`.
 function movedFrom(src: XtermPalette, p: XtermPalette): Partial<XtermPalette> {
   const moved: Partial<XtermPalette> = {};
@@ -1154,29 +1352,16 @@ const cheapest = <S extends Search>(runs: S[]) =>
 
 /** Fit a published palette to the checks, for `vision`, and return only
  *  the slots it moved. What still misses stays missed, so checks() on
- *  the fitted palette says what is short, and visionChecks() what a
- *  vision still sees too close.
+ *  the fitted palette says what is short.
  *
  *  Typical is the best of six searches, three seeds each from the
  *  published colors and from tune(), exactly as before color vision. It
  *  takes about two seconds, so a built in theme stores its result.
  *
- *  Another vision builds on the Typical fit, `typical` when you have it.
- *  It keeps that fit when the fit already keeps every pair the vision
- *  keeps apart (holdsVision). Else it moves only the slots of those
- *  pairs and their twins (visionSlots), so every other color plays as
- *  Typical has it. No step gives up a check the Typical fit passes or
- *  falls further short of one it misses (holdsCheck), brings a cue pair
- *  under its guard (GUARDED_PAIRS), or brings a color it moves under its
- *  guard from body text, white or bold white (textGuards). It moves
- *  lightness first, in one search from the Typical fit (visionSearch).
- *  Where that leaves a pair short, a search from there may also turn
- *  red, green and for a tritanope cyan up to HUE_TURN degrees, kept
- *  where it parts the pairs further, and where that still leaves one
- *  short, one more up to HUE_TURN_FAR, kept where it closes FAR_GAIN
- *  more of the gap. Where the best of them moves no color as far as
- *  VISIBLE_CHANGE, the fit is the Typical fit. That takes up to two
- *  seconds. */
+ *  Another vision swaps the colors it runs together (swapFor), from
+ *  `typical`, the slots Typical plays: the Typical fit, or nothing for
+ *  the published colors. Without it the swap starts from a Typical fit
+ *  worked out here. */
 export function fit(
   src: XtermPalette,
   vision: ColorVision = 'typical',
@@ -1189,47 +1374,5 @@ export function fit(
     );
     return movedFrom(src, cheapest(runs).palette);
   }
-  const base = typical ?? fit(src);
-  const from = { ...src, ...base };
-  if (holdsVision(from, from, vision)) return base;
-  const targets = visionPairs(vision);
-  const hold: Hold = {
-    kind,
-    from,
-    held: checks(from),
-    slots: visionSlots(vision),
-    turns: turnSlots(vision),
-    pairs: targets.map(([a, b]) => [a, b, dE(from[a], from[b])] as const),
-    guards: [
-      ...GUARDED_PAIRS.map(([a, b], i) => {
-        const seen = dECvd(from[a], from[b], kind);
-        const floor = targets.includes(GUARDED_PAIRS[i])
-          ? dE(from[a], from[b])
-          : Math.max(VISION_GUARD, GUARD_SHARE * seen);
-        return [a, b, Math.min(seen, floor)] as const;
-      }),
-      ...textGuards(vision).map(
-        ([a, b]) => [a, b, Math.min(dECvd(from[a], from[b], kind), VISION_GUARD)] as const,
-      ),
-    ],
-  };
-  const home: VisionState = {
-    L: Object.fromEntries(GAME_SLOTS.map((k) => [k, rgbToOklch(rgb(from[k])).L])) as Lightness,
-    turn: {},
-  };
-  const runs = (start: VisionState, bound: number) => visionSearch(src, hold, start, bound);
-  let best = runs(home, 0);
-  if (best.gap > 0) {
-    const near = runs(best.state, HUE_TURN);
-    if (near.gap < best.gap) best = near;
-  }
-  if (best.gap > 0) {
-    const far = runs(best.state, HUE_TURN_FAR);
-    if (far.gap < best.gap - FAR_GAIN) best = far;
-  }
-  const p = best.palette;
-  // Where every step that parts a pair further gives something up, or
-  // the best moves no color far enough to see, the Typical fit plays.
-  if (largestMove(from, p, GAME_SLOTS) < VISIBLE_CHANGE) return base;
-  return movedFrom(src, p);
+  return swapFor(src, vision, typical ?? fit(src));
 }

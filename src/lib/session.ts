@@ -2099,9 +2099,10 @@ export interface UiConfig {
    *  slots the theme fits for them (themes.ts playPalette), and Settings
    *  keeps the theme as published. On unless you turn it off. */
   fit_game_colors: boolean;
-  /** The color vision Fit game colors fits the game colors for. Typical
-   *  plays the fit every theme ships, and another vision the fit that
-   *  keeps its cues apart (themes.ts visionFitOf). Typical unless you
+  /** The color vision the game colors and the window's status colors
+   *  swap for. Typical plays every theme as it ships, and another vision
+   *  swaps the colors it runs together for ones it tells apart, with Fit
+   *  game colors on or off (themes.ts visionFitOf). Typical unless you
    *  pick another. */
   color_vision: ColorVision;
   /** Keep highlight colors readable. While on, the session draws a true

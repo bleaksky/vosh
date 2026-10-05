@@ -1,7 +1,14 @@
 import { fitOffThread } from './fitOffThread';
-import { fitKey, needsFit, needsVisionFit, type ColorVision } from './gameFit';
+import { fitKey, needsFit, type ColorVision } from './gameFit';
 import type { UiConfig } from './session';
-import { customThemes, holdFit, holdVisionFit, onMissingVisionFit, type AppTheme } from './themes';
+import {
+  customThemes,
+  holdFit,
+  holdVisionFit,
+  onMissingVisionFit,
+  type AppTheme,
+  type XtermPalette,
+} from './themes';
 
 // The main window fits a custom theme you play that keeps no fit and
 // holds the fit in memory (themes holdFit), so play draws it fitted
@@ -33,30 +40,27 @@ export function fitThemesInPlay(cfg: UiConfig): void {
   }
 }
 
-// The fits for a color vision asked this launch, by the vision and the
-// colors, so a theme fits once for each vision.
+// The swaps for a color vision asked this launch, by the vision, the
+// colors and the slots Typical plays over them, so a theme swaps once
+// for each.
 const askedVision = new Set<string>();
 
-/** Fit `theme` for `vision` off the main thread, once this launch, and
- *  hold the fit (themes holdVisionFit). Play asks through visionFitOf
- *  when it draws a custom theme for a vision this window holds no fit
- *  of, and draws the Typical fit until this one lands. The fit starts
- *  from the Typical fit the theme keeps, when it keeps one. */
-export function fitForVision(theme: AppTheme, vision: ColorVision): void {
+/** Swap `theme` for `vision` off the main thread, from `start`, the
+ *  slots Typical plays over its published palette, once this launch, and
+ *  hold the swap (themes holdVisionFit). Play asks through visionFitOf
+ *  when it draws a custom theme for a vision this window holds no swap
+ *  of, and draws the Typical slots until this one lands. */
+export function fitForVision(
+  theme: AppTheme,
+  vision: ColorVision,
+  start: Partial<XtermPalette> = {},
+): void {
   const palette = theme.xterm;
-  const key = `${vision} ${fitKey(palette)}`;
+  const key = `${vision} ${fitKey(palette)} from ${fitKey({ ...palette, ...start })}`;
   if (vision === 'typical' || askedVision.has(key)) return;
   askedVision.add(key);
-  // A Typical fit that already keeps every pair the vision keeps apart
-  // plays for the vision as it is. Play may be drawing, so the list
-  // changes later.
-  if (!needsVisionFit(palette, vision, theme.fitted)) {
-    const typical = theme.fitted ?? {};
-    queueMicrotask(() => holdVisionFit(palette, vision, typical));
-    return;
-  }
-  void fitOffThread(palette, vision, theme.fitted).then((fitted) => {
-    if (fitted) holdVisionFit(palette, vision, fitted);
+  void fitOffThread(palette, vision, start).then((swapped) => {
+    if (swapped) holdVisionFit(palette, vision, start, swapped);
   });
 }
 

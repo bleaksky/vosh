@@ -1,36 +1,43 @@
-import { describe, expect, it } from 'vitest';
-import { deltaEOk, parseHex, rgbToOklch, toHex } from './color';
+import { describe, expect, it, vi } from 'vitest';
+import { deltaEOk, parseHex, rgbToOklch } from './color';
 import {
   apca,
+  CHANNEL_FLOOR,
+  CHANNEL_LEAST,
+  CHANNEL_PAIRS,
   checks,
+  CHROMA_KEEP,
   COLOR_VISIONS,
+  CUE_FLOOR,
+  CUE_PAIRS,
+  CUE_SLOTS,
+  familyOf,
   fit,
   GAME_FIXED_COLORS,
   GAME_SLOTS,
   holdsCheck,
-  holdsVision,
-  HUE_LIMIT,
-  HUE_TURN,
-  HUE_TURN_FAR,
+  KEPT_PAIRS,
+  KEPT_SLACK,
+  L_REACH,
   largestMove,
+  LEAD_SLOTS,
+  MISS_SLACK,
+  MOVE_MIN,
+  MOVE_WANT,
   needsFit,
-  needsVisionFit,
+  PART_MIN,
+  PARTED_PAIRS,
   seenApart,
   seenBy,
+  SWAP_TARGETS,
+  swapFor,
   TEXT_SLOTS,
-  textGuards,
   toColorVision,
-  turnHue,
-  turnRoom,
-  turnSlots,
-  VISIBLE_CHANGE,
-  visionChecks,
-  visionPairs,
+  VISION_GUARD,
   VISION_SLACK,
-  visionSlots,
   xterm256,
 } from './gameFit';
-import { BUILTIN_THEMES, findTheme, visionFitOf, type XtermPalette } from './themes';
+import { BUILTIN_THEMES, findTheme, typicalStart, visionFitOf, type XtermPalette } from './themes';
 
 // Triad as the Themes review drew it, the one palette that passes every
 // check as it stands.
@@ -171,12 +178,31 @@ describe('fit', () => {
   });
 });
 
+// The swaps pinned to hex: Kanso Zen for a deuteranope from its Typical
+// fit, and Solarized Dark for a protanope from its published colors.
+const KANSO_DEUTAN: readonly string[] = [
+  'red #d67f46',
+  'green #79baf7',
+  'blue #8b90db',
+  'brightRed #fc9b6a',
+  'brightGreen #dfeeff',
+  'brightBlue #c9bdff',
+  'brightCyan #afded4',
+];
+const SOLARIZED_PROTAN: readonly string[] = [
+  'red #db3421',
+  'green #1ca5ee',
+  'yellow #b58901',
+  'blue #8879d7',
+  'magenta #d23581',
+  'brightRed #c65100',
+  'brightGreen #81daff',
+  'brightBlue #ccbbff',
+];
+
 describe('color vision', () => {
-  const short = (p: XtermPalette) =>
-    checks(p)
-      .filter((c) => !c.ok)
-      .map((c) => `${c.id} ${c.value}`);
-  const hue = (hex: string) => rgbToOklch(parseHex(hex) ?? { r: 0, g: 0, b: 0 }).h;
+  const hex = (h: string) => parseHex(h) ?? { r: 0, g: 0, b: 0 };
+  const moved = (a: string, b: string) => deltaEOk(hex(a), hex(b));
 
   it('asks the 46 checks the same whatever the vision', () => {
     expect(
@@ -198,166 +224,107 @@ describe('color vision', () => {
     ]);
   });
 
-  it('keeps red apart from green, bright yellow and yellow, and for a tritanope cyan from green and blue', () => {
-    const red = [
-      ['red', 'green'],
-      ['red', 'brightYellow'],
-      ['red', 'yellow'],
-    ];
-    expect(visionPairs('typical')).toEqual([]);
-    expect(visionPairs('deuteranopia')).toEqual(red);
-    expect(visionPairs('protanopia')).toEqual(red);
-    expect(visionPairs('tritanopia')).toEqual([...red, ['cyan', 'green'], ['cyan', 'blue']]);
-  });
-
-  // Triad keeps no fit, so its Typical fit is the published palette. A
-  // typical eye sees its red 30.3 from its green, and a deuteranope 10.5.
-  it('measures each pair through the vision against what a typical eye sees in the Typical fit', () => {
-    expect(visionChecks(TRIAD, TRIAD, 'typical')).toEqual([]);
-    expect(visionChecks(TRIAD, TRIAD, 'deuteranopia')).toEqual([
-      { id: 'red/green', value: 10.5, need: 30.3, ok: false },
-      { id: 'red/brightYellow', value: 24, need: 30.5, ok: false },
-      { id: 'red/yellow', value: 14.7, need: 22.6, ok: false },
-    ]);
-    expect(holdsVision(TRIAD, TRIAD, 'typical')).toBe(true);
-    expect(holdsVision(TRIAD, TRIAD, 'deuteranopia')).toBe(false);
-    expect(seenApart(parseHex(TRIAD.red)!, parseHex(TRIAD.green)!, 'typical')).toBe(
-      deltaEOk(parseHex(TRIAD.red)!, parseHex(TRIAD.green)!),
-    );
-  });
-
-  // Kanso Zen's Typical fit stands cyan 0.3 nearer green, as a tritanope
-  // sees them, than a typical eye sees them, less than VISION_SLACK, so
-  // the pair counts as apart.
-  it('counts a pair within VISION_SLACK of its target as apart', () => {
-    expect(VISION_SLACK).toBe(2);
-    const kanso = findTheme('kanso-zen');
-    const typical = { ...kanso.xterm, ...kanso.fitted };
-    expect(visionChecks(typical, typical, 'tritanopia').find((c) => c.id === 'cyan/green')).toEqual(
-      { id: 'cyan/green', value: 14.4, need: 14.7, ok: true },
-    );
-    expect(holdsVision(typical, typical, 'tritanopia')).toBe(true);
-  });
-
   it('reads a saved vision and takes anything else as Typical', () => {
     expect(COLOR_VISIONS.map(toColorVision)).toEqual(COLOR_VISIONS);
     expect(toColorVision('deutan')).toBe('typical');
     expect(toColorVision(undefined)).toBe('typical');
   });
 
-  // Kanso Zen's Typical fit already parts every pair as a protanope sees
-  // it, so the fit for Protanopia is that fit, the same object.
-  it('keeps the Typical fit where it already parts every pair the vision keeps apart', () => {
-    const kanso = findTheme('kanso-zen');
-    expect(needsVisionFit(kanso.xterm, 'protanopia', kanso.fitted)).toBe(false);
-    expect(fit(kanso.xterm, 'protanopia', kanso.fitted)).toBe(kanso.fitted);
-    expect(needsVisionFit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(true);
-    expect(needsVisionFit(TRIAD, 'typical')).toBe(false);
-    // A color the fit cannot read.
-    expect(needsVisionFit({ ...TRIAD, red: 'crimson' }, 'deuteranopia')).toBe(false);
-  });
-
-  // The fit themes.ts ships for Tango Dark under Protanopia. Green
-  // lightens and turns 16 degrees toward teal, from 136 to 151, and
-  // yellow lightens a touch, so a protanope sees red as far from green
-  // and from yellow as a typical eye does. Every check the Typical fit
-  // passes still passes, and none it misses falls further short.
-  it('fits Tango Dark for a protanope, lightness first and then a small turn', () => {
-    const tango = findTheme('tango-dark');
-    const typical = { ...tango.xterm, ...tango.fitted };
-    const play = { ...tango.xterm, ...fit(tango.xterm, 'protanopia', tango.fitted) };
-    expect(GAME_SLOTS.filter((k) => play[k] !== typical[k])).toEqual(['green', 'yellow']);
-    expect([play.green, play.yellow]).toEqual(['#7bffa3', '#e0bc3a']);
-    expect(visionChecks(typical, typical, 'protanopia').map((c) => c.value)).toEqual([
-      36.5, 36.7, 22.8,
-    ]);
-    expect(visionChecks(play, typical, 'protanopia').map((c) => c.value)).toEqual([38.9, 36.7, 24]);
-    expect(holdsVision(play, typical, 'protanopia')).toBe(true);
-    expect(hue(play.green) - hue(typical.green)).toBeCloseTo(16, 0);
-    expect(short(play)).toEqual(['T2 brightRed Lc 53.2', 'T3 red Lc 36.2', 'T6 green pair dE 7.7']);
-  });
-
-  // Every step that would part Triad's red from its green for a
-  // deuteranope fades red or green under its floor or brings green into
-  // body text, and red reaches its hue limit after 4 degrees. That best
-  // fit moves red 1.9, too little to see, so Triad plays its Typical
-  // colors for a deuteranope. Kanso Zen does the same.
-  it('keeps the Typical fit where the best fit moves no color far enough to see', () => {
-    expect(VISIBLE_CHANGE).toBe(3);
-    expect(needsVisionFit(TRIAD, 'deuteranopia')).toBe(true);
-    const none = {};
-    expect(fit(TRIAD, 'deuteranopia', none)).toBe(none);
-    expect(largestMove(TRIAD, { ...TRIAD, red: '#fa6346' }, GAME_SLOTS)).toBeCloseTo(1.9, 1);
-    const kanso = findTheme('kanso-zen');
-    expect(needsVisionFit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(true);
-    expect(fit(kanso.xterm, 'deuteranopia', kanso.fitted)).toBe(kanso.fitted);
-  });
-
-  it('keeps every color a vision moves clear of body text, white and bold white', () => {
-    expect(TEXT_SLOTS).toEqual(['foreground', 'white', 'brightWhite']);
-    expect(textGuards('typical')).toEqual([]);
-    expect(textGuards('deuteranopia')).toHaveLength(6 * 3);
-    expect(textGuards('tritanopia')).toHaveLength(10 * 3);
-    expect(textGuards('protanopia').slice(0, 3)).toEqual([
-      ['red', 'foreground'],
-      ['red', 'white'],
-      ['red', 'brightWhite'],
-    ]);
-    // A color that is not hex moves past any bound.
-    expect(largestMove(TRIAD, TRIAD, GAME_SLOTS)).toBe(0);
-    expect(largestMove(TRIAD, { ...TRIAD, red: 'crimson' }, GAME_SLOTS)).toBe(Infinity);
-  });
-
-  it('moves only the colors of the pairs a vision keeps apart and their twins', () => {
-    const both = ['red', 'green', 'yellow', 'brightRed', 'brightGreen', 'brightYellow'];
-    expect(visionSlots('deuteranopia')).toEqual(both);
-    expect(visionSlots('protanopia')).toEqual(both);
-    expect(visionSlots('tritanopia')).toEqual([
+  // Every source the design read lands on the same pairs: blue against
+  // orange for red and green deficiencies, and purple for tritanopia.
+  it('turns green blue, red toward vermilion and blue violet, or for a tritanope blue purple and magenta pink', () => {
+    const red = {
+      green: { hue: 240, reach: 15, chroma: 0.11 },
+      red: { hue: 45, reach: 15, chroma: 0.13 },
+      blue: { hue: 290, reach: 10, chroma: 0.11 },
+    };
+    expect(SWAP_TARGETS).toEqual({
+      typical: {},
+      deuteranopia: red,
+      protanopia: red,
+      tritanopia: {
+        blue: { hue: 320, reach: 10, chroma: 0.12 },
+        magenta: { hue: 355, reach: 10, chroma: 0.1 },
+      },
+    });
+    // The windows, from one end to the other.
+    const window = (t: { hue: number; reach: number }) => [
+      (t.hue - t.reach + 360) % 360,
+      (t.hue + t.reach) % 360,
+    ];
+    expect(window(red.green)).toEqual([225, 255]);
+    expect(window(red.red)).toEqual([30, 60]);
+    expect(window(red.blue)).toEqual([280, 300]);
+    expect(window(SWAP_TARGETS.tritanopia.blue ?? red.blue)).toEqual([310, 330]);
+    expect(window(SWAP_TARGETS.tritanopia.magenta ?? red.blue)).toEqual([345, 5]);
+    expect(CUE_SLOTS.map(familyOf)).toEqual([
       'red',
       'green',
       'yellow',
       'blue',
+      'magenta',
       'cyan',
-      'brightRed',
-      'brightGreen',
-      'brightYellow',
-      'brightBlue',
-      'brightCyan',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
     ]);
-    expect(visionSlots('typical')).toEqual([]);
-    expect(turnSlots('deuteranopia')).toEqual(['red', 'green']);
-    expect(turnSlots('protanopia')).toEqual(['red', 'green']);
-    expect(turnSlots('tritanopia')).toEqual(['red', 'green', 'cyan']);
-    expect(turnSlots('typical')).toEqual([]);
+    expect(LEAD_SLOTS).toEqual({
+      typical: [],
+      deuteranopia: ['green', 'brightGreen'],
+      protanopia: ['green', 'brightGreen'],
+      tritanopia: ['blue', 'brightBlue'],
+    });
   });
 
-  it('turns a hue up to the bound and never past its family limit', () => {
-    expect([HUE_TURN, HUE_TURN_FAR]).toEqual([30, 40]);
-    expect(HUE_LIMIT).toEqual({ red: 33, green: 165, cyan: 240 });
-    // Red stops past tomato and short of orange red, green past medium
-    // spring green and short of aquamarine, and cyan short of dodger blue.
-    expect(hue('#ff6347')).toBeLessThan(HUE_LIMIT.red);
-    expect(hue('#ff4500')).toBeGreaterThan(HUE_LIMIT.red);
-    expect(hue('#00fa9a')).toBeLessThan(HUE_LIMIT.green);
-    expect(hue('#7fffd4')).toBeGreaterThan(HUE_LIMIT.green);
-    expect(hue('#1e90ff')).toBeGreaterThan(HUE_LIMIT.cyan);
-    expect(turnRoom('red', 0, HUE_TURN)).toBe(30);
-    expect(turnRoom('red', 0, HUE_TURN_FAR)).toBe(33);
-    expect(turnRoom('red', 29, HUE_TURN_FAR)).toBe(4);
-    expect(turnRoom('red', 42, HUE_TURN_FAR)).toBe(0);
-    expect(turnRoom('green', 120, HUE_TURN)).toBe(30);
-    expect(turnRoom('green', 120, HUE_TURN_FAR)).toBe(40);
-    expect(turnRoom('green', 142, HUE_TURN_FAR)).toBe(23);
-    expect(turnRoom('green', 172, HUE_TURN)).toBe(0);
-    expect(turnRoom('cyan', 200, HUE_TURN_FAR)).toBe(40);
-    // A turn of nothing gives the color back.
-    expect(turnHue({ r: 254, g: 100, b: 87 }, 0)).toEqual({ r: 254, g: 100, b: 87 });
-    expect(hue(toHex(turnHue({ r: 254, g: 100, b: 87 }, 10)))).toBeCloseTo(hue('#fe6457') + 10, 0);
+  it('holds the floors and targets the design names', () => {
+    expect(PART_MIN).toEqual({ typical: 0, deuteranopia: 20, protanopia: 20, tritanopia: 15 });
+    expect(MOVE_MIN).toEqual({ lead: 12, bold: 6 });
+    expect([MOVE_WANT, MISS_SLACK, L_REACH, CHANNEL_FLOOR, CUE_FLOOR]).toEqual([15, 1, 0.15, 6, 3]);
+    expect([VISION_GUARD, VISION_SLACK, KEPT_SLACK, CHANNEL_LEAST, CHROMA_KEEP]).toEqual([
+      10, 2, 0.5, 4, 0.75,
+    ]);
+    expect(TEXT_SLOTS).toEqual(['foreground', 'white', 'brightWhite']);
+    expect(PARTED_PAIRS.deuteranopia).toEqual([
+      ['red', 'green'],
+      ['brightRed', 'brightGreen'],
+      ['green', 'yellow'],
+      ['green', 'brightYellow'],
+    ]);
+    expect(PARTED_PAIRS.protanopia).toEqual(PARTED_PAIRS.deuteranopia);
+    expect(PARTED_PAIRS.tritanopia).toEqual([
+      ['cyan', 'blue'],
+      ['green', 'blue'],
+      ['brightCyan', 'brightBlue'],
+    ]);
+    expect(KEPT_PAIRS.deuteranopia).toEqual([
+      ['red', 'yellow'],
+      ['red', 'brightYellow'],
+      ['blue', 'magenta'],
+    ]);
+    expect(KEPT_PAIRS.tritanopia).toEqual([
+      ['cyan', 'green'],
+      ['red', 'yellow'],
+      ['red', 'brightYellow'],
+      ['red', 'green'],
+    ]);
+    expect([PARTED_PAIRS.typical, KEPT_PAIRS.typical]).toEqual([[], []]);
+    // The game's channels, and every other two cue colors of a weight.
+    expect(CHANNEL_PAIRS).toHaveLength(16);
+    expect(CUE_PAIRS).toHaveLength(19);
+    const key = ([a, b]: readonly string[]) => [a, b].sort().join('/');
+    const channels = new Set(CHANNEL_PAIRS.map(key));
+    for (const pair of CUE_PAIRS) {
+      expect(channels.has(key(pair)), key(pair)).toBe(false);
+      expect(pair[0].startsWith('bright'), key(pair)).toBe(pair[1].startsWith('bright'));
+    }
   });
 
   // A deuteranope sees nothing through the protan or tritan matrices,
-  // so a fit for Deuteranopia leaves those pairs to the players who see
-  // through them, and holds every other check as the Typical fit has it.
+  // so a swap for Deuteranopia leaves those pairs to the players who see
+  // through them, and holds every other check as its start has it.
   it('holds every check but the T7 pairs another vision sees through', () => {
     expect(holdsCheck('T3 red Lc', 'deuteranopia')).toBe(true);
     expect(holdsCheck('T6 green pair dE', 'tritanopia')).toBe(true);
@@ -382,26 +349,114 @@ describe('color vision', () => {
     expect(seenBy('#fe6457', 'deuteranopia')).toBe('#b3a353');
     expect(seenBy('#fe6457', 'protanopia')).toBe('#8d8255');
     expect(seenBy('#fe6457', 'tritanopia')).toBe('#ff4262');
+    expect(seenApart(hex(TRIAD.red), hex(TRIAD.green), 'typical')).toBe(
+      deltaEOk(hex(TRIAD.red), hex(TRIAD.green)),
+    );
+  });
+
+  it('swaps nothing for Typical and hands back the start', () => {
+    const kanso = findTheme('kanso-zen');
+    expect(swapFor(kanso.xterm, 'typical', kanso.fitted)).toEqual(kanso.fitted);
+    expect(swapFor(TRIAD, 'typical')).toEqual({});
+    expect(largestMove(TRIAD, TRIAD, GAME_SLOTS)).toBe(0);
+    expect(largestMove(TRIAD, { ...TRIAD, red: 'crimson' }, GAME_SLOTS)).toBe(Infinity);
+  });
+
+  // The search keeps a step only when it scores better on the tiers, in
+  // a fixed order, so the same palette swaps to the same colors every
+  // time, here or in the worker, and fit() hands another vision to it.
+  it(
+    'swaps Tango Dark for a protanope to the same colors every time',
+    { timeout: 60_000 },
+    async () => {
+      const tango = findTheme('tango-dark');
+      const once = swapFor(tango.xterm, 'protanopia', tango.fitted);
+      expect(swapFor(tango.xterm, 'protanopia', tango.fitted)).toEqual(once);
+      expect(fit(tango.xterm, 'protanopia', tango.fitted)).toEqual(once);
+      expect(visionFitOf(tango, 'protanopia', true)).toEqual(once);
+      // The worker answers the main window with the same slots.
+      const answers: unknown[] = [];
+      vi.stubGlobal('self', { postMessage: (m: unknown) => answers.push(m) });
+      try {
+        await import('./gameFit.worker');
+        const worker = (globalThis as unknown as { self: { onmessage: (e: unknown) => void } })
+          .self;
+        worker.onmessage({
+          data: { id: 7, palette: tango.xterm, vision: 'protanopia', start: tango.fitted },
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(answers).toEqual([{ id: 7, fitted: once }]);
+    },
+  );
+
+  // Kanso Zen swaps from its Typical fit. Green turns sky blue, red
+  // vermilion and blue violet, and bold green, which the fit draws near
+  // white, keeps a blue tint.
+  it('swaps Kanso Zen for a deuteranope from its Typical fit', { timeout: 30_000 }, () => {
+    const kanso = findTheme('kanso-zen');
+    const swapped = swapFor(kanso.xterm, 'deuteranopia', kanso.fitted);
+    const play = { ...kanso.xterm, ...swapped };
+    const typical = { ...kanso.xterm, ...kanso.fitted };
+    expect(CUE_SLOTS.filter((k) => play[k] !== typical[k]).map((k) => `${k} ${play[k]}`)).toEqual(
+      KANSO_DEUTAN,
+    );
+    expect(moved(typical.green, play.green)).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+    expect(moved(typical.brightGreen, play.brightGreen)).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+  });
+
+  // Solarized Dark keeps out of Fit game colors, so its swap starts from
+  // the published colors.
+  it('swaps Solarized Dark for a protanope from its published colors', { timeout: 30_000 }, () => {
+    const dark = findTheme('solarized-dark');
+    const swapped = swapFor(dark.xterm, 'protanopia');
+    expect(
+      CUE_SLOTS.filter((k) => swapped[k] !== undefined).map((k) => `${k} ${swapped[k]}`),
+    ).toEqual(SOLARIZED_PROTAN);
+    expect(moved(dark.xterm.green, swapped.green ?? '')).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+  });
+
+  // Triad passes every check as it stands, and Kanso Zen's Typical fit
+  // already kept every pair the old fit kept apart for a protanope. The
+  // swap changes both all the same.
+  it('swaps a palette whatever it already keeps apart', { timeout: 60_000 }, () => {
+    for (const vision of ['deuteranopia', 'protanopia', 'tritanopia'] as const) {
+      const [lead, bold] = LEAD_SLOTS[vision];
+      const play = { ...TRIAD, ...swapFor(TRIAD, vision) };
+      expect(moved(TRIAD[lead], play[lead]), vision).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+      expect(moved(TRIAD[bold], play[bold]), vision).toBeGreaterThanOrEqual(MOVE_MIN.bold);
+    }
+    const kanso = findTheme('kanso-zen');
+    const typical = { ...kanso.xterm, ...kanso.fitted };
+    const protan = { ...kanso.xterm, ...swapFor(kanso.xterm, 'protanopia', kanso.fitted) };
+    expect(moved(typical.green, protan.green)).toBeGreaterThanOrEqual(MOVE_MIN.lead);
+    expect(rgbToOklch(hex(protan.green)).h).toBeGreaterThan(225 - 1);
+    expect(rgbToOklch(hex(protan.green)).h).toBeLessThan(255 + 1);
   });
 });
 
 // Every built in theme ships its fit worked out ahead, in themes.ts,
-// for Typical and for each other color vision (VISION_FITS). After a
-// change to a published palette or to the fit, fit each one again,
-// about two seconds a theme for Typical and about one for each other
-// vision, with
+// and its swap for each other color vision from each start it plays
+// (VISION_FITS). After a change to a published palette, to the fit or to
+// the swap, work each out again, about two seconds a theme for Typical
+// and about two for each swap, with
 //
 //   VOSH_FIT_THEMES=1 npx vitest run src/lib/gameFit.test.ts
 //
-// A theme that now fits to other colors fails and prints the block or
-// the row to paste in its place.
+// A theme that now fits or swaps to other colors fails and prints the
+// block or the row to paste in its place.
 describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () => {
   const block = (fitted: Partial<XtermPalette>) =>
     ['fitted: {', ...Object.entries(fitted).map(([k, v]) => `  ${k}: '${v}',`), '},'].join('\n');
   const row = (fitted: Partial<XtermPalette>) => GAME_SLOTS.map((k) => fitted[k] ?? '.').join(' ');
+  // The fits run for minutes without a break, so each test first lets the
+  // runner answer its worker, which gives up on a call left a minute.
+  const breathe = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   for (const theme of BUILTIN_THEMES) {
-    it(theme.id, { timeout: 30_000 }, () => {
+    it(theme.id, { timeout: 30_000 }, async () => {
+      await breathe();
       // Solarized Dark keeps out of the fit (Q20), so it ships none.
       if (theme.fitGameColors === false) {
         expect(theme.fitted).toBeUndefined();
@@ -413,15 +468,18 @@ describe.runIf(import.meta.env.VOSH_FIT_THEMES)('the fits themes.ts ships', () =
       expect(theme.fitted, `${theme.id} now fits to\n${block(fresh)}`).toEqual(want);
     });
     for (const vision of COLOR_VISIONS.filter((v) => v !== 'typical')) {
-      it(`${theme.id} ${vision}`, { timeout: 60_000 }, () => {
-        if (theme.fitGameColors === false) return;
-        // The Typical fit themes.ts ships, which the test above holds to
-        // the fitter, so each vision reads it as fit() would.
-        const fresh = fit(theme.xterm, vision, theme.fitted ?? {});
-        const now = visionFitOf(theme, vision) ?? {};
-        const kept = fresh === (theme.fitted ?? {}) ? 'the Typical fit' : `'${row(fresh)}'`;
-        expect(now, `${theme.id} ${vision} now fits to ${kept}`).toEqual(fresh);
-      });
+      // The start Typical plays with Fit game colors on, the theme's
+      // fit, which the test above holds to the fitter, and with it off.
+      const starts = Object.keys(typicalStart(theme, true)).length > 0 ? [true, false] : [false];
+      for (const on of starts) {
+        const start = on ? 'fitted' : 'published';
+        it(`${theme.id} ${vision} ${start}`, { timeout: 60_000 }, async () => {
+          await breathe();
+          const fresh = swapFor(theme.xterm, vision, typicalStart(theme, on));
+          const now = visionFitOf(theme, vision, on) ?? {};
+          expect(now, `${theme.id} ${vision} ${start} now swaps to '${row(fresh)}'`).toEqual(fresh);
+        });
+      }
     }
   }
 });
