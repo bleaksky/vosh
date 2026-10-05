@@ -167,7 +167,6 @@ A few imports still run from `src/ipc`, `src/stores`, `src/theme` and `src/lib` 
 - `src/stores/session/pinnedPromptStore.ts` uses `dockRows` from `src/prompt/pinnedDock.ts` and `closePinRow` from `src/terminal/terminalRegion.ts`, both pure.
 - `src/lib/helpLink.ts` uses `rankTopics` and `resolveHelpTarget` from `src/help/helpNav.ts`. 2.5 of the plan makes helpLink the one deep link helper.
 - `src/lib/appMenu.ts` uses `PANE_TYPES` from `src/panel/paneLayout.ts` for the panes the macOS menu bar lists.
-- `src/theme/gameFit.ts` uses `indexedRgb` from `src/terminal/bandCells.ts`, the 256 color table.
 
 Two tests cross as well. `src/ipc/characters.test.ts` builds its expected layout with `defaultLayout`, and `src/stores/gmcp/hiddenStore.test.tsx` renders the Affects and Group panes and the vitals footer over the stores it drives.
 

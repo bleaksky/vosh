@@ -5,7 +5,15 @@
 // to 60 percent in linear light, and draws bright colors in the bold face
 // only while Bright bold is on.
 
-import { fromLinear, toHex, toLinear, toRgba, type Rgb } from '../theme/color';
+import {
+  fromLinear,
+  hexOrBlack,
+  indexedRgb,
+  toHex,
+  toLinear,
+  toRgba,
+  type Rgb,
+} from '../theme/color';
 import type { Cell, CellAttrs, CellColor } from './sgrCells';
 
 export interface BandEnv {
@@ -49,26 +57,6 @@ export function decorationLine(look: BandCellLook): string | undefined {
   return lines.length > 0 ? lines.join(' ') : undefined;
 }
 
-/** The color of the first six hex digits, black without them. */
-function parseHex(hex: string): Rgb {
-  const m = /^#?([0-9a-f]{6})/i.exec(hex.trim());
-  if (!m) return { r: 0, g: 0, b: 0 };
-  const n = parseInt(m[1], 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
-/** xterm's 256 color table past the 16: the 6x6x6 cube, then 24 grays. */
-export function indexedRgb(n: number, palette: readonly string[]): Rgb {
-  if (n < 16) return parseHex(palette[n] ?? '#000000');
-  if (n < 232) {
-    const i = n - 16;
-    const v = (c: number) => (c === 0 ? 0 : 55 + c * 40);
-    return { r: v(Math.floor(i / 36)), g: v(Math.floor((i % 36) / 6)), b: v(i % 6) };
-  }
-  const gray = 8 + (n - 232) * 10;
-  return { r: gray, g: gray, b: gray };
-}
-
 function colorRgb(color: CellColor, palette: readonly string[]): Rgb {
   switch (color.kind) {
     case 'named':
@@ -101,7 +89,7 @@ const UNDERLINE_STYLES: readonly UnderlineLine[] = [
 
 export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
   const fgColor = brightened(attrs.fg, attrs.bold);
-  let fg: Rgb = fgColor ? colorRgb(fgColor, env.palette) : parseHex(env.fg);
+  let fg: Rgb = fgColor ? colorRgb(fgColor, env.palette) : hexOrBlack(env.fg);
   if (attrs.dim && env.renderer === 'native') {
     const dimmed = (c: number) => fromLinear(toLinear(c) * 0.6);
     fg = { r: dimmed(fg.r), g: dimmed(fg.g), b: dimmed(fg.b) };
@@ -110,13 +98,13 @@ export function resolveCell(attrs: CellAttrs, env: BandEnv): BandCellLook {
   let color: string;
   let background: string | null;
   if (attrs.inverse) {
-    color = toHex(bgRgb ?? parseHex(env.bg));
+    color = toHex(bgRgb ?? hexOrBlack(env.bg));
     background = toHex(fg);
   } else {
     color = toHex(fg);
     background = bgRgb ? toHex(bgRgb) : null;
   }
-  if (attrs.dim && env.renderer === 'xterm') color = toRgba(parseHex(color), 0.5);
+  if (attrs.dim && env.renderer === 'xterm') color = toRgba(hexOrBlack(color), 0.5);
   // xterm hides concealed text. The native grid draws it.
   if (attrs.hidden && env.renderer === 'xterm') color = 'transparent';
   const bold = env.renderer === 'native' && isBright(fgColor) ? env.brightBold : attrs.bold;

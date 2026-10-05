@@ -68,6 +68,29 @@ export function hexToRgba(hex: string, alpha: number): string {
   return c ? toRgba(c, alpha) : hex;
 }
 
+/** The color of the first six hex digits, black without them. The
+ *  terminal palette reads its colors this way, so an alpha after the
+ *  six digits drops away. */
+export function hexOrBlack(hex: string): Rgb {
+  const m = /^#?([0-9a-f]{6})/i.exec(hex.trim());
+  if (!m) return { r: 0, g: 0, b: 0 };
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** xterm's 256 color table: the 16 of `palette`, then the 6x6x6 cube,
+ *  then 24 grays. */
+export function indexedRgb(n: number, palette: readonly string[]): Rgb {
+  if (n < 16) return hexOrBlack(palette[n] ?? '#000000');
+  if (n < 232) {
+    const i = n - 16;
+    const v = (c: number) => (c === 0 ? 0 : 55 + c * 40);
+    return { r: v(Math.floor(i / 36)), g: v(Math.floor((i % 36) / 6)), b: v(i % 6) };
+  }
+  const gray = 8 + (n - 232) * 10;
+  return { r: gray, g: gray, b: gray };
+}
+
 /** An sRGB channel, 0..255, in linear light, 0..1. */
 export function toLinear(v: number): number {
   const c = v / 255;
