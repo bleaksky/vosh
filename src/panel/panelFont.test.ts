@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import baseCss from '../styles.css?raw';
+import baseCss from '../styles/base.css?raw';
 import frameCss from '../styles/frame.css?raw';
 import helpCss from '../styles/help.css?raw';
 import mapCss from '../styles/map.css?raw';
@@ -81,7 +81,7 @@ function rules(css: string): { selector: string; body: string }[] {
 }
 
 const SHEETS: Readonly<Record<string, string>> = {
-  'styles.css': baseCss,
+  'styles/base.css': baseCss,
   'styles/map.css': mapCss,
   'styles/tokens.css': tokensCss,
   'styles/frame.css': frameCss,
