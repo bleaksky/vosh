@@ -264,14 +264,38 @@ pub(crate) fn reached_prompt(session: &Session, p: &Profile) -> Option<crate::al
     presets::connection(p, Link::Ready)
 }
 
-/// A series that runs for a session: its task, and the wake that dials
-/// at once.
+/// A series that runs for a session: its task, the wake that dials at
+/// once, and what it redials.
 pub(crate) struct Redial {
     task: tokio::task::JoinHandle<()>,
     now: Arc<Notify>,
+    lost: Lost,
+}
+
+/// What a drop left a series to redial: where the link ran and the
+/// character it played. Each try forgets both on the session as it dials,
+/// so the series keeps its own copy.
+#[derive(Debug, Clone)]
+struct Lost {
+    address: Address,
+    character: Option<String>,
+    /// When the link dropped.
+    at: Instant,
+}
+
+impl Lost {
+    /// Whether the link ran at `here`, the host and port of another link.
+    fn at(&self, here: &(String, u16)) -> bool {
+        self.address.host == here.0 && self.address.port == here.1
+    }
 }
 
 impl Redial {
+    /// Whether the series redials `character` at `here`.
+    fn redials(&self, here: &(String, u16), character: &str) -> bool {
+        self.lost.at(here) && self.lost.character.as_deref() == Some(character)
+    }
+
     /// Dial at once in place of the wait under way.
     pub(crate) fn now(&self) {
         self.now.notify_one();
@@ -314,7 +338,7 @@ pub(crate) async fn after_drop<R: tauri::Runtime>(
         .expected(now)
         .or_else(|| took_elsewhere(&state, session, now).then_some(Why::Taken));
     if why == Some(Why::Taken) {
-        print(app, session, &taken_line(session));
+        print(app, session, &taken_line(session.character().as_deref()));
     }
     let (lost, on) = {
         let p = session.lock_profile().await;
@@ -341,15 +365,24 @@ pub(crate) async fn after_drop<R: tauri::Runtime>(
     else {
         return;
     };
+    let lost = Lost {
+        address,
+        character: session.character(),
+        at: now,
+    };
     let wake = Arc::new(Notify::new());
     let task = tokio::spawn(series(
         app.clone(),
         state,
         Arc::clone(session),
-        address,
+        lost.clone(),
         Arc::clone(&wake),
     ));
-    session.start_redial(Redial { task, now: wake });
+    session.start_redial(Redial {
+        task,
+        now: wake,
+        lost,
+    });
 }
 
 /// Whether another session on the host and port of `session` answered Y
@@ -386,23 +419,54 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
         return;
     };
     for other in state.other_sessions(session.id) {
-        let same = other.live_address().as_ref() == Some(&here)
+        let plays = other.live_address().as_ref() == Some(&here)
             && other.character().as_deref() == Some(character);
-        if !same {
-            continue;
+        if plays {
+            other.connection.lock().link.take();
         }
-        other.connection.lock().link.take();
-        if let Some(redial) = other.take_redial().filter(|redial| !redial.ended()) {
+        // A series matches on what the drop left it, since each try
+        // forgets the address and the character on the session.
+        let redial =
+            other.take_redial_if(|redial| !redial.ended() && redial.redials(&here, character));
+        if let Some(redial) = redial {
             redial.end().await;
-            other.awaiting_game_prompt.set(false);
-            print(app, &other, &taken_line(&other));
-            other.emit(
-                app,
-                events::RECONNECT,
-                &ReconnectPayload::Declined { why: Why::Taken },
-            );
+            stop_taken(app, &other, Some(character));
         }
     }
+}
+
+/// Whether, since the drop `lost` names, another session on its host and
+/// port answered Y to the game's question, or plays its character there
+/// now. Either one took the character this series would redial (Sessions
+/// Q8). The Y names no character, so it counts for whichever character
+/// the game asked about.
+fn taken_since(state: &SharedState, session: &Session, lost: &Lost) -> bool {
+    state.other_sessions(session.id).iter().any(|other| {
+        let Some(there) = other.live_address() else {
+            return false;
+        };
+        if !lost.at(&there) {
+            return false;
+        }
+        let (took, playing) = {
+            let c = other.connection.lock();
+            (c.link.took_at, c.link.playing())
+        };
+        took.is_some_and(|at| at >= lost.at)
+            || (playing && lost.character.is_some() && other.character() == lost.character)
+    })
+}
+
+/// End the series of `session` for a character another session took, and
+/// say so on its terminal and to the page.
+fn stop_taken<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, character: Option<&str>) {
+    session.awaiting_game_prompt.set(false);
+    print(app, session, &taken_line(character));
+    session.emit(
+        app,
+        events::RECONNECT,
+        &ReconnectPayload::Declined { why: Why::Taken },
+    );
 }
 
 /// End the series `session` runs, if any, and say so to the page.
@@ -425,19 +489,20 @@ fn series<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: SharedState,
     session: Arc<Session>,
-    address: Address,
+    lost: Lost,
     wake: Arc<Notify>,
 ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-    Box::pin(run_series(app, state, session, address, wake))
+    Box::pin(run_series(app, state, session, lost, wake))
 }
 
 async fn run_series<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: SharedState,
     session: Arc<Session>,
-    address: Address,
+    lost: Lost,
     wake: Arc<Notify>,
 ) {
+    let address = &lost.address;
     for (at, wait) in WAITS.iter().enumerate() {
         let number = at + 1;
         session.emit(
@@ -452,6 +517,11 @@ async fn run_series<R: tauri::Runtime>(
         tokio::select! {
             () = sleep(&state, &session, *wait) => {}
             () = wake.notified() => {}
+        }
+        // Another session may have taken the character since the drop.
+        if taken_since(&state, &session, &lost) {
+            stop_taken(&app, &session, lost.character.as_deref());
+            return;
         }
         session.emit(
             &app,
@@ -550,9 +620,9 @@ fn plain_reason(reason: &str) -> String {
     }
 }
 
-/// What a session that lost its character to another session prints.
-fn taken_line(session: &Session) -> String {
-    match session.character() {
+/// What a session that lost `character` to another session prints.
+fn taken_line(character: Option<&str>) -> String {
+    match character {
         Some(character) => format!(
             "[reconnect] Another session logged in as {character}, so Vosh does not reconnect here."
         ),
