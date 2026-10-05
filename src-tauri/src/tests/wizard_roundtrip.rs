@@ -216,7 +216,7 @@ fn on_rows(p: &Profile) -> Vec<String> {
         }
     }
     // The input bar fires the last copy of a key that is on and whose
-    // group is on, as `rebuild` in src/input/Input.tsx builds its
+    // group is on, as `rebuild` in src/input/useMacroKeys.ts builds its
     // map.
     let mut fired: BTreeMap<&str, &Macro> = BTreeMap::new();
     for m in &p.macros {
