@@ -84,8 +84,8 @@ export function ingestRecentNames(text: string): void {
 }
 
 /** Names seen in the last MAX_AGE_MS, ordered most-recent first.
- *  Used by Input.tsx Tab completion as a source after the typed-
- *  history words and the live Room.Chars list. */
+ *  Used by Tab completion in useTabCompletion.ts as a source after the
+ *  typed-history words and the live Room.Chars list. */
 export function recentNames(): string[] {
   const now = Date.now();
   const fresh: { name: string; ts: number }[] = [];
