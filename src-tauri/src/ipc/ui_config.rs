@@ -493,8 +493,9 @@ mod tests {
 
     #[test]
     fn ui_defaults_match_the_ones_the_page_fills() {
-        // normalizeUiConfig in src/lib/session.ts reads the same file and
-        // fills a missing field with each of these values.
+        // normalizeUiConfig in src/ipc/uiConfig.ts fills a missing field
+        // with each of these values, and src/ipc/uiConfig.test.ts reads
+        // the same file to hold it there.
         let text = include_str!("../../../fixtures/ui-config/defaults.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
         let passed: Vec<&str> = fixture["passed_through"]

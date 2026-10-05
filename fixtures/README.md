@@ -43,7 +43,8 @@ fixtures/
              test in src-tauri holds it to the sources, and
              VOSH_WRITE_IPC_NAMES=1 writes it again. gmcp-events.json,
              the event each GMCP package goes out on, read by a fake MUD
-             test in src-tauri and by session.test.ts on the page.
+             test in src-tauri and by src/ipc/session.test.ts on the
+             page.
              aliases_export.json is the reply to aliases_export plus a
              final newline. A test in src-tauri/src/ipc/automation.rs
              holds it to that command byte for byte, and the palette and
