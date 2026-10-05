@@ -36,9 +36,9 @@ export class PaneSizer {
   // The wrapper's size in whole pixels, as last given to the host.
   private lastW = 0;
   private lastH = 0;
-  // Tier 3 (docs/native-renderer.md): report this pane's screen
-  // rectangle to the native wgpu surface so it tracks the terminal.
-  // Live pane only, and only while the surface draws it.
+  // The native wgpu surface hears this pane's screen rectangle, so its
+  // grid tracks the terminal (docs/native-renderer.md). Live pane only,
+  // and only while the surface draws it.
   //
   // The rows the pinned band borrows go along, so the grid gives them
   // up in the same frame as the new bounds, and the game keeps its size.
@@ -178,13 +178,11 @@ export class PaneSizer {
     onCellSize({ width, height, cols: term.cols });
   }
 
-  // The actual fix. Read the sizing wrapper's bounding rect every
-  // frame and explicitly write width/height in pixels onto the
-  // terminal-host element. xterm-addon-fit reads the host's
-  // computed `height` style (not its clientHeight); without an
-  // explicit pixel height, computed height comes back wrong in some
-  // Tauri/WebKit layout passes — opening DevTools forces a layout
-  // and the value goes right, but otherwise it stays stale.
+  // Report the pane to the native grid and the band, then write the
+  // sizing wrapper's size in whole pixels onto the host xterm opened in.
+  // xterm-addon-fit reads the host's computed `height` style, not its
+  // clientHeight, and without a pixel height some Tauri and WebKit
+  // layout passes leave that computed height stale.
   private readonly sync = (): void => {
     const { sizer, host } = this.pane;
     if (!sizer) return;
@@ -218,22 +216,12 @@ export class PaneSizer {
     this.placeGrid();
   }
 
-  // Resizable broadcasts `vosh:resize-progress` { size } from
-  // its pointermove handler — fires synchronously inside the
-  // same JS task that just set the wrapper's CSS height. We
-  // run sync + fit + anchor restore in that same task so
-  // wrapper, xterm, and scroll all update before the browser
-  // paints. Anything async (React state, ResizeObserver) would
-  // land in a separate paint and the user would see a brief
-  // mismatched intermediate frame — the "jitter" that every
-  // previous attempt produced. For quiet panes (split-scrollback
-  // history) the viewport top is saved before fit and restored
-  // after so the larger viewport exposes new rows BELOW the old
-  // bottom instead of pushing old content down. That's what
-  // makes the drag look like a continuous curtain: the new
-  // rows xterm exposes match the rows that were just at the
-  // top of the live pane (both buffers are in sync because
-  // they both consume the same session://output stream).
+  // Resizable sends `vosh:resize-progress` from its pointermove
+  // handler, in the same task that just set the wrapper's CSS height.
+  // Sizing the host and fitting xterm in that task puts the wrapper and
+  // xterm in the same paint. Anything async (React state, a
+  // ResizeObserver) would paint a frame where the two disagree, which
+  // reads as jitter on the divider.
   private readonly onResizeProgress = (): void => {
     const { sizer, host } = this.pane;
     if (!sizer) return;
@@ -246,15 +234,11 @@ export class PaneSizer {
     host.style.width = `${w}px`;
     host.style.height = `${h}px`;
     this.safeFit();
-    // No explicit refresh or viewport restore. xterm's resize
-    // adjusts the buffer dimensions; the WebGL renderer's own
-    // debounced redraw paints once after the drag settles, which
-    // matches what the DOM renderer does — both panes look
-    // stationary during the drag and the divider slides cleanly
-    // between them. Forcing a per-frame refresh produced the
-    // curtain effect (content shifted per drag frame); doing
-    // scrollLines or scrollToLine produced oscillation. Leaving
-    // it alone gives the right visual.
+    // No refresh and no scroll here. xterm's resize adjusts the buffer
+    // and each renderer redraws once the drag settles, so both panes
+    // hold still while the divider slides between them. A refresh each
+    // frame would shift the text with every step, and scrolling to a
+    // line would make it oscillate.
   };
 
   /** Follow the pane from now on: a drag on the split, the window, the
@@ -275,7 +259,7 @@ export class PaneSizer {
     // viewport, otherwise that first scroll lands on blank rows and only
     // a second scroll re-renders it. The live pane uses a low-frequency
     // interval instead, because a per-frame getBoundingClientRect there
-    // stacked a layout reflow onto every combat-round write and stole
+    // stacks a layout reflow onto every write in a fight and steals
     // frames from the renderer.
     if (this.pane.quiet()) {
       const pollLoop = () => {

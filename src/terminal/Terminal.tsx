@@ -227,12 +227,11 @@ export function Terminal({
       convertEol: false,
       // High-precision touchpads emit many small deltaY events per
       // gesture; xterm's default scrollSensitivity (1) compounds
-      // these into a runaway scroll on macOS. 0.5 halves the per-
-      // event step so trackpad scrolling feels controllable. Smooth-
-      // scroll animation was tried (smoothScrollDuration) but stacking
-      // consecutive scrollLines animations broke the scrolling feel —
-      // discrete instant steps via the useScrollbackSplit.ts accumulator
-      // works better in practice.
+      // these into a runaway scroll on macOS. 0.75 shrinks the per-
+      // event step so trackpad scrolling feels controllable.
+      // smoothScrollDuration stays off, since consecutive scrollLines
+      // animations stack and the scroll stops feeling direct. The
+      // useScrollbackSplit.ts accumulator steps it at once instead.
       scrollSensitivity: 0.75,
       theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
@@ -299,10 +298,9 @@ export function Terminal({
     // GPU renderer. xterm's WebGL addon must run after term.open() and
     // it reads the host element's pixel size when it allocates the
     // glyph atlas — load it after one fit so the host has nonzero
-    // dimensions. The earlier rAF-deferred attempt crashed in
-    // syncScrollArea because the renderer swap and a scheduled fit()
-    // ran in the same frame, leaving `_renderer.value` undefined; the
-    // straightforward order (sync + fit, then swap) avoids that.
+    // dimensions. It loads here, not on a later frame, since a renderer
+    // swap in the same frame as a scheduled fit() leaves
+    // `_renderer.value` undefined and syncScrollArea throws.
     paneSizer.safeFit();
     const webgl = loadWebgl(term, blink, quietRef.current);
     requestAnimationFrame(paneSizer.safeFit);
@@ -464,16 +462,14 @@ export function Terminal({
     // ROM derivatives. We line-buffer here so a complete line word-
     // wraps cleanly before hitting xterm.
     //
-    // We flush the trailing partial (prompt) at the end of every chunk
-    // instead of waiting on an idle timer. The old 20ms idle flush
-    // made GMCP-driven UI (room strip, vitals, map) visibly land
-    // before the text — you would see the new room's info pop up a
-    // frame before walking into it. With backend per-read batching
-    // (v0.2.10) each TCP read arrives as one output event, so the
-    // line-buffer's wrap math still has the whole line for any line
-    // ending in \n; the only thing that flushes "early" is the
-    // already-complete prompt at the chunk tail. The shaper is made
-    // above, with the mirror.
+    // The trailing partial (the prompt) flushes at the end of every
+    // chunk rather than after an idle wait, since any wait lets
+    // GMCP-driven UI (room strip, vitals, map) land a frame before the
+    // text it belongs to. The backend sends each TCP read as one output
+    // event, so the line-buffer's wrap math still has the whole line
+    // for any line ending in \n, and only the prompt at the chunk's
+    // tail flushes before its newline. The shaper is made above, with
+    // the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
       paneSizer.reportCellSize();

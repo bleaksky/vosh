@@ -64,8 +64,6 @@ export function drawSquares(
   const size = Math.max(8, Math.floor(pitch * 0.55));
   // Place each grid cell relative to the player's canvas position so the
   // ROOM at world coord (x, y) keeps its on-screen position across pushes.
-  // Cells outside the populated bounding box are still drawn but ignored
-  // by hit-testing in this Phase 7 cut.
   const ox = Math.floor(playerX - centerC * pitch);
   const oy = Math.floor(playerY - centerR * pitch);
 
