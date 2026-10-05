@@ -452,27 +452,3 @@ export async function subscribeThemePrefs(
     if (isThemePrefs(payload)) callback(themePrefsOf(payload));
   });
 }
-
-// Every window hears its own broadcast. A theme id or theme fields
-// this window sent in the last second are its own echo, and adopting
-// one could undo a newer pick made while that save was in flight.
-const THEME_ECHO_MS = 1000;
-let themeEchoes: { key: string; at: number }[] = [];
-
-function themeEchoKey(value: string | ThemePrefs): string {
-  return typeof value === 'string' ? `id:${value}` : `prefs:${JSON.stringify(themePrefsOf(value))}`;
-}
-
-export function noteThemeEcho(value: string | ThemePrefs): void {
-  const now = Date.now();
-  themeEchoes = themeEchoes.filter((e) => now - e.at < THEME_ECHO_MS);
-  themeEchoes.push({ key: themeEchoKey(value), at: now });
-}
-
-/** Whether a theme id or theme fields heard on the bus are this
- *  window's own broadcast coming back. */
-export function isOwnThemeEcho(value: string | ThemePrefs): boolean {
-  const now = Date.now();
-  const key = themeEchoKey(value);
-  return themeEchoes.some((e) => e.key === key && now - e.at < THEME_ECHO_MS);
-}

@@ -8,16 +8,11 @@ import {
 } from '../ipc/affects';
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
-import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
-import { followReplacedUiConfig, isOwnAffectsDisplayEcho } from '../ipc/uiConfigSave';
+import { getUiConfig, type UiConfig, type UiFields } from '../ipc/uiConfig';
+import { followReplacedUiConfig } from '../ipc/uiConfigSave';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
-import {
-  applyThemePrefs,
-  isOwnThemeEcho,
-  subscribeThemeChanges,
-  subscribeThemePrefs,
-} from '../theme/theme';
+import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../theme/theme';
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
@@ -34,6 +29,7 @@ import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
 import { revealSettingsAnchor } from './revealAnchor';
 import { Sidebar } from './Sidebar';
 import { useSettingsClose } from './useSettingsClose';
+import { settingsSaveHolds } from './useSettingsAutoSave';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronRightIcon } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
@@ -83,6 +79,23 @@ function takePendingTarget(): SettingsTarget | null {
     return null;
   }
 }
+
+/** The fields the theme broadcasts carry. */
+const THEME_PREFS_FIELDS: readonly (keyof UiFields)[] = [
+  'theme',
+  'follow_system_appearance',
+  'light_theme',
+  'dark_theme',
+];
+
+/** The fields the affects display broadcast carries. */
+const AFFECTS_DISPLAY_FIELDS: readonly (keyof UiFields)[] = [
+  'affects_style',
+  'affects_marker',
+  'affects_tint',
+  'affects_running_out_hours',
+  'affects_almost_gone_hours',
+];
 
 function clearPendingTarget() {
   try {
@@ -232,10 +245,12 @@ export function SettingsWindow() {
   // appearance is off the id is your manual pick, so the config copy
   // takes it and Appearance shows it. While follow is on the id is only
   // the pair entry the OS shows, and the theme fields below carry the
-  // pick. This window's own save comes back too, and is skipped.
+  // pick. This window's own save comes back too, so while a save holds
+  // the theme fields the copy keeps what you picked.
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const current = configRef.current;
-    if (!current || current.follow_system_appearance || isOwnThemeEcho(themeId)) return;
+    if (!current || current.follow_system_appearance) return;
+    if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     setConfig((prev) =>
       prev && !prev.follow_system_appearance && prev.theme !== themeId
         ? { ...prev, theme: themeId }
@@ -247,7 +262,7 @@ export function SettingsWindow() {
   // follow is on fills the light or dark entry, and the config copy
   // takes it the same way.
   useTauriEvent(subscribeThemePrefs, (prefs) => {
-    if (isOwnThemeEcho(prefs)) return;
+    if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     applyThemePrefs(prefs);
     setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
   });
@@ -256,9 +271,9 @@ export function SettingsWindow() {
   // and a profile switch brings the whole display, the tint and the
   // hours too. The config copy takes it, the way it takes a palette
   // theme pick, so Layout shows it. This window's own save comes back
-  // too, and is skipped.
+  // too, so while a save holds a display field the copy keeps yours.
   useTauriEvent(subscribeAffectsDisplayChanged, (display) => {
-    if (isOwnAffectsDisplayEcho(display)) return;
+    if (settingsSaveHolds(AFFECTS_DISPLAY_FIELDS)) return;
     setConfig((prev) =>
       prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
         ? { ...prev, ...affectsDisplayFields(display) }

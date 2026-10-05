@@ -1,12 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { act, createElement } from 'react';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import uiFields from '../../fixtures/ui-config/fields.json';
 import { setAffectsDisplay } from '../ipc/affects';
-import { getUiConfig, setUiTheme, type RawUiConfig, type UiFields } from '../ipc/uiConfig';
+import { UI_CONFIG_REPLACED } from '../ipc/events';
+import {
+  getUiConfig,
+  normalizeUiConfig,
+  setUiTheme,
+  type RawUiConfig,
+  type UiFields,
+} from '../ipc/uiConfig';
 import { pendingWrites } from '../lib/pendingWrites';
+import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 import { applyThemePrefs } from '../theme/theme';
-import { queueSettingsChange } from './useSettingsAutoSave';
+import { queueSettingsChange, settingsSaveHolds, useSettingsAutoSave } from './useSettingsAutoSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -129,5 +138,144 @@ describe('a Settings change', () => {
     // The font size ends where it started, so no window hears of it.
     expect(vi.mocked(emit).mock.calls).toEqual([['vosh://tick-count-changed', 'down']]);
     expect(report.saved).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Settings hears its own theme and affects display broadcasts, and the
+// window leaves a field alone while a save of its own holds it.
+describe('what a Settings save holds', () => {
+  const themePrefs: (keyof UiFields)[] = [
+    'theme',
+    'follow_system_appearance',
+    'light_theme',
+    'dark_theme',
+  ];
+  const affectsDisplay: (keyof UiFields)[] = [
+    'affects_style',
+    'affects_marker',
+    'affects_tint',
+    'affects_running_out_hours',
+    'affects_almost_gone_hours',
+  ];
+  const copy = normalizeUiConfig(opened);
+
+  /** Hold the next ui_set_fields until the test answers it. */
+  function answerLater(): (outcome: 'saved' | 'failed') => void {
+    let settle: (outcome: 'saved' | 'failed') => void = () => {};
+    vi.mocked(invoke).mockImplementationOnce(
+      (() =>
+        new Promise<void>((resolve, reject) => {
+          settle = (outcome) =>
+            outcome === 'saved' ? resolve() : reject(new Error('the profile is gone'));
+        })) as typeof invoke,
+    );
+    return (outcome) => settle(outcome);
+  }
+
+  it('holds the theme fields while a theme pick waits and while it sends', async () => {
+    const report = { saved: vi.fn(), failed: vi.fn() };
+    queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
+    expect(settingsSaveHolds(themePrefs)).toBe(true);
+    expect(settingsSaveHolds(affectsDisplay)).toBe(false);
+    const answer = answerLater();
+    const landed = pendingWrites.flushAll();
+    expect(settingsSaveHolds(themePrefs)).toBe(true);
+    answer('saved');
+    await landed;
+
+    expect(report.saved).toHaveBeenCalledTimes(1);
+    expect(settingsSaveHolds(themePrefs)).toBe(false);
+  });
+
+  it('holds the theme until the last of two picks lands', async () => {
+    const report = { saved: vi.fn(), failed: vi.fn() };
+    const answerFirst = answerLater();
+    const answerSecond = answerLater();
+    const first = queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
+    const firstLanded = pendingWrites.flushAll();
+    queueSettingsChange(first, { theme: 'gruvbox' }, 250, report);
+    const secondLanded = pendingWrites.flushAll();
+    // The first pick lands and its broadcast comes back older than the
+    // second pick.
+    answerFirst('saved');
+    await firstLanded;
+    expect(settingsSaveHolds(themePrefs)).toBe(true);
+    answerSecond('saved');
+    await secondLanded;
+
+    expect(report.saved).toHaveBeenCalledTimes(2);
+    expect(settingsSaveHolds(themePrefs)).toBe(false);
+  });
+
+  it('lets go of the fields a failed save held', async () => {
+    const report = { saved: vi.fn(), failed: vi.fn() };
+    queueSettingsChange(copy, { affects_tint: true }, 250, report);
+    const answer = answerLater();
+    const landed = pendingWrites.flushAll();
+    expect(settingsSaveHolds(affectsDisplay)).toBe(true);
+    answer('failed');
+    await landed;
+
+    expect(report.failed).toHaveBeenCalledTimes(1);
+    expect(settingsSaveHolds(affectsDisplay)).toBe(false);
+  });
+
+  // The window drops the save waiting when the backend replaces the
+  // config, so this mounts the hook that hears the replace.
+  describe('on a replaced config', () => {
+    const doc = new FakeDocument();
+    let createRoot: typeof import('react-dom/client').createRoot;
+
+    beforeAll(async () => {
+      vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+      vi.stubGlobal('document', doc);
+      vi.stubGlobal('window', {
+        document: doc,
+        location: { protocol: 'about:' },
+        HTMLIFrameElement: class {},
+        addEventListener() {},
+        removeEventListener() {},
+      });
+      vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+      vi.stubGlobal('Node', FakeNode);
+      vi.stubGlobal('Element', FakeElement);
+      vi.stubGlobal('HTMLElement', FakeElement);
+      // React DOM checks for a DOM once, when it loads.
+      ({ createRoot } = await import('react-dom/client'));
+    });
+
+    afterAll(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function Saver() {
+      useSettingsAutoSave(
+        () => {},
+        () => {},
+      );
+      return null;
+    }
+
+    it('lets go of the fields the dropped save held', async () => {
+      let replace = () => {};
+      vi.mocked(listen).mockImplementationOnce((event, handler) => {
+        if (event === UI_CONFIG_REPLACED) {
+          replace = () => (handler as EventCallback<unknown>)({ event, id: 0, payload: null });
+        }
+        return Promise.resolve(() => {});
+      });
+      const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+      await act(async () => root.render(createElement(Saver)));
+      vi.mocked(invoke).mockClear();
+      const report = { saved: vi.fn(), failed: vi.fn() };
+      queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
+      expect(settingsSaveHolds(themePrefs)).toBe(true);
+      replace();
+      expect(settingsSaveHolds(themePrefs)).toBe(false);
+      await act(async () => root.unmount());
+
+      expect(invoke).not.toHaveBeenCalledWith('ui_set_fields', expect.anything());
+      expect(report.saved).not.toHaveBeenCalled();
+    });
   });
 });

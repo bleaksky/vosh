@@ -12,7 +12,7 @@ import {
   setAffectsDisplay,
 } from './affects';
 import { normalizeUiConfig, setUiFields, type RawUiConfig, type UiFields } from './uiConfig';
-import { broadcastUiConfigChanges, isOwnAffectsDisplayEcho } from './uiConfigSave';
+import { broadcastUiConfigChanges } from './uiConfigSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -140,7 +140,7 @@ describe('affects display', () => {
     });
   });
 
-  it('tells every window when a save changes it, and knows its own echo', async () => {
+  it('tells every window when a save changes it', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
     sent.mockClear();
@@ -153,9 +153,6 @@ describe('affects display', () => {
       almost_gone: 1,
     } as const;
     expect(sent).toHaveBeenCalledWith('vosh://affects-display-changed', display);
-    expect(isOwnAffectsDisplayEcho(display)).toBe(true);
-    expect(isOwnAffectsDisplayEcho({ ...display, style: 'countdown' })).toBe(false);
-    expect(isOwnAffectsDisplayEcho({ ...display, running_out: 3 })).toBe(false);
     sent.mockClear();
     await broadcastUiConfigChanges(
       { ...base, affects_style: 'chips' },
