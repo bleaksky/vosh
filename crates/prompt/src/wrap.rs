@@ -1,7 +1,7 @@
 //! Word wrap for terminal text, shared by both renderers.
 //!
 //! Moved from `src-tauri/src/term_grid.rs`. It is a faithful port of the
-//! frontend `WordWrapper` (`src/lib/wordWrap.ts`), and both run against
+//! frontend `WordWrapper` (`src/terminal/wordWrap.ts`), and both run against
 //! `fixtures/wrap/cases.json`, so the native grid and xterm break a line at
 //! the same place. Complete lines wrap at the last whitespace before the
 //! width, the trailing partial line wraps and emits at once, and escape

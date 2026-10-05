@@ -1,7 +1,7 @@
 //! What a frame reports, each only when it changes. The page hears the
 //! grid size and the scroll offset, and the game hears its size through
 //! the session. `grid_and_game_rows` is the Rust twin of `keptRows` and
-//! `gameSize` in src/lib/terminalRows.ts, and both run
+//! `gameSize` in src/terminal/terminalRows.ts, and both run
 //! fixtures/terminal-rows/cases.json.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -38,7 +38,7 @@ static REPORTED: Reported = Reported {
 /// told the rows the pane holds with a one row band. A fight that grows
 /// the band by a row only moves the text, so the game hears of no new
 /// size and wraps as before. `keptRows` and `gameSize` in
-/// src/lib/terminalRows.ts do the same for xterm, and both run
+/// src/terminal/terminalRows.ts do the same for xterm, and both run
 /// fixtures/terminal-rows/cases.json, so keep them in step.
 pub(super) fn grid_and_game_rows(fit: usize, lent: usize) -> (usize, usize) {
     (fit.saturating_sub(lent).max(1), fit)
@@ -221,7 +221,7 @@ mod tests {
     }
 
     /// fixtures/terminal-rows/cases.json, which `keptRows`, `gameSize` and
-    /// `GameSizeReport` in src/lib/terminalRows.ts run too.
+    /// `GameSizeReport` in src/terminal/terminalRows.ts run too.
     #[derive(serde::Deserialize)]
     struct RowCases {
         split: Vec<SplitCase>,

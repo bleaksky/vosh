@@ -79,7 +79,7 @@ const ALIASES: [&str; 6] = ["kk", "bash", "loot", "heal", "cc", "dd"];
 const TRIGGERS: [&str; 4] = ["flee", "loot", "greet", "tell"];
 const MACROS: [&str; 4] = ["f1", "f2", "ctrl+1", "f3"];
 
-/// The preset library the launch below installs from, as src/lib/presets.ts
+/// The preset library the launch below installs from, as src/automation/presets.ts
 /// holds it: each preset id with the names of its triggers. The first
 /// three are among [`PRESETS_ON_BY_DEFAULT`], so an empty list turns them
 /// on. The last ships off, as a preset added after the defaults froze
@@ -123,7 +123,7 @@ fn preset_trigger(preset: &str, name: &str, older: bool) -> Trigger {
 }
 
 /// The presets that are on for a stored `enabled_presets` list, in
-/// library order, as `enabledPresetIds` in src/lib/automationRecords.ts
+/// library order, as `enabledPresetIds` in src/automation/automationRecords.ts
 /// reads it. An empty list means the defaults, `PRESETS_ON_BY_DEFAULT`.
 fn presets_on(stored: &[String]) -> Vec<&'static str> {
     LIBRARY
@@ -140,7 +140,7 @@ fn presets_on(stored: &[String]) -> Vec<&'static str> {
 }
 
 /// What the main window does with the preset triggers once a launch has
-/// loaded the profile, as App.tsx does it with `presetLaunchPlan`. Every
+/// loaded the profile, as shell/MainWindow.tsx does it with `presetLaunchPlan`. Every
 /// preset that is off comes out through `presets_remove`, and every one
 /// that is on installs again through `presets_install`. Each command
 /// saves, as the real commands do.
@@ -215,7 +215,7 @@ fn on_rows(p: &Profile) -> Vec<String> {
         }
     }
     // The input bar fires the last copy of a key that is on and whose
-    // group is on, as `rebuild` in src/components/Input.tsx builds its
+    // group is on, as `rebuild` in src/input/Input.tsx builds its
     // map.
     let mut fired: BTreeMap<&str, &Macro> = BTreeMap::new();
     for m in &p.macros {

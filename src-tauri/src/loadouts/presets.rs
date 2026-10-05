@@ -13,7 +13,7 @@ use crate::profile::set::ProfileSet;
 
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
-/// src/lib/automationRecords.ts, and a test here reads that line.
+/// src/automation/automationRecords.ts, and a test here reads that line.
 pub(crate) const PRESETS_OFF: &str = "none";
 
 /// The presets an empty `ui.enabled_presets` list turns on, which are the
@@ -21,7 +21,7 @@ pub(crate) const PRESETS_OFF: &str = "none";
 /// is frozen. A preset added later starts off, and an empty list, the
 /// value every profile holds until you change a preset, keeps the meaning
 /// it had when it was saved. Mirrors `PRESETS_ON_BY_DEFAULT` in
-/// src/lib/presets.ts, and a test here reads that list.
+/// src/automation/presets.ts, and a test here reads that list.
 pub(crate) const PRESETS_ON_BY_DEFAULT: &[&str] = &[
     "healing_basics",
     "defensive_combat",

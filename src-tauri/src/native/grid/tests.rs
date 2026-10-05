@@ -1333,7 +1333,7 @@ fn marks_are_found_whole_and_only_whole() {
 }
 
 // The wrap itself runs fixtures/wrap/cases.json in crates/prompt and in
-// src/lib/wordWrap.test.ts.
+// src/terminal/wordWrap.test.ts.
 #[test]
 fn session_feed_word_wraps_at_the_grid_width() {
     let _shared = lock_shared_grid_for_test();
