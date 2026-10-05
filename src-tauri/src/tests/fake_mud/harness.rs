@@ -373,21 +373,35 @@ impl Harness {
         self.disconnect_session(self.first).await;
     }
 
-    /// Close the connection of `session` the way `session::disconnect`
-    /// does.
+    /// Close the connection of `session` through `session::disconnect`,
+    /// as Disconnect does.
     pub(crate) async fn disconnect_session(&self, session: SessionId) {
         let session = self.state.session(Some(session)).expect("the session");
-        let handle = session.slot.lock().await.take();
-        if let Some(handle) = handle {
-            handle.shutdown().await;
-        }
-        crate::session::reconnect::cancel(self.app.handle(), &session).await;
-        if let Ok(mut g) = session.current_connection.lock() {
-            *g = None;
-        }
-        if let Ok(mut g) = session.current_character.lock() {
-            *g = None;
-        };
+        crate::session::disconnect(self.app.handle(), &self.state, &session).await;
+    }
+
+    /// Connect `session` to the fake game `server` through
+    /// `session::connect`, as Connect does. The game counts as no world
+    /// Vosh knows.
+    pub(crate) async fn connect_through_vosh(&self, session: SessionId, server: &FakeServer) {
+        let session = self.state.session(Some(session)).expect("the session");
+        crate::session::connect(
+            self.app.handle(),
+            &self.state,
+            &session,
+            "127.0.0.1".into(),
+            server.port,
+            false,
+        )
+        .await
+        .expect("the fake game answers");
+    }
+
+    /// Close `session` through `session_close`, as its row does.
+    pub(crate) async fn close_session(&self, session: SessionId) {
+        crate::ipc::session::session_close(self.app.handle().clone(), self.app.state(), session)
+            .await
+            .expect("the session closes");
     }
 
     /// The affect fulls of `session`, as its store keeps them.

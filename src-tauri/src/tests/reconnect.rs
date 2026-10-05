@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use serde_json::{json, Value as Json};
+use tauri::Manager;
 use tokio::sync::{mpsc, oneshot};
 use vosh_prompt::testkit::{gmcp, Build, Options};
 
@@ -251,7 +252,21 @@ async fn a_drop_at_the_account_menu_starts_nothing() {
 async fn with_reconnect_off_a_drop_rings_and_stays_down() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = logged_in(&["alert_connection"]).await;
-    h.state.selected_profile().await.reconnect = crate::profile::file::OnSwitch(false);
+    let on = || crate::ipc::session::reconnect_get(h.app.state());
+    assert_eq!(on().await, Ok(true), "on for every profile");
+    crate::ipc::session::reconnect_set(h.app.handle().clone(), h.app.state(), false)
+        .await
+        .expect("the switch");
+    assert_eq!(on().await, Ok(false));
+    let file = std::fs::read_to_string(
+        h.profile_file(crate::profile::set::DEFAULT_PROFILE_NAME)
+            .await,
+    )
+    .expect("the profile saved");
+    assert!(
+        file.lines().any(|line| line == "reconnect = false"),
+        "{file}"
+    );
     let mut clock = Clock::hold(&h);
     h.servers[0].cut();
     h.until("the decline", |h| last_of(h, h.first, "declined").is_some())
@@ -635,5 +650,70 @@ async fn disconnect_while_a_try_connects_leaves_no_link_up() {
         "{heard:?}"
     );
     clock.stays_quiet().await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reconnect_now_dials_at_once_and_only_while_a_series_waits() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    let now = || crate::ipc::session::session_reconnect_now(h.app.state(), Some(h.first));
+    assert_eq!(
+        now().await,
+        Err("Vosh is not waiting to reconnect this session.".into())
+    );
+    h.servers[0].cut();
+    // The first wait never ends on the clock.
+    let (_, wait, _held) = clock.next().await;
+    assert_eq!(wait, Duration::from_secs(3));
+    assert_eq!(now().await, Ok(()));
+    h.until("the try that reached the game", |h| {
+        last_of(h, h.first, "reached").is_some()
+    })
+    .await;
+    assert_eq!(kinds(&h, h.first), ["waiting", "dialing", "reached"]);
+    clock.stays_quiet().await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_connect_during_a_wait_ends_the_series_and_dials_where_you_asked() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    h.servers[0].cut();
+    let (_, _, done) = clock.next().await;
+    h.connect_through_vosh(h.first, &h.servers[1]).await;
+    assert_eq!(kinds(&h, h.first), ["waiting", "cancelled"]);
+    let _ = done.send(());
+    clock.stays_quiet().await;
+    assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 1);
+    assert_eq!(h.servers[1].connects.lock().expect("the connects").len(), 1);
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn closing_a_session_during_a_wait_ends_its_series() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(playing_as("Orla")).await;
+    let mut clock = Clock::hold(&h);
+    let two = h.open_session().await;
+    h.connect_through_vosh(two, &h.servers[1]).await;
+    h.until("the login", |h| {
+        shows(h, two, "Welcome to the fake Aabahran, Orla.")
+    })
+    .await;
+    h.servers[1].cut();
+    let (session, _, done) = clock.next().await;
+    assert_eq!(session, two);
+    h.close_session(two).await;
+    assert_eq!(kinds(&h, two), ["waiting", "cancelled"]);
+    let _ = done.send(());
+    clock.stays_quiet().await;
+    assert_eq!(h.servers[1].connects.lock().expect("the connects").len(), 1);
     h.finish(grid).await;
 }
