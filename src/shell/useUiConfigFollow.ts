@@ -1,8 +1,9 @@
 // The main window's UI config: the fonts, the sizes, the theme and the
 // terminal settings it reads at launch, then every change a profile
-// switch or a Settings save sends. The window shows itself once the
-// launch read has applied, and the fonts, sizes and line height it
-// caches let the next load paint in them from the first frame.
+// switch or a Settings save sends. It shows the window once the launch
+// read applies, and brings the preset triggers in line with it. The
+// fonts, sizes and line height it caches let the next load paint in them
+// from the first frame.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
