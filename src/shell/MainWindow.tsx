@@ -26,9 +26,9 @@ import {
   panelWidthOf,
   setPanelWidth,
   togglePanelOpen,
-  updatePanelLayout,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
+import { addPaneType, togglePane } from '../panel/paneActions';
 import { listTriggers, presetsInstall, presetsRemove } from '../ipc/automation';
 import {
   nativeSurfaceFind,
@@ -129,15 +129,7 @@ import {
   startNativeScroll,
   subscribeNativeScroll,
 } from '../terminal/native/nativeScroll';
-import {
-  addPane,
-  allPanes,
-  closePane,
-  isLeaf,
-  PANE_TYPES,
-  type PaneNode,
-  type PaneType,
-} from '../panel/paneLayout';
+import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import { useConnection, type ConnectionStatus } from '../stores/session/useConnection';
 import { useEscape } from '../lib/escapeStack';
@@ -202,17 +194,6 @@ function pushNativeChromeTokens(): void {
     selrow: tokens.selrow,
     appearance: tokens.appearance,
   }).catch(() => {});
-}
-
-// The id of the leaf showing `pane`, or null when the panel does not
-// show it.
-function leafIdFor(node: PaneNode, pane: PaneType): string | null {
-  if (isLeaf(node)) return node.pane === pane ? node.id : null;
-  for (const child of node.children) {
-    const hit = leafIdFor(child, pane);
-    if (hit !== null) return hit;
-  }
-  return null;
 }
 
 const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
@@ -1466,22 +1447,6 @@ function MainWindow() {
       }}
     />
   );
-
-  // Show or hide one pane type from the palette. Showing opens the
-  // panel too, and a pane already there under a hidden panel just
-  // comes back with it.
-  const togglePane = (pane: PaneType) => {
-    updatePanelLayout((l) => {
-      const leaf = leafIdFor(l.root, pane);
-      if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
-      return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, pane) };
-    });
-  };
-
-  // Add a pane from the title band, at the bottom of the panel.
-  const addPaneType = (pane: PaneType) => {
-    updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, pane) }));
-  };
 
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
