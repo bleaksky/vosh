@@ -2,7 +2,7 @@
 //
 // Under the macOS underlay the native grid draws the terminal, and the
 // xterm copy stays mounted, hidden, only for the cell size it measures
-// (styles.css). Writing every output into it parsed and redrew a
+// (terminal.css). Writing every output into it parsed and redrew a
 // terminal nobody sees, a few milliseconds of page time per step. So
 // while the underlay owns the screen the copy takes no writes. When the
 // screen comes back to xterm, the copy starts over from the session's

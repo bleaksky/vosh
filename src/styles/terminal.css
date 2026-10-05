@@ -54,12 +54,12 @@
   z-index: 1;
 }
 
-/* Both panes anchor to .terminal-well (position: relative, in
-   styles/frame.css), which already sits inside .terminal-area's
-   padding, so inset 0 lands the overlay exactly on the closed-state
-   live rect. Insets that repeat the terminal padding here would
-   double-inset and visibly shrink the terminal (and the native
-   surface tracking it) every time the split opens. */
+/* Both panes anchor to .terminal-well (position: relative, below),
+   which already sits inside .terminal-area's padding, so inset 0 lands
+   the overlay exactly on the closed-state live rect. Insets that
+   repeat the terminal padding here would double-inset and visibly
+   shrink the terminal (and the native surface tracking it) every time
+   the split opens. */
 .terminal-area-split .terminal-pane-history {
   position: absolute;
   top: 0;
