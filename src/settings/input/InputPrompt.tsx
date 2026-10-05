@@ -44,7 +44,7 @@ import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { useGamePrompt } from '../../stores/gmcp/gamePromptStore';
 import { useBandEnv } from '../../prompt/useBandEnv';
 import { useCellWidth } from '../../lib/useCellWidth';
-import { knownWorld } from '../../stores/session/useConnection';
+import { knownWorld } from '../../lib/knownWorlds';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { nativeSurfaceEnabled } from '../../terminal/terminalRenderer';
 import { PromptShowField } from './PromptShowRow';

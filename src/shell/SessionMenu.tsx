@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuMode } from '../lib/appMenu';
 import { shortcutLabel } from '../lib/shortcuts';
+import { worldName } from '../lib/knownWorlds';
 import {
   parseTarget,
-  worldName,
   type Connection,
   type ConnectionTarget,
 } from '../stores/session/useConnection';

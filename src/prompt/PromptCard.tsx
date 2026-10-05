@@ -71,7 +71,7 @@ import { useCaptureSteps } from './useCaptureSteps';
 import { useCardPlace } from './useCardPlace';
 import { useDesignEdits } from './useDesignEdits';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
-import { knownWorld } from '../stores/session/useConnection';
+import { knownWorld } from '../lib/knownWorlds';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
