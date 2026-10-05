@@ -109,7 +109,7 @@ type Matrix = readonly [readonly number[], readonly number[], readonly number[]]
 
 /** The simulation matrices, by deficiency. The checks measure with
  *  them, and so does the theme gallery's Vision preview (seenBy). */
-export const MACHADO: Readonly<Record<Cvd, Matrix>> = {
+const MACHADO: Readonly<Record<Cvd, Matrix>> = {
   protan: [
     [0.152286, 1.052583, -0.204868],
     [0.114503, 0.786281, 0.099216],
@@ -225,7 +225,7 @@ const T = {
   // stand a quarter farther apart. The review's floors already hold for
   // a color blind player, and this gives the player who picks the
   // vision a margin past them. Lightness alone reaches it on most
-  // themes without giving up another floor (gameFit.test.ts).
+  // themes, and themes.test.ts names the pairs it cannot part that far.
   visionRaise: 1.25,
 };
 
