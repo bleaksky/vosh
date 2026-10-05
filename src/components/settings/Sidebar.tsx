@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { SETTINGS_FIND_EVENT } from '../../lib/appMenu';
+import { SETTINGS_FIND } from '../../ipc/events';
 import { shortcutKey, shortcutKeys } from '../../lib/palette';
 import { scrollWithin } from '../../lib/scrollWithin';
 import {
@@ -86,7 +86,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    listen(SETTINGS_FIND_EVENT, () => {
+    listen(SETTINGS_FIND, () => {
       inputRef.current?.focus();
       inputRef.current?.select();
     })

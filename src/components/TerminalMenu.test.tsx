@@ -1,8 +1,9 @@
 import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { SETTINGS_GOTO_TAB } from '../ipc/events';
 import { pushEscape } from '../lib/escapeStack';
-import { SETTINGS_GOTO_EVENT, SETTINGS_PENDING_KEY } from '../lib/settingsLink';
+import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
 import { SETTINGS_MENU } from '../lib/settingsMenu';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { TerminalMenu } from './TerminalMenu';
@@ -514,7 +515,7 @@ describe('the Settings list in the terminal menu', () => {
         // the goto event for a window already up, then the window.
         expect(calls.log, row.label).toEqual([
           'close',
-          `emit ${SETTINGS_GOTO_EVENT} ${row.link}`,
+          `emit ${SETTINGS_GOTO_TAB} ${row.link}`,
           'invoke open_settings_window',
         ]);
         expect(store.get(SETTINGS_PENDING_KEY), row.label).toBe(row.link);

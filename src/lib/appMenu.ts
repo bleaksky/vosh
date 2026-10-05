@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { APP_MENU } from '../ipc/events';
 import SHORTCUTS from './appShortcuts.json';
 import { PANE_TYPES, type PaneType } from './paneLayout';
 
@@ -18,12 +19,6 @@ export type AppShortcutId = keyof typeof SHORTCUTS;
 
 /** Every command with a shortcut, as a palette spec like `Mod+K`. */
 export const APP_SHORTCUTS: Readonly<Record<AppShortcutId, string>> = SHORTCUTS;
-
-/** Menu commands arrive on this event, in the main window. */
-export const APP_MENU_EVENT = 'vosh://app-menu';
-
-/** Find, chosen while Settings is in front, arrives in Settings here. */
-export const SETTINGS_FIND_EVENT = 'vosh://settings-find';
 
 /** Opens the session popover under the title, in a given mode. */
 export const SESSION_MENU_EVENT = 'vosh:session-menu';
@@ -153,7 +148,7 @@ export function resetAppMenuState(): void {
 
 /** Hear menu commands. Main window only. */
 export function listenAppMenu(cb: (id: string) => void): Promise<UnlistenFn> {
-  return listen<unknown>(APP_MENU_EVENT, (event) => {
+  return listen<unknown>(APP_MENU, (event) => {
     if (typeof event.payload === 'string') cb(event.payload);
   });
 }

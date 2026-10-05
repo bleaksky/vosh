@@ -2,6 +2,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { LOADOUTS_CHANGED } from './events';
 
 // Path B loadout state for the Settings UI. `path_b_active` is the
 // flag the frontend reads to decide whether to render the Loadouts
@@ -30,5 +31,5 @@ export async function loadoutsSetActive(active: string[]): Promise<void> {
 }
 
 export async function subscribeLoadoutsChanged(cb: () => void): Promise<UnlistenFn> {
-  return listen('vosh://loadouts-changed', () => cb());
+  return listen(LOADOUTS_CHANGED, () => cb());
 }

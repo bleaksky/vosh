@@ -7,6 +7,7 @@ import {
   removeCustomTheme,
   THEME_SLOT_GROUPS,
 } from '../../../../lib/appearanceSettings';
+import { CUSTOM_THEMES_CHANGED, THEME_CHANGED } from '../../../../ipc/events';
 import type { CustomTheme, UiConfig } from '../../../../ipc/uiConfig';
 import {
   activeThemeFor,
@@ -91,8 +92,8 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
       // repaints with the new colors while you drag the picker. A name
       // or description edit waits for the save.
       applyTheme(id);
-      void emit('vosh://custom-themes-changed', list)
-        .then(() => emit('vosh://theme-changed', id))
+      void emit(CUSTOM_THEMES_CHANGED, list)
+        .then(() => emit(THEME_CHANGED, id))
         .catch(() => {});
     }
     update({ custom_themes: list });

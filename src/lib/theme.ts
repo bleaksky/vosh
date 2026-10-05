@@ -13,6 +13,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { THEME_CHANGED, THEME_PREFS_CHANGED } from '../ipc/events';
 import { getUiConfig } from '../ipc/uiConfig';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
@@ -37,10 +38,6 @@ import {
   type AppTheme,
 } from './themes';
 
-const SYNC_EVENT = 'vosh://theme-changed';
-/** Carries the four theme fields after a save or a palette pick, so a
- *  window that keeps its own copy (Settings, the palette) stays current. */
-export const THEME_PREFS_EVENT = 'vosh://theme-prefs-changed';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 let cleanupContrastListener: (() => void) | null = null;
@@ -398,7 +395,7 @@ async function refreshAndReapply(choice: string): Promise<void> {
 export async function applyAndBroadcastTheme(choice: string): Promise<void> {
   applyTheme(choice);
   try {
-    await emit(SYNC_EVENT, choice);
+    await emit(THEME_CHANGED, choice);
   } catch {
     // Tauri unavailable; local apply is the persistent fallback.
   }
@@ -407,7 +404,7 @@ export async function applyAndBroadcastTheme(choice: string): Promise<void> {
 export async function subscribeThemeChanges(
   callback: (themeId: string) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>(SYNC_EVENT, (event) => {
+  return listen<string>(THEME_CHANGED, (event) => {
     if (typeof event.payload !== 'string') return;
     // No same-id guard. applyTheme is idempotent, and on startup the
     // local applyTheme runs before the broadcast lands, so the guard
@@ -425,7 +422,7 @@ export function getCurrentThemeId(): string {
 /** Tell every window the theme fields changed. */
 export async function broadcastThemePrefs(prefs: ThemePrefs): Promise<void> {
   try {
-    await emit(THEME_PREFS_EVENT, themePrefsOf(prefs));
+    await emit(THEME_PREFS_CHANGED, themePrefsOf(prefs));
   } catch {
     // Tauri unavailable; the local copy is already current.
   }
@@ -446,7 +443,7 @@ function isThemePrefs(value: unknown): value is ThemePrefs {
 export async function subscribeThemePrefs(
   callback: (prefs: ThemePrefs) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>(THEME_PREFS_EVENT, (event) => {
+  return listen<unknown>(THEME_PREFS_CHANGED, (event) => {
     if (isThemePrefs(event.payload)) callback(themePrefsOf(event.payload));
   });
 }

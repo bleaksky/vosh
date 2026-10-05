@@ -15,6 +15,7 @@ import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../lib/baseAnsi';
+import { NATIVE_GRID_SIZE } from '../ipc/events';
 import { setWindowSize } from '../ipc/session';
 import {
   loadScrollback,
@@ -935,7 +936,7 @@ export function Terminal({
     // over it. xterm does nothing for a size it already has.
     let unsubGridSize: (() => void) | undefined;
     if (!quietRef.current && nativeSurfaceEnabled()) {
-      void listen<[number, number]>('vosh://native-grid-size', (event) => {
+      void listen<[number, number]>(NATIVE_GRID_SIZE, (event) => {
         const [cols, rows] = event.payload;
         if (cols > 0 && rows > 0) writer.resize(cols, rows);
       }).then((un) => {

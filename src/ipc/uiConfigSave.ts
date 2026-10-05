@@ -7,30 +7,48 @@ import {
   noteThemeEcho,
   resolveActiveTheme,
   systemPrefersDark,
-  THEME_PREFS_EVENT,
   themePrefsOf,
   type ThemePrefs,
 } from '../lib/theme';
 import {
-  AFFECTS_DISPLAY_EVENT,
   affectsDisplayFields,
   affectsDisplayOf,
   normalizeAffectsDisplay,
-  TRACKED_AFFECTS_EVENT,
   type AffectsDisplay,
 } from './affects';
 import {
-  BLINK_TEXT_EVENT,
+  AFFECTS_DISPLAY_CHANGED,
+  BASE_ANSI_CHANGED,
+  BLINK_TEXT_CHANGED,
+  BRIGHT_BOLD_CHANGED,
+  CHIP_STYLE_CHANGED,
+  CUSTOM_THEMES_CHANGED,
+  ECHO_MACROS_CHANGED,
+  FIT_GAME_COLORS_CHANGED,
+  FONT_CHANGED,
+  GAME_TIME_CHANGED,
+  INPUT_CURSOR_STYLE_CHANGED,
+  INPUT_ECHO_CARET_CHANGED,
+  INPUT_ECHO_COLOR_CHANGED,
+  KEEP_LAST_CHANGED,
+  PASTE_LINE_DELAY_CHANGED,
+  READABLE_HIGHLIGHTS_CHANGED,
+  SPELLCHECK_PROMPT_CHANGED,
+  SPLIT_DIVIDER_CHANGED,
+  TERMINAL_LINE_HEIGHT_CHANGED,
+  THEME_CHANGED,
+  THEME_PREFS_CHANGED,
+  THEME_TERMINAL_COLORS_CHANGED,
+  TICK_COUNT_CHANGED,
+  TRACKED_AFFECTS_CHANGED,
+  VITALS_DENSITY_CHANGED,
+  VITALS_OPTIONS_CHANGED,
+} from './events';
+import {
   fetchUiConfig,
-  FIT_GAME_COLORS_EVENT,
-  FONT_CHANGED_EVENT,
-  READABLE_HIGHLIGHTS_EVENT,
   resolveThemeTerminalColors,
   subscribeUiConfigReplaced,
-  TERMINAL_LINE_HEIGHT_EVENT,
   uiConfigPayload,
-  VITALS_DENSITY_EVENT,
-  VITALS_OPTIONS_EVENT,
   vitalsOptionsOf,
   type FontChange,
   type UiConfig,
@@ -84,12 +102,7 @@ function deepEqual<T>(a: T, b: T): boolean {
 export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> {
   const prev = lastSentConfig;
   lastSentConfig = config;
-  await emitChanged(
-    'vosh://custom-themes-changed',
-    config.custom_themes,
-    prev?.custom_themes,
-    deepEqual,
-  );
+  await emitChanged(CUSTOM_THEMES_CHANGED, config.custom_themes, prev?.custom_themes, deepEqual);
   // The four theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
   // is `theme` unless follow is on. Both come back to this window too,
@@ -97,14 +110,14 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   const prefs = themePrefsOf(config);
   const prevPrefs = prev ? themePrefsOf(prev) : undefined;
   if (!prevPrefs || !deepEqual(prefs, prevPrefs)) noteThemeEcho(prefs);
-  await emitChanged(THEME_PREFS_EVENT, prefs, prevPrefs, deepEqual);
+  await emitChanged(THEME_PREFS_CHANGED, prefs, prevPrefs, deepEqual);
   const systemDark = systemPrefersDark();
   const shown = resolveActiveTheme(config, systemDark);
   const prevShown = prev ? resolveActiveTheme(prev, systemDark) : undefined;
   if (shown !== prevShown) noteThemeEcho(shown);
-  await emitChanged('vosh://theme-changed', shown, prevShown);
+  await emitChanged(THEME_CHANGED, shown, prevShown);
   await emitChanged<FontChange>(
-    FONT_CHANGED_EVENT,
+    FONT_CHANGED,
     fontChangeOf(config),
     prev ? fontChangeOf(prev) : undefined,
     (a, b) =>
@@ -114,83 +127,67 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
       a.panelSize === b.panelSize,
   );
   await emitChanged(
-    TERMINAL_LINE_HEIGHT_EVENT,
+    TERMINAL_LINE_HEIGHT_CHANGED,
     config.terminal_line_height,
     prev?.terminal_line_height,
   );
-  await emitChanged('vosh://keep-last-changed', config.keep_last_command, prev?.keep_last_command);
+  await emitChanged(KEEP_LAST_CHANGED, config.keep_last_command, prev?.keep_last_command);
   // The event carries the RESOLVED boolean so listeners never see the
   // tri-state. Resolving both sides of the diff means a theme switch
   // with the setting on auto also fires this event when the effective
   // value flips.
   await emitChanged(
-    'vosh://theme-terminal-colors-changed',
+    THEME_TERMINAL_COLORS_CHANGED,
     resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
     prev ? resolveThemeTerminalColors(prev.theme, prev.theme_terminal_colors) : undefined,
   );
-  await emitChanged('vosh://bright-bold-changed', config.bright_bold, prev?.bright_bold);
+  await emitChanged(BRIGHT_BOLD_CHANGED, config.bright_bold, prev?.bright_bold);
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
-  await emitChanged(BLINK_TEXT_EVENT, config.blink_text, prev?.blink_text);
-  await emitChanged(FIT_GAME_COLORS_EVENT, config.fit_game_colors, prev?.fit_game_colors);
+  await emitChanged(BLINK_TEXT_CHANGED, config.blink_text, prev?.blink_text);
+  await emitChanged(FIT_GAME_COLORS_CHANGED, config.fit_game_colors, prev?.fit_game_colors);
   await emitChanged(
-    READABLE_HIGHLIGHTS_EVENT,
+    READABLE_HIGHLIGHTS_CHANGED,
     config.readable_highlights,
     prev?.readable_highlights,
   );
   await emitChanged(
-    'vosh://base-ansi-changed',
+    BASE_ANSI_CHANGED,
     config.terminal_base_ansi,
     prev?.terminal_base_ansi,
     deepEqual,
   );
+  await emitChanged(SPLIT_DIVIDER_CHANGED, config.split_divider_color, prev?.split_divider_color);
+  await emitChanged(INPUT_ECHO_COLOR_CHANGED, config.input_echo_color, prev?.input_echo_color);
+  await emitChanged(ECHO_MACROS_CHANGED, config.echo_macros, prev?.echo_macros);
+  await emitChanged(INPUT_ECHO_CARET_CHANGED, config.input_echo_caret, prev?.input_echo_caret);
   await emitChanged(
-    'vosh://split-divider-changed',
-    config.split_divider_color,
-    prev?.split_divider_color,
-  );
-  await emitChanged(
-    'vosh://input-echo-color-changed',
-    config.input_echo_color,
-    prev?.input_echo_color,
-  );
-  await emitChanged('vosh://echo-macros-changed', config.echo_macros, prev?.echo_macros);
-  await emitChanged(
-    'vosh://input-echo-caret-changed',
-    config.input_echo_caret,
-    prev?.input_echo_caret,
-  );
-  await emitChanged(
-    'vosh://paste-line-delay-changed',
+    PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,
     prev?.paste_line_delay_ms,
   );
+  await emitChanged(SPELLCHECK_PROMPT_CHANGED, config.spellcheck_prompt, prev?.spellcheck_prompt);
   await emitChanged(
-    'vosh://spellcheck-prompt-changed',
-    config.spellcheck_prompt,
-    prev?.spellcheck_prompt,
-  );
-  await emitChanged(
-    'vosh://input-cursor-style-changed',
+    INPUT_CURSOR_STYLE_CHANGED,
     config.input_cursor_style,
     prev?.input_cursor_style,
   );
-  await emitChanged(VITALS_DENSITY_EVENT, config.vitals_density, prev?.vitals_density);
+  await emitChanged(VITALS_DENSITY_CHANGED, config.vitals_density, prev?.vitals_density);
   await emitChanged(
-    VITALS_OPTIONS_EVENT,
+    VITALS_OPTIONS_CHANGED,
     vitalsOptionsOf(config),
     prev ? vitalsOptionsOf(prev) : undefined,
     deepEqual,
   );
-  await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
-  await emitChanged('vosh://tick-count-changed', config.tick_count, prev?.tick_count);
-  await emitChanged('vosh://game-time-changed', config.game_time, prev?.game_time);
+  await emitChanged(CHIP_STYLE_CHANGED, config.chip_style, prev?.chip_style);
+  await emitChanged(TICK_COUNT_CHANGED, config.tick_count, prev?.tick_count);
+  await emitChanged(GAME_TIME_CHANGED, config.game_time, prev?.game_time);
   const display = affectsDisplayOf(config);
   const prevDisplay = prev ? affectsDisplayOf(prev) : undefined;
   if (!prevDisplay || !deepEqual(display, prevDisplay)) noteAffectsDisplayEcho(display);
-  await emitChanged(AFFECTS_DISPLAY_EVENT, display, prevDisplay, deepEqual);
+  await emitChanged(AFFECTS_DISPLAY_CHANGED, display, prevDisplay, deepEqual);
   await emitChanged(
-    TRACKED_AFFECTS_EVENT,
+    TRACKED_AFFECTS_CHANGED,
     config.tracked_affects,
     prev?.tracked_affects,
     deepEqual,

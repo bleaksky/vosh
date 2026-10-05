@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
+import { CONNECTION_TARGET_CHANGED } from '../ipc/events';
 import { pushToast } from './toasts';
 import {
-  CONNECTION_TARGET_EVENT,
   connectTo,
   KNOWN_WORLDS,
   knownWorld,
@@ -39,7 +39,7 @@ describe('the saved target', () => {
     const target = { host: 'mud.example.org', port: 4000, tls: true };
     saveConnectionTarget(target);
     expect(loadTarget()).toEqual(target);
-    expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_EVENT, target);
+    expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_CHANGED, target);
   });
 
   it('follows a target another window saves and ignores a bad one', async () => {
@@ -51,7 +51,7 @@ describe('the saved target', () => {
     });
     const seen: unknown[] = [];
     const stop = subscribeConnectionTarget((t) => seen.push(t));
-    expect(listen).toHaveBeenCalledWith(CONNECTION_TARGET_EVENT, expect.any(Function));
+    expect(listen).toHaveBeenCalledWith(CONNECTION_TARGET_CHANGED, expect.any(Function));
     handler?.({ payload: { host: 'mud.example.org', port: 23, tls: false } });
     handler?.({ payload: { host: '', port: 23 } });
     expect(seen).toEqual([{ host: 'mud.example.org', port: 23, tls: false }]);

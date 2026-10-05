@@ -3,6 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { MIGRATION_APPLIED } from './events';
 
 // Path B migration preview. The backend walks the current profile set,
 // loads each per-profile snapshot, and returns the merge plan: every
@@ -84,5 +85,5 @@ export async function migrationApply(
 /** Hear that the shared catalog wizard wrote its files. Nothing saves
  *  until Vosh opens again, and the main window says so. */
 export async function subscribeMigrationApplied(cb: () => void): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://migration-applied', () => cb());
+  return listen<unknown>(MIGRATION_APPLIED, () => cb());
 }

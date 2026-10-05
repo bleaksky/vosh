@@ -1,15 +1,14 @@
 import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../../fixtures/links/settings-anchors.json';
-import { HELP_GOTO_EVENT } from '../../lib/helpLink';
 import { resolveHelpTarget } from '../../lib/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
 import { defaultLayout, type PaneLeaf } from '../../lib/paneLayout';
 import type { GameBlock } from '../../lib/promptSettings';
 import { type SessionIdentity } from '../../ipc/characters';
+import { HELP_GOTO, SETTINGS_GOTO_TAB } from '../../ipc/events';
 import { type PromptLastSeen, type PromptState } from '../../ipc/prompt';
 import { normalizeUiConfig, type UiConfig } from '../../ipc/uiConfig';
-import { SETTINGS_GOTO_EVENT } from '../../lib/settingsLink';
 import {
   formatSettingsTarget,
   resolveSettingsTarget,
@@ -404,9 +403,7 @@ async function land(
     (el.getAttribute('aria-label') ?? '').startsWith('Help on '),
   );
   for (const book of books) press(book);
-  const help = calls.emitted
-    .filter((e) => e.event === HELP_GOTO_EVENT)
-    .map((e) => String(e.payload));
+  const help = calls.emitted.filter((e) => e.event === HELP_GOTO).map((e) => String(e.payload));
   if (after) {
     await act(async () => {
       after(container);
@@ -533,7 +530,7 @@ async function paneMenuLinks(label: string): Promise<string[]> {
     root.unmount();
   });
   doc.body.removeChild(container);
-  return calls.emitted.filter((e) => e.event === SETTINGS_GOTO_EVENT).map((e) => String(e.payload));
+  return calls.emitted.filter((e) => e.event === SETTINGS_GOTO_TAB).map((e) => String(e.payload));
 }
 
 /** Press each link outside search and the palette: first with the
