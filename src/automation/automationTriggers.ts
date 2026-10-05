@@ -6,6 +6,7 @@
 // rest of the list, and its order, as it was.
 
 import { saveDraftOnto, type Draft } from './automationDraft';
+import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
 import {
   exportTriggers,
@@ -363,16 +364,7 @@ const TRIGGER_STORE: TriggerStoreApi = { exportTriggers, importTriggers };
 /** Every trigger the store holds, for display. A reply that does not
  *  read shows as no triggers. */
 export async function loadTriggers(api: TriggerStoreApi = TRIGGER_STORE): Promise<TriggerRecord[]> {
-  return parseTriggerList(await api.exportTriggers()) ?? [];
-}
-
-function parseTriggerList(text: string): TriggerRecord[] | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed.map(normalizeTrigger) : null;
-  } catch {
-    return null;
-  }
+  return parseJsonList(await api.exportTriggers(), normalizeTrigger) ?? [];
 }
 
 /** Set the trigger named `name` to match Prompts, as Match does in the
@@ -416,7 +408,7 @@ export async function saveTriggerDraft(
     draft,
     {
       read: async () => {
-        const list = parseTriggerList(await api.exportTriggers());
+        const list = parseJsonList(await api.exportTriggers(), normalizeTrigger);
         if (!list) throw new Error('Vosh could not read your saved triggers, so it saved nothing.');
         return list;
       },
