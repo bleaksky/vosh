@@ -260,6 +260,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         if apply.prompt_vars_changed {
             io.prompt_vars(app, &session.connection).await;
         }
+        crate::alert::ring(app, session, std::mem::take(&mut apply.alerts));
         if apply.inputs.is_empty() {
             return Ok(());
         }

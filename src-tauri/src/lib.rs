@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 mod affects;
+mod alert;
 mod app;
 mod color;
 mod disk;

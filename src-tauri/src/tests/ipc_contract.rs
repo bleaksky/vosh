@@ -133,11 +133,18 @@ struct Unheard {
 /// Every name sent with no page listener. Everything else the app or the
 /// page sends must have one, so a rename at one sender alone fails even
 /// while another sender keeps the old name.
-const UNHEARD: &[Unheard] = &[Unheard {
-    name: r"https?://[^\s<>()\[\]]+",
-    why: "The terminal grid's pattern for a web address in the game output. \
-          It is no event.",
-}];
+const UNHEARD: &[Unheard] = &[
+    Unheard {
+        name: r"https?://[^\s<>()\[\]]+",
+        why: "The terminal grid's pattern for a web address in the game output. \
+              It is no event.",
+    },
+    Unheard {
+        name: "session://alert",
+        why: "An alert rang. The page half of the alerts plays its tone, shows \
+              its notice and marks the row, after R18 (Alerts Q18).",
+    },
+];
 
 /// A name argument, as far as the source tells it.
 #[derive(Clone, Debug, PartialEq)]

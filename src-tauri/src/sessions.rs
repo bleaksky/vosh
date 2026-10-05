@@ -168,6 +168,9 @@ pub(crate) struct Session {
     /// command's echo, landed after the open row and closed it. Output in
     /// another session never moves it.
     output_count: AtomicU64,
+    /// When each alert of the session last rang, for the 10 second cap. A
+    /// leaf lock, taken alone once the profile and connection let go.
+    alert_caps: std::sync::Mutex<crate::alert::Caps>,
 }
 
 impl Session {
@@ -196,6 +199,7 @@ impl Session {
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),
+            alert_caps: std::sync::Mutex::new(crate::alert::Caps::default()),
         }
     }
 
@@ -322,6 +326,15 @@ impl Session {
     /// count after it.
     pub(crate) fn count_output(&self) -> u64 {
         self.output_count.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// Whether the alert counted under `cap` may ring at `now`, under the
+    /// 10 second cap, and if so, mark that it rang.
+    pub(crate) fn allow_alert(&self, cap: &str, now: tokio::time::Instant) -> bool {
+        self.alert_caps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .allow(cap, now)
     }
 
     /// Send `event` with `payload`, which serializes as an object, and

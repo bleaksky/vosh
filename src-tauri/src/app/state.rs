@@ -89,6 +89,12 @@ pub(crate) struct AppState {
     /// only when launch could not resolve the folder, and then nothing
     /// loads from it.
     pub(crate) app_data: OnceLock<PathBuf>,
+    /// The windows of Vosh that have focus, which the focus rule of the
+    /// alerts reads. See [`crate::alert::focus`].
+    pub(crate) focus: crate::alert::focus::Focus,
+    /// Where alert banners go, the system's, or in a test build a list
+    /// the test reads. See [`crate::alert::banner`].
+    pub(crate) banners: crate::alert::banner::Banners,
 }
 
 impl AppState {
@@ -307,6 +313,8 @@ impl Default for AppState {
             relaunch_pending: AtomicBool::new(false),
             loadout_mode: AtomicBool::new(false),
             app_data: OnceLock::new(),
+            focus: crate::alert::focus::Focus::default(),
+            banners: crate::alert::banner::Banners::default(),
         }
     }
 }

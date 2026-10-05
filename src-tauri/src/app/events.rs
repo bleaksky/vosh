@@ -114,6 +114,11 @@ pub(crate) const GAME_PROMPT_SEEN: &str = "session://game-prompt-seen";
 /// [`crate::session::GagWithoutReaderPayload`].
 /// `onPromptGagWithoutReader` hears it.
 pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without-reader";
+/// An alert rang in the session, from a trigger, a preset or Lua. The
+/// payload is a [`crate::alert::AlertPayload`]. The page half of the
+/// alerts plays its tone, shows its notice and marks the session's row.
+/// No page listener hears it yet.
+pub(crate) const ALERT: &str = "session://alert";
 
 // The lists.
 
