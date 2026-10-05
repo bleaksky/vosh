@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { subscribeSettingsFind } from '../../ipc/windows';
-import { shortcutKey, shortcutKeys } from '../../lib/palette';
+import { shortcutKey, shortcutKeys } from '../../lib/shortcuts';
 import { scrollWithin } from '../../lib/scrollWithin';
 import {
   SETTINGS_GROUPS,

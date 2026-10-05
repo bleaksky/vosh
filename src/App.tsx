@@ -108,12 +108,11 @@ import { startGamePromptToasts } from './lib/gamePromptToast';
 import { CommandPalette } from './components/CommandPalette';
 import {
   buildPaletteEntries,
-  isMacPlatform,
-  shortcutKey,
   themeEntries,
   themesInGalleryOrder,
   type PaletteDeps,
 } from './lib/palette';
+import { isMacPlatform, shortcutKey } from './lib/shortcuts';
 import {
   buildMenuState,
   commandRepeats,

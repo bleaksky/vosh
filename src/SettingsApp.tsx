@@ -27,7 +27,7 @@ import {
 import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack, renderFontStack } from './lib/fontLoader';
-import { isMacPlatform } from './lib/palette';
+import { isMacPlatform } from './lib/shortcuts';
 import {
   resolveSettingsTarget,
   settingsGroupLabel,

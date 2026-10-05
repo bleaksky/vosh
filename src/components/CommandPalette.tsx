@@ -7,11 +7,11 @@ import {
   paletteSections,
   readRecent,
   recordRecent,
-  shortcutKeys,
   type PaletteDeps,
   type PaletteEntry,
   type PaletteSectionView,
 } from '../lib/palette';
+import { shortcutKeys } from '../lib/shortcuts';
 import { scrollWithin } from '../lib/scrollWithin';
 
 interface Props {

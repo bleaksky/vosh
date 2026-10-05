@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import tauriConf from '../../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
-import { shortcutLabel } from '../../lib/palette';
+import { shortcutLabel } from '../../lib/shortcuts';
 import { PANEL_WIDTH_MIN, panelWidthFloor } from '../../lib/paneLayout';
 import type { Connection } from '../../lib/useConnection';
 import frameCss from '../../styles/frame.css?raw';
