@@ -416,4 +416,11 @@ describe('persistence', () => {
     vi.advanceTimersByTime(1000);
     expect(tauri.invoke).not.toHaveBeenCalledWith('pane_layout_set', expect.anything());
   });
+
+  it('resets the panes of the live profile', async () => {
+    const mod = await load();
+    tauri.invoke.mockResolvedValue({ ...defaultLayout(), generation: 4 });
+    expect(await mod.resetPaneLayout()).toEqual({ ...defaultLayout(), generation: 4 });
+    expect(tauri.invoke).toHaveBeenLastCalledWith('pane_layout_reset', { profile: null });
+  });
 });

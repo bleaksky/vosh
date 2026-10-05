@@ -10,14 +10,13 @@ import {
   worldOptions,
   worldSources,
 } from '../../../lib/characterProfiles';
-import { subscribePaneLayout } from '../../../lib/paneLayout';
+import { resetPaneLayout, subscribePaneLayout } from '../../../lib/paneLayout';
 import {
   subscribeTrackedAffectsChanged,
   trackedAffectsSet,
   type TrackedAffect,
 } from '../../../ipc/affects';
 import {
-  paneLayoutReset,
   profileDetailGet,
   profileSetLogin,
   profileSetWorld,
@@ -227,7 +226,7 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
     if (!detail) return;
     const name = detail.name;
     setResetting(true);
-    paneLayoutReset(name)
+    resetPaneLayout(name)
       .then((panes) => {
         onError(null);
         setDetail((d) => (d && d.name === name ? { ...d, panes } : d));

@@ -1,5 +1,10 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
-import { paneLayoutGet, paneLayoutSet, subscribePaneLayoutChanged } from '../ipc/panes';
+import {
+  paneLayoutGet,
+  paneLayoutReset,
+  paneLayoutSet,
+  subscribePaneLayoutChanged,
+} from '../ipc/panes';
 import { subscribeProfileSwitched } from '../ipc/profiles';
 import { pendingWrites } from './pendingWrites';
 
@@ -582,6 +587,12 @@ function ensureListening(): Promise<void> {
  *  gets a tree migrated from its old dock layout, or the default. */
 export async function getPaneLayout(): Promise<PaneLayout> {
   return sanitizeLayout(await paneLayoutGet());
+}
+
+/** Put a profile's panes back to the stock tree, the live profile's
+ *  when you name none, and return the new layout (paneLayoutReset). */
+export async function resetPaneLayout(profile?: string | null): Promise<PaneLayout> {
+  return sanitizeLayout(await paneLayoutReset(profile));
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce
