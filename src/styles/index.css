@@ -6,7 +6,7 @@
 
 @import '@fontsource-variable/inter'; /* Inter, the chrome face, bundled so the app never fetches a font */
 @import './fonts.css'; /* the bundled mono faces, no classes */
-@import '../styles.css'; /* base, app, settings-, migration-, server-view, map- */
+@import '../styles.css'; /* base, server-view, map- */
 @import './tokens.css'; /* the One Window tokens, no classes */
 @import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */

@@ -1,5 +1,7 @@
 /* The migration wizard. The .settings-app wrapper ImportPanel opens it
-   in, the .settings-btn chip, and the wizard modal and its lists. */
+   in, the .settings-btn chip, and the wizard modal and its lists. These
+   are interim styles. They stay here until D23 moves the wizard onto
+   the shared kit. */
 
 /* The wrapper ImportPanel puts around the migration wizard. It keeps
    the chrome font and size the Settings window used before

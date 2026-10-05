@@ -3,9 +3,8 @@
    st- class and reads the One Window tokens, the control tones among
    them, for the SPEC 4 settings controls. Geometry follows the approved
    boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
-   The root is not under .settings-app. In styles.css only the
-   .settings-app font rule and .settings-btn remain, for the migration
-   wizard that ImportPanel wraps in .settings-app. */
+   The root is not under .settings-app. That wrapper and .settings-btn
+   live in migration.css, for the migration wizard ImportPanel opens. */
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
