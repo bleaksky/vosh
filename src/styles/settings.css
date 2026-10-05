@@ -1932,6 +1932,10 @@
   white-space: nowrap;
 }
 
+/* ── Input, Prompt (InputPrompt) ───────────────────────────────────── */
+
+/* Last in the sheet, after every Settings rule it might tie with. */
+
 /* Settings, Input, Prompt (P12, P13, and the Settings specimens on P0
    and P14). The game prompt block sets two label and code rows in an
    88 px label column, each 28 tall and 8 below the line above, then
