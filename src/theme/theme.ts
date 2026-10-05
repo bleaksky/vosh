@@ -205,12 +205,12 @@ export function getThemePrefs(): ThemePrefs | null {
 export function themePaintSide(theme: AppTheme): ThemePaintSide {
   const tokens = themeTokens(theme);
   const vars = tokensToCssVars(tokens);
-  // The legacy --c-* names alias the tokens in styles/tokens.css. The
-  // one exception is the soft accent: the map canvas reads it through
-  // getComputedStyle, and a canvas fill cannot parse the color-mix()
-  // alias in every webview, so it lands here as plain rgba.
+  // The soft accent goes on as plain rgba over the color-mix() default
+  // in styles/tokens.css. The map canvas reads it through
+  // getComputedStyle, and a canvas fill cannot parse color-mix() in
+  // every webview.
   const accent = parseHex(tokens.accent);
-  if (accent) vars['--c-accent-soft'] = toRgba(accent, 0.13);
+  if (accent) vars['--accent-soft'] = toRgba(accent, 0.13);
   // Expose the xterm background as a CSS var so the split history
   // overlay can paint an opaque undercoat that matches the renderer's
   // own background — covers xterm's sub-frame render gap during scroll.

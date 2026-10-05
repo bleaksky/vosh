@@ -242,7 +242,7 @@ export interface UiConfig {
   terminal_base_ansi: string[] | null;
   custom_themes: CustomTheme[];
   /** Override color for the split-scrollback divider. Empty/undefined
-   *  means use the theme default (--c-border). */
+   *  means use the theme default (--split-divider, the tertiary tone). */
   split_divider_color: string | null;
   /** Override color for locally-echoed sent input. Empty/undefined
    *  means no recoloring (default terminal foreground). */

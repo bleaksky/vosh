@@ -54,7 +54,7 @@ export function sectorGlyphColor(code: string | undefined, dimLevel: number): st
 }
 
 // Theme-dependent slots (panel, origin, originFill, text) are exposed as
-// getters that read from --c-* custom properties at access time so the
+// getters that read the theme tokens at access time so the
 // canvas tracks the active app theme. Terrain-meaningful slots stay
 // fixed regardless of theme. Fallbacks match the Kanso Zen palette
 // for the first paint before applyTheme has installed CSS vars.
@@ -69,20 +69,20 @@ export const MAP_COLORS = {
   /// The panel's own color. A map inside a panel pane paints on it, so
   /// the drawing sits in the pane with no box around it.
   get panel(): string {
-    return readCssVar('--panel', readCssVar('--c-surface', '#090e13'));
+    return readCssVar('--panel', readCssVar('--bg', '#090e13'));
   },
   /// Player's room cell uses a sector-style fill+border pair: a dim
   /// tint of the accent inside with the bright accent as the outline,
   /// so the player tile reads the same shape as a regular sector tile,
   /// just in the user's chosen accent color.
   get origin(): string {
-    return readCssVar('--c-accent', '#ff3399');
+    return readCssVar('--accent', '#ff3399');
   },
   get originFill(): string {
-    return readCssVar('--c-accent-soft', 'rgba(255, 51, 153, 0.09)');
+    return readCssVar('--accent-soft', 'rgba(255, 51, 153, 0.09)');
   },
   get text(): string {
-    return readCssVar('--c-text-faint', '#6e7681');
+    return readCssVar('--tertiary', '#6e7681');
   },
   dest: '#c83030',
   destGlow: 'rgba(200,48,48,0.15)',
@@ -152,10 +152,9 @@ export function mapInks(): MapInks {
 // means the canvas needs a fresh paint.
 const THEME_VARS = [
   '--panel',
-  '--c-surface',
-  '--c-accent',
-  '--c-accent-soft',
-  '--c-text-faint',
+  '--bg',
+  '--accent',
+  '--accent-soft',
   '--text',
   '--secondary',
   '--tertiary',
