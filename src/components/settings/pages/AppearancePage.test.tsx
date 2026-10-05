@@ -423,20 +423,22 @@ describe('AppearancePage', () => {
     expect(picked.label).toContain(
       "Nord already keeps the window's status colors apart for tritanopia, so only the game text changes.",
     );
+    // Kanso Zen's game text cannot part visibly further for a deuteranope,
+    // so the row says only the window changes.
+    const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
+    expect((await visionRow(kanso)).label).toContain(
+      'Only the window changes on Kanso Zen, since its game text cannot part visibly further for deuteranopia without fading or running into other colors.',
+    );
     // While Fit game colors is off, the row says the game text keeps its
     // published colors and the window still follows.
-    const off = await visionRow({
-      ...config(),
-      color_vision: 'deuteranopia',
-      fit_game_colors: false,
-    });
+    const off = await visionRow({ ...kanso, fit_game_colors: false });
     expect(off.label).toContain(
       'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
     );
     // Kanso Zen's Typical fit already keeps the game text apart for a
     // protanope, so the row says only the window changes.
-    const kanso = await visionRow({ ...config(), theme: 'kanso-zen', color_vision: 'protanopia' });
-    expect(kanso.label).toContain(
+    const protan = await visionRow({ ...kanso, color_vision: 'protanopia' });
+    expect(protan.label).toContain(
       'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
     );
   });
