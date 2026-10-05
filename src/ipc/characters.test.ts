@@ -20,7 +20,6 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const { trackedAffectsSet } = await import('./affects');
 const {
-  paneLayoutReset,
   profileDetailGet,
   profileSetLogin,
   profileSetWorld,
@@ -103,12 +102,6 @@ describe('per profile edits', () => {
       list,
       profile: 'Healer',
     });
-  });
-
-  it('resets the panes of the live profile', async () => {
-    tauri.invoke.mockResolvedValue({ ...defaultLayout(), generation: 4 });
-    expect(await paneLayoutReset()).toEqual({ ...defaultLayout(), generation: 4 });
-    expect(tauri.invoke).toHaveBeenLastCalledWith('pane_layout_reset', { profile: null });
   });
 });
 

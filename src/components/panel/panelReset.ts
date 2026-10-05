@@ -1,5 +1,4 @@
-import { acceptPaneLayout, flushPaneLayout } from '../../lib/paneLayout';
-import { paneLayoutReset } from '../../ipc/characters';
+import { acceptPaneLayout, flushPaneLayout, resetPaneLayout } from '../../lib/paneLayout';
 import { pushToast } from '../../lib/toasts';
 import { getPanelLayout } from './panelLayoutStore';
 
@@ -17,7 +16,7 @@ export async function resetPanelLayout(): Promise<void> {
     // lands after it and shows at once. A write that fails here is
     // dropped, and the reset replaces it anyway.
     await flushPaneLayout().catch((e: unknown) => console.warn('[panel] pending write failed', e));
-    acceptPaneLayout(await paneLayoutReset());
+    acceptPaneLayout(await resetPaneLayout());
     pushToast({ kind: 'success', message: 'Panel layout reset' });
   } catch (e) {
     console.error('[panel] reset failed', e);

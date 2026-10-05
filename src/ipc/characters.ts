@@ -51,14 +51,6 @@ export async function profileDetailGet(name: string): Promise<ProfileDetail> {
   };
 }
 
-/** Put a profile's panes back to the stock map over affects tree,
- *  keeping whether its panel shows and how wide it is. Returns the new
- *  layout. The live profile saves it at once and every window hears it
- *  through vosh://pane-layout-changed. */
-export async function paneLayoutReset(profile?: string | null): Promise<PaneLayout> {
-  return sanitizeLayout(await invoke<unknown>('pane_layout_reset', { profile: profile ?? null }));
-}
-
 /** What turning a login toggle on or off did. */
 export interface LoginClaim {
   /** The profile as it now reads. */
