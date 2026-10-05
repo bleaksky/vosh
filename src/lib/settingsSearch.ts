@@ -138,8 +138,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Color vision',
-    description:
-      'With Fit game colors on, Vosh keeps hits, tells and says apart for the vision you pick.',
+    description: 'Fit game colors keeps hits, tells and says apart for the vision you pick.',
     keywords:
       'color blind colorblind deuteranopia protanopia tritanopia red green blue yellow cvd accessibility',
     target: at('appearance', 'text', 'color-vision'),

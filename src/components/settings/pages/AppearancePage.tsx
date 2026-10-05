@@ -359,7 +359,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
         <Row
           anchor="color-vision"
           label="Color vision"
-          description="With Fit game colors on, Vosh keeps hits, tells and says apart for the vision you pick."
+          description="Fit game colors keeps hits, tells and says apart for the vision you pick."
         >
           <Select
             value={config.color_vision}

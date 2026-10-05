@@ -402,7 +402,9 @@ describe('AppearancePage', () => {
       'readable-highlights',
     ]);
     expect(typical.label).toContain('Color vision');
-    expect(typical.label).toContain('keeps hits, tells and says apart for the vision you pick');
+    expect(typical.label).toContain(
+      'Fit game colors keeps hits, tells and says apart for the vision you pick.',
+    );
     expect(typical.options).toEqual([
       { label: 'Typical', value: 'typical' },
       { label: 'Deuteranopia', value: 'deuteranopia' },
