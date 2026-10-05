@@ -1,15 +1,13 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import {
   PANEL_WIDTH_MAX,
   PANEL_WIDTH_MIN,
-  allPanes,
   defaultLayout,
   getPaneLayout,
   setPaneLayout,
   subscribePaneLayout,
   type PaneLayout,
   type PaneSplit,
-  type PaneType,
 } from './paneLayout';
 
 // The one copy of the active profile's pane layout this window edits.
@@ -86,19 +84,6 @@ export function updatePanelLayout(fn: (current: PaneLayout) => PaneLayout): void
 /** Replace the pane tree, keeping the panel's open state and width. */
 export function setPaneTree(root: PaneSplit): void {
   updatePanelLayout((l) => (l.root === root ? l : { ...l, root }));
-}
-
-/** Whether the panel shows. True until the layout loads, which is
- *  the stock state, so the first paint does not jump. */
-export function usePanelOpen(): boolean {
-  return usePanelLayout()?.panel_open ?? true;
-}
-
-/** Pane types the panel shows, in reading order. Empty until the
- *  layout loads. */
-export function useShownPanes(): PaneType[] {
-  const root = usePanelLayout()?.root;
-  return useMemo(() => (root ? allPanes(root) : []), [root]);
 }
 
 export function setPanelOpen(open: boolean): void {
