@@ -65,6 +65,12 @@ describe('searchSettingsRows', () => {
     expect(rows.every((r) => r.target.group === 'automation')).toBe(true);
   });
 
+  it('finds the Theme row by the themes that left Vosh', () => {
+    for (const name of ['vellum', 'one dark', 'everforest light']) {
+      expect(labels(name)[0], name).toBe('Theme');
+    }
+  });
+
   it('ignores case and accents', () => {
     expect(labels('LINE HEIGHT')).toEqual(['Line height']);
     expect(labels('thème')[0]).toBe('Theme');
