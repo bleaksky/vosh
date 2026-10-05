@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value as Json};
 use tokio::sync::{mpsc, oneshot};
-use vosh_prompt::testkit::{Build, Options};
+use vosh_prompt::testkit::{gmcp, Build, Options};
 
 use super::fake_mud::harness::Harness;
 use crate::sessions::SessionId;
@@ -474,6 +474,51 @@ async fn a_yes_to_connect_anyway_in_another_session_takes_the_character() {
         Some(json!({"kind": "declined", "why": "taken"}))
     );
     clock.stays_quiet().await;
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_elsewhere_as_the_character_you_stepped_away_from_takes_nothing() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&["alert_connection"]).await;
+    let mut clock = Clock::hold(&h);
+    let one = h.first;
+    // You step away to the account menu (act_comm.c:3248). The game puts
+    // you there here, since a quit you typed would count for 10 seconds.
+    let left = "You step away from the Forsaken Lands and return to your account menu.";
+    h.servers[0].push_to(0, format!("\n\r{left}\n\r").as_bytes());
+    h.until_shown(left).await;
+    // Orla is free at the account menu, and the second session takes her.
+    let two = h.open_session().await;
+    h.connect_to(two, &h.servers[0]).await;
+    h.until("the second login", |h| {
+        character_of(h, two).as_deref() == Some("Orla")
+    })
+    .await;
+    // You play Tolliver from the account menu, and connect_char sends his
+    // Char.Status (gmcp.c:200).
+    let status = gmcp(
+        "Char.Status",
+        r#"{"name":"Tolliver","level":12,"race":"human","class":"warrior"}"#,
+    );
+    h.servers[0].push_to(0, &status);
+    h.until("the login as Tolliver", |h| {
+        character_of(h, one).as_deref() == Some("Tolliver")
+    })
+    .await;
+    // A real drop now redials, as for any drop while you play.
+    h.servers[0].cut_link(0);
+    let (session, wait, _done) = clock.next().await;
+    assert_eq!((session, wait.as_secs()), (one, 3));
+    assert!(
+        !shows(&h, one, "[reconnect] Another session"),
+        "{:#?}",
+        h.screen_of(one)
+    );
+    h.until("the lost link", |h| !rang(h).is_empty()).await;
+    assert_eq!(rang(&h), ["Connection lost"]);
     h.disconnect_session(two).await;
     h.finish(grid).await;
 }

@@ -97,8 +97,10 @@ pub(crate) struct LinkWatch {
     /// When a Y of yours took a character another link played.
     pub(crate) took_at: Option<Instant>,
     /// Another session logged in as the character this one plays, on the
-    /// same host and port, so the game closes this link.
-    pub(crate) taken: bool,
+    /// same host and port, so the game closes this link. Only a link that
+    /// plays takes the mark, and it holds until you step away or log in
+    /// again on this link.
+    taken: bool,
 }
 
 /// Why a drop while you play does not redial.
@@ -133,6 +135,7 @@ impl LinkWatch {
             self.closing = true;
         } else if line == LEFT_PLAY {
             self.playing = false;
+            self.taken = false;
         } else if line.starts_with(ALREADY_PLAYING) {
             self.asked = true;
         }
@@ -163,6 +166,23 @@ impl LinkWatch {
     /// Whether you play now.
     pub(crate) fn playing(&self) -> bool {
         self.playing
+    }
+
+    /// You logged in on this link as a character it had not named yet,
+    /// so no mark another session left on what this link played before
+    /// holds, and the game asks nothing now.
+    pub(crate) fn logged_in(&mut self) {
+        self.taken = false;
+        self.asked = false;
+    }
+
+    /// Another session logged in as the character this link plays, which
+    /// the game closes it for. A link that does not play keeps no mark,
+    /// as at the account menu, where the character is free to take.
+    fn take(&mut self) {
+        if self.playing {
+            self.taken = true;
+        }
     }
 
     /// What a drop at `now` while you play means: None when it is
@@ -353,8 +373,9 @@ fn took_elsewhere(state: &SharedState, session: &Session, now: Instant) -> bool 
 /// A login in `session` named `character`: every other session that
 /// plays that character on the same host and port loses it to this one,
 /// so its close counts as expected, and one waiting to redial stops and
-/// says so (Sessions Q8). Takes the session map, so call it with no lock
-/// held.
+/// says so (Sessions Q8). A session at the account menu plays no
+/// character, so it loses none. Takes the session map, so call it with no
+/// lock held.
 pub(crate) async fn took_character<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -370,7 +391,7 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
         if !same {
             continue;
         }
-        other.connection.lock().link.taken = true;
+        other.connection.lock().link.take();
         if let Some(redial) = other.take_redial().filter(|redial| !redial.ended()) {
             redial.end().await;
             other.awaiting_game_prompt.set(false);
@@ -612,6 +633,23 @@ mod tests {
         watch.sent(b"n\r\n", now);
         watch.sent(b"y\r\n", now);
         assert_eq!(watch.took_at, None, "a No ends the question");
+    }
+
+    #[test]
+    fn only_a_link_that_plays_takes_the_mark_and_it_ends_with_the_play() {
+        let now = Instant::now();
+        let mut watch = LinkWatch::default();
+        watch.take();
+        assert_eq!(watch.expected(now), None, "nothing plays here yet");
+        watch.gmcp("Char.Status");
+        watch.take();
+        assert_eq!(watch.expected(now), Some(Why::Taken));
+        watch.line(LEFT_PLAY);
+        assert_eq!(watch.expected(now), None, "you stepped away");
+        watch.gmcp("Char.Status");
+        watch.take();
+        watch.logged_in();
+        assert_eq!(watch.expected(now), None, "a login on this link");
     }
 
     #[test]
