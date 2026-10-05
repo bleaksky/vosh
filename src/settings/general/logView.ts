@@ -1,3 +1,4 @@
+import { indexedRgb } from '../../terminal/bandCells';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../../theme/baseAnsi';
 import type { XtermPalette } from '../../theme/themes';
 
@@ -220,13 +221,8 @@ export function logPalette(
 export function logColorCss(color: LogColor, palette: readonly string[]): string {
   if (typeof color === 'string') return color;
   if (color < 16) return palette[color] ?? CANONICAL_ANSI_16[ANSI_SLOTS[color]];
-  if (color < 232) {
-    const n = color - 16;
-    const level = (c: number) => (c === 0 ? 0 : 55 + c * 40);
-    return `rgb(${level(Math.floor(n / 36))}, ${level(Math.floor(n / 6) % 6)}, ${level(n % 6)})`;
-  }
-  const gray = 8 + (color - 232) * 10;
-  return `rgb(${gray}, ${gray}, ${gray})`;
+  const { r, g, b } = indexedRgb(color, palette);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 export interface LogPieceCss {
