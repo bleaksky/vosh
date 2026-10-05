@@ -4,7 +4,7 @@ import './prepaint';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { SettingsApp } from './SettingsApp';
-import { HelpApp } from './HelpApp';
+import { HelpApp } from './help/HelpWindow';
 // The chrome typeface from the Ember redesign. Bundled through Vite so
 // the app never fetches fonts at runtime. Inter carries chrome body
 // text. Terminal text stays on the bundled mono faces.

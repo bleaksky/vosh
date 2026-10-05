@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { HelpApp } from './HelpApp';
+import { HelpApp } from './HelpWindow';
 
 // The Help window reads the config and follows the theme in effects, which
 // a static render never runs. The mocks only keep the imports quiet.

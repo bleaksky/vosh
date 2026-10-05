@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { HELP_TOPICS, PROMPT_DESIGN_CODES, type HelpTopic } from '../../lib/helpContent';
-import { countMatches, outlineFor } from '../../lib/helpNav';
+import { HELP_TOPICS, PROMPT_DESIGN_CODES, type HelpTopic } from './helpContent';
+import { countMatches, outlineFor } from './helpNav';
 import { HelpArticle } from './HelpArticle';
-import helpCss from '../../styles/help.css?raw';
+import helpCss from '../styles/help.css?raw';
 
 function topic(id: string): HelpTopic {
   const found = HELP_TOPICS.find((t) => t.id === id);

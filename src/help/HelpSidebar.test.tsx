@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { HELP_SECTIONS, HELP_TOPICS, type HelpTopic } from '../../lib/helpContent';
-import { helpSearchKey, rankTopics } from '../../lib/helpNav';
+import { HELP_SECTIONS, HELP_TOPICS, type HelpTopic } from './helpContent';
+import { helpSearchKey, rankTopics } from './helpNav';
 import { HelpSidebar } from './HelpSidebar';
 import { HELP_SECTION_ICONS } from './sectionIcons';
 

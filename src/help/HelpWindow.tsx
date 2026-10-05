@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getUiConfig, type UiConfig } from './ipc/uiConfig';
-import { followReplacedUiConfig } from './ipc/uiConfigSave';
-import { useTauriEvent } from './ipc/useTauriEvent';
-import { subscribeHelpFind, subscribeHelpGoto } from './ipc/windows';
+import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
+import { followReplacedUiConfig } from '../ipc/uiConfigSave';
+import { useTauriEvent } from '../ipc/useTauriEvent';
+import { subscribeHelpFind, subscribeHelpGoto } from '../ipc/windows';
 import {
   applyThemePrefs,
   getCurrentThemeId,
   subscribeThemeChanges,
   subscribeThemePrefs,
-} from './lib/theme';
-import { showAfterThemePaint } from './lib/reveal';
-import { customToAppTheme, findTheme, setCustomThemes } from './lib/themes';
-import { loadFontStack, renderFontStack } from './lib/fontLoader';
-import { parseHex, toRgba } from './lib/color';
-import { isMacPlatform, shortcutKey } from './lib/shortcuts';
-import { HELP_TOPICS, type HelpTopic } from './lib/helpContent';
+} from '../lib/theme';
+import { showAfterThemePaint } from '../lib/reveal';
+import { customToAppTheme, findTheme, setCustomThemes } from '../lib/themes';
+import { loadFontStack, renderFontStack } from '../lib/fontLoader';
+import { parseHex, toRgba } from '../lib/color';
+import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
+import { HELP_TOPICS, type HelpTopic } from './helpContent';
 import {
   countMatches,
   helpScrollKey,
@@ -26,19 +26,19 @@ import {
   type HelpFocus,
   type HelpScroll,
   type HelpTarget,
-} from './lib/helpNav';
-import { HELP_PENDING_KEY } from './lib/helpLink';
-import { scrollWithin } from './lib/scrollWithin';
-import { HelpSidebar } from './components/help/HelpSidebar';
-import { HelpArticle } from './components/help/HelpArticle';
-import { HelpOutline } from './components/help/HelpOutline';
-import { WindowControls } from './components/settings/WindowControls';
+} from './helpNav';
+import { HELP_PENDING_KEY } from '../lib/helpLink';
+import { scrollWithin } from '../lib/scrollWithin';
+import { HelpSidebar } from './HelpSidebar';
+import { HelpArticle } from './HelpArticle';
+import { HelpOutline } from './HelpOutline';
+import { WindowControls } from '../components/settings/WindowControls';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   IconButton,
-} from './components/settings/ui';
+} from '../components/settings/ui';
 
 // The Help window (the approved Help boards), its own window like
 // Settings and in the same frame: a 280 px sidebar with search and the

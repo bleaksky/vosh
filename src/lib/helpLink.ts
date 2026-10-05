@@ -1,5 +1,5 @@
 import { emitHelpGoto, openHelpWindow } from '../ipc/windows';
-import { rankTopics, resolveHelpTarget } from './helpNav';
+import { rankTopics, resolveHelpTarget } from '../help/helpNav';
 
 // Opening Help from another window, the twin of settingsLink.ts. The
 // Help window may not exist yet, so a target travels twice: through

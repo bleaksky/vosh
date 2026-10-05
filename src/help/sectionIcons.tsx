@@ -9,7 +9,7 @@ import {
   TerminalIcon,
   TickRingIcon,
   UserIcon,
-} from '../settings/ui';
+} from '../components/settings/ui';
 
 /** Each section's icon, in the SPEC 6 stroke style. */
 export const HELP_SECTION_ICONS: Record<string, () => ReactNode> = {

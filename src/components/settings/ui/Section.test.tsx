@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { HELP_TOPICS } from '../../../lib/helpContent';
+import { HELP_TOPICS } from '../../../help/helpContent';
 import general from '../groups/GeneralGroup.tsx?raw';
 import inputPrompt from '../groups/InputPrompt.tsx?raw';
 import layout from '../groups/LayoutGroup.tsx?raw';

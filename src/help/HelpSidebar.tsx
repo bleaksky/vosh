@@ -5,11 +5,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
 } from 'react';
-import { HELP_SECTIONS, type HelpTopic } from '../../lib/helpContent';
-import { helpSearchKey, sectionTopics } from '../../lib/helpNav';
-import { shortcutKeys } from '../../lib/shortcuts';
-import { scrollWithin } from '../../lib/scrollWithin';
-import { Keycap, SearchIcon, VisuallyHidden } from '../settings/ui';
+import { HELP_SECTIONS, type HelpTopic } from './helpContent';
+import { helpSearchKey, sectionTopics } from './helpNav';
+import { shortcutKeys } from '../lib/shortcuts';
+import { scrollWithin } from '../lib/scrollWithin';
+import { Keycap, SearchIcon, VisuallyHidden } from '../components/settings/ui';
 import { sectionIcon } from './sectionIcons';
 
 // The Help sidebar (the approved Help boards), the Settings sidebar 280
