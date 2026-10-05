@@ -7,7 +7,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
+import { type TerminalHandle } from './Terminal';
+import { nativeSurfaceEnabled } from './terminalRenderer';
 import { type InputHandle } from '../input/Input';
 import { submenuAt } from '../ui/menuPlacement';
 import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';

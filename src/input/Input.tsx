@@ -52,7 +52,7 @@ import {
   planSubmit,
 } from './maskedInput';
 import { recentNames } from './recentNames';
-import { nativeSurfaceEnabled } from '../terminal/Terminal';
+import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 
 export interface InputHandle {
