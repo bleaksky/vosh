@@ -398,7 +398,8 @@ export const PRESETS: Preset[] = [
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
-      // line 109 that does `get 1.;wield 1.` on disarm. Fires
+      // line 109 that does `get 1.;wield 1.` on disarm, with dual in
+      // place of wield for the secondary weapon. Fires
       // unconditionally — when the attacker is "Someone" (blinded)
       // it still tries, which can pick up junk; that edge case is
       // the cost of not having lookarounds in the trigger regex.
@@ -416,7 +417,9 @@ export const PRESETS: Preset[] = [
               '{bold_red}##{reset} {fg:178}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
             ),
           },
-          { kind: 'send', template: 'get 1.;wield 1.' },
+          // The off hand takes its weapon back with dual (do_second,
+          // interp.c), where wield would swap out the primary.
+          { kind: 'send', template: 'get 1.;dual 1.' },
         ],
       },
       {
