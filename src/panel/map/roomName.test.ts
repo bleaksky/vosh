@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ANSI_SLOTS, type AnsiSlot } from '../../theme/baseAnsi';
 import { contrast, parseHex, rgbToOklch, type Rgb } from '../../theme/color';
-import { logSpanCss, parseLogLine } from '../../lib/logView';
+import { logSpanCss, parseLogLine } from '../../settings/general/logView';
 import {
   ROOM_NAME_CONTRAST,
   SECTOR_NAME_SLOTS,
