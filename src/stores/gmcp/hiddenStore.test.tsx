@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import lament from '../../../fixtures/gmcp/aabahran/lament.json';
-import { AffectsPaneView } from '../../panel/affects/AffectsPane';
+import { AffectsPaneView } from '../../panel/affects/AffectsTimers';
 import { GroupPaneView } from '../../panel/group/GroupPane';
 import { PaneLeafContext } from '../../panel/paneActions';
 import { VitalsBlock } from '../../panel/VitalsFooter';

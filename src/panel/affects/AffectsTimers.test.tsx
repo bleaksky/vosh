@@ -5,7 +5,7 @@ import type { PaneLeaf } from '../paneLayout';
 import { groupCurrentAffects, type CurrentAffect } from '../../stores/gmcp/affectsStore';
 import type { TrackedAffect } from '../../ipc/affects';
 import { aabahranPacket } from '../../test/aabahranGmcp';
-import { AffectsPaneView } from './AffectsPane';
+import { AffectsPaneView } from './AffectsTimers';
 import { PaneLeafContext } from '../paneActions';
 import { PaneTextSizeContext } from '../paneTextSize';
 
