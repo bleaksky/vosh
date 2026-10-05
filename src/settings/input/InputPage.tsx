@@ -126,7 +126,7 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             value={config.input_echo_color ?? ''}
             onChange={(color) => update({ input_echo_color: color || null })}
             allowEmpty
-            // The echo reads only #rrggbb (colorizeEcho in Input.tsx).
+            // The echo reads only #rrggbb (colorizeEcho in maskedInput.ts).
             hexOnly
             placeholder="Theme default"
             emptySwatch={terminalText}
