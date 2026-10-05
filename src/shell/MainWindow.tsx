@@ -29,7 +29,6 @@ import {
   usePanelLayout,
 } from '../panel/panelLayoutStore';
 import { addPaneType, togglePane } from '../panel/paneActions';
-import { listTriggers, presetsInstall, presetsRemove } from '../ipc/automation';
 import {
   nativeSurfaceFind,
   nativeSurfaceFindClear,
@@ -76,8 +75,7 @@ import {
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
 import { normalizePanelFont, panelFontFamily, panelFontList } from '../panel/panelFont';
 import { DEFAULT_PANEL_SIZE, normalizePanelSize, resolvePanelSize } from '../panel/panelSize';
-import { PRESETS, presetTriggers } from '../automation/presets';
-import { presetLaunchPlan } from '../automation/automationRecords';
+import { installLaunchPresets } from '../automation/automationRecords';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { customToAppTheme, resolveThemeTerminalColors, setCustomThemes } from '../theme/themes';
 import { setBaseAnsi } from '../theme/baseAnsi';
@@ -901,37 +899,8 @@ function MainWindow() {
         setReadableHighlights(cfg.readable_highlights);
         applySplitDividerColor(cfg.split_divider_color);
 
-        // Bring the preset triggers in line with the presets that are
-        // on. Take out every preset that is off, or that this build no
-        // longer has, and install every one that is on again, so this
-        // build's patterns replace older copies. In loadout mode the
-        // triggers and the list are shared by every profile, and
-        // without the removal a preset you turned off came back after a
-        // launch as another character.
-        let installed: (string | null | undefined)[] = [];
-        try {
-          installed = (await listTriggers()).map((t) => t.preset);
-        } catch (e) {
-          console.error('[presets] listing triggers failed:', e);
-        }
-        const plan = presetLaunchPlan(cfg.enabled_presets, installed);
-        for (const id of plan.remove) {
-          try {
-            await presetsRemove(id);
-          } catch (e) {
-            console.error(`[presets] removing ${id} failed:`, e);
-          }
-        }
-        const toInstall = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(
-          presetTriggers,
-        );
-        if (toInstall.length > 0) {
-          try {
-            await presetsInstall(toInstall);
-          } catch (e) {
-            console.error('[presets] startup install failed:', e);
-          }
-        }
+        // Bring the preset triggers in line with the presets that are on.
+        await installLaunchPresets(cfg.enabled_presets);
       })
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(() => showAfterThemePaint(reveal));
