@@ -7,7 +7,7 @@
 // rows 16 and 38). Rows are the screen's rows from its top, with trailing
 // blanks gone. Marks count cells, as the renderers place them.
 
-import { cellWidth } from '../terminal/sgrCells';
+import { textCells } from '../terminal/sgrCells';
 import type { RawMark } from './promptPieces';
 import { wrapBreaks } from '../terminal/wordWrap';
 
@@ -25,13 +25,6 @@ export interface ScreenAsk {
 export interface OnScreen {
   row: number;
   lines: string[];
-}
-
-/** The cells `text` takes, a wide character two. */
-function cellsOf(text: string): number {
-  let cells = 0;
-  for (const ch of text) cells += cellWidth(ch.codePointAt(0) ?? 0);
-  return cells;
 }
 
 /** `line` as the rows the word wrap breaks it into at `cols` wide. */
@@ -73,7 +66,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *  line or one wider than the screen. */
 export function shapesOnScreen(rows: readonly string[], line: string, cols: number): OnScreen[] {
   const shown = line.trimEnd();
-  if (shown === '' || cellsOf(shown) > cols) return [];
+  if (shown === '' || textCells(shown) > cols) return [];
   const body = shown
     .split(/(-?\d+)/)
     .map((part, i) => (i % 2 === 1 ? '-?\\d+' : escape(part)))
@@ -104,7 +97,7 @@ export function numberRuns(line: string): { start: number; end: number }[] {
 /** The accent tint over each line whole. */
 export function wholeMarks(lines: readonly string[]): RawMark[] {
   return lines
-    .map((line, row) => ({ row, col: 0, width: cellsOf(line.trimEnd()), warn: false }))
+    .map((line, row) => ({ row, col: 0, width: textCells(line.trimEnd()), warn: false }))
     .filter((mark) => mark.width > 0);
 }
 
@@ -116,8 +109,8 @@ export function numberMarks(line: string, keep: readonly boolean[]): RawMark[] {
     .filter((_, k) => keep[k] ?? false)
     .map((run) => ({
       row: 0,
-      col: cellsOf(chars.slice(0, run.start).join('')),
-      width: cellsOf(chars.slice(run.start, run.end).join('')),
+      col: textCells(chars.slice(0, run.start).join('')),
+      width: textCells(chars.slice(run.start, run.end).join('')),
       warn: false,
     }));
 }
