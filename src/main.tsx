@@ -2,7 +2,7 @@
 // window never shows the dark stylesheet defaults under a light theme.
 import './prepaint';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from './shell/MainWindow';
 import { SettingsApp } from './settings/SettingsWindow';
 import { HelpApp } from './help/HelpWindow';
 // The chrome typeface from the Ember redesign. Bundled through Vite so

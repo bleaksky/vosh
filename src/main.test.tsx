@@ -12,7 +12,7 @@ vi.mock('react-dom/client', () => {
   const createRoot = () => ({ render });
   return { default: { createRoot }, createRoot };
 });
-vi.mock('./App', () => ({ default: () => null }));
+vi.mock('./shell/MainWindow', () => ({ default: () => null }));
 vi.mock('./settings/SettingsWindow', () => ({ SettingsApp: () => null }));
 vi.mock('./help/HelpWindow', () => ({ HelpApp: () => null }));
 

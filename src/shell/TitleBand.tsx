@@ -1,0 +1,242 @@
+import { useEffect, useRef, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useTauriEvent } from '../ipc/useTauriEvent';
+import APP_SHORTCUTS from '../lib/appShortcuts.json';
+import { SESSION_MENU_EVENT, type SessionMenuMode } from '../lib/appMenu';
+import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
+import type { PaneSplit, PaneType } from '../panel/paneLayout';
+import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
+import type { Connection } from '../stores/session/useConnection';
+import {
+  CloseIcon,
+  GearIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  PanelIcon,
+  PlusIcon,
+  SearchIcon,
+} from './icons';
+import { SessionMenu } from './SessionMenu';
+import { ShellMenu, ShellMenuItem } from './ShellMenu';
+import { TitleButton } from './TitleButton';
+
+// The 32 px title band across the top of the window (SPEC 1 and 9). No
+// fill and no line of its own: the terminal ground runs up under it and
+// the panel ground runs up on the right. Its empty areas drag the
+// window. The session button sits centered over the terminal column.
+// Add a pane, Search commands, the panel toggle, and Settings sit at
+// the right, over the panel. On macOS the native traffic lights own the
+// left corner. Windows and Linux draw minimize, maximize, and close
+// here, after Settings, and the panel draws at least 248 px wide there
+// to keep all seven over it. They have no menu bar, so there the gear
+// is how you find Settings.
+
+const ADD_MENU_WIDTH = 200;
+
+interface Props {
+  connection: Connection;
+  panelOpen: boolean;
+  onTogglePanel: () => void;
+  /** Open the palette, or close it when it is open. */
+  onTogglePalette: () => void;
+  /** Open Settings, the same as its shortcut. */
+  onOpenSettings: () => void;
+  /** The panel's pane tree. Add a pane lists the pane types it does
+   *  not show yet. */
+  paneTree: PaneSplit | null;
+  onAddPane: (pane: PaneType) => void;
+  /** Runs after a menu closes, or after the gear opens Settings, to
+   *  hand the caret back to the command line. */
+  onMenuClosed: () => void;
+}
+
+export function TitleBand({
+  connection,
+  panelOpen,
+  onTogglePanel,
+  onTogglePalette,
+  onOpenSettings,
+  paneTree,
+  onAddPane,
+  onMenuClosed,
+}: Props) {
+  const mac = isMacPlatform();
+  const [menu, setMenu] = useState<'session' | 'add' | null>(null);
+  // The mode the session popover opens in. The menu bar's Edit
+  // connection and New connection open it straight on their form, and
+  // the key remounts it so a second request starts fresh.
+  const [session, setSession] = useState<{ mode: SessionMenuMode; key: number }>({
+    mode: 'menu',
+    key: 0,
+  });
+  const sessionRef = useRef<HTMLButtonElement | null>(null);
+  const addRef = useRef<HTMLButtonElement | null>(null);
+  const closeMenu = () => {
+    setMenu(null);
+    onMenuClosed();
+  };
+  const toggleMenu = (which: 'session' | 'add') => {
+    if (which === 'session') setSession((s) => ({ mode: 'menu', key: s.key + 1 }));
+    setMenu((current) => (current === which ? null : which));
+  };
+  useEffect(() => {
+    const onRequest = (e: Event) => {
+      const mode = (e as CustomEvent<unknown>).detail;
+      if (mode !== 'menu' && mode !== 'edit' && mode !== 'new') return;
+      setSession((s) => ({ mode, key: s.key + 1 }));
+      setMenu('session');
+    };
+    window.addEventListener(SESSION_MENU_EVENT, onRequest);
+    return () => window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+  }, []);
+  // Hiding the panel takes Add a pane with it, so its menu closes too
+  // instead of coming back the next time the panel shows.
+  useEffect(() => {
+    if (!panelOpen) setMenu((current) => (current === 'add' ? null : current));
+  }, [panelOpen]);
+  const addable = menu === 'add' ? paneTypesToAdd(paneTree) : [];
+  const panelLabel = panelOpen ? 'Hide panel' : 'Show panel';
+
+  return (
+    <div className="shell-band" data-tauri-drag-region>
+      <div className="shell-band-title" data-tauri-drag-region>
+        <TitleButton
+          ref={sessionRef}
+          connection={connection}
+          open={menu === 'session'}
+          onToggle={() => toggleMenu('session')}
+        />
+      </div>
+      <div className="shell-band-actions">
+        {panelOpen && (
+          <button
+            ref={addRef}
+            type="button"
+            className={`shell-icon-button${menu === 'add' ? ' is-open' : ''}`}
+            aria-label="Add a pane"
+            aria-haspopup="menu"
+            aria-expanded={menu === 'add'}
+            onClick={() => toggleMenu('add')}
+          >
+            <PlusIcon />
+          </button>
+        )}
+        <button
+          type="button"
+          className="shell-icon-button"
+          aria-label={`Search commands (${shortcutLabel(APP_SHORTCUTS.palette)})`}
+          // The palette leaves presses on its own button to this toggle.
+          data-palette-anchor=""
+          onClick={onTogglePalette}
+        >
+          <SearchIcon />
+        </button>
+        <button
+          type="button"
+          className={`shell-icon-button${panelOpen ? '' : ' is-quiet'}`}
+          // The label says what a press does, so no pressed state on top
+          // of it ("Hide panel, pressed" reads backward).
+          aria-label={panelLabel}
+          title={`${panelLabel} (${shortcutLabel(APP_SHORTCUTS.panel)})`}
+          onClick={onTogglePanel}
+        >
+          <PanelIcon />
+        </button>
+        <button
+          type="button"
+          className="shell-icon-button"
+          aria-label="Settings"
+          title={`Settings (${shortcutLabel(APP_SHORTCUTS.settings)})`}
+          onClick={(e) => {
+            onOpenSettings();
+            // WebView2 and WebKitGTK focus a button on click. Left on the
+            // gear, the caret would take your next Space and open Settings
+            // again, so it goes back to the command line.
+            if (document.activeElement === e.currentTarget) onMenuClosed();
+          }}
+        >
+          <GearIcon />
+        </button>
+        {!mac && <WindowControls />}
+      </div>
+      {menu === 'session' && (
+        <SessionMenu
+          key={session.key}
+          connection={connection}
+          anchor={sessionRef.current}
+          initialMode={session.mode}
+          onClose={closeMenu}
+        />
+      )}
+      {menu === 'add' && panelOpen && (
+        <ShellMenu
+          anchor={addRef.current}
+          align="end"
+          width={ADD_MENU_WIDTH}
+          label="Add a pane"
+          onClose={closeMenu}
+        >
+          {addable.length === 0 ? (
+            <p className="shell-menu-note">Every pane is showing.</p>
+          ) : (
+            addable.map((pane) => (
+              <ShellMenuItem
+                key={pane}
+                onSelect={() => {
+                  closeMenu();
+                  onAddPane(pane);
+                }}
+              >
+                {PANE_LABELS[pane]}
+              </ShellMenuItem>
+            ))
+          )}
+        </ShellMenu>
+      )}
+    </div>
+  );
+}
+
+// Minimize, maximize, and close for the frameless window on Windows and
+// Linux, after the band's own buttons. Maximize reads Restore while the
+// window is maximized.
+function WindowControls() {
+  const win = () => getCurrentWindow();
+  const [maximized, setMaximized] = useState(false);
+  const read = () => {
+    getCurrentWindow()
+      .isMaximized()
+      .then(setMaximized)
+      .catch(() => {});
+  };
+  useEffect(() => read(), []);
+  useTauriEvent<unknown>((cb) => getCurrentWindow().onResized(cb), read);
+  return (
+    <div className="shell-window-controls">
+      <button
+        type="button"
+        className="shell-icon-button"
+        aria-label="Minimize"
+        onClick={() => void win().minimize()}
+      >
+        <MinimizeIcon />
+      </button>
+      <button
+        type="button"
+        className="shell-icon-button"
+        aria-label={maximized ? 'Restore' : 'Maximize'}
+        onClick={() => void win().toggleMaximize()}
+      >
+        <MaximizeIcon />
+      </button>
+      <button
+        type="button"
+        className="shell-icon-button is-close"
+        aria-label="Close"
+        onClick={() => void win().close()}
+      >
+        <CloseIcon />
+      </button>
+    </div>
+  );
+}

@@ -17,7 +17,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 vi.mock('../stores/toasts', () => ({ pushToast: tauri.pushToast }));
 
-const { buildPaletteEntries, initialSelection, paletteSections } = await import('../lib/palette');
+const { buildPaletteEntries, initialSelection, paletteSections } =
+  await import('../shell/overlays/palette');
 const { getPanelLayout, setPaneTree, startPanelLayoutStore } = await import('./panelLayoutStore');
 const { flushPaneLayout } = await import('./paneLayout');
 const { resetPanelLayout } = await import('./panelReset');
