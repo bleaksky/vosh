@@ -82,7 +82,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         // A tell you got or a fight that starts on you rings its preset.
         apply
             .alerts
-            .extend(c.alerts.gmcp(&p, &msg, conn.stream.last_line(), now));
+            .extend(c.preset_watch.gmcp(&p, &msg, conn.stream.last_line(), now));
         // The game's day or night, beside the tick.
         let daylight = (msg.package == "World.Time")
             .then(|| c.tick.observe_daylight(&msg.data))
