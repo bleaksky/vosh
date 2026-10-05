@@ -140,10 +140,11 @@ fn presets_on(stored: &[String]) -> Vec<&'static str> {
 }
 
 /// What the main window does with the preset triggers once a launch has
-/// loaded the profile, as shell/MainWindow.tsx does it with `presetLaunchPlan`. Every
-/// preset that is off comes out through `presets_remove`, and every one
-/// that is on installs again through `presets_install`. Each command
-/// saves, as the real commands do.
+/// loaded the profile, as `installLaunchPresets` in
+/// automation/automationRecords.ts does it. Every preset that is off
+/// comes out through `presets_remove`, and every one that is on installs
+/// again through `presets_install`. Each command saves, as the real
+/// commands do.
 async fn preset_launch_plan(state: &SharedState) {
     let (remove, install) = {
         let p = state.selected_profile().await;

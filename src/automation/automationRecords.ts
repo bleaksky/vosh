@@ -8,11 +8,14 @@
 
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { groupKeyOf, searchText, type ListEntry } from './automationList';
-import { defaultEnabledIds, PRESETS } from './presets';
+import { defaultEnabledIds, PRESETS, presetTriggers } from './presets';
 import {
   deleteMacro,
   exportAliases,
   importAliases,
+  listTriggers,
+  presetsInstall,
+  presetsRemove,
   setMacro,
   timersDelete,
   timersSet,
@@ -450,6 +453,38 @@ export function presetLaunchPlan(
     if (id && !on.has(id)) remove.add(id);
   }
   return { install, remove: [...remove].sort() };
+}
+
+/** Bring the preset triggers in line with `enabled`, the stored
+ *  enabled_presets, at launch. Take out every preset that is off, or that
+ *  this build no longer has, and install every one that is on again, so
+ *  this build's patterns replace older copies. In loadout mode the
+ *  triggers and the list are shared by every profile, and without the
+ *  removal a preset you turned off came back after a launch as another
+ *  character. A failed call is logged and the rest still run. */
+export async function installLaunchPresets(enabled: readonly string[]): Promise<void> {
+  let installed: (string | null | undefined)[] = [];
+  try {
+    installed = (await listTriggers()).map((t) => t.preset);
+  } catch (e) {
+    console.error('[presets] listing triggers failed:', e);
+  }
+  const plan = presetLaunchPlan(enabled, installed);
+  for (const id of plan.remove) {
+    try {
+      await presetsRemove(id);
+    } catch (e) {
+      console.error(`[presets] removing ${id} failed:`, e);
+    }
+  }
+  const toInstall = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
+  if (toInstall.length > 0) {
+    try {
+      await presetsInstall(toInstall);
+    } catch (e) {
+      console.error('[presets] startup install failed:', e);
+    }
+  }
 }
 
 // ── Loadouts ────────────────────────────────────────────────────────
