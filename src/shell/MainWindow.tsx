@@ -32,40 +32,18 @@ import { disconnectSession, setWindowSize, onState, type StatePayload } from '..
 import { terminalLocalWrite } from '../ipc/terminal';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { menuCopy, openHelpWindow, openSettingsWindow, subscribeHelpOpen } from '../ipc/windows';
+import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
 import { subscribeMigrationApplied } from '../ipc/wizard';
-import { getCurrentThemeId } from '../theme/theme';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
 import { pushToast } from '../stores/toasts';
 import { showLaunchNotices, showMigrationApplied } from './launchNotices';
 import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
-import {
-  buildPaletteEntries,
-  themeEntries,
-  themesInGalleryOrder,
-  type PaletteDeps,
-} from './overlays/palette';
-import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
-import {
-  buildMenuState,
-  commandRepeats,
-  listenAppMenu,
-  pageHasSelection,
-  requestSessionMenu,
-  resolveShortcut,
-  setAppMenuState,
-} from '../lib/appMenu';
-import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
+import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { openSettingsTab } from '../lib/settingsLink';
-import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
-import {
-  getNativeScroll,
-  startNativeScroll,
-  subscribeNativeScroll,
-} from '../terminal/native/nativeScroll';
+import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import { useConnection, type ConnectionStatus } from '../stores/session/useConnection';
@@ -76,6 +54,7 @@ import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { notePageWrite, usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
+import { useAppCommands } from './useAppCommands';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 import { useScrollbackSplit } from './useScrollbackSplit';
@@ -152,15 +131,6 @@ function MainWindow() {
   const terminalAreaRef = useRef<HTMLDivElement | null>(null);
   // ⌘K command palette.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Close window (⌘W on macOS) while a session is live asks first,
-  // since closing the main window ends the session and quits Vosh.
-  const [confirmClose, setConfirmClose] = useState(false);
-  // What the macOS menu bar mirrors beyond the panel and the session: a
-  // tick for every theme apply or custom theme change, whether the MUD
-  // offers staff queues, and whether the native grid is scrolled back.
-  const [themeTick, setThemeTick] = useState(0);
-  const [staffOffered, setStaffOffered] = useState(false);
-  const [nativeScrolled, setNativeScrolled] = useState(false);
   // Right-click context menu over the terminal area. Non-null while
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
@@ -381,71 +351,6 @@ function MainWindow() {
     inputRef.current?.focus();
   });
 
-  // Window shortcuts, in the capture phase so they fire before xterm's
-  // own keybindings, the webview's find and reload, and the command
-  // line's macros. macOS binds Cmd only, because Ctrl belongs to your
-  // macros there. Windows and Linux bind Ctrl. The keys live in
-  // lib/appShortcuts.json, which the macOS menu bar reads too.
-  //   Mod+K        command palette (toggles)
-  //   Mod+F        find in scrollback (again refocuses the find field)
-  //   Mod+R        connect to the saved world. Ctrl+R never reloads the
-  //                page on Windows, even while connected.
-  //   Mod+,        settings
-  //   Mod+/        help
-  //   Mod+Shift+L  show or hide the panel
-  //   Mod+\        open or close the scrollback split
-  // A key this handler takes never reaches the menu bar, and the menu
-  // bar sends its commands through runCommand below too, so each press
-  // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
-  // layout still reaches them by the physical key.
-  const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
-  const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
-  useEffect(() => {
-    const mac = isMacPlatform();
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!primary || e.altKey) return;
-      const hit = resolveShortcut(shortcutKey(e), e.shiftKey);
-      if (!hit) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (hit.id) runCommandRef.current(hit.id, { repeat: e.repeat });
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
-
-  // `#help <words>` from the command line (src-tauri input::help_query).
-  // A topic id or number opens that topic. Other words open Help on its
-  // search when a topic matches, and the terminal says so when none does.
-  useTauriEvent(subscribeHelpOpen, (payload) => {
-    const words = typeof payload === 'string' ? payload.trim() : '';
-    if (!helpOpensOn(words)) {
-      if (words.length > 0) {
-        writeLive(`\x1b[38;5;244m${helpNoMatchNotice(words)}\x1b[0m\r\n`);
-      }
-      return;
-    }
-    openHelpTopic(words);
-  });
-
-  // Menu bar commands (macOS only). Each arrives with its palette id.
-  useEffect(() => {
-    if (!isMacPlatform()) return;
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    listenAppMenu((id) => runCommandRef.current(id))
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
   // Start every pane and status line store at launch so any package
   // that arrives while a pane is closed (or has not yet been opened)
   // still lands and shows on first open. Imm.Queues especially: the
@@ -456,6 +361,61 @@ function MainWindow() {
   useEffect(() => {
     startStores();
   }, []);
+
+  const connected = status.kind === 'connected' || status.kind === 'connecting';
+
+  // Everything the palette can reach, rebuilt fresh at each open so
+  // labels track live state.
+  const paletteDeps = (): PaletteDeps => ({
+    connected,
+    host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
+    worldName: connection.world,
+    panelOpen,
+    togglePanel: togglePanelOpen,
+    splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
+    toggleSplit,
+    // The staff queues row waits for Imm.Queues, like Add a pane, but a
+    // pane the tree already shows stays listed so you can hide it.
+    paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
+    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
+    togglePane,
+    openHelp: openHelpWindow,
+    openFind,
+    openSettings: openSettingsWindow,
+    openSettingsTab,
+    connect: () => void connection.connect(),
+    disconnect: () => void disconnectSession(),
+    insertInput: (text) => inputRef.current?.insert(text),
+    promptShow: promptShow?.capture ? promptShow.show : null,
+    openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
+    promptDraw: promptShow?.capture ? promptShow.draw : null,
+    setPromptDraw: (on) => {
+      void promptConfigGet()
+        .then((config) => promptConfigSet({ ...config, draw: on }))
+        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
+    },
+  });
+
+  // The window shortcuts, the macOS menu bar and #help.
+  const { runCommand, confirmClose, setConfirmClose, closeMainWindow, themesChanged } =
+    useAppCommands({
+      connection,
+      splitOpen,
+      toggleSplit,
+      findOpen,
+      openFind,
+      findToolbarRef,
+      paletteOpen,
+      setPaletteOpen,
+      togglePanel: () => togglePanelKeepingCaret(() => inputRef.current?.focus()),
+      focusInput: () => inputRef.current?.focus(),
+      panelOpen,
+      shownPanes,
+      termRef,
+      historyTermRef,
+      writeLive,
+      paletteDeps,
+    });
 
   // The fonts, the sizes and the terminal settings, read at launch and
   // kept up with every Settings change and profile switch. The menu bar
@@ -469,7 +429,7 @@ function MainWindow() {
     themeTerminalColors,
     brightBold,
     blinkText,
-  } = useUiConfigFollow({ onThemesChanged: () => setThemeTick((n) => n + 1) });
+  } = useUiConfigFollow({ onThemesChanged: themesChanged });
 
   // Keep the native surface under the page in step with this window.
   useNativeSurfaceBridge({
@@ -532,8 +492,6 @@ function MainWindow() {
     }
   });
 
-  const connected = status.kind === 'connected' || status.kind === 'connecting';
-
   const inputElement = (
     <Input
       ref={inputRef}
@@ -555,171 +513,6 @@ function MainWindow() {
       onExitSplit={exitSplit}
     />
   );
-
-  // Everything the palette can reach, rebuilt fresh at each open so
-  // labels track live state.
-  const paletteDeps = (): PaletteDeps => ({
-    connected,
-    host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
-    worldName: connection.world,
-    panelOpen,
-    togglePanel: togglePanelOpen,
-    splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
-    toggleSplit,
-    // The staff queues row waits for Imm.Queues, like Add a pane, but a
-    // pane the tree already shows stays listed so you can hide it.
-    paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
-    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
-    togglePane,
-    openHelp: openHelpWindow,
-    openFind,
-    openSettings: openSettingsWindow,
-    openSettingsTab,
-    connect: () => void connection.connect(),
-    disconnect: () => void disconnectSession(),
-    insertInput: (text) => inputRef.current?.insert(text),
-    promptShow: promptShow?.capture ? promptShow.show : null,
-    openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
-    promptDraw: promptShow?.capture ? promptShow.draw : null,
-    setPromptDraw: (on) => {
-      void promptConfigGet()
-        .then((config) => promptConfigSet({ ...config, draw: on }))
-        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
-    },
-  });
-
-  const closeMainWindow = () => {
-    getCurrentWindow()
-      .close()
-      .catch((e: unknown) => console.error('[main] closing the window failed', e));
-  };
-
-  // Edit, then Copy, in the menu bar. With no selection of the page's
-  // own, the terminal selection wins, the same as Cmd+C in the command
-  // line and Copy in the terminal menu. Otherwise the system copies the
-  // field or page selection.
-  const copyFromMenu = () => {
-    const own = pageHasSelection();
-    if (!own && !nativeSurfaceEnabled()) {
-      const text = termRef.current?.getSelection() || historyTermRef.current?.getSelection() || '';
-      if (text.length > 0) {
-        void navigator.clipboard.writeText(text).catch(() => {});
-        return;
-      }
-    }
-    menuCopy(!own && nativeSurfaceEnabled());
-  };
-
-  // One dispatcher for the window shortcuts and the macOS menu bar, by
-  // palette id. It keeps the shortcut gates: a held key repeats only
-  // find, and Connect does nothing while a session is live. An id it
-  // does not own runs the palette entry of the same id.
-  const runCommand = (id: string, opts: { repeat?: boolean } = {}) => {
-    const { findOpen: finding, paletteOpen: inPalette, live } = shortcutState.current;
-    if (opts.repeat && !commandRepeats(id)) return;
-    switch (id) {
-      case 'connect':
-        if (!live) void connection.connect();
-        return;
-      case 'panel':
-        togglePanelKeepingCaret(() => inputRef.current?.focus());
-        return;
-      case 'palette':
-        setPaletteOpen(!inPalette);
-        if (inPalette) inputRef.current?.focus();
-        return;
-      case 'find':
-        // Open just the toolbar. Whether to open the split is decided
-        // per search: only when a match would scroll the live pane up
-        // off its tail (see submitFind in useFind.ts).
-        if (finding) findToolbarRef.current?.focus();
-        else openFind();
-        return;
-      case 'settings':
-        openSettingsWindow();
-        return;
-      case 'help':
-        openHelpWindow();
-        return;
-      case 'split':
-        toggleSplit();
-        return;
-      case 'session-edit':
-        requestSessionMenu('edit');
-        return;
-      case 'session-new':
-        requestSessionMenu('new');
-        return;
-      case 'close-window':
-        if (live) setConfirmClose(true);
-        else closeMainWindow();
-        return;
-      case 'copy':
-        copyFromMenu();
-        return;
-    }
-    const entry = [...buildPaletteEntries(paletteDeps()), ...themeEntries()].find(
-      (e) => e.id === id,
-    );
-    if (entry) void entry.run();
-  };
-  useEffect(() => {
-    shortcutState.current = { findOpen, paletteOpen, live: connection.live };
-    runCommandRef.current = runCommand;
-  });
-
-  // The macOS menu bar mirrors this window. Theme applies write
-  // data-theme on the root, so one observer catches every source.
-  useEffect(() => {
-    if (!isMacPlatform()) return;
-    const observer = new MutationObserver(() => setThemeTick((n) => n + 1));
-    observer.observe(document.documentElement, { attributeFilter: ['data-theme'] });
-    setStaffOffered(getImmState().received);
-    const unsubImm = subscribeImmState((s) => setStaffOffered(s.received));
-    let unsubScroll = () => {};
-    if (nativeSurfaceEnabled()) {
-      startNativeScroll();
-      const readScroll = () => setNativeScrolled(getNativeScroll().offset > 0);
-      readScroll();
-      unsubScroll = subscribeNativeScroll(readScroll);
-    }
-    return () => {
-      observer.disconnect();
-      unsubImm();
-      unsubScroll();
-    };
-  }, []);
-
-  // Send the menu bar a snapshot when one of its inputs changes. The
-  // theme tick stands in for the theme id and the custom theme list.
-  useEffect(() => {
-    if (!isMacPlatform()) return;
-    setAppMenuState(
-      buildMenuState({
-        live: connection.live,
-        worldName: connection.world,
-        panelOpen,
-        splitOpen: splitOpen || nativeScrolled,
-        shownPanes,
-        staffOffered,
-        themes: themesInGalleryOrder().map(({ theme, custom }) => ({
-          id: theme.id,
-          label: theme.label,
-          custom,
-        })),
-        theme: getCurrentThemeId(),
-      }),
-    );
-  }, [
-    connection.live,
-    connection.world,
-    panelOpen,
-    splitOpen,
-    nativeScrolled,
-    shownPanes,
-    staffOffered,
-    themeTick,
-  ]);
 
   const terminalAreaElement = (
     <div

@@ -242,7 +242,7 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 // Windows and the menu.
 
 /// Sent to the main window on `#help <words>`. The payload is the
-/// words. `MainWindow` hears it and opens Help on the best match.
+/// words. `useAppCommands` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
