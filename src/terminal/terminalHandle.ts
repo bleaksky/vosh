@@ -170,6 +170,39 @@ const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
 export function terminalHandle(parts: HandleParts): TerminalHandle {
   const { term, searchAddon, paneSizer, sizer, host, write, outputTaken, region, quiet, lent } =
     parts;
+  // The cell grid the renderer in use draws, in client px: the box it
+  // fills and the size of a cell, or null before it has a size. The
+  // native grid draws from the pane's top left, below the pixels its
+  // rows leave over, each cell xterm's device cell rounded to whole
+  // pixels.
+  const gridBox = () => {
+    if (!quiet() && nativeSurfaceEnabled()) {
+      const device = term.dimensions?.device?.cell;
+      if (!sizer || !device?.width || !device?.height) return null;
+      const dpr = window.devicePixelRatio || 1;
+      const r = sizer.getBoundingClientRect();
+      return {
+        left: r.left,
+        top: r.top + paneSizer.nativeSpare,
+        width: r.width,
+        height: r.height - paneSizer.nativeSpare,
+        cellW: Math.round(device.width) / dpr,
+        cellH: Math.round(device.height) / dpr,
+      };
+    }
+    const screen = host?.querySelector('.xterm-screen');
+    const cell = term.dimensions?.css?.cell;
+    if (!screen || !cell?.width || !cell?.height) return null;
+    const r = screen.getBoundingClientRect();
+    return {
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      cellW: cell.width,
+      cellH: cell.height,
+    };
+  };
   return {
     write,
     outputTaken,
@@ -273,65 +306,16 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
       return { rows, cols: term.cols, atBottom: buffer.viewportY === buffer.baseY };
     },
     cellAt: (clientX, clientY) => {
-      const dpr = window.devicePixelRatio || 1;
-      if (!quiet() && nativeSurfaceEnabled()) {
-        // The native grid draws from the pane's top left, each cell
-        // xterm's device cell rounded to whole pixels.
-        const device = term.dimensions?.device?.cell;
-        if (!sizer || !device?.width || !device?.height) return null;
-        const r = sizer.getBoundingClientRect();
-        const grid = {
-          left: r.left,
-          top: r.top + paneSizer.nativeSpare,
-          width: r.width,
-          height: r.height - paneSizer.nativeSpare,
-        };
-        return cellInGrid(clientX, clientY, grid, {
-          width: Math.round(device.width) / dpr,
-          height: Math.round(device.height) / dpr,
-        });
-      }
-      const screen = host?.querySelector('.xterm-screen');
-      const cell = term.dimensions?.css?.cell;
-      if (!screen || !cell?.width || !cell?.height) return null;
-      return cellInGrid(clientX, clientY, screen.getBoundingClientRect(), cell);
+      const g = gridBox();
+      return g ? cellInGrid(clientX, clientY, g, { width: g.cellW, height: g.cellH }) : null;
     },
     rowTop: (row) => {
-      if (!quiet() && nativeSurfaceEnabled()) {
-        // The native grid, as cellAt reads it.
-        const device = term.dimensions?.device?.cell;
-        if (!sizer || !device?.height) return null;
-        const dpr = window.devicePixelRatio || 1;
-        return (
-          sizer.getBoundingClientRect().top +
-          paneSizer.nativeSpare +
-          row * (Math.round(device.height) / dpr)
-        );
-      }
-      const screen = host?.querySelector('.xterm-screen');
-      const cell = term.dimensions?.css?.cell;
-      if (!screen || !cell?.height) return null;
-      return screen.getBoundingClientRect().top + row * cell.height;
+      const g = gridBox();
+      return g ? g.top + row * g.cellH : null;
     },
     grid: () => {
-      if (!quiet() && nativeSurfaceEnabled()) {
-        // The native grid, as cellAt reads it.
-        const device = term.dimensions?.device?.cell;
-        if (!sizer || !device?.width || !device?.height) return null;
-        const dpr = window.devicePixelRatio || 1;
-        const r = sizer.getBoundingClientRect();
-        return {
-          left: r.left,
-          top: r.top + paneSizer.nativeSpare,
-          cellW: Math.round(device.width) / dpr,
-          cellH: Math.round(device.height) / dpr,
-        };
-      }
-      const screen = host?.querySelector('.xterm-screen');
-      const cell = term.dimensions?.css?.cell;
-      if (!screen || !cell?.width || !cell?.height) return null;
-      const r = screen.getBoundingClientRect();
-      return { left: r.left, top: r.top, cellW: cell.width, cellH: cell.height };
+      const g = gridBox();
+      return g ? { left: g.left, top: g.top, cellW: g.cellW, cellH: g.cellH } : null;
     },
   };
 }
