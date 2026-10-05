@@ -3,7 +3,7 @@
 import './prepaint';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { SettingsApp } from './SettingsApp';
+import { SettingsApp } from './settings/SettingsWindow';
 import { HelpApp } from './help/HelpWindow';
 // The chrome typeface from the Ember redesign. Bundled through Vite so
 // the app never fetches fonts at runtime. Inter carries chrome body

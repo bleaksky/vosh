@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import appSource from '../App.tsx?raw';
-import settingsSource from '../SettingsApp.tsx?raw';
+import settingsSource from '../settings/SettingsWindow.tsx?raw';
 import { REPAINT_WAIT_MS, showAfterThemePaint, type RevealDeps } from './reveal';
 
 vi.mock('../theme/theme', () => ({ paintMatchesBoot: () => false }));

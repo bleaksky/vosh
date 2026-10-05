@@ -8,7 +8,7 @@ import {
   SETTINGS_GROUPS,
   type SettingsTarget,
 } from '../lib/settingsNav';
-import { SETTINGS_ROWS, settingsRowKey } from '../lib/settingsSearch';
+import { SETTINGS_ROWS, settingsRowKey } from '../settings/settingsSearch';
 
 // The Settings list in the terminal menu sends the same deep links the
 // palette and search send, so it opens Settings where they do. The
