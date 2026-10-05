@@ -10,6 +10,7 @@
 @import './tokens.css'; /* the One Window tokens, no classes */
 @import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */
+@import './migration.css'; /* settings-app, settings-btn, migration- */
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
 @import './settings.css'; /* st- */
