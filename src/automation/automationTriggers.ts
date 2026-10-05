@@ -18,6 +18,7 @@ import {
   type TriggerPattern,
   type TriggerRecord,
 } from '../ipc/automation';
+import { quoted } from '../lib/text';
 
 /** The Style select on the board. */
 export type TriggerStyle = 'none' | 'highlight' | 'wash' | 'replace' | 'hide';
@@ -329,8 +330,6 @@ export function blankTrigger(): TriggerRecord {
   };
 }
 
-const quote = (name: string) => `“${name}”`;
-
 /** Why the triggers cannot save yet, or null. Every trigger needs a
  *  name, names must differ (the store keys by name, so a second one
  *  would replace the first), and a trigger needs a pattern. */
@@ -339,10 +338,12 @@ export function validateTriggers(list: readonly TriggerRecord[]): string | null 
   for (const t of list) {
     const name = t.name.trim();
     if (!name) return 'Give every trigger a name before you save.';
-    if (seen.has(name)) return `Two triggers are named ${quote(name)}. Give each one its own name.`;
+    if (seen.has(name)) {
+      return `Two triggers are named ${quoted(name)}. Give each one its own name.`;
+    }
     seen.add(name);
     if (!t.patterns.some((p) => patternSource(p).trim().length > 0)) {
-      return `The trigger ${quote(name)} needs a pattern.`;
+      return `The trigger ${quoted(name)} needs a pattern.`;
     }
   }
   return null;
@@ -396,7 +397,7 @@ export async function moveTriggerToPrompts(
   const at = list.findIndex(
     (t: unknown) => t !== null && typeof t === 'object' && (t as { name?: unknown }).name === name,
   );
-  if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quote(name)}.`);
+  if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quoted(name)}.`);
   const next = [...list];
   next[at] = { ...(list[at] as object), target: 'prompt' };
   await api.importTriggers(JSON.stringify(next, null, 2));

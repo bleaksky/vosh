@@ -45,6 +45,7 @@ import { useGamePrompt } from '../../stores/gmcp/gamePromptStore';
 import { useBandEnv } from '../../prompt/useBandEnv';
 import { useCellWidth } from '../../lib/useCellWidth';
 import { knownWorld } from '../../lib/knownWorlds';
+import { errorText } from '../../lib/text';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { nativeSurfaceEnabled } from '../../terminal/terminalRenderer';
 import { PromptShowField } from './PromptShowRow';
@@ -199,10 +200,7 @@ export function PromptSection({
     setRefocus(false);
   }, [refocus, reading]);
 
-  const fail = useCallback(
-    (e: unknown) => onError(e instanceof Error ? e.message : String(e)),
-    [onError],
-  );
+  const fail = useCallback((e: unknown) => onError(errorText(e)), [onError]);
 
   if (!data) return null;
   const { config, show, state, identity, active, host } = data;

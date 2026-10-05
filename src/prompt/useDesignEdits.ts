@@ -11,6 +11,7 @@ import {
   type PromptPiece,
   type PromptPreviewName,
 } from '../ipc/promptDesign';
+import { errorText } from '../lib/text';
 import { pushToast } from '../stores/toasts';
 import { editedTable, movedBackTable, takeBackOnto, undoEntry, type UndoEntry } from './cardRules';
 import { caretAfter, moveBack, moveOp, type MoveMade, type Pointing } from './promptPieces';
@@ -132,7 +133,7 @@ export function useDesignEdits(
           setPointing({ picked: landed, caret: null });
         }
       } catch (e) {
-        pushToast({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+        pushToast({ kind: 'error', message: errorText(e) });
       }
     });
   };

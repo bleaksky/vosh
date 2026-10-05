@@ -23,6 +23,7 @@ import {
   type PromptLineTrigger,
 } from '../ipc/prompt';
 import { useTauriEvent } from '../ipc/useTauriEvent';
+import { errorText } from '../lib/text';
 import { pushToast } from '../stores/toasts';
 import { Button, Field } from '../ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
@@ -404,7 +405,7 @@ export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
                     .catch((e: unknown) =>
                       pushToast({
                         kind: 'error',
-                        message: e instanceof Error ? e.message : String(e),
+                        message: errorText(e),
                       }),
                     )
                     .finally(() => setBusy(null));
