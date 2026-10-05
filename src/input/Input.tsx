@@ -253,10 +253,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     });
     if (plan.remember) remember(line);
     // #nativesurface is handled here, not in the backend, because the
-    // renderer flag lives in localStorage (Terminal.tsx reads it at
-    // startup). `on` forces the native surface on any platform (the
-    // Windows/Linux tester path), `off` forces xterm, `default` restores
-    // the platform default (native on macOS, xterm elsewhere).
+    // renderer flag lives in localStorage (terminalRenderer.ts reads it
+    // at startup). It takes effect on macOS only, where `off` forces
+    // xterm and `on` and `default` keep the native surface. Windows and
+    // Linux always draw with xterm.
     if (plan.local) {
       const arg = (line.split(/\s+/)[1] ?? '').toLowerCase();
       const notice = (text: string) => onLocalEcho?.(`\x1b[38;5;244m${text}\x1b[0m\r\n`);
