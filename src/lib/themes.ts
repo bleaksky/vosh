@@ -1429,6 +1429,118 @@ const modusVivendi: AppTheme = {
   chrome: { accent: '#2fafff' },
 };
 
+// ── Harbor Dark ─────────────────────────────────────────────────────
+// The GitHub Dark Default palette of GitHub's theme for VS Code, as
+// published, under a name of its own, since GitHub is a trademark
+// (Themes review Q6). GitHub publishes no terminal selection, so the
+// selection is its list selection, #6e768166 laid over the ground. The
+// blue cursor is the accent the review picked, and the theme pins it.
+const harborDark: AppTheme = {
+  id: 'harbor-dark',
+  label: 'Harbor Dark',
+  description: 'Bright text on a blue black ground, with clear colors and a blue accent.',
+  source: 'GitHub Dark Default',
+  author: 'GitHub',
+  license: 'MIT',
+  xterm: {
+    background: '#0d1117',
+    foreground: '#e6edf3',
+    cursor: '#2f81f7',
+    cursorAccent: '#0d1117',
+    selectionBackground: '#343941',
+    selectionForeground: '#e6edf3',
+    black: '#484f58',
+    red: '#ff7b72',
+    green: '#3fb950',
+    yellow: '#d29922',
+    blue: '#58a6ff',
+    magenta: '#bc8cff',
+    cyan: '#39c5cf',
+    white: '#b1bac4',
+    brightBlack: '#6e7681',
+    brightRed: '#ffa198',
+    brightGreen: '#56d364',
+    brightYellow: '#e3b341',
+    brightBlue: '#79c0ff',
+    brightMagenta: '#d2a8ff',
+    brightCyan: '#56d4dd',
+    brightWhite: '#ffffff',
+  },
+  // In play the fit moves 11 slots and passes 45 of 46. Red stays short
+  // at Lc 40.8.
+  fitted: {
+    foreground: '#dee5eb',
+    red: '#e4635c',
+    green: '#7af185',
+    yellow: '#e1a837',
+    blue: '#56a4fd',
+    brightBlack: '#8e97a2',
+    brightGreen: '#b9ffbc',
+    brightYellow: '#fccc5d',
+    brightBlue: '#82c4ff',
+    brightMagenta: '#d6b0ff',
+    brightCyan: '#6ae6ef',
+  },
+  chrome: { accent: '#2f81f7' },
+};
+
+// ── Iceberg Dark ────────────────────────────────────────────────────
+// The dark terminal colors of iceberg.vim, as published. Its cursor is
+// the gray of its text, so the theme pins its magenta, a soft violet,
+// as the accent the review picked.
+const icebergDark: AppTheme = {
+  id: 'iceberg-dark',
+  label: 'Iceberg Dark',
+  description: 'A blue gray night with muted pastel colors and a soft violet accent.',
+  source: 'Iceberg',
+  author: 'cocopon',
+  license: 'MIT',
+  xterm: {
+    background: '#161821',
+    foreground: '#c6c8d1',
+    cursor: '#c6c8d1',
+    cursorAccent: '#161821',
+    selectionBackground: '#272c42',
+    selectionForeground: '#c6c8d1',
+    black: '#1e2132',
+    red: '#e27878',
+    green: '#b4be82',
+    yellow: '#e2a478',
+    blue: '#84a0c6',
+    magenta: '#a093c7',
+    cyan: '#89b8c2',
+    white: '#c6c8d1',
+    brightBlack: '#6b7089',
+    brightRed: '#e98989',
+    brightGreen: '#c0ca8e',
+    brightYellow: '#e9b189',
+    brightBlue: '#91acd1',
+    brightMagenta: '#ada0d3',
+    brightCyan: '#95c4ce',
+    brightWhite: '#d2d4de',
+  },
+  // In play the fit moves 15 slots and passes 44 of 46. Yellow stays
+  // short at Lc 58.1 and red at Lc 37.8.
+  fitted: {
+    foreground: '#cbcdd6',
+    black: '#272b3c',
+    red: '#d16869',
+    green: '#cfda9c',
+    yellow: '#e0a276',
+    blue: '#809bc1',
+    cyan: '#8cbbc5',
+    brightBlack: '#9196b0',
+    brightRed: '#f99897',
+    brightGreen: '#f1fbbd',
+    brightYellow: '#fdc49b',
+    brightBlue: '#9fbbe0',
+    brightMagenta: '#c0b3e7',
+    brightCyan: '#acdce6',
+    brightWhite: '#e6e9f3',
+  },
+  chrome: { accent: '#a093c7' },
+};
+
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
   triad,
@@ -1454,6 +1566,8 @@ export const BUILTIN_THEMES: AppTheme[] = [
   melangeDark,
   melangeLight,
   modusVivendi,
+  harborDark,
+  icebergDark,
 ];
 
 /** The chrome tokens a theme paints the window with. */

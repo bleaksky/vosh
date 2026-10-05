@@ -476,6 +476,10 @@ describe('Draining chips', () => {
     'melange-light danger': '3.90 to 3.59',
     'modus-vivendi warn': '10.67 to 6.79',
     'modus-vivendi danger': '6.34 to 4.87',
+    'harbor-dark warn': '7.58 to 5.09',
+    'harbor-dark danger': '7.27 to 5.12',
+    'iceberg-dark warn': '7.11 to 4.76',
+    'iceberg-dark danger': '5.44 to 4.07',
   };
 
   it('reads the hours at 3 to 1 or better over the fill and the bare panel, pinned per theme', () => {
