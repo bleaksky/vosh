@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import panelCss from '../../styles/panel.css?raw';
+import affectsCss from '../../styles/affects.css?raw';
 import type { PaneLeaf } from '../paneLayout';
 import { groupCurrentAffects, type CurrentAffect } from '../../stores/gmcp/affectsStore';
 import type { TrackedAffect } from '../../ipc/affects';
@@ -87,11 +87,11 @@ function cellsOf(html: string): string[] {
   return out;
 }
 
-/** The declarations of one rule in panel.css. */
+/** The declarations of one rule in affects.css. */
 function rule(selector: string): string {
-  const at = panelCss.indexOf(`${selector} {`);
+  const at = affectsCss.indexOf(`${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
-  return panelCss.slice(at, panelCss.indexOf('}', at));
+  return affectsCss.slice(at, affectsCss.indexOf('}', at));
 }
 
 const list = (name: string) => groupCurrentAffects(aabahranPacket(name).data);
@@ -267,15 +267,15 @@ describe('TimersView', () => {
       rule("[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before"),
     ).toContain('height: 1.5px');
     // A plus while you have it: the upright stroke, which a minus drops.
-    expect(panelCss).toMatch(
+    expect(affectsCss).toMatch(
       /\.pane-affect-mark:not\(\.is-harmful\):not\(\.is-missing\)::after \{\s*left: 3\.25px;\s*top: 0;\s*width: 1\.5px;\s*height: 8px;/,
     );
     // No mark sets the hours at the text edge.
     expect(rule("[data-affects-marker='none'] .pane-affect-mark")).toContain('display: none');
     expect(rule("[data-affects-marker='none'] .pane-affect-hours")).toContain('margin-left: 0');
     // The marker rules come after the base rules they refine.
-    expect(panelCss.indexOf("[data-affects-marker='none'] .pane-affect-hours {")).toBeGreaterThan(
-      panelCss.indexOf('.pane-affect-hours {'),
+    expect(affectsCss.indexOf("[data-affects-marker='none'] .pane-affect-hours {")).toBeGreaterThan(
+      affectsCss.indexOf('.pane-affect-hours {'),
     );
   });
 

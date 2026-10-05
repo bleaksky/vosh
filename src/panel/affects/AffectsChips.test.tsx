@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import panelCss from '../../styles/panel.css?raw';
+import affectsCss from '../../styles/affects.css?raw';
 import type { AffectInput, TrackedInput } from './affectsView';
 import { deriveChrome } from '../../theme/chrome';
 import { composite, contrast, parseHex } from '../../theme/color';
@@ -115,17 +115,17 @@ const labelsOf = (html: string) =>
     (m) => m[1],
   );
 
-/** The declarations of one rule in panel.css. */
+/** The declarations of one rule in affects.css. */
 function rule(selector: string): string {
-  const at = panelCss.indexOf(`${selector} {`);
+  const at = affectsCss.indexOf(`${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
-  return panelCss.slice(at, panelCss.indexOf('}', at));
+  return affectsCss.slice(at, affectsCss.indexOf('}', at));
 }
 
 /** The same, with the selector on one line however the sheet wraps
  *  it. */
 function flatRule(selector: string): string {
-  const flat = panelCss.replace(/\s+/g, ' ');
+  const flat = affectsCss.replace(/\s+/g, ' ');
   const at = flat.indexOf(`${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
   return flat.slice(at, flat.indexOf('}', at));
@@ -295,10 +295,7 @@ describe('ChipsView', () => {
     expect(rule('.pane-chip-dots rect')).toContain('fill: none');
     expect(rule('.pane-chip-other')).toContain('--chip-edge: var(--sep)');
     expect(rule('.pane-chip-harmful')).toContain('var(--danger) 55%');
-    const chips = panelCss.slice(
-      panelCss.indexOf('/* Board Affects C'),
-      panelCss.indexOf('/* ── Group'),
-    );
+    const chips = affectsCss.slice(affectsCss.indexOf('/* Board Affects C'));
     expect(chips).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(chips).not.toContain('dashed');
   });
@@ -377,13 +374,15 @@ describe('Draining chips', () => {
     expect(danger).toContain('--chip-edge: var(--sep)');
     // The drain rules come after Grouped chips', so they win at equal
     // weight, and touch only the tracked chips running out.
-    const drainAt = panelCss.indexOf("[data-chip-fill='drain']");
-    expect(drainAt).toBeGreaterThan(panelCss.indexOf('.pane-chip-tracked.is-danger.is-draining {'));
+    const drainAt = affectsCss.indexOf("[data-chip-fill='drain']");
+    expect(drainAt).toBeGreaterThan(
+      affectsCss.indexOf('.pane-chip-tracked.is-danger.is-draining {'),
+    );
     // Each selector on one line, however the sheet wraps it. A light
     // theme changes only the red fill and the yellow hours, by the
     // theme's own appearance, never by its id.
-    const drainCss = panelCss
-      .slice(drainAt, panelCss.indexOf('/* ── Group'))
+    const drainCss = affectsCss
+      .slice(drainAt)
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\s+/g, ' ');
     const selectors = [...drainCss.matchAll(/([^{}]+)\{[^}]*\}/g)].flatMap((m) =>

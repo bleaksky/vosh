@@ -1,0 +1,700 @@
+/* The Affects pane in its three styles, Timers first, Countdown and
+   Grouped chips, with the markers, the recast tint and the draining
+   fill you pick, and the words a screen reader hears for a cell. */
+
+/* ── Affects ─────────────────────────────────────────────────────── */
+
+/* Words for a screen reader that a cell shows only as glyphs and
+   color. */
+.pane-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Board Affects A, timers first. Two columns 16 apart on 22 px rows
+   at 12 px, 18 in from the left and 12 from the right. In each cell the mark
+   sits at x 0, the hours right aligned in a column of three cells from
+   x 14, and the name 8 after them, both in the game face. While a
+   longer count shows, TimersView sets --affect-hours-ch on the body
+   and every cell's column widens to fit it. */
+.pane-affects-grid {
+  display: grid;
+  column-gap: 16px;
+  grid-auto-rows: var(--mud-affects-row);
+  margin: 0;
+  padding: 0 12px 0 18px;
+  list-style: none;
+}
+
+.pane-affect {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--mud-affects-row);
+}
+
+/* The mark keeps its 8 px at every size and sits centered on the row,
+   7 px down a 22 px row. */
+.pane-affect-mark {
+  --mark: var(--success);
+  position: absolute;
+  left: 0;
+  top: round((var(--mud-affects-row) - 8px) / 2, 1px);
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* A tracked slot's mark agrees with its hours. Every marker shape
+   paints with --mark, so the color carries the state in each. */
+.pane-affect-mark.is-up {
+  background: var(--mark);
+}
+
+.pane-affect-mark.is-warn {
+  --mark: var(--warn);
+  background: var(--mark);
+}
+
+.pane-affect-mark.is-danger {
+  --mark: var(--danger);
+  background: var(--mark);
+}
+
+.pane-affect-mark.is-missing {
+  --mark: var(--danger);
+  border: 1.25px solid var(--mark);
+  background: transparent;
+}
+
+/* Something harmful on you takes a 6 px diamond, never a dot. */
+.pane-affect-mark.is-harmful {
+  --mark: var(--danger);
+  left: 1px;
+  top: round((var(--mud-affects-row) - 6px) / 2, 1px);
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--mark);
+  transform: rotate(45deg);
+}
+
+/* The hours follow the game: one hour or none in bold red, and Vosh
+   warns in yellow at two. `+` is permanent and `-` missing. */
+.pane-affect-hours {
+  flex: none;
+  width: var(--mud-affects-hours);
+  min-width: calc(var(--affect-hours-ch, 3) * 1ch);
+  margin-left: 14px;
+  text-align: right;
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.pane-affect-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-affect-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+.pane-affect-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-affect-untracked .pane-affect-name {
+  color: var(--secondary);
+}
+
+.pane-affect-missing .pane-affect-name,
+.pane-affect-harmful .pane-affect-name {
+  color: var(--danger-text);
+}
+
+/* The marker you pick in Settings, Layout, Affects. The pane body
+   names it, and the dot, the default, needs no rule. Harmful keeps its
+   diamond under every shape but none.
+
+   Square: the dot's 8 px box at radius 1.5, hollow while missing. */
+[data-affects-marker='square'] .pane-affect-mark:not(.is-harmful) {
+  border-radius: 1.5px;
+}
+
+/* Plus and minus: 8 px strokes 1.5 thick, a plus while you have it and
+   a minus while you miss it. */
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful) {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before,
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful):not(.is-missing)::after {
+  content: '';
+  position: absolute;
+  border-radius: 0.75px;
+  background: var(--mark);
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before {
+  left: 0;
+  top: 3.25px;
+  width: 8px;
+  height: 1.5px;
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful):not(.is-missing)::after {
+  left: 3.25px;
+  top: 0;
+  width: 1.5px;
+  height: 8px;
+}
+
+/* None: no mark at all, and the hours start at the pane's text edge.
+   The hours, the game's own + and -, and the red names still carry
+   the state. */
+[data-affects-marker='none'] .pane-affect-mark {
+  display: none;
+}
+
+[data-affects-marker='none'] .pane-affect-hours {
+  margin-left: 0;
+}
+
+/* The hairline between your tracked slots and the rest. */
+.pane-affects-rule {
+  height: 1px;
+  margin: var(--mud-affects-rule-gap) 12px var(--mud-affects-rule-gap) 18px;
+  background: var(--divider);
+}
+
+/* The rest scroll in a window of whole rows, a page at a time, so a
+   row is never cut. TimersView sets the height. The count cell stands
+   in for the scroll bar. */
+.pane-affects-rest {
+  overflow: hidden;
+}
+
+.pane-affects-rest.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-affects-rest.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-affects-rest .is-page-start {
+  scroll-snap-align: start;
+}
+
+.pane-affects-more-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--mud-affects-row);
+}
+
+/* The count of what does not fit, at 12 px where the names start,
+   after an empty hours column as wide as every other cell's. */
+.pane-affects-more {
+  display: flex;
+  align-items: center;
+  height: var(--mud-affects-row);
+  margin: 0 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tertiary);
+  font: inherit;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.pane-affects-more:hover {
+  color: var(--secondary);
+}
+
+.pane-affects-more:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--r-key);
+}
+
+/* Board Affects B, Countdown. One run on 23 px rows, two columns 24
+   apart from 360 px, 18 in from the left and 12 from the right, at 12
+   px. Each cell holds the mark at x 0, y 5, the name from x 14, the
+   hours at the right edge, and a 2 px meter under the text from x 14
+   to the edge. The line is 17 tall with 1 px above the text, as the
+   board draws it under the app's border-box reset. At another size
+   the mark stays centered on the text. */
+.pane-countdown-window {
+  overflow: hidden;
+}
+
+.pane-countdown-window.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-countdown-window.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-countdown-window .is-page-start {
+  scroll-snap-align: start;
+}
+
+.pane-countdown {
+  display: grid;
+  column-gap: 24px;
+  margin: 0;
+  padding: 0 12px 0 18px;
+  list-style: none;
+}
+
+.pane-countdown-cell {
+  position: relative;
+  min-width: 0;
+  height: var(--mud-countdown-row);
+}
+
+.pane-countdown-cell .pane-affect-mark {
+  top: round(1px + var(--mud-line) / 2 - 4px, 1px);
+}
+
+.pane-countdown-cell .pane-affect-mark.is-harmful {
+  top: round(1px + var(--mud-line) / 2 - 3px, 1px);
+}
+
+.pane-countdown-line {
+  display: flex;
+  align-items: center;
+  height: calc(var(--mud-line) + 1px);
+  padding: 1px 0 0 14px;
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+}
+
+.pane-countdown-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-affect-untracked .pane-countdown-name {
+  color: var(--secondary);
+}
+
+.pane-affect-missing .pane-countdown-name,
+.pane-affect-harmful .pane-countdown-name {
+  color: var(--danger-text);
+}
+
+/* The hours follow the same rule as Timers first. */
+.pane-countdown-hours {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.pane-countdown-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-countdown-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+/* The meter drains over the affect's own cast. Full for a permanent
+   affect, empty for a missing one, and gone when the server sent no
+   hours. */
+.pane-countdown-meter {
+  position: absolute;
+  left: 14px;
+  right: 0;
+  top: var(--mud-countdown-meter-top);
+  height: var(--mud-countdown-meter);
+  border-radius: 1px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.pane-countdown-fill {
+  display: block;
+  height: var(--mud-countdown-meter);
+  border-radius: 1px;
+  background: var(--tertiary);
+}
+
+.pane-countdown-cell.is-warn .pane-countdown-fill {
+  background: var(--warn);
+}
+
+.pane-countdown-cell.is-danger .pane-countdown-fill {
+  background: var(--danger);
+}
+
+/* The count of what waits on the next page, in the last cell of a page
+   where the names start. */
+.pane-countdown-more-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  height: var(--mud-countdown-row);
+  padding: 1px 0 0 14px;
+}
+
+.pane-countdown-more-cell .pane-affects-more {
+  height: var(--mud-line);
+  margin: 0;
+}
+
+/* No mark: the names, the meters, and the count start at the text
+   edge. */
+[data-affects-marker='none'] .pane-countdown-line,
+[data-affects-marker='none'] .pane-countdown-more-cell {
+  padding-left: 0;
+}
+
+[data-affects-marker='none'] .pane-countdown-meter {
+  left: 0;
+}
+
+/* Tint what to recast, in Timers first and Countdown: a missing affect
+   sits on a red wash, and one about to drop on board C's yellow at two
+   hours or red at one or none. The wash sits behind the row, 6 px past
+   it each side at radius 4, 20 tall in Timers first like a chip, and
+   22 tall over the text and the meter in Countdown. The missing wash is
+   8 percent, so a red name keeps 4 to 1 or better on the light themes. */
+[data-affects-tint] .pane-affect,
+[data-affects-tint] .pane-countdown-cell {
+  isolation: isolate;
+}
+
+[data-affects-tint]
+  :is(.pane-affect, .pane-countdown-cell):is(.pane-affect-missing, .pane-affect-expiring)::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: -6px;
+  right: -6px;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 4px;
+  background: var(--recast-wash);
+}
+
+/* As specific as the rule above, and after it, so Countdown's wash
+   starts at the cell's top. */
+[data-affects-tint] .pane-countdown-cell:is(.pane-affect-missing, .pane-affect-expiring)::before {
+  top: 0;
+}
+
+[data-affects-tint] .pane-affect-missing {
+  --recast-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+[data-affects-tint] .pane-affect-expiring {
+  --recast-wash: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+[data-affects-tint] .pane-affect-expiring:has(.is-danger) {
+  --recast-wash: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+/* Board Affects C, Grouped chips. chipsGrid packs the lines, and each
+   sits at its own top in a page as tall as the body. Pages stack and
+   scroll a page at a time, as the other styles do. Lines run from x 18
+   to 12 from the right, chips 4 apart, each line a chip tall. */
+.pane-chips {
+  overflow: hidden;
+}
+
+.pane-chips.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-chips.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-chips-page {
+  position: relative;
+  scroll-snap-align: start;
+}
+
+.pane-chips-line {
+  position: absolute;
+  left: 18px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--mud-chip);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The group's name in the board's 56 px gutter, 8 px before the chips,
+   on the group's first line. Under 360 px it runs in at the start of
+   that line instead. */
+.pane-chips-label {
+  flex: none;
+  width: var(--mud-chip-gutter);
+  margin: 0 4px 0 0;
+  font-size: round(11px * var(--mud-scale), 1px);
+  line-height: var(--mud-chip);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.pane-chips-runin {
+  width: auto;
+}
+
+/* The count of what waits on the next page, 8 px after the last chip. */
+.pane-chips-more {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: var(--mud-chip);
+  margin-left: 4px;
+}
+
+.pane-chips-more .pane-affects-more {
+  height: var(--mud-chip);
+  margin: 0;
+}
+
+/* A chip: 20 tall at 12 px, 7 px each side, radius 4, the name and 6
+   px after it the hours, in the game face. Its ground is the track, and
+   while its gauge drains, the gauge over it from the left, as wide as
+   --gauge of the chip. A 1 px inset ring shows the edge. Every tone
+   mixes a theme token. */
+.pane-chip {
+  --chip-track: transparent;
+  --chip-gauge: transparent;
+  --chip-edge: transparent;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: var(--mud-chip);
+  padding: 0 7px;
+  border-radius: 4px;
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  white-space: nowrap;
+  background: var(--chip-track);
+  box-shadow: inset 0 0 0 1px var(--chip-edge);
+}
+
+.pane-chip.is-draining {
+  background:
+    linear-gradient(to right, var(--chip-gauge) calc(var(--gauge, 1) * 100%), transparent 0),
+    var(--chip-track);
+}
+
+.pane-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.pane-chip-hours {
+  flex: none;
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--secondary);
+}
+
+.pane-chip-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-chip-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+/* On a light theme the yellow hours read under 3 to 1 on the tinted
+   chip (Solarized Light), so a light theme draws them in the deeper
+   warn text tone, in both chip styles. */
+:root[data-appearance='light'] .pane-chip-tracked.is-warn .pane-chip-hours {
+  color: var(--warn-text);
+}
+
+.pane-chip-other .pane-chip-name {
+  color: var(--secondary);
+}
+
+.pane-chip-missing .pane-chip-name,
+.pane-chip-harmful .pane-chip-name {
+  color: var(--danger-text);
+}
+
+/* A tracked chip is filled, as board C draws it, and the fill drains
+   from the left as the hours run down. While it drains, a hairline
+   shows the chip's full width. */
+.pane-chip-tracked {
+  --chip-track: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.pane-chip-tracked.is-draining {
+  --chip-track: transparent;
+  --chip-gauge: color-mix(in srgb, var(--text) 8%, transparent);
+  --chip-edge: var(--sep);
+}
+
+/* Running out, the whole chip takes board C's tint, yellow at two hours
+   and red at one or none, and the chip's extent needs no hairline. At
+   full it is exactly the board. While it drains, the gauge shows in the
+   same hue over the tint. */
+.pane-chip-tracked.is-warn {
+  --chip-track: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.pane-chip-tracked.is-danger {
+  --chip-track: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.pane-chip-tracked.is-warn.is-draining {
+  --chip-track: color-mix(in srgb, var(--warn) 14%, transparent);
+  --chip-gauge: color-mix(in srgb, var(--warn) 20%, transparent);
+  --chip-edge: transparent;
+}
+
+.pane-chip-tracked.is-danger.is-draining {
+  --chip-track: color-mix(in srgb, var(--danger) 16%, transparent);
+  --chip-gauge: color-mix(in srgb, var(--danger) 22%, transparent);
+  --chip-edge: transparent;
+}
+
+/* Missing: no ground, and a ring of soft red dots, each 1.5 px across
+   on a 3 px pitch, all the way round the chip and its corners. The
+   chip draws the ring as an SVG over itself, so the dots come out
+   round and close evenly at any width. It sits inside the chip, which
+   keeps the width chipsGrid packs. */
+.pane-chip-missing {
+  position: relative;
+  background: none;
+  box-shadow: none;
+}
+
+.pane-chip-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pane-chip-dots rect {
+  fill: none;
+  stroke: var(--danger);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+}
+
+/* The rest keep the board's hairline ring, and a harmful affect a
+   danger ring. Their hours count down, and they carry no gauge. */
+.pane-chip-other {
+  --chip-edge: var(--sep);
+}
+
+.pane-chip-harmful {
+  --chip-edge: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+/* Draining chips. A chip running out keeps no tint of its own. A
+   hairline shows its full width, and the yellow or red, at 30 percent,
+   covers only the share that matches the hours it has left, the whole
+   chip while it is at full. Every other chip, the groups and the pages
+   are Grouped chips exactly. */
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn,
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  background:
+    linear-gradient(to right, var(--chip-gauge) calc(var(--gauge, 1) * 100%), transparent 0),
+    var(--chip-track);
+}
+
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn,
+[data-chip-fill='drain'] .pane-chip-tracked.is-warn.is-draining {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  --chip-gauge: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger,
+[data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining {
+  --chip-track: transparent;
+  --chip-edge: var(--sep);
+  --chip-gauge: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+/* On a light theme the fill darkens toward the hours, and yellow hours
+   read only 3 to 1 on the bare panel. So there a yellow chip draws its
+   hours in the deeper warn text tone, as a red one already draws its
+   own in danger text, each 4.5 to 1 on the panel. A red at or near 4.5
+   to 1 is its own text tone, or close to it, so the hours there are
+   nearly the fill color over itself. The red fill eases to 24 percent.
+   That holds the hours at 3 to 1 or better over the fill on every built
+   in light theme and on the common imported light palettes, and still
+   stands the drain at least 1.3 to 1 off the bare panel on the built in
+   ones. The yellow keeps its 30, and its hours take warn text by the
+   rule both chip styles share. Dark themes stay as drawn. */
+:root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger,
+:root[data-appearance='light'] [data-chip-fill='drain'] .pane-chip-tracked.is-danger.is-draining {
+  --chip-gauge: color-mix(in srgb, var(--danger) 24%, transparent);
+}

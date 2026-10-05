@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import panelCss from '../styles/panel.css?raw';
+import affectsCss from '../styles/affects.css?raw';
 import mapCss from '../styles/map.css?raw';
 import frameCss from '../styles/frame.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
@@ -27,6 +28,7 @@ function rulesOf(css: string): { selector: string; body: string }[] {
 // pane's rules join the panel's.
 const RULES = [
   ...rulesOf(panelCss),
+  ...rulesOf(affectsCss),
   ...rulesOf(mapCss).filter((r) => r.selector.includes('.pane-')),
 ];
 const FRAME_RULES = rulesOf(frameCss);
