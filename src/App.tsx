@@ -988,7 +988,7 @@ function App() {
         setPanelFont(cfg.panel_font);
         setPanelSize(cfg.panel_font_size);
         setTerminalLineHeight(cfg.terminal_line_height);
-        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
+        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         setBlinkChoice(cfg.blink_text);
         setFitGameColors(cfg.fit_game_colors);
@@ -1058,7 +1058,7 @@ function App() {
       setPanelFont(cfg.panel_font);
       setPanelSize(cfg.panel_font_size);
       setTerminalLineHeight(cfg.terminal_line_height);
-      setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
+      setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme_terminal_colors));
       applyBrightBold(cfg.bright_bold);
       setBlinkChoice(cfg.blink_text);
       setFitGameColors(cfg.fit_game_colors);

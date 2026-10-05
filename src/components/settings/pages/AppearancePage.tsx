@@ -328,7 +328,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           description="Turn this off to keep the exact colors your MUD sends."
         >
           <Toggle
-            checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
+            checked={resolveThemeTerminalColors(config.theme_terminal_colors)}
             onChange={(on) => update({ theme_terminal_colors: on }, { now: true })}
           />
         </Row>

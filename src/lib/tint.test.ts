@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { resolveThemeTerminalColors } from './themes';
 
 describe('resolveThemeTerminalColors', () => {
-  it('tints output with the theme by default for every theme', () => {
-    for (const theme of ['obsidian-ember', 'nord', 'rubric', 'custom-2']) {
-      expect(resolveThemeTerminalColors(theme, null)).toBe(true);
-    }
+  it('tints output with the theme by default', () => {
+    expect(resolveThemeTerminalColors(null)).toBe(true);
   });
 
   it('lets the stored choice win', () => {
-    expect(resolveThemeTerminalColors('obsidian-ember', false)).toBe(false);
-    expect(resolveThemeTerminalColors('nord', true)).toBe(true);
+    expect(resolveThemeTerminalColors(false)).toBe(false);
+    expect(resolveThemeTerminalColors(true)).toBe(true);
   });
 });

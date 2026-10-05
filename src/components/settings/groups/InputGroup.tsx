@@ -140,7 +140,7 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
 
       <PromptSection
         fontFamily={renderFontStack(config.font_family)}
-        themeTerminalColors={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
+        themeTerminalColors={resolveThemeTerminalColors(config.theme_terminal_colors)}
         brightBold={config.bright_bold}
         onError={onError}
       />
