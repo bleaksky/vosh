@@ -120,7 +120,7 @@ export function chipWidth(name: string, hours: string, measure: ChipMeasure): nu
 export const CHIP_DOT_PX = 1.5;
 /** From one dot to the next, about. */
 export const CHIP_DOT_PITCH = 3;
-/** The chip's corner radius, panel.css .pane-chip. */
+/** The chip's corner radius, affects.css .pane-chip. */
 export const CHIP_RADIUS = 4;
 
 /** The ring's path round a chip `width` wide and `height` tall, inset

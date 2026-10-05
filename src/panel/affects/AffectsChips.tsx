@@ -52,7 +52,7 @@ import { usePaneText } from '../paneTextSize';
 // out draws differently: no tint over the whole chip, a hairline for
 // its full width, and the yellow or red only over the share that
 // matches the hours it has left. The body carries data-chip-fill, and
-// panel.css draws the rest. On a light theme it eases the red fill and
+// affects.css draws the rest. On a light theme it eases the red fill and
 // draws yellow hours in the warn text tone, so the hours read over the
 // fill. Dark themes stay as drawn.
 
