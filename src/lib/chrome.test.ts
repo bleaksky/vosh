@@ -6,13 +6,14 @@ import {
   ON_ACCENT_CONTRAST,
   SECONDARY_CONTRAST,
   STATUS_CONTRAST,
+  STATUS_PART,
   STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
   tokensToCssVars,
   tokenVarName,
 } from './chrome';
 import { contrast, deltaEOk, parseHex, rgbToOklch, type Rgb } from './color';
-import { seenApart } from './gameFit';
+import { seenApart, VISION_SLACK } from './gameFit';
 import { DEFAULT_THEME_ID, findTheme, themeTokens } from './themes';
 import tokensCss from '../styles/tokens.css?raw';
 
@@ -242,18 +243,28 @@ describe('status colors for a color vision', () => {
   const kanso = findTheme('kanso-zen').xterm;
 
   // Kanso Zen's danger and success look 2.9 apart to a deuteranope. The
-  // window darkens danger and lifts success at their hue until they stand
-  // as far apart as a typical eye sees them, and every token that only
-  // reads the ground stays as it is.
-  it('parts danger from success for a deuteranope and leaves the ground tokens', () => {
+  // window turns success blue and danger toward vermilion until they
+  // stand STATUS_PART apart, and every token that only reads the ground
+  // stays as it is. A tritanope keeps the Typical status colors.
+  it('swaps danger and success for a deuteranope and leaves the ground tokens', () => {
     const typical = deriveChrome(kanso);
     const deutan = deriveChrome(kanso, {}, 'deuteranopia');
     expect(deriveChrome(kanso, {}, 'typical')).toEqual(typical);
     const apart = (t: typeof typical) => seenApart(hex(t.danger), hex(t.success), 'deuteranopia');
     expect(apart(typical)).toBeCloseTo(2.9, 1);
     expect(apart(deutan)).toBeGreaterThanOrEqual(
-      deltaEOk(hex(typical.danger), hex(typical.success)),
+      Math.min(STATUS_PART, deltaEOk(hex(typical.danger), hex(typical.success))) - VISION_SLACK,
     );
+    const hue = (c: string) => rgbToOklch(hex(c)).h;
+    expect(hue(deutan.success)).toBeGreaterThanOrEqual(205);
+    expect(hue(deutan.success)).toBeLessThanOrEqual(255);
+    expect(hue(deutan.danger)).toBeGreaterThanOrEqual(30);
+    expect(hue(deutan.danger)).toBeLessThanOrEqual(60);
+    expect(deutan.warn).toBe(typical.warn);
+    const tritan = deriveChrome(kanso, {}, 'tritanopia');
+    for (const key of ['danger', 'warn', 'success'] as const) {
+      expect(tritan[key], key).toBe(typical[key]);
+    }
     for (const key of ['bg', 'panel', 'sep', 'text', 'secondary', 'tertiary', 'raised'] as const) {
       expect(deutan[key], key).toBe(typical[key]);
     }

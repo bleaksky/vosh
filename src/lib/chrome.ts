@@ -54,11 +54,12 @@
 // stands. Overridden base colors (bg, panel, raised, text, the status
 // colors) feed the tokens derived from them.
 //
-// A color vision other than Typical tunes the status colors after the
-// rule above (statusSeenBy), so danger stands as far from success and
-// from warn, seen through that vision, as a typical eye sees them, and
-// none runs into the text and secondary tiers the marks sit beside. The
-// text tones, the accent and the selection then derive from the tuned
+// A color vision other than Typical swaps the status colors after the
+// rule above (statusSeenBy), the way the game text swaps: under
+// deuteranopia and protanopia success turns blue and danger toward
+// vermilion, clear of the text and secondary tiers the marks sit beside.
+// Tritanopia keeps them, since a tritanope tells them apart already. The
+// text tones, the accent and the selection then derive from the swapped
 // colors, and the accent the rule picks stands ACCENT_APART from each
 // as that vision sees them.
 
@@ -81,16 +82,14 @@ import {
   type Rgb,
 } from './color';
 import {
-  HUE_TURN,
-  HUE_TURN_FAR,
+  CHROMA_KEEP,
+  KEPT_SLACK,
   seenApart,
   seenLab,
-  turnRoom,
-  VISIBLE_CHANGE,
   VISION_GUARD,
   VISION_SLACK,
   type ColorVision,
-  type TurnFamily,
+  type SwapTarget,
 } from './gameFit';
 import type { XtermPalette } from './themes';
 
@@ -413,20 +412,59 @@ interface Picked {
   rgb: Rgb;
 }
 
+export type StatusKey = 'danger' | 'warn' | 'success';
+
+// Success turns blue and danger toward vermilion, the hues the game text
+// takes for tells and hits. Warn keeps its hue.
+const RED_GREEN_STATUS: Readonly<Partial<Record<StatusKey, SwapTarget>>> = {
+  danger: { hue: 45, reach: 15, chroma: 0.13 },
+  success: { hue: 230, reach: 25, chroma: 0.11 },
+};
+
+/// The status colors each vision turns, the way the game text swaps
+/// (gameFit SWAP_TARGETS). Tritanopia turns none, since a tritanope
+/// tells red, yellow and green apart already, and Typical none.
+export const STATUS_SWAP: Readonly<
+  Record<ColorVision, Readonly<Partial<Record<StatusKey, SwapTarget>>>>
+> = {
+  typical: {},
+  deuteranopia: RED_GREEN_STATUS,
+  protanopia: RED_GREEN_STATUS,
+  tritanopia: {},
+};
+
+/// How far success moves at least where a vision turns it, in OKLab dE
+/// times 100 as a typical eye sees it, so the swap shows.
+export const STATUS_MOVE_MIN = 10;
+
+/// How far apart danger and success stand at least as the vision sees
+/// them, or as far as a typical eye sees the Typical colors if that is
+/// less, give or take VISION_SLACK.
+export const STATUS_PART = 20;
+
 /// The steps the status colors take for a color vision: lightness in
-/// OKLCH L, up to STATUS_REACH either way, and hue in degrees.
+/// OKLCH L, up to STATUS_REACH either way, and hue in degrees inside a
+/// turned color's window.
 const STATUS_STEP = 0.01;
 const STATUS_REACH = 0.4;
-const STATUS_TURN_STEP = 2;
-/// What a step costs, as in the game color fit (gameFit). A pair or an
-/// accent short of its target costs 100 times the share it misses, plus
-/// 5. A dE of move costs 0.035 and a degree of turn 0.1, and a status
-/// color that keeps under 60 percent of its chroma a heavy charge.
+const STATUS_HUE_STEP = 2.5;
+/// A turned status color keeps this share of its own chroma, or of the
+/// chroma it aims for if that is less, so no distance is bought by
+/// lifting it to white (gameFit CHROMA_KEEP).
+/// What the solve weighs, firmest first: standing too near a pinned
+/// accent, danger coming nearer warn than under Typical or warn nearer
+/// success than its floor, success moving too little to see, standing
+/// too near a picked accent, and danger short of its distance from
+/// success. Under them each dE of move costs 0.035, each degree off the
+/// target hue 0.02 and each dE danger stands short of success 10.
+const PINNED_COST = 1e8;
+const PAIR_COST = 1e7;
+const MOVE_SHORT_COST = 1e6;
+const PICKED_COST = 1e5;
+const PART_COST = 1e4;
 const MOVE_COST = 0.035;
-const TURN_COST = 0.1;
-/// A turn past HUE_TURN must close at least this much of the gap, in
-/// OKLab dE times 100, or the smaller turn stays.
-const FAR_GAIN = 0.5;
+const HUE_COST = 0.02;
+const PART_SOFT = 10;
 
 /// The accent the status colors keep clear of: the theme's pin, or the
 /// one the rule picked for Typical.
@@ -439,20 +477,16 @@ interface StatusOption {
   rgb: Rgb;
   seen: { L: number; a: number; b: number };
   cost: number;
-  /// How much nearer the accent the option stands than it may, in dE.
-  gap: number;
 }
 
 const seenDistance = (p: StatusOption['seen'], q: StatusOption['seen']) =>
   100 * Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
 
-const missCost = (value: number, need: number) =>
-  value >= need ? 0 : 100 * ((need - value) / need + 0.05);
+const hueOff = (h: number, target: number) => Math.abs(((h - target + 540) % 360) - 180);
 
-// The accent a status color keeps clear of, as `vision` sees them: the
-// rule's pick by ACCENT_APART where the Typical color stands that far
-// from it, and a pinned accent by as far as the Typical color stands,
-// up to ACCENT_APART.
+// How near the accent a status color may come, as `vision` sees them:
+// as near as the Typical color stands, up to ACCENT_APART, and for the
+// rule's pick no nearer than the Typical color stands to a typical eye.
 function accentNeedOf(accent: StatusAccent, c: Rgb, vision: ColorVision): number {
   return Math.min(
     ACCENT_APART,
@@ -462,163 +496,111 @@ function accentNeedOf(accent: StatusAccent, c: Rgb, vision: ColorVision): number
 }
 
 // Every color a status color may take for `vision`: its own lightness
-// stepped either way and, for a family that turns, its hue turned up to
-// `bound` degrees. Each keeps the contrast the Typical color holds on
-// every ground, up to the 3:1 floor, stays clear of the text the marks
-// sit beside (`marks`), and carries its cost, with the charge of
-// standing too near the accent.
+// stepped either way and, for a color the vision turns (`target`), every
+// hue inside its window at the chroma it aims for. Each keeps the
+// contrast the Typical color holds on every ground, up to the 3:1
+// floor, and stands as far from the text the marks sit beside (`marks`)
+// as the Typical color stands, up to VISION_GUARD, both as the vision
+// sees them and as a typical eye does. Each carries its cost: its move,
+// its hue off the target, standing too near the accent, and for a color
+// that must move, moving too little.
 function statusOptions(
   from: Picked,
-  family: TurnFamily | null,
-  bound: number,
+  target: SwapTarget | undefined,
   grounds: Rgb[],
   vision: ColorVision,
   accent: StatusAccent | null,
   marks: Rgb[],
+  moveMin: number,
 ): StatusOption[] {
   const c = from.rgb;
   const seenAccent = accent && seenLab(accent.rgb, vision);
-  // No option comes nearer the text, as the vision sees them, than the
-  // Typical color stands, or VISION_GUARD if that is less, so a success
-  // mark never reads as the words beside it.
-  const seenMarks = marks.map((m) => seenLab(m, vision));
-  const markFloors = marks.map((m) => Math.min(seenApart(c, m, vision), VISION_GUARD));
-  const clearOfText = (seen: StatusOption['seen']) =>
-    seenMarks.every((m, j) => seenDistance(m, seen) >= markFloors[j]);
-  // The accent the rule picked for Typical stands ACCENT_APART from each
-  // status color, as the vision sees them, where the Typical colors stand
-  // that far from it. A pinned accent is the theme's own pick, which the
-  // rule never moves apart from the status colors, so a status color only
-  // keeps from coming nearer to it than it stands now, up to ACCENT_APART.
   const accentNeed = accent ? accentNeedOf(accent, c, vision) : 0;
-  const option = (rgb: Rgb, turn: number): StatusOption => {
+  const option = (rgb: Rgb, h: number): StatusOption => {
     const seen = seenLab(rgb, vision);
-    let cost = deltaEOk(c, rgb) * MOVE_COST + turn * TURN_COST;
-    const c0 = rgbToOklch(c).C;
-    const kept = rgbToOklch(rgb).C;
-    if (c0 > 0.04 && kept < 0.6 * c0) cost += ((0.6 * c0 - kept) / c0) * 400;
-    let gap = 0;
-    if (seenAccent) {
-      const apart = seenDistance(seenAccent, seen);
-      cost += missCost(apart, accentNeed);
-      gap = Math.max(0, accentNeed - apart);
+    const move = deltaEOk(c, rgb);
+    let cost = move * MOVE_COST + (target ? hueOff(h, target.hue) * HUE_COST : 0);
+    if (move < moveMin) cost += MOVE_SHORT_COST * (1 + moveMin - move);
+    if (seenAccent && accent) {
+      const short = accentNeed - seenDistance(seenAccent, seen);
+      if (short > 1e-9) cost += (accent.pinned ? PINNED_COST : PICKED_COST) * (1 + short);
     }
-    return { rgb, seen, cost, gap };
+    return { rgb, seen, cost };
   };
   // A pin that is not hex stays as it is.
   if (parseHex(from.css) === null) return [option(c, 0)];
   const lch = rgbToOklch(c);
   const floors = grounds.map((g) => Math.min(STATUS_CONTRAST, contrast(c, g)));
-  const room = family ? turnRoom(family, lch.h, bound) : 0;
-  const turns: number[] = [];
-  for (let t = 0; t < room; t += STATUS_TURN_STEP) turns.push(t);
-  turns.push(room);
+  const seenMarks = marks.map((m) => seenLab(m, vision));
+  const markFloors = marks.map((m) => [
+    Math.min(seenApart(c, m, vision), VISION_GUARD),
+    Math.min(deltaEOk(c, m), VISION_GUARD),
+  ]);
+  const chroma = target ? Math.max(lch.C, target.chroma) : lch.C;
+  const keepChroma = target ? CHROMA_KEEP * Math.min(lch.C, target.chroma) : 0;
+  const hues: number[] = [];
+  if (target) {
+    for (let d = -target.reach; d <= target.reach + 1e-9; d += STATUS_HUE_STEP) {
+      hues.push((target.hue + d + 360) % 360);
+    }
+  } else {
+    hues.push(lch.h);
+  }
   const out: StatusOption[] = [];
   const reach = Math.round(STATUS_REACH / STATUS_STEP);
-  for (const turn of turns) {
+  for (const h of hues) {
     for (let i = -reach; i <= reach; i += 1) {
-      if (turn === 0 && i === 0) {
-        out.push(option(c, 0));
+      if (!target && i === 0) {
+        out.push(option(c, h));
         continue;
       }
       const L = lch.L + i * STATUS_STEP;
       if (L < 0 || L > 1) continue;
-      const raw = oklchToRgbInGamut({ L, C: lch.C, h: (lch.h + turn) % 360 });
+      const raw = oklchToRgbInGamut({ L, C: chroma, h });
       const rgb = { r: Math.round(raw.r), g: Math.round(raw.g), b: Math.round(raw.b) };
       if (grounds.some((g, j) => contrast(rgb, g) < floors[j])) continue;
-      const o = option(rgb, turn);
-      if (clearOfText(o.seen)) out.push(o);
+      if (target && rgbToOklch(rgb).C < keepChroma) continue;
+      const o = option(rgb, h);
+      const clear = seenMarks.every(
+        (m, j) =>
+          seenDistance(m, o.seen) >= markFloors[j][0] &&
+          deltaEOk(rgb, marks[j]) >= markFloors[j][1],
+      );
+      if (clear) out.push(o);
     }
   }
-  return out;
-}
-
-interface StatusPick {
-  danger: StatusOption;
-  warn: StatusOption;
-  success: StatusOption;
-  cost: number;
-  /// How far the pairs and the accent fall short, in dE.
-  gap: number;
-}
-
-// The cheapest danger, warn and success among the options, where warn
-// and success stand at least `apart` from each other as the vision sees
-// them. Given danger, the best success and the best warn do not depend
-// on each other unless they stand too near, so each danger tries the
-// best of each first.
-function cheapestStatus(
-  dangers: StatusOption[],
-  warns: StatusOption[],
-  successes: StatusOption[],
-  needs: { success: number; warn: number; floorSuccess: number; floorWarn: number },
-  apart: number,
-): StatusPick {
-  let best: StatusPick | null = null;
-  // A pair never comes nearer than the Typical colors stand, unless it
-  // stays past its target.
-  const ranked = (d: StatusOption, list: StatusOption[], need: number, floor: number) =>
-    list.map((o) => {
-      const away = seenDistance(d.seen, o.seen);
-      const cost = away < floor ? Infinity : o.cost + missCost(away, need);
-      return { o, cost, gap: o.gap + Math.max(0, need - away) };
-    });
-  const cheapest = <T extends { cost: number }>(list: T[]) =>
-    list.reduce((win, o) => (o.cost < win.cost ? o : win));
-  for (const d of dangers) {
-    const s = ranked(d, successes, needs.success, needs.floorSuccess);
-    const w = ranked(d, warns, needs.warn, needs.floorWarn);
-    let ss = cheapest(s);
-    let ww = cheapest(w);
-    if (!Number.isFinite(ss.cost + ww.cost)) continue;
-    if (best !== null && d.cost + ss.cost + ww.cost >= best.cost) continue;
-    if (seenDistance(ss.o.seen, ww.o.seen) < apart) {
-      // The cheapest pair of the two that stands apart.
-      s.sort((a, b) => a.cost - b.cost);
-      w.sort((a, b) => a.cost - b.cost);
-      let pair: [typeof ss, typeof ww] | null = null;
-      for (const so of s) {
-        if (pair && so.cost + w[0].cost >= pair[0].cost + pair[1].cost) break;
-        for (const wo of w) {
-          if (pair && so.cost + wo.cost >= pair[0].cost + pair[1].cost) break;
-          if (!Number.isFinite(so.cost + wo.cost)) break;
-          if (seenDistance(so.o.seen, wo.o.seen) >= apart) {
-            pair = [so, wo];
-            break;
-          }
-        }
-      }
-      if (!pair) continue;
-      [ss, ww] = pair;
-    }
-    const cost = d.cost + ss.cost + ww.cost;
-    if (best === null || cost < best.cost) {
-      best = { danger: d, warn: ww.o, success: ss.o, cost, gap: d.gap + ss.gap + ww.gap };
-    }
-  }
-  return best as StatusPick;
+  // Where no turned color clears every floor, the Typical color stays.
+  return out.length > 0 ? out : [option(c, lch.h)];
 }
 
 const STATUS_CACHE = new Map<string, { danger: Picked; warn: Picked; success: Picked }>();
 
-/** The status colors tuned for `vision`. Seen through that vision,
- *  danger stands as far from success and from warn as a typical eye
- *  sees the Typical colors stand, where it can, and warn comes no
- *  nearer success than VISION_GUARD (gameFit). Each moves in lightness
- *  first. Where lightness leaves a pair short, danger may turn toward
- *  orange and success toward teal, up to HUE_TURN degrees and then
- *  HUE_TURN_FAR, never past HUE_LIMIT (gameFit). Warn moves only in
- *  lightness. No color reads fainter on the panel or on raised than the
- *  3:1 floor, or than the Typical color where that sits under it. Each
- *  stands ACCENT_APART, as the vision sees them, from the accent the
- *  rule picks for Typical, where the Typical color stands that far from
- *  it, and comes no nearer a pinned accent than the Typical color
- *  stands, up to ACCENT_APART. None comes nearer the text the marks sit
- *  beside, `marks`, than the Typical color stands, or VISION_GUARD if
- *  that is less. A color the theme pins in a form other than hex stays
- *  as pinned. Where the Typical colors already stand apart, within
- *  VISION_SLACK (statusHolds), or the best tuning moves no color
- *  VISIBLE_CHANGE, the Typical colors stay. */
+/** The status colors swapped for `vision`. Deuteranopia and protanopia
+ *  turn success blue and danger toward vermilion (STATUS_SWAP), each
+ *  settling its lightness and its hue inside its window, and warn keeps
+ *  its hue and may move in lightness. Floors, firmest first:
+ *
+ *  1. No color reads fainter on the panel or on raised than the 3:1
+ *     floor, or than the Typical color where that sits under it, and
+ *     each stands as far from the text the marks sit beside, `marks`, as
+ *     the Typical color stands, up to VISION_GUARD, seen and typical. A
+ *     turned color keeps CHROMA_KEEP of its chroma, or of the chroma it
+ *     aims for if that is less.
+ *  2. No color comes nearer a pinned accent than the Typical color
+ *     stands, up to ACCENT_APART.
+ *  3. Danger comes no nearer warn, seen, than the Typical colors stand,
+ *     give or take KEPT_SLACK, and warn and success stay as far apart as
+ *     they stand, up to VISION_GUARD.
+ *  4. Success moves at least STATUS_MOVE_MIN.
+ *  5. No color comes nearer the accent the rule picked for Typical than
+ *     the Typical color stands, up to ACCENT_APART. The rule picks again
+ *     after, clear of the swapped colors.
+ *  6. Danger and success stand STATUS_PART apart, seen, or as far as a
+ *     typical eye sees the Typical colors if that is less, give or take
+ *     VISION_SLACK.
+ *
+ *  Tritanopia and Typical keep the Typical colors, and so does a color
+ *  the theme pins in a form other than hex. */
 function statusSeenBy(
   vision: ColorVision,
   typical: { danger: Picked; warn: Picked; success: Picked },
@@ -626,6 +608,8 @@ function statusSeenBy(
   accent: StatusAccent | null,
   marks: Rgb[],
 ): { danger: Picked; warn: Picked; success: Picked } {
+  const targets = STATUS_SWAP[vision];
+  if (Object.keys(targets).length === 0) return typical;
   const { danger, warn, success } = typical;
   const key = [
     vision,
@@ -638,52 +622,76 @@ function statusSeenBy(
   ].join(' ');
   const held = STATUS_CACHE.get(key);
   if (held) return held;
-  if (statusHolds(vision, typical, accent)) {
-    STATUS_CACHE.set(key, typical);
-    return typical;
-  }
-  const needSuccess = deltaEOk(danger.rgb, success.rgb);
-  const needWarn = deltaEOk(danger.rgb, warn.rgb);
-  const needs = {
-    success: needSuccess,
-    warn: needWarn,
-    floorSuccess: Math.min(seenApart(danger.rgb, success.rgb, vision), needSuccess),
-    floorWarn: Math.min(seenApart(danger.rgb, warn.rgb, vision), needWarn),
-  };
-  // Warn and success may come nearer, as the vision sees them, but
-  // never under VISION_GUARD, or under where the Typical colors stand if
-  // that is less.
-  const apart = Math.min(seenApart(warn.rgb, success.rgb, vision), VISION_GUARD);
-  const solve = (bound: number) =>
-    cheapestStatus(
-      statusOptions(danger, 'red', bound, grounds, vision, accent, marks),
-      statusOptions(warn, null, bound, grounds, vision, accent, marks),
-      statusOptions(success, 'green', bound, grounds, vision, accent, marks),
-      needs,
-      apart,
+  const options = (k: StatusKey) =>
+    statusOptions(
+      typical[k],
+      targets[k],
+      grounds,
+      vision,
+      accent,
+      marks,
+      targets[k] && k === 'success' ? STATUS_MOVE_MIN : 0,
     );
-  let best = solve(0);
-  if (best.gap > 0) {
-    const near = solve(HUE_TURN);
-    if (near.gap < best.gap) best = near;
+  const dangers = options('danger');
+  const warns = options('warn');
+  const successes = options('success');
+  const keepWarn = seenApart(danger.rgb, warn.rgb, vision) - KEPT_SLACK;
+  const apart = Math.min(seenApart(warn.rgb, success.rgb, vision), VISION_GUARD);
+  const part = Math.min(STATUS_PART, deltaEOk(danger.rgb, success.rgb));
+  let best: {
+    cost: number;
+    danger: StatusOption;
+    warn: StatusOption;
+    success: StatusOption;
+  } | null = null;
+  for (const d of dangers) {
+    if (best && d.cost >= best.cost) continue;
+    const s = successes.map((o) => {
+      const v = seenDistance(d.seen, o.seen);
+      let cost = o.cost + Math.max(0, part - v) * PART_SOFT;
+      if (v < part - VISION_SLACK) cost += PART_COST * (1 + part - VISION_SLACK - v);
+      return { o, cost };
+    });
+    const w = warns.map((o) => {
+      const v = seenDistance(d.seen, o.seen);
+      return { o, cost: o.cost + (v < keepWarn ? PAIR_COST * (1 + keepWarn - v) : 0) };
+    });
+    const pairCost = (so: (typeof s)[number], wo: (typeof w)[number]) => {
+      const v = seenDistance(so.o.seen, wo.o.seen);
+      return so.cost + wo.cost + (v < apart ? PAIR_COST * (1 + apart - v) : 0);
+    };
+    const cheapest = <T extends { cost: number }>(list: T[]) =>
+      list.reduce((win, o) => (o.cost < win.cost ? o : win));
+    let ss = cheapest(s);
+    let ww = cheapest(w);
+    let cost = d.cost + pairCost(ss, ww);
+    if (seenDistance(ss.o.seen, ww.o.seen) < apart) {
+      // The cheapest pair of the two that stands apart, if one does.
+      const sSorted = [...s].sort((a, b) => a.cost - b.cost);
+      const wSorted = [...w].sort((a, b) => a.cost - b.cost);
+      for (const so of sSorted) {
+        if (d.cost + so.cost + wSorted[0].cost >= cost) break;
+        for (const wo of wSorted) {
+          const c = d.cost + pairCost(so, wo);
+          if (d.cost + so.cost + wo.cost >= cost) break;
+          if (c < cost) {
+            cost = c;
+            ss = so;
+            ww = wo;
+          }
+        }
+      }
+    }
+    if (!best || cost < best.cost) best = { cost, danger: d, warn: ww.o, success: ss.o };
   }
-  if (best.gap > 0) {
-    const far = solve(HUE_TURN_FAR);
-    if (far.gap < best.gap - FAR_GAIN) best = far;
-  }
+  const pick = best as NonNullable<typeof best>;
   const keep = (from: Picked, to: StatusOption): Picked =>
     to.rgb === from.rgb ? from : { css: toHex(to.rgb), rgb: to.rgb };
-  const tuned = {
-    danger: keep(danger, best.danger),
-    warn: keep(warn, best.warn),
-    success: keep(success, best.success),
+  const out = {
+    danger: keep(danger, pick.danger),
+    warn: keep(warn, pick.warn),
+    success: keep(success, pick.success),
   };
-  const most = Math.max(
-    deltaEOk(danger.rgb, tuned.danger.rgb),
-    deltaEOk(warn.rgb, tuned.warn.rgb),
-    deltaEOk(success.rgb, tuned.success.rgb),
-  );
-  const out = most < VISIBLE_CHANGE ? typical : tuned;
   STATUS_CACHE.set(key, out);
   return out;
 }
