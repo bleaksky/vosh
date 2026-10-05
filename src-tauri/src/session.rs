@@ -369,6 +369,10 @@ pub(crate) async fn dial<R: tauri::Runtime>(
             return Err(e.to_string());
         }
     };
+    #[cfg(test)]
+    if quiet {
+        reconnect::hold_try(state);
+    }
 
     {
         let mut current = session.slot.lock().await;
@@ -398,12 +402,16 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(
     state: &SharedState,
     session: &Arc<Session>,
 ) {
+    // The series ends first, so a try that connects as you disconnect
+    // cannot put its link in the slot after the take below.
+    reconnect::cancel(app, session).await;
     {
         let mut current = session.slot.lock().await;
         if let Some(handle) = current.take() {
             handle.shutdown().await;
         }
     }
+    // A link that dropped as it ended may have started a series.
     reconnect::cancel(app, session).await;
     if let Ok(mut g) = session.current_connection.lock() {
         *g = None;

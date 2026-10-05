@@ -307,10 +307,12 @@ impl Redial {
         self.task.is_finished()
     }
 
-    /// End the series, and wait until it has.
-    pub(crate) async fn end(self) {
+    /// End the series, and wait until it has. Returns true when the end
+    /// cut it short, and false when it had ended on its own, at a try
+    /// that connected or after its last try.
+    pub(crate) async fn end(self) -> bool {
         self.task.abort();
-        let _ = self.task.await;
+        self.task.await.is_err_and(|e| e.is_cancelled())
     }
 }
 
@@ -429,8 +431,9 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
         let redial =
             other.take_redial_if(|redial| !redial.ended() && redial.redials(&here, character));
         if let Some(redial) = redial {
-            redial.end().await;
-            stop_taken(app, &other, Some(character));
+            if redial.end().await {
+                stop_taken(app, &other, Some(character));
+            }
         }
     }
 }
@@ -472,9 +475,7 @@ fn stop_taken<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, characte
 /// End the series `session` runs, if any, and say so to the page.
 pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
     if let Some(redial) = session.take_redial() {
-        let running = !redial.ended();
-        redial.end().await;
-        if running {
+        if redial.end().await {
             session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
         }
     }
@@ -607,6 +608,24 @@ async fn sleep(state: &SharedState, session: &Session, wait: Duration) {
     }
     let _ = (state, session);
     tokio::time::sleep(wait).await;
+}
+
+/// In a test build, a try that connected waits here before it takes the
+/// slot while a test holds the gate. It blocks its thread, so an end of
+/// the series cannot land on it until the test lets it go on.
+#[cfg(test)]
+pub(crate) fn hold_try(state: &SharedState) {
+    let gate = state
+        .redial_gate
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    if let Some(gate) = gate {
+        let (go_on, wait) = std::sync::mpsc::channel();
+        if gate.send(go_on).is_ok() {
+            let _ = wait.recv();
+        }
+    }
 }
 
 /// The reason a try failed, as the terminal line gives it.
