@@ -1,4 +1,5 @@
 import { isLeaf, type PaneNode, type PaneSplit, type PaneType } from '../../panel/paneLayout';
+import { listJoin } from '../../lib/text';
 
 // The small drawing of a profile's panel in Settings > Characters
 // (SettingsCharacters.dc.html, Panel layout). A 180 by 110 box with a
@@ -152,19 +153,13 @@ export function possessive(name: string): string {
   return /s$/i.test(name) ? `${name}'` : `${name}'s`;
 }
 
-function listPhrase(parts: readonly string[]): string {
-  if (parts.length <= 1) return parts[0] ?? '';
-  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
-  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
-}
-
 /** A node as a noun phrase: a pane's name, `Group and Chat side by
  *  side` for a split across, `Map over Affects` for a split down. */
 function nounPhrase(node: PaneNode, labelFor: (pane: PaneType) => string): string {
   if (isLeaf(node)) return labelFor(node.pane);
   const parts = node.children.map((child) => nounPhrase(child, labelFor));
   if (parts.length === 1) return parts[0];
-  return node.split === 'row' ? `${listPhrase(parts)} side by side` : parts.join(' over ');
+  return node.split === 'row' ? `${listJoin(parts)} side by side` : parts.join(' over ');
 }
 
 function pronoun(node: PaneNode): string {

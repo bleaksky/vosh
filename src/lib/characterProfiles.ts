@@ -1,6 +1,7 @@
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
 import { KNOWN_WORLDS, knownWorld, worldName } from './knownWorlds';
+import { listJoin } from './text';
 
 // The words and choices Settings > Characters builds from the profile
 // index and the session: display names, the login toggle's character,
@@ -136,12 +137,6 @@ export function profileWorldName(entry: ProfileEntry): string | null {
 // Names and sentences
 // ---------------------------------------------------------------
 
-function listNames(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? '';
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-}
-
 /** What turning a login toggle on took from other profiles, like
  *  `Vosh moved Ilsabet from Test-Prompt to Ilsabet.` Null when it took
  *  nothing. */
@@ -151,7 +146,7 @@ export function movedSentence(
   to: string,
 ): string | null {
   if (releasedFrom.length === 0) return null;
-  const from = listNames(releasedFrom.map(profileDisplayName));
+  const from = listJoin(releasedFrom.map(profileDisplayName));
   return `Vosh moved ${character} from ${from} to ${profileDisplayName(to)}.`;
 }
 
