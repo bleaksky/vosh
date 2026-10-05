@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import uiDefaults from '../../fixtures/ui-config/defaults.json';
+import uiFields from '../../fixtures/ui-config/fields.json';
 import type { CustomTheme } from './theme';
 import {
   GAME_TIMES,
@@ -15,10 +16,12 @@ import {
   normalizeVitalsMeter,
   normalizeVitalsOptions,
   normalizeVitalsValues,
+  setUiFields,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
   type RawUiConfig,
   type UiConfig,
+  type UiFields,
 } from './uiConfig';
 import { broadcastUiConfigChanges, setUiConfig } from './uiConfigSave';
 import { galleryThemes } from '../theme/themeThumb';
@@ -45,6 +48,12 @@ const raw = (patch: Partial<RawUiConfig> = {}): RawUiConfig => ({
   enabled_presets: [],
   ...patch,
 });
+
+/** What setUiFields hands ui_set_fields. */
+interface SetFieldsArgs {
+  fields: { field: string; value: unknown }[];
+  profile: string | null;
+}
 
 const custom = (id: string, background: string): CustomTheme => ({
   id,
@@ -231,29 +240,34 @@ describe('a custom theme on a built-in id', () => {
     expect(findTheme('solarized-light').xterm.background).toBe('#fdf6e3');
   });
 
-  it('saves the move once, at the generation it read', async () => {
+  it('saves the move once, through the setters of the custom themes and the theme fields', async () => {
     let stored: Record<string, unknown> = { ...before() };
     const saves: Record<string, unknown>[] = [];
-    vi.mocked(invoke).mockImplementation(((
-      command: string,
-      args?: { config: Record<string, unknown> },
-    ) => {
+    vi.mocked(invoke).mockImplementation(((command: string, args?: SetFieldsArgs) => {
       if (command === 'ui_get_config') return Promise.resolve(stored);
-      if (command === 'ui_set_config' && args) {
-        saves.push(args.config);
-        stored = { ...args.config };
-        return Promise.resolve(true);
+      if (command === 'ui_set_fields' && args) {
+        expect(args.profile).toBeNull();
+        const saved = Object.fromEntries(args.fields.map(({ field, value }) => [field, value]));
+        saves.push(saved);
+        stored = { ...stored, ...saved };
       }
       return Promise.resolve();
     }) as typeof invoke);
 
     const first = await getUiConfig();
     expect(saves).toHaveLength(1);
+    expect(Object.keys(saves[0]).sort()).toEqual([
+      'custom_themes',
+      'dark_theme',
+      'follow_system_appearance',
+      'light_theme',
+      'theme',
+    ]);
     expect(saves[0]).toMatchObject({
       theme: 'solarized-light-2',
+      follow_system_appearance: false,
       light_theme: 'solarized-light-2',
       dark_theme: 'nord',
-      generation: 4,
     });
     expect((saves[0].custom_themes as CustomTheme[]).map((t) => t.id)).toEqual([
       'night-ink',
@@ -648,5 +662,41 @@ describe('the UI config defaults Rust sends', () => {
     // The page has no value of its own for these, so Rust always sends
     // them.
     for (const key of passedThrough) expect(got[key], key).toBeUndefined();
+  });
+});
+
+// One value for each field ui_set_fields takes. The Rust setter test in
+// src-tauri/src/ipc/ui_config.rs reads the same file.
+describe('setUiFields', () => {
+  const values: Record<string, unknown> = uiFields.fields;
+
+  it('can send every field Rust has a setter for', () => {
+    const keys = Object.keys(normalizeUiConfig({} as RawUiConfig));
+    expect(keys.filter((key) => key !== 'tracked_affects').sort()).toEqual(
+      Object.keys(values).sort(),
+    );
+  });
+
+  it('sends each field it names to its setter, for the profile it names', async () => {
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+    await setUiFields(values as UiFields);
+    expect(invoke).toHaveBeenLastCalledWith('ui_set_fields', {
+      fields: Object.entries(values).map(([field, value]) => ({ field, value })),
+      profile: null,
+    });
+    // A field left undefined stays out, and null clears a color.
+    const some: Record<string, unknown> = {
+      game_time: '12h',
+      split_divider_color: null,
+      font_size: undefined,
+    };
+    await setUiFields(some as UiFields, 'Orla');
+    expect(invoke).toHaveBeenLastCalledWith('ui_set_fields', {
+      fields: [
+        { field: 'game_time', value: '12h' },
+        { field: 'split_divider_color', value: null },
+      ],
+      profile: 'Orla',
+    });
   });
 });

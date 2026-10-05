@@ -205,7 +205,6 @@ export function AutomationPage({
         body = config ? (
           <PresetsEditor
             key="presets"
-            config={config}
             setConfig={setConfig}
             onDirty={onDirty}
             onError={onError}

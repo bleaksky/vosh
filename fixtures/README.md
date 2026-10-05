@@ -122,6 +122,10 @@ fixtures/
   ui-config/ defaults.json, the UI config Rust sends for a profile that
              sets nothing, which normalizeUiConfig on the page fills in
              for a field that arrives missing. Hand written.
+             fields.json, one value that is not the default for each field
+             ui_set_fields takes, read by the setter tests in
+             src-tauri/src/ipc/ui_config.rs and src/ipc/uiConfig.test.ts.
+             Hand written.
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
              TypeScript WordWrapper, so both renderers break lines alike.
 ```
