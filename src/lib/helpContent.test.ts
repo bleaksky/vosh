@@ -1089,17 +1089,35 @@ describe('the help on auto reconnect and Lua alerts', () => {
 describe('the help on Color vision', () => {
   const id = 'make-it-yours.control-terminal-colors';
 
-  it('says Color vision swaps the colors your eyes run together', () => {
+  it('says Color vision swaps the colors your eyes confuse', () => {
     const text = body(id);
     expect(text).toContain(
-      '`Color vision` swaps the colors your eyes run together for colors they tell apart, the way color blind modes in games do.',
+      '`Color vision` swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
     );
-    expect(text).toContain('Deuteranopia and Protanopia turn greens blue and reds orange');
+    expect(text).toContain('Deuteranopia and Protanopia turn tells in green blue');
+    expect(text).toContain(
+      'Reds lean toward orange and blues toward violet where the theme allows.',
+    );
     expect(text).toContain('Tritanopia turns blues purple and magentas pink');
     expect(text).toContain('with Fit game colors on or off, Solarized Dark included.');
     expect(text).toContain(
       'Solarized Dark stays as published in play too, since its soft text is what the scheme is, until you pick a Color vision other than Typical.',
     );
+  });
+
+  // The swap keeps every two channels apart, so a color keeps its own
+  // hue where turning it would run it into another, and the window moves
+  // its status colors where a tritanope sees them near.
+  it('says where a color keeps its hue and what the window does under tritanopia', () => {
+    const text = body(id);
+    expect(text).toContain(
+      'Two channels you told apart never run together for your vision, newbie chat and immortal talk included.',
+    );
+    expect(text).toContain('such as Tokyo Night, tells keep their green.');
+    expect(text).toContain('makes them lighter or darker where danger sits near warn or success');
+    for (const old of ['run together for colors', 'which you already tell apart', 'reds orange']) {
+      expect(text, old).not.toContain(old);
+    }
   });
 
   // The fit before the swap turned red and green only as far as they
