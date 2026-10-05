@@ -1,5 +1,5 @@
-/* The base. The box-sizing reset, html and body in the chrome face,
-   and thin scrollbars in the theme's colors on every platform. */
+/* The base. The box-sizing reset, html and body in Inter, and thin
+   scrollbars in the theme's colors on every platform. */
 
 * {
   box-sizing: border-box;
@@ -13,9 +13,10 @@ body,
   height: 100%;
   background: transparent;
   color: var(--text);
-  /* Ember: chrome is Inter by default; the terminal and game-data
-     surfaces opt back into mono explicitly. Chrome type does NOT
-     scale with the user's terminal font size. */
+  /* Inter draws only text outside every window root, until D23
+     retires it with the migration wizard. Each window root sets
+     --font-ui, and the terminal and the panes set their own faces. The
+     13 px holds whatever terminal size you pick. */
   font-family: var(--font-chrome);
   font-size: 13px;
 }
