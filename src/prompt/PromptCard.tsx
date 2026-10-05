@@ -9,9 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { moveTriggerToPrompts } from '../automation/automationTriggers';
-import { BAND_OUTSET_Y, dockGap, type CellSize } from './pinnedDock';
+import type { CellSize } from './pinnedDock';
 import {
-  cardAnchor,
   type CardRequest,
   cardShowState,
   codeReaderStep,
@@ -94,6 +93,7 @@ import { keepFocus, type FocusKeeper } from '../lib/focusKeeper';
 import { useGamePrompt } from '../stores/gmcp/gamePromptStore';
 import { pushToast } from '../stores/toasts';
 import { useBandEnv } from './useBandEnv';
+import { useCardPlace } from './useCardPlace';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
 import { knownWorld } from '../stores/session/useConnection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -205,9 +205,6 @@ export function PromptCard({
   const [pickFrom, setPickFrom] = useState(0);
   const [presets, setPresets] = useState<PromptPreset[]>([]);
   const [designs, setDesigns] = useState<PromptDesign[]>([]);
-  const [anchor, setAnchor] = useState<{ left: number; bottom: number; maxHeight: number } | null>(
-    null,
-  );
   const [view, setView] = useState<CardView>(opening.view === 'text' ? 'text' : 'design');
   // Edit prompt as text… asks for the text field, so what you type goes to
   // your design, as the card opens or while it is open.
@@ -462,56 +459,7 @@ export function PromptCard({
     [pieces, described, state?.catalog],
   );
 
-  // Sit over your prompt, and follow it.
-  const relayout = useCallback(async () => {
-    const area = host.area();
-    if (!area) return;
-    const rect = area.getBoundingClientRect();
-    const cellH = cell?.height ?? 17.5;
-    const term = host.terminal();
-    let lastRowTop = rect.bottom - cellH;
-    let promptTop: number | null = null;
-    if (term) {
-      const rows = term.getSize().rows;
-      lastRowTop = term.rowTop(rows - 1) ?? lastRowTop;
-      const region = await term.promptRegion().catch(() => null);
-      if (region && region.atBottom) {
-        const top = term.rowTop(region.row);
-        if (top !== null && top >= rect.top) promptTop = top;
-      }
-    }
-    const pinned = show?.show === 'pinned' && show.capture;
-    const dock = pinned ? host.dock() : null;
-    const bandRowTop = dock
-      ? dock.getBoundingClientRect().top + dockGap(cellH) + BAND_OUTSET_Y
-      : null;
-    const placed = cardAnchor({
-      pinned: Boolean(pinned),
-      promptTop,
-      lastRowTop,
-      bandRowTop,
-      cellH,
-      areaTop: rect.top,
-      viewportH: window.innerHeight,
-    });
-    setAnchor({ left: rect.left + 12, ...placed });
-  }, [host, cell, show]);
-
-  useLayoutEffect(() => {
-    void relayout();
-  }, [relayout, step, refresh, view, template, drawn]);
-
-  useEffect(() => {
-    const onResize = () => void relayout();
-    window.addEventListener('resize', onResize);
-    const area = host.area();
-    const observer = area ? new ResizeObserver(onResize) : null;
-    if (area) observer?.observe(area);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      observer?.disconnect();
-    };
-  }, [host, relayout]);
+  const anchor = useCardPlace(host, cell, show, { step, refresh, view, template, drawn });
 
   // Focus moves into the card so the keyboard reaches it, unless a field
   // in it took focus first.
