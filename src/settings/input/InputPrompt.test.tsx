@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../terminal/bandCells';
 import { previewOptions, previewRows } from '../../prompt/promptSettings';
 import type { PromptCheckRead } from '../../ipc/prompt';
-import { DrawRow, PreviewView } from './InputPrompt';
+import { DrawRow } from './InputPrompt';
 import { CodesMetaLine, CodesText, LineRow, PointRow } from './PromptGame';
+import { PreviewView } from './PromptPreview';
 
 // The section reaches the Tauri bridge through its stores. The pieces
 // under test draw from the values they are handed.
