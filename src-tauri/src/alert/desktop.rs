@@ -22,11 +22,16 @@ const SOUND: &str = "Default";
 const SOUND: &str = "message-new-instant";
 
 /// Post `banner`, with the system's sound when `sound` says so. Returns
-/// whether the system plays that sound in place of the page's tone. On
-/// Windows it does while Windows Settings lets Vosh show toasts, though
-/// Focus Assist may still hush one. A Linux server may play no sound at
-/// all, so there the page's tone plays as well.
-pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound: bool) -> bool {
+/// None when the banner did not go out, or else whether the system plays
+/// that sound in place of the page's tone. On Windows it does while
+/// Windows Settings lets Vosh show toasts, though Focus Assist may still
+/// hush one. A Linux server may play no sound at all, so there the
+/// page's tone plays as well.
+pub(super) fn post<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    banner: &Banner,
+    sound: bool,
+) -> Option<bool> {
     let mut title = banner.title.clone();
     if let Some(label) = &banner.label {
         title = format!("{title} \u{b7} {label}");
@@ -41,15 +46,15 @@ pub(super) fn post<R: tauri::Runtime>(app: &AppHandle<R>, banner: &Banner, sound
     }
     if let Err(e) = builder.show() {
         tracing::warn!(error = %e, "the banner did not go out");
-        return false;
+        return None;
     }
     #[cfg(windows)]
     {
-        sound && windows_setting() == Permission::Granted
+        Some(sound && windows_setting() == Permission::Granted)
     }
     #[cfg(not(windows))]
     {
-        false
+        Some(false)
     }
 }
 
