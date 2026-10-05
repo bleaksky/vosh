@@ -1685,7 +1685,7 @@ export function findTheme(id: string | undefined): AppTheme {
  *  unset is on for every theme. The chrome derives its status colors
  *  from the theme's ANSI slots, so output painted in the same slots
  *  keeps the MUD's red and the chrome's red in agreement. */
-export function resolveThemeTerminalColors(_theme: string, stored: boolean | null): boolean {
+export function resolveThemeTerminalColors(stored: boolean | null): boolean {
   return stored ?? true;
 }
 

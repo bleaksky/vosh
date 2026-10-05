@@ -138,8 +138,8 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   // value flips.
   await emitChanged(
     THEME_TERMINAL_COLORS_CHANGED,
-    resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
-    prev ? resolveThemeTerminalColors(prev.theme, prev.theme_terminal_colors) : undefined,
+    resolveThemeTerminalColors(config.theme_terminal_colors),
+    prev ? resolveThemeTerminalColors(prev.theme_terminal_colors) : undefined,
   );
   await emitChanged(BRIGHT_BOLD_CHANGED, config.bright_bold, prev?.bright_bold);
   // Your choice as you made it. Each window reads its own system's

@@ -207,10 +207,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
   // Colors for the lines: the terminal palette the main window uses,
   // and the find bar's mark, ANSI yellow at 28%.
   const themeId = getCurrentThemeId();
-  const themeColors = resolveThemeTerminalColors(
-    config?.theme ?? themeId,
-    config?.theme_terminal_colors ?? null,
-  );
+  const themeColors = resolveThemeTerminalColors(config?.theme_terminal_colors ?? null);
   const baseAnsi = config?.terminal_base_ansi ?? null;
   const brightBold = config?.bright_bold ?? false;
   const { palette, mark } = useMemo(() => {
