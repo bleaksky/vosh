@@ -7,6 +7,7 @@ import {
   onGmcpPackage,
   onState,
   subscribeConnectionTargetChanged,
+  type ConnectionTarget,
 } from '../../ipc/session';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { worldName } from '../../lib/knownWorlds';
@@ -24,13 +25,6 @@ export type ConnectionStatus =
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
   | { kind: 'connected'; host: string; port: number; tls: boolean }
   | { kind: 'error'; message: string };
-
-/** Where Connect dials. */
-export interface ConnectionTarget {
-  host: string;
-  port: number;
-  tls: boolean;
-}
 
 export const DEFAULT_TARGET: ConnectionTarget = {
   host: 'play.theforsakenlands.com',
