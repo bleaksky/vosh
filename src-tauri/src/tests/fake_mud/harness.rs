@@ -9,7 +9,8 @@ use serde_json::Value as Json;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Listener, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio::sync::mpsc;
 use vosh_prompt::testkit::{Mud, Options};
 
 use crate::app::state::{AppState, SharedState};
@@ -18,7 +19,7 @@ use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 use crate::sessions::SessionId;
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 11] = [
+const EVENTS: [&str; 12] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -30,7 +31,15 @@ const EVENTS: [&str; 11] = [
     crate::app::events::TICK,
     crate::app::events::AFFECT_FULL_CHANGED,
     crate::app::events::PROMPT_CONFIG_CHANGED,
+    crate::app::events::ALERT,
 ];
+
+/// What a test hands a link of the fake game that plays.
+enum Push {
+    /// Bytes the game writes, such as a packet or a line no command asked
+    /// for.
+    Bytes(Vec<u8>),
+}
 
 /// A fake game on a local port of its own.
 pub(crate) struct FakeServer {
@@ -39,36 +48,72 @@ pub(crate) struct FakeServer {
     pub(crate) options: Arc<StdMutex<Options>>,
     /// Every byte a client sent the game, in order.
     pub(crate) received: Arc<StdMutex<Vec<u8>>>,
+    /// The links that play now.
+    links: Arc<StdMutex<Vec<mpsc::UnboundedSender<Push>>>>,
+    /// Counts each IAC DO EOR a client sends.
+    asks: Arc<AtomicUsize>,
+}
+
+impl FakeServer {
+    /// Write `bytes` on every link that plays, as the game does at the
+    /// end of a pulse.
+    pub(crate) fn push(&self, bytes: &[u8]) {
+        for link in self.links.lock().expect("the links").iter() {
+            let _ = link.send(Push::Bytes(bytes.to_vec()));
+        }
+    }
+
+    fn accept(&self, listener: TcpListener) {
+        let (options, received, links, asks) = (
+            self.options.clone(),
+            self.received.clone(),
+            self.links.clone(),
+            self.asks.clone(),
+        );
+        tokio::spawn(async move {
+            while let Ok((socket, _)) = listener.accept().await {
+                let options = options.lock().expect("the options").clone();
+                let (tx, rx) = mpsc::unbounded_channel();
+                links.lock().expect("the links").push(tx);
+                tokio::spawn(play(socket, options, asks.clone(), received.clone(), rx));
+            }
+        });
+    }
+}
+
+/// A listener on `port` of the local host, 0 for any, that a later
+/// listener can take again once this one goes.
+fn listen(port: u16) -> std::io::Result<TcpListener> {
+    let socket = TcpSocket::new_v4()?;
+    socket.set_reuseaddr(true)?;
+    socket.bind(std::net::SocketAddr::from(([127, 0, 0, 1], port)))?;
+    socket.listen(16)
 }
 
 /// Serve the fake game on a local port until the test ends. Each
 /// connection plays the options the server holds when it connects. `asks`
 /// counts each IAC DO EOR a client sends.
-async fn serve_fake(options: Options, asks: Arc<AtomicUsize>) -> FakeServer {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("a local port");
+fn serve_fake(options: Options, asks: Arc<AtomicUsize>) -> FakeServer {
+    let listener = listen(0).expect("a local port");
     let server = FakeServer {
         port: listener.local_addr().expect("an address").port(),
         options: Arc::new(StdMutex::new(options)),
         received: Arc::default(),
+        links: Arc::default(),
+        asks,
     };
-    let (options, received) = (server.options.clone(), server.received.clone());
-    tokio::spawn(async move {
-        while let Ok((socket, _)) = listener.accept().await {
-            let options = options.lock().expect("the options").clone();
-            tokio::spawn(play(socket, options, asks.clone(), received.clone()));
-        }
-    });
+    server.accept(listener);
     server
 }
 
-/// One connection to the fake game, as `examples/fake_mud.rs` plays it.
+/// One connection to the fake game, as `examples/fake_mud.rs` plays it,
+/// with what the test pushes.
 async fn play(
     mut socket: TcpStream,
     options: Options,
     asks: Arc<AtomicUsize>,
     received: Arc<StdMutex<Vec<u8>>>,
+    mut pushes: mpsc::UnboundedReceiver<Push>,
 ) -> std::io::Result<()> {
     use vosh_prompt::testkit::mud::telnet::{DO, IAC, TELOPT_EOR};
     socket.set_nodelay(true)?;
@@ -76,7 +121,16 @@ async fn play(
     socket.write_all(&mud.greeting()).await?;
     let mut buf = [0u8; 4096];
     loop {
-        let n = socket.read(&mut buf).await?;
+        let n = tokio::select! {
+            read = socket.read(&mut buf) => read?,
+            push = pushes.recv() => match push {
+                Some(Push::Bytes(bytes)) => {
+                    socket.write_all(&bytes).await?;
+                    continue;
+                }
+                None => return Ok(()),
+            },
+        };
         if n == 0 {
             return Ok(());
         }
@@ -152,8 +206,8 @@ impl Harness {
     pub(crate) async fn new(options: Options) -> Self {
         let eor_asks = Arc::new(AtomicUsize::new(0));
         let servers = [
-            serve_fake(options.clone(), eor_asks.clone()).await,
-            serve_fake(options, Arc::default()).await,
+            serve_fake(options.clone(), eor_asks.clone()),
+            serve_fake(options, Arc::default()),
         ];
         let port = servers[0].port;
         let dir = tempfile::tempdir().expect("a temporary folder");

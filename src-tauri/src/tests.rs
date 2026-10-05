@@ -1,5 +1,6 @@
 //! Tests that span the crate rather than one module.
 
+mod alerts;
 mod broadcast;
 mod config_golden;
 mod echo;

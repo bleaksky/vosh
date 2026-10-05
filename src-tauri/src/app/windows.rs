@@ -304,6 +304,18 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
 /// popup hangs around alone after the user closes the main
 /// client.
 pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
+    // The focus rule of the alerts counts Vosh in front while any of its
+    // windows has focus, Settings and Help included.
+    if let Some(state) = window
+        .app_handle()
+        .try_state::<crate::app::state::SharedState>()
+    {
+        match event {
+            tauri::WindowEvent::Focused(focused) => state.focus.set(window.label(), *focused),
+            tauri::WindowEvent::Destroyed => state.focus.set(window.label(), false),
+            _ => {}
+        }
+    }
     if window.label() != "main" {
         return;
     }

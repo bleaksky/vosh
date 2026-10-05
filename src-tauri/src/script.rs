@@ -142,6 +142,9 @@ pub(crate) struct ApplyResult {
     /// A `#walk` a line ran, for the walker in the session, after the
     /// bytes. Only the input pipeline sets it.
     pub walk: Option<crate::input::walk::WalkCommand>,
+    /// The alerts the step raised, a trigger's, a preset's or Lua's,
+    /// which ring once the locks let go, see [`crate::alert::ring`].
+    pub alerts: Vec<crate::alert::Alert>,
 }
 
 impl ApplyResult {
@@ -161,6 +164,7 @@ impl ApplyResult {
         if later.walk.is_some() {
             self.walk = later.walk;
         }
+        self.alerts.extend(later.alerts);
     }
 
     /// This result, whose Lua ran under `open` while the step held it.
