@@ -367,9 +367,12 @@ describe('colorVisionNote', () => {
     expect(visionTunesWindow(findTheme('rubric'), 'deuteranopia')).toBe(true);
   });
 
-  it('says the game text keeps its published colors while Fit game colors is off', () => {
+  it('says the game text keeps its colors while Fit game colors or the theme colors are off', () => {
     expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', false)).toBe(
       'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
+    );
+    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', true, false)).toBe(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window still follows Color vision.",
     );
     expect(colorVisionNote(findTheme('solarized-dark'), 'protanopia', true)).toBe(
       'Game text keeps its published colors on Solarized Dark. The window still follows Color vision.',

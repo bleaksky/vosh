@@ -176,7 +176,12 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   // An id no theme has draws the fallback theme, so the caption names it.
   const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
   const caption = themeCaption(shownTheme);
-  const visionNote = colorVisionNote(shownTheme, config.color_vision, config.fit_game_colors);
+  const visionNote = colorVisionNote(
+    shownTheme,
+    config.color_vision,
+    config.fit_game_colors,
+    resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
+  );
   // While follow is on the arrow keys stay among the themes the OS
   // shows now, so stepping through the gallery never fills the other
   // slot and each step lands on the radio it checks.

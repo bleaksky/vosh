@@ -435,6 +435,12 @@ describe('AppearancePage', () => {
     expect(off.label).toContain(
       'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
     );
+    // While the theme's colors are off for MUD text, the game text keeps
+    // your base palette.
+    const base = await visionRow({ ...kanso, theme_terminal_colors: false });
+    expect(base.label).toContain(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window still follows Color vision.",
+    );
     // Kanso Zen's Typical fit already keeps the game text apart for a
     // protanope, so the row says only the window changes.
     const protan = await visionRow({ ...kanso, color_vision: 'protanopia' });

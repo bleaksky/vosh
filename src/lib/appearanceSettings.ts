@@ -272,7 +272,8 @@ const NO_ROOM = 'without fading or running into other colors';
 
 /** The quiet line under the Color vision row for `theme`, the theme on
  *  screen. It says what the vision leaves as it is: the game text while
- *  Fit game colors is off or the theme keeps out of it, and whatever the
+ *  Fit game colors is off, the theme keeps out of it or the theme's
+ *  colors are off for MUD text (`themeTerminalColors`), and whatever the
  *  theme already keeps apart or cannot part further. Empty under
  *  Typical, and where the vision changes both the game text and the
  *  window far enough to see. */
@@ -280,15 +281,18 @@ export function colorVisionNote(
   theme: AppTheme,
   vision: ColorVision,
   fitGameColors: boolean,
+  themeTerminalColors = true,
 ): string {
   if (vision === 'typical') return '';
   const name = theme.label;
   const window = visionWindowSide(theme, vision);
-  const off = !fitGameColors
-    ? 'Game text keeps its published colors while Fit game colors is off'
-    : theme.fitGameColors === false
-      ? `Game text keeps its published colors on ${name}`
-      : null;
+  const off = !themeTerminalColors
+    ? "Game text keeps your base palette while the theme's colors are off for MUD text"
+    : !fitGameColors
+      ? 'Game text keeps its published colors while Fit game colors is off'
+      : theme.fitGameColors === false
+        ? `Game text keeps its published colors on ${name}`
+        : null;
   if (off !== null) {
     if (window === 'changes') return `${off}. The window still follows Color vision.`;
     return window === 'holds'
