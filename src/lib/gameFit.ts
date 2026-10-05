@@ -11,14 +11,15 @@
 // gives the colors the review measured, slot for slot.
 //
 // Where a fit comes from. A built in theme ships its fit in themes.ts
-// (fitted), worked out ahead by this file. Settings fits a custom theme
-// when you import, copy or change it, and when Appearance opens on one
-// that keeps no fit, and keeps the fit in your config
-// (settings/pages/appearance/fitAndKeep). The main window fits a custom
-// theme in play that keeps no fit when it loads your config, and holds
-// that fit in memory only (customThemeFits, holdFit in themes.ts). Every
-// fit runs in a worker (fitOffThread, gameFit.worker). Play draws the
-// fit while Fit game colors is on (playPalette in themes.ts,
+// (fitted), worked out ahead by this file, and gameFit.test.ts fits
+// each one again when you run it with VOSH_FIT_THEMES=1. Settings fits
+// a custom theme when you import, copy or change it, and when
+// Appearance opens on one that keeps no fit, and keeps the fit in your
+// config (settings/pages/appearance/fitAndKeep). The main window fits a
+// custom theme in play that keeps no fit when it loads your config, and
+// holds that fit in memory only (customThemeFits, holdFit in themes.ts).
+// Every fit runs in a worker (fitOffThread, gameFit.worker). Play draws
+// the fit while Fit game colors is on (playPalette in themes.ts,
 // fitGameColors).
 
 import { indexedRgb } from './bandCells';

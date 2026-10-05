@@ -56,8 +56,9 @@ export interface AppTheme {
   /// The colors Fit game colors draws in play, the slots the game color
   /// fit (lib/gameFit) moves off the published palette, from body text
   /// and the 16 ANSI colors. A built in theme stores them computed
-  /// ahead, since a fit takes about two seconds, and a custom theme
-  /// keeps the fit Settings made when you imported or changed it.
+  /// ahead, since a fit takes about two seconds, and gameFit.test.ts
+  /// fits each again with VOSH_FIT_THEMES=1. A custom theme keeps the
+  /// fit Settings made when you imported or changed it.
   fitted?: Partial<XtermPalette>;
   /// False keeps the published palette in play with Fit game colors on.
   fitGameColors?: false;
