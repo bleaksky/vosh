@@ -31,6 +31,7 @@ import {
   planSubmit,
 } from './maskedInput';
 import { useCaret } from './useCaret';
+import { useCommandHistory } from './useCommandHistory';
 import { useInputPreferences } from './useInputPreferences';
 import { useMacroKeys } from './useMacroKeys';
 import { useTabCompletion } from './useTabCompletion';
@@ -111,7 +112,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   ref,
 ) {
   const [value, setValue] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
   const [passwordMode, setPasswordMode] = useState(false);
   // The mask from the newest input-mode event. The event sets it at once,
   // while the state above waits for a render. The key, paste, and submit
@@ -121,11 +121,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // whether the server just took echo or just handed it back.
   const passwordModeRef = useRef(false);
   const maskedNow = () => isMasked(passwordMode, passwordModeRef.current);
-  // When the user starts arrow-key navigation with non-empty input, we
-  // remember that prefix so Up and Down cycle only matching history entries.
-  // Null means no active prefix search; cycle the full history.
-  const [searchPrefix, setSearchPrefix] = useState<string | null>(null);
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const { history, searchPrefix, remember, resetSearch, recallOlder, recallNewer } =
+    useCommandHistory(value, setValue);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   // Line-number gutter next to the multi-line prompt. Kept in its own
   // ref so the textarea's scroll position can be mirrored onto it once a
@@ -170,8 +167,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     setPasswordMode(payload.password);
     if (wasMasked !== payload.password) {
       setValue((draft) => draftAfterMaskChange(wasMasked, payload.password, draft));
-      setSearchPrefix(null);
-      setHistoryIndex(null);
+      resetSearch();
     }
   });
 
@@ -225,30 +221,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     [],
   );
 
-  const matchingIndices = (prefix: string | null): number[] => {
-    if (prefix === null || prefix === '') {
-      return history.map((_, i) => i);
-    }
-    return history.flatMap((line, i) => (line.startsWith(prefix) ? [i] : []));
-  };
-
-  const startSearchIfNeeded = (): number[] => {
-    if (searchPrefix === null) {
-      const prefix = value;
-      setSearchPrefix(prefix);
-      return matchingIndices(prefix);
-    }
-    return matchingIndices(searchPrefix);
-  };
-
   const handleChange = (next: string) => {
     setValue(next);
     // Any direct edit cancels the active prefix search so the next Up uses
     // the current input as the new prefix.
-    if (searchPrefix !== null) {
-      setSearchPrefix(null);
-      setHistoryIndex(null);
-    }
+    if (searchPrefix !== null) resetSearch();
     // Same for the tab-completion cycle; typing anything breaks it.
     resetCycle();
   };
@@ -274,12 +251,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       echoColor: echoColorRef.current,
       echoCaret: echoCaretRef.current,
     });
-    if (plan.remember) {
-      setHistory((prev) => {
-        if (prev[prev.length - 1] === line) return prev;
-        return [...prev, line];
-      });
-    }
+    if (plan.remember) remember(line);
     // #nativesurface is handled here, not in the backend, because the
     // renderer flag lives in localStorage (Terminal.tsx reads it at
     // startup). `on` forces the native surface on any platform (the
@@ -556,8 +528,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       } else {
         setValue('');
       }
-      setSearchPrefix(null);
-      setHistoryIndex(null);
+      resetSearch();
       // Send each composed line as its own command (the Shift+Enter
       // lines, plus the backend still splits `;` within each). A bare
       // Enter on an empty prompt sends one blank line, which advances
@@ -581,15 +552,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         return;
       }
       event.preventDefault();
-      const matches = startSearchIfNeeded();
-      if (matches.length === 0) return;
-      const currentMatchPos =
-        historyIndex === null ? matches.length : matches.indexOf(historyIndex);
-      const nextPos = Math.max(0, currentMatchPos - 1);
-      const next = matches[nextPos];
-      if (next === undefined) return;
-      setHistoryIndex(next);
-      setValue(history[next] ?? '');
+      recallOlder();
       return;
     }
 
@@ -601,19 +564,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         return;
       }
       event.preventDefault();
-      if (historyIndex === null) return;
-      const matches = matchingIndices(searchPrefix);
-      const currentMatchPos = matches.indexOf(historyIndex);
-      const nextPos = currentMatchPos + 1;
-      if (nextPos >= matches.length) {
-        setHistoryIndex(null);
-        setValue(searchPrefix ?? '');
-      } else {
-        const next = matches[nextPos];
-        if (next === undefined) return;
-        setHistoryIndex(next);
-        setValue(history[next] ?? '');
-      }
+      recallNewer();
     }
   };
 
