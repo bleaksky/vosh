@@ -693,8 +693,6 @@ If the text renders in the wrong typeface, open Settings and choose Appearance, 
 
 Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size. Turn it off to let each character keep its own.
 
-With the xterm renderer the right click menu offers `Clear scrollback`. The native surface hides that item because its grid has no clear command.
-
 ### 8.2 Recover a bad connection
 
 The session button in the title band holds the connection controls. Its dot shows idle, connecting, connected, or an error. After a failed connection the button reads `Not connected`, and pointing at it shows why.
