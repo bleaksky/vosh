@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultLayout } from './paneLayout';
+import { defaultLayout } from '../lib/paneLayout';
 
 // The Characters wrappers in session.ts. Tauri takes camelCase argument
 // keys from JS, and an optional profile must reach the backend as null
@@ -28,7 +28,7 @@ const {
   subscribeProfileChanged,
   subscribeSessionIdentity,
   trackedAffectsSet,
-} = await import('./session');
+} = await import('../lib/session');
 
 const fire = (event: string, payload: unknown) => tauri.handlers.get(event)?.({ payload });
 

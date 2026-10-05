@@ -44,10 +44,10 @@ import {
   type CustomTheme,
   type RawUiConfig,
   type UiConfig,
-} from './session';
-import { isOwnThemeEcho } from './theme';
-import { galleryThemes } from './themeThumb';
-import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from './themes';
+} from '../lib/session';
+import { isOwnThemeEcho } from '../lib/theme';
+import { galleryThemes } from '../lib/themeThumb';
+import { BUILTIN_THEMES, customToAppTheme, findTheme, setCustomThemes } from '../lib/themes';
 import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
