@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import panelCss from '../../styles/panel.css?raw';
+import affectsCss from '../../styles/affects.css?raw';
 import type { AffectInput, TrackedInput } from './affectsView';
 import type { PaneLeaf } from '../paneLayout';
 import type { AffectsMarker } from '../../ipc/affects';
@@ -157,10 +157,10 @@ function specificity(selector: string): number[] {
 
 const compare = (x: number[], y: number[]) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 
-/** The top level rules of panel.css that set `property`, each selector
+/** The top level rules of affects.css that set `property`, each selector
  *  on its own with where the rule sits. */
 function rulesSetting(property: string): { selector: string; value: string; at: number }[] {
-  const css = panelCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = affectsCss.replace(/\/\*[\s\S]*?\*\//g, '');
   const out: { selector: string; value: string; at: number }[] = [];
   let depth = 0;
   let start = 0;
@@ -185,11 +185,11 @@ function rulesSetting(property: string): { selector: string; value: string; at: 
   return out;
 }
 
-/** The declarations of one rule in panel.css. */
+/** The declarations of one rule in affects.css. */
 function rule(selector: string): string {
-  const at = panelCss.indexOf(`${selector} {`);
+  const at = affectsCss.indexOf(`${selector} {`);
   expect(at, selector).toBeGreaterThanOrEqual(0);
-  return panelCss.slice(at, panelCss.indexOf('}', at));
+  return affectsCss.slice(at, affectsCss.indexOf('}', at));
 }
 
 describe('CountdownView', () => {

@@ -13,6 +13,7 @@
 @import './migration.css'; /* settings-app, settings-btn, migration- */
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
+@import './affects.css'; /* pane-affect, pane-countdown, pane-chip, pane-sr */
 @import './map.css'; /* server-view, map-, pane-map- */
 @import './controls.css'; /* the st- controls and their --st- fills */
 @import './settings.css'; /* st- */

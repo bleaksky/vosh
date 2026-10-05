@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import affectsCss from '../styles/affects.css?raw';
 import baseCss from '../styles/base.css?raw';
 import frameCss from '../styles/frame.css?raw';
 import helpCss from '../styles/help.css?raw';
@@ -86,6 +87,7 @@ const SHEETS: Readonly<Record<string, string>> = {
   'styles/tokens.css': tokensCss,
   'styles/frame.css': frameCss,
   'styles/panel.css': panelCss,
+  'styles/affects.css': affectsCss,
   'styles/overlays.css': overlaysCss,
   'styles/settings.css': settingsCss,
   'styles/prompt.css': promptCss,
@@ -160,11 +162,11 @@ describe('the panel faces in the stylesheets', () => {
       '.map-glyph-grid: var(--font-panel-glyph)',
       '.shell-statusline: var(--font-panel)',
       '.panel-host: var(--font-panel)',
+      '.pane-chat-log: var(--font-panel-game)',
       '.pane-affect-hours: var(--font-panel-game)',
       '.pane-affect-name: var(--font-panel-game)',
       '.pane-countdown-line: var(--font-panel-game)',
       '.pane-chip: var(--font-panel-game)',
-      '.pane-chat-log: var(--font-panel-game)',
     ]);
   });
 
