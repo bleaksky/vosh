@@ -25,7 +25,9 @@ export function emitConnectionTargetChanged(target: ConnectionTarget): Promise<v
   return emit(CONNECTION_TARGET_CHANGED, target);
 }
 
-/** Hear the Connect target any window saved. */
+/** Hear the Connect target any window saved. Pages follow it through
+ *  subscribeConnectionTarget in lib/useConnection.ts, which parses it
+ *  first. */
 export function subscribeConnectionTargetChanged(
   cb: (payload: unknown) => void,
 ): Promise<UnlistenFn> {

@@ -46,7 +46,8 @@ export function emitThemeChanged(id: string): Promise<void> {
   return emit(THEME_CHANGED, id);
 }
 
-/** Hear the theme id a window picked or saved. */
+/** Hear the theme id a window picked or saved. Pages hear it through
+ *  subscribeThemeChanges in lib/theme.ts, which applies the theme first. */
 export function subscribeThemeChanged(cb: (id: string) => void): Promise<UnlistenFn> {
   return listen<string>(THEME_CHANGED, (event) => cb(event.payload));
 }
@@ -56,7 +57,8 @@ export function emitThemePrefsChanged(prefs: ThemePrefs): Promise<void> {
   return emit(THEME_PREFS_CHANGED, prefs);
 }
 
-/** Hear the theme fields another window saved. */
+/** Hear the theme fields another window saved. Pages hear them through
+ *  subscribeThemePrefs in lib/theme.ts, which checks their shape first. */
 export function subscribeThemePrefsChanged(cb: (payload: unknown) => void): Promise<UnlistenFn> {
   return listen<unknown>(THEME_PREFS_CHANGED, (event) => cb(event.payload));
 }
