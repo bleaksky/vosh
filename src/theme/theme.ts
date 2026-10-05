@@ -1,8 +1,8 @@
 // Theme runtime. Applies the active theme to the document root via the
-// derived chrome token vars (lib/chrome) plus `data-theme` and
+// derived chrome token vars (theme/chrome) plus `data-theme` and
 // `data-appearance` attributes, and broadcasts a window event so the
 // Terminal can refresh its xterm palette. Each paint of the theme the
-// saved fields resolve to also lands in the paint cache (lib/themePaint),
+// saved fields resolve to also lands in the paint cache (theme/themePaint),
 // so the next window to open paints it before React renders.
 //
 // The active theme comes from four saved fields. While

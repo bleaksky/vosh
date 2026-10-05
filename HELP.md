@@ -2,7 +2,7 @@
 
 This file holds the topics the Help window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, from Settings in the terminal right click menu, or with Open help in the command palette. This file mirrors the same topics for offline reading and copy-out.
 
-The source of truth for both is `src/lib/helpContent.ts`.
+The source of truth for both is `src/help/helpContent.ts`.
 
 ---
 

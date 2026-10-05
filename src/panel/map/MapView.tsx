@@ -745,7 +745,7 @@ function depthAlphaForRing(d: number): number {
 
 // HTML glyph overlay.
 //
-// glyphGrid() in lib/mapTiles lays out the rooms and the connectors
+// glyphGrid() in panel/map/mapTiles lays out the rooms and the connectors
 // between them. The player cell anchors to the parent's geometric
 // center via a CSS calc() translate, so the map scrolls around the
 // player as they walk. Each cell measures 1ch × 1em (line-height: 1)

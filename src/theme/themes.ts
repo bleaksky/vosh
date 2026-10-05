@@ -1,5 +1,5 @@
 // Theme palettes. A theme is a terminal palette (the 16 ANSI slots plus
-// surfaces) and nothing else by default: lib/chrome derives the window
+// surfaces) and nothing else by default: theme/chrome derives the window
 // chrome from it, so adding a scheme is one xterm block. A theme may pin
 // individual chrome tokens where the derivation misses a look the theme
 // is known for (Nord's frost accent, for example).
@@ -57,7 +57,7 @@ export interface AppTheme {
   license?: ThemeLicense;
   xterm: XtermPalette;
   /// The colors Fit game colors draws in play, the slots the game color
-  /// fit (lib/gameFit) moves off the published palette, from body text
+  /// fit (theme/gameFit) moves off the published palette, from body text
   /// and the 16 ANSI colors. A built in theme stores them computed
   /// ahead, since a fit takes about two seconds, and gameFit.test.ts
   /// fits each again with VOSH_FIT_THEMES=1. A custom theme keeps the
@@ -1509,7 +1509,7 @@ export function onCustomThemesChanged(listener: () => void): () => void {
 }
 
 // Fits the main window made this launch for custom themes in play that
-// keep none, by the colors they fit (gameFit fitKey). lib/customThemeFits
+// keep none, by the colors they fit (gameFit fitKey). theme/customThemeFits
 // makes them, and no file holds them. Each list set later, a broadcast
 // from Settings included, lays a held fit on the theme with its colors
 // that keeps none, so the fit stays until Settings keeps one.

@@ -1,10 +1,10 @@
 # Settings
 
-`src/settings/SettingsWindow.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. Appearance, Automation, and Characters live in `pages/`, and General, Input, and Layout live in `groups/`. Every page is built from its board and from the primitives in `ui/`.
+`src/settings/SettingsWindow.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. Each page lives in a folder of its own, `general/`, `appearance/`, `layout/`, `input/`, `automation/`, and `characters/`. Every page is built from its board and from the primitives in `src/ui`.
 
 ## Pages
 
-A page is a component in `pages/` or `groups/` that takes `SettingsPageProps` from `pageTypes.ts`.
+A page is the component its folder is named for, like `layout/LayoutPage.tsx`, and takes `SettingsPageProps` from `pageTypes.ts`.
 
 - `target` is where the page should land. `target.section` and `target.anchor` come from the nav, a deep link, or a search hit.
 - `navSeq` goes up on every navigation, even to the same target. React to it when the target changes state on the page, like the Automation kind or the Characters profile.
@@ -17,9 +17,9 @@ Register a page in `PAGES` in `SettingsWindow.tsx`. A page that pins its own bar
 
 A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it.
 
-A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`, the one file left in that folder. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
+A page that saves as you go takes `update` from `useSettingsAutoSave`, beside the frame. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
-`pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
+`characters/CharactersPage.tsx` is the Characters board and `appearance/AppearancePage.tsx` the Appearance board, each with its parts beside it. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `automation/AutomationPage.tsx` is the Automation board, described under Automation below.
 
 `general/GeneralPage.tsx` is the General board, with the session log view in `general/SessionLogs.tsx`. `input/InputPage.tsx` and `layout/LayoutPage.tsx` are the Input and Layout boards. Layout's Status line section holds `layout/TickTimeStyleRow.tsx`, the Tick and time row, and under it `layout/TickCountRow.tsx`, the Tick counts row.
 
@@ -29,11 +29,11 @@ A deep link is a string like `automation:macros` or `characters:Ilsabet#tracked`
 
 What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. Everywhere else it is a section `id` the frame scrolls to.
 
-Search finds rows. `src/lib/settingsSearch.ts` lists every row with its label and target. When a page adds a row, add it there too, and give the element the same anchor, `anchor` on `Row` or `Disclosure` and `id` on `Section`. The frame scrolls to it and flashes a row (`revealAnchor.ts`). When the anchor sits inside a closed `Disclosure`, open it when `target.anchor` names it.
+Search finds rows. `settingsSearch.ts` lists every row with its label and target. When a page adds a row, add it there too, and give the element the same anchor, `anchor` on `Row` or `Disclosure` and `id` on `Section`. The frame scrolls to it and flashes a row (`revealAnchor.ts`). When the anchor sits inside a closed `Disclosure`, open it when `target.anchor` names it.
 
 ## Automation
 
-`pages/AutomationPage.tsx` holds the kind switcher, `Import…`, and the discard question. Each kind is an editor in `pages/automation/` built on `DraftEditor`, which draws the list, the detail card, and the save bar over a draft from `src/lib/automationDraft.ts`. A kind is a `KindSpec` (`pages/automation/types.ts`): how it loads, saves through the kind's existing API, validates, lists, and draws its detail card. Timers pins the Tick above its list with a draft of its own. The pure logic, with tests, sits in `src/lib/automationDraft.ts`, `automationList.ts`, `automationTriggers.ts`, and `automationRecords.ts`.
+`automation/AutomationPage.tsx` holds the kind switcher, `Import…`, and the discard question. Each kind is an editor beside it built on `DraftEditor`, which draws the list, the detail card, and the save bar over a draft from `src/automation/automationDraft.ts`. A kind is a `KindSpec` (`automation/types.ts`): how it loads, saves through the kind's existing API, validates, lists, and draws its detail card. Timers pins the Tick above its list with a draft of its own. The pure logic, with tests, sits in `src/automation/automationDraft.ts`, `automationList.ts`, `automationTriggers.ts`, and `automationRecords.ts`.
 
 Save writes only what the draft added, changed, and removed. Triggers and aliases go through one call that replaces the whole store, so their save reads the store again first and applies the draft over it by name (`saveTriggerDraft`, `saveAliasDraft`, `mergeDraftChanges`). Macros and timers save item by item, and a timer id always comes from the load. The backend sends `vosh://triggers-changed` and `vosh://aliases-changed` whenever a list changes, from Settings, #trigger, #alias, Lua, an import, or a preset (`src-tauri/src/app/events.rs`). A clean draft follows the store at once. A dirty one keeps your edits, says the list changed, and catches up once you save or discard.
 
@@ -41,10 +41,10 @@ The page draws the anchors `tick` (the Tick row), `import` (the import section),
 
 # Primitives
 
-Import the primitives from `ui/index.ts`. A page in `groups/` does it like this.
+Import the primitives from `src/ui/index.ts`. A page in its folder does it like this.
 
 ```tsx
-import { Section, Row, Toggle, Select } from '../ui';
+import { Section, Row, Toggle, Select } from '../../ui';
 ```
 
 The styles live in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the legacy rules in `styles.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
@@ -96,7 +96,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `FieldArea` is a `Field` for text where a newline means something, like the commands a trigger or timer sends. At one line it looks exactly like `Field`, and it grows a line at a time. It takes `value`, `onChange`, `width`, and `mono` like `Field` and forwards its ref. A plain `Field` drops newlines, so use this one for any value that can hold them.
 
-`ColorField` is a color setting in a row or a grid, like `Sent command color` on Input, `Divider color` on Layout, and the custom theme colors on Appearance. A 16 px swatch at the left opens the system color picker, and the color reads as text in the UI font on the field fill. The hex rules live in `src/lib/colorField.ts`.
+`ColorField` is a color setting in a row or a grid, like `Sent command color` on Input, `Divider color` on Layout, and the custom theme colors on Appearance. A 16 px swatch at the left opens the system color picker, and the color reads as text in the UI font on the field fill. The hex rules live in `src/ui/colorText.ts`.
 
 - `value` is CSS color text, or an empty string for none. `onChange(value)` runs with each color the field reads. A hex saves as lowercase `#rrggbb` once it has six digits, or three when you press Enter or leave the field. A hex with alpha or any other CSS color saves as typed once the page can draw it. Text that does not read as a color yet stays in the field. Leaving the field puts the saved color back, and Escape does the same while you stay in it.
 - `allowEmpty` lets you clear the text, which runs `onChange('')`, for a color that falls back to the theme. `placeholder` names that fallback, like `Theme default`, and `emptySwatch` is the color the swatch shows meanwhile, var() included. The picker then opens on that color.
@@ -158,7 +158,7 @@ A few classes in `settings.css` cover small shapes that are not worth a componen
 
 ## Icons
 
-`ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`src/ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
 
 ## Focus and motion
 

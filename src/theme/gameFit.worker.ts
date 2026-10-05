@@ -1,5 +1,5 @@
-// Runs the game color fit (lib/gameFit) off the main thread, for
-// lib/fitOffThread. Each message holds a palette and an id. The answer
+// Runs the game color fit (theme/gameFit) off the main thread, for
+// theme/fitOffThread. Each message holds a palette and an id. The answer
 // holds the fitted slots under the same id, or null for a palette the
 // fit cannot read, such as one with a color that is not hex.
 

@@ -19,7 +19,7 @@ export function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean, fit
   // The play palette, fitted while Fit game colors is on. Tinted mode
   // lets it color server output; otherwise the BASE palette applies, the
   // canonical xterm-256 chart unless the user replaced slots in the
-  // themes tab (lib/baseAnsi). Either way the theme owns the surfaces
+  // themes tab (theme/baseAnsi). Either way the theme owns the surfaces
   // (background, foreground, cursor, selection). The selection is the
   // window's token pair, an opaque fill with its own text, so xterm
   // draws what the native renderer and the window draw.

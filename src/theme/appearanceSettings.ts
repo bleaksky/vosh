@@ -1,8 +1,9 @@
 // The Appearance page's choices and edits, kept pure so they can be
 // tested without a window: what the Font and Size selects of Terminal
 // text and Panel text, and the Light theme and Dark theme selects,
-// offer, and how custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
-// applies and saves the results.
+// offer, and how custom themes and the base palette change. The page
+// (src/settings/appearance/AppearancePage.tsx) applies and saves the
+// results.
 
 import type { Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';

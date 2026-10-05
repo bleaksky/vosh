@@ -60,7 +60,7 @@
 
 /* Lifted, in xterm. The bands sit in a layer in the terminal area, under
    the terminal well, since the well and xterm clip at the text's edge and
-   a band reaches 4 px past it. promptBands.ts sizes the layer to the text
+   a band reaches 4 px past it. liftBands.ts sizes the layer to the text
    plus that reach and places each band. While your prompt shows lifted,
    xterm's own ground is clear, so the text draws over the bands. The
    area carries data-prompt-lifted then, an attribute React never writes,

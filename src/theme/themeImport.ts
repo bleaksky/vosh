@@ -1,6 +1,6 @@
 // Theme file import. Reads the color scheme files other terminals ship
 // (Ghostty, iTerm2, Kitty, and Alacritty) into Vosh's CustomTheme
-// shape. Only the terminal palette comes across. lib/chrome derives the
+// shape. Only the terminal palette comes across. theme/chrome derives the
 // window chrome from it, the same way it dresses every built-in theme.
 //
 // Each reader is small and forgiving. It skips keys it does not know,

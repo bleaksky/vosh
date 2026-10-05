@@ -1,8 +1,8 @@
-/* One Window design tokens. src/lib/theme.ts writes the color tokens
-   on :root at runtime from lib/chrome's derivation of the active
+/* One Window design tokens. src/theme/theme.ts writes the color tokens
+   on :root at runtime from theme/chrome's derivation of the active
    terminal theme. The values below are Obsidian Ember's, the fallback
    theme a config without a theme key reads, and a test in
-   lib/chrome.test.ts holds them to that derivation. They paint only
+   theme/chrome.test.ts holds them to that derivation. They paint only
    until the startup paint or the config brings your theme. A new
    install starts on Triad, and its window stays hidden until the
    config paints Triad, for half a second at most. Every new component
@@ -42,7 +42,7 @@
   --font-mud: var(--app-font-family);
   /* The panes and the status line, one name for each face they were
      designed in. Under Panel text Font As designed, the default, the
-     main window writes no --panel-font-family (src/lib/panelFont.ts)
+     main window writes no --panel-font-family (src/panel/panelFont.ts)
      and each keeps its own: --font-panel the system face for the
      headers, labels, counts, rows, the vitals and the status line,
      --font-panel-game the terminal face for the game text, the affects,

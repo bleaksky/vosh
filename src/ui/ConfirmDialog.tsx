@@ -15,7 +15,7 @@ interface Props {
 // and right-aligned Cancel and danger buttons. No scrim. A clear layer
 // behind the card still catches a press outside it, which cancels.
 // Exists because Tauri webviews silently reject window.confirm().
-// Focus starts on Cancel and stays inside the card (lib/dialogFocus).
+// Focus starts on Cancel and stays inside the card (ui/dialogFocus).
 // Tab cycles Cancel and the danger button, and focus that lands behind
 // the card comes back to Cancel. Esc cancels through the escape stack,
 // so it closes this dialog and nothing under it. Enter presses the

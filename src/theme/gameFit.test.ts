@@ -145,7 +145,7 @@ describe('fit', () => {
 // After a change to a published palette or to the fit, fit each one
 // again, about two seconds a theme, with
 //
-//   VOSH_FIT_THEMES=1 npx vitest run src/lib/gameFit.test.ts
+//   VOSH_FIT_THEMES=1 npx vitest run src/theme/gameFit.test.ts
 //
 // A theme that now fits to other colors fails and prints the block to
 // paste in its place.

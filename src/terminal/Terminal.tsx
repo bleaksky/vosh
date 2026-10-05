@@ -189,7 +189,7 @@ export interface TerminalHandle {
   getSelection: () => string;
   /** Select `length` cells from `column` of buffer row `row`, rows
    *  counted whole. A drag across the scrollback split selects through
-   *  it (src/lib/splitDrag.ts). */
+   *  it (src/terminal/splitDrag.ts). */
   select: (column: number, row: number, length: number) => void;
   /** The buffer as a drag reads it: the size, where the viewport and the
    *  bottom page start, and the cursor's row on the screen. */
@@ -268,7 +268,7 @@ interface Props {
   /// grid draws its own bands, and the split history pane draws none.
   lifted?: boolean;
   /// Rows at the bottom of the live pane the pinned prompt band borrows
-  /// while your prompt takes more than one row (src/lib/terminalRows.ts).
+  /// while your prompt takes more than one row (src/terminal/terminalRows.ts).
   /// The pane keeps its size and the grid gives them up from its top, so
   /// the newest line stays right above the band. The game still hears of
   /// the rows the pane holds with them.
@@ -279,12 +279,12 @@ interface Props {
   /// keeps to the top, as in the text and Lifted.
   anchorBottom?: boolean;
   /// Blinking text is on, so xterm blinks SGR 5 on the shared clock
-  /// (src/lib/xtermBlink.ts) while WebGL draws the pane. Off, or on the
+  /// (src/terminal/xterm/xtermBlink.ts) while WebGL draws the pane. Off, or on the
   /// DOM renderer, it draws it steady.
   blinkText?: boolean;
 }
 
-// The terminal's palette lives in src/lib/terminalTheme.ts, which the
+// The terminal's palette lives in src/terminal/terminalTheme.ts, which the
 // pinned prompt band reads too.
 
 /** `color`, a #rrggbb ground, fully clear. */
@@ -421,7 +421,7 @@ export function Terminal({
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
-    // nothing was written after them (src/lib/terminalRegion.ts). Every
+    // nothing was written after them (src/terminal/terminalRegion.ts). Every
     // resize goes through it too, so xterm takes a size only once it has
     // parsed what it holds. A copy that fills anew from the scrollback
     // gets a writer of its own (see the mirror below).
@@ -985,12 +985,12 @@ export function Terminal({
       }
     };
 
-    // Decoded across outputs and word wrapped (src/lib/outputShaper.ts).
+    // Decoded across outputs and word wrapped (src/terminal/outputShaper.ts).
     // A copy that fills anew starts a shaper of its own.
     let shaper = new OutputShaper(term.cols);
 
     // While the native underlay draws the live terminal, the xterm copy
-    // hides and takes no writes (src/lib/xtermMirror.ts). It keeps its
+    // hides and takes no writes (src/terminal/xterm/xtermMirror.ts). It keeps its
     // size, which the native grid sets, and the cell size it measures,
     // which the grid and the pinned band draw on. Find, selection, copy,
     // the prompt card and the scroll all go to the native grid then. If
@@ -1103,7 +1103,7 @@ export function Terminal({
       // Only a pane that left its tail snaps: xterm's scrollbar still
       // has the old rows here, and a scroll asked of it now lands a
       // row short, the newest line under the screen
-      // (src/lib/terminalRows.ts).
+      // (src/terminal/terminalRows.ts).
       if (!quietRef.current) {
         // When the viewport grows taller, the bottom-anchor pad
         // from mount no longer reaches the new last row, leaving
@@ -1143,7 +1143,7 @@ export function Terminal({
         // live tail. The history pane (quiet=true) opts out so users
         // can read past output in the split. A pane on its tail asks
         // nothing, since a resize may have left xterm's scrollbar a
-        // frame behind (src/lib/terminalRows.ts).
+        // frame behind (src/terminal/terminalRows.ts).
         if (!quietRef.current) {
           mirror.write(() => keepTail(term));
         }
@@ -1170,7 +1170,7 @@ export function Terminal({
     // since the history pane in the split view shares the same width.
     // A row the pinned band borrows or gives back sends nothing, since
     // the game is told the rows the pane holds with the lent ones
-    // (src/lib/terminalRows.ts).
+    // (src/terminal/terminalRows.ts).
     let naws_timer: ReturnType<typeof setTimeout> | null = null;
     const gameSizes = new GameSizeReport();
     const pushSize = () => {
@@ -1563,7 +1563,7 @@ export function Terminal({
     }
     // xterm just measured its cell on the faces that had loaded, and a
     // face the page mints for this list loads later. Measure again once
-    // the face the list draws with has loaded (src/lib/terminalFont.ts).
+    // the face the list draws with has loaded (src/terminal/terminalFont.ts).
     if (typeof document === 'undefined' || !document.fonts) return;
     return remeasureWhenLoaded(document.fonts, term, () => refitCellRef.current?.());
   }, [fontFamily, fontSize]);

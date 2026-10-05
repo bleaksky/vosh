@@ -214,7 +214,7 @@ describe('the chat line in panel.css', () => {
   it('sets the log in the game face at your panel size, 17 px lines at 12', () => {
     const log = rule('.pane-chat-log');
     // Your terminal font under As designed, your Panel font under any
-    // other pick (src/lib/panelFont.test.ts).
+    // other pick (src/panel/panelFont.test.ts).
     expect(log).toContain('font-family: var(--font-panel-game);');
     expect(log).toContain('font-size: var(--mud-text);');
     expect(log).toContain('line-height: var(--mud-chat-line);');

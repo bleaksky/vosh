@@ -395,7 +395,7 @@ describe('AffectsPaneView', () => {
 
   it('sets the names and the hours at your panel size in the game face', () => {
     // The game face is your terminal font under As designed and your
-    // Panel font under any other pick (src/lib/panelFont.test.ts).
+    // Panel font under any other pick (src/panel/panelFont.test.ts).
     expect(rule('.pane-affect-name')).toContain('font-family: var(--font-panel-game);');
     expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-panel-game);');
     expect(rule('.pane-affect-name')).toContain('font-size: var(--mud-text)');

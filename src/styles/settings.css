@@ -1,5 +1,5 @@
 /* Settings window (milestone 2). The frame, the sidebar, and the
-   primitives in src/components/settings/ui. Every rule sits under an
+   primitives in src/ui. Every rule sits under an
    st- class and reads the One Window tokens, the control tones among
    them, for the SPEC 4 settings controls. Geometry follows the approved
    boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.

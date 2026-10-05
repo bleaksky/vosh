@@ -7,12 +7,12 @@ import type { ThemePrefs } from '../theme/theme';
 import { CUSTOM_THEMES_CHANGED, THEME_CHANGED, THEME_PREFS_CHANGED } from './events';
 
 // ThemeChoice is now a free-form string keyed against THEMES in
-// src/lib/themes.ts plus the legacy `system` sentinel for tracking the
+// src/theme/themes.ts plus the legacy `system` sentinel for tracking the
 // OS contrast preference. The settings UI populates options from the
 // theme registry.
 export type ThemeChoice = string;
 
-// User-authored theme. Mirrors AppTheme on the lib/themes side
+// User-authored theme. Mirrors AppTheme on the theme/themes side
 // but with the two palette objects exposed as bare records so
 // adding a slot only needs to touch themes.ts + the editor UI.
 export interface CustomTheme {
@@ -22,7 +22,7 @@ export interface CustomTheme {
   xterm: Record<string, string>;
   chrome: Record<string, string>;
   /** The game color fit of the palette, kept once Settings has fitted
-   *  it (lib/gameFit). None on a theme saved before the fit or by Vosh
+   *  it (theme/gameFit). None on a theme saved before the fit or by Vosh
    *  0.8.1, which drops it. */
   fitted?: Record<string, string>;
 }
@@ -47,7 +47,7 @@ export function emitThemeChanged(id: string): Promise<void> {
 }
 
 /** Hear the theme id a window picked or saved. Pages hear it through
- *  subscribeThemeChanges in lib/theme.ts, which applies the theme first. */
+ *  subscribeThemeChanges in theme/theme.ts, which applies the theme first. */
 export function subscribeThemeChanged(cb: (id: string) => void): Promise<UnlistenFn> {
   return listen<string>(THEME_CHANGED, (event) => cb(event.payload));
 }
@@ -58,7 +58,7 @@ export function emitThemePrefsChanged(prefs: ThemePrefs): Promise<void> {
 }
 
 /** Hear the theme fields another window saved. Pages hear them through
- *  subscribeThemePrefs in lib/theme.ts, which checks their shape first. */
+ *  subscribeThemePrefs in theme/theme.ts, which checks their shape first. */
 export function subscribeThemePrefsChanged(cb: (payload: unknown) => void): Promise<UnlistenFn> {
   return listen<unknown>(THEME_PREFS_CHANGED, (event) => cb(event.payload));
 }

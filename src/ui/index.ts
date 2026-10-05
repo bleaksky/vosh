@@ -1,6 +1,6 @@
 // The Settings primitives. Every Settings page builds from these, so
 // the geometry and the One Window tokens live in one place
-// (src/styles/settings.css). src/components/settings/README.md lists
+// (src/styles/settings.css). src/settings/README.md lists
 // each one and its props.
 
 export { Button, type ButtonProps, type ButtonVariant } from './Button';

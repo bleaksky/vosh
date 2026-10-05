@@ -51,7 +51,7 @@ import type { Cell } from '../terminal/sgrCells';
 // reads the same count from the same store, so the band and the terminal
 // change in one commit, before the page paints. The game is told the rows
 // the pane holds with a one row band, so a fight sends it no new size
-// (src/lib/terminalRows.ts).
+// (src/terminal/terminalRows.ts).
 //
 // The band is drawn as the boards draw the edit band: --selrow, radius 4,
 // 4 px past the text on each side and 2 px above and below its rows, its

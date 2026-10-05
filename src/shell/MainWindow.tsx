@@ -594,7 +594,7 @@ function MainWindow() {
 
   // A drag that starts on the history pane's text and goes below it
   // scrolls the history down and hands its selection to the live pane
-  // when the split closes at the bottom (src/lib/splitDrag.ts). One
+  // when the split closes at the bottom (src/terminal/splitDrag.ts). One
   // controller for the window's life, since the drag outlives the split.
   // The wheel and Page Down tell it when they take the history to its
   // bottom, so a drag carries on through that close too.

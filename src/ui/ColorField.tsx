@@ -50,7 +50,7 @@ function drawable(text: string): boolean {
 
 /** What text in the field saves: an empty string for none, the color
  *  to save, or null while it is not a color yet. Hex digits follow the
- *  rules in src/lib/colorField.ts, so typing #fffc41 does not save #fff
+ *  rules in src/ui/colorText.ts, so typing #fffc41 does not save #fff
  *  on the way. A hex with alpha and any other CSS color save as typed
  *  once the page can draw them. */
 function readFieldText(text: string, final: boolean): string | null {

@@ -1,5 +1,5 @@
 // Gallery thumbnails for the Appearance tab. Each tile paints a tiny
-// window in five colors derived from the theme (lib/chrome), so an
+// window in five colors derived from the theme (theme/chrome), so an
 // imported theme gets a true thumbnail without anyone picking swatches.
 // The tile recipe (SettingsAppearance board): the ground in bg, a 22 px
 // panel strip in panel behind a 1 px sep line, a 6 px accent dot, and

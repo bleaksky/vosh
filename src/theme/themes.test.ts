@@ -662,7 +662,7 @@ describe('Solarized', () => {
   });
 });
 
-// The fits are computed ahead by lib/gameFit, and gameFit.test.ts fits
+// The fits are computed ahead by theme/gameFit, and gameFit.test.ts fits
 // each again with VOSH_FIT_THEMES=1. These pin what the decisions say of them.
 describe('fitted game colors', () => {
   const inPlay = (id: string) => playPalette(findTheme(id), true);
