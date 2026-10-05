@@ -176,6 +176,11 @@ pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
 /// of those, so it also reads the current value with
 /// `session_identity_get`. `subscribeSessionIdentity` hears it.
 pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-changed";
+/// Sent to every window when Vosh selected a session itself, as a click
+/// on an alert banner does. The payload is a
+/// [`crate::alert::banner::SessionSelected`]. No page listener hears it
+/// yet, since the page opens one session.
+pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of
 /// [`crate::profile::ui::CustomTheme`].

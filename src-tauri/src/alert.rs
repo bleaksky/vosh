@@ -17,6 +17,12 @@
 pub(crate) mod banner;
 pub(crate) mod focus;
 
+#[cfg(target_os = "macos")]
+mod mac;
+
+#[cfg(not(target_os = "macos"))]
+mod desktop;
+
 use std::collections::HashMap;
 use std::time::Duration;
 

@@ -1,15 +1,20 @@
-//! Where a banner goes. [`Banners::System`] bounces the Dock or flashes
-//! the taskbar. A test build holds [`Banners::Recorded`] instead, which
-//! keeps each banner for the test to read, so no test ever posts one or
-//! touches the system's notification center.
+//! Where a banner goes. [`Banners::System`] posts it, bounces the Dock or
+//! flashes the taskbar, and plays a system sound where the window cannot.
+//! A test build holds [`Banners::Recorded`] instead, which keeps each
+//! banner for the test to read, so no test ever posts one or touches the
+//! system's notification center.
 
 #[cfg(test)]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 
+use serde::Serialize;
 use tauri::{AppHandle, Manager, UserAttentionType};
 
 use super::focus::Fate;
 use super::Attention;
+use crate::app::events::{broadcast, SESSION_SELECTED};
+use crate::app::state::SharedState;
 use crate::sessions::SessionId;
 
 /// One banner to post.
@@ -25,6 +30,21 @@ pub(crate) struct Banner {
     pub(crate) owner: Option<String>,
 }
 
+impl Banner {
+    /// The banner's body: the words, or else Vosh, so a title alone
+    /// never looks cut short.
+    pub(crate) fn body(&self) -> &str {
+        self.words.as_deref().unwrap_or("Vosh")
+    }
+}
+
+/// `vosh://session-selected`: Vosh selected a session itself, as a click
+/// on a banner does, so every window follows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SessionSelected {
+    pub(crate) session: SessionId,
+}
+
 /// A banner a test build kept, with what the focus rule said of it.
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,7 +55,7 @@ pub(crate) struct Posted {
 
 /// Where banners go.
 pub(crate) enum Banners {
-    /// The system's attention calls.
+    /// The system's banners, sound and attention calls.
     #[cfg_attr(test, allow(dead_code))]
     System(SystemBanners),
     /// A list a test reads, in a test build.
@@ -52,19 +72,32 @@ impl Default for Banners {
         }
         #[cfg(not(test))]
         {
-            Self::System(SystemBanners)
+            Self::System(SystemBanners::default())
         }
     }
 }
 
-/// The system's side of an alert.
+/// What the system banners remember: the session of the newest banner,
+/// which a click that starts Vosh again on Windows selects.
 #[derive(Debug, Default)]
-pub(crate) struct SystemBanners;
+pub(crate) struct SystemBanners {
+    newest: Mutex<Option<SessionId>>,
+}
+
+impl SystemBanners {
+    /// The session of the newest banner.
+    fn newest(&self) -> Option<SessionId> {
+        *self
+            .newest
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
 
 impl Banners {
     /// Post `banner` as `fate` says, and bounce the Dock or flash the
     /// taskbar. Returns true when Vosh played a system sound in place of
-    /// the page's tone.
+    /// the page's tone, as for a window too hidden to play it.
     pub(crate) fn post<R: tauri::Runtime>(
         &self,
         app: &AppHandle<R>,
@@ -72,10 +105,7 @@ impl Banners {
         fate: &Fate,
     ) -> bool {
         match self {
-            Banners::System(system) => {
-                let _ = banner;
-                system.post(app, fate)
-            }
+            Banners::System(system) => system.post(app, banner, fate),
             #[cfg(test)]
             Banners::Recorded(list) => {
                 if fate.banner || fate.attention.is_some() {
@@ -86,6 +116,17 @@ impl Banners {
                 }
                 false
             }
+        }
+    }
+
+    /// The session of the newest banner the system showed, which a click
+    /// that starts Vosh again on Windows selects.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn newest(&self) -> Option<SessionId> {
+        match self {
+            Banners::System(system) => system.newest(),
+            #[cfg(test)]
+            Banners::Recorded(_) => None,
         }
     }
 
@@ -100,9 +141,36 @@ impl Banners {
 }
 
 impl SystemBanners {
-    #[allow(clippy::unused_self)]
-    fn post<R: tauri::Runtime>(&self, app: &AppHandle<R>, fate: &Fate) -> bool {
-        if let (Some(attention), Some(main)) = (fate.attention, app.get_webview_window("main")) {
+    fn post<R: tauri::Runtime>(&self, app: &AppHandle<R>, banner: &Banner, fate: &Fate) -> bool {
+        let main = app.get_webview_window("main");
+        // A window behind others, minimized or hidden may not play the
+        // page's tone, so the system plays a sound in its place.
+        let hidden = main.as_ref().map_or(true, |w| {
+            w.is_minimized().unwrap_or(false) || !w.is_visible().unwrap_or(true)
+        });
+        let system_sound = fate.sound.is_some() && hidden;
+        let mut played = false;
+        if fate.banner {
+            *self
+                .newest
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(banner.session);
+            #[cfg(target_os = "macos")]
+            super::mac::post(banner, false);
+            #[cfg(not(target_os = "macos"))]
+            {
+                super::desktop::post(app, banner, system_sound);
+                played = system_sound;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if system_sound {
+            if let Some(sound) = &fate.sound {
+                super::mac::play(sound);
+                played = true;
+            }
+        }
+        if let (Some(attention), Some(main)) = (fate.attention, main) {
             let kind = match attention {
                 Attention::Once => UserAttentionType::Informational,
                 Attention::Until => UserAttentionType::Critical,
@@ -111,6 +179,39 @@ impl SystemBanners {
                 tracing::warn!(error = %e, "the attention call failed");
             }
         }
-        false
+        played
     }
+}
+
+/// Answer clicks on banners at launch: a click selects the session its
+/// banner names and brings the main window to the front.
+pub(crate) fn install<R: tauri::Runtime>(app: &AppHandle<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        let app = app.clone();
+        super::mac::install(Box::new(move |session| show_session(&app, session)));
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+/// Select `session` and bring the main window to the front, as a click
+/// on its banner does. Every window hears the selection.
+pub(crate) fn show_session<R: tauri::Runtime>(app: &AppHandle<R>, session: SessionId) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(state) = app.try_state::<SharedState>() else {
+            return;
+        };
+        let state = state.inner().clone();
+        match crate::app::launch::select_session(&app, &state, session).await {
+            Ok(()) => broadcast(&app, SESSION_SELECTED, &SessionSelected { session }),
+            Err(e) => tracing::warn!(error = %e, "a banner named a session Vosh no longer holds"),
+        }
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.unminimize();
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
+    });
 }

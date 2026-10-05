@@ -75,6 +75,13 @@ impl SessionId {
         Self(n)
     }
 
+    /// The session numbered `n`, as a banner Vosh posted names it. It may
+    /// name a session that has since closed, which a lookup then refuses.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) const fn from_number(n: u32) -> Self {
+        Self(n)
+    }
+
     /// The key the profile's stores hold the session's Lua stops under.
     pub(crate) fn stop_key(self) -> StopKey {
         StopKey(self.0)

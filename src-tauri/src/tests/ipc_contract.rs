@@ -144,6 +144,11 @@ const UNHEARD: &[Unheard] = &[
         why: "An alert rang. The page half of the alerts plays its tone, shows \
               its notice and marks the row, after R18 (Alerts Q18).",
     },
+    Unheard {
+        name: "vosh://session-selected",
+        why: "A click on a banner selected a session. The page opens one \
+              session until the page half of R14b after R20.",
+    },
 ];
 
 /// A name argument, as far as the source tells it.
