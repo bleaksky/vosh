@@ -247,6 +247,13 @@ fn your_name_rings_as_a_whole_word_with_its_capital_once_char_status_names_you()
     assert!(names(line, "Orla"));
     assert!(!names(line, "orla"), "the capital counts");
     assert!(!names(line, "Orl"), "a whole word");
+    // A quote opens right before a name you are called by, as in the
+    // yell of act_comm.c:1983, `$n yells '$t'`.
+    let yell = "Tolliver yells 'Orla, help!'";
+    assert_eq!(
+        watch.line(&p, yell).map(|a| a.words),
+        Some(Some(yell.to_string()))
+    );
     // A line that starts with You is about you, `You now follow $N.`
     // from act_comm.c:3515 among them.
     assert_eq!(watch.line(&p, "You now follow Orla."), None);
