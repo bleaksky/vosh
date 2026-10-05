@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { NATIVE_COPIED } from '../ipc/events';
+import { onNativeCopied } from '../ipc/nativeSurface';
 import { dismissToast, getToasts, pushToast, subscribeToasts, type Toast } from '../lib/toasts';
 
 /** How long the copy confirmation stays up. Matches the native toast
@@ -16,8 +15,8 @@ let copyListening = false;
 function startCopyToasts() {
   if (copyListening) return;
   copyListening = true;
-  listen<unknown>(NATIVE_COPIED, (event) => {
-    const chars = Number(event.payload);
+  onNativeCopied((payload) => {
+    const chars = Number(payload);
     if (!Number.isFinite(chars) || chars <= 0) return;
     pushToast({
       kind: 'success',

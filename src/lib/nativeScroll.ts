@@ -1,5 +1,4 @@
-import { listen } from '@tauri-apps/api/event';
-import { NATIVE_SCROLL } from '../ipc/events';
+import { onNativeScroll } from '../ipc/nativeSurface';
 
 // Scroll depth of the native terminal grid. The native renderer
 // reports `vosh://native-scroll` as `[offset, max]` whenever the depth
@@ -29,8 +28,7 @@ function setDepth(next: NativeScrollDepth) {
 export function startNativeScroll(): void {
   if (started) return;
   started = true;
-  listen<unknown>(NATIVE_SCROLL, (event) => {
-    const p = event.payload;
+  onNativeScroll((p) => {
     if (!Array.isArray(p)) return;
     const offset = Number(p[0]);
     const max = Number(p[1]);

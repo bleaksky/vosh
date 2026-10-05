@@ -7,12 +7,13 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from './Input';
 import { submenuAt } from './panel/menuPlacement';
 import { MenuItem, MenuSeparator, MenuSurface } from './panel/MenuSurface';
 import { ChevronRightIcon } from './panel/paneIcons';
+import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
+import { scrollbackClear } from '../ipc/terminal';
 import { openPaneSubmenu, type PaneSubmenuState } from '../lib/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { openHelpWindow } from '../lib/helpLink';
@@ -128,7 +129,7 @@ export function TerminalMenu({
     // Same fork as the Cmd+C path in Input.tsx: the native surface owns
     // the visible selection when enabled, xterm otherwise.
     if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_copy').catch(() => {});
+      void nativeSurfaceCopy().catch(() => {});
       return;
     }
     const text = termRef.current?.getSelection() ?? '';
@@ -141,7 +142,7 @@ export function TerminalMenu({
   // native grid selects through its own command, xterm otherwise.
   const runSelectAll = () => {
     if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_select_all').catch(() => {});
+      void nativeSurfaceSelectAll().catch(() => {});
       return;
     }
     termRef.current?.selectAll();
@@ -161,7 +162,7 @@ export function TerminalMenu({
   // its own buffer, and the backend clears the native grid.
   const runClear = () => {
     if (!nativeSurfaceEnabled()) termRef.current?.clear();
-    void invoke('scrollback_clear').catch(() => {});
+    void scrollbackClear().catch(() => {});
   };
 
   // Groups split by separators.

@@ -172,3 +172,9 @@ export async function loadScrollback(feedNative = false): Promise<ScrollbackLoad
   });
   return { bytes: new Uint8Array(res.bytes), seededNative: res.seeded_native };
 }
+
+/** Forget the lines kept for the next launch, and on the native renderer
+ *  the grid's history too. xterm clears its own buffer. */
+export async function scrollbackClear(): Promise<void> {
+  await invoke('scrollback_clear');
+}

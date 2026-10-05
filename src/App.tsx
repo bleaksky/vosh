@@ -9,7 +9,6 @@ import {
 } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { invoke } from '@tauri-apps/api/core';
 import {
   NATIVE_FAILED_KEY,
   Terminal,
@@ -35,13 +34,21 @@ import {
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
 import { listTriggers, presetsInstall, presetsRemove } from './ipc/automation';
+import { FONT_CHANGED, HELP_OPEN, THEME_TERMINAL_COLORS_CHANGED } from './ipc/events';
 import {
-  FONT_CHANGED,
-  HELP_OPEN,
-  TERMINAL_CLICKED,
-  TERMINAL_CURSOR,
-  THEME_TERMINAL_COLORS_CHANGED,
-} from './ipc/events';
+  nativeSurfaceFind,
+  nativeSurfaceFindClear,
+  nativeSurfaceReady,
+  nativeSurfaceScroll,
+  nativeSurfaceSetBlinkText,
+  nativeSurfaceSetBrightBold,
+  nativeSurfaceSetDividerColor,
+  nativeSurfaceSetPromptBands,
+  nativeSurfaceSetPromptReach,
+  nativeSurfaceSetTokens,
+  onTerminalClicked,
+  onTerminalCursor,
+} from './ipc/nativeSurface';
 import {
   promptConfigGet,
   promptConfigSet,
@@ -163,7 +170,7 @@ function applySplitDividerColor(color: string | null): void {
   }
   // The native surface draws its own divider; keep it in the same color.
   if (nativeSurfaceEnabled()) {
-    void invoke('native_surface_set_divider_color', { color }).catch(() => {});
+    void nativeSurfaceSetDividerColor(color).catch(() => {});
   }
 }
 
@@ -178,7 +185,7 @@ function pushNativeChromeTokens(): void {
   const theme = findTheme(getCurrentThemeId());
   const tokens = themeTokens(theme);
   const yellow = parseHex(theme.xterm.yellow);
-  void invoke('native_surface_set_tokens', {
+  void nativeSurfaceSetTokens({
     divider: tokens.sep,
     selection: tokens.selection,
     selectionText: tokens.selectionText,
@@ -322,14 +329,14 @@ function App() {
   const applyBrightBold = (on: boolean) => {
     setBrightBold(on);
     if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_set_bright_bold', { on }).catch(() => {});
+      void nativeSurfaceSetBrightBold(on).catch(() => {});
     }
   };
   // The native grid blinks while Blinking text is on and draws steady
   // while it is off, from the next frame.
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
-    void invoke('native_surface_set_blink_text', { on: blinkText }).catch(() => {});
+    void nativeSurfaceSetBlinkText(blinkText).catch(() => {});
   }, [blinkText]);
   // Direct ref on the terminal-area wrapper so we can attach a
   // non-passive wheel listener. JSX onWheel is passive in some
@@ -798,7 +805,7 @@ function App() {
     termRef.current?.clearSearch();
     historyTermRef.current?.clearSearch();
     if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_find_clear').catch(() => {});
+      void nativeSurfaceFindClear().catch(() => {});
     }
     pendingFindRef.current = null;
     setFindResults({ index: -1, count: 0 });
@@ -849,7 +856,7 @@ function App() {
   // history pane above the live one.
   const toggleSplit = () => {
     if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_scroll', { kind: 'toggle' }).catch(() => {});
+      void nativeSurfaceScroll('toggle').catch(() => {});
       return;
     }
     if (splitOpenRef.current) {
@@ -934,7 +941,7 @@ function App() {
     let cancelled = false;
     let tries = 0;
     const check = () => {
-      void invoke<boolean>('native_surface_ready')
+      void nativeSurfaceReady()
         .catch(() => false)
         .then((ready) => {
           if (cancelled) return;
@@ -1270,9 +1277,7 @@ function App() {
   // is there and the card's marks still show.
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
-    void invoke('native_surface_set_prompt_bands', {
-      on: promptLifted === true || cardBand,
-    }).catch(() => {});
+    void nativeSurfaceSetPromptBands(promptLifted === true || cardBand).catch(() => {});
   }, [promptLifted, cardBand]);
 
   // The band under the open row reaches past its last glyph for the
@@ -1280,7 +1285,7 @@ function App() {
   const promptReach = usePromptReach();
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
-    void invoke('native_surface_set_prompt_reach', { px: promptReach }).catch(() => {});
+    void nativeSurfaceSetPromptReach(promptReach).catch(() => {});
   }, [promptReach]);
 
   // Keep the native surface's chrome colors on the theme. Every theme
@@ -1303,8 +1308,7 @@ function App() {
     const root = document.documentElement;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen<string>(TERMINAL_CURSOR, (event) => {
-      const cursor = event.payload;
+    void onTerminalCursor((cursor) => {
       if (cursor === 'row-resize' || cursor === 'pointer') {
         root.style.setProperty('--terminal-cursor', cursor);
       } else {
@@ -1329,7 +1333,7 @@ function App() {
     if (!nativeSurfaceEnabled()) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen(TERMINAL_CLICKED, () => {
+    void onTerminalClicked(() => {
       inputRef.current?.focus();
     }).then((fn) => {
       if (cancelled) fn();
@@ -1517,7 +1521,7 @@ function App() {
     // highlight. Route to the native command and feed the count back to
     // the toolbar; no xterm split is involved.
     if (nativeSurfaceEnabled()) {
-      void invoke<[number, number]>('native_surface_find', {
+      void nativeSurfaceFind({
         query,
         regex: opts.regex ?? false,
         caseSensitive: opts.caseSensitive ?? false,
