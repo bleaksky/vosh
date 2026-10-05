@@ -241,8 +241,8 @@ export function Terminal({
       // event step so trackpad scrolling feels controllable. Smooth-
       // scroll animation was tried (smoothScrollDuration) but stacking
       // consecutive scrollLines animations broke the scrolling feel —
-      // discrete instant steps via the MainWindow.tsx accumulator works
-      // better in practice.
+      // discrete instant steps via the useScrollbackSplit.ts accumulator
+      // works better in practice.
       scrollSensitivity: 0.75,
       theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
