@@ -3,11 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import {
-  SearchAddon,
-  type ISearchOptions,
-  type ISearchResultChangeEvent,
-} from '@xterm/addon-search';
+import { SearchAddon, type ISearchResultChangeEvent } from '@xterm/addon-search';
 
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../theme/baseAnsi';
@@ -17,13 +13,7 @@ import {
   onNativeGridSize,
 } from '../ipc/nativeSurface';
 import { setWindowSize } from '../ipc/session';
-import {
-  loadScrollback,
-  onOutput,
-  terminalCursor,
-  terminalScreenRows,
-  terminalLocalWrite,
-} from '../ipc/terminal';
+import { loadScrollback, onOutput, terminalLocalWrite } from '../ipc/terminal';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { findTheme, onCustomThemesChanged } from '../theme/themes';
 import { getFitGameColors, subscribeFitGameColors } from '../theme/fitGameColors';
@@ -34,9 +24,8 @@ import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
 import { remeasureWhenLoaded } from './terminalFont';
 import { nativeSurfaceEnabled } from './terminalRenderer';
-import { cellInGrid, regionFromCursor, regionFromXterm } from '../prompt/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
-import { GameSizeReport, gameSize, keepTail } from './terminalRows';
+import { GameSizeReport, keepTail } from './terminalRows';
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
@@ -44,7 +33,7 @@ import { XtermBlink } from './xterm/xtermBlink';
 import { loadWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
 import { PaneSizer } from './paneSizer';
-import type { TerminalHandle } from './terminalHandle';
+import { terminalHandle, type TerminalHandle } from './terminalHandle';
 
 // Report the active theme's terminal background to the session, which
 // keeps trigger colors readable on it, on either renderer. Then report the
@@ -605,212 +594,23 @@ export function Terminal({
     // the real size rather than the 80x24 default xterm starts with.
     setTimeout(pushSize, 900);
 
-    // Match-highlight colors. Read from CSS vars at search time so a
-    // theme switch picks up the new accent on the next find call.
-    // Hard-coded fallbacks keep matches visible if the var lookup
-    // returns empty (early-mount race in WKWebView).
-    const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
-      const rootStyle = getComputedStyle(document.documentElement);
-      const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#7aa2f7';
-      const toRgba = (hex: string, alpha: number): string => {
-        const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
-        if (!m) return hex;
-        const n = parseInt(m[1], 16);
-        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-      };
-      // The SearchAddon draws non-active matches BELOW the text and the
-      // active match ABOVE it. So a non-active match can carry an accent
-      // tint (the glyphs paint on top and stay legible), but the active
-      // match must have NO top fill — any fill there sits over the
-      // glyphs and washes them out, which is the unreadable highlight
-      // bug. The active match is marked instead by a solid accent
-      // outline (and its own tint shows through from the below-text
-      // highlight layer the addon also draws for it).
-      return {
-        matchBackground: toRgba(accent, 0.28),
-        matchBorder: toRgba(accent, 0.5),
-        matchOverviewRuler: accent,
-        activeMatchBackground: 'transparent',
-        activeMatchBorder: accent,
-        activeMatchColorOverviewRuler: accent,
-      };
-    };
-
-    const handle: TerminalHandle = {
+    // What the host reaches the pane by (src/terminal/terminalHandle.ts).
+    const handle = terminalHandle({
+      term,
+      searchAddon,
+      paneSizer,
+      sizer,
+      host,
       write: (data) => {
         const text = typeof data === 'string' ? data : localDecoder.decode(data);
         mirror.write(() => writer.local(text));
       },
       outputTaken: () => outputTaken,
-      fit: () => paneSizer.fitKept(),
-      focus: () => term.focus(),
-      clear: () => term.clear(),
-      scrollPages: (n) => term.scrollPages(n),
-      scrollLines: (n) => term.scrollLines(n),
-      scrollToBottom: () => term.scrollToBottom(),
-      refresh: () => {
-        if (term.rows > 0) term.refresh(0, term.rows - 1);
-      },
-      debug: () => ({
-        rows: term.rows,
-        cols: term.cols,
-        viewportY: term.buffer.active.viewportY,
-        baseY: term.buffer.active.baseY,
-        bufferLength: term.buffer.active.length,
-        hostW: host && host.style.width ? parseFloat(host.style.width) : 0,
-        hostH: host && host.style.height ? parseFloat(host.style.height) : 0,
-        webgl: webgl.active(),
-      }),
-      // viewportY tracks the top of the viewport in scrollback coords;
-      // baseY tracks the top of the bottom page. Equal means the
-      // viewport is anchored to the live tail.
-      isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
-      getSize: () => ({ cols: term.cols, rows: term.rows }),
-      windowSize: () => gameSize(term.cols, term.rows, lentRef.current),
-      cellHeight: () => {
-        // Read the host's pixel height (set by sync), divide by
-        // xterm's current row count, and round UP to whole pixels.
-        // xterm does not expose actual cell height in its public
-        // API; this derivation matches FitAddon's own row math.
-        // Ceiling matters: the snap pitch is the wrapper-height
-        // delta per row. With fractional cellHeight the wrapper
-        // height between two snap points is `N * cellHeight`, but
-        // the DOM rounds it to whole pixels — drag near a snap
-        // boundary then oscillates between two pixel rows of
-        // remainder space at the bottom of xterm and the line near
-        // the divider looks like its height is changing. Ceiling
-        // guarantees `N * snap > N * actualCellHeight`, so xterm
-        // always fits N rows comfortably with a constant tiny
-        // remainder, and that remainder doesn't move as snaps
-        // change. A few unused pixels at the bottom is cheaper
-        // than a visible jitter.
-        // The rows lent to the pinned band are still the host's.
-        const h = host && host.style.height ? parseFloat(host.style.height) : 0;
-        const rows = term.rows + lentRef.current;
-        return rows > 0 ? Math.ceil(h / rows) : 0;
-      },
-      findNext: (query, opts) =>
-        searchAddon.findNext(query, {
-          regex: opts?.regex ?? false,
-          wholeWord: opts?.wholeWord ?? false,
-          caseSensitive: opts?.caseSensitive ?? false,
-          decorations: searchDecorations(),
-        }),
-      findPrevious: (query, opts) =>
-        searchAddon.findPrevious(query, {
-          regex: opts?.regex ?? false,
-          wholeWord: opts?.wholeWord ?? false,
-          caseSensitive: opts?.caseSensitive ?? false,
-          decorations: searchDecorations(),
-        }),
-      clearSearch: () => searchAddon.clearDecorations(),
-      clearSelection: () => term.clearSelection(),
-      hasSelection: () => term.hasSelection(),
-      getSelection: () => term.getSelection(),
-      select: (column, row, length) => term.select(column, row, length),
-      bufferView: () => {
-        const buffer = term.buffer.active;
-        return {
-          cols: term.cols,
-          rows: term.rows,
-          viewportY: buffer.viewportY,
-          baseY: buffer.baseY,
-          cursorY: buffer.cursorY,
-        };
-      },
-      markLine: (row) => {
-        const buffer = term.buffer.active;
-        if (buffer.type !== 'normal') return null;
-        return term.registerMarker(Math.max(0, row) - (buffer.baseY + buffer.cursorY)) ?? null;
-      },
-      lineText: (row) => term.buffer.active.getLine(row)?.translateToString(true) ?? null,
-      selectAll: () => term.selectAll(),
-      onSelectionChange: (cb) => {
-        const disposable = term.onSelectionChange(cb);
-        return () => disposable.dispose();
-      },
-      promptRegion: async () => {
-        if (!quietRef.current && nativeSurfaceEnabled()) {
-          return regionFromCursor(await terminalCursor().catch(() => null));
-        }
-        return regionFromXterm(writer.region(), term.buffer.active, term.cols);
-      },
-      screenRows: async () => {
-        if (!quietRef.current && nativeSurfaceEnabled()) {
-          const screen = await terminalScreenRows().catch(() => null);
-          return screen
-            ? { rows: screen.rows, cols: screen.cols, atBottom: screen.at_bottom }
-            : null;
-        }
-        const buffer = term.buffer.active;
-        const rows = Array.from(
-          { length: term.rows },
-          (_, row) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '',
-        );
-        return { rows, cols: term.cols, atBottom: buffer.viewportY === buffer.baseY };
-      },
-      cellAt: (clientX, clientY) => {
-        const dpr = window.devicePixelRatio || 1;
-        if (!quietRef.current && nativeSurfaceEnabled()) {
-          // The native grid draws from the pane's top left, each cell
-          // xterm's device cell rounded to whole pixels.
-          const device = term.dimensions?.device?.cell;
-          if (!sizer || !device?.width || !device?.height) return null;
-          const r = sizer.getBoundingClientRect();
-          const grid = {
-            left: r.left,
-            top: r.top + paneSizer.nativeSpare,
-            width: r.width,
-            height: r.height - paneSizer.nativeSpare,
-          };
-          return cellInGrid(clientX, clientY, grid, {
-            width: Math.round(device.width) / dpr,
-            height: Math.round(device.height) / dpr,
-          });
-        }
-        const screen = host?.querySelector('.xterm-screen');
-        const cell = term.dimensions?.css?.cell;
-        if (!screen || !cell?.width || !cell?.height) return null;
-        return cellInGrid(clientX, clientY, screen.getBoundingClientRect(), cell);
-      },
-      rowTop: (row) => {
-        if (!quietRef.current && nativeSurfaceEnabled()) {
-          // The native grid, as cellAt reads it.
-          const device = term.dimensions?.device?.cell;
-          if (!sizer || !device?.height) return null;
-          const dpr = window.devicePixelRatio || 1;
-          return (
-            sizer.getBoundingClientRect().top +
-            paneSizer.nativeSpare +
-            row * (Math.round(device.height) / dpr)
-          );
-        }
-        const screen = host?.querySelector('.xterm-screen');
-        const cell = term.dimensions?.css?.cell;
-        if (!screen || !cell?.height) return null;
-        return screen.getBoundingClientRect().top + row * cell.height;
-      },
-      grid: () => {
-        if (!quietRef.current && nativeSurfaceEnabled()) {
-          // The native grid, as cellAt reads it.
-          const device = term.dimensions?.device?.cell;
-          if (!sizer || !device?.width || !device?.height) return null;
-          const dpr = window.devicePixelRatio || 1;
-          const r = sizer.getBoundingClientRect();
-          return {
-            left: r.left,
-            top: r.top + paneSizer.nativeSpare,
-            cellW: Math.round(device.width) / dpr,
-            cellH: Math.round(device.height) / dpr,
-          };
-        }
-        const screen = host?.querySelector('.xterm-screen');
-        const cell = term.dimensions?.css?.cell;
-        if (!screen || !cell?.width || !cell?.height) return null;
-        const r = screen.getBoundingClientRect();
-        return { left: r.left, top: r.top, cellW: cell.width, cellH: cell.height };
-      },
-    };
+      region: () => writer.region(),
+      webgl,
+      quiet: () => quietRef.current,
+      lent: () => lentRef.current,
+    });
     onReadyRef.current?.(handle);
 
     // Auto-clear selection when it scrolls off the viewport.
