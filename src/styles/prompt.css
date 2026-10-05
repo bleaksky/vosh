@@ -133,7 +133,7 @@
 /* The prompt card (section 7 of the prompt build spec, boards P1 to P15).
    A floating card on the SPEC 3 recipe, 560 wide, its left edge 12 px in
    from the terminal and its bottom 4 px above the row right above your
-   prompt (PromptCard.tsx places it). Header 46, a hairline, the body, a
+   prompt (useCardPlace.ts places it). Header 46, a hairline, the body, a
    hairline, footer 52. It composes the Settings primitives, so it carries
    .st-controls for their fills. */
 .pc-card {
