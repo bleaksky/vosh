@@ -56,7 +56,8 @@
 //
 // A color vision other than Typical tunes the status colors after the
 // rule above (statusSeenBy), so danger stands as far from success and
-// from warn, seen through that vision, as a typical eye sees them. The
+// from warn, seen through that vision, as a typical eye sees them, and
+// none runs into the text and secondary tiers the marks sit beside. The
 // text tones, the accent and the selection then derive from the tuned
 // colors, and the accent the rule picks stands ACCENT_APART from each
 // as that vision sees them.
@@ -463,8 +464,9 @@ function accentNeedOf(accent: StatusAccent, c: Rgb, vision: ColorVision): number
 // Every color a status color may take for `vision`: its own lightness
 // stepped either way and, for a family that turns, its hue turned up to
 // `bound` degrees. Each keeps the contrast the Typical color holds on
-// every ground, up to the 3:1 floor, and carries its cost, with the
-// charge of standing too near the accent.
+// every ground, up to the 3:1 floor, stays clear of the text the marks
+// sit beside (`marks`), and carries its cost, with the charge of
+// standing too near the accent.
 function statusOptions(
   from: Picked,
   family: TurnFamily | null,
@@ -472,9 +474,17 @@ function statusOptions(
   grounds: Rgb[],
   vision: ColorVision,
   accent: StatusAccent | null,
+  marks: Rgb[],
 ): StatusOption[] {
   const c = from.rgb;
   const seenAccent = accent && seenLab(accent.rgb, vision);
+  // No option comes nearer the text, as the vision sees them, than the
+  // Typical color stands, or VISION_GUARD if that is less, so a success
+  // mark never reads as the words beside it.
+  const seenMarks = marks.map((m) => seenLab(m, vision));
+  const markFloors = marks.map((m) => Math.min(seenApart(c, m, vision), VISION_GUARD));
+  const clearOfText = (seen: StatusOption['seen']) =>
+    seenMarks.every((m, j) => seenDistance(m, seen) >= markFloors[j]);
   // The accent the rule picked for Typical stands ACCENT_APART from each
   // status color, as the vision sees them, where the Typical colors stand
   // that far from it. A pinned accent is the theme's own pick, which the
@@ -516,7 +526,8 @@ function statusOptions(
       const raw = oklchToRgbInGamut({ L, C: lch.C, h: (lch.h + turn) % 360 });
       const rgb = { r: Math.round(raw.r), g: Math.round(raw.g), b: Math.round(raw.b) };
       if (grounds.some((g, j) => contrast(rgb, g) < floors[j])) continue;
-      out.push(option(rgb, turn));
+      const o = option(rgb, turn);
+      if (clearOfText(o.seen)) out.push(o);
     }
   }
   return out;
@@ -602,15 +613,18 @@ const STATUS_CACHE = new Map<string, { danger: Picked; warn: Picked; success: Pi
  *  stands ACCENT_APART, as the vision sees them, from the accent the
  *  rule picks for Typical, where the Typical color stands that far from
  *  it, and comes no nearer a pinned accent than the Typical color
- *  stands, up to ACCENT_APART. A color the theme pins in a form other
- *  than hex stays as pinned. Where the Typical colors already stand
- *  apart, within VISION_SLACK (statusHolds), or the best tuning moves
- *  no color VISIBLE_CHANGE, the Typical colors stay. */
+ *  stands, up to ACCENT_APART. None comes nearer the text the marks sit
+ *  beside, `marks`, than the Typical color stands, or VISION_GUARD if
+ *  that is less. A color the theme pins in a form other than hex stays
+ *  as pinned. Where the Typical colors already stand apart, within
+ *  VISION_SLACK (statusHolds), or the best tuning moves no color
+ *  VISIBLE_CHANGE, the Typical colors stay. */
 function statusSeenBy(
   vision: ColorVision,
   typical: { danger: Picked; warn: Picked; success: Picked },
   grounds: Rgb[],
   accent: StatusAccent | null,
+  marks: Rgb[],
 ): { danger: Picked; warn: Picked; success: Picked } {
   const { danger, warn, success } = typical;
   const key = [
@@ -620,6 +634,7 @@ function statusSeenBy(
     success.css,
     ...grounds.map(toHex),
     accent && `${toHex(accent.rgb)} ${accent.pinned}`,
+    ...marks.map(toHex),
   ].join(' ');
   const held = STATUS_CACHE.get(key);
   if (held) return held;
@@ -641,9 +656,9 @@ function statusSeenBy(
   const apart = Math.min(seenApart(warn.rgb, success.rgb, vision), VISION_GUARD);
   const solve = (bound: number) =>
     cheapestStatus(
-      statusOptions(danger, 'red', bound, grounds, vision, accent),
-      statusOptions(warn, null, bound, grounds, vision, accent),
-      statusOptions(success, 'green', bound, grounds, vision, accent),
+      statusOptions(danger, 'red', bound, grounds, vision, accent, marks),
+      statusOptions(warn, null, bound, grounds, vision, accent, marks),
+      statusOptions(success, 'green', bound, grounds, vision, accent, marks),
       needs,
       apart,
     );
@@ -789,7 +804,7 @@ export function deriveChrome(
     const accent = o.accent
       ? pinned && { rgb: pinned, pinned: true }
       : { rgb: liftAccent(prefer), pinned: false };
-    tuned = statusSeenBy(vision, t, grounds, accent);
+    tuned = statusSeenBy(vision, t, grounds, accent, [text.rgb, secondary.rgb]);
   }
   const { danger, warn, success } = tuned;
   // A danger that clears 3:1 as a dot can still be too dim to read as
