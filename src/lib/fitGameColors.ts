@@ -6,12 +6,13 @@ import { playPalette, type XtermPalette } from './themes';
 import { useActiveTheme } from './useActiveTheme';
 
 // Fit game colors, from UiConfig fit_game_colors, and the color vision
-// it fits for, from UiConfig color_vision. The main window sets Fit game
-// colors when it reads your config and on vosh://fit-game-colors-changed.
-// No other window sets it, so Settings and every other window keep the
-// published palette for the game colors. The color vision is the one
-// the window paints its chrome for (lib/theme), which every window sets
-// from its config and on vosh://color-vision-changed.
+// the game colors swap for, from UiConfig color_vision. The main window
+// sets Fit game colors when it reads your config and on
+// vosh://fit-game-colors-changed. No other window sets it, so Settings
+// and every other window play the published palette for the game
+// colors, swapped for a vision other than Typical. The color vision is
+// the one the window paints its chrome for (lib/theme), which every
+// window sets from its config and on vosh://color-vision-changed.
 
 const store = createStore(false);
 
@@ -38,7 +39,7 @@ export function useColorVision(): ColorVision {
 }
 
 /** The palette the game draws in while you play, on the theme this
- *  window paints with, fitted for your color vision. */
+ *  window paints with, swapped for your color vision. */
 export function usePlayPalette(): XtermPalette {
   const theme = useActiveTheme();
   const fit = useFitGameColors();

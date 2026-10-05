@@ -696,50 +696,6 @@ function statusSeenBy(
   return out;
 }
 
-// Whether the Typical status colors already stand apart for `vision`:
-// danger from success and from warn as far, as the vision sees them, as
-// a typical eye sees them, within VISION_SLACK, and each from the accent
-// as far as it keeps clear of it, which the accent rule holds exactly.
-function statusHolds(
-  vision: ColorVision,
-  status: { danger: Picked; warn: Picked; success: Picked },
-  accent: StatusAccent | null,
-): boolean {
-  const { danger, warn, success } = status;
-  const pair = (a: Rgb, b: Rgb) => seenApart(a, b, vision) >= deltaEOk(a, b) - VISION_SLACK;
-  if (!pair(danger.rgb, success.rgb) || !pair(danger.rgb, warn.rgb)) return false;
-  if (!accent) return true;
-  return [danger, warn, success].every(
-    (s) => seenApart(accent.rgb, s.rgb, vision) >= accentNeedOf(accent, s.rgb, vision),
-  );
-}
-
-/** Whether the status colors of `tokens`, the tokens the rule derives
- *  for Typical, already stand apart for `vision` (statusHolds), so a
- *  color vision leaves them as they are. `accentPinned` says whether
- *  the theme pins the accent. False where a status color is not hex,
- *  which no vision tunes. */
-export function statusKeptApart(
-  tokens: ChromeTokens,
-  vision: ColorVision,
-  accentPinned: boolean,
-): boolean {
-  const picked = (css: string) => {
-    const rgb = parseHex(css);
-    return rgb && { css, rgb };
-  };
-  const danger = picked(tokens.danger);
-  const warn = picked(tokens.warn);
-  const success = picked(tokens.success);
-  if (!danger || !warn || !success) return false;
-  const accent = parseHex(tokens.accent);
-  return statusHolds(
-    vision,
-    { danger, warn, success },
-    accent && { rgb: accent, pinned: accentPinned },
-  );
-}
-
 /** Derive the chrome tokens for a terminal palette, for a player with
  *  `vision`. Pure. Typical derives them as the rule above has it. */
 export function deriveChrome(
