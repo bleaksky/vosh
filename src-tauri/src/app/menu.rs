@@ -4,11 +4,11 @@
 //! front.
 //!
 //! Vosh commands reach the main window as `vosh://app-menu` with the
-//! palette entry id as the payload, and shell/MainWindow.tsx runs them through the
-//! same dispatcher as its keyboard shortcuts. The page owns the truth
-//! for every check mark and label: it pushes a [`MenuState`] snapshot
-//! through the `menu_set_state` command whenever one changes, and the
-//! menu only mirrors it.
+//! palette entry id as the payload, and shell/useAppCommands.ts runs them
+//! through the same dispatcher as the keyboard shortcuts. The page owns
+//! the truth for every check mark and label: it pushes a [`MenuState`]
+//! snapshot through the `menu_set_state` command whenever one changes,
+//! and the menu only mirrors it.
 //!
 //! Windows and Linux get no menu bar. Tauri would attach an app menu to
 //! every frameless window there, so the builder only installs this one

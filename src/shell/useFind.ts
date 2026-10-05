@@ -23,7 +23,7 @@ interface FindPanes extends Pick<
   focusInput: () => void;
 }
 
-interface ScrollbackFind {
+export interface ScrollbackFind {
   findOpen: boolean;
   openFind: () => void;
   findToolbarRef: RefObject<FindToolbarHandle>;
