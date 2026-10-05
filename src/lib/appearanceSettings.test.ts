@@ -19,7 +19,9 @@ import {
   stepGalleryTheme,
   THEME_SLOT_GROUPS,
   themeCaption,
+  visionTextSide,
   visionTunesWindow,
+  visionWindowSide,
   withBaseColor,
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
@@ -360,15 +362,20 @@ describe('colorVisionNote', () => {
     expect(colorVisionNote(findTheme('nord'), 'typical', true)).toBe('');
     expect(visionTunesWindow(findTheme('nord'), 'typical')).toBe(false);
     expect(colorVisionNote(findTheme('rubric'), 'deuteranopia', true)).toBe('');
+    expect(visionTextSide(findTheme('rubric'), 'deuteranopia')).toBe('changes');
+    expect(visionWindowSide(findTheme('rubric'), 'deuteranopia')).toBe('changes');
     expect(visionTunesWindow(findTheme('rubric'), 'deuteranopia')).toBe(true);
   });
 
   it('says the game text keeps its published colors while Fit game colors is off', () => {
-    expect(colorVisionNote(findTheme('nord'), 'deuteranopia', false)).toBe(
+    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', false)).toBe(
       'Game text keeps its published colors while Fit game colors is off. The window still follows Color vision.',
     );
     expect(colorVisionNote(findTheme('solarized-dark'), 'protanopia', true)).toBe(
       'Game text keeps its published colors on Solarized Dark. The window still follows Color vision.',
+    );
+    expect(colorVisionNote(findTheme('nord'), 'tritanopia', false)).toBe(
+      "Game text keeps its published colors while Fit game colors is off, and Nord already keeps the window's status colors apart for tritanopia.",
     );
   });
 
@@ -376,39 +383,38 @@ describe('colorVisionNote', () => {
     expect(colorVisionNote(findTheme('kanso-zen'), 'protanopia', true)).toBe(
       'Kanso Zen already keeps the game text apart for protanopia, so only the window changes.',
     );
-    expect(colorVisionNote(findTheme('triad'), 'tritanopia', true)).toBe(
-      'Triad already keeps these colors apart for tritanopia, so nothing changes.',
+    expect(colorVisionNote(findTheme('nord'), 'tritanopia', true)).toBe(
+      "Nord already keeps the window's status colors apart for tritanopia, so only the game text changes.",
     );
-    // Every step that would part Catppuccin's red from its green for a
-    // protanope fades a color, so its game text stays as it is.
-    expect(colorVisionNote(findTheme('catppuccin'), 'protanopia', true)).toBe(
-      'Catppuccin keeps its game text as Typical draws it for protanopia, and only the window changes.',
+    expect(colorVisionNote(findTheme('kanso-zen'), 'tritanopia', true)).toBe(
+      'Kanso Zen already keeps these colors apart for tritanopia, so nothing changes.',
     );
   });
 
-  // Kanso Zen's colors with status colors pinned in a form the window
-  // cannot tune, so neither the game text nor the window changes for a
-  // protanope.
-  it('says so where nothing changes', () => {
-    const kanso = findTheme('kanso-zen');
-    const pinned = customToAppTheme({
-      ...custom('still', 'Still'),
-      xterm: { ...kanso.xterm },
-      chrome: {
-        accent: '#b0c8d4',
-        danger: 'rgb(228, 104, 118)',
-        warn: 'rgb(230, 195, 132)',
-        success: 'rgb(135, 169, 135)',
-      },
-      fitted: kanso.fitted as Record<string, string>,
-    });
-    expect(colorVisionNote(pinned, 'protanopia', true)).toBe(
-      'Still already keeps these colors apart for protanopia, so nothing changes.',
+  // Every step that would part Kanso Zen's game text further for a
+  // deuteranope fades red or runs a color into another, so its game text
+  // stays as it is and only the window changes.
+  it('says what a theme cannot part far enough to see', () => {
+    expect(visionTextSide(findTheme('kanso-zen'), 'deuteranopia')).toBe('kept');
+    expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', true)).toBe(
+      'Only the window changes on Kanso Zen, since its game text cannot part visibly further for deuteranopia without fading or running into other colors.',
     );
-    // A custom theme Settings holds no fit for changes its game text where
-    // its Typical fit misses a pair.
-    expect(colorVisionNote(pinned, 'deuteranopia', true)).toBe(
-      "Still already keeps the window's status colors apart for deuteranopia, so only the game text changes.",
+    expect(visionWindowSide(findTheme('iceberg-dark'), 'protanopia')).toBe('kept');
+    expect(colorVisionNote(findTheme('iceberg-dark'), 'protanopia', true)).toBe(
+      'Nothing changes on Iceberg Dark for protanopia, since no color can part visibly further without fading or running into other colors.',
+    );
+  });
+
+  // Settings holds no fit for a custom theme, which the main window fits
+  // as it plays. A copy of Kanso Zen counts its game text as changing
+  // where its Typical fit misses a pair, and as kept apart where it
+  // holds them.
+  it('reads a custom theme by its Typical fit', () => {
+    const copy = customToAppTheme(copyTheme(findTheme('kanso-zen'), []));
+    expect(visionTextSide(copy, 'deuteranopia')).toBe('changes');
+    expect(colorVisionNote(copy, 'deuteranopia', true)).toBe('');
+    expect(colorVisionNote(copy, 'tritanopia', true)).toBe(
+      'Kanso Zen copy already keeps these colors apart for tritanopia, so nothing changes.',
     );
   });
 });

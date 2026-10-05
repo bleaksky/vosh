@@ -5,7 +5,7 @@
 // custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
 // applies and saves the results.
 
-import { CHROME_COLOR_KEYS, type Appearance } from './chrome';
+import { CHROME_COLOR_KEYS, statusKeptApart, type Appearance } from './chrome';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
 import {
   normalizePanelFont,
@@ -17,13 +17,20 @@ import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
-import { fitKey, needsVisionFit, type ColorVision } from './gameFit';
+import {
+  fitKey,
+  GAME_SLOTS,
+  largestMove,
+  needsVisionFit,
+  VISIBLE_CHANGE,
+  type ColorVision,
+} from './gameFit';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
   DEFAULT_THEME_ID,
+  playPalette,
   themeTokens,
-  visionFitOf,
   type AppTheme,
   type ThemeLicense,
   type XtermPalette,
@@ -223,19 +230,52 @@ export function themeCaption(theme: AppTheme): string {
 
 // ── Color vision ─────────────────────────────────────────────────────
 
-/** Whether `vision` changes any color the window paints `theme` in. */
-export function visionTunesWindow(theme: AppTheme, vision: ColorVision): boolean {
-  if (vision === 'typical') return false;
+/** What `vision` does to one side of a theme, the game text or the
+ *  window: `changes` where some color moves VISIBLE_CHANGE or more,
+ *  `holds` where the Typical colors already keep the pairs apart, and
+ *  `kept` where they fall short and no color can part further, far
+ *  enough to see, without fading or running into another. */
+export type VisionSide = 'changes' | 'holds' | 'kept';
+
+/** What `vision` does to the colors the window paints `theme` in. A
+ *  change too small to see counts as none. */
+export function visionWindowSide(theme: AppTheme, vision: ColorVision): VisionSide {
+  if (vision === 'typical') return 'holds';
   const typical = themeTokens(theme);
   const seen = themeTokens(theme, vision);
-  return CHROME_COLOR_KEYS.some((key) => seen[key] !== typical[key]);
+  if (largestMove(typical, seen, CHROME_COLOR_KEYS) >= VISIBLE_CHANGE) return 'changes';
+  return statusKeptApart(typical, vision, Boolean(theme.chrome?.accent)) ? 'holds' : 'kept';
 }
+
+/** Whether `vision` changes a color the window paints `theme` in far
+ *  enough to see. */
+export function visionTunesWindow(theme: AppTheme, vision: ColorVision): boolean {
+  return visionWindowSide(theme, vision) === 'changes';
+}
+
+/** What `vision` does to the game text of `theme` while Fit game colors
+ *  is on. A built in theme ships its fit for the vision, which is its
+ *  Typical fit where no game color can part further far enough to see.
+ *  Settings holds no fit for a custom theme, which the main window fits
+ *  as it plays, so one its Typical fit leaves short counts as changing. */
+export function visionTextSide(theme: AppTheme, vision: ColorVision): VisionSide {
+  const holds = !needsVisionFit(theme.xterm, vision, theme.fitted);
+  if (holds) return 'holds';
+  const builtin = BUILTIN_THEMES.find((t) => t.id === theme.id)?.xterm === theme.xterm;
+  if (!builtin) return 'changes';
+  const moved = largestMove(playPalette(theme, true), playPalette(theme, true, vision), GAME_SLOTS);
+  return moved >= VISIBLE_CHANGE ? 'changes' : 'kept';
+}
+
+// Why a side keeps its Typical colors where they fall short.
+const NO_ROOM = 'without fading or running into other colors';
 
 /** The quiet line under the Color vision row for `theme`, the theme on
  *  screen. It says what the vision leaves as it is: the game text while
  *  Fit game colors is off or the theme keeps out of it, and whatever the
- *  theme already keeps apart for the vision. Empty under Typical, and
- *  where the vision changes both the game text and the window. */
+ *  theme already keeps apart or cannot part further. Empty under
+ *  Typical, and where the vision changes both the game text and the
+ *  window far enough to see. */
 export function colorVisionNote(
   theme: AppTheme,
   vision: ColorVision,
@@ -243,33 +283,33 @@ export function colorVisionNote(
 ): string {
   if (vision === 'typical') return '';
   const name = theme.label;
-  const window = visionTunesWindow(theme, vision);
-  if (!fitGameColors || theme.fitGameColors === false) {
-    const why = fitGameColors ? `on ${name}` : 'while Fit game colors is off';
-    return window
-      ? `Game text keeps its published colors ${why}. The window still follows Color vision.`
-      : `Game text keeps its published colors ${why}, and ${name} already keeps the window's status colors apart for ${vision}.`;
+  const window = visionWindowSide(theme, vision);
+  const off = !fitGameColors
+    ? 'Game text keeps its published colors while Fit game colors is off'
+    : theme.fitGameColors === false
+      ? `Game text keeps its published colors on ${name}`
+      : null;
+  if (off !== null) {
+    if (window === 'changes') return `${off}. The window still follows Color vision.`;
+    return window === 'holds'
+      ? `${off}, and ${name} already keeps the window's status colors apart for ${vision}.`
+      : `${off}, and the window cannot part visibly further for ${vision} ${NO_ROOM}.`;
   }
-  // A built in theme ships its fit for the vision, which is its Typical
-  // fit where no game color can move without fading. Settings holds no
-  // fit for a custom theme, which the main window fits as it plays.
-  const holds = !needsVisionFit(theme.xterm, vision, theme.fitted);
-  const builtin = BUILTIN_THEMES.find((t) => t.id === theme.id)?.xterm === theme.xterm;
-  const text = !holds && (!builtin || visionFitOf(theme, vision) !== theme.fitted);
-  if (!text && !window) {
-    return holds
-      ? `${name} already keeps these colors apart for ${vision}, so nothing changes.`
-      : `Nothing on ${name} changes for ${vision}.`;
+  const text = visionTextSide(theme, vision);
+  if (text === 'changes' && window === 'changes') return '';
+  if (text === 'changes') {
+    return window === 'holds'
+      ? `${name} already keeps the window's status colors apart for ${vision}, so only the game text changes.`
+      : `Only the game text changes on ${name}, since its window cannot part visibly further for ${vision} ${NO_ROOM}.`;
   }
-  if (!text) {
-    return holds
+  if (window === 'changes') {
+    return text === 'holds'
       ? `${name} already keeps the game text apart for ${vision}, so only the window changes.`
-      : `${name} keeps its game text as Typical draws it for ${vision}, and only the window changes.`;
+      : `Only the window changes on ${name}, since its game text cannot part visibly further for ${vision} ${NO_ROOM}.`;
   }
-  if (!window) {
-    return `${name} already keeps the window's status colors apart for ${vision}, so only the game text changes.`;
-  }
-  return '';
+  return text === 'holds' && window === 'holds'
+    ? `${name} already keeps these colors apart for ${vision}, so nothing changes.`
+    : `Nothing changes on ${name} for ${vision}, since no color can part visibly further ${NO_ROOM}.`;
 }
 
 // ── Custom themes ────────────────────────────────────────────────────
