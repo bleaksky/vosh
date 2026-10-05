@@ -22,7 +22,14 @@ import {
   WHITE,
   type Rgb,
 } from './color';
-import { checks, COLOR_VISIONS, GAME_SLOTS, holdsVision, type ColorVision } from './gameFit';
+import {
+  checks,
+  COLOR_VISIONS,
+  GAME_SLOTS,
+  holdsVision,
+  visionSlots,
+  type ColorVision,
+} from './gameFit';
 import {
   BUILTIN_THEMES,
   customThemeLabel,
@@ -866,33 +873,85 @@ describe('color vision fits', () => {
     }
   });
 
+  // A vision's fit holds to the Typical fit. It passes every check the
+  // Typical fit passes, and on each check the Typical fit misses it falls
+  // no further short. So hits on you in red never reads fainter for the
+  // player who picks a vision than it does under Typical.
+  it('gives up no check the Typical fit passes and falls no further short of one it misses', () => {
+    const gap = (need: string, value: number) => {
+      if (need.startsWith('>=')) return Math.max(0, +need.slice(2) - value);
+      const [a, b] = need.split('..').map(Number);
+      return Math.max(0, a - value, value - b);
+    };
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        const held = checks(playPalette(theme, true));
+        checks(playPalette(theme, true, vision)).forEach((c, i) => {
+          const at = `${vision} ${theme.id} ${c.id} ${held[i].value} to ${c.value}`;
+          if (held[i].ok) expect(c.ok, at).toBe(true);
+          else
+            expect(gap(c.need, c.value), at).toBeLessThanOrEqual(gap(held[i].need, held[i].value));
+        });
+      }
+    }
+  });
+
+  // Deuteranopia and Protanopia move red, green, yellow and their bold
+  // twins. Tritanopia moves cyan, green and their bold twins. Every other
+  // color plays as the Typical fit draws it, byte for byte.
+  it('moves only the colors of the pairs a vision raises and their twins', () => {
+    for (const vision of OTHER) {
+      const moves = visionSlots(vision);
+      for (const theme of fitting) {
+        const typical = playPalette(theme, true);
+        const own = playPalette(theme, true, vision);
+        for (const slot of GAME_SLOTS.filter((k) => !moves.includes(k))) {
+          expect(own[slot], `${vision} ${theme.id} ${slot}`).toBe(typical[slot]);
+        }
+      }
+    }
+  });
+
   // What each vision's fit leaves short of the floors it raises, the
-  // pairs lightness cannot part on that theme without giving up a floor
-  // Typical asks. Every theme left out holds them all.
+  // pairs lightness cannot part that far on that theme without giving up
+  // a check the Typical fit passes or falling further short of one it
+  // misses. Every theme left out holds them all.
   const UNREACHED: Record<string, string[]> = {
-    'deuteranopia obsidian-ember': ['T7 deutan yellow/green 11.4'],
-    'deuteranopia triad': ['T7 deutan red/green 12.1'],
-    'deuteranopia kanso-zen': ['T7 deutan yellow/green 11.4'],
-    'deuteranopia tokyo-night': ['T7 deutan red/yellow 12.1', 'T7 deutan yellow/green 10.2'],
-    'deuteranopia gruvbox': ['T7 deutan yellow/green 10.3'],
-    'deuteranopia monokai': ['T7 deutan yellow/green 11.6'],
-    'deuteranopia one-half-dark': ['T7 deutan yellow/green 10.2'],
-    'deuteranopia tango-dark': ['T7 deutan yellow/green 10.3'],
-    'deuteranopia classic-vivid': ['T7 deutan yellow/green 11.4'],
-    'deuteranopia everforest-dark': ['T7 deutan yellow/green 10.6'],
-    'deuteranopia green-screen': ['T7 deutan yellow/green 10.1'],
-    'deuteranopia srcery': ['T7 deutan red/yellow 12.9', 'T7 deutan yellow/green 10.4'],
-    'deuteranopia melange-dark': ['T7 deutan yellow/green 11.9'],
-    'deuteranopia harbor-dark': ['T7 deutan yellow/green 10.2'],
-    'deuteranopia iceberg-dark': ['T7 deutan yellow/green 11'],
+    'deuteranopia obsidian-ember': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 11.3'],
+    'deuteranopia rubric': ['T7 deutan brightRed/brightGreen 12'],
+    'deuteranopia kanso-zen': ['T7 deutan red/yellow 12.2', 'T7 deutan yellow/green 9.5'],
+    'deuteranopia tokyo-night': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 10.1'],
+    'deuteranopia nord': ['T7 deutan red/green 10.8'],
+    'deuteranopia gruvbox': ['T7 deutan red/yellow 14.7'],
+    'deuteranopia catppuccin': ['T7 deutan red/green 10.1'],
+    'deuteranopia dracula': ['T7 deutan red/green 10.1'],
+    'deuteranopia monokai': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 10.6'],
+    'deuteranopia one-half-dark': ['T7 deutan red/yellow 12.1', 'T7 deutan yellow/green 10.1'],
+    'deuteranopia tango-dark': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 9.5'],
+    'deuteranopia classic-vivid': ['T7 deutan red/green 10.3', 'T7 deutan yellow/green 11.4'],
+    'deuteranopia high-contrast': ['T7 deutan red/green 10.1'],
+    'deuteranopia everforest-dark': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 11.9'],
+    'deuteranopia green-screen': ['T7 deutan red/green 10', 'T7 deutan yellow/green 10.2'],
+    'deuteranopia srcery': ['T7 deutan yellow/green 10.6'],
+    'deuteranopia nightfly': ['T7 deutan red/green 10', 'T7 deutan yellow/green 12.4'],
+    'deuteranopia melange-dark': ['T7 deutan yellow/green 10.4'],
+    'deuteranopia modus-vivendi': ['T7 deutan red/yellow 12.2', 'T7 deutan yellow/green 11.5'],
+    'deuteranopia harbor-dark': ['T7 deutan red/yellow 12', 'T7 deutan yellow/green 10.2'],
+    'deuteranopia iceberg-dark': ['T7 deutan red/yellow 12.1'],
     'protanopia triad': ['T7 protan yellow/green 12.4'],
-    'protanopia catppuccin': ['T7 protan yellow/green 10.2'],
-    'protanopia dracula': ['T7 protan yellow/green 12.2'],
-    'protanopia solarized-light': ['T7 protan red/green 10.7'],
+    'protanopia rubric': ['T7 protan red/green 12.5'],
+    'protanopia kanso-zen': ['T7 protan yellow/green 11.1'],
+    'protanopia nord': ['T7 protan yellow/green 10.6'],
+    'protanopia catppuccin': ['T7 protan yellow/green 10.1'],
+    'protanopia dracula': ['T7 protan yellow/green 10.2'],
+    'protanopia solarized-light': ['T7 protan red/yellow 12.1'],
     'protanopia classic-vivid': ['T7 protan yellow/green 10.1'],
+    'protanopia high-contrast': ['T7 protan yellow/green 10.5'],
     'protanopia green-screen': ['T7 protan yellow/green 10.1'],
     'protanopia nightfly': ['T7 protan yellow/green 10.2'],
-    'protanopia melange-dark': ['T7 protan red/yellow 12.7'],
+    'protanopia melange-dark': ['T7 protan red/yellow 14.5'],
+    'tritanopia classic-vivid': ['T7 tritan cyan/green 8.5'],
+    'tritanopia green-screen': ['T7 tritan cyan/green 8'],
   };
 
   it('holds the floors each vision raises on every theme it can reach', () => {
@@ -923,12 +982,18 @@ describe('color vision fits', () => {
   });
 
   it('plays the Typical fit for a vision whose floors it already holds', () => {
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        if (!holdsVision(playPalette(theme, true), vision)) continue;
+        expect(visionFitOf(theme, vision), `${vision} ${theme.id}`).toBe(theme.fitted);
+      }
+    }
     // Tritanopia raises only cyan against green, which most Typical fits
     // already part far enough.
-    const kept = fitting.filter(
-      (t) => visionFitOf(t, 'tritanopia') === t.fitted && t.fitted !== undefined,
+    const held = fitting.filter(
+      (t) => t.fitted !== undefined && holdsVision(playPalette(t, true), 'tritanopia'),
     );
-    expect(kept.map((t) => t.id)).toEqual([
+    expect(held.map((t) => t.id)).toEqual([
       'kanso-zen',
       'tokyo-night',
       'rose-pine',
@@ -942,9 +1007,35 @@ describe('color vision fits', () => {
       'harbor-dark',
       'iceberg-dark',
     ]);
-    for (const theme of kept) {
+    for (const theme of held) {
       expect(playPalette(theme, true, 'tritanopia')).toEqual(playPalette(theme, true));
     }
+  });
+
+  // Where every step that parts a raised pair further gives up a check
+  // or falls further short of one, the vision plays the Typical fit.
+  it('plays the Typical fit where lightness parts no raised pair further', () => {
+    const kept: string[] = [];
+    for (const vision of OTHER) {
+      for (const theme of fitting) {
+        if (holdsVision(playPalette(theme, true), vision)) continue;
+        if (visionFitOf(theme, vision) === theme.fitted) kept.push(`${vision} ${theme.id}`);
+      }
+    }
+    expect(kept).toEqual([
+      'deuteranopia kanso-zen',
+      'deuteranopia tokyo-night',
+      'deuteranopia one-half-dark',
+      'deuteranopia tango-dark',
+      'deuteranopia high-contrast',
+      'deuteranopia harbor-dark',
+      'protanopia kanso-zen',
+      'protanopia catppuccin',
+      'protanopia dracula',
+      'protanopia green-screen',
+      'tritanopia green-screen',
+    ]);
+    for (const at of kept) expect(Object.keys(UNREACHED), at).toContain(at);
   });
 });
 

@@ -22,10 +22,11 @@
 // the fit while Fit game colors is on (playPalette in themes.ts,
 // fitGameColors).
 //
-// A color vision other than Typical gets fits of its own. A built in
-// theme ships them in themes.ts (VISION_FITS) where its Typical fit
-// misses the floors the vision raises, and gameFit.test.ts fits them
-// again with VOSH_FIT_THEMES=1.
+// A color vision other than Typical gets fits of its own, each the
+// Typical fit with the colors of the pairs the vision raises moved
+// further apart. A built in theme ships them in themes.ts (VISION_FITS)
+// where the fit for a vision moves anything, and gameFit.test.ts fits
+// them again with VOSH_FIT_THEMES=1.
 
 import { indexedRgb } from './bandCells';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
@@ -224,8 +225,9 @@ const T = {
   // A color vision asks the T7 pairs its own simulation measures to
   // stand a quarter farther apart. The review's floors already hold for
   // a color blind player, and this gives the player who picks the
-  // vision a margin past them. Lightness alone reaches it on most
-  // themes, and themes.test.ts names the pairs it cannot part that far.
+  // vision a margin past them. Where lightness cannot reach it without
+  // giving up a check the Typical fit passes, the pair stays as far
+  // apart as it gets, and themes.test.ts names those pairs.
   visionRaise: 1.25,
 };
 
@@ -342,7 +344,7 @@ function stepAtHue(hex: string, dir: number, ok: (hex: string) => boolean): stri
  *  when it reads as loud as body text, and when one color of a pair
  *  runs out of room, the other steps toward the ground, never under its
  *  own floor. Half the fit's searches start from here. */
-export function tune(src: XtermPalette, vision: ColorVision = 'typical'): XtermPalette {
+export function tune(src: XtermPalette): XtermPalette {
   const p = { ...src };
   const bg = p.background;
   const gL = lightness(bg);
@@ -413,8 +415,7 @@ export function tune(src: XtermPalette, vision: ColorVision = 'typical'): XtermP
         (q) => stepOut(q, 'brightWhite') - stepOut(q, 'foreground') >= T.fgBrightWhiteDL,
       ) || changed;
     for (const kind of ['protan', 'deutan'] as const) {
-      for (const [a, b, floor] of CVD_PAIRS) {
-        const need = cvdNeed(floor, kind, vision);
+      for (const [a, b, need] of CVD_PAIRS) {
         const [near, far] = nearFirst(a, b);
         changed = separate(near, far, (q) => dECvd(q[a], q[b], kind) >= need) || changed;
       }
@@ -430,9 +431,9 @@ export function tune(src: XtermPalette, vision: ColorVision = 'typical'): XtermP
         (q) => dL(q.red, q.brightRed) >= T.rRbDL && stepOut(q, 'brightRed') > stepOut(q, 'red'),
       ) || changed;
     {
-      const need = cvdNeed(T.tritanCG, 'tritan', vision);
       const [near, far] = nearFirst('cyan', 'green');
-      changed = separate(near, far, (q) => dECvd(q.cyan, q.green, 'tritan') >= need) || changed;
+      changed =
+        separate(near, far, (q) => dECvd(q.cyan, q.green, 'tritan') >= T.tritanCG) || changed;
     }
     if (!changed) break;
   }
@@ -459,15 +460,18 @@ function shortfall(p: XtermPalette): number {
   return s;
 }
 
+// The T7 pairs `kind` measures, each with its floor before a vision
+// raises it.
+const pairsOf = (kind: Cvd): readonly (readonly [AnsiSlot, AnsiSlot, number])[] =>
+  kind === 'tritan' ? [['cyan', 'green', T.tritanCG]] : CVD_PAIRS;
+
 // How far short of the floors a color vision raises its own pairs fall,
 // summed the same way. Typical raises none.
 function visionShortfall(p: XtermPalette, vision: ColorVision): number {
   const kind = CVD_OF[vision];
   if (!kind) return 0;
-  const pairs: readonly (readonly [AnsiSlot, AnsiSlot, number])[] =
-    kind === 'tritan' ? [['cyan', 'green', T.tritanCG]] : CVD_PAIRS;
   let s = 0;
-  for (const [a, b, floor] of pairs) {
+  for (const [a, b, floor] of pairsOf(kind)) {
     const need = cvdNeed(floor, kind, vision);
     const v = dECvd(p[a], p[b], kind);
     if (v < need) s += (need - +v.toFixed(1)) / need + 0.05;
@@ -475,13 +479,41 @@ function visionShortfall(p: XtermPalette, vision: ColorVision): number {
   return s;
 }
 
+// How far a check falls outside its target, 0 when it is inside, to
+// the tenth checks() reports.
+function gap(c: GameCheck): number {
+  if (c.need.startsWith('>=')) return Math.max(0, +c.need.slice(2) - c.value);
+  const [a, b] = c.need.split('..').map(Number);
+  return Math.max(0, a - c.value, c.value - b);
+}
+
+// Whether `p` holds every check `held` passes, and falls no further
+// short than `held` on each check it misses. A fit for a color vision
+// holds to the checks of the Typical fit this way, so no color drops
+// under a floor the Typical fit holds, and a color the Typical fit
+// leaves short, such as a dim red, gets no fainter.
+function keeps(p: XtermPalette, held: readonly GameCheck[]): boolean {
+  return checks(p).every((c, i) => (held[i].ok ? c.ok : gap(c) <= gap(held[i])));
+}
+
+/** The slots a fit for `vision` may move, the slots of the pairs it
+ *  raises and the bold or plain twin of each, which T6 ties to it.
+ *  Every other slot keeps its Typical fit. Typical names none. */
+export function visionSlots(vision: ColorVision): readonly GameSlot[] {
+  const kind = CVD_OF[vision];
+  if (!kind) return [];
+  const named = new Set<GameSlot>();
+  for (const [a, b] of pairsOf(kind)) {
+    for (const k of [a, b]) {
+      for (const pair of PAIRS) if (pair.includes(k)) pair.forEach((s) => named.add(s));
+    }
+  }
+  return GAME_SLOTS.filter((k) => named.has(k));
+}
+
 const ITERS = 9000;
 const SEEDS = [11, 23, 37];
 const MOVE_WEIGHT = 0.35;
-// A miss on a floor a color vision raises counts half what a miss on a
-// floor Typical asks counts, so the fit for a vision rarely gives up a
-// floor to reach a raised one.
-const VISION_WEIGHT = 50;
 
 type Lightness = Record<GameSlot, number>;
 
@@ -490,17 +522,35 @@ interface Search {
   palette: XtermPalette;
 }
 
+// What a search for a color vision holds to.
+interface Hold {
+  vision: ColorVision;
+  // The Typical fit laid over the published colors. The search starts
+  // here and measures each move from here.
+  from: XtermPalette;
+  // checks() of `from`, the floors no step may give up.
+  held: readonly GameCheck[];
+  // The slots the search may move (visionSlots).
+  slots: readonly GameSlot[];
+}
+
 // One random search over the slots' lightness, from `start` or from
 // the published colors. It keeps a step only when the cost drops. The
-// cost is the shortfall first, with the floors a color vision raises at
-// half weight, then the total distance from the published colors, and a
-// heavy charge on any slot that loses more than 40 percent of its
-// chroma, so a yellow never turns cream.
+// cost is the shortfall first, then the total distance from the
+// published colors, and a heavy charge on any slot that loses more
+// than 40 percent of its chroma, so a yellow never turns cream.
+//
+// With `hold` it fits for a color vision. It starts from the Typical
+// fit, moves only the slots `hold` names, and takes no step that gives
+// up a check the Typical fit passes or falls further short of one it
+// misses. The cost is how far the floors the vision raises fall short,
+// then the total distance from the Typical fit, and the same charge on
+// chroma.
 function search(
   src: XtermPalette,
   seed: number,
   start: XtermPalette | undefined,
-  vision: ColorVision,
+  hold?: Hold,
 ): Search {
   // A linear congruential generator in plain doubles. The products
   // pass 2^53 and lose low bits, and the fit depends on exactly those
@@ -514,9 +564,16 @@ function search(
     GameSlot,
     Oklch
   >;
+  // Where each slot starts and where a pull back heads, the published
+  // colors for Typical and the Typical fit for a color vision.
+  const origin = hold?.from ?? src;
+  const home = Object.fromEntries(
+    GAME_SLOTS.map((k) => [k, hold ? rgbToOklch(rgb(origin[k])) : base[k]]),
+  ) as Record<GameSlot, Oklch>;
   const at = (k: GameSlot, L: number) => {
     const o = base[k];
     if (Math.abs(L - o.L) < 1e-9) return { hex: src[k], C: o.C };
+    if (Math.abs(L - home[k].L) < 1e-9) return { hex: origin[k], C: home[k].C };
     const hex = toHex(oklchToRgbInGamut({ ...o, L: Math.max(0, Math.min(1, L)) }));
     return { hex, C: rgbToOklch(rgb(hex)).C };
   };
@@ -530,27 +587,37 @@ function search(
       if (c0 > 0.04 && C < 0.6 * c0) drained += (0.6 * c0 - C) / c0;
     }
     let move = 0;
-    for (const k of GAME_SLOTS) move += dE(src[k], p[k]);
-    const missed =
-      vision === 'typical'
-        ? shortfall(p) * 100
-        : shortfall(p) * 100 + visionShortfall(p, vision) * VISION_WEIGHT;
+    for (const k of GAME_SLOTS) move += dE(origin[k], p[k]);
+    let missed: number;
+    if (!hold) missed = shortfall(p) * 100;
+    else if (keeps(p, hold.held)) missed = visionShortfall(p, hold.vision) * 100;
+    else return { cost: Infinity, palette: p };
     return { cost: missed + (move * MOVE_WEIGHT) / 10 + drained * 400, palette: p };
   };
   let cur = Object.fromEntries(
     GAME_SLOTS.map((k) => [k, start ? rgbToOklch(rgb(start[k])).L : base[k].L]),
   ) as Lightness;
   let best = cost(cur);
+  const slots = hold?.slots ?? GAME_SLOTS;
   for (let i = 0; i < ITERS; i += 1) {
     const t = { ...cur };
-    const n = 1 + Math.floor(rnd() * 3);
     const amp = 0.06 * (1 - i / ITERS) + 0.004;
-    for (let j = 0; j < n; j += 1) {
-      const k = GAME_SLOTS[Math.floor(rnd() * GAME_SLOTS.length)];
-      // A quarter of the moves pull a slot back toward its published
-      // lightness.
-      t[k] = rnd() < 0.25 ? base[k].L + (t[k] - base[k].L) * rnd() : t[k] + (rnd() - 0.5) * 2 * amp;
-      t[k] = Math.max(0, Math.min(1, t[k]));
+    // For a color vision, half the moves step a few slots by the same
+    // amount, so colors a floor ties together, such as yellow and bright
+    // yellow, move as one where each alone would break it.
+    if (hold && rnd() < 0.5) {
+      const d = (rnd() - 0.5) * 2 * amp;
+      for (const k of slots) if (rnd() < 0.5) t[k] = Math.max(0, Math.min(1, t[k] + d));
+    } else {
+      const n = 1 + Math.floor(rnd() * 3);
+      for (let j = 0; j < n; j += 1) {
+        const k = slots[Math.floor(rnd() * slots.length)];
+        // A quarter of the moves pull a slot back toward where it
+        // started, its published lightness for Typical.
+        const L0 = home[k].L;
+        t[k] = rnd() < 0.25 ? L0 + (t[k] - L0) * rnd() : t[k] + (rnd() - 0.5) * 2 * amp;
+        t[k] = Math.max(0, Math.min(1, t[k]));
+      }
     }
     const c = cost(t);
     if (c.cost < best.cost) {
@@ -584,35 +651,51 @@ export function holdsVision(p: XtermPalette, vision: ColorVision): boolean {
   return visionShortfall(p, vision) === 0;
 }
 
-/** Fit a published palette to the checks, for `vision`. The best of six
- *  searches, three seeds each from the published colors and from tune(),
- *  and it returns only the slots it moved. What still misses stays
- *  missed, so checks() on the fitted palette for the same vision says
- *  what is short. It takes about two seconds, so a built in theme
- *  stores its result. Typical fits exactly as before color vision.
+// The slots of `p` that differ from `src`.
+function movedFrom(src: XtermPalette, p: XtermPalette): Partial<XtermPalette> {
+  const moved: Partial<XtermPalette> = {};
+  for (const k of GAME_SLOTS) if (p[k] !== src[k]) moved[k] = p[k];
+  return moved;
+}
+
+// The first of the cheapest wins.
+const cheapest = (runs: Search[]) =>
+  runs.reduce((win, run) => (run.cost < win.cost ? run : win)).palette;
+
+/** Fit a published palette to the checks, for `vision`, and return only
+ *  the slots it moved. What still misses stays missed, so checks() on
+ *  the fitted palette for the same vision says what is short.
  *
- *  Another vision first takes the Typical fit, `typical` when you have
- *  it, and keeps it when it already holds the floors the vision raises,
- *  so play changes only where the vision needs it. Else three more
- *  searches start from the Typical fit, so the fit for the vision ends
- *  no worse for it than the Typical fit. That takes up to eight
- *  seconds. */
+ *  Typical is the best of six searches, three seeds each from the
+ *  published colors and from tune(), exactly as before color vision. It
+ *  takes about two seconds, so a built in theme stores its result.
+ *
+ *  Another vision builds on the Typical fit, `typical` when you have it.
+ *  It keeps that fit when it already holds the floors the vision raises.
+ *  Else three searches start from it and move only the slots of the
+ *  raised pairs and their twins (visionSlots), so every other color
+ *  plays as Typical has it. No step gives up a check the Typical fit
+ *  passes or falls further short of one it misses, so where lightness
+ *  cannot part a pair without that, the pair stays as far apart as it
+ *  gets. Where no step parts a pair at all, the fit is the Typical fit.
+ *  That takes about a second. */
 export function fit(
   src: XtermPalette,
   vision: ColorVision = 'typical',
   typical?: Partial<XtermPalette>,
 ): Partial<XtermPalette> {
-  const starts: (XtermPalette | undefined)[] = [undefined, tune(src, vision)];
-  if (vision !== 'typical') {
-    const base = typical ?? fit(src);
-    const play = { ...src, ...base };
-    if (holdsVision(play, vision)) return base;
-    starts.push(play);
+  if (vision === 'typical') {
+    const runs = [undefined, tune(src)].flatMap((start) =>
+      SEEDS.map((seed) => search(src, seed, start)),
+    );
+    return movedFrom(src, cheapest(runs));
   }
-  const runs = starts.flatMap((start) => SEEDS.map((seed) => search(src, seed, start, vision)));
-  // The first of the cheapest wins.
-  const p = runs.reduce((win, run) => (run.cost < win.cost ? run : win)).palette;
-  const moved: Partial<XtermPalette> = {};
-  for (const k of GAME_SLOTS) if (p[k] !== src[k]) moved[k] = p[k];
-  return moved;
+  const base = typical ?? fit(src);
+  const from = { ...src, ...base };
+  if (holdsVision(from, vision)) return base;
+  const hold: Hold = { vision, from, held: checks(from), slots: visionSlots(vision) };
+  const p = cheapest(SEEDS.map((seed) => search(src, seed, from, hold)));
+  // Every step that parts a raised pair further gives something up.
+  if (GAME_SLOTS.every((k) => p[k] === from[k])) return base;
+  return movedFrom(src, p);
 }
