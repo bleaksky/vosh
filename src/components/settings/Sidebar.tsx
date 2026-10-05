@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
+import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { subscribeSettingsFind } from '../../ipc/windows';
 import { shortcutKey, shortcutKeys } from '../../lib/palette';
 import { scrollWithin } from '../../lib/scrollWithin';
@@ -82,23 +83,10 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
 
   // Find in the macOS menu bar, chosen while Settings is in front,
   // searches settings the same way.
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeSettingsFind(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent(subscribeSettingsFind, () => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  });
 
   useEffect(() => setActive(0), [query]);
 

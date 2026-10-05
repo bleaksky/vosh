@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getUiConfig, type UiConfig } from './ipc/uiConfig';
 import { followReplacedUiConfig } from './ipc/uiConfigSave';
+import { useTauriEvent } from './ipc/useTauriEvent';
 import { subscribeHelpFind, subscribeHelpGoto } from './ipc/windows';
 import {
   applyThemePrefs,
@@ -210,32 +211,21 @@ export function HelpApp() {
 
   // A link for a window that is already open. The window that asked
   // also left the target in storage for a cold open, so clear it.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeHelpGoto((link) => {
-      if (typeof link !== 'string') return;
-      clearPendingTarget();
-      const target = resolveHelpTarget(link);
-      if (target) land(target);
-      void getCurrentWindow().setFocus();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, [land]);
+  useTauriEvent(subscribeHelpGoto, (link) => {
+    if (typeof link !== 'string') return;
+    clearPendingTarget();
+    const target = resolveHelpTarget(link);
+    if (target) land(target);
+    void getCurrentWindow().setFocus();
+  });
 
   // Cmd+F on macOS, Ctrl+F elsewhere, and Find in the menu bar, focus
   // the search.
+  const focusSearch = () => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  };
   useEffect(() => {
-    const focusSearch = () => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.shiftKey) return;
       const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
@@ -244,20 +234,9 @@ export function HelpApp() {
       focusSearch();
     };
     document.addEventListener('keydown', onKey);
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeHelpFind(focusSearch)
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      cancelled = true;
-      unlisten?.();
-    };
+    return () => document.removeEventListener('keydown', onKey);
   }, [mac]);
+  useTauriEvent(subscribeHelpFind, focusSearch);
 
   // The article takes focus from Tab and scrolls itself then. From the
   // search or the sidebar, the keys that scroll a page still reach it.
@@ -277,6 +256,12 @@ export function HelpApp() {
   // Load the theme and the font, and show the window once a frame with
   // the theme has gone out. The startup paint usually has it on screen
   // already.
+  const take = (cfg: UiConfig) => {
+    setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+    applyThemePrefs(cfg);
+    setThemeId(getCurrentThemeId());
+    setConfig(cfg);
+  };
   useEffect(() => {
     let revealed = false;
     const reveal = () => {
@@ -286,52 +271,31 @@ export function HelpApp() {
       void win.show().then(() => win.setFocus());
     };
     const fallback = window.setTimeout(reveal, 500);
-    const take = (cfg: UiConfig) => {
-      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-      applyThemePrefs(cfg);
-      setThemeId(getCurrentThemeId());
-      setConfig(cfg);
-    };
     getUiConfig()
       .then(take)
       .catch((e: unknown) => console.error('[help] reading the config failed', e))
       .finally(() => showAfterThemePaint(reveal));
-    let cancelled = false;
-    const unsubs: Array<() => void> = [];
-    const keep = (p: Promise<() => void>) =>
-      p
-        .then((fn) => {
-          if (cancelled) fn();
-          else unsubs.push(fn);
-        })
-        .catch(() => {});
-    // A profile switch or an import replaces the config: the theme and
-    // the font may change with it.
-    void keep(
-      followReplacedUiConfig(take, (e) => console.error('[help] following the config failed', e)),
-    );
-    // Another window changed the theme. The repaint has run already. A
-    // custom theme Help has not read yet comes with the config.
-    void keep(
-      subscribeThemeChanges(() => {
-        setThemeId(getCurrentThemeId());
-        getUiConfig()
-          .then(take)
-          .catch(() => {});
-      }),
-    );
-    void keep(
-      subscribeThemePrefs((prefs) => {
-        applyThemePrefs(prefs);
-        setThemeId(getCurrentThemeId());
-      }),
-    );
-    return () => {
-      window.clearTimeout(fallback);
-      cancelled = true;
-      unsubs.forEach((fn) => fn());
-    };
+    return () => window.clearTimeout(fallback);
   }, []);
+  // A profile switch or an import replaces the config: the theme and
+  // the font may change with it.
+  useTauriEvent(
+    (cb) =>
+      followReplacedUiConfig(cb, (e) => console.error('[help] following the config failed', e)),
+    take,
+  );
+  // Another window changed the theme. The repaint has run already. A
+  // custom theme Help has not read yet comes with the config.
+  useTauriEvent(subscribeThemeChanges, () => {
+    setThemeId(getCurrentThemeId());
+    getUiConfig()
+      .then(take)
+      .catch(() => {});
+  });
+  useTauriEvent(subscribeThemePrefs, (prefs) => {
+    applyThemePrefs(prefs);
+    setThemeId(getCurrentThemeId());
+  });
 
   // Commands and codes use your terminal font through --font-mud, the
   // way Settings and the main window do.

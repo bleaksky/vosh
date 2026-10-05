@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { listLogSessions } from '../../../ipc/logs';
 import {
   profileGetScope,
@@ -8,6 +8,7 @@ import {
   type ScopeConfig,
 } from '../../../ipc/profiles';
 import { checkForUpdate, installUpdateAndRelaunch } from '../../../ipc/updater';
+import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../../lib/palette';
 import { savedSessionsText } from '../../../lib/logView';
@@ -330,27 +331,13 @@ const SCOPE_ROWS: { key: keyof ScopeConfig; label: string }[] = [
 function ScopeSection({ onError }: { onError: (message: string | null) => void }) {
   const [scope, setScope] = useState<ScopeConfig | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    const reload = () =>
-      profileGetScope()
-        .then((next) => {
-          if (!cancelled) setScope(next);
-        })
-        .catch((e) => onError(String(e)));
-    void reload();
-    void subscribeProfilesChanged(() => {
-      if (!cancelled) void reload();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
+  const reload = useCallback(() => {
+    profileGetScope()
+      .then(setScope)
+      .catch((e) => onError(String(e)));
   }, [onError]);
+  useEffect(() => reload(), [reload]);
+  useTauriEvent(subscribeProfilesChanged, reload);
 
   const set = async (key: keyof ScopeConfig, shared: boolean) => {
     if (!scope) return;

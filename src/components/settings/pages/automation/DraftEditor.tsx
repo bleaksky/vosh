@@ -33,6 +33,7 @@ import {
 import { automationSaveError } from '../../../../lib/automationRecords';
 import { scrollWithin } from '../../../../lib/scrollWithin';
 import { subscribeProfileSwitched } from '../../../../ipc/profiles';
+import { useTauriEvent } from '../../../../ipc/useTauriEvent';
 import { Button } from '../../ui';
 import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
@@ -217,33 +218,20 @@ export function DraftEditor<T>({
   useEffect(() => {
     scopedRef.current = profileScoped;
   }, [profileScoped]);
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void subscribeProfileSwitched(() => {
-      const d = draftRef.current;
-      const dirty = d !== null && isDraftDirty(d);
-      if (cancelled || (dirty && !scopedRef.current)) return;
-      void load(dirty ? null : selectedKey())
-        .then(() => {
-          if (dirty) {
-            onError(
-              `Vosh switched profiles and loaded that profile's ${spec.noun.many}, so your unsaved changes are gone.`,
-            );
-          }
-        })
-        .catch((e) => onError(automationSaveError(e)));
-    })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unsub = fn;
+  useTauriEvent(subscribeProfileSwitched, () => {
+    const d = draftRef.current;
+    const dirty = d !== null && isDraftDirty(d);
+    if (dirty && !scopedRef.current) return;
+    void load(dirty ? null : selectedKey())
+      .then(() => {
+        if (dirty) {
+          onError(
+            `Vosh switched profiles and loaded that profile's ${spec.noun.many}, so your unsaved changes are gone.`,
+          );
+        }
       })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
-  }, [spec, load, selectedKey, onError]);
+      .catch((e) => onError(automationSaveError(e)));
+  });
 
   const entryCache = useMemo(() => new WeakMap<object, Omit<ListEntry, 'uid'>>(), []);
   const entries = useMemo<ListEntry[]>(() => {

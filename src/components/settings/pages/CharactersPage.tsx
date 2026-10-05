@@ -33,6 +33,7 @@ import {
   subscribeProfileSwitched,
   type ProfilesList,
 } from '../../../ipc/profiles';
+import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import { loadTarget } from '../../../lib/useConnection';
 import type { SettingsPageProps } from '../pageTypes';
 import { Row, Section, Select, Toggle } from '../ui';
@@ -56,27 +57,6 @@ import { TrackedAffects } from './characters/TrackedAffects';
 // the whole UI config, so editing an inactive profile cannot reach the
 // main window. The page follows edits from anywhere through the
 // profile events and the session identity event.
-
-type Unlisten = () => void;
-
-/** Subscribe to each of `subs` and hand back one cleanup, safe to run
- *  before the subscriptions resolve. */
-function subscribeAll(subs: Promise<Unlisten>[]): Unlisten {
-  let cancelled = false;
-  const unlisteners: Unlisten[] = [];
-  for (const sub of subs) {
-    void sub
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisteners.push(fn);
-      })
-      .catch(() => {});
-  }
-  return () => {
-    cancelled = true;
-    for (const fn of unlisteners) fn();
-  };
-}
 
 export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsPageProps) {
   const [list, setList] = useState<ProfilesList | null>(null);
@@ -155,28 +135,22 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       .catch(() => {});
   }, [reloadList]);
 
-  useEffect(
-    () =>
-      subscribeAll([
-        subscribeProfilesChanged(() => reloadAll()),
-        subscribeProfileSwitched(() => reloadAll()),
-        subscribeProfileChanged((name) => {
-          if (name === selectedRef.current) reloadDetail();
-        }),
-        subscribeSessionIdentity(setIdentity),
-        // The live profile's list and panes can change in the main
-        // window. Keep the window's config copy on the live list, so a
-        // full save from another page never writes an old one back.
-        subscribeTrackedAffectsChanged((tracked) => {
-          setConfig((prev) => (prev ? { ...prev, tracked_affects: tracked } : prev));
-          if (selectedRef.current === listRef.current?.active) reloadDetail();
-        }),
-        subscribePaneLayout(() => {
-          if (selectedRef.current === listRef.current?.active) reloadDetail();
-        }),
-      ]),
-    [reloadAll, reloadDetail, setConfig],
-  );
+  useTauriEvent(subscribeProfilesChanged, () => reloadAll());
+  useTauriEvent(subscribeProfileSwitched, () => reloadAll());
+  useTauriEvent(subscribeProfileChanged, (name) => {
+    if (name === selectedRef.current) reloadDetail();
+  });
+  useTauriEvent(subscribeSessionIdentity, setIdentity);
+  // The live profile's list and panes can change in the main
+  // window. Keep the window's config copy on the live list, so a
+  // full save from another page never writes an old one back.
+  useTauriEvent(subscribeTrackedAffectsChanged, (tracked) => {
+    setConfig((prev) => (prev ? { ...prev, tracked_affects: tracked } : prev));
+    if (selectedRef.current === listRef.current?.active) reloadDetail();
+  });
+  useTauriEvent(subscribePaneLayout, () => {
+    if (selectedRef.current === listRef.current?.active) reloadDetail();
+  });
 
   const select = (name: string) => {
     if (name === selected) return;
