@@ -222,21 +222,22 @@ export function themeCaption(theme: AppTheme): string {
 // ── Color vision ─────────────────────────────────────────────────────
 
 /** The quiet line under the Color vision row, which says what your
- *  vision swaps. Every theme swaps the same families, so the line names
- *  none. Empty under Typical. While the theme's colors are off for MUD
- *  text (`themeTerminalColors`), game text keeps your base palette, so
- *  only the window changes, or under tritanopia nothing. */
+ *  vision swaps. Every theme swaps the same families as far as its own
+ *  colors leave room, so the line names none. Empty under Typical. While
+ *  the theme's colors are off for MUD text (`themeTerminalColors`), game
+ *  text keeps your base palette, so only the window changes. */
 export function colorVisionNote(vision: ColorVision, themeTerminalColors = true): string {
   if (vision === 'typical') return '';
-  const base = "Game text keeps your base palette while the theme's colors are off for MUD text";
-  if (vision === 'tritanopia') {
-    return themeTerminalColors
-      ? 'Blues turn purple and magentas turn pink in the game text. The window keeps its status colors, which you already tell apart.'
-      : `${base}, and the window keeps its status colors, so nothing changes.`;
-  }
-  return themeTerminalColors
-    ? "Greens turn blue, reds turn orange and blues turn violet, in the game text and in the window's status colors."
-    : `${base}. The window's greens still turn blue and its reds orange.`;
+  const game = themeTerminalColors
+    ? vision === 'tritanopia'
+      ? 'In the game text blues turn purple and magentas turn pink.'
+      : 'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room.'
+    : "Game text keeps your base palette while the theme's colors are off for MUD text.";
+  const window =
+    vision === 'tritanopia'
+      ? 'The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
+      : 'In the window success turns blue and danger leans toward orange.';
+  return `${game} ${window}`;
 }
 
 // ── Custom themes ────────────────────────────────────────────────────
