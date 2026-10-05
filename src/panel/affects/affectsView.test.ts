@@ -4,9 +4,7 @@ import {
   affectsPaneRows,
   affectsSummary,
   affectsView,
-  CRITICAL_TICKS,
   DEFAULT_AFFECT_THRESHOLDS,
-  EXPIRING_TICKS,
   gaugeFraction,
   hoursTone,
   isTrackedRow,
@@ -14,6 +12,7 @@ import {
   type AffectRow,
   type AffectThresholds,
 } from './affectsView';
+import { CRITICAL_TICKS, EXPIRING_TICKS } from '../../ipc/affects';
 import { HARMFUL_AFFECTS } from './harmfulAffects';
 
 const aff = (name: string, duration: number | null): AffectInput => ({ name, duration });

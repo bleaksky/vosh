@@ -3,12 +3,12 @@ import {
   affectsPaneRows,
   DEFAULT_AFFECT_THRESHOLDS,
   gaugeFraction,
-  type AffectFulls,
   type AffectInput,
   type AffectRow,
   type AffectThresholds,
   type TrackedInput,
 } from './affectsView';
+import type { AffectFulls } from '../../ipc/affects';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { useChipMeasure } from './chipMeasure';

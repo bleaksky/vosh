@@ -3,13 +3,12 @@ import {
   affectsPaneRows,
   DEFAULT_AFFECT_THRESHOLDS,
   gaugeFraction,
-  type AffectFulls,
   type AffectInput,
   type AffectRow,
   type AffectThresholds,
   type TrackedInput,
 } from './affectsView';
-import type { AffectsMarker } from '../../ipc/affects';
+import type { AffectFulls, AffectsMarker } from '../../ipc/affects';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { countdownGrid, type CountdownGrid } from './countdownGrid';

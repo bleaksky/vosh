@@ -3,7 +3,6 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { CRITICAL_TICKS, EXPIRING_TICKS } from '../panel/affects/affectsView';
 import { AFFECTS_DISPLAY_CHANGED, AFFECT_FULL_CHANGED, TRACKED_AFFECTS_CHANGED } from './events';
 import type { SessionData } from './session';
 import type { UiConfig } from './uiConfig';
@@ -56,6 +55,13 @@ export async function affectsSnapshotGet(): Promise<unknown> {
   return invoke('affects_snapshot_get');
 }
 
+/** Hours at full for each affect key, the most Vosh has seen for the
+ *  affect on this character since it was last cast. The backend keeps
+ *  them (src-tauri/src/affects/full.rs), the one place that decides
+ *  full, and nothing here computes one. An affect with no entry reads
+ *  as full. */
+export type AffectFulls = Readonly<Record<string, number>>;
+
 /** The affect fulls the backend keeps for the logged in character. */
 export async function affectFullGet(): Promise<unknown> {
   return invoke('affect_full_get');
@@ -101,6 +107,16 @@ export type AffectsMarker = (typeof AFFECTS_MARKERS)[number];
 export function normalizeAffectsMarker(value: unknown): AffectsMarker {
   return AFFECTS_MARKERS.find((marker) => marker === value) ?? 'dot';
 }
+
+/** A tracked affect at or under this many ticks reads as about to
+ *  drop, unless you set another. An affect at 0 goes on the next
+ *  tick. */
+export const EXPIRING_TICKS = 2;
+
+/** The game prints the hours of an affect at or under this many ticks
+ *  in bold red, in its own affects bar. Vosh does too, unless you set
+ *  another. */
+export const CRITICAL_TICKS = 1;
 
 /** The most hours either affects threshold takes. */
 export const AFFECTS_HOURS_MAX = 99;

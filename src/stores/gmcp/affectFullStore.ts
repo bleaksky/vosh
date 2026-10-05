@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { AffectFulls } from '../../panel/affects/affectsView';
-import { affectFullGet, subscribeAffectFullChanged } from '../../ipc/affects';
+import { affectFullGet, subscribeAffectFullChanged, type AffectFulls } from '../../ipc/affects';
 import { onState } from '../../ipc/session';
 import { createStore } from '../store';
 

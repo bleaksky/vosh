@@ -1,4 +1,5 @@
 import { normalizeAffectName } from '../../lib/affects';
+import { CRITICAL_TICKS, EXPIRING_TICKS, type AffectFulls } from '../../ipc/affects';
 import { HARMFUL_AFFECTS, harmfulSet } from './harmfulAffects';
 
 // View model for the Affects pane, the at a glance checklist (board
@@ -48,16 +49,6 @@ export interface TrackedInput {
   name: string;
   label?: string | null;
 }
-
-/** A tracked affect at or under this many ticks reads as about to
- *  drop, unless you set another. An affect at 0 goes on the next
- *  tick. */
-export const EXPIRING_TICKS = 2;
-
-/** The game prints the hours of an affect at or under this many ticks
- *  in bold red, in its own affects bar. Vosh does too, unless you set
- *  another. */
-export const CRITICAL_TICKS = 1;
 
 /** When an affect's hours change color, in whole ticks. The profile
  *  keeps both (affects_running_out_hours and affects_almost_gone_hours
@@ -179,13 +170,6 @@ export function affectMark(row: AffectRow): AffectMark | null {
   if (row.state === 'untracked') return null;
   return row.tone ?? 'up';
 }
-
-/** Hours at full for each affect key, the most Vosh has seen for the
- *  affect on this character since it was last cast. The backend keeps
- *  them (src-tauri/src/affects/full.rs), the one place that decides
- *  full, and nothing here computes one. An affect with no entry reads
- *  as full. */
-export type AffectFulls = Readonly<Record<string, number>>;
 
 /** How full an affect's gauge is, 0 to 1: the hours left over the
  *  hours at full. Missing is empty. Permanent is full and never drains.
