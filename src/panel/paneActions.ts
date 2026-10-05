@@ -1,6 +1,5 @@
 import { createContext, useContext } from 'react';
 import {
-  addPane,
   closePane,
   isLeaf,
   replacePane,
@@ -12,7 +11,7 @@ import {
   type PaneType,
   type SplitDir,
 } from './paneLayout';
-import { getPanelLayout, setPaneTree, setPanelOpen } from './panelLayoutStore';
+import { getPanelLayout, setPaneTree } from './panelLayoutStore';
 import { paneTypesToAdd } from './paneTypes';
 
 // What a pane's header and menu can do to the tree. Each action reads
@@ -41,15 +40,6 @@ export function splitHere(id: string, dir: SplitDir): void {
 export function showHereInstead(id: string, pane: PaneType): void {
   const root = getPanelLayout()?.root;
   if (root) setPaneTree(replacePane(root, id, pane));
-}
-
-/** Add `pane` at the bottom of the panel (the title band's Add a
- *  pane), and open the panel if it is hidden. */
-export function addPaneToPanel(pane: PaneType): void {
-  const layout = getPanelLayout();
-  if (!layout) return;
-  setPaneTree(addPane(layout.root, pane));
-  if (!layout.panel_open) setPanelOpen(true);
 }
 
 export function closeHere(id: string): void {
