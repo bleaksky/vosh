@@ -5,7 +5,8 @@
    prefixes its sheet holds. */
 
 @import '@fontsource-variable/inter'; /* Inter, the chrome face, bundled so the app never fetches a font */
-@import '../styles.css'; /* mono faces, base, app, terminal-, scrollback-, input-, caret-, paste-, resizable-, settings-, migration-, server-view, map- */
+@import './fonts.css'; /* the bundled mono faces, no classes */
+@import '../styles.css'; /* base, app, terminal-, scrollback-, input-, caret-, paste-, resizable-, settings-, migration-, server-view, map- */
 @import './tokens.css'; /* the One Window tokens, no classes */
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
