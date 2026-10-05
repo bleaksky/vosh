@@ -219,8 +219,7 @@ impl SystemBanners {
             super::mac::post(banner, false);
             #[cfg(not(target_os = "macos"))]
             {
-                super::desktop::post(app, banner, system_sound);
-                played = system_sound;
+                played = super::desktop::post(app, banner, system_sound);
             }
         }
         #[cfg(target_os = "macos")]
