@@ -1085,3 +1085,35 @@ describe('the help on auto reconnect and Lua alerts', () => {
     }
   });
 });
+
+describe('the help on Color vision', () => {
+  const id = 'make-it-yours.control-terminal-colors';
+
+  it('says Color vision swaps the colors your eyes run together', () => {
+    const text = body(id);
+    expect(text).toContain(
+      '`Color vision` swaps the colors your eyes run together for colors they tell apart, the way color blind modes in games do.',
+    );
+    expect(text).toContain('Deuteranopia and Protanopia turn greens blue and reds orange');
+    expect(text).toContain('Tritanopia turns blues purple and magentas pink');
+    expect(text).toContain('with Fit game colors on or off, Solarized Dark included.');
+    expect(text).toContain(
+      'Solarized Dark stays as published in play too, since its soft text is what the scheme is, until you pick a Color vision other than Typical.',
+    );
+  });
+
+  // The fit before the swap turned red and green only as far as they
+  // kept their names.
+  it('drops the hue limits of the fit before the swap', () => {
+    for (const old of ['orange red', 'aquamarine', 'dodger blue', 'toward teal', '30 degrees']) {
+      expect(body(id), old).not.toContain(old);
+      expect(helpMd, old).not.toContain(old);
+    }
+  });
+
+  it('matches HELP.md word for word', () => {
+    const topic = HELP_TOPICS.find((t) => t.id === id);
+    if (!topic) throw new Error(`no help topic ${id}`);
+    expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
+  });
+});
