@@ -6,11 +6,12 @@
 
 @import '@fontsource-variable/inter'; /* Inter, the chrome face, bundled so the app never fetches a font */
 @import './fonts.css'; /* the bundled mono faces, no classes */
-@import '../styles.css'; /* base, app, terminal-, scrollback-, input-, caret-, paste-, resizable-, settings-, migration-, server-view, map- */
+@import '../styles.css'; /* base, app, input-, caret-, paste-, settings-, migration-, server-view, map- */
 @import './tokens.css'; /* the One Window tokens, no classes */
+@import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './overlays.css'; /* ov- */
 @import './panel.css'; /* pane-, panel- */
 @import './settings.css'; /* st- */
 @import './prompt.css'; /* prompt-, pc-, and the st- rules of the Settings Prompt section */
 @import './help.css'; /* hp- */
-@import './frame.css'; /* shell, shell-, terminal-well */
+@import './frame.css'; /* shell, shell- */

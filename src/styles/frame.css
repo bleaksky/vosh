@@ -320,26 +320,6 @@
   color: var(--tertiary);
 }
 
-/* ── Terminal ──────────────────────────────────────────────────────── */
-
-/* Text starts 16 in and 6 under the band (SPEC 1). The bottom keeps
-   the 6 px buffer above the input band so the last row never reads as
-   touching it. */
-.shell .terminal-area {
-  padding: 6px 16px;
-}
-
-/* The containing block for the scrollback split. The history pane lays
-   over the live one at inset 0 here, inside the terminal padding. */
-.terminal-well {
-  position: relative;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
 /* ── Input band ────────────────────────────────────────────────────── */
 
 /* SPEC 1: full terminal width, 40 tall, --inputband fill, no border

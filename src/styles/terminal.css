@@ -1,0 +1,302 @@
+/* The terminal. The padded area and its well, the scrollback split
+   over the live pane, the macOS underlay list, and the split handle. */
+
+.terminal-area {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  /* The gutter around xterm paints the SAME dark as the terminal well
+     itself (theme.ts exposes the active xterm background as --xterm-bg)
+     so the well reads as one continuous surface instead of a two-tone
+     ring. Falls back to the chrome surface before the theme applies. */
+  background: var(--xterm-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Containing block for the floating find toolbar overlay (Cmd+F). */
+  position: relative;
+  /* The terminal padding lives on this element, never on host or
+     .xterm. `.shell .terminal-area` in styles/frame.css sets it.
+     Sizer (flex:1 inside) fills the post-padding content area; JS
+     writes its bounding rect to host; FitAddon then sees the correct
+     available space and rows do not get lost to a padding
+     subtraction the way they did when padding lived on host or
+     xterm.element. */
+}
+
+/* Split-scrollback layout. The history pane is lazy-mounted only when
+   the split opens, because a hidden Terminal cannot be measured by
+   FitAddon and would write its scrollback at 1-3 columns wide. When
+   the split is closed the history pane is not in the DOM at all. */
+.terminal-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.terminal-pane-live {
+  flex: 1 1 0;
+}
+
+/* Overlay split. The live pane sits at full terminal-area height
+   and the history pane is laid on top with a height the Resizable
+   controls. Live keeps its real row count and the backend NAWS
+   size stays correct; the opaque xterm-viewport bg below ensures
+   the history overlay can't reveal live's hidden rows. We tried a
+   shrink model (live's top tracking history's bottom via a CSS
+   variable) — it shifted live's content down on open and made the
+   drag refit xterm + GL atlas every pointermove, both visibly
+   janky. */
+.terminal-area-split .terminal-pane-live {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  z-index: 1;
+}
+
+/* Both panes anchor to .terminal-well (position: relative, in
+   styles/frame.css), which already sits inside .terminal-area's
+   padding, so inset 0 lands the overlay exactly on the closed-state
+   live rect. Insets that repeat the terminal padding here would
+   double-inset and visibly shrink the terminal (and the native
+   surface tracking it) every time the split opens. */
+.terminal-area-split .terminal-pane-history {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  /* Wrapper background stays transparent so any gap beyond the
+     inner xterm host (when a drag grows the wrapper past the
+     gated xterm size) reveals the live pane below instead of an
+     opaque surface fill. Without this, growing the history pane
+     during a drag leaves a black band between the bottom of the
+     frozen xterm content and the new bottom edge of the wrapper. */
+  background: transparent;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+/* xterm.css hardcodes `.xterm-viewport` to `background-color: #000`
+   so the scroll container is solid black against any transparent
+   wrapper. During scroll the WebGL canvas redraws and there's a
+   sub-frame window where that black peeks through — reads as a
+   flash. Override the viewport background on both split panes (and
+   on the live pane in single-pane mode too, since the same gap
+   exists when only one pane is present). */
+.terminal-pane .xterm .xterm-viewport,
+.terminal-pane .xterm .xterm-screen {
+  background-color: var(--xterm-bg);
+}
+
+/* Hide the history pane content while it primes (mounts, loads
+   scrollback, snaps to its target position). Without this the user
+   sees the just-loaded live tail for one frame before
+   onScrollbackLoaded fires and scrolls the viewport back to the
+   pre-split alignment. The class is removed once historyReady flips
+   to true. Visibility hidden rather than opacity 0 so the pane
+   still reserves its layout space and the splitter geometry stays
+   correct from the first frame. */
+.terminal-pane-history-priming .xterm {
+  visibility: hidden;
+}
+
+/* Style the resizable handle so it reads as the split divider. The
+   base carved-channel handle is transparent, which would make the
+   split boundary invisible inside the well; --split-divider lets
+   the user pick the line color from Settings. Hover and drag still
+   show the base rule's ember tick. */
+.terminal-pane-history.resizable .resizable-handle {
+  background: var(--split-divider);
+  flex: 0 0 2px;
+}
+
+/* Scroll-depth indicator in the top-right of the history pane.
+   Absolutely positioned so it overlays the xterm without affecting
+   the row count FitAddon calculates. The right offset has to clear
+   the xterm viewport scrollbar gutter — overlay scrollbars on macOS
+   take 0px when idle but Windows / Linux scrollbars eat ~10-17px
+   permanently. 24px keeps the indicator clean of the gutter on
+   every platform without measurable visual cost. */
+.scrollback-indicator {
+  position: absolute;
+  top: 4px;
+  right: 24px;
+  font-size: 0.78em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--secondary);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 8px;
+  border-radius: 3px;
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+}
+
+/* xterm's FitAddon reads the host's computed height to compute the
+   row count, and paneSizer.ts writes width/height in pixels onto the
+   host every frame. Host is position:absolute so flex/box-model never
+   re-flows it; sizer just provides the bounding rect JS reads.
+   Padding lives on the host so xterm renders inside it. Departing
+   from this shape (e.g. width:100% on the host) led to xterm
+   measuring cells against one box and rendering inside another,
+   which shows up as doubled character spacing. */
+/* Flex item inside terminal-area (which is now flex column). Its
+   bounding rect is the truth source for the terminal-host pixel
+   dimensions that paneSizer.ts writes every frame. */
+.terminal-sizer {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  background: var(--bg);
+  /* Padding deliberately NOT here. xterm-addon-fit reads the host
+     clientHeight (includes parent padding) but subtracts only the
+     padding of xterm.element itself when computing available rows.
+     If padding lives on the host, FitAddon overshoots by that
+     padding and renders one extra row that bleeds past the visible
+     area into the input bar. Padding must live on .xterm below so
+     FitAddon sees and subtracts it. */
+}
+
+/* xterm.element (the .xterm div xterm creates inside the host).
+   Padding is intentionally zero — the visible padding lives on
+   .terminal-area where FitAddon is not affected by it. Explicit 100%
+   sizing here also stops the doubled-character-cell bug when no
+   inline size has been written yet. */
+.terminal-host .xterm {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Underlay (macOS). The native surface sits BELOW the webview and paints
+   the terminal background across the whole window, so every ancestor of
+   the terminal pane goes transparent and the grid shows through. The
+   list names each wrapper between the One Window shell root and the
+   sizer (AppShell, then MainWindow's terminal slot), and html, body, and #root
+   are transparent already. A wrapper added there with a background of
+   its own turns the terminal into a flat colored hole. The title band
+   and the status line carry no fill, so the same ground shows under
+   them. The input band and the panel paint their own surfaces over it.
+   The xterm copy stays mounted for sizing but is never shown, and the
+   DOM owns the cursor over the pane, taking the shape the native
+   surface asks for through --terminal-cursor. */
+html[data-underlay] .app.shell,
+html[data-underlay] .shell-slot-term,
+html[data-underlay] .terminal-area,
+html[data-underlay] .terminal-well,
+html[data-underlay] .terminal-pane,
+html[data-underlay] .terminal-sizer,
+html[data-underlay] .terminal-host {
+  background: transparent;
+}
+html[data-underlay] .terminal-pane-live .terminal-host {
+  visibility: hidden;
+}
+html[data-underlay] .terminal-pane-live .terminal-sizer {
+  cursor: var(--terminal-cursor, default);
+  touch-action: none;
+}
+
+/* ── Terminal ──────────────────────────────────────────────────────── */
+
+/* Text starts 16 in and 6 under the band (SPEC 1). The bottom keeps
+   the 6 px buffer above the input band so the last row never reads as
+   touching it. */
+.shell .terminal-area {
+  padding: 6px 16px;
+}
+
+/* The containing block for the scrollback split. The history pane lays
+   over the live one at inset 0 here, inside the terminal padding. */
+.terminal-well {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Resizable. The scrollback split's history pane, anchored to the top
+   of the terminal well, with its drag handle on the bottom edge. */
+
+.resizable {
+  display: flex;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.resizable-vertical {
+  flex-direction: column;
+}
+
+/* Leading-anchor variant. The handle is the first DOM child in the
+   wrapper, so reversing flex direction renders the handle on the
+   anchor-opposite edge: anchor-top → handle on bottom. */
+.resizable-anchor-top {
+  flex-direction: column-reverse;
+}
+
+/* Carved-channel handle. The handle paints nothing at rest — it is
+   an 8px strip of the exposed ground — and a centered ember tick
+   surfaces on hover to name the grab point. Dragging stretches the
+   tick and adds a soft glow. */
+.resizable-handle {
+  background: transparent;
+  position: relative;
+}
+
+.resizable-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.resizable-handle-vertical {
+  flex: 0 0 8px;
+  cursor: row-resize;
+  width: 100%;
+}
+.resizable-handle-vertical::after {
+  width: 24px;
+  height: 2px;
+}
+
+.resizable-handle:hover::after,
+.resizable-handle:focus-visible::after {
+  opacity: 0.8;
+}
+.resizable-handle:focus {
+  outline: none;
+}
+.resizable-handle.is-dragging::after {
+  opacity: 1;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.resizable-handle-vertical.is-dragging::after {
+  width: 56px;
+}
+
+.resizable-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
