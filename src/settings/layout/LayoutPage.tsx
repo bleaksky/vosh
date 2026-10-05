@@ -3,7 +3,8 @@ import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../panel/affects
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../panel/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../lib/shortcuts';
-import { profilePossessive } from '../../lib/profileLabel';
+import { profileDisplayName } from '../../lib/characterProfiles';
+import { possessive } from '../../lib/text';
 import {
   AFFECTS_HOURS_MAX,
   AFFECTS_MARKERS,
@@ -86,7 +87,7 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
   const mac = isMacPlatform();
   const profile = useActiveProfile();
   const layout = usePanelLayout();
-  const owner = profile === null ? null : profilePossessive(profile);
+  const owner = profile === null ? null : possessive(profileDisplayName(profile));
   // The narrowest panel the main window draws here. On Windows and
   // Linux the title band's window controls need it wider.
   const panelFloor = panelWidthFloor(mac);

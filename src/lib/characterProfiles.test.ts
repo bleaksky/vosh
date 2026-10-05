@@ -21,6 +21,7 @@ import {
   worldOptions,
   worldSources,
 } from './characterProfiles';
+import { possessive } from './text';
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileEntry } from '../ipc/profiles';
 
@@ -52,6 +53,15 @@ describe('profile names', () => {
     expect(profileDisplayName('default')).toBe('Default');
     expect(profileDisplayName('Healer')).toBe('Healer');
     expect(profileDisplayName('Default')).toBe('Default');
+  });
+
+  it('keeps every other name as it is', () => {
+    expect(profileDisplayName('Ilsabet')).toBe('Ilsabet');
+    expect(profileDisplayName('aabahran-ilsabet')).toBe('aabahran-ilsabet');
+  });
+
+  it('reads the reserved profile as Default in a possessive', () => {
+    expect(possessive(profileDisplayName('default'))).toBe("Default's");
   });
 
   it('finds the profile a deep link names in any case or by display name', () => {
