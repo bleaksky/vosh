@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import { aabahranChatFixtureNames, aabahranChatPacket } from '../test/aabahranGmcp';
 import { getChatLines, parseCommChannel, parseRoutedLine, type ChatLine } from './chatStore';
-import type { RoutedPayload } from './session';
+import type { RoutedPayload } from '../ipc/session';
 
 // The store reaches the Tauri bridge when it starts. The parsers under
 // test never do.

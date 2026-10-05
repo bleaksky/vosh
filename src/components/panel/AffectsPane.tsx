@@ -8,7 +8,7 @@ import {
   type AffectThresholds,
   type TrackedInput,
 } from '../../lib/affectsView';
-import type { AffectsMarker } from '../../lib/session';
+import type { AffectsMarker } from '../../ipc/affects';
 import { useAffectFull } from '../../lib/stores/affectFullStore';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';

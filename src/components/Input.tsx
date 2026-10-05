@@ -8,24 +8,24 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
-  getTarget,
-  getUiConfig,
   listMacros,
   listMacroGroups,
-  normalizeInputCursorStyle,
+  subscribeMacroGroupsChanged,
+  subscribeMacrosChanged,
+  type GroupState,
+  type Macro,
+} from '../ipc/automation';
+import {
+  getTarget,
   onGmcpPackage,
   onInputMode,
   onTarget,
   sendInput,
   sendMaskedInput,
   stopWalk,
-  subscribeMacroGroupsChanged,
-  subscribeMacrosChanged,
-  type GroupState,
-  type InputCursorStyle,
-  type Macro,
   type QuickKey,
-} from '../lib/session';
+} from '../ipc/session';
+import { getUiConfig, normalizeInputCursorStyle, type InputCursorStyle } from '../ipc/uiConfig';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import {
   draftAfterMaskChange,

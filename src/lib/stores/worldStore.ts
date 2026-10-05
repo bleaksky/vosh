@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../session';
+import { onGmcpPackage, onState } from '../../ipc/session';
 import { asNumber, asText, createStore } from './store';
 
 // Game time and the moons for the status line. Aabahran sends

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { normalizeUiConfig, type GameTime, type UiConfig } from '../../../lib/session';
+import { normalizeUiConfig, type GameTime, type UiConfig } from '../../../ipc/uiConfig';
 import { SETTINGS_ROWS, searchSettingsRows, settingsRowKey } from '../../../lib/settingsSearch';
 import type { SegmentedProps } from '../ui';
 import { GameTimeField } from './GameTimeRow';

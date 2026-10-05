@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { normalizeAffectName } from '../../../../lib/affects';
-import type { TrackedAffect } from '../../../../lib/session';
+import type { TrackedAffect } from '../../../../ipc/affects';
 import {
   moveTrackedAffect,
   setTrackedAffectLabel,

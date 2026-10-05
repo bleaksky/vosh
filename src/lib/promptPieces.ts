@@ -14,7 +14,7 @@ import type {
   PromptPiece,
   PromptUnderlineStyle,
   PromptWhen,
-} from './session';
+} from '../ipc/promptDesign';
 
 // ---------------------------------------------------------------------
 // Picking a part

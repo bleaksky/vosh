@@ -5,10 +5,10 @@ import {
   listGroupSwitches,
   setGroupEnabled,
   subscribeGroupsChanged,
-  subscribeLoadoutsChanged,
   type GroupList,
   type GroupSwitch,
-} from '../../../../lib/session';
+} from '../../../../ipc/automation';
+import { subscribeLoadoutsChanged } from '../../../../ipc/loadouts';
 
 /** The switches on one list's group headings, and how to turn one. */
 export interface GroupSwitches {

@@ -2,12 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BandEnv } from '../../lib/bandCells';
 import { startRows, type StartRow } from '../../lib/promptCard';
 import { useLabelMeasure } from '../../lib/useCellWidth';
-import {
-  promptRenderMany,
-  type PromptConfig,
-  type PromptDesign,
-  type PromptPreset,
-} from '../../lib/session';
+import { type PromptConfig, type PromptDesign, type PromptPreset } from '../../ipc/prompt';
+import { promptRenderMany } from '../../ipc/promptDesign';
 import { parseSgrCells, shownColumns, type Cell } from '../../lib/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '../settings/ui';
 import { CardMenu } from './CardMenu';

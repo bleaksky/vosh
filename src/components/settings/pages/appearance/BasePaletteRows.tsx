@@ -1,6 +1,6 @@
 import { ANSI_SLOT_LABELS, basePalette, withBaseColor } from '../../../../lib/appearanceSettings';
 import { ANSI_SLOTS } from '../../../../lib/baseAnsi';
-import type { UiConfig } from '../../../../lib/session';
+import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 import { Button, Row } from '../../ui';
 import { ColorBlock, ColorGroup } from './ColorGrid';

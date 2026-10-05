@@ -11,13 +11,13 @@ import {
   type LayoutId,
   type PickerRow,
 } from '../../lib/promptPicker';
+import { type PromptState } from '../../ipc/prompt';
 import {
   promptForms,
   type PromptForm,
   type PromptFormatChoice,
   type PromptPreviewName,
-  type PromptState,
-} from '../../lib/session';
+} from '../../ipc/promptDesign';
 import { scrollWithin } from '../../lib/scrollWithin';
 import { parseSgrCells } from '../../lib/sgrCells';
 import { cx, Field, SearchIcon } from '../settings/ui';

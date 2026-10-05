@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../../lib/bandCells';
 import { previewOptions, previewRows } from '../../../lib/promptSettings';
-import type { PromptCheckRead } from '../../../lib/session';
+import type { PromptCheckRead } from '../../../ipc/prompt';
 import { CodesMetaLine, CodesText, DrawRow, LineRow, PointRow, PreviewView } from './InputPrompt';
 
 // The section reaches the Tauri bridge through its stores. The pieces

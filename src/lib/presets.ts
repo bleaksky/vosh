@@ -16,7 +16,7 @@
 // recall) can be toggled independently from must-see ones (your own
 // buffs falling, your own recall).
 
-import type { HighlightStyle, TriggerRecord, TriggerTarget } from './session';
+import type { HighlightStyle, TriggerRecord, TriggerTarget } from '../ipc/automation';
 import { colorize } from './colorTokens';
 
 export type PresetCategory =

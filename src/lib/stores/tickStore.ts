@@ -1,14 +1,14 @@
 import { useSyncExternalStore } from 'react';
+import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { onState } from '../../ipc/session';
 import {
-  onState,
   onTick,
-  subscribeProfileSwitched,
   subscribeTickConfigChanged,
   tickGetConfig,
   type TickConfig,
-  type TickCount,
   type TickPayload,
-} from '../session';
+} from '../../ipc/tick';
+import { type TickCount } from '../../ipc/uiConfig';
 import { playTickSound } from '../tickSound';
 import { createStore } from './store';
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { followReplacedUiConfig, getUiConfig, type UiConfig } from './lib/session';
+import { getUiConfig, type UiConfig } from './ipc/uiConfig';
+import { followReplacedUiConfig } from './ipc/uiConfigSave';
 import {
   applyThemePrefs,
   getCurrentThemeId,

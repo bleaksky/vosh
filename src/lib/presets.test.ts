@@ -14,7 +14,7 @@ import {
   type PresetSampleLine,
   presetTriggers,
 } from './presets';
-import type { HighlightStyle, TriggerTarget } from './session';
+import type { HighlightStyle, TriggerTarget } from '../ipc/automation';
 
 // The preset that puts the tells you send in the chat pane, run against
 // every line the game prints when you talk to one person or your group

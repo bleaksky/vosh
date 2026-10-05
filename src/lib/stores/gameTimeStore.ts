@@ -1,10 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import {
-  getUiConfig,
-  subscribeGameTimeChanged,
-  subscribeProfileSwitched,
-  type GameTime,
-} from '../session';
+import { subscribeProfileSwitched } from '../../ipc/profiles';
+import { getUiConfig, subscribeGameTimeChanged, type GameTime } from '../../ipc/uiConfig';
 import { createStore } from './store';
 
 // The clock the status line reads the game time on, from UiConfig

@@ -1,5 +1,5 @@
 import type { PromptShowState } from './promptShow';
-import type { VitalsMeter, VitalsValues } from './session';
+import type { VitalsMeter, VitalsValues } from '../ipc/uiConfig';
 import { vitalPercent } from './stores/vitalsStore';
 
 // How your vitals read in the panel footer and in the status line, from

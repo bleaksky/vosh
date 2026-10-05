@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../affects';
-import { affectsSnapshotGet, onGmcpPackage, onState } from '../session';
+import { affectsSnapshotGet } from '../../ipc/affects';
+import { onGmcpPackage, onState } from '../../ipc/session';
 import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, asText, createStore, isHiddenFlag } from './store';
 

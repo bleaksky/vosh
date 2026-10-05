@@ -1,6 +1,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { dockRows } from '../promptBand';
-import { onOutput, onState, type PromptSpan, type SessionOutput } from '../session';
+import { type PromptSpan } from '../../ipc/promptDesign';
+import { onState } from '../../ipc/session';
+import { onOutput, type SessionOutput } from '../../ipc/terminal';
 import { closePinRow } from '../terminalRegion';
 import { createStore } from './store';
 

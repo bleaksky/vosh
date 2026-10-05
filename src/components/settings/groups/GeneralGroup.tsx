@@ -1,14 +1,13 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { listLogSessions } from '../../../ipc/logs';
 import {
-  checkForUpdate,
-  installUpdateAndRelaunch,
-  listLogSessions,
   profileGetScope,
   profileSetScope,
   subscribeProfilesChanged,
   type ProfileScope,
   type ScopeConfig,
-} from '../../../lib/session';
+} from '../../../ipc/profiles';
+import { checkForUpdate, installUpdateAndRelaunch } from '../../../ipc/updater';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../../lib/palette';
 import { savedSessionsText } from '../../../lib/logView';

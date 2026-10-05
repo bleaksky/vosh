@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { listen, type EventCallback } from '@tauri-apps/api/event';
-import type { TickConfig } from './session';
+import type { TickConfig } from '../ipc/tick';
 import { followTickDraft } from './tickDraft';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));

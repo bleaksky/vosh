@@ -49,7 +49,7 @@ import type {
   PromptConfig,
   PromptLineNumber,
   PromptPreset,
-} from './session';
+} from '../ipc/prompt';
 
 const none: PromptCapture = { kind: 'none' };
 const codes: PromptCapture = {

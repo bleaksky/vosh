@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { ChipStyle, TickCount } from '../../lib/session';
+import type { ChipStyle, TickCount } from '../../ipc/uiConfig';
 import { SunPathIcon, TickRingIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 

@@ -21,7 +21,7 @@ import type {
   PromptCaptureCheck,
   PromptCompileReport,
   PromptLastSeen,
-} from './session';
+} from '../ipc/prompt';
 
 const none: PromptCapture = { kind: 'none' };
 const codes: PromptCapture = {

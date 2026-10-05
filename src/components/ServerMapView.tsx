@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
-import { onGmcpPackage } from '../lib/session';
+import { onGmcpPackage } from '../ipc/session';
 import { drawMap3D } from '../lib/map3dDraw';
 import {
   DEFAULT_MAP_3D_VIEW,

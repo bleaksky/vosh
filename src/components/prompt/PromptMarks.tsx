@@ -20,7 +20,9 @@ import {
 } from '../../lib/promptPointer';
 import { findOnScreen, type ScreenAsk } from '../../lib/promptScreen';
 import type { PromptShowState } from '../../lib/promptShow';
-import { onOutput, type PromptOpenRow, type PromptPiece } from '../../lib/session';
+import { type PromptOpenRow } from '../../ipc/prompt';
+import { type PromptPiece } from '../../ipc/promptDesign';
+import { onOutput } from '../../ipc/terminal';
 import { getPinnedBand } from '../../lib/stores/pinnedPromptStore';
 import { setPromptReach } from '../../lib/stores/promptReachStore';
 import { shownColumns } from '../../lib/sgrCells';

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../session';
+import { onGmcpPackage, onState } from '../../ipc/session';
 import { getHidden, subscribeHidden, type HiddenState } from './hiddenStore';
 import { asNumber, asText, createStore, isHiddenFlag } from './store';
 

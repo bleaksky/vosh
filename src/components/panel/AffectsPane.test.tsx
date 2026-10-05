@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import type { PaneLeaf } from '../../lib/paneLayout';
 import { groupCurrentAffects, type CurrentAffect } from '../../lib/stores/affectsStore';
-import type { TrackedAffect } from '../../lib/session';
+import type { TrackedAffect } from '../../ipc/affects';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { AffectsPaneView } from './AffectsPane';
 import { PaneLeafContext } from './paneActions';

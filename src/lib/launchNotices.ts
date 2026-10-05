@@ -1,4 +1,4 @@
-import { launchNoticesTake } from './session';
+import { launchNoticesTake } from '../ipc/windows';
 import { pushToast } from './toasts';
 
 // What launch has to tell you, such as a profile file Vosh could not

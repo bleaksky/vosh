@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import splitsB64 from '../../fixtures/collapse/splits.b64?raw';
 import { OutputShaper } from './outputShaper';
-import { decodeOutputPayload, type OutputPayload } from './session';
+import { decodeOutputPayload, type OutputPayload } from '../ipc/terminal';
 import { RegionWriter } from './terminalRegion';
 
 // Collapse repeated lines, with the session's own payloads for pulses

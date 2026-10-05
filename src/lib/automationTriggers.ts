@@ -17,7 +17,7 @@ import {
   type TriggerAction,
   type TriggerPattern,
   type TriggerRecord,
-} from './session';
+} from '../ipc/automation';
 
 /** The Style select on the board. */
 export type TriggerStyle = 'none' | 'highlight' | 'wash' | 'replace' | 'hide';

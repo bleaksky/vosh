@@ -11,11 +11,11 @@ import {
 import {
   exportLogSession,
   listLogSessions,
-  resolveThemeTerminalColors,
   searchLogPage,
   type LogSearchHit,
   type LogSession,
-} from '../../../lib/session';
+} from '../../../ipc/logs';
+import { resolveThemeTerminalColors } from '../../../ipc/uiConfig';
 import { parseHex, toRgba } from '../../../lib/color';
 import {
   groupLogDays,

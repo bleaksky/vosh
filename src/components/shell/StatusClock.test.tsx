@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { ChipStyle, TickCount } from '../../lib/session';
+import type { ChipStyle, TickCount } from '../../ipc/uiConfig';
 import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
 import frameCss from '../../styles/frame.css?raw';
 import { daylightTint } from './daylight';

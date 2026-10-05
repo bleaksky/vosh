@@ -11,7 +11,7 @@ import {
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
 import { labelForKey } from '../../../../lib/macroKeys';
-import { listMacros, subscribeMacrosChanged } from '../../../../lib/session';
+import { listMacros, subscribeMacrosChanged } from '../../../../ipc/automation';
 import { Card, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';

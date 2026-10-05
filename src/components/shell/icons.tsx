@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { TickCount } from '../../lib/session';
+import type { TickCount } from '../../ipc/uiConfig';
 import {
   SUN_ARC_PATH,
   SUN_DOWN,

@@ -16,22 +16,24 @@ import {
   promptConfigGet,
   promptConfigSet,
   promptDesignsList,
-  promptDescribe,
-  promptEdit,
-  promptForms,
   promptLineTriggers,
   promptCodeReaderSet,
-  promptPreviewSet,
-  promptRender,
-  promptRenderMany,
   promptStateGet,
   promptWatch,
   subscribePromptConfigChanged,
-  terminalCursor,
   type PromptConfig,
   type PromptConfigChangedPayload,
   type PromptCardRequest,
-} from './session';
+} from '../ipc/prompt';
+import {
+  promptDescribe,
+  promptEdit,
+  promptForms,
+  promptPreviewSet,
+  promptRender,
+  promptRenderMany,
+} from '../ipc/promptDesign';
+import { terminalCursor } from '../ipc/terminal';
 import { emit } from '@tauri-apps/api/event';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));

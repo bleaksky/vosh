@@ -55,39 +55,40 @@ import {
 } from '../../lib/promptPieces';
 import { notMatchingLine, shownPreview } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
+import { sessionIdentityGet, type SessionIdentity } from '../../ipc/characters';
+import { profilesList } from '../../ipc/profiles';
 import {
   onPromptState,
   onPromptStatus,
-  profilesList,
   promptCandidates,
   promptCardOpen,
   promptCodeReaderSet,
   promptCompile,
   promptConfigGet,
   promptConfigSet,
-  promptDescribe,
   promptDesignsList,
-  promptEdit,
   promptLineTriggers,
-  promptPreviewSet,
   promptStateGet,
   promptWatch,
-  sessionIdentityGet,
   subscribePromptConfigChanged,
   type PromptCapture,
   type PromptCheckRead,
   type PromptCompileReport,
   type PromptConfig,
-  type PromptDescribed,
   type PromptDesign,
-  type PromptEditOp,
-  type PromptFormatChoice,
   type PromptLineTrigger,
   type PromptPreset,
-  type PromptPreviewName,
   type PromptState,
-  type SessionIdentity,
-} from '../../lib/session';
+} from '../../ipc/prompt';
+import {
+  promptDescribe,
+  promptEdit,
+  promptPreviewSet,
+  type PromptDescribed,
+  type PromptEditOp,
+  type PromptFormatChoice,
+  type PromptPreviewName,
+} from '../../ipc/promptDesign';
 import { useEscape } from '../../lib/escapeStack';
 import { keepFocus, type FocusKeeper } from '../../lib/focusKeeper';
 import { useGamePrompt } from '../../lib/stores/gamePromptStore';

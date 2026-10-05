@@ -10,7 +10,7 @@ import {
   rowStatus,
   sourceLine,
 } from './promptPicker';
-import type { PromptFieldState } from './session';
+import type { PromptFieldState } from '../ipc/prompt';
 
 /** A catalog field as prompt_state_get reports it. */
 function field(name: string, over: Partial<PromptFieldState> = {}): PromptFieldState {

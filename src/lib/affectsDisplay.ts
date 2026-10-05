@@ -6,7 +6,7 @@ import {
   type AffectsDisplay,
   type AffectsMarker,
   type AffectsStyle,
-} from './session';
+} from '../ipc/affects';
 
 // The names Settings, Layout, Affects and the Affects pane menu give
 // the pane's styles and markers, and the menu's choices. Pure, so both

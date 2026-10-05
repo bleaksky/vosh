@@ -21,7 +21,7 @@ import {
   type PromptCompileReport,
   type PromptLegendRow,
   type PromptLineTrigger,
-} from '../../lib/session';
+} from '../../ipc/prompt';
 import { pushToast } from '../../lib/toasts';
 import { Button, Field } from '../settings/ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';

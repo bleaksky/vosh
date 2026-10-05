@@ -9,6 +9,7 @@ import { profileDisplayName, profilePossessive } from './profileLabel';
 import type { MoveMade } from './promptPieces';
 import type { PromptShowState } from './promptShow';
 import { cellWidth, parseSgrCells, type Cell } from './sgrCells';
+import type { SessionIdentity } from '../ipc/characters';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -20,8 +21,7 @@ import type {
   PromptLineNumber,
   PromptPreset,
   PromptShow,
-  SessionIdentity,
-} from './session';
+} from '../ipc/prompt';
 import type { GamePromptSeen } from './stores/gamePromptStore';
 
 /** The card's steps. `codes-entry` is P2, `codes` P3 with its states P3b

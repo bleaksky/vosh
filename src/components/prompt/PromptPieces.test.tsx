@@ -4,13 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../../lib/bandCells';
 import { BY_VALUE_HINT, THEME_HINT, WHEN_FIXED_HINT } from '../../lib/promptPieces';
 import { TEXT_HELP } from '../../lib/promptText';
-import type {
-  PromptFieldState,
-  PromptForm,
-  PromptPiece,
-  PromptPreset,
-  PromptState,
-} from '../../lib/session';
+import type { PromptFieldState, PromptPreset, PromptState } from '../../ipc/prompt';
+import type { PromptForm, PromptPiece } from '../../ipc/promptDesign';
 import { LineTriggers } from './PromptCodes';
 import { PromptPicker } from './PromptPicker';
 import { MoreStyleItems, PromptPieceBody } from './PromptPiece';

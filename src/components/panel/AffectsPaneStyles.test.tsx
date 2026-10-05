@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaneLeaf } from '../../lib/paneLayout';
-import { DEFAULT_AFFECTS_DISPLAY, type AffectsDisplay } from '../../lib/session';
+import { DEFAULT_AFFECTS_DISPLAY, type AffectsDisplay } from '../../ipc/affects';
 import type { CurrentAffect } from '../../lib/stores/affectsStore';
 import { AffectsPane } from './AffectsPane';
 import { PaneLeafContext } from './paneActions';

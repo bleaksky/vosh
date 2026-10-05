@@ -11,7 +11,7 @@ import {
   loadoutsSetActive,
   subscribeLoadoutsChanged,
   type LoadoutSummary,
-} from '../../../../lib/session';
+} from '../../../../ipc/loadouts';
 import { Button, Card, Chip, Row, Toggle } from '../../ui';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';

@@ -1,4 +1,4 @@
-import { onGmcpPackage, onState } from './session';
+import { onGmcpPackage, onState } from '../ipc/session';
 import { getHidden, subscribeHidden } from './stores/hiddenStore';
 import { isHiddenFlag } from './stores/store';
 

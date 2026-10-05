@@ -1,6 +1,6 @@
 import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CustomTheme, UiConfig } from '../../../../lib/session';
+import type { CustomTheme, UiConfig } from '../../../../ipc/uiConfig';
 import type { XtermPalette } from '../../../../lib/themes';
 import { FakeDocument, findAll, type FakeNode } from '../../../../test/fakeDom';
 import type { CustomThemeRows as CustomThemeRowsType } from './CustomThemeRows';
@@ -34,7 +34,7 @@ const doc = new FakeDocument();
 let CustomThemeRows: typeof CustomThemeRowsType;
 let FIT_SETTLE_MS: number;
 let createRoot: typeof import('react-dom/client').createRoot;
-let normalizeUiConfig: typeof import('../../../../lib/session').normalizeUiConfig;
+let normalizeUiConfig: typeof import('../../../../ipc/uiConfig').normalizeUiConfig;
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -50,7 +50,7 @@ beforeAll(async () => {
   vi.stubGlobal('navigator', { userAgent: 'node' });
   ({ createRoot } = await import('react-dom/client'));
   ({ CustomThemeRows, FIT_SETTLE_MS } = await import('./CustomThemeRows'));
-  ({ normalizeUiConfig } = await import('../../../../lib/session'));
+  ({ normalizeUiConfig } = await import('../../../../ipc/uiConfig'));
 });
 
 afterAll(() => {

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { VitalsOptions } from '../../lib/session';
+import type { VitalsOptions } from '../../ipc/uiConfig';
 import type { Vitals } from '../../lib/stores/vitalsStore';
 import type { CombatHealth } from '../../lib/vitalsView';
 import frameCss from '../../styles/frame.css?raw';

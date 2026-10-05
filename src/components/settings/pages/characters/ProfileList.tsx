@@ -26,16 +26,18 @@ import {
   takenSentence,
 } from '../../../../lib/characterProfiles';
 import {
+  profileExportFile,
+  profileSetLogin,
+  type SessionIdentity,
+} from '../../../../ipc/characters';
+import {
   profileCreate,
   profileDelete,
   profileDuplicate,
-  profileExportFile,
   profileRename,
-  profileSetLogin,
   profileSwitch,
   type ProfilesList,
-  type SessionIdentity,
-} from '../../../../lib/session';
+} from '../../../../ipc/profiles';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
 
 // The profile list on the Characters board: one 38 px row per profile

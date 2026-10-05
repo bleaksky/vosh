@@ -6,7 +6,7 @@ import {
   promptShowLock,
   type PromptShowState,
 } from '../../../lib/promptShow';
-import type { PromptShow } from '../../../lib/session';
+import type { PromptShow } from '../../../ipc/prompt';
 import { SETTINGS_ROWS } from '../../../lib/settingsSearch';
 import { PromptShowField } from './PromptShowRow';
 

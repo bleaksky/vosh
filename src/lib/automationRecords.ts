@@ -16,8 +16,8 @@ import {
   setMacro,
   timersDelete,
   timersSet,
-  type TickConfig,
-} from './session';
+} from '../ipc/automation';
+import { type TickConfig } from '../ipc/tick';
 
 const quote = (name: string) => `“${name}”`;
 

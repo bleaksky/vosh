@@ -20,13 +20,8 @@ import {
   type TimerRecord,
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
-import {
-  subscribeTimersChanged,
-  tickGetConfig,
-  tickSetConfig,
-  timersList,
-  type TickConfig,
-} from '../../../../lib/session';
+import { subscribeTimersChanged, timersList } from '../../../../ipc/automation';
+import { tickGetConfig, tickSetConfig, type TickConfig } from '../../../../ipc/tick';
 import { followTickDraft } from '../../../../lib/tickDraft';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { DraftEditor, type PinnedPart } from './DraftEditor';

@@ -5,7 +5,7 @@ import {
   INPUT_CURSOR_STYLES,
   resolveThemeTerminalColors,
   type InputCursorStyle,
-} from '../../../lib/session';
+} from '../../../ipc/uiConfig';
 import type { SettingsTarget } from '../../../lib/settingsNav';
 import { getCurrentThemeId } from '../../../lib/theme';
 import { findTheme } from '../../../lib/themes';

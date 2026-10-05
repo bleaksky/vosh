@@ -4,7 +4,7 @@
 // no value for underlined, and the token rows that add a token at the
 // caret. Pure, so PromptText.tsx stays about the field.
 
-import type { PromptToken } from './session';
+import type { PromptToken } from '../ipc/promptDesign';
 
 /** The token rows under the field, as P9 draws them. */
 export const TOKEN_ROWS: readonly { label: string; tokens: readonly string[] }[] = [

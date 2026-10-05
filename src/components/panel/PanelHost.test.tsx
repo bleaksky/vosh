@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../../lib/session';
+import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../../ipc/uiConfig';
 import type { PromptShowState } from '../../lib/promptShow';
 import { PanelHost } from './PanelHost';
 

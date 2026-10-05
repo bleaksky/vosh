@@ -5,12 +5,9 @@
 // it never saves one profile's table over another's. A login names the
 // character the header saves for.
 
-import {
-  subscribeProfileSwitched,
-  subscribeSessionIdentity,
-  subscribeUiConfigReplaced,
-  type SessionIdentity,
-} from './session';
+import { subscribeSessionIdentity, type SessionIdentity } from '../ipc/characters';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+import { subscribeUiConfigReplaced } from '../ipc/uiConfig';
 
 export interface CardProfileFollow {
   /** Another profile's table is live now. */

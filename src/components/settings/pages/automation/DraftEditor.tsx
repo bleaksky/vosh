@@ -32,7 +32,7 @@ import {
 } from '../../../../lib/automationList';
 import { automationSaveError } from '../../../../lib/automationRecords';
 import { scrollWithin } from '../../../../lib/scrollWithin';
-import { subscribeProfileSwitched } from '../../../../lib/session';
+import { subscribeProfileSwitched } from '../../../../ipc/profiles';
 import { Button } from '../../ui';
 import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';

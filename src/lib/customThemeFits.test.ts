@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fitThemesInPlay } from './customThemeFits';
-import { normalizeUiConfig, type UiConfig } from './session';
+import { normalizeUiConfig, type UiConfig } from '../ipc/uiConfig';
 import {
   customToAppTheme,
   findTheme,

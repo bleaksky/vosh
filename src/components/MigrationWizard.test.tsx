@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { MigrationPlan } from '../lib/session';
+import type { MigrationPlan } from '../ipc/wizard';
 import { AppliedNotice, PlanView } from './MigrationWizard';
 
 // The wizard reaches the Tauri bridge only when it analyzes or applies.

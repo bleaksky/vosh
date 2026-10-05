@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites';
-import {
-  affectsDisplayFields,
-  isOwnAffectsDisplayEcho,
-  setUiConfig,
-  subscribeAffectsDisplayChanged,
-  subscribeUiConfigReplaced,
-  type UiConfig,
-} from '../../../lib/session';
+import { affectsDisplayFields, subscribeAffectsDisplayChanged } from '../../../ipc/affects';
+import { subscribeUiConfigReplaced, type UiConfig } from '../../../ipc/uiConfig';
+import { isOwnAffectsDisplayEcho, setUiConfig } from '../../../ipc/uiConfigSave';
 import {
   applyThemePrefs,
   isOwnThemeEcho,

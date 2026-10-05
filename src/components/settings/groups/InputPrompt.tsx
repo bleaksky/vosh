@@ -29,24 +29,22 @@ import {
 } from '../../../lib/promptSettings';
 import { usePromptShow, type PromptShowState } from '../../../lib/promptShow';
 import {
+  sessionIdentityGet,
+  subscribeSessionIdentity,
+  type SessionIdentity,
+} from '../../../ipc/characters';
+import { profilesList, subscribeProfileSwitched } from '../../../ipc/profiles';
+import {
   onGamePromptSeen,
   onPromptStatus,
-  onState,
   openPromptCard,
-  profilesList,
   promptCaptureCheck,
   promptCompile,
   promptConfigGet,
   promptConfigSet,
-  promptDescribe,
   promptLastSeen,
-  promptRender,
   promptStateGet,
-  sessionIdentityGet,
-  subscribeProfileSwitched,
   subscribePromptConfigChanged,
-  subscribeSessionIdentity,
-  subscribeUiConfigReplaced,
   type PromptCapture,
   type PromptCaptureCheck,
   type PromptCheckRead,
@@ -54,11 +52,12 @@ import {
   type PromptConfig,
   type PromptFieldState,
   type PromptLastSeen,
-  type PromptPreviewName,
   type PromptShow,
   type PromptState,
-  type SessionIdentity,
-} from '../../../lib/session';
+} from '../../../ipc/prompt';
+import { promptDescribe, promptRender, type PromptPreviewName } from '../../../ipc/promptDesign';
+import { onState } from '../../../ipc/session';
+import { subscribeUiConfigReplaced } from '../../../ipc/uiConfig';
 import { shownColumns, type Cell } from '../../../lib/sgrCells';
 import { warnBoxes, warnedPieces } from '../../../lib/promptWarn';
 import { useGamePrompt } from '../../../lib/stores/gamePromptStore';

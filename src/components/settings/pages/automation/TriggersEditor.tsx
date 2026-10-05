@@ -36,7 +36,7 @@ import {
   type TriggerAction,
   type TriggerPattern,
   type TriggerRecord,
-} from '../../../../lib/session';
+} from '../../../../ipc/automation';
 import {
   Card,
   ChipButton,

@@ -4,7 +4,7 @@
 // grid holds its own selection and scroll, which the session reads
 // itself.
 
-import { terminalReaderBusy } from './session';
+import { terminalReaderBusy } from '../ipc/terminal';
 
 /** What can keep you busy with the text: a selection in the live pane
  *  or in the split's history pane, the live pane off its newest rows,

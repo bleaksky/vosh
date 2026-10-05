@@ -1,7 +1,7 @@
 import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import tokyoNight from '../../../../fixtures/themes/tokyonight_night.conf?raw';
-import type { SystemFontEntry, UiConfig } from '../../../lib/session';
+import type { SystemFontEntry, UiConfig } from '../../../ipc/uiConfig';
 import type { XtermPalette } from '../../../lib/themes';
 import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
@@ -51,7 +51,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 const doc = new FakeDocument();
 let AppearancePage: typeof AppearancePageType;
 let createRoot: typeof import('react-dom/client').createRoot;
-let normalizeUiConfig: typeof import('../../../lib/session').normalizeUiConfig;
+let normalizeUiConfig: typeof import('../../../ipc/uiConfig').normalizeUiConfig;
 let BUILTIN_THEMES: typeof import('../../../lib/themes').BUILTIN_THEMES;
 
 beforeAll(async () => {
@@ -73,7 +73,7 @@ beforeAll(async () => {
   // React DOM checks for a DOM once, when it loads, so it loads now.
   ({ createRoot } = await import('react-dom/client'));
   ({ AppearancePage } = await import('./AppearancePage'));
-  ({ normalizeUiConfig } = await import('../../../lib/session'));
+  ({ normalizeUiConfig } = await import('../../../ipc/uiConfig'));
   ({ BUILTIN_THEMES } = await import('../../../lib/themes'));
 });
 

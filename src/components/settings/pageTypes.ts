@@ -1,4 +1,4 @@
-import type { UiConfig } from '../../lib/session';
+import type { UiConfig } from '../../ipc/uiConfig';
 import type { SettingsTarget } from '../../lib/settingsNav';
 
 /** Replace the window's UiConfig copy. Every save sends the whole

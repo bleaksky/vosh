@@ -2,7 +2,7 @@ import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../../lib/promptShow';
-import type { PromptShow } from '../../lib/session';
+import type { PromptShow } from '../../ipc/prompt';
 import { BUTTON, checkMarks, menuButtonDom, menuHeight, on } from '../../test/menuButtonDom';
 import { MENU_BUTTON_MENU_WIDTH } from './MenuButton';
 import { ShowButton } from './PromptShow';

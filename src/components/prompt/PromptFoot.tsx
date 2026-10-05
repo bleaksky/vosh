@@ -1,7 +1,8 @@
 import { useId } from 'react';
 import { previewOptions } from '../../lib/promptSettings';
 import type { PromptShowState } from '../../lib/promptShow';
-import type { PromptPreviewName, PromptShow } from '../../lib/session';
+import type { PromptShow } from '../../ipc/prompt';
+import type { PromptPreviewName } from '../../ipc/promptDesign';
 import { Button, Toggle } from '../settings/ui';
 import { MenuButton } from './MenuButton';
 import { ShowButton } from './PromptShow';

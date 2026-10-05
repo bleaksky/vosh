@@ -1,4 +1,5 @@
-import type { ProfileAutoMatch, ProfileEntry, SessionIdentity } from './session';
+import type { SessionIdentity } from '../ipc/characters';
+import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
 import { KNOWN_WORLDS, worldName, type KnownWorld } from './useConnection';
 
 // The words and choices Settings > Characters builds from the profile

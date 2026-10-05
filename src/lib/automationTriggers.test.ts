@@ -9,7 +9,7 @@ import {
   updateDraftItem,
 } from './automationDraft';
 import { jsonListText, parseJsonList } from './automationRecords';
-import type { TriggerAction, TriggerRecord } from './session';
+import type { TriggerAction, TriggerRecord } from '../ipc/automation';
 import {
   blankTrigger,
   loadTriggers,

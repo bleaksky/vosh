@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TrackedAffect } from './session';
+import type { TrackedAffect } from '../ipc/affects';
 import {
   addTrackedAffect,
   affectSuggestions,

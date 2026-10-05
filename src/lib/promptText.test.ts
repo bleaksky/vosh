@@ -11,7 +11,7 @@ import {
   unknownTitle,
   keptCaret,
 } from './promptText';
-import type { PromptToken } from './session';
+import type { PromptToken } from '../ipc/promptDesign';
 
 // `[%c_hp%hp %nope` as prompt_describe reads it.
 const TOKENS: PromptToken[] = [

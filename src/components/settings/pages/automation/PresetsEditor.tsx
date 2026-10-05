@@ -8,13 +8,9 @@ import {
   type PresetToggle,
 } from '../../../../lib/automationRecords';
 import { PRESET_CATEGORIES, presetById, PRESETS, presetTriggers } from '../../../../lib/presets';
-import {
-  getUiConfig,
-  presetsInstall,
-  presetsRemove,
-  setUiConfig,
-  type UiConfig,
-} from '../../../../lib/session';
+import { presetsInstall, presetsRemove } from '../../../../ipc/automation';
+import { getUiConfig, type UiConfig } from '../../../../ipc/uiConfig';
+import { setUiConfig } from '../../../../ipc/uiConfigSave';
 import type { SetUiConfig } from '../../pageTypes';
 import { Card, Row, Toggle } from '../../ui';
 import { DraftEditor } from './DraftEditor';

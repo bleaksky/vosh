@@ -1,5 +1,5 @@
 import { normalizeAffectName } from './affects';
-import type { TrackedAffect } from './session';
+import type { TrackedAffect } from '../ipc/affects';
 
 // Editing a profile's tracked affects in Settings > Characters: the
 // chips, Add affect, and the labels and order under Advanced. Pure, so

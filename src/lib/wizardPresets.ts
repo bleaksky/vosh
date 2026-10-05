@@ -1,6 +1,6 @@
 import { enabledPresetIds } from './automationRecords';
 import { PRESETS } from './presets';
-import type { MigrationPlan } from './session';
+import type { MigrationPlan } from '../ipc/wizard';
 
 // In loadout mode every character shares one list of presets that are
 // on, the one the shared catalog wizard builds from the profile files.
