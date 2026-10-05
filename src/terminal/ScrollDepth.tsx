@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './native/nativeScroll';
-import { nativeSurfaceEnabled } from './Terminal';
+import { nativeSurfaceEnabled } from './terminalRenderer';
 
 interface Props {
   /** True while the find bar is open, so the readout drops below it

@@ -70,7 +70,7 @@ import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { CellLine } from '../../prompt/PromptCells';
 import { CommandBox } from '../../prompt/PromptCodes';
-import { nativeSurfaceEnabled } from '../../terminal/Terminal';
+import { nativeSurfaceEnabled } from '../../terminal/terminalRenderer';
 import { PromptShowField } from './PromptShowRow';
 import { Button, Field, IconButton, MoreIcon, Row, Section, Segmented, Toggle } from '../../ui';
 

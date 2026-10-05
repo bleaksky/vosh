@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from './Terminal';
+import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from './terminalRenderer';
 
 // Which renderer draws the live terminal, as the page decides it. The
 // xterm copy draws whenever the native underlay does not, so these hold
