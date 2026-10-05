@@ -30,18 +30,6 @@ import {
   stopWalk,
   type QuickKey,
 } from '../ipc/session';
-import {
-  getUiConfig,
-  normalizeInputCursorStyle,
-  subscribeEchoMacrosChanged,
-  subscribeInputCursorStyleChanged,
-  subscribeInputEchoCaretChanged,
-  subscribeInputEchoColorChanged,
-  subscribeKeepLastChanged,
-  subscribePasteLineDelayChanged,
-  subscribeSpellcheckPromptChanged,
-  type InputCursorStyle,
-} from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
@@ -53,6 +41,7 @@ import {
 } from './maskedInput';
 import { recentNames } from './recentNames';
 import { useCaret } from './useCaret';
+import { useInputPreferences } from './useInputPreferences';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 
@@ -130,11 +119,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   ref,
 ) {
   const [value, setValue] = useState('');
-  const [spellcheckPrompt, setSpellcheckPrompt] = useState(false);
-  // Caret shape from Settings, general. Only the paint changes — every
-  // shape occupies the same anchor box, so the measured position below
-  // stays shape-independent.
-  const [cursorStyle, setCursorStyle] = useState<InputCursorStyle>('block');
   const [history, setHistory] = useState<string[]>([]);
   const [passwordMode, setPasswordMode] = useState(false);
   // The mask from the newest input-mode event. The event sets it at once,
@@ -255,66 +239,15 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     quickKeysRef.current = payload.quick_keys;
   });
 
-  // Keep-last-command preference. When true, after submitting a
-  // line the input retains the value and selects the text so
-  // pressing Enter resends. Read once on mount, refreshed via the
-  // vosh://keep-last-changed event the settings save fires.
-  const keepLastRef = useRef<boolean>(false);
-  // Paste-line delay (ms). Same load + subscribe pattern as keepLast
-  // so the indicator/pacing picks up Settings edits without a relaunch.
-  const pasteDelayRef = useRef<number>(500);
-  // Color applied to locally-echoed sent input (null = default fg). Same
-  // load + subscribe pattern as keepLast.
-  const echoColorRef = useRef<string | null>(null);
-  // Echo commands sent by keyboard macros like typed input (default
-  // on). Under lag the echo shows the keybind registered before the
-  // world responds. Same load + subscribe pattern as keepLast.
-  const echoMacrosRef = useRef<boolean>(true);
-  // Mark your commands, a grey caret before each echo (default on).
-  // Same load + subscribe pattern as keepLast.
-  const echoCaretRef = useRef<boolean>(true);
-  useEffect(() => {
-    let cancelled = false;
-    getUiConfig()
-      .then((cfg) => {
-        if (cancelled) return;
-        keepLastRef.current = cfg.keep_last_command;
-        pasteDelayRef.current = cfg.paste_line_delay_ms;
-        echoColorRef.current = cfg.input_echo_color;
-        echoMacrosRef.current = cfg.echo_macros;
-        echoCaretRef.current = cfg.input_echo_caret;
-        setSpellcheckPrompt(cfg.spellcheck_prompt);
-        setCursorStyle(cfg.input_cursor_style);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  useTauriEvent(subscribeKeepLastChanged, (on) => {
-    keepLastRef.current = Boolean(on);
-  });
-  useTauriEvent(subscribePasteLineDelayChanged, (ms) => {
-    const n = Number(ms);
-    if (Number.isFinite(n) && n >= 0) {
-      pasteDelayRef.current = Math.min(10_000, Math.floor(n));
-    }
-  });
-  useTauriEvent(subscribeSpellcheckPromptChanged, (on) => {
-    setSpellcheckPrompt(Boolean(on));
-  });
-  useTauriEvent(subscribeInputCursorStyleChanged, (style) => {
-    setCursorStyle(normalizeInputCursorStyle(style));
-  });
-  useTauriEvent(subscribeInputEchoColorChanged, (next) => {
-    echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
-  });
-  useTauriEvent(subscribeEchoMacrosChanged, (on) => {
-    echoMacrosRef.current = Boolean(on);
-  });
-  useTauriEvent(subscribeInputEchoCaretChanged, (on) => {
-    echoCaretRef.current = Boolean(on);
-  });
+  const {
+    spellcheckPrompt,
+    cursorStyle,
+    keepLastRef,
+    pasteDelayRef,
+    echoColorRef,
+    echoMacrosRef,
+    echoCaretRef,
+  } = useInputPreferences();
 
   // Keyboard macro bindings — keyed by canonical key string
   // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and
