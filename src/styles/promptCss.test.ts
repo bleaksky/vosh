@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import overlaysCss from '../styles/overlays.css?raw';
-import promptCss from '../styles/prompt.css?raw';
-import settingsCss from '../styles/settings.css?raw';
-import tokensCss from '../styles/tokens.css?raw';
+import overlaysCss from './overlays.css?raw';
+import promptCss from './prompt.css?raw';
+import settingsCss from './settings.css?raw';
+import tokensCss from './tokens.css?raw';
 
 // prompt.css draws the prompt card, the bands, the pinned dock and the
 // Settings Prompt section on One Window tokens only (section 8 of the
