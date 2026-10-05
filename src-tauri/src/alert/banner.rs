@@ -111,25 +111,41 @@ impl SystemBanners {
 
 impl Banners {
     /// Post `banner` as `fate` says, and bounce the Dock or flash the
-    /// taskbar. Returns true when Vosh played a system sound in place of
-    /// the page's tone, as for a window too hidden to play it.
+    /// taskbar, then hand `told` whether Vosh played a system sound in
+    /// place of the page's tone, as for a window too hidden to play it.
+    /// Only the main thread answers whether the window shows, so an alert
+    /// with a tone posts from a blocking task, and the session that rang
+    /// it never waits on the main thread.
     pub(crate) fn post<R: tauri::Runtime>(
         &self,
         app: &AppHandle<R>,
-        banner: &Banner,
-        fate: &Fate,
-    ) -> bool {
+        banner: Banner,
+        fate: Fate,
+        told: impl FnOnce(bool) + Send + 'static,
+    ) {
         match self {
-            Banners::System(system) => system.post(app, banner, fate),
+            Banners::System(system) if fate.sound.is_none() => {
+                told(system.post(app, &banner, &fate, false));
+            }
+            Banners::System(_) => {
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let hidden = main_hidden(&app);
+                    let played = app.try_state::<SharedState>().is_some_and(|state| {
+                        matches!(&state.banners, Banners::System(system)
+                            if system.post(&app, &banner, &fate, hidden))
+                    });
+                    told(played);
+                });
+            }
             #[cfg(test)]
             Banners::Recorded(list) => {
                 if fate.banner || fate.attention.is_some() {
-                    list.lock().expect("the banners").push(Posted {
-                        banner: banner.clone(),
-                        fate: fate.clone(),
-                    });
+                    list.lock()
+                        .expect("the banners")
+                        .push(Posted { banner, fate });
                 }
-                false
+                told(false);
             }
         }
     }
@@ -171,14 +187,27 @@ impl Banners {
     }
 }
 
+/// Whether the main window is minimized, hidden or gone, so it may not
+/// play the page's tone. Waits on the main thread, so call it from a
+/// blocking task.
+fn main_hidden<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
+    app.get_webview_window("main").map_or(true, |w| {
+        w.is_minimized().unwrap_or(false) || !w.is_visible().unwrap_or(true)
+    })
+}
+
 impl SystemBanners {
-    fn post<R: tauri::Runtime>(&self, app: &AppHandle<R>, banner: &Banner, fate: &Fate) -> bool {
+    /// Post as [`Banners::post`] says, with `hidden` whether the main
+    /// window may not play the page's tone, in which case the system
+    /// plays a sound in its place. Returns whether it did.
+    fn post<R: tauri::Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        banner: &Banner,
+        fate: &Fate,
+        hidden: bool,
+    ) -> bool {
         let main = app.get_webview_window("main");
-        // A window behind others, minimized or hidden may not play the
-        // page's tone, so the system plays a sound in its place.
-        let hidden = main.as_ref().map_or(true, |w| {
-            w.is_minimized().unwrap_or(false) || !w.is_visible().unwrap_or(true)
-        });
         let system_sound = fate.sound.is_some() && hidden;
         let mut played = false;
         if fate.banner {
