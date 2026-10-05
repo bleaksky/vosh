@@ -3,7 +3,7 @@
    scroll depth chip. Every floating surface takes the SPEC 3 recipe
    (--raised ground, radius 16, --shadow-float) and reads only the One
    Window tokens. Class names carry the ov- prefix so nothing in the
-   legacy styles.css reaches them. */
+   interim migration.css reaches them. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40

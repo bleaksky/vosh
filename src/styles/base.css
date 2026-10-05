@@ -1,3 +1,6 @@
+/* The base. The box-sizing reset, html and body in the chrome face,
+   and thin scrollbars in the theme's colors on every platform. */
+
 * {
   box-sizing: border-box;
 }
