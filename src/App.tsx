@@ -84,7 +84,7 @@ import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { setReadableHighlights } from './lib/highlightGround';
 import { fitThemesInPlay } from './lib/customThemeFits';
-import { setColorVision, setFitGameColors } from './lib/fitGameColors';
+import { getColorVision, setColorVision, setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
@@ -180,7 +180,7 @@ function applySplitDividerColor(color: string | null): void {
 // so light themes never get the renderer's dark defaults.
 function pushNativeChromeTokens(): void {
   const theme = findTheme(getCurrentThemeId());
-  const tokens = themeTokens(theme);
+  const tokens = themeTokens(theme, getColorVision());
   const yellow = parseHex(theme.xterm.yellow);
   void invoke('native_surface_set_tokens', {
     divider: tokens.sep,
@@ -1238,8 +1238,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Settings save broadcasts the color vision. Play draws the fit for
-    // it at once, a custom theme once its fit lands.
+    // Settings save broadcasts the color vision. The window paints its
+    // status colors for it, and play draws the fit for it at once, a
+    // custom theme once its fit lands.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     subscribeColorVisionChanged(setColorVision).then((fn) => {
@@ -1305,8 +1306,9 @@ function App() {
   }, [promptReach]);
 
   // Keep the native surface's chrome colors on the theme. Every theme
-  // apply, from this window, a broadcast, or a profile switch, writes
-  // data-theme on the root, so one observer catches them all.
+  // apply, from this window, a broadcast, a profile switch, or a new
+  // color vision, writes data-theme on the root, so one observer catches
+  // them all.
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
     pushNativeChromeTokens();

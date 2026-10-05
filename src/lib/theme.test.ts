@@ -266,6 +266,36 @@ describe('the paint cache', () => {
     expect(paint.manual).toEqual(theme.themePaintSide(rubric));
   });
 
+  // Your color vision tunes the status colors every window paints, and
+  // the paint the next window opens on.
+  it('paints the status colors for your color vision and leaves them for the next window', async () => {
+    const theme = await import('./theme');
+    const { findTheme, themeTokens } = await import('./themes');
+    const kanso = findTheme('kanso-zen');
+    const typical = themeTokens(kanso);
+    const deutan = themeTokens(kanso, 'deuteranopia');
+    expect(deutan.success).not.toBe(typical.success);
+    theme.applyThemePrefs({ ...prefs({ theme: 'kanso-zen' }), color_vision: 'deuteranopia' });
+    expect(theme.getColorVision()).toBe('deuteranopia');
+    let paint = await cached();
+    if (paint?.follow !== false) throw new Error('no manual paint');
+    expect(paint.manual.vars['--danger']).toBe(deutan.danger);
+    expect(paint.manual.vars['--success']).toBe(deutan.success);
+    // The four fields another window sends keep the vision.
+    theme.applyThemePrefs(prefs({ theme: 'kanso-zen' }));
+    expect(theme.getColorVision()).toBe('deuteranopia');
+    // A new vision paints the theme on screen again at once.
+    const heard = vi.fn();
+    const stop = theme.subscribeColorVision(heard);
+    theme.setColorVision('typical');
+    expect(heard).toHaveBeenCalledTimes(1);
+    paint = await cached();
+    if (paint?.follow !== false) throw new Error('no manual paint');
+    expect(paint.manual.vars['--success']).toBe(typical.success);
+    expect(paint.manual).toEqual(theme.themePaintSide(kanso, 'typical'));
+    stop();
+  });
+
   it('leaves both sides while the theme follows the system', async () => {
     const theme = await import('./theme');
     const { findTheme } = await import('./themes');

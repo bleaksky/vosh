@@ -1,7 +1,8 @@
 // The Appearance page's choices and edits, kept pure so they can be
 // tested without a window: what the Font and Size selects of Terminal
 // text and Panel text, and the Light theme and Dark theme selects,
-// offer, and how custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
+// offer, what the Color vision row says your vision swaps, and how
+// custom themes and the base palette change. The page (src/components/settings/pages/AppearancePage.tsx)
 // applies and saves the results.
 
 import type { Appearance } from './chrome';
@@ -16,7 +17,7 @@ import { normalizePanelSize, PANEL_SIZE_TERMINAL } from './panelSize';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
-import { fitKey } from './gameFit';
+import { fitKey, type ColorVision } from './gameFit';
 import {
   customToAppTheme,
   DEFAULT_THEME_ID,
@@ -216,6 +217,27 @@ export function themeCaption(theme: AppTheme): string {
     );
   }
   return parts.filter((part) => part !== '').join(' ');
+}
+
+// ── Color vision ─────────────────────────────────────────────────────
+
+/** The quiet line under the Color vision row, which says what your
+ *  vision swaps. Every theme swaps the same families as far as its own
+ *  colors leave room, so the line names none. Empty under Typical. While
+ *  the theme's colors are off for MUD text (`themeTerminalColors`), game
+ *  text keeps your base palette, so only the window changes. */
+export function colorVisionNote(vision: ColorVision, themeTerminalColors = true): string {
+  if (vision === 'typical') return '';
+  const game = themeTerminalColors
+    ? vision === 'tritanopia'
+      ? 'In the game text blues turn purple and magentas turn pink.'
+      : 'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room.'
+    : "Game text keeps your base palette while the theme's colors are off for MUD text.";
+  const window =
+    vision === 'tritanopia'
+      ? 'The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.'
+      : 'In the window success turns blue and danger leans toward orange.';
+  return `${game} ${window}`;
 }
 
 // ── Custom themes ────────────────────────────────────────────────────

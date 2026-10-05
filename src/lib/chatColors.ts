@@ -21,23 +21,15 @@ import { ANSI_SLOT_LABELS } from './appearanceSettings';
 import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
 import type { ChromeTokens } from './chrome';
 import { composite, contrast, liftAtHue, parseHex, toHex } from './color';
+import { GAME_CHANNEL_SLOTS } from './gameChannels';
 import type { XtermPalette } from './themes';
 
 // A Map rather than an object literal: pane names come straight from
 // server data and user-defined routes, and keys like "constructor"
-// must not walk the prototype chain.
+// must not walk the prototype chain. Aabahran's own channels come from
+// gameChannels, which the color vision swap reads too.
 const CHANNEL_SLOTS = new Map<string, AnsiSlot>([
-  ['say', 'brightYellow'], // `# bold yellow
-  ['tell', 'green'], // `2 green
-  ['gtell', 'brightMagenta'], // `9 bold magenta
-  ['yell', 'cyan'], // `6 cyan
-  ['pray', 'brightWhite'], // `& bold white
-  ['cabal', 'brightBlue'], // `0 bold blue
-  ['clan', 'brightCyan'], // `^ bold cyan
-  ['faction', 'yellow'], // `3 yellow
-  ['newbie', 'brightGreen'], // `@ bold green
-  ['immortal', 'brightRed'], // `! bold red
-  ['imp', 'brightCyan'], // the message in `^ bold cyan
+  ...GAME_CHANNEL_SLOTS,
   // Other games name the same channels in their own words.
   ['tells', 'green'],
   ['says', 'brightYellow'],

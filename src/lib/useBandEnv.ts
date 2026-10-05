@@ -41,7 +41,7 @@ export function useBandEnv(
   return useMemo(() => {
     const theme = findTheme(getCurrentThemeId());
     const resolved = xtermThemeFor(theme, themeTerminalColors, fit, vision);
-    const { selection, selectionText } = themeTokens(theme);
+    const { selection, selectionText } = themeTokens(theme, vision);
     return {
       palette: ansi16Of(resolved),
       fg: resolved.foreground ?? '#cccccc',

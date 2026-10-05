@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { parseHex, rgbToOklch, WHITE } from './color';
 import { ansi16Of, nativeThemeOf, xtermThemeFor } from './terminalTheme';
-import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
+import { BUILTIN_THEMES, findTheme, playPalette, themeTokens } from './themes';
 
 describe('the xterm theme', () => {
   it('selects in the opaque token pair, with the theme colors for MUD text on or off', () => {
@@ -39,21 +40,43 @@ describe('the xterm theme', () => {
     expect(base.foreground).toBe('#c9cdcb');
   });
 
-  it('draws the fit for your color vision while Fit game colors is on', () => {
-    const triad = findTheme('triad');
-    // Triad passes every check Typical asks as published. For a
-    // deuteranope it lifts green and yellow and sets red a touch darker
-    // (themes.ts VISION_FITS), and leaves blue as published.
-    expect(xtermThemeFor(triad, true, true).green).toBe(triad.xterm.green);
-    const deutan = xtermThemeFor(triad, true, true, 'deuteranopia');
-    expect(deutan.green).toBe('#52d1b3');
-    expect(deutan.yellow).toBe('#f8d47a');
-    expect(deutan.red).toBe('#fb6154');
-    expect(deutan.blue).toBe(triad.xterm.blue);
-    // Off, every vision draws the published palette.
-    expect(xtermThemeFor(triad, true, false, 'deuteranopia').green).toBe(triad.xterm.green);
-    const native = nativeThemeOf(triad, true, true, 'deuteranopia');
-    expect(native.ansi).toEqual(ansi16Of(deutan));
+  it('draws the swap for your color vision with Fit game colors on or off', () => {
+    const tango = findTheme('tango-dark');
+    // For a protanope Tango Dark swaps green to blue from its Typical fit
+    // (themes.ts VISION_FITS). Body text and white play the Typical fit.
+    const typical = xtermThemeFor(tango, true, true);
+    const protan = xtermThemeFor(tango, true, true, 'protanopia');
+    const swap = playPalette(tango, true, 'protanopia');
+    expect(protan.green).toBe(swap.green);
+    expect(protan.green).not.toBe(typical.green);
+    expect(rgbToOklch(parseHex(protan.green ?? '') ?? WHITE).h).toBeGreaterThan(224);
+    expect(protan.foreground).toBe(typical.foreground);
+    expect(protan.white).toBe(typical.white);
+    // Off, the swap starts from the published palette, whose body text
+    // stays as published.
+    const off = xtermThemeFor(tango, true, false, 'protanopia');
+    expect(off.green).toBe(playPalette(tango, false, 'protanopia').green);
+    expect(off.green).not.toBe(tango.xterm.green);
+    expect(off.foreground).toBe(tango.xterm.foreground);
+    const native = nativeThemeOf(tango, true, true, 'protanopia');
+    expect(native.ansi).toEqual(ansi16Of(protan));
+    // With the theme's colors off for MUD text, the base palette stays.
+    expect(xtermThemeFor(tango, false, true, 'protanopia').green).toBe(
+      xtermThemeFor(tango, false, true).green,
+    );
+  });
+
+  it('draws the selection the window paints for your color vision, fit or not', () => {
+    for (const theme of BUILTIN_THEMES) {
+      for (const fit of [true, false]) {
+        const x = xtermThemeFor(theme, true, fit, 'tritanopia');
+        const tokens = themeTokens(theme, 'tritanopia');
+        expect(x.selectionBackground, theme.id).toBe(tokens.selection);
+        expect(nativeThemeOf(theme, true, fit, 'tritanopia').selection, theme.id).toBe(
+          tokens.selection,
+        );
+      }
+    }
   });
 
   it('hands the native grid the 16 colors and body text xterm draws', () => {

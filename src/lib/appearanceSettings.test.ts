@@ -4,6 +4,7 @@ import {
   basePalette,
   BUNDLED_FONTS,
   colorInputValue,
+  colorVisionNote,
   copyTheme,
   editCustomTheme,
   fontChoices,
@@ -22,6 +23,7 @@ import {
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
+import { COLOR_VISIONS } from './gameFit';
 import type { CustomTheme } from './session';
 import { pickTheme, resolveActiveTheme } from './theme';
 import { galleryThemes } from './themeThumb';
@@ -349,6 +351,54 @@ describe('themeCaption', () => {
       const caption = themeCaption(theme);
       expect(caption, theme.id).not.toMatch(/[:;\u2010-\u2015-]/);
       expect(caption, theme.id).toMatch(/\.$/);
+    }
+  });
+});
+
+describe('colorVisionNote', () => {
+  it('says nothing for Typical', () => {
+    expect(colorVisionNote('typical')).toBe('');
+    expect(colorVisionNote('typical', false)).toBe('');
+  });
+
+  // Every theme swaps the same families, so the line names no theme and
+  // says what turns into what, as far as the theme leaves room.
+  it('says what each vision swaps, in the game text and the window', () => {
+    const redGreen =
+      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+    expect(colorVisionNote('deuteranopia')).toBe(redGreen);
+    expect(colorVisionNote('protanopia')).toBe(redGreen);
+    expect(colorVisionNote('tritanopia')).toBe(
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+    );
+  });
+
+  // With the theme's colors off the window still swaps, and under
+  // tritanopia it can still move a status color or the accent, so the
+  // line never says nothing changes.
+  it('says the game text keeps your base palette while the theme colors are off', () => {
+    expect(colorVisionNote('deuteranopia', false)).toBe(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. In the window success turns blue and danger leans toward orange.",
+    );
+    expect(colorVisionNote('protanopia', false)).toBe(colorVisionNote('deuteranopia', false));
+    expect(colorVisionNote('tritanopia', false)).toBe(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.",
+    );
+    for (const vision of COLOR_VISIONS) {
+      expect(colorVisionNote(vision, false)).not.toContain('nothing changes');
+    }
+  });
+
+  it('leaves out the old notes on what a theme keeps or cannot part', () => {
+    for (const vision of COLOR_VISIONS) {
+      for (const on of [true, false]) {
+        const note = colorVisionNote(vision, on);
+        for (const old of ['already keeps', 'cannot part', 'Fit game colors', 'published']) {
+          expect(note, `${vision} ${on}`).not.toContain(old);
+        }
+        for (const theme of BUILTIN_THEMES) expect(note).not.toContain(theme.label);
+        expect(note).not.toMatch(/[;:\u2010-\u2015*]/);
+      }
     }
   });
 });
