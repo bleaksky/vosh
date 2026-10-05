@@ -320,39 +320,6 @@
   color: var(--tertiary);
 }
 
-/* ── Input band ────────────────────────────────────────────────────── */
-
-/* SPEC 1: full terminal width, 40 tall, --inputband fill, no border
-   and no radius. The prompt glyph sits at 16 in the tertiary tone and
-   the typed text starts at 32. It grows while you compose several
-   lines. */
-.shell .input-row {
-  flex: 1 0 auto;
-  min-height: var(--input-band);
-  box-sizing: border-box;
-  gap: 0;
-  padding: 8px 16px;
-  border: 0;
-  background: var(--inputband);
-}
-
-.shell .input-row .prompt {
-  flex: none;
-  width: 16px;
-  color: var(--tertiary);
-  font-weight: 400;
-}
-
-.shell .input-row .input-gutter,
-.shell .input-row .paste-burst {
-  margin-right: 8px;
-}
-
-/* No glows (SPEC 3). */
-.shell .input-caret {
-  box-shadow: none;
-}
-
 /* ── Status line ───────────────────────────────────────────────────── */
 
 /* SPEC 10 G4: 12 px, tertiary, tabular numbers, items 20 apart with no
