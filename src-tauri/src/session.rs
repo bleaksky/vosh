@@ -37,6 +37,8 @@
 //! - `log_sink` holds the session log's row and the scrollback ring of a
 //!   connection, and the lines the session captures as it ends.
 //! - `perf` counts the work on the hot path.
+//! - `reconnect` decides whether a drop dials again, and runs the series
+//!   of redials.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
 //! - `tests` drives the steps the way the loop does.
@@ -56,6 +58,7 @@ mod lua_timers;
 mod perf;
 pub(crate) mod prompt_view;
 mod read;
+pub(crate) mod reconnect;
 pub(crate) mod room_block;
 mod socket;
 mod steps;
@@ -238,10 +241,10 @@ impl SessionHandle {
 }
 
 /// Connect `session` to `host` on `port`, over TLS when `tls` says so,
-/// in place of the connection it runs, if any. The new connection starts
-/// without the session variables, the character and the affects of the
-/// last one, and every window hears who the session is for once it
-/// connects or fails to.
+/// in place of the connection it runs, if any, and in place of a series
+/// of redials it waits on. The new connection starts without the session
+/// variables, the character and the affects of the last one, and every
+/// window hears who the session is for once it connects or fails to.
 pub(crate) async fn connect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -249,6 +252,28 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     host: String,
     port: u16,
     tls: bool,
+) -> Result<(), String> {
+    // The connection that runs ends first, so a drop it ends on cannot
+    // start a series after the cancel below.
+    let old = session.slot.lock().await.take();
+    if let Some(handle) = old {
+        handle.shutdown().await;
+    }
+    reconnect::cancel(app, session).await;
+    dial(app, state, session, host, port, tls, false).await
+}
+
+/// The body of [`connect`], which a redial runs too, since it must not
+/// end the series it runs in. A redial that fails says nothing of it to
+/// the page, `quiet`, since the series prints a line for each try.
+pub(crate) async fn dial<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    session: &Arc<Session>,
+    host: String,
+    port: u16,
+    tls: bool,
+    quiet: bool,
 ) -> Result<(), String> {
     // Take any existing handle out under a brief lock and drop the lock
     // before doing the long-running connect. This lets `disconnect`
@@ -330,7 +355,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
                 app,
                 session,
                 StatePayload::Disconnected {
-                    reason: Some(e.to_string()),
+                    reason: (!quiet).then(|| e.to_string()),
                 },
             );
             // Nothing reached the target, so nobody is logged in there.
@@ -344,6 +369,10 @@ pub(crate) async fn connect<R: tauri::Runtime>(
             return Err(e.to_string());
         }
     };
+    #[cfg(test)]
+    if quiet {
+        reconnect::hold_try(state);
+    }
 
     {
         let mut current = session.slot.lock().await;
@@ -365,19 +394,25 @@ pub(crate) async fn connect<R: tauri::Runtime>(
     Ok(())
 }
 
-/// End the connection `session` runs, if any, and forget it and its
-/// character. Every window hears that no connection is live.
+/// End the connection `session` runs, if any, and the series of redials
+/// it waits on, and forget the connection and its character. Every
+/// window hears that no connection is live.
 pub(crate) async fn disconnect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     session: &Arc<Session>,
 ) {
+    // The series ends first, so a try that connects as you disconnect
+    // cannot put its link in the slot after the take below.
+    reconnect::cancel(app, session).await;
     {
         let mut current = session.slot.lock().await;
         if let Some(handle) = current.take() {
             handle.shutdown().await;
         }
     }
+    // A link that dropped as it ended may have started a series.
+    reconnect::cancel(app, session).await;
     if let Ok(mut g) = session.current_connection.lock() {
         *g = None;
     }

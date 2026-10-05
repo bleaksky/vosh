@@ -101,6 +101,15 @@ pub(crate) struct Connection {
     /// Lua stops under, made from the session's id. A trigger or an alias
     /// whose Lua Vosh stopped here stays on in every other session.
     pub(crate) stop_key: StopKey,
+    /// What the alert presets follow on the connection: your name, the
+    /// low latch on your health and whom you fight. See
+    /// [`crate::alert::presets::PresetWatch`].
+    pub(crate) preset_watch: crate::alert::presets::PresetWatch,
+    /// What decides whether a drop redials: whether you play, a closing
+    /// line, a quit of yours, and a character another session took. See
+    /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
+    /// connection ends.
+    pub(crate) link: super::reconnect::LinkWatch,
 }
 
 impl Connection {
@@ -115,6 +124,7 @@ impl Connection {
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
+        self.preset_watch.reset();
         had
     }
 

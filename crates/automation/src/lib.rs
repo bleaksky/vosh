@@ -10,7 +10,9 @@
 //! `$name`.
 //! [`trigger`] matches server lines and fires highlight, gag, replace,
 //! send, route and script actions.
+//! [`alert`] says what an alert on a trigger, a preset or a Lua call does.
 
+pub mod alert;
 pub mod alias;
 mod groups;
 mod revision;

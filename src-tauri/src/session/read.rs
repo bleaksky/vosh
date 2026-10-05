@@ -370,23 +370,41 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         gag_without_reader,
         character,
         hold: _,
-        gmcp: _,
+        gmcp,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (open, vars, hidden, prompt_seen, status, prompt_state, clock) = {
+    let (open, vars, hidden, prompt_seen, status, prompt_state, clock, rings) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
+        let vars = c.prompt.take_prompt_vars(prompt_vars);
+        let hidden = c.prompt.vars.take_hidden_change();
+        // Low health follows what the vitals panes read once the read's
+        // packets and prompt values landed, while its preset is on.
+        let follow = (gmcp || prompt_vars || hidden.is_some())
+            && crate::alert::presets::parts(&p, crate::alert::presets::LOW_HEALTH).is_some();
+        let mut rings: Vec<crate::alert::Alert> = follow
+            .then(|| crate::alert::presets::health(&c.prompt.vars))
+            .flatten()
+            .and_then(|(hp, maxhp, hid)| c.preset_watch.health(&p, hp, maxhp, hid))
+            .into_iter()
+            .collect();
+        // The first text of a link a redial opened is the game's prompt,
+        // which waits for your login.
+        if out.writes_text() {
+            rings.extend(super::reconnect::reached_prompt(session, &p));
+        }
         (
             p.open().clone(),
-            c.prompt.take_prompt_vars(prompt_vars),
-            c.prompt.vars.take_hidden_change(),
+            vars,
+            hidden,
             c.prompt.take_seen(),
             c.prompt.take_status_change(),
             watched.then(|| crate::prompt::prompt_state(&p, &c)),
             clock_after(&p, &c, Instant::now()),
+            rings,
         )
     };
     if !out.is_empty() {
@@ -418,6 +436,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         session.emit(app, events::PROMPT_STATUS, &status);
     }
     emit_prompt_state(app, session, prompt_state);
+    crate::alert::ring(app, session, rings);
     clock
 }
 

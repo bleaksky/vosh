@@ -555,3 +555,72 @@ async fn your_line_reaches_the_log_while_the_game_never_pauses() {
     assert!(flooding, "the flood ended before the row landed");
     assert_eq!(rows, vec!["> look".to_string()]);
 }
+
+/// A GMCP packet as the game frames it.
+fn packet(package: &str, json: &str) -> Vec<u8> {
+    let mut bytes = vec![IAC, 250, 201];
+    bytes.extend_from_slice(format!("{package} {json}").as_bytes());
+    bytes.extend_from_slice(&[IAC, 240]);
+    bytes
+}
+
+/// An answer that rings alerts still shows in one frame. The tell, the
+/// trigger with a tone and your name all ring on the read that shows it,
+/// and none of them holds the read back.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_answer_that_rings_alerts_still_shows_in_one_frame() {
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
+    let mut h = Harness::new().await;
+    {
+        let mut p = h.state.selected_session().lock_profile().await;
+        p.ui.enabled_presets = vec!["alert_tells".into(), "alert_name".into()];
+        let visitor = vosh_automation::trigger::Trigger {
+            alert: Some(crate::alert::AlertParts {
+                banner: true,
+                sound: Some("chime".into()),
+                ..crate::alert::AlertParts::default()
+            }),
+            ..vosh_automation::trigger::Trigger::new(
+                "visitor",
+                r"^\w+ walks in\.$",
+                vosh_automation::trigger::TriggerAction::Route {
+                    pane: "chat".into(),
+                },
+            )
+        };
+        p.triggers.set(visitor).expect("the trigger");
+    }
+    let alerts = Arc::new(AtomicUsize::new(0));
+    {
+        let alerts = alerts.clone();
+        h.app.listen_any(crate::app::events::ALERT, move |_| {
+            alerts.fetch_add(1, Ordering::SeqCst);
+        });
+    }
+    let mut greeting = packet(
+        "Char.Status",
+        r#"{"name":"Orla","level":50,"race":"human","class":"dark-knight"}"#,
+    );
+    greeting.extend_from_slice(b"Welcome.\r\n\r\n[329h 9999m 9999v] ");
+    greeting.extend_from_slice(&GA);
+    h.game_writes(&greeting).await;
+    h.until_shown("Welcome.").await;
+    let before = h.settled_frames(1).await;
+
+    let tell = include_str!("../../../fixtures/gmcp/aabahran/chat/tell.gmcp");
+    let (package, json) = tell.trim().split_once(' ').expect("a packet");
+    let mut answer = packet(package, json);
+    // `$n walks in.` (act_move.c:1053) and `$n looks at $N.`
+    // (act_info.c:1054).
+    answer.extend_from_slice(
+        b"\r\nMaren walks in.\r\nMaren looks at Orla.\r\n\r\n[329h 9999m 9999v] ",
+    );
+    answer.extend_from_slice(&GA);
+    h.game_writes(&answer).await;
+    h.until_shown("Maren looks at Orla.").await;
+    assert_eq!(h.settled_frames(before + 1).await, before + 1);
+    assert_eq!(alerts.load(Ordering::SeqCst), 3);
+    h.disconnect().await;
+}

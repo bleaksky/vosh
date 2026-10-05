@@ -4,13 +4,14 @@
 //! variables, its Lua engine, the aliases its plugins make and its macro
 //! recorder on its [`Connection`](crate::session::connection::Connection).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use vosh_automation::alert::AlertParts;
 use vosh_automation::alias::AliasStore;
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 
-use crate::profile::file::{GroupFolders, PluginsPersist};
+use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist};
 use crate::profile::ui::UiConfig;
 use crate::tick::TickSettings;
 
@@ -83,6 +84,15 @@ pub(crate) struct Profile {
     /// per-timer next-fire deadlines live in the session loop, not
     /// here, so this stays a plain config mirror.
     pub(crate) timers: Vec<Timer>,
+    /// What each alert preset does, by preset id, which the file saves
+    /// under `[alerts]`. Whether a preset rings is in
+    /// `ui.enabled_presets`, see [`crate::alert::presets`]. In loadout
+    /// mode catalog.toml keeps them, beside the list of presets that are
+    /// on.
+    pub(crate) alerts: BTreeMap<String, AlertParts>,
+    /// Vosh dials again after the link drops while you play, see
+    /// [`crate::session::reconnect`]. On at first.
+    pub(crate) reconnect: OnSwitch,
 }
 
 impl Profile {

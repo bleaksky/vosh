@@ -1059,3 +1059,29 @@ describe('the help on group switches and timer groups', () => {
     }
   });
 });
+
+describe('the help on auto reconnect and Lua alerts', () => {
+  it('says when Vosh dials again and when it never does', () => {
+    const text = body('get-connected.reconnect');
+    expect(text).toContain('then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries');
+    expect(text).toContain('Vosh never dials again after your `Disconnect`, a `quit` you typed');
+    expect(text).toContain('add `reconnect = false` to its profile file');
+  });
+
+  it('says what a Mac waits for and that only macOS takes banners back', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain('on macOS turning a plugin off takes back the banners it posted');
+    expect(text).toContain('Vosh asks for that from the Alerts settings, which have yet to land');
+    expect(text).toContain(
+      'It also needs a signed Vosh, so a dev build you run from the source shows none there.',
+    );
+  });
+
+  it('reads the same in HELP.md', () => {
+    for (const id of ['get-connected.reconnect', 'automate.lua-scripts']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});

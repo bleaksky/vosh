@@ -133,11 +133,38 @@ struct Unheard {
 /// Every name sent with no page listener. Everything else the app or the
 /// page sends must have one, so a rename at one sender alone fails even
 /// while another sender keeps the old name.
-const UNHEARD: &[Unheard] = &[Unheard {
-    name: r"https?://[^\s<>()\[\]]+",
-    why: "The terminal grid's pattern for a web address in the game output. \
-          It is no event.",
-}];
+const UNHEARD: &[Unheard] = &[
+    Unheard {
+        name: r"https?://[^\s<>()\[\]]+",
+        why: "The terminal grid's pattern for a web address in the game output. \
+              It is no event.",
+    },
+    Unheard {
+        name: "session://alert",
+        why: "An alert rang. The page half of the alerts plays its tone, shows \
+              its notice and marks the row, after R18 (Alerts Q18).",
+    },
+    Unheard {
+        name: "session://alerts-ended",
+        why: "A plugin's alerts ended. The page half drops its notices, after \
+              R18 (Alerts Q19).",
+    },
+    Unheard {
+        name: "session://reconnect",
+        why: "Where a redial stands. The reconnect notice of the page half \
+              hears it, after R18 (Alerts Q18).",
+    },
+    Unheard {
+        name: "vosh://daylight-changed",
+        why: "The game turned to day or night. Switch themes With the game \
+              reads it in the page half, after R18 (Alerts Q16).",
+    },
+    Unheard {
+        name: "vosh://session-selected",
+        why: "A click on a banner selected a session. The page opens one \
+              session until the page half of R14b after R20.",
+    },
+];
 
 /// A name argument, as far as the source tells it.
 #[derive(Clone, Debug, PartialEq)]

@@ -114,6 +114,21 @@ pub(crate) const GAME_PROMPT_SEEN: &str = "session://game-prompt-seen";
 /// [`crate::session::GagWithoutReaderPayload`].
 /// `onPromptGagWithoutReader` hears it.
 pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without-reader";
+/// An alert rang in the session, from a trigger, a preset or Lua. The
+/// payload is a [`crate::alert::AlertPayload`]. The page half of the
+/// alerts plays its tone, shows its notice and marks the session's row.
+/// No page listener hears it yet.
+pub(crate) const ALERT: &str = "session://alert";
+/// The alerts of a Lua owner ended, as its plugin turned off, stopped or
+/// loaded again. The payload is a [`crate::alert::AlertsEnded`]. No page
+/// listener hears it yet.
+pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
+/// Where the redial of the session stands after a drop: a wait, a try, a
+/// failed try, the try that reached the game, the end of the tries, a
+/// cancel, or why a drop does not redial. The payload is a
+/// [`crate::session::reconnect::ReconnectPayload`]. The reconnect notice
+/// of the page half hears it. No page listener hears it yet.
+pub(crate) const RECONNECT: &str = "session://reconnect";
 
 // The lists.
 
@@ -171,6 +186,17 @@ pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
 /// of those, so it also reads the current value with
 /// `session_identity_get`. `subscribeSessionIdentity` hears it.
 pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-changed";
+/// Sent to every window when Vosh selected a session itself, as a click
+/// on an alert banner does. The payload is a
+/// [`crate::alert::banner::SessionSelected`]. No page listener hears it
+/// yet, since the page opens one session.
+pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
+/// Sent to every window when the game of a session turns to day or
+/// night, from World.Time (Alerts Q16). The payload is a
+/// [`crate::tick::DaylightPayload`] with the session beside it. Switch
+/// themes With the game reads it in the page half. No page listener
+/// hears it yet.
+pub(crate) const DAYLIGHT_CHANGED: &str = "vosh://daylight-changed";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of
 /// [`crate::profile::ui::CustomTheme`].

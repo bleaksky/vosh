@@ -70,15 +70,32 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply) = {
+    let (tick_step, script_apply, daylight) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
-        let (tick_step, apply) = gmcp_step(&mut p, &mut c, &msg, Instant::now());
-        (tick_step, apply.ran_under(p.open()))
+        let now = Instant::now();
+        c.link.gmcp(&msg.package);
+        let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
+        // A tell you got or a fight that starts on you rings its preset.
+        apply
+            .alerts
+            .extend(c.preset_watch.gmcp(&p, &msg, conn.stream.last_line(), now));
+        // The game's day or night, beside the tick.
+        let daylight = (msg.package == "World.Time")
+            .then(|| c.tick.observe_daylight(&msg.data))
+            .flatten();
+        (tick_step, apply.ran_under(p.open()), daylight)
     };
+    if let Some(phase) = daylight {
+        conn.session.emit(
+            &conn.app,
+            crate::app::events::DAYLIGHT_CHANGED,
+            &crate::tick::DaylightPayload { phase },
+        );
+    }
 
     // Char.Status / Char.Name carry the logged-in character name on
     // Aabahran (and most ROM derivatives). A name the session has not
@@ -175,10 +192,15 @@ async fn character_named<R: tauri::Runtime>(
     if !is_new {
         return;
     }
+    // A login on this link ends what the redial followed of the last play.
+    session.connection.lock().link.logged_in();
     // The affect gauges read this character's saved fulls.
     crate::affects::full::character_known(app, state, session, character);
     auto_switch_for_character(app, state, session, character).await;
     crate::session::identity::broadcast_session_identity(app, state, session).await;
+    // Another session that played the character here loses it to this
+    // one, so its link closes as expected.
+    super::reconnect::took_character(app, state, session, character).await;
 }
 
 /// What a GMCP packet does to the profile and the connection, under the

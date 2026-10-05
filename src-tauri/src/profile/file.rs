@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use vosh_automation::alert::AlertParts;
 use vosh_automation::alias::Alias;
 use vosh_automation::trigger::Trigger;
 
@@ -84,6 +85,35 @@ pub(crate) struct ProfileConfig {
         with = "vosh_prompt::config::file_table"
     )]
     pub prompt: Option<vosh_prompt::PromptConfig>,
+    /// What each alert preset does, by preset id, the `[alerts]` table
+    /// of Alerts Q5. Whether a preset rings is in `ui.enabled_presets`,
+    /// as for any preset. Left out while it holds none, and a build that
+    /// knows no alert skips it (D14).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub alerts: BTreeMap<String, AlertParts>,
+    /// Vosh dials again after the link drops while you play (Alerts Q13
+    /// and Q14). On for every profile, so the file says
+    /// `reconnect = false` only once you turn it off.
+    #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
+    pub reconnect: OnSwitch,
+}
+
+/// A switch that stays on until you turn it off, such as Reconnect when
+/// the link drops. A file writes it only while it is off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct OnSwitch(pub(crate) bool);
+
+impl Default for OnSwitch {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
+impl OnSwitch {
+    pub(crate) fn is_on(&self) -> bool {
+        self.0
+    }
 }
 
 /// The catalog groups each folder of one profile became when the shared
@@ -214,6 +244,8 @@ impl ProfileConfig {
             disabled_timer_groups,
             group_folders: profile.group_folders.clone(),
             prompt: None,
+            alerts: profile.alerts.clone(),
+            reconnect: profile.reconnect,
         };
         config.set_prompt(profile.prompt.clone());
         config
@@ -347,6 +379,8 @@ impl ProfileConfig {
             .cloned()
             .collect();
         profile.group_folders.clone_from(&self.group_folders);
+        profile.alerts.clone_from(&self.alerts);
+        profile.reconnect = self.reconnect;
 
         warnings
     }
@@ -361,6 +395,7 @@ impl ProfileConfig {
         self.aliases.clear();
         self.triggers.clear();
         self.macros.clear();
+        self.alerts.clear();
     }
 
     /// Write the profile file at `path`. The first save that writes a
@@ -545,6 +580,61 @@ mod tests {
         let read: ProfileConfig = toml::from_str(older).unwrap();
         assert_eq!(read.tick.interval_secs, 45);
         assert!(!toml::to_string(&read).unwrap().contains("[connection]"));
+    }
+
+    #[test]
+    fn reconnect_is_on_until_you_turn_it_off_and_only_off_reaches_the_file() {
+        // A file from before the switch, the old [connection] table among
+        // it, reconnects.
+        let older =
+            "[connection]\nhost = \"mud.example\"\nport = 4000\n\n[tick]\ninterval_secs = 45\n";
+        let read: ProfileConfig = toml::from_str(older).unwrap();
+        assert_eq!(read.reconnect, OnSwitch(true));
+        assert!(!read.to_toml().unwrap().contains("reconnect"));
+        let mut profile = Profile::default();
+        assert!(profile.reconnect.is_on(), "a new profile reconnects");
+        profile.reconnect = OnSwitch(false);
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        assert!(
+            text.lines().any(|line| line == "reconnect = false"),
+            "{text}"
+        );
+        let mut again = Profile::default();
+        ProfileConfig::from_toml(&text)
+            .unwrap()
+            .apply_to(&mut again);
+        assert_eq!(again.reconnect, OnSwitch(false));
+    }
+
+    #[test]
+    fn the_alert_presets_round_trip_and_leave_the_file_alone_while_empty() {
+        let mut profile = Profile::default();
+        assert!(!ProfileConfig::from_profile(&profile)
+            .to_toml()
+            .unwrap()
+            .contains("[alerts"));
+        profile.alerts.insert(
+            "alert_tells".into(),
+            AlertParts {
+                banner: true,
+                ..AlertParts::default()
+            },
+        );
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        assert!(
+            text.contains("[alerts.alert_tells]\nbanner = true\n"),
+            "{text}"
+        );
+        let mut again = Profile::default();
+        ProfileConfig::from_toml(&text)
+            .unwrap()
+            .apply_to(&mut again);
+        assert_eq!(again.alerts, profile.alerts);
+        // Loadout mode keeps them in catalog.toml.
+        let mut config = ProfileConfig::from_profile(&profile);
+        config.clear_catalog_items();
+        let leftover = &config.alerts;
+        assert!(leftover.is_empty(), "{leftover:?}");
     }
 
     #[test]

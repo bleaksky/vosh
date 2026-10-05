@@ -8,6 +8,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+use crate::alert::AlertParts;
 use crate::groups::GroupSwitch;
 use crate::revision::next_revision;
 use crate::stops::{StopKey, Stops};
@@ -246,6 +247,11 @@ pub struct Trigger {
     /// buffer (telnet GA/EOR) instead of completed lines. See
     /// [`TriggerTarget`] for details.
     pub target: TriggerTarget,
+    /// The alert the trigger rings when it matches, kept in a table of
+    /// its own beside the actions, so a build that knows no alert skips
+    /// it and still reads the trigger (D14). It rides on the match, not on
+    /// the line showing, so a trigger that hides its line still rings.
+    pub alert: Option<AlertParts>,
 }
 
 fn default_enabled() -> bool {
@@ -281,6 +287,17 @@ struct TriggerRaw {
     group: Option<String>,
     #[serde(default)]
     target: TriggerTarget,
+    #[serde(default)]
+    alert: Option<AlertRaw>,
+}
+
+/// A trigger's `alert` table, or anything else in its place, which reads
+/// as no alert so one bad value never fails the trigger.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AlertRaw {
+    Parts(AlertParts),
+    Other(serde::de::IgnoredAny),
 }
 
 impl<'de> Deserialize<'de> for Trigger {
@@ -320,6 +337,10 @@ impl<'de> Deserialize<'de> for Trigger {
             preset: raw.preset,
             group: raw.group,
             target: raw.target,
+            alert: match raw.alert {
+                Some(AlertRaw::Parts(parts)) => Some(parts),
+                Some(AlertRaw::Other(_)) | None => None,
+            },
         })
     }
 }
@@ -334,12 +355,14 @@ impl Serialize for Trigger {
         // canonical list). `group` is omitted when unset so older
         // builds and grep-friendly diffs stay clean. `target` is
         // omitted when it is the default Line so the on-disk shape
-        // for the overwhelming majority of triggers stays unchanged.
+        // for the overwhelming majority of triggers stays unchanged, and
+        // so is `alert` when the trigger rings none.
         let emit_target = self.target != TriggerTarget::default();
         let field_count = 6
             + usize::from(self.preset.is_some())
             + usize::from(self.group.is_some())
-            + usize::from(emit_target);
+            + usize::from(emit_target)
+            + usize::from(self.alert.is_some());
         let mut state = serializer.serialize_struct("Trigger", field_count)?;
         state.serialize_field("name", &self.name)?;
         // Those builds read it as a regex, so a Text or Starts with row
@@ -362,6 +385,9 @@ impl Serialize for Trigger {
         if emit_target {
             state.serialize_field("target", &self.target)?;
         }
+        if let Some(alert) = &self.alert {
+            state.serialize_field("alert", alert)?;
+        }
         state.end()
     }
 }
@@ -380,6 +406,7 @@ impl Trigger {
             preset: None,
             group: None,
             target: TriggerTarget::Line,
+            alert: None,
         }
     }
 
@@ -632,6 +659,28 @@ mod tests {
             group: Some("combat".into()),
             ..Trigger::new(name, pattern, TriggerAction::Gag)
         }
+    }
+
+    #[test]
+    fn an_alert_rides_beside_the_actions_and_a_bad_one_reads_as_none() {
+        let json = r#"{"name":"visitor","pattern":"walks in","actions":[{"kind":"gag"}],
+            "alert":{"banner":true,"sound":"chime","attention":"once"}}"#;
+        let t: Trigger = serde_json::from_str(json).unwrap();
+        let alert = t.alert.clone().expect("the alert table");
+        assert!(alert.banner && alert.background && !alert.words);
+        assert_eq!(alert.sound.as_deref(), Some("chime"));
+        let again: Trigger = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+        assert_eq!(again, t);
+        // A value no build wrote, such as a banner that is no switch,
+        // leaves the trigger with no alert and its actions whole.
+        let json = r#"{"name":"visitor","pattern":"walks in","actions":[{"kind":"gag"}],
+            "alert":{"banner":"yes"}}"#;
+        let t: Trigger = serde_json::from_str(json).unwrap();
+        assert_eq!(t.alert, None);
+        assert_eq!(t.actions, [TriggerAction::Gag]);
+        // A trigger with no alert writes no key for it.
+        let text = serde_json::to_string(&Trigger::new("x", "x", TriggerAction::Gag)).unwrap();
+        assert!(!text.contains("alert"), "{text}");
     }
 
     #[test]

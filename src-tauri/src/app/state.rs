@@ -89,7 +89,36 @@ pub(crate) struct AppState {
     /// only when launch could not resolve the folder, and then nothing
     /// loads from it.
     pub(crate) app_data: OnceLock<PathBuf>,
+    /// The windows of Vosh that have focus, which the focus rule of the
+    /// alerts reads. See [`crate::alert::focus`].
+    pub(crate) focus: crate::alert::focus::Focus,
+    /// Where alert banners go, the system's, or in a test build a list
+    /// the test reads. See [`crate::alert::banner`].
+    pub(crate) banners: crate::alert::banner::Banners,
+    /// In a test build, the clock the redial waits on while a test holds
+    /// one: each wait goes to the test, which ends it.
+    #[cfg(test)]
+    pub(crate) redial_clock: std::sync::Mutex<Option<RedialClock>>,
+    /// In a test build, the gate a redial that connected waits at before
+    /// it takes the slot, while a test holds one. See
+    /// [`crate::session::reconnect::hold_try`].
+    #[cfg(test)]
+    pub(crate) redial_gate: std::sync::Mutex<Option<RedialGate>>,
 }
+
+/// Where a redial in a test build sends each wait: the session, how long
+/// it would wait, and the sender the test ends the wait with.
+#[cfg(test)]
+pub(crate) type RedialClock = tokio::sync::mpsc::UnboundedSender<(
+    SessionId,
+    std::time::Duration,
+    tokio::sync::oneshot::Sender<()>,
+)>;
+
+/// Where a redial in a test build that connected sends the sender that
+/// lets it go on.
+#[cfg(test)]
+pub(crate) type RedialGate = std::sync::mpsc::Sender<std::sync::mpsc::Sender<()>>;
 
 impl AppState {
     /// The session map, held for one step that takes no other lock.
@@ -307,6 +336,12 @@ impl Default for AppState {
             relaunch_pending: AtomicBool::new(false),
             loadout_mode: AtomicBool::new(false),
             app_data: OnceLock::new(),
+            focus: crate::alert::focus::Focus::default(),
+            banners: crate::alert::banner::Banners::default(),
+            #[cfg(test)]
+            redial_clock: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            redial_gate: std::sync::Mutex::new(None),
         }
     }
 }

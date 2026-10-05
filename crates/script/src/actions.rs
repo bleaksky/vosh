@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use vosh_automation::alert::AlertParts;
 use vosh_automation::vars::Scope;
 
 use crate::owner::Owner;
@@ -102,6 +103,15 @@ pub enum Action {
     /// the `[lua]` tag in red. Vosh adds these itself, so no call's
     /// action cap counts them.
     Error(String),
+    /// Ring an alert, from `mud.alert`, for the Lua of `owner`, which
+    /// ends the alerts of a plugin as the plugin turns off.
+    Alert {
+        owner: Owner,
+        title: String,
+        /// What a banner shows under the title with Title and words.
+        text: Option<String>,
+        parts: AlertParts,
+    },
 }
 
 impl Action {
@@ -134,6 +144,13 @@ impl Action {
             Action::SetLuaTrigger { name, pattern, .. } => name.len() + pattern.len(),
             Action::SubscribeGmcp { package, .. } => package.len(),
             Action::Timer { .. } | Action::CancelTimer(_) => 0,
+            Action::Alert {
+                title, text, parts, ..
+            } => {
+                title.len()
+                    + text.as_ref().map_or(0, String::len)
+                    + parts.sound.as_ref().map_or(0, String::len)
+            }
         }
     }
 

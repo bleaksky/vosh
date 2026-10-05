@@ -65,6 +65,13 @@ pane = "chat"
 kind = "script"
 body = "mud.echo(captures[1])"
 
+[triggers.alert]
+banner = true
+sound = "chime"
+attention = "until"
+background = false
+words = true
+
 [[triggers]]
 name = "spam"
 pattern = '^You are hungry\.$'
@@ -111,3 +118,16 @@ group = "info"
 key = "F2"
 command = "flee"
 enabled = false
+
+[alerts.alert_low_health]
+banner = false
+sound = "low"
+background = false
+words = false
+
+[alerts.alert_tells]
+banner = true
+sound = "bell"
+attention = "once"
+background = true
+words = false

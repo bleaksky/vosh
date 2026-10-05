@@ -566,6 +566,7 @@ fn line_trigger(
         preset: None,
         group: None,
         target,
+        alert: None,
     }
 }
 
