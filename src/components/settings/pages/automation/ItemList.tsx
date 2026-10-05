@@ -10,7 +10,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import type { KindNoun } from '../../../../lib/automationDraft';
+import type { KindNoun } from '../../../../automation/automationDraft';
 import {
   foldKeyOf,
   groupOfSectionKey,
@@ -21,8 +21,8 @@ import {
   tabStopId,
   type ListSection,
   type ListStop,
-} from '../../../../lib/automationList';
-import { loadoutHoldNote } from '../../../../lib/groupSwitches';
+} from '../../../../automation/automationList';
+import { loadoutHoldNote } from '../../../../automation/groupSwitches';
 import { scrollWithin } from '../../../../lib/scrollWithin';
 import { ChevronRightIcon, cx, Field, SearchIcon, Toggle, VisuallyHidden } from '../../ui';
 import type { GroupSwitches } from './useGroupSwitches';

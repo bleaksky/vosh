@@ -5,7 +5,7 @@ import {
   isDraftDirty,
   updateDraftItem,
   type Draft,
-} from '../../../../lib/automationDraft';
+} from '../../../../automation/automationDraft';
 import {
   automationSaveError,
   blankTimer,
@@ -18,11 +18,11 @@ import {
   timerKey,
   validateTimers,
   type TimerRecord,
-} from '../../../../lib/automationRecords';
-import { withGroup } from '../../../../lib/automationTriggers';
+} from '../../../../automation/automationRecords';
+import { withGroup } from '../../../../automation/automationTriggers';
 import { subscribeTimersChanged, timersList } from '../../../../ipc/automation';
 import { tickGetConfig, tickSetConfig, type TickConfig } from '../../../../ipc/tick';
-import { followTickDraft } from '../../../../lib/tickDraft';
+import { followTickDraft } from '../../../../automation/tickDraft';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
 import { GroupField, NumberField } from './fields';

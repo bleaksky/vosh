@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { buildSections, sectionKeyOf, type ListEntry } from '../../../../lib/automationList';
+import { buildSections, sectionKeyOf, type ListEntry } from '../../../../automation/automationList';
 import settingsCss from '../../../../styles/settings.css?raw';
 import { ItemList, type ItemListProps } from './ItemList';
 import { HIDES_PROMPT_NOTE } from './TriggersEditor';

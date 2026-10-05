@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { groupKeyOf, searchText } from '../../../../lib/automationList';
+import { groupKeyOf, searchText } from '../../../../automation/automationList';
 import {
   aliasKey,
   blankAlias,
@@ -10,8 +10,8 @@ import {
   saveAliasDraft,
   validateAliases,
   type AliasRecord,
-} from '../../../../lib/automationRecords';
-import { withGroup } from '../../../../lib/automationTriggers';
+} from '../../../../automation/automationRecords';
+import { withGroup } from '../../../../automation/automationTriggers';
 import { subscribeAliasesChanged } from '../../../../ipc/automation';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';

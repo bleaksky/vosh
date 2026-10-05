@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../fixtures/readable/grounds.json';
-import { PRESETS } from '../lib/presets';
+import { PRESETS } from '../automation/presets';
 import { BUILTIN_THEMES } from './themes';
 
 // fixtures/readable/grounds.json feeds the Rust tests of Keep highlight

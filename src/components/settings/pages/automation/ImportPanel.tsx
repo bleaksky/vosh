@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { importErrorMessage } from '../../../../lib/automationRecords';
+import { importErrorMessage } from '../../../../automation/automationRecords';
 import {
   applyImport,
   detectImportFormat,

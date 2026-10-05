@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn the_ladder_holds_the_verbs_the_damage_presets_color() {
-        let presets = include_str!("../../../../src/lib/presets.ts");
+        let presets = include_str!("../../../../src/automation/presets.ts");
         let start = presets
             .find("const DAMAGE_VERBS = [")
             .expect("presets.ts lists DAMAGE_VERBS");

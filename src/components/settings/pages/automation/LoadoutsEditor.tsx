@@ -1,11 +1,11 @@
 import { useMemo, useRef } from 'react';
-import { draftValues, updateDraftItem } from '../../../../lib/automationDraft';
-import { searchText } from '../../../../lib/automationList';
+import { draftValues, updateDraftItem } from '../../../../automation/automationDraft';
+import { searchText } from '../../../../automation/automationList';
 import {
   activeLoadouts,
   loadoutToggles,
   type LoadoutToggle,
-} from '../../../../lib/automationRecords';
+} from '../../../../automation/automationRecords';
 import {
   loadoutsGetState,
   loadoutsSetActive,

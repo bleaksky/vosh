@@ -19,7 +19,7 @@ import {
   updateDraftItem,
   type Draft,
   type SavedWrite,
-} from '../../../../lib/automationDraft';
+} from '../../../../automation/automationDraft';
 import {
   buildSections,
   filterSections,
@@ -29,8 +29,8 @@ import {
   sectionOrder,
   visibleOrder,
   type ListEntry,
-} from '../../../../lib/automationList';
-import { automationSaveError } from '../../../../lib/automationRecords';
+} from '../../../../automation/automationList';
+import { automationSaveError } from '../../../../automation/automationRecords';
 import { scrollWithin } from '../../../../lib/scrollWithin';
 import { subscribeProfileSwitched } from '../../../../ipc/profiles';
 import { useTauriEvent } from '../../../../ipc/useTauriEvent';
