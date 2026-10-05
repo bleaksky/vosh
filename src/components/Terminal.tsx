@@ -11,7 +11,7 @@ import {
 import { WebglAddon } from '@xterm/addon-webgl';
 
 import '@xterm/xterm/css/xterm.css';
-import { subscribeBaseAnsi } from '../lib/baseAnsi';
+import { subscribeBaseAnsi } from '../theme/baseAnsi';
 import {
   nativeSurfacePointer,
   nativeSurfaceSetBounds,
@@ -30,11 +30,11 @@ import {
   terminalLocalWrite,
 } from '../ipc/terminal';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { findTheme, onCustomThemesChanged } from '../lib/themes';
-import { getFitGameColors, subscribeFitGameColors } from '../lib/fitGameColors';
+import { findTheme, onCustomThemesChanged } from '../theme/themes';
+import { getFitGameColors, subscribeFitGameColors } from '../theme/fitGameColors';
 import { setHighlightGround } from '../lib/highlightGround';
 import { nativeThemeOf, xtermThemeFor } from '../lib/terminalTheme';
-import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
+import { getCurrentThemeId, subscribeThemeChanges } from '../theme/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
 import { remeasureWhenLoaded } from '../lib/terminalFont';

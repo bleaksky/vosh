@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ansi16Of, nativeThemeOf, xtermThemeFor } from './terminalTheme';
-import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
+import { BUILTIN_THEMES, findTheme, themeTokens } from '../theme/themes';
 
 describe('the xterm theme', () => {
   it('selects in the opaque token pair, with the theme colors for MUD text on or off', () => {

@@ -10,7 +10,7 @@ import {
   DEFAULT_THEME_ID,
   freeBuiltinThemeIds,
   seedDarkTheme,
-} from '../lib/themes';
+} from '../theme/themes';
 import {
   normalizeAffectsMarker,
   normalizeAffectsStyle,

@@ -2,7 +2,7 @@ import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import tokyoNight from '../../../../fixtures/themes/tokyonight_night.conf?raw';
 import type { SystemFontEntry, UiConfig } from '../../../ipc/uiConfig';
-import type { XtermPalette } from '../../../lib/themes';
+import type { XtermPalette } from '../../../theme/themes';
 import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
 
@@ -40,7 +40,7 @@ const fitting = vi.hoisted(() => {
   );
   return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
 });
-vi.mock('../../../lib/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
+vi.mock('../../../theme/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -52,7 +52,7 @@ const doc = new FakeDocument();
 let AppearancePage: typeof AppearancePageType;
 let createRoot: typeof import('react-dom/client').createRoot;
 let normalizeUiConfig: typeof import('../../../ipc/uiConfig').normalizeUiConfig;
-let BUILTIN_THEMES: typeof import('../../../lib/themes').BUILTIN_THEMES;
+let BUILTIN_THEMES: typeof import('../../../theme/themes').BUILTIN_THEMES;
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -74,7 +74,7 @@ beforeAll(async () => {
   ({ createRoot } = await import('react-dom/client'));
   ({ AppearancePage } = await import('./AppearancePage'));
   ({ normalizeUiConfig } = await import('../../../ipc/uiConfig'));
-  ({ BUILTIN_THEMES } = await import('../../../lib/themes'));
+  ({ BUILTIN_THEMES } = await import('../../../theme/themes'));
 });
 
 afterAll(() => {

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { ChipStyle, TickCount } from '../../ipc/uiConfig';
-import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
+import { BUILTIN_THEMES, themeTokens } from '../../theme/themes';
 import frameCss from '../../styles/frame.css?raw';
 import { daylightTint } from './daylight';
 import { StatusClock, type ClockMoons, type ClockTick, type ClockTime } from './StatusClock';

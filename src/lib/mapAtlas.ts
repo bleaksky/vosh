@@ -4,7 +4,7 @@
 // is fetched from the game site. Each sector's fill, border and halo are
 // the mapPalette table, which the atlas shares value for value.
 
-import { WHITE, mix, parseHex, scaled, type Rgb } from './color';
+import { WHITE, mix, parseHex, scaled, type Rgb } from '../theme/color';
 import { SECTORS } from './mapPalette';
 
 /** How one terrain paints on a box. */

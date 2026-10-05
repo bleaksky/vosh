@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { setFitGameColors } from './fitGameColors';
+import { setFitGameColors } from '../theme/fitGameColors';
 import { resetHighlightGround, setHighlightGround, setReadableHighlights } from './highlightGround';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));

@@ -1,6 +1,6 @@
-import type { ChromeTokens } from '../../lib/chrome';
+import type { ChromeTokens } from '../../theme/chrome';
 import { moonAlignment, moonTitle, type Moons } from '../../stores/gmcp/worldStore';
-import type { XtermPalette } from '../../lib/themes';
+import type { XtermPalette } from '../../theme/themes';
 import { moonColor } from './moonColors';
 import type { ClockMoons } from './StatusClock';
 

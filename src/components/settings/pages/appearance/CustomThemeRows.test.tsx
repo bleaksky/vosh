@@ -2,7 +2,7 @@ import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { CustomTheme } from '../../../../ipc/theme';
 import type { UiConfig } from '../../../../ipc/uiConfig';
-import type { XtermPalette } from '../../../../lib/themes';
+import type { XtermPalette } from '../../../../theme/themes';
 import { FakeDocument, findAll, type FakeNode } from '../../../../test/fakeDom';
 import type { CustomThemeRows as CustomThemeRowsType } from './CustomThemeRows';
 
@@ -29,7 +29,7 @@ const fitting = vi.hoisted(() => {
   );
   return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
 });
-vi.mock('../../../../lib/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
+vi.mock('../../../../theme/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
 
 const doc = new FakeDocument();
 let CustomThemeRows: typeof CustomThemeRowsType;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ANSI_SLOTS, type AnsiSlot } from './baseAnsi';
-import { contrast, parseHex, rgbToOklch, type Rgb } from './color';
+import { ANSI_SLOTS, type AnsiSlot } from '../theme/baseAnsi';
+import { contrast, parseHex, rgbToOklch, type Rgb } from '../theme/color';
 import { logSpanCss, parseLogLine } from './logView';
 import {
   ROOM_NAME_CONTRAST,
@@ -10,7 +10,7 @@ import {
   terrainLabel,
 } from './roomName';
 import { parseRoomInfo } from '../stores/gmcp/roomStore';
-import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
+import { BUILTIN_THEMES, findTheme, themeTokens } from '../theme/themes';
 
 const hex = (h: string): Rgb => {
   const c = parseHex(h);

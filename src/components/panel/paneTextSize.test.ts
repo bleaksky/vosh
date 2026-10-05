@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import frameCss from '../../styles/frame.css?raw';
 import tokensCss from '../../styles/tokens.css?raw';
-import { TEXT_SIZES } from '../../lib/appearanceSettings';
+import { TEXT_SIZES } from '../../theme/appearanceSettings';
 import { liveChipMeasure } from './chipMeasure';
 import { MIN_PANE_W } from './paneGeometry';
 import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText, paneTextSize, textPx } from './paneTextSize';

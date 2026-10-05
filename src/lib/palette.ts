@@ -12,9 +12,9 @@ import {
   getCurrentThemeId,
   getThemePrefs,
   pickTheme,
-} from './theme';
-import { galleryThemes } from './themeThumb';
-import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from './themes';
+} from '../theme/theme';
+import { galleryThemes } from '../theme/themeThumb';
+import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from '../theme/themes';
 
 // Command registry for the ⌘K palette. Commands are built fresh each
 // time the palette opens so checks and labels reflect live state

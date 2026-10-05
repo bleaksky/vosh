@@ -1,8 +1,8 @@
-import { keepFit } from '../../../../lib/appearanceSettings';
-import { fitOffThread } from '../../../../lib/fitOffThread';
-import { fitKey, needsFit } from '../../../../lib/gameFit';
+import { keepFit } from '../../../../theme/appearanceSettings';
+import { fitOffThread } from '../../../../theme/fitOffThread';
+import { fitKey, needsFit } from '../../../../theme/gameFit';
 import type { CustomTheme } from '../../../../ipc/theme';
-import { customToAppTheme, setCustomThemes } from '../../../../lib/themes';
+import { customToAppTheme, setCustomThemes } from '../../../../theme/themes';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
 
 // The fits this window has asked for and not had back, by theme id and

@@ -7,7 +7,7 @@ import {
   panelSizeChoices,
   sizeChoices,
   themeCaption,
-} from '../../../lib/appearanceSettings';
+} from '../../../theme/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
 import type { CustomTheme } from '../../../ipc/theme';
@@ -17,7 +17,7 @@ import {
   type TerminalLineHeight,
   type UiConfig,
 } from '../../../ipc/uiConfig';
-import type { Appearance } from '../../../lib/chrome';
+import type { Appearance } from '../../../theme/chrome';
 import type { SettingsTarget } from '../../../lib/settingsNav';
 import {
   activeThemeFor,
@@ -25,9 +25,9 @@ import {
   pickTheme,
   systemPrefersDark,
   themePrefsOf,
-} from '../../../lib/theme';
-import { parseThemeFile, ThemeFileError } from '../../../lib/themeImport';
-import { galleryThemes } from '../../../lib/themeThumb';
+} from '../../../theme/theme';
+import { parseThemeFile, ThemeFileError } from '../../../theme/themeImport';
+import { galleryThemes } from '../../../theme/themeThumb';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
@@ -36,7 +36,7 @@ import {
   RETIRED_THEMES,
   setCustomThemes,
   themeShownBy,
-} from '../../../lib/themes';
+} from '../../../theme/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';

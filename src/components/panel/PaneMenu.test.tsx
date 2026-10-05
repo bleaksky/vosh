@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from '../../lib/chatColors';
 import type { PaneLayout, PaneLeaf, PaneType } from '../../lib/paneLayout';
 import { resetChatColors, setChatColor } from '../../ipc/uiConfig';
-import { findTheme } from '../../lib/themes';
+import { findTheme } from '../../theme/themes';
 import { MenuItem, MenuSeparator } from './MenuSurface';
 import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
 import { PaneTextSizeContext } from './paneTextSize';
@@ -48,8 +48,8 @@ vi.mock('./panelLayoutStore', async (actual) => ({
   ...(await actual<typeof import('./panelLayoutStore')>()),
   getPanelLayout: () => laid.layout,
 }));
-vi.mock('../../lib/useActiveTheme', async () => {
-  const { findTheme: find } = await import('../../lib/themes');
+vi.mock('../../theme/useActiveTheme', async () => {
+  const { findTheme: find } = await import('../../theme/themes');
   return { useActiveTheme: () => find('kanso-zen') };
 });
 

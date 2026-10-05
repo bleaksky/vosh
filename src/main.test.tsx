@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { THEME_PAINT_KEY, type ThemePaint } from './lib/themePaint';
+import { THEME_PAINT_KEY, type ThemePaint } from './theme/themePaint';
 import mainSource from './main.tsx?raw';
 import prepaintSource from './prepaint.ts?raw';
 

@@ -9,8 +9,8 @@ import {
   systemPrefersDark,
   themePrefsOf,
   type ThemePrefs,
-} from '../lib/theme';
-import { resolveThemeTerminalColors } from '../lib/themes';
+} from '../theme/theme';
+import { resolveThemeTerminalColors } from '../theme/themes';
 import {
   affectsDisplayFields,
   affectsDisplayOf,

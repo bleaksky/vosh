@@ -10,7 +10,7 @@
 // theme to go out. WKWebView may run no animation frames in a hidden
 // window, so a short timer backs the frames up.
 
-import { paintMatchesBoot } from './theme';
+import { paintMatchesBoot } from '../theme/theme';
 
 /** The longest a window waits for a frame with the new theme. */
 export const REPAINT_WAIT_MS = 100;

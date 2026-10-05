@@ -7,7 +7,7 @@ import {
   type RoomInfoBase,
   type RoomPerson,
 } from '../../stores/gmcp/roomStore';
-import { findTheme, themeTokens } from '../../lib/themes';
+import { findTheme, themeTokens } from '../../theme/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { MapBandRows } from './MapPane';

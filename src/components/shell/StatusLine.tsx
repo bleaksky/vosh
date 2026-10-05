@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { usePlayPalette } from '../../lib/fitGameColors';
+import { usePlayPalette } from '../../theme/fitGameColors';
 import type { VitalsOptions } from '../../ipc/uiConfig';
 import { useChipStyle } from '../../stores/config/chipStyleStore';
 import { useCombat } from '../../stores/gmcp/combatStore';
@@ -10,8 +10,8 @@ import { shownTick, useTick } from '../../stores/session/tickStore';
 import { useVitalsOptions } from '../../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals, type VitalKey } from '../../stores/gmcp/vitalsStore';
 import { useWorld } from '../../stores/gmcp/worldStore';
-import { themeTokens } from '../../lib/themes';
-import { useActiveTheme } from '../../lib/useActiveTheme';
+import { themeTokens } from '../../theme/themes';
+import { useActiveTheme } from '../../theme/useActiveTheme';
 import {
   formatVital,
   hiddenVital,

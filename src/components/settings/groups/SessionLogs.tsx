@@ -15,7 +15,7 @@ import {
   type LogSearchHit,
   type LogSession,
 } from '../../../ipc/logs';
-import { parseHex, toRgba } from '../../../lib/color';
+import { parseHex, toRgba } from '../../../theme/color';
 import {
   groupLogDays,
   LOG_PAGE_SIZE,
@@ -28,8 +28,8 @@ import {
   markMatches,
   parseLogLine,
 } from '../../../lib/logView';
-import { getCurrentThemeId } from '../../../lib/theme';
-import { findTheme, resolveThemeTerminalColors } from '../../../lib/themes';
+import { getCurrentThemeId } from '../../../theme/theme';
+import { findTheme, resolveThemeTerminalColors } from '../../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
 import { CopyIcon, Field, SearchIcon, Select } from '../ui';
 

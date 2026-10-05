@@ -21,14 +21,14 @@ import {
   type UiConfig,
 } from './uiConfig';
 import { broadcastUiConfigChanges, setUiConfig } from './uiConfigSave';
-import { galleryThemes } from '../lib/themeThumb';
+import { galleryThemes } from '../theme/themeThumb';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
   findTheme,
   freeBuiltinThemeIds,
   setCustomThemes,
-} from '../lib/themes';
+} from '../theme/themes';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

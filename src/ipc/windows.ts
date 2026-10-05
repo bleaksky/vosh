@@ -7,7 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { MenuState } from '../lib/appMenu';
-import type { Appearance } from '../lib/chrome';
+import type { Appearance } from '../theme/chrome';
 import {
   APP_MENU,
   FLUSH_PENDING_WRITES,

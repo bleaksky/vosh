@@ -1,8 +1,8 @@
-import type { AnsiSlot } from './baseAnsi';
-import { STATUS_TEXT_CONTRAST, type ChromeTokens } from './chrome';
-import { liftAtHue, parseHex, toHex } from './color';
+import type { AnsiSlot } from '../theme/baseAnsi';
+import { STATUS_TEXT_CONTRAST, type ChromeTokens } from '../theme/chrome';
+import { liftAtHue, parseHex, toHex } from '../theme/color';
 import { SECTORS } from './mapPalette';
-import type { XtermPalette } from './themes';
+import type { XtermPalette } from '../theme/themes';
 
 // How the Map pane shows the room you stand in: the name in the color
 // the terminal draws it in, and the terrain in the game's own words.

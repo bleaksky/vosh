@@ -8,10 +8,10 @@ import {
   type ChatInk,
 } from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../stores/gmcp/chatStore';
-import { usePlayPalette } from '../../lib/fitGameColors';
+import { usePlayPalette } from '../../theme/fitGameColors';
 import { useChatColors } from '../../stores/config/chatColorsStore';
-import { themeTokens, type XtermPalette } from '../../lib/themes';
-import { useActiveTheme } from '../../lib/useActiveTheme';
+import { themeTokens, type XtermPalette } from '../../theme/themes';
+import { useActiveTheme } from '../../theme/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions';
 import { PaneHeader } from './PaneHeader';

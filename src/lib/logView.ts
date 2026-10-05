@@ -1,5 +1,5 @@
-import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
-import type { XtermPalette } from './themes';
+import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../theme/baseAnsi';
+import type { XtermPalette } from '../theme/themes';
 
 // The Settings log view (the SettingsGeneralLogs board) and the
 // Session logs row on General. The words and numbers they show, the

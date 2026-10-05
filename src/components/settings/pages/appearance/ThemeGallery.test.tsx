@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { galleryThemes } from '../../../../lib/themeThumb';
-import { BUILTIN_THEMES, customToAppTheme } from '../../../../lib/themes';
+import { galleryThemes } from '../../../../theme/themeThumb';
+import { BUILTIN_THEMES, customToAppTheme } from '../../../../theme/themes';
 import { ThemeGallery } from './ThemeGallery';
 
 const custom = (id: string, label: string) =>

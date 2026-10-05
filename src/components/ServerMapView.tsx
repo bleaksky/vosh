@@ -36,7 +36,7 @@ import {
   type MapTilesPayload,
   type OffFloorEntry,
 } from '../lib/mapTiles';
-import { subscribeThemeChanges } from '../lib/theme';
+import { subscribeThemeChanges } from '../theme/theme';
 import { pushToast } from '../stores/toasts';
 import { MapPaneControls } from './panel/MapPaneControls';
 import { textPx } from './panel/paneTextSize';

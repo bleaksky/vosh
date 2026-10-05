@@ -7,11 +7,11 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react';
-import { usePlayPalette } from '../../lib/fitGameColors';
+import { usePlayPalette } from '../../theme/fitGameColors';
 import { roomNameColor, terrainLabel, type RoomNameGround } from '../../lib/roomName';
 import { groupPeople, useRoom, type RoomInfo, type RoomPerson } from '../../stores/gmcp/roomStore';
-import { themeTokens, type XtermPalette } from '../../lib/themes';
-import { useActiveTheme } from '../../lib/useActiveTheme';
+import { themeTokens, type XtermPalette } from '../../theme/themes';
+import { useActiveTheme } from '../../theme/useActiveTheme';
 import { ServerMapView } from '../ServerMapView';
 import { mapBandLayout, mapBandPeople, mapBandRows } from './mapBand';
 import { PaneHeader, PaneMeta } from './PaneHeader';

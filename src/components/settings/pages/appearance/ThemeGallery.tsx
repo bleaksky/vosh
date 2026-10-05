@@ -1,8 +1,8 @@
 import { useId, useRef, type KeyboardEvent } from 'react';
-import { stepGalleryTheme } from '../../../../lib/appearanceSettings';
-import type { Appearance } from '../../../../lib/chrome';
-import { themeThumb } from '../../../../lib/themeThumb';
-import type { AppTheme } from '../../../../lib/themes';
+import { stepGalleryTheme } from '../../../../theme/appearanceSettings';
+import type { Appearance } from '../../../../theme/chrome';
+import { themeThumb } from '../../../../theme/themeThumb';
+import type { AppTheme } from '../../../../theme/themes';
 
 interface ThemeGalleryProps {
   /** Every theme in gallery order (galleryThemes). */
