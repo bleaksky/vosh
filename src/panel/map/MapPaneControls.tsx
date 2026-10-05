@@ -1,14 +1,9 @@
 import { useRef, useState } from 'react';
 import { FLOOR_CHOICES, isResetView, resetView, type Floors, type Map3dView } from './map3dView';
 import { MAP_STYLE_CHOICES, type MapStyle } from './mapStyle';
-import {
-  MenuItem,
-  MenuSeparator,
-  MenuSurface,
-  type MenuCloseReason,
-} from '../../components/panel/MenuSurface';
+import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../../ui/MenuSurface';
 import { returnToCommandLine } from '../paneActions';
-import { CheckIcon } from '../../components/panel/paneIcons';
+import { CheckIcon } from '../../ui/paneIcons';
 
 // The map's own control in a panel pane: a small button in the drawing
 // box's bottom right corner that shows while you point at the map or

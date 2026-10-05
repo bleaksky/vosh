@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useEscape } from '../../lib/escapeStack';
+import { useEscape } from '../lib/escapeStack';
 import { placeMenu, type MenuPlacement } from './menuPlacement';
 
 export type { MenuPlacement } from './menuPlacement';

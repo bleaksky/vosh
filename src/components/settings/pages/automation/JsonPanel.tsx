@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import type { KindNoun } from '../../../../automation/automationDraft';
-import { CodeEditor } from '../../../CodeEditor';
-import { Button } from '../../ui';
+import { CodeEditor } from '../../../../ui/CodeEditor';
+import { Button } from '../../../../ui';
 
 interface JsonPanelProps {
   noun: KindNoun;

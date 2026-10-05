@@ -5,14 +5,14 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { ConfirmDialog } from '../../../ConfirmDialog';
+import { ConfirmDialog } from '../../../../ui/ConfirmDialog';
 import {
   MenuItem,
   MenuSeparator,
   MenuSurface,
   type MenuCloseReason,
   type MenuPlacement,
-} from '../../../panel/MenuSurface';
+} from '../../../../ui/MenuSurface';
 import { useEscape } from '../../../../lib/escapeStack';
 import {
   copyName,
@@ -38,7 +38,7 @@ import {
   profileSwitch,
   type ProfilesList,
 } from '../../../../ipc/profiles';
-import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
+import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../../../ui';
 
 // The profile list on the Characters board: one 38 px row per profile
 // in index order, the profile in use marked by an accent dot, its world

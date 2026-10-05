@@ -17,7 +17,7 @@ import { presetsInstall, presetsRemove } from '../../../../ipc/automation';
 import { getUiConfig, type UiConfig } from '../../../../ipc/uiConfig';
 import { setUiConfig } from '../../../../ipc/uiConfigSave';
 import type { SetUiConfig } from '../../pageTypes';
-import { Card, Row, Toggle } from '../../ui';
+import { Card, Row, Toggle } from '../../../../ui';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 

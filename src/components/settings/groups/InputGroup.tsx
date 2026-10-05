@@ -18,7 +18,7 @@ import {
   Segmented,
   Toggle,
   type SegmentedOption,
-} from '../ui';
+} from '../../../ui';
 import { PromptSection } from './InputPrompt';
 
 // Settings, Input (P12). The Command line card holds the caret shape,

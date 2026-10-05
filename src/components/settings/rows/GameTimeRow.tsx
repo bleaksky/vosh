@@ -1,7 +1,7 @@
 import type { GameTime, UiConfig } from '../../../ipc/uiConfig';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { Row, Segmented, type SegmentedOption } from '../ui';
+import { Row, Segmented, type SegmentedOption } from '../../../ui';
 
 // The clock the main window's status line reads the game time on, from
 // UiConfig game_time. It sits under the Tick and time row and writes

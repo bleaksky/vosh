@@ -5,7 +5,7 @@ import {
   readColorText,
   readHexColorText,
   rgbStringToHex,
-} from '../../../lib/colorField';
+} from './colorText';
 import { cx } from './cx';
 import { useRowIds } from './rowContext';
 import { VisuallyHidden } from './VisuallyHidden';

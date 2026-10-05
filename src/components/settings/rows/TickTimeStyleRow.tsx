@@ -1,7 +1,7 @@
 import type { ChipStyle } from '../../../ipc/uiConfig';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { Row, Segmented, type SegmentedOption } from '../ui';
+import { Row, Segmented, type SegmentedOption } from '../../../ui';
 
 // How the tick, the game time, and the moons show in the main window's
 // status line, from UiConfig chip_style. It writes through the same

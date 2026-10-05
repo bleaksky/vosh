@@ -20,7 +20,7 @@ import {
 } from '../../ipc/promptDesign';
 import { scrollWithin } from '../../lib/scrollWithin';
 import { parseSgrCells } from '../../terminal/sgrCells';
-import { cx, Field, SearchIcon } from '../settings/ui';
+import { cx, Field, SearchIcon } from '../../ui';
 import { CellLine } from './PromptCells';
 
 // Insert value… (P6, P6b): every field Vosh can draw, grouped by topic,

@@ -31,7 +31,7 @@ import {
 import { getCurrentThemeId } from '../../../theme/theme';
 import { findTheme, resolveThemeTerminalColors } from '../../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
-import { CopyIcon, Field, SearchIcon, Select } from '../ui';
+import { CopyIcon, Field, SearchIcon, Select } from '../../../ui';
 
 // The log view inside General (the approved SettingsGeneralLogs
 // board), at general:logs. One toolbar over the results: the pattern,

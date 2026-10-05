@@ -24,7 +24,7 @@ import {
 } from '../../ipc/prompt';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { pushToast } from '../../stores/toasts';
-import { Button, Field } from '../settings/ui';
+import { Button, Field } from '../../ui';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 
 // The capture steps on The Forsaken Lands: P2, where you tell Vosh your

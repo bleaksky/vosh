@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { Row } from '../../ui';
+import { Row } from '../../../../ui';
 import { CodeRow, NumberField } from './fields';
 
 // CodeMirror draws nothing on the server, so a stand in shows the props
 // CodeRow hands the editor.
-vi.mock('../../../CodeEditor', async () => {
+vi.mock('../../../../ui/CodeEditor', async () => {
   const { createElement } = await import('react');
   return {
     CodeEditor: (props: Record<string, unknown>) =>

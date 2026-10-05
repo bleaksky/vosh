@@ -66,13 +66,13 @@ import { useGamePrompt } from '../../../stores/gmcp/gamePromptStore';
 import { useBandEnv } from '../../../lib/useBandEnv';
 import { CARD_ROW_PX, useCellWidth } from '../../../lib/useCellWidth';
 import { knownWorld } from '../../../stores/session/useConnection';
-import { ConfirmDialog } from '../../ConfirmDialog';
-import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../panel/MenuSurface';
+import { ConfirmDialog } from '../../../ui/ConfirmDialog';
+import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../../ui/MenuSurface';
 import { CellLine } from '../../prompt/PromptCells';
 import { CommandBox } from '../../prompt/PromptCodes';
 import { nativeSurfaceEnabled } from '../../../terminal/Terminal';
 import { PromptShowField } from '../rows/PromptShowRow';
-import { Button, Field, IconButton, MoreIcon, Row, Section, Segmented, Toggle } from '../ui';
+import { Button, Field, IconButton, MoreIcon, Row, Section, Segmented, Toggle } from '../../../ui';
 
 // Settings, Input, Prompt (section 7 step 12 of the prompt build spec,
 // boards P12 and P13, with the Settings specimens on P0 and P14). One

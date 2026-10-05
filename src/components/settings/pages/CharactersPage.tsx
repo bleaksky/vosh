@@ -35,7 +35,7 @@ import {
 import { useTauriEvent } from '../../../ipc/useTauriEvent';
 import { loadTarget } from '../../../stores/session/useConnection';
 import type { SettingsPageProps } from '../pageTypes';
-import { Row, Section, Select, Toggle } from '../ui';
+import { Row, Section, Select, Toggle } from '../../../ui';
 import { PanelLayout } from './characters/PanelLayout';
 import { ProfileAdvanced } from './characters/ProfileAdvanced';
 import { ProfileList } from './characters/ProfileList';

@@ -23,7 +23,7 @@ import { withGroup } from '../../../../automation/automationTriggers';
 import { subscribeTimersChanged, timersList } from '../../../../ipc/automation';
 import { tickGetConfig, tickSetConfig, type TickConfig } from '../../../../ipc/tick';
 import { followTickDraft } from '../../../../automation/tickDraft';
-import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
+import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../../../ui';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
 import { GroupField, NumberField } from './fields';
 import type { DetailProps, DirtyReport, KindSpec } from './types';

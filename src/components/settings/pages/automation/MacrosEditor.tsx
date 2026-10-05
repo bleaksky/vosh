@@ -12,7 +12,7 @@ import {
 import { withGroup } from '../../../../automation/automationTriggers';
 import { labelForKey } from '../../../../automation/macroKeys';
 import { listMacros, subscribeMacrosChanged } from '../../../../ipc/automation';
-import { Card, Field, Row, Toggle } from '../../ui';
+import { Card, Field, Row, Toggle } from '../../../../ui';
 import { GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';

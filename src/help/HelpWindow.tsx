@@ -32,13 +32,8 @@ import { scrollWithin } from '../lib/scrollWithin';
 import { HelpSidebar } from './HelpSidebar';
 import { HelpArticle } from './HelpArticle';
 import { HelpOutline } from './HelpOutline';
-import { WindowControls } from '../components/settings/WindowControls';
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ChevronUpIcon,
-  IconButton,
-} from '../components/settings/ui';
+import { WindowControls } from '../ui/WindowControls';
+import { ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, IconButton } from '../ui';
 
 // The Help window (the approved Help boards), its own window like
 // Settings and in the same frame: a 280 px sidebar with search and the

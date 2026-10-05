@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, PlusIcon } from '../../ui';
+import { Button, PlusIcon } from '../../../../ui';
 
 export type SaveStatus = 'clean' | 'dirty' | 'saved';
 

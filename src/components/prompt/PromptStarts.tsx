@@ -5,7 +5,7 @@ import { useLabelMeasure } from '../../lib/useCellWidth';
 import { type PromptConfig, type PromptDesign, type PromptPreset } from '../../ipc/prompt';
 import { promptRenderMany } from '../../ipc/promptDesign';
 import { parseSgrCells, shownColumns, type Cell } from '../../terminal/sgrCells';
-import { Button, CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '../settings/ui';
+import { Button, CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '../../ui';
 import { CardMenu } from './CardMenu';
 import { CellLine } from './PromptCells';
 

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { normalizeUiConfig, type GameTime, type UiConfig } from '../../../ipc/uiConfig';
 import { SETTINGS_ROWS, searchSettingsRows, settingsRowKey } from '../../../lib/settingsSearch';
-import type { SegmentedProps } from '../ui';
+import type { SegmentedProps } from '../../../ui';
 import { GameTimeField } from './GameTimeRow';
 
 // The row's save hook reaches the Tauri bridge. The row under test

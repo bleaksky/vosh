@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SettingsTarget } from '../../../lib/settingsNav';
-import { ConfirmDialog } from '../../ConfirmDialog';
+import { ConfirmDialog } from '../../../ui/ConfirmDialog';
 import type { SettingsPageProps } from '../pageTypes';
-import { Button, Segmented, type SegmentedOption } from '../ui';
+import { Button, Segmented, type SegmentedOption } from '../../../ui';
 import { AliasesEditor } from './automation/AliasesEditor';
 import { ImportPanel } from './automation/ImportPanel';
 import { LoadoutsEditor } from './automation/LoadoutsEditor';

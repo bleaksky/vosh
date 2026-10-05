@@ -50,7 +50,7 @@ import {
   Select,
   Toggle,
   type SelectOption,
-} from '../../ui';
+} from '../../../../ui';
 import { usePromptGags } from '../../../../stores/session/promptGagStore';
 import { CardNote, CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';

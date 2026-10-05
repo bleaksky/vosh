@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { resolveBlinkText, useReduceMotion } from '../../../../lib/blink';
 import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
-import { Card, Disclosure, DisclosurePanel, Row, Toggle } from '../../ui';
+import { Card, Disclosure, DisclosurePanel, Row, Toggle } from '../../../../ui';
 import { BasePaletteRows } from './BasePaletteRows';
 import { CustomThemeRows } from './CustomThemeRows';
 import { FontStackRow } from './FontStackRow';

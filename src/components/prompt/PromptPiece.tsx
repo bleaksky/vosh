@@ -39,7 +39,7 @@ import {
   PlusIcon,
   Segmented,
   type SegmentedOption,
-} from '../settings/ui';
+} from '../../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 
 // The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line

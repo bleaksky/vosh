@@ -24,9 +24,9 @@ import {
   setCustomThemes,
   themeTokens,
 } from '../../../../theme/themes';
-import { ConfirmDialog } from '../../../ConfirmDialog';
+import { ConfirmDialog } from '../../../../ui/ConfirmDialog';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
-import { Button, Field, PlusIcon, Row, Select } from '../../ui';
+import { Button, Field, PlusIcon, Row, Select } from '../../../../ui';
 import { ColorBlock, ColorGroup } from './ColorGrid';
 import { fitAndKeep } from './fitAndKeep';
 

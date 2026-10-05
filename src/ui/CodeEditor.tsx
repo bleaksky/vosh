@@ -3,7 +3,7 @@ import CodeMirror, { type Extension } from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
-import { codeEditorAttributes, codeHighlightStyle } from '../lib/codeEditor';
+import { codeEditorAttributes, codeHighlightStyle } from './codeEditorStyle';
 
 interface Props {
   value: string;
