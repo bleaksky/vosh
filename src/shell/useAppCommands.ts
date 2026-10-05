@@ -151,21 +151,10 @@ export function useAppCommands({
   });
 
   // Menu bar commands (macOS only). Each arrives with its palette id.
-  useEffect(() => {
-    if (!isMacPlatform()) return;
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    listenAppMenu((id) => runCommandRef.current(id))
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent(
+    (cb) => (isMacPlatform() ? listenAppMenu(cb) : Promise.resolve(() => {})),
+    (id: string) => runCommandRef.current(id),
+  );
 
   const closeMainWindow = () => {
     getCurrentWindow()
