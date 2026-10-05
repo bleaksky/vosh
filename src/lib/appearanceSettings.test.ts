@@ -402,10 +402,9 @@ describe('colorVisionNote', () => {
     expect(colorVisionNote(findTheme('kanso-zen'), 'deuteranopia', true)).toBe(
       'Only the window changes on Kanso Zen, since its game text cannot part visibly further for deuteranopia without fading or running into other colors.',
     );
-    expect(visionWindowSide(findTheme('iceberg-dark'), 'protanopia')).toBe('kept');
-    expect(colorVisionNote(findTheme('iceberg-dark'), 'protanopia', true)).toBe(
-      'Nothing changes on Iceberg Dark for protanopia, since no color can part visibly further without fading or running into other colors.',
-    );
+    // The window swaps its status colors on every theme for a protanope,
+    // Iceberg Dark included.
+    expect(visionWindowSide(findTheme('iceberg-dark'), 'protanopia')).toBe('changes');
   });
 
   // Settings holds no fit for a custom theme, which the main window fits

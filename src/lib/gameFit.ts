@@ -688,6 +688,25 @@ export const TEXT_SLOTS: readonly GameSlot[] = ['foreground', 'white', 'brightWh
  *  an eye tells. */
 export const VISION_SLACK = 2;
 
+/** Where a swap turns a family: the OKLCH hue it aims for, how far
+ *  either side of it the solve may settle, in degrees, and the least
+ *  OKLCH chroma it gives the family where sRGB holds it. */
+export interface SwapTarget {
+  hue: number;
+  reach: number;
+  chroma: number;
+}
+
+/** How much nearer than at the start a kept pair may come, in OKLab dE
+ *  times 100. */
+export const KEPT_SLACK = 0.5;
+
+/** The share of its chroma a turned color keeps at least: of its own at
+ *  the start, or of its target chroma if that is less. Lightness alone
+ *  could clear every distance by lifting a color to white, which shows
+ *  no color at all. */
+export const CHROMA_KEEP = 0.75;
+
 /** The least change, in OKLab dE times 100, a fit for a color vision
  *  makes to the color it moves most. A fit that moves nothing this far
  *  is a change no one sees, so the fit keeps the Typical colors, and

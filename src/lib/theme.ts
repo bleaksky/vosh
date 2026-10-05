@@ -11,7 +11,7 @@
 // and a prefers-color-scheme listener swaps them when the OS flips.
 //
 // Every window paints the chrome for your color vision, from UiConfig
-// color_vision, which tunes the status colors (lib/chrome). A window
+// color_vision, which swaps the status colors (lib/chrome). A window
 // takes it from its config through applyThemePrefs, and from a change
 // through setColorVision, which paints the theme again.
 
