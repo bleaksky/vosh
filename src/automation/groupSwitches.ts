@@ -5,6 +5,7 @@
 // them and says when they turn back a group #group turned.
 
 import type { GroupSwitch, LoadoutHold } from '../ipc/automation';
+import { listJoin } from '../lib/text';
 
 /** The switches of a list by group name. A reply that is not a list
  *  holds none. */
@@ -42,13 +43,6 @@ export function withSwitch(
   return next;
 }
 
-/** Names in a sentence, with a serial comma before the last of three
- *  or more. */
-function nameList(names: readonly string[]): string {
-  if (names.length <= 2) return names.join(' and ');
-  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-}
-
 /** When the loadouts lay their state over every group again. */
 const UNTIL = 'when you next launch Vosh, switch profiles, or save Loadouts';
 
@@ -64,7 +58,7 @@ export function loadoutHoldNote(hold: LoadoutHold, enabled: boolean): string {
       : 'Every loadout is off, so this group stays off.';
   }
   const one = hold.by.length === 1;
-  const who = `The ${nameList(hold.by)} ${one ? 'loadout' : 'loadouts'}`;
+  const who = `The ${listJoin(hold.by)} ${one ? 'loadout' : 'loadouts'}`;
   const verb = one ? 'turns' : 'turn';
   if (turned) return `${who} ${verb} this group ${hold.on ? 'on' : 'off'} again ${UNTIL}.`;
   if (hold.on) return `${who} ${verb} this group on.`;

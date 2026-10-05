@@ -1,5 +1,6 @@
 import { onGamePromptSeen, type GamePromptSeenPayload } from '../ipc/prompt';
 import { pushToast, type ToastInput } from '../stores/toasts';
+import { listJoin } from '../lib/text';
 
 // When the game tells Vosh a new prompt setting and your profile's
 // capture takes it, Vosh says so once with the codes it now reads. When
@@ -61,13 +62,6 @@ function partName(name: string): string {
   return PARTS[name] ?? name.replace(/_/g, ' ');
 }
 
-/** `items` joined as a sentence lists them, with "and" before the last. */
-function andList(items: readonly string[]): string {
-  if (items.length < 2) return items[0] ?? '';
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
-}
-
 /** The toast that names the parts of your design your new prompt no
  *  longer feeds, or null when it still feeds every one. */
 export function lostPartsToast(payload: GamePromptSeenPayload): ToastInput | null {
@@ -76,7 +70,7 @@ export function lostPartsToast(payload: GamePromptSeenPayload): ToastInput | nul
   const one = payload.lost.length === 1;
   return {
     kind: 'info',
-    message: `Your prompt no longer shows ${andList(parts)}, so ${
+    message: `Your prompt no longer shows ${listJoin(parts)}, so ${
       one ? 'that part of your design stays' : 'those parts of your design stay'
     } blank.`,
   };

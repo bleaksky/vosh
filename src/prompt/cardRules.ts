@@ -6,6 +6,7 @@
 // prompt. Pure, so the components stay about layout.
 
 import { profileDisplayName, profilePossessive } from '../lib/profileLabel';
+import { listJoin } from '../lib/text';
 import type { MoveMade } from './promptPieces';
 import { cellWidth, parseSgrCells, type Cell } from '../terminal/sgrCells';
 import type { SessionIdentity } from '../ipc/characters';
@@ -369,7 +370,7 @@ export function prefixNote(read: PromptCheckRead | null): string | null {
   }
   if (parts.length === 0) return null;
   const both = parts.length > 1;
-  return `The game puts ${parts.join(' and ')} in front. Vosh reads ${both ? 'those' : 'that'} too.`;
+  return `The game puts ${listJoin(parts)} in front. Vosh reads ${both ? 'those' : 'that'} too.`;
 }
 
 /** The note that says the codes replace the pattern your old capture

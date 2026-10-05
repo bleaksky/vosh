@@ -14,6 +14,8 @@
 // rows that did not change and lets the change count reuse a cached
 // serialization. That keeps the page quick with 500 triggers.
 
+import { listJoin } from '../lib/text';
+
 export interface DraftItem<T> {
   readonly uid: string;
   readonly value: T;
@@ -328,11 +330,7 @@ export function countPhrase(count: number, noun: KindNoun): string {
 export function discardTitle(phrases: readonly string[]): string {
   const parts = phrases.filter((p) => p.length > 0);
   if (parts.length === 0) return 'Discard your changes?';
-  const joined =
-    parts.length === 1
-      ? parts[0]
-      : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-  return `Discard changes to ${joined}?`;
+  return `Discard changes to ${listJoin(parts)}?`;
 }
 
 /** The note the page shows when the store changed while you had unsaved
