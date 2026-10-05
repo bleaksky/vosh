@@ -36,7 +36,12 @@ import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { setBaseAnsi } from '../theme/baseAnsi';
 import { fitThemesInPlay } from '../theme/customThemeFits';
 import { setFitGameColors } from '../theme/fitGameColors';
-import { applyAndBroadcastTheme, applyThemePrefs, subscribeThemePrefs } from '../theme/theme';
+import {
+  applyAndBroadcastTheme,
+  applyThemePrefs,
+  subscribeThemePrefs,
+  type ThemePrefsOptions,
+} from '../theme/theme';
 import { customToAppTheme, resolveThemeTerminalColors, setCustomThemes } from '../theme/themes';
 
 // CSS variable applied to the split-scrollback divider. Empty value
@@ -51,6 +56,14 @@ function applySplitDividerColor(color: string | null): void {
   // The native surface draws its own divider; keep it in the same color.
   if (nativeSurfaceEnabled()) {
     void nativeSurfaceSetDividerColor(color).catch(() => {});
+  }
+}
+
+// Report the bright-bold setting to the native surface (xterm has no
+// equivalent option, so this drives the GPU renderer only).
+function sendBrightBold(on: boolean): void {
+  if (nativeSurfaceEnabled()) {
+    void nativeSurfaceSetBrightBold(on).catch(() => {});
   }
 }
 
@@ -140,13 +153,28 @@ export function useUiConfigFollow({
   const [blinkChoice, setBlinkChoice] = useState<boolean | null | undefined>(undefined);
   const reduceMotion = useReduceMotion();
   const blinkText = blinkChoice !== undefined && resolveBlinkText(blinkChoice, reduceMotion);
-  // Report the bright-bold setting to the native surface (xterm has no
-  // equivalent option, so this drives the GPU renderer only).
-  const applyBrightBold = (on: boolean) => {
-    setBrightBold(on);
-    if (nativeSurfaceEnabled()) {
-      void nativeSurfaceSetBrightBold(on).catch(() => {});
-    }
+  // Apply a whole UI config here, at launch and when a profile switch or
+  // an import replaces it. `theme` says how the theme reaches the other
+  // windows.
+  const applyConfig = (cfg: UiConfig, theme: ThemePrefsOptions) => {
+    // Register user-authored themes BEFORE the theme apply so
+    // the picked theme can actually be a custom entry.
+    setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+    setBaseAnsi(cfg.terminal_base_ansi);
+    applyThemePrefs(cfg, theme);
+    setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
+    setFontSize(cfg.font_size || 14);
+    setPanelFont(cfg.panel_font);
+    setPanelSize(cfg.panel_font_size);
+    setTerminalLineHeight(cfg.terminal_line_height);
+    setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme_terminal_colors));
+    setBrightBold(cfg.bright_bold);
+    sendBrightBold(cfg.bright_bold);
+    setBlinkChoice(cfg.blink_text);
+    setFitGameColors(cfg.fit_game_colors);
+    fitThemesInPlay(cfg);
+    setReadableHighlights(cfg.readable_highlights);
+    applySplitDividerColor(cfg.split_divider_color);
   };
 
   useEffect(() => {
@@ -167,25 +195,9 @@ export function useUiConfigFollow({
     const onUnmount = () => window.clearTimeout(fallback);
     getUiConfig()
       .then(async (cfg) => {
-        // Register user-authored themes BEFORE the theme apply so
-        // the picked theme can actually be a custom entry.
-        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-        setBaseAnsi(cfg.terminal_base_ansi);
         // This window owns following the OS appearance, so its flips
         // reach the Terminal and every other window.
-        applyThemePrefs(cfg, { broadcast: true, broadcastFlips: true });
-        setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
-        setFontSize(cfg.font_size || 14);
-        setPanelFont(cfg.panel_font);
-        setPanelSize(cfg.panel_font_size);
-        setTerminalLineHeight(cfg.terminal_line_height);
-        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme_terminal_colors));
-        applyBrightBold(cfg.bright_bold);
-        setBlinkChoice(cfg.blink_text);
-        setFitGameColors(cfg.fit_game_colors);
-        fitThemesInPlay(cfg);
-        setReadableHighlights(cfg.readable_highlights);
-        applySplitDividerColor(cfg.split_divider_color);
+        applyConfig(cfg, { broadcast: true, broadcastFlips: true });
 
         // Bring the preset triggers in line with the presets that are on.
         await installLaunchPresets(cfg.enabled_presets);
@@ -211,23 +223,7 @@ export function useUiConfigFollow({
         (e) => console.error('[app] reading the replaced config failed', e),
         { broadcast: true },
       ),
-    (cfg: UiConfig) => {
-      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-      setBaseAnsi(cfg.terminal_base_ansi);
-      applyThemePrefs(cfg, { broadcast: true });
-      setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
-      setFontSize(cfg.font_size || 14);
-      setPanelFont(cfg.panel_font);
-      setPanelSize(cfg.panel_font_size);
-      setTerminalLineHeight(cfg.terminal_line_height);
-      setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme_terminal_colors));
-      applyBrightBold(cfg.bright_bold);
-      setBlinkChoice(cfg.blink_text);
-      setFitGameColors(cfg.fit_game_colors);
-      fitThemesInPlay(cfg);
-      setReadableHighlights(cfg.readable_highlights);
-      applySplitDividerColor(cfg.split_divider_color);
-    },
+    (cfg: UiConfig) => applyConfig(cfg, { broadcast: true }),
   );
 
   useEffect(() => {
@@ -304,7 +300,8 @@ export function useUiConfigFollow({
   // Settings save broadcasts the bright-bold toggle. Apply it to the
   // native surface without a relaunch.
   useTauriEvent(subscribeBrightBoldChanged, (value) => {
-    applyBrightBold(value);
+    setBrightBold(value);
+    sendBrightBold(value);
   });
 
   // Settings save broadcasts the Blinking text choice.
