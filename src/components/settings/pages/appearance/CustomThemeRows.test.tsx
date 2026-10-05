@@ -1,6 +1,7 @@
 import { act, createElement, useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CustomTheme, UiConfig } from '../../../../ipc/uiConfig';
+import type { CustomTheme } from '../../../../ipc/theme';
+import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { XtermPalette } from '../../../../lib/themes';
 import { FakeDocument, findAll, type FakeNode } from '../../../../test/fakeDom';
 import type { CustomThemeRows as CustomThemeRowsType } from './CustomThemeRows';

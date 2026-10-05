@@ -44,9 +44,9 @@ import {
   VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
+import { resolveThemeTerminalColors } from './theme';
 import {
   fetchUiConfig,
-  resolveThemeTerminalColors,
   subscribeUiConfigReplaced,
   uiConfigPayload,
   vitalsOptionsOf,

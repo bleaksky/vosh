@@ -15,7 +15,7 @@ import {
   type LogSearchHit,
   type LogSession,
 } from '../../../ipc/logs';
-import { resolveThemeTerminalColors } from '../../../ipc/uiConfig';
+import { resolveThemeTerminalColors } from '../../../ipc/theme';
 import { parseHex, toRgba } from '../../../lib/color';
 import {
   groupLogDays,

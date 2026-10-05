@@ -10,10 +10,9 @@ import {
 } from '../../../lib/appearanceSettings';
 import { normalizePanelFont } from '../../../lib/panelFont';
 import { normalizePanelSize } from '../../../lib/panelSize';
+import { resolveThemeTerminalColors, type CustomTheme } from '../../../ipc/theme';
 import {
   listSystemFonts,
-  resolveThemeTerminalColors,
-  type CustomTheme,
   type SystemFontEntry,
   type TerminalLineHeight,
   type UiConfig,
