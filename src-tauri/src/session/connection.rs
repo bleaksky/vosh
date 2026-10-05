@@ -103,8 +103,8 @@ pub(crate) struct Connection {
     pub(crate) stop_key: StopKey,
     /// What the alert presets follow on the connection: your name, the
     /// low latch on your health and whom you fight. See
-    /// [`crate::alert::presets::Watch`].
-    pub(crate) alerts: crate::alert::presets::Watch,
+    /// [`crate::alert::presets::PresetWatch`].
+    pub(crate) preset_watch: crate::alert::presets::PresetWatch,
     /// What decides whether a drop redials: whether you play, a closing
     /// line, a quit of yours, and a character another session took. See
     /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
@@ -124,7 +124,7 @@ impl Connection {
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
-        self.alerts.reset();
+        self.preset_watch.reset();
         had
     }
 

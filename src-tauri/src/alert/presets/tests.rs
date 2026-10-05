@@ -31,8 +31,8 @@ fn with_on(on: &[&str]) -> Profile {
 }
 
 /// Orla logged in, as Char.Status says.
-fn orla(p: &Profile) -> Watch {
-    let mut watch = Watch::default();
+fn orla(p: &Profile) -> PresetWatch {
+    let mut watch = PresetWatch::default();
     let status = built(
         "Char.Status",
         r#"{"name":"Orla","level":50,"race":"human","class":"dark-knight"}"#,
@@ -58,7 +58,7 @@ fn every_preset_ships_off_and_rings_nothing_until_you_turn_it_on() {
 #[test]
 fn a_tell_you_get_rings_with_its_sender_and_a_tell_of_another_shape_does_not() {
     let p = with_on(&[TELLS]);
-    let mut watch = Watch::default();
+    let mut watch = PresetWatch::default();
     let now = Instant::now();
     let alert = watch
         .gmcp(&p, &packet("chat/tell.gmcp"), None, now)
@@ -100,7 +100,7 @@ fn the_alerts_table_says_what_a_preset_does() {
         ..AlertParts::default()
     };
     p.alerts.insert(TELLS.into(), quiet.clone());
-    let alert = Watch::default()
+    let alert = PresetWatch::default()
         .gmcp(&p, &packet("chat/tell.gmcp"), None, Instant::now())
         .expect("a tell rings");
     assert_eq!(alert.parts, quiet);
@@ -109,7 +109,7 @@ fn the_alerts_table_says_what_a_preset_does() {
 #[test]
 fn a_tell_rings_once_per_sender_in_ten_seconds() {
     let p = with_on(&[TELLS]);
-    let mut watch = Watch::default();
+    let mut watch = PresetWatch::default();
     let mut caps = Caps::default();
     let start = Instant::now();
     let tolliver = packet("chat/tell.gmcp");
@@ -200,7 +200,7 @@ fn your_name_rings_as_a_whole_word_with_its_capital_once_char_status_names_you()
     let p = with_on(&[NAME]);
     // `$n looks at $N.`, act_info.c:1054.
     let line = "Maren looks at Orla.";
-    assert_eq!(Watch::default().line(&p, line), None, "no name yet");
+    assert_eq!(PresetWatch::default().line(&p, line), None, "no name yet");
     let watch = orla(&p);
     let alert = watch.line(&p, line).expect("your name");
     assert_eq!(alert.title, "Someone named you");
@@ -265,7 +265,7 @@ fn low_health_rings_as_the_latch_rises_and_never_while_hidden() {
     let p = with_on(&[LOW_HEALTH]);
     let cases = latch_cases();
     for run in cases["runs"].as_array().expect("runs") {
-        let mut watch = Watch::default();
+        let mut watch = PresetWatch::default();
         for vitals in run["vitals"].as_array().expect("vitals") {
             let n = |key: &str| vitals[key].as_i64().expect("a number");
             let hidden = vitals["hidden"].as_bool().expect("hidden");

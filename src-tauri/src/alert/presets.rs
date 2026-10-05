@@ -49,7 +49,7 @@ const YOUR_FIGHT: Duration = Duration::from_secs(2);
 /// [`Connection`](crate::session::connection::Connection), since the
 /// line pipeline changes it, and starts over at each connect.
 #[derive(Debug, Default)]
-pub(crate) struct Watch {
+pub(crate) struct PresetWatch {
     /// Your name, from Char.Status. Your name stays quiet until it comes,
     /// and a drop clears it.
     name: Option<String>,
@@ -70,7 +70,7 @@ pub(crate) enum Link {
     Stopped,
 }
 
-impl Watch {
+impl PresetWatch {
     /// A connection opened or ended, so nothing it followed carries on.
     pub(crate) fn reset(&mut self) {
         *self = Self::default();

@@ -389,7 +389,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         let mut rings: Vec<crate::alert::Alert> = follow
             .then(|| crate::alert::presets::health(&c.prompt.vars))
             .flatten()
-            .and_then(|(hp, maxhp, hid)| c.alerts.health(&p, hp, maxhp, hid))
+            .and_then(|(hp, maxhp, hid)| c.preset_watch.health(&p, hp, maxhp, hid))
             .into_iter()
             .collect();
         // The first text of a link a redial opened is the game's prompt,

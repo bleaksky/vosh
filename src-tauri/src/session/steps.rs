@@ -74,7 +74,7 @@ fn line_pass(
             .iter()
             .map(|alert| crate::alert::Alert::of_trigger(alert, plain)),
     );
-    apply.alerts.extend(c.alerts.line(p, plain));
+    apply.alerts.extend(c.preset_watch.line(p, plain));
     LinePass {
         result,
         tick_step,

@@ -123,7 +123,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         }
         // A new link starts with nothing the last one followed for the
         // alerts and the redial.
-        c.alerts.reset();
+        c.preset_watch.reset();
         c.link = super::reconnect::LinkWatch::default();
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
