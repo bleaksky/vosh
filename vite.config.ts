@@ -49,11 +49,10 @@ export default defineConfig(async () => ({
   test: {
     exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
     // Vitest hands back CSS as an empty string unless a pattern here
-    // matches it. Tests read the sheets under src/styles as text, and
-    // src/styles.css beside them, so this one pattern returns every
-    // sheet whole, a new one included.
+    // matches it. Tests read the sheets under src/styles as text, so
+    // this one pattern returns every sheet whole, a new one included.
     css: {
-      include: [/src\/styles(\/|\.css)/],
+      include: [/src\/styles\//],
     },
   },
   clearScreen: false,
