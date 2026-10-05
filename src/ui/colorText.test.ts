@@ -6,7 +6,7 @@ import {
   readColorText,
   readHexColorText,
   rgbStringToHex,
-} from './colorField';
+} from './colorText';
 
 describe('normalizeHexColor', () => {
   it('reads six and three digit hex with or without the #', () => {

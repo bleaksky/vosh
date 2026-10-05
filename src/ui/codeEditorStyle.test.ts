@@ -2,7 +2,7 @@ import { StreamLanguage } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
 import { highlightTree } from '@lezer/highlight';
 import { describe, expect, it } from 'vitest';
-import { codeEditorAttributes, codeHighlightStyle } from './codeEditor';
+import { codeEditorAttributes, codeHighlightStyle } from './codeEditorStyle';
 
 /** The color each highlighted piece of `code` gets, by its text. */
 function colors(code: string): Map<string, string> {

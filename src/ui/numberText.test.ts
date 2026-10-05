@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampWhole, readNumberText } from './numberField';
+import { clampWhole, readNumberText } from './numberText';
 
 describe('clampWhole', () => {
   it('rounds and clamps', () => {

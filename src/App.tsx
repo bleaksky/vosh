@@ -123,7 +123,7 @@ import {
   setAppMenuState,
 } from './lib/appMenu';
 import { getImmState, subscribeImmState } from './stores/gmcp/immStore';
-import { ConfirmDialog } from './components/ConfirmDialog';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 import { openSettingsTab } from './lib/settingsLink';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';

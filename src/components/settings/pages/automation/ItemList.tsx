@@ -24,7 +24,7 @@ import {
 } from '../../../../automation/automationList';
 import { loadoutHoldNote } from '../../../../automation/groupSwitches';
 import { scrollWithin } from '../../../../lib/scrollWithin';
-import { ChevronRightIcon, cx, Field, SearchIcon, Toggle, VisuallyHidden } from '../../ui';
+import { ChevronRightIcon, cx, Field, SearchIcon, Toggle, VisuallyHidden } from '../../../../ui';
 import type { GroupSwitches } from './useGroupSwitches';
 
 /** A row pinned above the groups, like the Tick in Timers. */

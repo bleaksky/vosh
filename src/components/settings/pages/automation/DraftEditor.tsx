@@ -34,7 +34,7 @@ import { automationSaveError } from '../../../../automation/automationRecords';
 import { scrollWithin } from '../../../../lib/scrollWithin';
 import { subscribeProfileSwitched } from '../../../../ipc/profiles';
 import { useTauriEvent } from '../../../../ipc/useTauriEvent';
-import { Button } from '../../ui';
+import { Button } from '../../../../ui';
 import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
 import { SaveBar, type SaveStatus } from './SaveBar';

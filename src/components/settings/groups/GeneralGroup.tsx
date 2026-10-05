@@ -31,7 +31,7 @@ import {
   Section,
   Select,
   Toggle,
-} from '../ui';
+} from '../../../ui';
 import { SessionLogs } from './SessionLogs';
 
 // General (the approved SettingsGeneral board): where Connect dials,

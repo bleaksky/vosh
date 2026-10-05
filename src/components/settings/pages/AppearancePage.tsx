@@ -39,7 +39,7 @@ import {
 } from '../../../theme/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../ui';
+import { Button, Card, Row, Section, Segmented, Select, Toggle } from '../../../ui';
 import { AdvancedAppearance } from './appearance/AdvancedAppearance';
 import { CollapseRows } from './appearance/CollapseRows';
 import { ThemeGallery } from './appearance/ThemeGallery';

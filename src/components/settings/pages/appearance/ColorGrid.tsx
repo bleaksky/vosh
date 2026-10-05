@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { ColorField } from '../../ui';
+import { ColorField } from '../../../../ui';
 
 // Labeled color fields in a grid under a row: the base palette and a
 // custom theme's slots.

@@ -2,7 +2,7 @@ import { ANSI_SLOT_LABELS, basePalette, withBaseColor } from '../../../../theme/
 import { ANSI_SLOTS } from '../../../../theme/baseAnsi';
 import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
-import { Button, Row } from '../../ui';
+import { Button, Row } from '../../../../ui';
 import { ColorBlock, ColorGroup } from './ColorGrid';
 
 interface BasePaletteRowsProps {

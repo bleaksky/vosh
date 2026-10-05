@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useTauriEvent } from '../../ipc/useTauriEvent';
-import { CloseIcon, MaximizeIcon, MinimizeIcon } from './ui';
+import { useTauriEvent } from '../ipc/useTauriEvent';
+import { CloseIcon, MaximizeIcon, MinimizeIcon } from '.';
 
 /** Minimize, maximize, and close for the frameless Settings window on
  *  Windows and Linux, at the right end of the header like the main

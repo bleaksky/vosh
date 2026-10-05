@@ -7,7 +7,7 @@ import {
   type ImportSummary,
 } from '../../../../ipc/automation';
 import { MigrationWizard } from '../../../MigrationWizard';
-import { Button, Disclosure, Row, Section, Select } from '../../ui';
+import { Button, Disclosure, Row, Section, Select } from '../../../../ui';
 
 // Import from another client, the old Import tab's logic in the new
 // frame. Pick a file or paste its contents, pick the format or let

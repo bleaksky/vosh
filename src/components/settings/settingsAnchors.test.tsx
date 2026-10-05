@@ -167,8 +167,8 @@ vi.mock('@uiw/react-codemirror', () => ({ default: () => null }));
 // A menu measures itself and portals to the page. The pane menu draws
 // its rows in place here instead. The Settings pages open a menu only
 // on a press, so they draw as they do in the app.
-vi.mock('../panel/MenuSurface', async (actual) => ({
-  ...(await actual<typeof import('../panel/MenuSurface')>()),
+vi.mock('../../ui/MenuSurface', async (actual) => ({
+  ...(await actual<typeof import('../../ui/MenuSurface')>()),
   MenuSurface: ({ label, children }: { label: string; children: ReactNode }) =>
     createElement('menu', { 'aria-label': label }, children),
 }));

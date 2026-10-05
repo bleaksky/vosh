@@ -9,9 +9,9 @@ import {
 } from 'react';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from '../input/Input';
-import { submenuAt } from '../components/panel/menuPlacement';
-import { MenuItem, MenuSeparator, MenuSurface } from '../components/panel/MenuSurface';
-import { ChevronRightIcon } from '../components/panel/paneIcons';
+import { submenuAt } from '../ui/menuPlacement';
+import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
+import { ChevronRightIcon } from '../ui/paneIcons';
 import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
 import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';

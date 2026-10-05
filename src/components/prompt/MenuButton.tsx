@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import type { MenuPlace } from '../../lib/promptCard';
-import { Button, CheckIcon, ChevronDownIcon } from '../settings/ui';
+import { Button, CheckIcon, ChevronDownIcon } from '../../ui';
 import { CardMenu } from './CardMenu';
 
 // A compact button at the foot of Customize prompt that reads the

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type InputHTMLAttributes } from 'react';
-import { clampWhole, readNumberText } from '../../../lib/numberField';
+import { clampWhole, readNumberText } from './numberText';
 import { cx } from './cx';
 import { useRowIds } from './rowContext';
 

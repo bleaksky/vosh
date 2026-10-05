@@ -25,12 +25,7 @@ import type { XtermPalette } from '../theme/themes';
 import { splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
-import {
-  MenuItem,
-  MenuSeparator,
-  MenuSurface,
-  type MenuCloseReason,
-} from '../components/panel/MenuSurface';
+import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
 import {
   closeHere,
   paneToSplitIn,
@@ -38,10 +33,10 @@ import {
   showHereInstead,
   splitHere,
 } from './paneActions';
-import { submenuAt } from '../components/panel/menuPlacement';
+import { submenuAt } from '../ui/menuPlacement';
 import { fitsPanel } from './paneGeometry';
 import { PaneTextSizeContext } from './paneTextSize';
-import { CheckIcon, ChevronRightIcon } from '../components/panel/paneIcons';
+import { CheckIcon, ChevronRightIcon } from '../ui/paneIcons';
 import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 

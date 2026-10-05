@@ -32,7 +32,7 @@ import {
   SearchIcon,
   UserIcon,
   VisuallyHidden,
-} from './ui';
+} from '../../ui';
 
 // The Settings sidebar (the approved boards): a 32 px drag strip where
 // macOS puts the traffic lights, the search pill at (12, 44), and the

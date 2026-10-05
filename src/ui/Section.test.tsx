@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { HELP_TOPICS } from '../../../help/helpContent';
-import general from '../groups/GeneralGroup.tsx?raw';
-import inputPrompt from '../groups/InputPrompt.tsx?raw';
-import layout from '../groups/LayoutGroup.tsx?raw';
-import appearance from '../pages/AppearancePage.tsx?raw';
-import characters from '../pages/CharactersPage.tsx?raw';
+import { HELP_TOPICS } from '../help/helpContent';
+import general from '../components/settings/groups/GeneralGroup.tsx?raw';
+import inputPrompt from '../components/settings/groups/InputPrompt.tsx?raw';
+import layout from '../components/settings/groups/LayoutGroup.tsx?raw';
+import appearance from '../components/settings/pages/AppearancePage.tsx?raw';
+import characters from '../components/settings/pages/CharactersPage.tsx?raw';
 import { Section } from './Section';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));

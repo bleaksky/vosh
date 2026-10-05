@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
-import { trapDialogFocus } from '../lib/dialogFocus';
+import { trapDialogFocus } from './dialogFocus';
 import { useEscape } from '../lib/escapeStack';
 
 interface Props {

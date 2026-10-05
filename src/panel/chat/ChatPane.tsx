@@ -12,10 +12,10 @@ import { usePlayPalette } from '../../theme/fitGameColors';
 import { useChatColors } from '../../stores/config/chatColorsStore';
 import { themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
-import { MenuItem, MenuSurface } from '../../components/panel/MenuSurface';
+import { MenuItem, MenuSurface } from '../../ui/MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from '../paneActions';
 import { PaneHeader } from '../PaneHeader';
-import { CheckIcon, ChevronDownIcon } from '../../components/panel/paneIcons';
+import { CheckIcon, ChevronDownIcon } from '../../ui/paneIcons';
 import { chatTime } from '../paneText';
 import { usePaneText } from '../paneTextSize';
 

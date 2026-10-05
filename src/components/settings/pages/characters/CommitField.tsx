@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Field, type FieldProps } from '../../ui';
+import { Field, type FieldProps } from '../../../../ui';
 
 export interface CommitFieldProps extends Omit<FieldProps, 'value' | 'onChange'> {
   /** The saved value. The field follows it while you are not typing. */

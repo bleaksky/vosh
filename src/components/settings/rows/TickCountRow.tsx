@@ -1,7 +1,7 @@
 import type { TickCount, UiConfig } from '../../../ipc/uiConfig';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { Row, Segmented, type SegmentedOption } from '../ui';
+import { Row, Segmented, type SegmentedOption } from '../../../ui';
 
 // Which way the tick counts in the main window's status line, from
 // UiConfig tick_count. It sits under the Tick and time row and writes

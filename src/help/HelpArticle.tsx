@@ -2,7 +2,7 @@ import { forwardRef, Fragment, type CSSProperties, type ReactNode } from 'react'
 import { parseHelpBody, type HelpTopic } from './helpContent';
 import { inlinePieces, keyGlyph, keyParts, type InlinePiece } from './helpInline';
 import { helpItemId, matchRanges, type OutlineEntry } from './helpNav';
-import { Keycap } from '../components/settings/ui';
+import { Keycap } from '../ui';
 
 // One help topic as the approved Help boards draw it: the H1 at 26/32,
 // prose and lists on a 528 measure at 14/22, a table as a Settings

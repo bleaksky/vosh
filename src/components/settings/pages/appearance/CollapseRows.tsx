@@ -1,6 +1,6 @@
 import type { UiConfig } from '../../../../ipc/uiConfig';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
-import { Row, Segmented, type SegmentedOption } from '../../ui';
+import { Row, Segmented, type SegmentedOption } from '../../../../ui';
 
 // In a fight and Attack lines, the two rows under Collapse repeated
 // lines on Appearance, Terminal text. In a fight says whether the lines

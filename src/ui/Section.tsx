@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { openHelpTopic } from '../../../lib/helpLink';
+import { openHelpTopic } from '../lib/helpLink';
 import { Card } from './Card';
 import { cx } from './cx';
 import { IconButton } from './IconButton';

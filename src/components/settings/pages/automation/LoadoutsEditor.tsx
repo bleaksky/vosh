@@ -12,7 +12,7 @@ import {
   subscribeLoadoutsChanged,
   type LoadoutSummary,
 } from '../../../../ipc/loadouts';
-import { Button, Card, Chip, Row, Toggle } from '../../ui';
+import { Button, Card, Chip, Row, Toggle } from '../../../../ui';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 

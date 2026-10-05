@@ -5,7 +5,7 @@ import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from './chat/chatCol
 import type { PaneLayout, PaneLeaf, PaneType } from './paneLayout';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
 import { findTheme } from '../theme/themes';
-import { MenuItem, MenuSeparator } from '../components/panel/MenuSurface';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
 import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
 import { PaneTextSizeContext } from './paneTextSize';
 
@@ -26,8 +26,8 @@ vi.mock('../ipc/profiles', async (actual) => ({
 }));
 // The menu draws its rows in place, with no page to portal into, and
 // reads the stores' values without the running app.
-vi.mock('../components/panel/MenuSurface', async (actual) => ({
-  ...(await actual<typeof import('../components/panel/MenuSurface')>()),
+vi.mock('../ui/MenuSurface', async (actual) => ({
+  ...(await actual<typeof import('../ui/MenuSurface')>()),
   MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => (
     <menu aria-label={label}>{children}</menu>
   ),

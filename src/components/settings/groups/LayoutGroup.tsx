@@ -47,7 +47,7 @@ import {
   Toggle,
   type SegmentedOption,
   type SelectOption,
-} from '../ui';
+} from '../../../ui';
 
 // Settings, Layout (SettingsLayout.dc.html). How the window is
 // arranged. The Panel card edits the panel of the character you are

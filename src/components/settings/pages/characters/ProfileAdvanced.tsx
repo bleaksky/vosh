@@ -6,7 +6,7 @@ import {
   setTrackedAffectLabel,
   trackedAffectLabel,
 } from '../../../../lib/trackedAffectEdit';
-import { Card, ChevronDownIcon, ChevronUpIcon, Disclosure, IconButton, Row } from '../../ui';
+import { Card, ChevronDownIcon, ChevronUpIcon, Disclosure, IconButton, Row } from '../../../../ui';
 import { CommitField } from './CommitField';
 
 // The quiet Advanced row at the end of the Characters page, the recipe

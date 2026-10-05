@@ -20,7 +20,7 @@ import {
 } from '../../ipc/prompt';
 import { numberRuns } from '../../lib/promptScreen';
 import { parseSgrCells } from '../../terminal/sgrCells';
-import { Button, CheckIcon, ChevronDownIcon, Field } from '../settings/ui';
+import { Button, CheckIcon, ChevronDownIcon, Field } from '../../ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
 import { MatchRow } from './PromptCandidate';
 import { CellLine } from './PromptCells';

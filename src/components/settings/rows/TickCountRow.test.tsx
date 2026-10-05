@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizeUiConfig, type TickCount, type UiConfig } from '../../../ipc/uiConfig';
 import { SETTINGS_ROWS } from '../../../lib/settingsSearch';
 import { StatusLineSection } from '../groups/LayoutGroup';
-import type { SegmentedProps } from '../ui';
+import type { SegmentedProps } from '../../../ui';
 import { TickCountField } from './TickCountRow';
 
 // The rows' save hook and LayoutGroup's stores reach the Tauri bridge.

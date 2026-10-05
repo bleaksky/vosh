@@ -9,7 +9,7 @@ import {
   removeTrackedAffect,
   trackedAffectLabel,
 } from '../../../../lib/trackedAffectEdit';
-import { Card, Chip, ChipButton, PlusIcon, Section } from '../../ui';
+import { Card, Chip, ChipButton, PlusIcon, Section } from '../../../../ui';
 
 // Tracked affects on the Characters board: a quiet line, then a chip
 // per affect the profile tracks with a close button that stops

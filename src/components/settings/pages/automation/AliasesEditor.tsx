@@ -13,7 +13,7 @@ import {
 } from '../../../../automation/automationRecords';
 import { withGroup } from '../../../../automation/automationTriggers';
 import { subscribeAliasesChanged } from '../../../../ipc/automation';
-import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
+import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../../../ui';
 import { CodeRow, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';

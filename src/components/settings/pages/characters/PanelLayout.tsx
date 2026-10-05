@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { PaneLayout } from '../../../../panel/paneLayout';
 import { paneSchematic } from '../../../../lib/paneSchematic';
 import { PANE_LABELS } from '../../../../panel/paneTypes';
-import { Button, Card, Section } from '../../ui';
+import { Button, Card, Section } from '../../../../ui';
 
 // Panel layout on the Characters board: the schematic of the selected
 // profile's panel, drawn from its real pane tree, beside a line about

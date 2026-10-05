@@ -1,7 +1,7 @@
 import { forwardRef, useId, useState, type ReactNode } from 'react';
-import { CodeEditor } from '../../../CodeEditor';
+import { CodeEditor } from '../../../../ui/CodeEditor';
 import { canonicalKeyFromEvent, labelForKey } from '../../../../automation/macroKeys';
-import { Field, useRowIds, type FieldProps } from '../../ui';
+import { Field, useRowIds, type FieldProps } from '../../../../ui';
 
 // Controls the Automation detail cards share. Each one wraps a
 // primitive from ui/ with the editing rule its field needs.
