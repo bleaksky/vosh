@@ -163,14 +163,9 @@ export function Terminal({
   // before the page paints.
   const lentRef = useRef(lentRows);
   const anchorRef = useRef(anchorBottom);
-  // Applies a new lent count or anchoring: refits and places xterm, or
-  // reports the native bounds. Set by the setup effect.
-  const relayoutRef = useRef<(() => void) | null>(null);
-  // Fits xterm to its pane less the lent rows. Set by the setup effect.
-  const fitKeptRef = useRef<(() => void) | null>(null);
-  // Fits the pane to a cell measured again and reports it. Set by the
-  // setup effect.
-  const refitCellRef = useRef<(() => void) | null>(null);
+  // Sizes the pane and places its grid, for the effects after setup.
+  // Set by the setup effect.
+  const paneSizerRef = useRef<PaneSizer | null>(null);
   // The band layer, while this pane can draw bands.
   const bandsRef = useRef<BandLayer | null>(null);
   // Blinking text on xterm, and whether it is on.
@@ -179,12 +174,7 @@ export function Terminal({
   blinkTextRef.current = blinkText;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
   const sizingRef = useRef<HTMLDivElement | null>(null);
-  // Sends the current cell size to the native surface. Set by the setup
-  // effect, so a line height change can report without waiting for the
-  // next resize poll.
-  const reportCellMetricsRef = useRef<(() => void) | null>(null);
   // Mirror the flag in a ref so the long-lived effect (which creates
   // the XTerm instance once) doesn't re-create the terminal every
   // time the user toggles the setting.
@@ -304,7 +294,7 @@ export function Terminal({
       quiet: () => quietRef.current,
       onCellSize: () => onCellSizeRef.current,
     });
-    fitKeptRef.current = () => paneSizer.fitKept();
+    paneSizerRef.current = paneSizer;
 
     // GPU renderer. xterm's WebGL addon must run after term.open() and
     // it reads the host element's pixel size when it allocates the
@@ -320,11 +310,7 @@ export function Terminal({
     setTimeout(paneSizer.safeFit, 200);
     setTimeout(paneSizer.safeFit, 800);
     termRef.current = term;
-    fitRef.current = fit;
-    reportCellMetricsRef.current = () => paneSizer.reportCellMetrics();
-    relayoutRef.current = () => paneSizer.relayout();
     paneSizer.start();
-    refitCellRef.current = () => paneSizer.refitCell();
 
     const detachUnderlayInput = forwardUnderlayPointer(
       sizer,
@@ -716,10 +702,7 @@ export function Terminal({
       }
       term.dispose();
       termRef.current = null;
-      fitRef.current = null;
-      fitKeptRef.current = null;
-      refitCellRef.current = null;
-      relayoutRef.current = null;
+      paneSizerRef.current = null;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
     // later font changes re-apply via the effect below without disposing
@@ -735,7 +718,7 @@ export function Terminal({
     if (lentRef.current === lentRows && anchorRef.current === anchorBottom) return;
     lentRef.current = lentRows;
     anchorRef.current = anchorBottom;
-    relayoutRef.current?.();
+    paneSizerRef.current?.relayout();
   }, [lentRows, anchorBottom]);
 
   // Blinking text turns on or off live.
@@ -747,12 +730,12 @@ export function Terminal({
   // listeners survive. xterm reflows on the next fit() call.
   useEffect(() => {
     const term = termRef.current;
-    const fit = fitRef.current;
-    if (!term || !fit) return;
+    const paneSizer = paneSizerRef.current;
+    if (!term || !paneSizer) return;
     term.options.fontFamily = fontFamily;
     term.options.fontSize = fontSize;
     try {
-      fitKeptRef.current?.();
+      paneSizer.fitKept();
     } catch {
       // ignore
     }
@@ -768,7 +751,7 @@ export function Terminal({
     // face the page mints for this list loads later. Measure again once
     // the face the list draws with has loaded (src/terminal/terminalFont.ts).
     if (typeof document === 'undefined' || !document.fonts) return;
-    return remeasureWhenLoaded(document.fonts, term, () => refitCellRef.current?.());
+    return remeasureWhenLoaded(document.fonts, term, () => paneSizerRef.current?.refitCell());
   }, [fontFamily, fontSize]);
 
   // Apply a line height change without rebuilding the terminal. xterm
@@ -780,11 +763,11 @@ export function Terminal({
     if (!term || term.options.lineHeight === lineHeight) return;
     term.options.lineHeight = lineHeight;
     if (!quietRef.current && nativeSurfaceEnabled()) {
-      reportCellMetricsRef.current?.();
+      paneSizerRef.current?.reportCellMetrics();
       return;
     }
     try {
-      fitKeptRef.current?.();
+      paneSizerRef.current?.fitKept();
     } catch {
       // ignore resize before layout settles
     }
