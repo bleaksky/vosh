@@ -1,10 +1,9 @@
 // The xterm theme the terminal draws with, from the chrome theme, the
 // "Use the theme's colors for MUD text" setting, Fit game colors and the
 // color vision the game colors swap for, which the selection follows
-// too. The
-// pinned prompt band and the native renderer resolve their colors from
-// the same palette, so a prompt on the band looks as it would in the
-// text, on either renderer.
+// too. The pinned prompt band and the native renderer resolve their
+// colors from the same palette, so a prompt on the band looks as it would
+// in the text, on either renderer.
 
 import type { ITheme } from '@xterm/xterm';
 import { baseAnsiRecord } from './baseAnsi';

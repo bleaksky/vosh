@@ -1,11 +1,11 @@
 import type { ColorVision } from './gameFit';
 import type { XtermPalette } from './themes';
 
-// The game color fit (lib/gameFit) takes about two seconds of CPU and
-// the swap for a color vision about half of one, so a module worker runs
-// them and the window never waits on either. A window
-// starts its worker the first time it fits, and the worker answers in
-// the order it was asked.
+// The game color fit (lib/gameFit) takes about two seconds of CPU, and
+// the swap for a color vision one to two and a half more, so a module
+// worker runs them and the window never waits on either. A window starts
+// its worker the first time it fits, and the worker answers in the order
+// it was asked.
 
 type Fitted = Partial<XtermPalette>;
 
