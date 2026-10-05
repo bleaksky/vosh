@@ -29,8 +29,8 @@ describe('prompt.css', () => {
   });
 
   it('reads only the One Window tokens and the recipes it reuses', () => {
-    // The tokens, then the Settings control fills (.st-controls) and the
-    // overlay recipes the card reuses.
+    // The tokens, then the control fills in controls.css (.st-controls),
+    // what settings.css defines, and the overlay recipes the card reuses.
     const known = new Set([
       ...defined(bare(tokensCss)),
       ...defined(bare(controlsCss)),

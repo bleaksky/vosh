@@ -6,7 +6,7 @@ Every window builds from the primitives in `src/ui`. Settings, Help and the prom
 import { Section, Row, Toggle, Select } from '../../ui';
 ```
 
-The styles live in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
+The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
 
 Use monospace only for MUD text. That means patterns, sent commands, macro keys, host, and port. Everything else uses the UI font with tabular numbers, which the root already sets.
 
@@ -109,7 +109,7 @@ A row whose content sits under its label line at full width, like the prompt tem
 
 `cx` joins class names.
 
-A few classes in `settings.css` cover small shapes that are not worth a component.
+A few classes in `settings.css` and `controls.css` cover small shapes that are not worth a component.
 
 - `st-field-pair` sets two fields in one row 8 px apart, like General's host and port. Give the second field its own `id` and `aria-label`.
 - `st-glyph-toggle` is a 28×24 on and off button drawn as text, like the find bar's `Aa`. It carries `aria-pressed`. Add `st-glyph-case` for the Aa weight.
