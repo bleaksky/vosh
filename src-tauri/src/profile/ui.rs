@@ -251,10 +251,11 @@ pub(crate) struct UiConfig {
     /// pick them from the theme dropdown like any other theme.
     #[serde(default)]
     pub custom_themes: Vec<CustomTheme>,
-    /// CSS color string applied to the 1px border that separates the
-    /// split-scrollback history pane from the live pane. Empty or
-    /// missing means use the theme default (`--c-border`). Any valid
-    /// CSS color is accepted; e.g. `#ff00ff`, `rgb(255, 0, 0)`.
+    /// CSS color string applied to the handle between the
+    /// split-scrollback history pane and the live pane. Empty or
+    /// missing means use the theme default (`--split-divider`, the
+    /// theme's tertiary tone). Any valid CSS color is accepted; e.g.
+    /// `#ff00ff`, `rgb(255, 0, 0)`.
     #[serde(default)]
     pub split_divider_color: Option<String>,
     /// CSS color applied to locally-echoed sent input so the user can
