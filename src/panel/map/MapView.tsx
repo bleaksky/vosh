@@ -216,36 +216,12 @@ export function MapView({ emptyText }: MapViewProps = {}) {
 
     const { row: centerR, col: centerC } = playerCellOf(tiles, rows, cols);
 
-    const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
+    const anchor = computeAnchor(cssWidth, cssHeight, zoom);
 
     if (style === 'tileset') {
-      drawTileset(
-        ctx,
-        cssWidth,
-        cssHeight,
-        tiles,
-        rows,
-        cols,
-        centerR,
-        centerC,
-        tilesetImage,
-        anchor,
-        ground,
-      );
+      drawTileset(ctx, tiles, rows, cols, centerR, centerC, tilesetImage, anchor, ground);
     } else if (style === 'squares') {
-      drawSquares(
-        ctx,
-        cssWidth,
-        cssHeight,
-        tiles,
-        rows,
-        cols,
-        centerR,
-        centerC,
-        anchor,
-        ground,
-        readPanelMarkFace(),
-      );
+      drawSquares(ctx, tiles, rows, cols, centerR, centerC, anchor, ground, readPanelMarkFace());
     }
     // Glyph mode: canvas paints just the background + terrain halo.
     // The actual character grid is rendered via <GlyphsOverlay /> in
