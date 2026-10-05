@@ -19,8 +19,7 @@ import {
   pieceAtCell,
 } from '../../lib/promptPointer';
 import { findOnScreen, type ScreenAsk } from '../../lib/promptScreen';
-import type { PromptShowState } from '../../lib/promptShow';
-import { type PromptOpenRow } from '../../ipc/prompt';
+import type { PromptOpenRow, PromptShowState } from '../../ipc/prompt';
 import { type PromptPiece } from '../../ipc/promptDesign';
 import { onOutput } from '../../ipc/terminal';
 import { getPinnedBand } from '../../lib/stores/pinnedPromptStore';

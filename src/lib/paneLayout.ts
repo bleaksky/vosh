@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { PANE_LAYOUT_CHANGED, PROFILE_SWITCHED } from '../ipc/events';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { paneLayoutGet, paneLayoutSet, subscribePaneLayoutChanged } from '../ipc/panes';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import { pendingWrites } from './pendingWrites';
 
 // The one-window panel's pane tree, saved per profile. Mirrors
@@ -566,8 +566,8 @@ function onProfileSwitched(): void {
 
 function ensureListening(): Promise<void> {
   listening ??= Promise.all([
-    listen<unknown>(PANE_LAYOUT_CHANGED, (event) => onRemoteLayout(event.payload)),
-    listen<string>(PROFILE_SWITCHED, () => onProfileSwitched()),
+    subscribePaneLayoutChanged((payload) => onRemoteLayout(payload)),
+    subscribeProfileSwitched(() => onProfileSwitched()),
   ]).then(
     () => undefined,
     (e: unknown) => {
@@ -581,7 +581,7 @@ function ensureListening(): Promise<void> {
 /** The active profile's pane layout. A profile that never saved one
  *  gets a tree migrated from its old dock layout, or the default. */
 export async function getPaneLayout(): Promise<PaneLayout> {
-  return sanitizeLayout(await invoke<unknown>('pane_layout_get'));
+  return sanitizeLayout(await paneLayoutGet());
 }
 
 /** Save the active profile's pane layout. Calls within 250 ms coalesce
@@ -613,7 +613,7 @@ export async function flushPaneLayout(): Promise<void> {
   lastKnown = JSON.stringify(clean);
   inFlight += 1;
   try {
-    const applied = await invoke<boolean>('pane_layout_set', {
+    const applied = await paneLayoutSet({
       layout: clean,
       generation: clean.generation ?? null,
     });

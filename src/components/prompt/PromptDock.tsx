@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react';
 import { bandRuns, type BandEnv, type UnderlineLine } from '../../lib/bandCells';
-import type { PromptShowState } from '../../lib/promptShow';
+import type { PromptShowState } from '../../ipc/prompt';
 import {
   BAND_LIFT,
   BAND_OUTSET_X,

@@ -27,7 +27,7 @@ import {
   shownPreview,
   type CodesMeta,
 } from '../../../lib/promptSettings';
-import { usePromptShow, type PromptShowState } from '../../../lib/promptShow';
+import { usePromptShow } from '../../../lib/promptShow';
 import {
   sessionIdentityGet,
   subscribeSessionIdentity,
@@ -54,6 +54,7 @@ import {
   type PromptLastSeen,
   type PromptShow,
   type PromptState,
+  type PromptShowState,
 } from '../../../ipc/prompt';
 import { promptDescribe, promptRender, type PromptPreviewName } from '../../../ipc/promptDesign';
 import { onState } from '../../../ipc/session';

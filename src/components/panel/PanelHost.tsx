@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { PANE_TYPES, setWeights, type PaneType } from '../../lib/paneLayout';
-import type { PromptShowState } from '../../lib/promptShow';
+import type { PromptShowState } from '../../ipc/prompt';
 import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
 import { panelShowsVitals } from '../../lib/vitalsView';
 import { AffectsPane } from './AffectsPane';

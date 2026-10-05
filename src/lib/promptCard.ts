@@ -7,7 +7,6 @@
 
 import { profileDisplayName, profilePossessive } from './profileLabel';
 import type { MoveMade } from './promptPieces';
-import type { PromptShowState } from './promptShow';
 import { cellWidth, parseSgrCells, type Cell } from './sgrCells';
 import type { SessionIdentity } from '../ipc/characters';
 import type {
@@ -21,6 +20,7 @@ import type {
   PromptLineNumber,
   PromptPreset,
   PromptShow,
+  PromptShowState,
 } from '../ipc/prompt';
 import type { GamePromptSeen } from './stores/gamePromptStore';
 

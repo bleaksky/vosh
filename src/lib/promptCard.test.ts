@@ -41,7 +41,7 @@ import {
   type CardStep,
 } from './promptCard';
 import { moveBack, type MoveMade } from './promptPieces';
-import { promptShowLock, type PromptShowState } from './promptShow';
+import { promptShowLock } from './promptShow';
 import type {
   PromptCapture,
   PromptCaptureCheck,
@@ -49,6 +49,7 @@ import type {
   PromptConfig,
   PromptLineNumber,
   PromptPreset,
+  PromptShowState,
 } from '../ipc/prompt';
 
 const none: PromptCapture = { kind: 'none' };

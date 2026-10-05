@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { PromptShowState } from '../../ipc/prompt';
 import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../../ipc/uiConfig';
-import type { PromptShowState } from '../../lib/promptShow';
 import { PanelHost } from './PanelHost';
 
 // The stores behind the panel reach the Tauri bridge when they start.

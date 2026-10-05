@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { highlightGroundSet } from '../ipc/terminal';
 import { getFitGameColors, subscribeFitGameColors } from './fitGameColors';
 
 // Keep highlight colors readable, and Fit game colors. The session lifts
@@ -22,7 +22,7 @@ function report(): void {
   const game = getFitGameColors() ? ground : null;
   if (sent?.background === background && sent.game === game) return;
   sent = { background, game };
-  void invoke('highlight_ground_set', { background, game }).catch(() => {});
+  void highlightGroundSet({ background, game }).catch(() => {});
 }
 
 subscribeFitGameColors(report);

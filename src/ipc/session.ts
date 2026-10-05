@@ -1,9 +1,11 @@
 // Calls and events of the live connection. Connect, send a line, hear
-// the state, the GMCP packages, routed text and your target.
+// the state, the GMCP packages, routed text and your target, and tell
+// every window where Connect dials.
 
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { INPUT_MODE, ROUTED, STATE, TARGET } from './events';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { ConnectionTarget } from '../lib/useConnection';
+import { CONNECTION_TARGET_CHANGED, INPUT_MODE, ROUTED, STATE, TARGET } from './events';
 
 export type StatePayload =
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
@@ -16,6 +18,18 @@ export async function connectSession(host: string, port: number, tls: boolean): 
 
 export async function disconnectSession(): Promise<void> {
   await invoke('session_disconnect');
+}
+
+/** Tell every window, this one included, the Connect target you saved. */
+export function emitConnectionTargetChanged(target: ConnectionTarget): Promise<void> {
+  return emit(CONNECTION_TARGET_CHANGED, target);
+}
+
+/** Hear the Connect target any window saved. */
+export function subscribeConnectionTargetChanged(
+  cb: (payload: unknown) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(CONNECTION_TARGET_CHANGED, (event) => cb(event.payload));
 }
 
 /** Push the live terminal size to the backend. The backend updates
