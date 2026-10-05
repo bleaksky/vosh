@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onNativeCopied } from '../ipc/nativeSurface';
-import { dismissToast, getToasts, pushToast, subscribeToasts, type Toast } from '../lib/toasts';
+import { dismissToast, getToasts, pushToast, subscribeToasts, type Toast } from '../stores/toasts';
 
 /** How long the copy confirmation stays up. Matches the native toast
  *  it replaces. */

@@ -9,7 +9,7 @@ import {
   sectorNameSlot,
   terrainLabel,
 } from './roomName';
-import { parseRoomInfo } from '../stores/roomStore';
+import { parseRoomInfo } from '../stores/gmcp/roomStore';
 import { BUILTIN_THEMES, findTheme, themeTokens } from './themes';
 
 const hex = (h: string): Rgb => {

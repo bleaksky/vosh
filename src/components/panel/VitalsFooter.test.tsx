@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { VitalsDensity, VitalsOptions } from '../../ipc/uiConfig';
-import type { CombatOpponent } from '../../stores/combatStore';
-import type { Vitals } from '../../stores/vitalsStore';
+import type { CombatOpponent } from '../../stores/gmcp/combatStore';
+import type { Vitals } from '../../stores/gmcp/vitalsStore';
 import panelCss from '../../styles/panel.css?raw';
 import { PaneTextSizeContext } from './paneTextSize';
 import type { VitalsLineFit } from './vitalsLine';

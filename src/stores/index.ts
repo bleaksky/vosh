@@ -1,25 +1,25 @@
-import { startChatStore } from '../lib/chatStore';
-import { startGroupStore } from '../lib/groupStore';
-import { startImmStore } from '../lib/immStore';
-import { startAffectFullStore } from './affectFullStore';
-import { startAffectsDisplayStore } from './affectsDisplayStore';
-import { startAffectsStore } from './affectsStore';
-import { startChatColorsStore } from './chatColorsStore';
-import { startChipStyleStore } from './chipStyleStore';
-import { startCombatStore } from './combatStore';
-import { startGameTimeStore } from './gameTimeStore';
-import { startGamePromptStore } from './gamePromptStore';
-import { startHiddenStore } from './hiddenStore';
-import { startPinnedPromptStore } from './pinnedPromptStore';
-import { startRoomStore } from './roomStore';
-import { startTargetStore } from './targetStore';
-import { startTickCountStore } from './tickCountStore';
-import { startTickStore } from './tickStore';
-import { startTrackedAffectsStore } from './trackedAffectsStore';
-import { startVitalsDensityStore } from './vitalsDensityStore';
-import { startVitalsOptionsStore } from './vitalsOptionsStore';
-import { startVitalsStore } from './vitalsStore';
-import { startWorldStore } from './worldStore';
+import { startChatStore } from './gmcp/chatStore';
+import { startGroupStore } from './gmcp/groupStore';
+import { startImmStore } from './gmcp/immStore';
+import { startAffectFullStore } from './gmcp/affectFullStore';
+import { startAffectsDisplayStore } from './config/affectsDisplayStore';
+import { startAffectsStore } from './gmcp/affectsStore';
+import { startChatColorsStore } from './config/chatColorsStore';
+import { startChipStyleStore } from './config/chipStyleStore';
+import { startCombatStore } from './gmcp/combatStore';
+import { startGameTimeStore } from './config/gameTimeStore';
+import { startGamePromptStore } from './gmcp/gamePromptStore';
+import { startHiddenStore } from './gmcp/hiddenStore';
+import { startPinnedPromptStore } from './session/pinnedPromptStore';
+import { startRoomStore } from './gmcp/roomStore';
+import { startTargetStore } from './session/targetStore';
+import { startTickCountStore } from './config/tickCountStore';
+import { startTickStore } from './session/tickStore';
+import { startTrackedAffectsStore } from './config/trackedAffectsStore';
+import { startVitalsDensityStore } from './config/vitalsDensityStore';
+import { startVitalsOptionsStore } from './config/vitalsOptionsStore';
+import { startVitalsStore } from './gmcp/vitalsStore';
+import { startWorldStore } from './gmcp/worldStore';
 
 // Start every pane and status line store once, at launch, so packages
 // that arrive before a pane first renders still land. Several arrive

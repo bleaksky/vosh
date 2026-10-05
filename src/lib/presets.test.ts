@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
 import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
-import { parseRoutedLine } from './chatStore';
-import { KNOWN_WORLDS } from './useConnection';
+import { parseRoutedLine } from '../stores/gmcp/chatStore';
+import { KNOWN_WORLDS } from '../stores/session/useConnection';
 import {
   defaultEnabledIds,
   type Preset,

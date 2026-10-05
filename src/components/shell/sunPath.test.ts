@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorldTime } from '../../stores/worldStore';
+import type { WorldTime } from '../../stores/gmcp/worldStore';
 import { isDaytime } from './daylight';
 import {
   SUN_ARC_PATH,

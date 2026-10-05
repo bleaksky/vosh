@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getImmState, subscribeImmState, type ImmState } from '../../lib/immStore';
+import { getImmState, subscribeImmState, type ImmState } from '../../stores/gmcp/immStore';
 import { immRows, immSummary } from './immRows';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 

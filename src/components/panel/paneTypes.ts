@@ -1,4 +1,4 @@
-import { getImmState } from '../../lib/immStore';
+import { getImmState } from '../../stores/gmcp/immStore';
 import { PANE_TYPES, allPanes, type PaneSplit, type PaneType } from '../../lib/paneLayout';
 
 // Names for each pane type, shared by the pane headers, the pane menu,

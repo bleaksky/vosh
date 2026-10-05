@@ -1,5 +1,5 @@
 import { launchNoticesTake } from '../ipc/windows';
-import { pushToast } from './toasts';
+import { pushToast } from '../stores/toasts';
 
 // What launch has to tell you, such as a profile file Vosh could not
 // read and will not save over. Launch runs before any window listens,

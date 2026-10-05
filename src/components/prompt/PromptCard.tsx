@@ -91,11 +91,11 @@ import {
 } from '../../ipc/promptDesign';
 import { useEscape } from '../../lib/escapeStack';
 import { keepFocus, type FocusKeeper } from '../../lib/focusKeeper';
-import { useGamePrompt } from '../../stores/gamePromptStore';
-import { pushToast } from '../../lib/toasts';
+import { useGamePrompt } from '../../stores/gmcp/gamePromptStore';
+import { pushToast } from '../../stores/toasts';
 import { useBandEnv } from '../../lib/useBandEnv';
 import { useCellWidth, useLabelMeasure } from '../../lib/useCellWidth';
-import { knownWorld } from '../../lib/useConnection';
+import { knownWorld } from '../../stores/session/useConnection';
 import { ConfirmDialog } from '../ConfirmDialog';
 import type { TerminalHandle } from '../Terminal';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../settings/ui';

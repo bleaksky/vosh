@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import views from '../../fixtures/gmcp/aabahran/views.json';
-import { parseGroupInfo } from '../lib/groupStore';
+import { parseGroupInfo } from '../stores/gmcp/groupStore';
 import { asNumber, asText } from '../stores/store';
-import { parseAffectsPacket } from '../stores/affectsStore';
-import { parseCombat } from '../stores/combatStore';
-import { parseGamePrompt } from '../stores/gamePromptStore';
-import { parseVitalsPacket } from '../stores/vitalsStore';
-import { parseRoomInfo } from '../stores/roomStore';
+import { parseAffectsPacket } from '../stores/gmcp/affectsStore';
+import { parseCombat } from '../stores/gmcp/combatStore';
+import { parseGamePrompt } from '../stores/gmcp/gamePromptStore';
+import { parseVitalsPacket } from '../stores/gmcp/vitalsStore';
+import { parseRoomInfo } from '../stores/gmcp/roomStore';
 import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 
 // The stores' reading of each Aabahran packet against

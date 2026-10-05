@@ -1,5 +1,5 @@
 import { onGamePromptSeen, type GamePromptSeenPayload } from '../ipc/prompt';
-import { pushToast, type ToastInput } from './toasts';
+import { pushToast, type ToastInput } from '../stores/toasts';
 
 // When the game tells Vosh a new prompt setting and your profile's
 // capture takes it, Vosh says so once with the codes it now reads. When

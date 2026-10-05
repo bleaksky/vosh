@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import panelCss from '../../styles/panel.css?raw';
 import type { PaneLeaf } from '../../lib/paneLayout';
-import { groupCurrentAffects, type CurrentAffect } from '../../stores/affectsStore';
+import { groupCurrentAffects, type CurrentAffect } from '../../stores/gmcp/affectsStore';
 import type { TrackedAffect } from '../../ipc/affects';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import { AffectsPaneView } from './AffectsPane';

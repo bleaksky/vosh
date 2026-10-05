@@ -29,7 +29,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 // The tick sound is Web Audio, so the store tests only check when it
 // plays.
 const playTickSound = vi.hoisted(() => vi.fn());
-vi.mock('../lib/tickSound', () => ({ playTickSound }));
+vi.mock('./session/tickSound', () => ({ playTickSound }));
 
 function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
@@ -61,23 +61,23 @@ async function load() {
   stores.startStores();
   await settle();
   return {
-    vitals: await import('./vitalsStore'),
-    affects: await import('./affectsStore'),
-    tracked: await import('./trackedAffectsStore'),
-    combat: await import('./combatStore'),
-    world: await import('./worldStore'),
-    room: await import('./roomStore'),
-    target: await import('./targetStore'),
-    tick: await import('./tickStore'),
-    chipStyle: await import('./chipStyleStore'),
-    tickCount: await import('./tickCountStore'),
-    gameTime: await import('./gameTimeStore'),
-    vitalsOptions: await import('./vitalsOptionsStore'),
-    affectsDisplay: await import('./affectsDisplayStore'),
-    chatColors: await import('./chatColorsStore'),
-    affectFull: await import('./affectFullStore'),
-    group: await import('../lib/groupStore'),
-    gamePrompt: await import('./gamePromptStore'),
+    vitals: await import('./gmcp/vitalsStore'),
+    affects: await import('./gmcp/affectsStore'),
+    tracked: await import('./config/trackedAffectsStore'),
+    combat: await import('./gmcp/combatStore'),
+    world: await import('./gmcp/worldStore'),
+    room: await import('./gmcp/roomStore'),
+    target: await import('./session/targetStore'),
+    tick: await import('./session/tickStore'),
+    chipStyle: await import('./config/chipStyleStore'),
+    tickCount: await import('./config/tickCountStore'),
+    gameTime: await import('./config/gameTimeStore'),
+    vitalsOptions: await import('./config/vitalsOptionsStore'),
+    affectsDisplay: await import('./config/affectsDisplayStore'),
+    chatColors: await import('./config/chatColorsStore'),
+    affectFull: await import('./gmcp/affectFullStore'),
+    group: await import('./gmcp/groupStore'),
+    gamePrompt: await import('./gmcp/gamePromptStore'),
   };
 }
 

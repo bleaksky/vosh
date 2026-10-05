@@ -102,7 +102,7 @@ import { setReadableHighlights } from './lib/highlightGround';
 import { fitThemesInPlay } from './lib/customThemeFits';
 import { setFitGameColors } from './lib/fitGameColors';
 import { startStores } from './stores';
-import { pushToast } from './lib/toasts';
+import { pushToast } from './stores/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
 import { startGamePromptToasts } from './lib/gamePromptToast';
 import { CommandPalette } from './components/CommandPalette';
@@ -122,7 +122,7 @@ import {
   resolveShortcut,
   setAppMenuState,
 } from './lib/appMenu';
-import { getImmState, subscribeImmState } from './lib/immStore';
+import { getImmState, subscribeImmState } from './stores/gmcp/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab } from './lib/settingsLink';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from './lib/helpLink';
@@ -138,14 +138,14 @@ import {
   type PaneType,
 } from './lib/paneLayout';
 import { offeredPaneTypes } from './components/panel/paneTypes';
-import { useConnection, type ConnectionStatus } from './lib/useConnection';
+import { useConnection, type ConnectionStatus } from './stores/session/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
 import { PromptCard, type PromptCardHost } from './components/prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/promptCard';
-import { notePageWrite, usePinnedDockRows } from './stores/pinnedPromptStore';
-import { usePromptReach } from './stores/promptReachStore';
+import { notePageWrite, usePinnedDockRows } from './stores/session/pinnedPromptStore';
+import { usePromptReach } from './stores/session/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
 import { noteReader } from './lib/readerBusy';
 import { resolveBlinkText, useReduceMotion } from './lib/blink';

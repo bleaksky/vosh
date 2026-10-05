@@ -19,7 +19,7 @@
 // under xterm's text, repositioned in xterm's own render frame so band and
 // text land in the same composite.
 
-import { getPromptReach, subscribePromptReach } from '../stores/promptReachStore';
+import { getPromptReach, subscribePromptReach } from '../stores/session/promptReachStore';
 import type { IBufferCell, IDisposable, IMarker, Terminal } from '@xterm/xterm';
 import { REGION_OSC } from './terminalRegion';
 

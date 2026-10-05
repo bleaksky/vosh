@@ -7,9 +7,9 @@ import {
   type ChatGround,
   type ChatInk,
 } from '../../lib/chatColors';
-import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
+import { getChatLines, subscribeChatLines, type ChatLine } from '../../stores/gmcp/chatStore';
 import { usePlayPalette } from '../../lib/fitGameColors';
-import { useChatColors } from '../../stores/chatColorsStore';
+import { useChatColors } from '../../stores/config/chatColorsStore';
 import { themeTokens, type XtermPalette } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';

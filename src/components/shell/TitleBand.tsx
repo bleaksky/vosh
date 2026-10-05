@@ -6,7 +6,7 @@ import { SESSION_MENU_EVENT, type SessionMenuMode } from '../../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import type { PaneSplit, PaneType } from '../../lib/paneLayout';
 import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
-import type { Connection } from '../../lib/useConnection';
+import type { Connection } from '../../stores/session/useConnection';
 import {
   CloseIcon,
   GearIcon,
