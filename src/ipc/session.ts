@@ -1,0 +1,130 @@
+// Calls and events of the live connection. Connect, send a line, hear
+// the state, the GMCP packages, routed text and your target.
+
+import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+
+export type StatePayload =
+  | { kind: 'connecting'; host: string; port: number; tls: boolean }
+  | { kind: 'connected'; host: string; port: number; tls: boolean }
+  | { kind: 'disconnected'; reason: string | null };
+
+export async function connectSession(host: string, port: number, tls: boolean): Promise<void> {
+  await invoke('session_connect', { host, port, tls });
+}
+
+export async function disconnectSession(): Promise<void> {
+  await invoke('session_disconnect');
+}
+
+/** Push the live terminal size to the backend. The backend updates
+ *  the telnet negotiator and emits a NAWS subnegotiation when NAWS
+ *  has already been agreed with the server. MUDs that honor NAWS
+ *  then re-wrap their output at the new column count, which is what
+ *  word-wrap actually looks like: server-side wrapping at word
+ *  boundaries instead of mid-character. No-op when not connected. */
+export async function setWindowSize(cols: number, rows: number): Promise<void> {
+  await invoke('session_set_window_size', { cols, rows });
+}
+
+/// Run a typed input line through the backend pipeline. Variables, aliases,
+/// and slash commands are handled there; the result either goes to the
+/// connection or echoes back as a session://output event.
+export async function sendInput(line: string): Promise<void> {
+  await invoke('session_send_input', { line });
+}
+
+/// Send a line typed into the masked password field. It goes to the
+/// server exactly as typed, past aliases, variables, and slash commands,
+/// and the session log keeps `> (hidden)` in its place.
+export async function sendMaskedInput(line: string): Promise<void> {
+  await invoke('session_send_masked', { line });
+}
+
+/// Stop the walk under way, as Esc in the command line does. The session
+/// says nothing when you are not walking.
+export async function stopWalk(): Promise<void> {
+  await invoke('session_walk_stop');
+}
+
+// Phase 4 perf fix: subscribe to a single GMCP package. The backend
+// emits each packet on a per-package event channel
+// (`session://gmcp/<package>`) so listeners run only on packets
+// they care about, instead of every consumer running a string
+// compare on every packet. For listeners that handle multiple
+// packages (roomStore, chatStore, groupStore), call
+// this once per package and manage the unsubscribes individually.
+//
+// Tauri event names only allow alphanumeric + `-/:_`, so dots in
+// GMCP package names (`Char.Vitals`) must be encoded the same way
+// the backend encodes them (`Char-Vitals`). Callers still pass the
+// canonical package name with the dot; this helper rewrites it
+// for the wire.
+//
+// The payload arrives as the package's data shape directly; the
+// package name is implicit in the subscription target. Callers
+// supply the data type as the generic.
+//
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function onGmcpPackage<T = any>(
+  name: string,
+  cb: (data: T) => void,
+): Promise<UnlistenFn> {
+  const channel = `session://gmcp/${name.replace(/\./g, '-')}`;
+  return listen<T>(channel, (event) => {
+    cb(event.payload);
+  });
+}
+
+export interface RoutedPayload {
+  pane: string;
+  text: string;
+}
+
+export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<UnlistenFn> {
+  return listen<RoutedPayload>('session://routed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export interface QuickKey {
+  name: string;
+  verb: string;
+}
+
+export interface TargetPayload {
+  name: string | null;
+  /// 1-based position in the latest Room.Chars push that the
+  /// backend resolved as the targeted char. `null` when the target
+  /// isn't in the current room or no target is set.
+  room_idx: number | null;
+  /// Current quick-key bindings (name → verb). Includes empty-verb
+  /// entries; the TargetBar filters them for display.
+  quick_keys: QuickKey[];
+}
+
+export async function getTarget(): Promise<TargetPayload> {
+  return invoke('target_get');
+}
+
+export async function onTarget(cb: (payload: TargetPayload) => void): Promise<UnlistenFn> {
+  return listen<TargetPayload>('session://target', (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
+  return listen<StatePayload>('session://state', (event) => {
+    cb(event.payload);
+  });
+}
+
+export interface InputModePayload {
+  password: boolean;
+}
+
+export async function onInputMode(cb: (payload: InputModePayload) => void): Promise<UnlistenFn> {
+  return listen<InputModePayload>('session://input-mode', (event) => {
+    cb(event.payload);
+  });
+}
