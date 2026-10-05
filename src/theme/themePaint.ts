@@ -15,7 +15,7 @@
 // while Vosh was closed still opens on the right side.
 //
 // This module stays free of the theme catalog and the Tauri API so the
-// startup paint costs next to nothing. lib/theme.ts writes the cache.
+// startup paint costs next to nothing. theme/theme.ts writes the cache.
 
 export const THEME_PAINT_KEY = 'vosh.cache.themePaint';
 

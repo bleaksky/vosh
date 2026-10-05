@@ -5,7 +5,7 @@ import { rankTopics, resolveHelpTarget } from '../help/helpNav';
 // Help window may not exist yet, so a target travels twice: through
 // localStorage for a cold open and through an event for a window that
 // is already up. HelpWindow reads both and resolves the string with
-// resolveHelpTarget (src/lib/helpNav.ts): a topic id, a topic number,
+// resolveHelpTarget (src/help/helpNav.ts): a topic id, a topic number,
 // or words to search for.
 
 /** Where a cold open finds its target. */

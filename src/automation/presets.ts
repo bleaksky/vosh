@@ -263,8 +263,8 @@ const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 // failed entirely on `<<< VERB >>>`).
 const DAMAGE_VERB_WRAPPED = `(?:(?:[*=><]{3}|does|do) )?(?:${DAMAGE_VERB_ALT})(?: (?:[*=><]{3}|things))?`;
 
-// Token table now lives in src/lib/colorTokens.ts so the trigger form
-// editor can use the same grammar (and the inverse).
+// The color token table lives in src/automation/colorTokens.ts, so the
+// trigger form editor reads the same grammar and its inverse.
 
 export const PRESETS: Preset[] = [
   // ── Healing & Cure ────────────────────────────────────────────────

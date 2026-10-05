@@ -9,7 +9,7 @@ interface Props {
 }
 
 // Scroll depth readout for the native surface. This chip shows the
-// depth that lib/nativeScroll tracks at the terminal's top right while
+// depth that terminal/native/nativeScroll tracks at the terminal's top right while
 // you are scrolled back. Mount it inside the positioned terminal area.
 
 export function ScrollDepth({ findOpen = false }: Props = {}) {

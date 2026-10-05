@@ -17,7 +17,7 @@ export interface SectionProps {
   /** The h2, in sentence case. */
   title: ReactNode;
   /** Deep link and search anchor. The frame scrolls here when a target
-   *  names it, so keep it in step with src/lib/settingsSearch.ts. */
+   *  names it, so keep it in step with src/settings/settingsSearch.ts. */
   id?: string;
   /** Content at the right end of the heading row, like Appearance's
    *  import hint and button. */

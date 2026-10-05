@@ -1,4 +1,4 @@
-// Shared plumbing for the module stores under src/lib/stores. Each
+// Shared plumbing for the module stores under src/stores. Each
 // store keeps one immutable snapshot at module scope, so a pane that
 // remounts (split, moved, shown here instead) reads the last value at
 // once instead of going blank until the server pushes again. The

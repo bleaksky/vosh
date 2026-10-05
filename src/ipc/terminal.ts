@@ -12,7 +12,7 @@ export interface OutputPayload {
    *  backend serialize one JSON number per byte. */
   b64: string;
   /** Replace a region an earlier payload marked, applied before `b64`
-   *  (see src/lib/terminalRegion.ts). */
+   *  (see src/terminal/terminalRegion.ts). */
   replace?: {
     gen: number;
     b64: string;
@@ -176,7 +176,7 @@ export async function loadScrollback(feedNative = false): Promise<ScrollbackLoad
 /** The terminal background the session lifts trigger colors against
  *  while Keep highlight colors readable is on, and the one it fits game
  *  colors against while Fit game colors is on, each null while its
- *  setting is off. lib/highlightGround.ts says when each goes. */
+ *  setting is off. terminal/highlightGround.ts says when each goes. */
 export function highlightGroundSet(ground: {
   background: string | null;
   game: string | null;

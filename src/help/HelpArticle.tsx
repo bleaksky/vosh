@@ -7,7 +7,7 @@ import { Keycap } from '../ui';
 // One help topic as the approved Help boards draw it: the H1 at 26/32,
 // prose and lists on a 528 measure at 14/22, a table as a Settings
 // card, and each backticked span as a mono chip, an SF 600 label, or
-// keycaps (src/lib/helpInline.ts). While the search holds words every
+// keycaps (src/help/helpInline.ts). While the search holds words every
 // match is marked the way the session logs page marks one, and the
 // match you are on carries a ring.
 

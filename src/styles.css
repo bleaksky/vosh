@@ -23,7 +23,7 @@
 
 /* Font stacks and the floating shadow recipe. Colors live in
    styles/tokens.css, where the `--c-*` names alias the theme tokens
-   src/lib/theme.ts writes at runtime. */
+   src/theme/theme.ts writes at runtime. */
 
 :root {
   --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;

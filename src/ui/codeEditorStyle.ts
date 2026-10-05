@@ -1,4 +1,4 @@
-// Settings for the shared CodeMirror editor (src/components/CodeEditor.tsx)
+// Settings for the shared CodeMirror editor (src/ui/CodeEditor.tsx)
 // that do not need the DOM, so tests can check them.
 
 import { HighlightStyle } from '@codemirror/language';

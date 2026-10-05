@@ -10,7 +10,7 @@ export interface RowProps {
    *  4 px below. The row's control is described by it. */
   description?: ReactNode;
   /** Search and deep link anchor. The frame scrolls the row into view
-   *  and flashes it. Keep it in step with src/lib/settingsSearch.ts. */
+   *  and flashes it. Keep it in step with src/settings/settingsSearch.ts. */
   anchor?: string;
   /** The control, right aligned. */
   children?: ReactNode;

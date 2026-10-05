@@ -1,6 +1,6 @@
 import type { XtermPalette } from './themes';
 
-// The game color fit (lib/gameFit) takes about two seconds of CPU, so a
+// The game color fit (theme/gameFit) takes about two seconds of CPU, so a
 // module worker runs it and the window never waits on it. A window
 // starts its worker the first time it fits, and the worker answers in
 // the order it was asked.
