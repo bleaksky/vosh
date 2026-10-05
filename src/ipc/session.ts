@@ -4,13 +4,19 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { ConnectionTarget } from '../stores/session/useConnection';
 import { CONNECTION_TARGET_CHANGED, INPUT_MODE, ROUTED, STATE, TARGET } from './events';
 
 export type StatePayload =
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
   | { kind: 'connected'; host: string; port: number; tls: boolean }
   | { kind: 'disconnected'; reason: string | null };
+
+/** Where Connect dials. */
+export interface ConnectionTarget {
+  host: string;
+  port: number;
+  tls: boolean;
+}
 
 export async function connectSession(host: string, port: number, tls: boolean): Promise<void> {
   await invoke('session_connect', { host, port, tls });
@@ -26,8 +32,7 @@ export function emitConnectionTargetChanged(target: ConnectionTarget): Promise<v
 }
 
 /** Hear the Connect target any window saved. Pages follow it through
- *  subscribeConnectionTarget in stores/session/useConnection.ts, which
- *  parses it first. */
+ *  subscribeConnectionTarget in useConnection.ts, which parses it first. */
 export function subscribeConnectionTargetChanged(
   cb: (payload: unknown) => void,
 ): Promise<UnlistenFn> {

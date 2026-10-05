@@ -3,11 +3,8 @@ import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuMode } from '../lib/appMenu';
 import { shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
-import {
-  parseTarget,
-  type Connection,
-  type ConnectionTarget,
-} from '../stores/session/useConnection';
+import type { ConnectionTarget } from '../ipc/session';
+import { parseTarget, type Connection } from '../stores/session/useConnection';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button (Session.dc.html): Connect
