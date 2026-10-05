@@ -4,19 +4,20 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { PromptSpan } from './promptDesign';
+import type { SessionData } from './session';
 
 // Prompt vars, the values a trigger writes with
 // `mud.set_prompt_var(...)`. The vitals store reads them with priority
 // over GMCP, so a #prompt capture can feed hp, mana and moves from the
-// prompt text. The payload is the full snapshot, and the frontend
-// replaces its copy. A value for a name GMCP also supplies, such as
-// hp, drops out at the next Char.Vitals, or at your next send on a
-// server without it. A value the game hides comes as `?`.
+// prompt text. The payload's data is the full snapshot, and the
+// frontend replaces its copy. A value for a name GMCP also supplies,
+// such as hp, drops out at the next Char.Vitals, or at your next send
+// on a server without it. A value the game hides comes as `?`.
 export type PromptVarsPayload = Record<string, string>;
 
 export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Promise<UnlistenFn> {
-  return listen<PromptVarsPayload>('session://prompt-vars', (event) => {
-    cb(event.payload);
+  return listen<SessionData<PromptVarsPayload>>('session://prompt-vars', (event) => {
+    cb(event.payload.data);
   });
 }
 

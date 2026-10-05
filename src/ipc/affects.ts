@@ -4,6 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { CRITICAL_TICKS, EXPIRING_TICKS } from '../lib/affectsView';
+import type { SessionData } from './session';
 import type { UiConfig } from './uiConfig';
 
 /// Cross-window broadcast for tracked-affect changes. The settings
@@ -68,11 +69,13 @@ export async function affectFullGet(): Promise<unknown> {
 
 /** Hear the affect fulls change: a list that starts, recasts, or ends
  *  an affect, the saved fulls at login, or a disconnect that empties
- *  them. The payload is the whole map. */
+ *  them. The payload's data is the whole map. */
 export async function subscribeAffectFullChanged(
   cb: (value: unknown) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('vosh://affect-full-changed', (event) => cb(event.payload));
+  return listen<SessionData<unknown>>('vosh://affect-full-changed', (event) =>
+    cb(event.payload.data),
+  );
 }
 
 /** The layouts the Affects pane draws. `timers` is Timers first, the

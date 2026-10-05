@@ -5,9 +5,10 @@
 //! Each event of the session's stream whose payload is an object names
 //! the session that sent it in a `session` field beside the payload's
 //! own, through [`crate::sessions::Session::emit`], and `session://output`
-//! names it in [`crate::output::OutputPayload`]. `session://prompt-vars`,
-//! a map of values, and the GMCP packages, each the packet as the game
-//! sent it, keep their shape.
+//! names it in [`crate::output::OutputPayload`]. The GMCP packages, each
+//! the packet as the game sent it, `session://prompt-vars`, a map of
+//! values, and `vosh://affect-full-changed`, a map of fulls, carry
+//! `{session, data}` through [`crate::sessions::Session::emit_data`].
 //!
 //! Two names stay where they are built. The session sends each GMCP
 //! package from a `format!` template in session/gmcp.rs,
@@ -95,8 +96,9 @@ pub(crate) const ROUTED: &str = "session://routed";
 /// [`vosh_prompt::values::Hidden`]. `onHidden` hears it.
 pub(crate) const HIDDEN: &str = "session://hidden";
 /// Your prompt values, when they changed or a prompt Vosh read sends
-/// them anyway. The payload maps each value's name to its text, with
-/// `?` for a value the game hides. `onPromptVars` hears it.
+/// them anyway. The payload is `{session, data}`, and `data` maps each
+/// value's name to its text, with `?` for a value the game hides.
+/// `onPromptVars` hears it.
 pub(crate) const PROMPT_VARS: &str = "session://prompt-vars";
 /// Whether Vosh reads your prompt, when that changed. The payload is
 /// `{status, last_match_at}`. `onPromptStatus` and
@@ -183,8 +185,9 @@ pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";
 /// null. `subscribeMigrationApplied` hears it.
 pub(crate) const MIGRATION_APPLIED: &str = "vosh://migration-applied";
 /// Sent to every window with the whole map of a session's connection
-/// whenever it changes, see [`crate::affects::full::FullMap`]. The map
-/// names no session. `subscribeAffectFullChanged` hears it.
+/// whenever it changes. The payload is `{session, data}`, and `data` is
+/// the [`crate::affects::full::FullMap`]. `subscribeAffectFullChanged`
+/// hears it.
 pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
 // The profile's `[ui]` table.

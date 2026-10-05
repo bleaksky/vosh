@@ -47,23 +47,27 @@ export async function stopWalk(): Promise<void> {
   await invoke('session_walk_stop');
 }
 
-// Phase 4 perf fix: subscribe to a single GMCP package. The backend
-// emits each packet on a per-package event channel
-// (`session://gmcp/<package>`) so listeners run only on packets
-// they care about, instead of every consumer running a string
-// compare on every packet. For listeners that handle multiple
-// packages (roomStore, chatStore, groupStore), call
-// this once per package and manage the unsubscribes individually.
+/** What a GMCP package, the prompt values and the affect fulls carry,
+ *  the session that sent them beside their data. A `session` key
+ *  among the data's own would read as one more field, value or
+ *  affect. */
+export interface SessionData<T> {
+  session: number;
+  data: T;
+}
+
+// Hear one GMCP package. The session sends each package on an event of
+// its own, `session://gmcp/<package>`, so a listener runs only on the
+// packets it reads. A store that reads several, such as the room, chat
+// and group stores, calls this once for each and keeps each unlisten.
 //
-// Tauri event names only allow alphanumeric + `-/:_`, so dots in
-// GMCP package names (`Char.Vitals`) must be encoded the same way
-// the backend encodes them (`Char-Vitals`). Callers still pass the
-// canonical package name with the dot; this helper rewrites it
-// for the wire.
+// Tauri event names allow only letters, digits and `-/:_`, so the dots
+// of a package name (`Char.Vitals`) become dashes (`Char-Vitals`), as
+// the session sends them. Callers pass the name with its dots.
 //
-// The payload arrives as the package's data shape directly; the
-// package name is implicit in the subscription target. Callers
-// supply the data type as the generic.
+// The payload is a SessionData, and the callback gets its data, the
+// packet as the game sent it, in the type the caller names as the
+// generic.
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function onGmcpPackage<T = any>(
@@ -71,8 +75,8 @@ export async function onGmcpPackage<T = any>(
   cb: (data: T) => void,
 ): Promise<UnlistenFn> {
   const channel = `session://gmcp/${name.replace(/\./g, '-')}`;
-  return listen<T>(channel, (event) => {
-    cb(event.payload);
+  return listen<SessionData<T>>(channel, (event) => {
+    cb(event.payload.data);
   });
 }
 

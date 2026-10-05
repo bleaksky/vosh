@@ -46,12 +46,14 @@ function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
 }
 
-/** Send one packet from fixtures/gmcp/aabahran, as the backend emits it. */
+/** Send one packet from fixtures/gmcp/aabahran, as the backend emits it
+ *  from session 1. */
 function packet(name: string): void {
   const p = aabahranPacket(name);
-  fire(`session://gmcp/${p.package.replace(/\./g, '-')}`, p.data);
+  fire(`session://gmcp/${p.package.replace(/\./g, '-')}`, { session: 1, data: p.data });
 }
 
+const promptVars = (data: unknown) => fire('session://prompt-vars', { session: 1, data });
 const hidden = (payload: unknown) => fire('session://hidden', payload);
 const disconnect = () => fire('session://state', { kind: 'disconnected', reason: null });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -288,17 +290,17 @@ describe('hiddenStore', () => {
   it('never fills hidden vitals from prompt vars, before the song or during it', async () => {
     const s = await load();
     packet('char-vitals.gmcp');
-    fire('session://prompt-vars', { hp: '800', maxhp: '900' });
+    promptVars({ hp: '800', maxhp: '900' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 800, hidden: false });
     hidden({ ...NOTHING, vitals: true });
     // The backend sends a hidden prompt var as ?, which never fills in.
-    fire('session://prompt-vars', { hp: '?', maxhp: '?' });
+    promptVars({ hp: '?', maxhp: '?' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 0, hidden: true });
     hidden(NOTHING);
     // Char.Vitals fills in until the prompt sets a new value, and the
     // prompt var from before the song stays out.
     expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900, hidden: false });
-    fire('session://prompt-vars', { hp: '870', maxhp: '900' });
+    promptVars({ hp: '870', maxhp: '900' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 870, hidden: false });
   });
 });
