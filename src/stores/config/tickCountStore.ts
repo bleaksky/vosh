@@ -5,9 +5,9 @@ import { createStore } from '../store';
 
 // Which way the status line tick counts, from UiConfig tick_count. The
 // same wiring as the chip style store: seeded from ui_get_config, kept
-// live by vosh://tick-count-changed, which setUiConfig emits to every
-// window when Settings saves, and refetched on vosh://profile-switched
-// since each character keeps its own.
+// live by vosh://tick-count-changed, which the Settings save emits to
+// every window, and refetched on vosh://profile-switched since each
+// character keeps its own.
 
 const store = createStore<TickCount>('up');
 let started = false;

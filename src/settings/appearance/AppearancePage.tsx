@@ -179,9 +179,13 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     update(themePrefsOf(next), { now: true });
   };
 
+  // Every theme row saves the four theme fields together, as
+  // THEME_PREFS_CHANGED carries them, so a dark theme the page seeded
+  // from your theme saves too.
   const setPrefs = (patch: Partial<UiConfig>) => {
-    applyThemePrefs({ ...config, ...patch });
-    update(patch, { now: true });
+    const next = { ...config, ...patch };
+    applyThemePrefs(next);
+    update(themePrefsOf(next), { now: true });
   };
 
   const addTheme = (theme: CustomTheme) => {

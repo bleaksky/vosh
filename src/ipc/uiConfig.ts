@@ -526,10 +526,10 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
   return listen<unknown>(UI_CONFIG_REPLACED, () => cb());
 }
 
-/** Save the theme choice alone. A full setUiConfig from a window that
- *  is not Settings would write its stale copy of every other field.
- *  Pass the light and dark pair too when the pick came from pickTheme,
- *  which fills one of them while follow system appearance is on. */
+/** Save the theme choice alone, from a window that keeps no copy of
+ *  the other fields, like the palette. Pass the light and dark pair too
+ *  when the pick came from pickTheme, which fills one of them while
+ *  follow system appearance is on. */
 export async function setUiTheme(
   theme: string,
   pair?: { light_theme: string; dark_theme: string },
@@ -616,8 +616,9 @@ export function uiConfigPayload(config: UiConfig): Record<string, unknown> {
   };
 }
 
-/** Hear a new chip style saved from Settings. setUiConfig emits it to
- *  every window, so the main window's status line follows at once. */
+/** Hear a new chip style saved from Settings. The Settings save emits
+ *  it to every window, so the main window's status line follows at
+ *  once. */
 export async function subscribeChipStyleChanged(
   cb: (value: ChipStyle) => void,
 ): Promise<UnlistenFn> {
@@ -626,8 +627,9 @@ export async function subscribeChipStyleChanged(
   });
 }
 
-/** Hear a new tick count saved from Settings. setUiConfig emits it to
- *  every window, so the main window's status line follows at once. */
+/** Hear a new tick count saved from Settings. The Settings save emits
+ *  it to every window, so the main window's status line follows at
+ *  once. */
 export async function subscribeTickCountChanged(
   cb: (value: TickCount) => void,
 ): Promise<UnlistenFn> {
@@ -637,8 +639,8 @@ export async function subscribeTickCountChanged(
 }
 
 /** Hear a new game time clock saved from Settings, or the one a
- *  profile switch brings. setUiConfig emits it to every window, so the
- *  main window's status line follows at once. */
+ *  profile switch brings. The Settings save emits it to every window,
+ *  so the main window's status line follows at once. */
 export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
   return listen<unknown>(GAME_TIME_CHANGED, (event) => {
     cb(normalizeGameTime(event.payload));

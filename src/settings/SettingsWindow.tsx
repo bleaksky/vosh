@@ -9,13 +9,7 @@ import {
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
 import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
-import {
-  followReplacedUiConfig,
-  isOwnAffectsDisplayEcho,
-  primeUiConfigAffectsDisplay,
-  primeUiConfigTheme,
-  primeUiConfigThemePrefs,
-} from '../ipc/uiConfigSave';
+import { followReplacedUiConfig, isOwnAffectsDisplayEcho } from '../ipc/uiConfigSave';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {
@@ -196,10 +190,8 @@ export function SettingsWindow() {
   }, []);
 
   // A profile switch, #profile load, #profile reset, and an import each
-  // replace the whole UI config in the backend. Every save from this
-  // window sends the full snapshot, so read it again here, or the next
-  // edit writes the old profile's tick count, chip style, tracked
-  // affects, custom themes, and the rest over the new one.
+  // replace the whole UI config in the backend. Read it again here, so
+  // the copy every page shows and edits is the new profile's.
   useTauriEvent(
     (cb) => followReplacedUiConfig(cb, (e) => setError(String(e))),
     (cfg: UiConfig) => {
@@ -210,8 +202,9 @@ export function SettingsWindow() {
   );
 
   // Turning the theme scope global folds the custom themes of every
-  // other profile into the shared list. Take the new list, or the next
-  // save from this window writes the old one back and drops them.
+  // other profile into the shared list. Take the new list, since a later
+  // edit of the custom themes sends the whole list, and one built on the
+  // old list would drop them.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
@@ -237,14 +230,12 @@ export function SettingsWindow() {
   // Another window can change the theme (the palette's Choose theme).
   // subscribeThemeChanges repaints this window. While follow system
   // appearance is off the id is your manual pick, so the config copy
-  // takes it and the next full save from any page carries it instead
-  // of writing the old theme back. While follow is on the id is only
+  // takes it and Appearance shows it. While follow is on the id is only
   // the pair entry the OS shows, and the theme fields below carry the
   // pick. This window's own save comes back too, and is skipped.
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const current = configRef.current;
     if (!current || current.follow_system_appearance || isOwnThemeEcho(themeId)) return;
-    primeUiConfigTheme(themeId);
     setConfig((prev) =>
       prev && !prev.follow_system_appearance && prev.theme !== themeId
         ? { ...prev, theme: themeId }
@@ -257,7 +248,6 @@ export function SettingsWindow() {
   // takes it the same way.
   useTauriEvent(subscribeThemePrefs, (prefs) => {
     if (isOwnThemeEcho(prefs)) return;
-    primeUiConfigThemePrefs(prefs);
     applyThemePrefs(prefs);
     setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
   });
@@ -265,12 +255,10 @@ export function SettingsWindow() {
   // The Affects pane menu picks a style or a marker in the main window,
   // and a profile switch brings the whole display, the tint and the
   // hours too. The config copy takes it, the way it takes a palette
-  // theme pick, so the next full save from any page carries it instead
-  // of writing the old one back. This window's own save comes back too,
-  // and is skipped.
+  // theme pick, so Layout shows it. This window's own save comes back
+  // too, and is skipped.
   useTauriEvent(subscribeAffectsDisplayChanged, (display) => {
     if (isOwnAffectsDisplayEcho(display)) return;
-    primeUiConfigAffectsDisplay(display);
     setConfig((prev) =>
       prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
         ? { ...prev, ...affectsDisplayFields(display) }

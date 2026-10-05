@@ -5,8 +5,8 @@ import { Row, Segmented, type SegmentedOption } from '../../ui';
 
 // How the tick, the game time, and the moons show in the main window's
 // status line, from UiConfig chip_style. It writes through the same
-// debounced save as the other rows, and setUiConfig tells every window,
-// so the status line follows at once. Its search anchor is layout:status#tick-time,
+// debounced save as the other rows, which tells every window, so the
+// status line follows at once. Its search anchor is layout:status#tick-time,
 // so it belongs in a Layout section with the id `status`.
 
 const OPTIONS: readonly SegmentedOption<ChipStyle>[] = [
