@@ -209,6 +209,18 @@ pub(crate) struct UiConfig {
     /// saves the bytes it saved before.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub fit_game_colors: bool,
+    /// The color vision Fit game colors fits the game colors for:
+    /// `typical`, `deuteranopia`, `protanopia` or `tritanopia`. Part of
+    /// the `theme` scope category, since your vision is the same on
+    /// every character. Typical by default, and a file written before
+    /// this choice reads it Typical. Written only once you pick another,
+    /// so a profile that never does saves the bytes it saved before. A
+    /// build without it reads past the key.
+    #[serde(
+        default = "default_color_vision",
+        skip_serializing_if = "is_default_color_vision"
+    )]
+    pub color_vision: String,
     /// Keep highlight colors readable. While on, a fixed color a trigger
     /// paints text in, a true color or a 256 color past the 16, that fades
     /// on the theme's terminal background draws at a lightness that reads
@@ -893,6 +905,7 @@ impl Default for UiConfig {
             bright_bold: false,
             blink_text: None,
             fit_game_colors: true,
+            color_vision: default_color_vision(),
             readable_highlights: true,
             collapse_repeats: false,
             collapse_fight_lines: true,
@@ -973,6 +986,27 @@ pub(crate) fn coerce_terminal_line_height(value: String) -> String {
         value
     } else {
         default_terminal_line_height()
+    }
+}
+
+/// The color visions the game color fit knows (`COLOR_VISIONS` in
+/// lib/gameFit.ts). Anything else saves as the default.
+pub(crate) const COLOR_VISIONS: [&str; 4] = ["typical", "deuteranopia", "protanopia", "tritanopia"];
+
+pub(crate) fn default_color_vision() -> String {
+    "typical".to_string()
+}
+
+pub(crate) fn is_default_color_vision(value: &str) -> bool {
+    value == "typical"
+}
+
+/// Keep a known color vision and turn anything else into `typical`.
+pub(crate) fn coerce_color_vision(value: String) -> String {
+    if COLOR_VISIONS.contains(&value.as_str()) {
+        value
+    } else {
+        default_color_vision()
     }
 }
 
@@ -1427,6 +1461,34 @@ name = "haste"
         // A file from before the switch reads it on.
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!(old.ui.fit_game_colors);
+    }
+
+    #[test]
+    fn color_vision_round_trips_and_is_written_only_once_picked() {
+        let mut config = ProfileConfig::default();
+        assert_eq!(config.ui.color_vision, "typical");
+        let typical = config.to_toml().unwrap();
+        assert!(!typical.contains("color_vision"), "{typical}");
+        config.ui.color_vision = "deuteranopia".into();
+        let picked = config.to_toml().unwrap();
+        assert!(
+            picked.contains("color_vision = \"deuteranopia\""),
+            "{picked}"
+        );
+        let back = ProfileConfig::from_toml(&picked).unwrap();
+        assert_eq!(back.ui.color_vision, "deuteranopia");
+        // A file from before the choice reads it Typical.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert_eq!(old.ui.color_vision, "typical");
+    }
+
+    #[test]
+    fn an_unknown_color_vision_coerces_to_typical() {
+        for vision in COLOR_VISIONS {
+            assert_eq!(coerce_color_vision(vision.into()), vision);
+        }
+        assert_eq!(coerce_color_vision("deutan".into()), "typical");
+        assert_eq!(coerce_color_vision(String::new()), "typical");
     }
 
     #[test]

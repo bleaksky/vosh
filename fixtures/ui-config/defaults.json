@@ -16,6 +16,7 @@
     "bright_bold": false,
     "blink_text": null,
     "fit_game_colors": true,
+    "color_vision": "typical",
     "readable_highlights": true,
     "collapse_repeats": false,
     "collapse_fight_lines": true,

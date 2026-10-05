@@ -137,6 +137,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'text', 'fit-game-colors'),
   },
   {
+    label: 'Color vision',
+    description: 'Fit game colors keeps hits, tells and says apart for the vision you pick.',
+    keywords:
+      'color blind colorblind deuteranopia protanopia tritanopia red green blue yellow cvd accessibility',
+    target: at('appearance', 'text', 'color-vision'),
+  },
+  {
     label: 'Keep highlight colors readable',
     description:
       'Vosh darkens or lightens a color your triggers set when the theme would make it faint.',

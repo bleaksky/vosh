@@ -18,7 +18,10 @@ use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::live::Profile;
 use crate::profile::panes::DockEntryPersist;
 use crate::profile::set::ProfileSet;
-use crate::profile::ui::{is_default_font_family, CustomTheme, UiConfig, DEFAULT_PANEL_FONT_SIZE};
+use crate::profile::ui::{
+    default_color_vision, is_default_color_vision, is_default_font_family, CustomTheme, UiConfig,
+    DEFAULT_PANEL_FONT_SIZE,
+};
 
 /// Per-category scope choice. Per-profile fields move with the
 /// active profile; global fields are shared across every profile.
@@ -34,9 +37,10 @@ pub(crate) enum Scope {
 }
 
 /// User-controllable mapping of UI categories to scope. `theme`
-/// covers `theme`, the follow switch, the light and dark pair, and
+/// covers `theme`, the follow switch, the light and dark pair,
 /// `custom_themes`, so a custom theme travels with the theme that
-/// names it. `font` covers `font_family`, `font_size`,
+/// names it, and `color_vision`, since your vision is the same on every
+/// character. `font` covers `font_family`, `font_size`,
 /// `terminal_line_height`, `panel_font`, and `panel_font_size` since
 /// they move together visually.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -118,6 +122,12 @@ pub(crate) struct GlobalConfig {
     pub light_theme: Option<String>,
     #[serde(default)]
     pub dark_theme: Option<String>,
+    /// The color vision, while the theme is shared. Written only once you
+    /// pick another than Typical, like the profile file's own. With
+    /// `theme` here, a missing color vision is Typical (see
+    /// `shared_color_vision`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_vision: Option<String>,
     #[serde(default)]
     pub terminal_line_height: Option<String>,
     /// The panel font, while the font is shared. Written only once you
@@ -150,6 +160,9 @@ impl GlobalConfig {
             follow_system_appearance: theme.then_some(profile.ui.follow_system_appearance),
             light_theme: theme.then(|| profile.ui.light_theme.clone()),
             dark_theme: theme.then(|| profile.ui.dark_theme.clone()),
+            color_vision: theme
+                .then(|| profile.ui.color_vision.clone())
+                .filter(|vision| !is_default_color_vision(vision)),
             custom_themes: theme.then(|| profile.ui.custom_themes.clone()),
             auto_update: matches!(scope.auto_update, Scope::Global)
                 .then_some(profile.ui.auto_update),
@@ -200,6 +213,9 @@ impl GlobalConfig {
         if let Some(v) = &self.dark_theme {
             profile.ui.dark_theme.clone_from(v);
         }
+        if let Some(v) = self.shared_color_vision() {
+            profile.ui.color_vision = v;
+        }
         if let Some(v) = &self.terminal_line_height {
             profile.ui.terminal_line_height.clone_from(v);
         }
@@ -217,6 +233,17 @@ impl GlobalConfig {
         if let Some(v) = &self.custom_themes {
             profile.ui.custom_themes.clone_from(v);
         }
+    }
+
+    /// The color vision every character shares, or None while the theme
+    /// is not shared. The file leaves out Typical, the default, so a
+    /// shared theme with no color vision of its own is Typical.
+    fn shared_color_vision(&self) -> Option<String> {
+        self.theme.as_ref().map(|_| {
+            self.color_vision
+                .clone()
+                .unwrap_or_else(default_color_vision)
+        })
     }
 
     /// The panel font every character shares, or None while the font is
@@ -275,6 +302,7 @@ impl GlobalConfig {
             self.follow_system_appearance = None;
             self.light_theme = None;
             self.dark_theme = None;
+            self.color_vision = None;
             self.custom_themes = None;
         }
         if !matches!(scope.font, Scope::Global) {
@@ -362,7 +390,8 @@ impl GlobalConfig {
             let own_pick = ui.theme != defaults.theme
                 || ui.follow_system_appearance != defaults.follow_system_appearance
                 || ui.light_theme != defaults.light_theme
-                || ui.dark_theme != defaults.dark_theme;
+                || ui.dark_theme != defaults.dark_theme
+                || ui.color_vision != defaults.color_vision;
             if let Some(shared) = &self.custom_themes {
                 let own = std::mem::take(&mut ui.custom_themes);
                 let mut list = shared.clone();
@@ -383,6 +412,9 @@ impl GlobalConfig {
                 }
                 if let Some(v) = &self.dark_theme {
                     changed |= replace_value(&mut ui.dark_theme, v.clone());
+                }
+                if let Some(v) = self.shared_color_vision() {
+                    changed |= replace_value(&mut ui.color_vision, v);
                 }
             }
         }
@@ -529,6 +561,7 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
         config.ui.follow_system_appearance = defaults.follow_system_appearance;
         config.ui.light_theme = defaults.light_theme;
         config.ui.dark_theme = defaults.dark_theme;
+        config.ui.color_vision = defaults.color_vision;
         config.ui.custom_themes = defaults.custom_themes;
     }
     if matches!(scope.auto_update, Scope::Global) {
@@ -1062,6 +1095,75 @@ mod tests {
         shared.hand_out(&mut ui, "alt");
         assert_eq!(ui.panel_font, own);
         assert_eq!(ui.font_family, UiConfig::default().font_family);
+    }
+
+    #[test]
+    fn the_theme_scope_carries_the_color_vision() {
+        let mut profile = styled_profile();
+        profile.ui.color_vision = "deuteranopia".into();
+        let scope = ScopeConfig::default();
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(
+            global_text.contains("color_vision = \"deuteranopia\""),
+            "{global_text}"
+        );
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.color_vision, "typical");
+        assert_eq!(restored.ui.color_vision, "deuteranopia");
+
+        // Kept per profile, it stays in the profile file.
+        let scope = ScopeConfig {
+            theme: Scope::Profile,
+            ..ScopeConfig::default()
+        };
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        assert!(!global_text.contains("color_vision"), "{global_text}");
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(per_profile.ui.color_vision, "deuteranopia");
+        assert_eq!(restored.ui.color_vision, "deuteranopia");
+    }
+
+    #[test]
+    fn a_shared_theme_without_a_color_vision_is_typical() {
+        // Typical, the default, stays out of global.toml.
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+        assert_eq!(shared.color_vision, None);
+        let text = toml::to_string_pretty(&shared).unwrap();
+        assert!(!text.contains("color_vision"), "{text}");
+        // So a profile file that kept a vision of its own from before the
+        // theme was shared plays Typical, which every character shares.
+        let mut live = Profile::default();
+        live.ui.color_vision = "tritanopia".into();
+        toml::from_str::<GlobalConfig>(&text)
+            .unwrap()
+            .apply_to(&mut live);
+        assert_eq!(live.ui.color_vision, "typical");
+        // A global.toml that shares no theme leaves it alone.
+        live.ui.color_vision = "tritanopia".into();
+        GlobalConfig::default().apply_to(&mut live);
+        assert_eq!(live.ui.color_vision, "tritanopia");
+    }
+
+    #[test]
+    fn a_profile_with_its_own_color_vision_keeps_it_when_the_theme_stops_being_shared() {
+        let mut profile = shared_profile();
+        profile.ui.color_vision = "protanopia".into();
+        let shared = GlobalConfig::from_profile(&profile, &ScopeConfig::default());
+        assert_eq!(shared.color_vision.as_deref(), Some("protanopia"));
+        // A file with no theme pick of its own takes the shared vision.
+        let mut ui = UiConfig::default();
+        assert!(shared.hand_out(&mut ui, "alt"));
+        assert_eq!(ui.color_vision, "protanopia");
+        // A vision of its own is its own pick, and it all stays.
+        let mut ui = UiConfig {
+            color_vision: "tritanopia".into(),
+            ..UiConfig::default()
+        };
+        shared.hand_out(&mut ui, "alt");
+        assert_eq!(ui.color_vision, "tritanopia");
+        assert_eq!(ui.theme, UiConfig::default().theme);
     }
 
     #[test]

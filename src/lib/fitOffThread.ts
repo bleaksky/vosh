@@ -1,3 +1,4 @@
+import type { ColorVision } from './gameFit';
 import type { XtermPalette } from './themes';
 
 // The game color fit (lib/gameFit) takes about two seconds of CPU, so a
@@ -32,16 +33,21 @@ function startWorker(): Worker | null {
   }
 }
 
-/** The fit of `palette`, the slots it moves, or null when this window
- *  cannot fit it: a color that is not hex, or a webview that runs no
- *  module worker. */
-export function fitOffThread(palette: XtermPalette): Promise<Fitted | null> {
+/** The fit of `palette` for `vision`, the slots it moves, or null when
+ *  this window cannot fit it: a color that is not hex, or a webview that
+ *  runs no module worker. `typical` is the Typical fit when you have it,
+ *  which a fit for another vision starts from (gameFit fit). */
+export function fitOffThread(
+  palette: XtermPalette,
+  vision: ColorVision = 'typical',
+  typical?: Fitted,
+): Promise<Fitted | null> {
   worker ??= startWorker();
   const w = worker;
   if (!w) return Promise.resolve(null);
   const id = nextId++;
   return new Promise((resolve) => {
     waiting.set(id, resolve);
-    w.postMessage({ id, palette });
+    w.postMessage({ id, palette, vision, typical });
   });
 }
