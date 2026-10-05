@@ -14,7 +14,7 @@ import {
   nativeSurfaceEnabled,
   type TerminalHandle,
 } from './components/Terminal';
-import { Input, type InputHandle } from './components/Input';
+import { Input, type InputHandle } from './input/Input';
 import { Resizable } from './components/Resizable';
 import { UpdateNotice } from './components/UpdateNotice';
 import { Toasts } from './components/Toasts';

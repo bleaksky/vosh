@@ -50,9 +50,9 @@ import {
   keepsLastCommand,
   macroEcho,
   planSubmit,
-} from '../lib/maskedInput';
-import { recentNames } from '../lib/recentNames';
-import { nativeSurfaceEnabled } from './Terminal';
+} from './maskedInput';
+import { recentNames } from './recentNames';
+import { nativeSurfaceEnabled } from '../components/Terminal';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 
 export interface InputHandle {

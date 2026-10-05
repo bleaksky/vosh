@@ -55,7 +55,7 @@ import {
   spareAbove,
 } from '../lib/terminalRows';
 import { noteReader } from '../lib/readerBusy';
-import { ingestRecentNames } from '../lib/recentNames';
+import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from '../lib/xtermMirror';
 import { XtermBlink } from '../lib/xtermBlink';
 import type { BufferView, LineMark } from '../lib/splitDrag';

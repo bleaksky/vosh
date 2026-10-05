@@ -1915,7 +1915,7 @@ fn a_quick_key_echoes_like_a_typed_command() {
 
 #[test]
 fn the_caret_is_the_one_the_command_line_draws() {
-    let page = include_str!("../../../src/lib/maskedInput.ts");
+    let page = include_str!("../../../src/input/maskedInput.ts");
     assert!(page.contains(r"export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';"));
     assert_eq!(ECHO_CARET, "\x1b[90m\u{203a} \x1b[0m");
 }

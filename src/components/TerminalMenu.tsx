@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
-import { type InputHandle } from './Input';
+import { type InputHandle } from '../input/Input';
 import { submenuAt } from './panel/menuPlacement';
 import { MenuItem, MenuSeparator, MenuSurface } from './panel/MenuSurface';
 import { ChevronRightIcon } from './panel/paneIcons';
