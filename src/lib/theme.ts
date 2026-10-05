@@ -13,6 +13,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getUiConfig } from '../ipc/uiConfig';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
 import {
@@ -380,8 +381,6 @@ export function applyTheme(choice: string) {
 
 async function refreshAndReapply(choice: string): Promise<void> {
   try {
-    // Inline import to dodge the session.ts <-> theme.ts cycle.
-    const { getUiConfig } = await import('./session');
     const cfg = await getUiConfig();
     setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
     // A pick made while the catalog loaded is on screen now. Keep it.

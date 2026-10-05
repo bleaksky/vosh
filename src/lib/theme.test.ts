@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit,
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
-vi.mock('./session', () => ({ getUiConfig }));
+vi.mock('../ipc/uiConfig', () => ({ getUiConfig }));
 
 const prefs = (patch: Partial<ThemePrefs> = {}): ThemePrefs => ({
   theme: 'nord',
