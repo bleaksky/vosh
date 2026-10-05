@@ -5,15 +5,7 @@ import ReactDOM from 'react-dom/client';
 import MainWindow from './shell/MainWindow';
 import { SettingsWindow } from './settings/SettingsWindow';
 import { HelpWindow } from './help/HelpWindow';
-// The chrome typeface from the Ember redesign. Bundled through Vite so
-// the app never fetches fonts at runtime. Inter carries chrome body
-// text. Terminal text stays on the bundled mono faces.
-import '@fontsource-variable/inter';
-import './styles.css';
 import './styles/index.css';
-// The One Window frame: the shell grid, title band, input band, and
-// status line. After the token sheet so it reads the new tokens.
-import './styles/frame.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
 // tweaks. The two known cases that matter today:
