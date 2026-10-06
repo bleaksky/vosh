@@ -3,6 +3,7 @@ import { countPhrase, draftValues } from '../../automation/automationDraft';
 import { searchText } from '../../automation/automationList';
 import {
   keysYoursHold,
+  keysYoursHoldNote,
   presetSavePlan,
   presetToggles,
   storedPresetIds,
@@ -16,7 +17,7 @@ import {
   PRESETS,
   presetTriggers,
 } from '../../automation/presets';
-import { presetsInstall, presetsRemove, type Macro } from '../../ipc/automation';
+import { presetsInstall, presetsRemove } from '../../ipc/automation';
 import { getUiConfig, setUiFields } from '../../ipc/uiConfig';
 import { listJoin } from '../../lib/text';
 import { useMacroList } from '../../stores/config/macroListStore';
@@ -138,18 +139,7 @@ function PresetKeys({ preset }: { preset: Preset }) {
           ))}
         </div>
       </Row>
-      {waiting.length > 0 && <CardNote tone="warn">{heldNote(waiting)}</CardNote>}
+      {waiting.length > 0 && <CardNote tone="warn">{keysYoursHoldNote(waiting)}</CardNote>}
     </>
   );
-}
-
-/** What the card says when your macros keep keys the preset wants. No
- *  board draws more than one such key, so two or more share one plural
- *  sentence, the keys in the preset's order. */
-function heldNote(held: readonly Omit<Macro, 'preset'>[]): string {
-  const keys = listJoin(held.map((m) => m.key));
-  const sends = listJoin(held.map((m) => m.command));
-  return held.length === 1
-    ? `Your macro on ${keys} keeps the key, so ${sends} has none until you move it.`
-    : `Your macros on ${keys} keep their keys, so ${sends} have none until you move them.`;
 }
