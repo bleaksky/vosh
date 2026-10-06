@@ -231,7 +231,7 @@ Triggers watch incoming lines and run actions when a pattern matches. They live 
 
 - Open Settings and choose Automation, then Triggers.
 - Click `New trigger`.
-- Enter a name and a pattern. Patterns are regexes, so escape literal punctuation. Under `Advanced`, `Add pattern` in More patterns adds another, and the trigger fires when any pattern that is on matches.
+- Enter a name and a pattern, and pick how the pattern matches. `Text` matches a line that is exactly the pattern, `Starts with` matches any line that starts with it, and `Regex` reads it as a regular expression. Under `Advanced`, `Add pattern` in More patterns adds another in the same mode, and the trigger fires when any pattern that is on matches.
 - Leave `Priority` under `Advanced` at `5`, the default for a new trigger, or raise it to run before other triggers. Higher priority triggers run first. Leave `Match` on `Lines`.
 - Pick `Room` in `Match` to match only the armies, things and people a room lists after its exits line. The game sends `Room.Chars` and `Room.Items` packets with each look, and Vosh counts the lines from them, so a say or an arrival after the look stays a plain line.
 - Pick `Your target` in `Match` to match only the line of the one you target with `tar`, when a room lists them. Vosh finds that line by where your target stands in the room, the place `tar` marks with `>`, so `tar 3` finds the third person even when their line words the name another way. When more than one person in the room fits what you gave `tar`, the first of them is your target, so one line matches.
@@ -239,9 +239,11 @@ Triggers watch incoming lines and run actions when a pattern matches. They live 
 - Put a command in `Then send`. `Send to pane` and `Lua script` sit under `Advanced`. Send and replace templates reach capture groups with `$1` through `$9` or `${name}`, and `;` splits a send into separate commands.
 - Click `Save`. Vosh shows `Saved` in the bar at the bottom.
 
-Example. The pattern `(\w+) is DEAD!` with a send of `get all corpse` loots each kill as the death line arrives.
+`Text` and `Starts with` skip spaces at the start of the line, and `Text` skips them at the end too, so a line you copy from a look matches with or without the five spaces before it. Neither needs escaping, and neither fills `$1`. A `Regex` pattern needs literal punctuation escaped, and its groups fill `$1` and on. A new trigger starts in `Text`, and older triggers read as `Regex`. The mode covers every pattern of the trigger. In `Edit all as JSON…` a `Text` or `Starts with` row reads `text`, so a change to its `pattern` alone, there or by hand in the file, changes nothing.
 
-The command line builds triggers too. `#trigger name {pattern} send command` creates one at priority 0 on the `line` target, `#triggers` lists everything by priority, and `#untrigger name` removes one. Vosh rejects an invalid regex and names the broken pattern.
+Example. To match the line `You feel better.`, type `You feel better.` in `Text`, `You feel better` in `Starts with`, or `You feel better\.$` in `Regex`. Pick `Regex` for the pattern `(\w+) is DEAD!`, and a send of `get all corpse` loots each kill as the death line arrives.
+
+The command line builds triggers too. `#trigger name {pattern} send command` creates one with a `Regex` pattern at priority 0 on the `line` target, `#triggers` lists everything by priority, and `#untrigger name` removes one. Vosh rejects an invalid regex and names the broken pattern.
 
 ### 3.3 Highlight lines
 
