@@ -95,7 +95,7 @@ The name shows in place of the character in the row, the title band, the window 
 
 The selected row is the filled one. The title band and the window title follow it and add the port after the world the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
 
-A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. An accent dot takes the place of the port once an alert rings there, such as one a trigger or a script raises. Bringing the session to the front clears both.
+A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. An accent dot takes the place of the port once something for you happens there. That is a tell, your name in a line, a fight that starts on you, low health or a drop, whether or not you turned their alerts on, and any alert a trigger or a script raises. Bringing the session to the front clears both.
 
 A glyph takes the place of the port while a session is not ready to play.
 

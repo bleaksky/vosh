@@ -256,12 +256,12 @@ impl AwaitingPrompt {
 
 /// The first text came on the link that runs. When a redial opened it,
 /// that text is the game's prompt, which waits for your login, and the
-/// Connection preset rings once while `p` has it on.
+/// Connection preset raises its alert once.
 pub(crate) fn reached_prompt(session: &Session, p: &Profile) -> Option<crate::alert::Alert> {
     if !session.awaiting_game_prompt.0.swap(false, Ordering::AcqRel) {
         return None;
     }
-    presets::connection(p, Link::Ready)
+    Some(presets::connection(p, Link::Ready))
 }
 
 /// A series that runs for a session: its task, the wake that dials at
@@ -351,7 +351,7 @@ pub(crate) async fn after_drop<R: tauri::Runtime>(
         session.emit(app, events::RECONNECT, &ReconnectPayload::Declined { why });
         return;
     }
-    crate::alert::ring(app, session, lost.into_iter().collect());
+    crate::alert::ring(app, session, vec![lost]);
     if !on {
         session.emit(
             app,
@@ -586,7 +586,7 @@ async fn run_series<R: tauri::Runtime>(
         &ReconnectPayload::Stopped { tries: TRIES },
     );
     let stopped = presets::connection(&*session.lock_profile().await, Link::Stopped);
-    crate::alert::ring(&app, &session, stopped.into_iter().collect());
+    crate::alert::ring(&app, &session, vec![stopped]);
 }
 
 /// Wait `wait` before a try, on the tokio clock, or in a test build on

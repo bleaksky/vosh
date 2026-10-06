@@ -123,6 +123,15 @@ describe('the marks on a session row', () => {
     expect(look(row())).toEqual({ glyph: 'dot', tone: null });
   });
 
+  it('show the dot for something an alert that is off would ring', async () => {
+    const { rows, look } = await load();
+    fire('session://mark', { session: ORLA });
+    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, alert: true });
+    expect(look(row())).toEqual({ glyph: 'dot', tone: null });
+    fire('session://mark', { session: TOLLIVER });
+    expect(rows.getSessionRow(TOLLIVER).alert).toBe(false);
+  });
+
   it('never mark the selected session', async () => {
     const { rows } = await load();
     output(TOLLIVER, 'The Bank of Aabahran\n\r');

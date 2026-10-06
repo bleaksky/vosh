@@ -22,6 +22,7 @@ export const PROMPT_STATE = 'session://prompt-state';
 export const GAME_PROMPT_SEEN = 'session://game-prompt-seen';
 export const PROMPT_GAG_WITHOUT_READER = 'session://prompt-gag-without-reader';
 export const ALERT = 'session://alert';
+export const MARK = 'session://mark';
 export const RECONNECT = 'session://reconnect';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';

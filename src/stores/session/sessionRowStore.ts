@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onAlert } from '../../ipc/alerts';
+import { onAlert, onMark } from '../../ipc/alerts';
 import {
   onReconnect,
   type ReconnectPayload,
@@ -23,8 +23,11 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 //
 // A session you are not looking at earns two marks (Q9). Its name
 // brightens once the game prints a line there, and the dot shows once
-// an alert rings there. Selecting the session clears both, and the
-// selected row never takes either.
+// something for you happens there, the events the alert presets watch
+// whether or not their alerts are on, and any alert a trigger or Lua
+// raises. One that rings comes as session://alert, and one that rings
+// nothing as session://mark. Selecting the session clears both, and
+// the selected row never takes either.
 //
 // The link follows session://state and session://reconnect. Until an
 // event of the session names it, a row reads the link from the session
@@ -113,6 +116,14 @@ const playing = (now: SessionRowState) => moved(now, { playing: true, reached: f
 /** Whether the session shows, so nothing marks it. */
 const shown = (session: number) => session === getSelected();
 
+/** Applies a change to the row of the session it names. */
+type Apply = (session: number, change: (now: SessionRowState) => SessionRowState) => void;
+
+/** Put the dot on the row of `session`, unless it shows. */
+function mark(apply: Apply, session: number): void {
+  if (!shown(session)) apply(session, (now) => moved(now, { alert: true }));
+}
+
 /** Whether a line from the game would mark the session's row, so a
  *  write to one shown or marked already decodes nothing. */
 function waitsForLines(session: number): boolean {
@@ -127,10 +138,8 @@ const store = createGmcpStore<SessionRowState>({
     (apply) => onReconnect((payload, session) => apply(session, (now) => redialed(now, payload))),
     (apply) =>
       onGameLine(waitsForLines, (session) => apply(session, (now) => moved(now, { lines: true }))),
-    (apply) =>
-      onAlert((session) => {
-        if (!shown(session)) apply(session, (now) => moved(now, { alert: true }));
-      }),
+    (apply) => onAlert((session) => mark(apply, session)),
+    (apply) => onMark((session) => mark(apply, session)),
     (apply) =>
       subscribeSelected(() =>
         apply(getSelected(), (now) => moved(now, { lines: false, alert: false })),

@@ -42,14 +42,23 @@ fn orla(p: &Profile) -> PresetWatch {
 }
 
 #[test]
-fn every_preset_ships_off_and_rings_nothing_until_you_turn_it_on() {
+fn every_preset_ships_off_and_raises_alerts_that_ring_nothing_until_you_turn_it_on() {
     let p = Profile::default();
     let mut watch = orla(&p);
     let now = Instant::now();
-    assert_eq!(watch.gmcp(&p, &packet("chat/tell.gmcp"), None, now), None);
-    assert_eq!(watch.gmcp(&p, &packet("char-combat.gmcp"), None, now), None);
-    assert_eq!(watch.line(&p, "Maren looks at Orla."), None);
-    assert_eq!(watch.health(&p, 170, 900, false), None);
+    // Each event still comes, with nothing on, so it marks the row of a
+    // session behind (Sessions Q9).
+    let quiet = |alert: Option<Alert>| alert.is_some_and(|alert| alert.parts.is_silent());
+    assert!(quiet(watch.gmcp(&p, &packet("chat/tell.gmcp"), None, now)));
+    assert!(quiet(watch.gmcp(
+        &p,
+        &packet("char-combat.gmcp"),
+        None,
+        now
+    )));
+    assert!(quiet(watch.line(&p, "Maren looks at Orla.")));
+    assert!(quiet(watch.health(&p, 170, 900, false)));
+    assert!(connection(&p, Link::Lost).parts.is_silent());
     // The marker that turns every preset off wins over a list.
     let p = with_on(&[TELLS, PRESETS_OFF]);
     assert_eq!(parts(&p, TELLS), None);
@@ -267,7 +276,7 @@ fn the_connection_preset_rings_each_turn_of_the_link_under_its_own_cap() {
     let p = with_on(&[CONNECTION]);
     let alerts: Vec<Alert> = [Link::Lost, Link::Ready, Link::Stopped]
         .into_iter()
-        .filter_map(|link| connection(&p, link))
+        .map(|link| connection(&p, link))
         .collect();
     let titles: Vec<&str> = alerts.iter().map(|a| a.title.as_str()).collect();
     assert_eq!(
@@ -277,9 +286,10 @@ fn the_connection_preset_rings_each_turn_of_the_link_under_its_own_cap() {
     let mut caps = Caps::default();
     let now = Instant::now();
     assert!(alerts.iter().all(|a| caps.allow(&a.cap, now)));
-    assert_eq!(
-        connection(&Profile::default(), Link::Lost),
-        None,
+    assert!(
+        connection(&Profile::default(), Link::Lost)
+            .parts
+            .is_silent(),
         "off at first"
     );
 }

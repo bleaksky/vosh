@@ -12,9 +12,12 @@
 //!   whether you look at the session, which takes the session map, holds
 //!   each to the 10 second cap the session keeps, posts the banner,
 //!   bounces the Dock or flashes the taskbar, and tells the page through
-//!   `session://alert`, which plays the tone.
+//!   `session://alert`, which plays the tone. An alert that rings nothing
+//!   still tells the page through `session://mark` in a session you are
+//!   not looking at, so its row takes the dot (Sessions Q9).
 //! - [`presets`] matches the five presets from GMCP, the text and the
-//!   link, and keeps the low latch, the Rust twin of `nextLow`.
+//!   link, and keeps the low latch, the Rust twin of `nextLow`. A preset
+//!   that is off still raises its alerts, with nothing on, so they mark.
 //! - [`banner`] is where a banner goes, the system or, in a test build,
 //!   a list the test reads, so no test ever posts one.
 
@@ -151,9 +154,16 @@ pub(crate) fn of_lua(
     }
 }
 
+/// `session://mark`: something for you happened in a session behind and
+/// rang nothing. The payload is the session alone.
+#[derive(Serialize)]
+struct Mark {}
+
 /// Ring each of `alerts` that `session` raised, with no lock held. Each
 /// one follows the focus rule, then the 10 second cap, and what rings
-/// posts its banner, asks for attention and tells the page.
+/// posts its banner, asks for attention and tells the page. In a session
+/// other than the selected one, an alert that rings nothing, since it is
+/// off or quiet or the cap holds it back, still marks the row.
 pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, alerts: Vec<Alert>) {
     if alerts.is_empty() {
         return;
@@ -162,15 +172,19 @@ pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, ale
         return;
     };
     let seen = focus::seen(&state, session.id);
+    let behind = state.selected_session().id != session.id;
     let label = session.label(&state.other_sessions(session.id));
     let now = Instant::now();
+    let mut marked = false;
     for alert in alerts {
-        let Some(fate) = focus::fate(&alert.parts, seen) else {
+        let fate = focus::fate(&alert.parts, seen).filter(|_| session.allow_alert(&alert.cap, now));
+        let Some(fate) = fate else {
+            if behind && !marked {
+                session.emit(app, events::MARK, &Mark {});
+                marked = true;
+            }
             continue;
         };
-        if !session.allow_alert(&alert.cap, now) {
-            continue;
-        }
         let words = alert.parts.words.then(|| alert.words.clone()).flatten();
         let banner = banner::Banner {
             session: session.id,
