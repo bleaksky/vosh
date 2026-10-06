@@ -50,6 +50,26 @@ Variables set with `#var` live in session scope. They clear when the next connec
 
 `#profile load` pulls the saved file back into the live session. In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.
 
+### 1.4 Play in more than one session
+
+Each session is one connection to a game, with its own terminal, command line and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, one row for each. With one session it hides by itself.
+
+- Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
+- The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
+- Click `Hide sessions` at the top right of the sidebar to fold it away in this window.
+
+Each row names its session.
+
+- The character logged in on it, such as `Tolliver`.
+- Before you log in, the world it plays, such as `The Forsaken Lands`.
+- `New session` while it has no world yet.
+
+A port that is not the world's own shows in grey at the right of the row, so Orla on the build port reads `Orla` with `1825` beside it. A row named by its world puts the port in its name instead, as `The Forsaken Lands 1825`, and when the row runs short the world ends in an ellipsis and the port stays. On a host Vosh does not know by name, the port shows only while another session plays on the same host. Point at a row to see the character and the world together, such as `Orla on The Forsaken Lands 1825`.
+
+The selected row is the filled one. The title band and the window title follow it and add the port after the world the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
+
+The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
+
 ## Play
 
 ### 2.1 Send commands
