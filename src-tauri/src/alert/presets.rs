@@ -1,7 +1,9 @@
 //! The five alert presets (Alerts Q5), matched from GMCP where the game
 //! says it plainly. Each one is on while `ui.enabled_presets` lists its
 //! id, and the profile's `[alerts]` table says what it does. All five
-//! ship off, so none rings until you turn it on.
+//! ship off, so none rings until you turn it on. A preset that is off
+//! still raises its alert, with nothing on, so the row of a session you
+//! are not looking at takes the dot all the same (Sessions Q9).
 //!
 //! - Tells you get: Comm.Channel with channel `tell` and direction
 //!   `received`, once per sender in 10 seconds.
@@ -149,12 +151,10 @@ impl PresetWatch {
                 None
             }
             "Comm.Channel" => tell(p, msg),
-            // The game sends it each prompt, so only while the preset
-            // that reads it is on.
+            // Being attacked reads the group whether its alert is on or
+            // off, since a fight that starts on you marks a row either way.
             "Group.Info" => {
-                if parts(p, ATTACKED).is_some() {
-                    self.group = Group::of(&msg.data);
-                }
+                self.group = Group::of(&msg.data);
                 None
             }
             "Char.Combat" => {
@@ -174,7 +174,7 @@ impl PresetWatch {
                 if self.target.as_deref() != target {
                     self.target = target.map(str::to_string);
                 }
-                let parts = parts(p, ATTACKED)?;
+                let parts = heard(p, ATTACKED);
                 if !started {
                     return None;
                 }
@@ -200,8 +200,7 @@ impl PresetWatch {
     /// What a line of the game that is not your prompt rings: your name.
     pub(crate) fn line(&self, p: &Profile, plain: &str) -> Option<Alert> {
         let name = self.name.as_deref()?;
-        // Off, the preset costs a line nothing but this look at the list.
-        let parts = parts(p, NAME)?;
+        let parts = heard(p, NAME);
         if plain.starts_with("You ") || !names(plain, name) {
             return None;
         }
@@ -227,7 +226,7 @@ impl PresetWatch {
         if was || !self.low {
             return None;
         }
-        let parts = parts(p, LOW_HEALTH)?;
+        let parts = heard(p, LOW_HEALTH);
         Some(preset(
             LOW_HEALTH,
             format!("Health at {}%", vital_percent(hp, maxhp)),
@@ -260,20 +259,19 @@ pub(crate) fn health(vars: &vosh_prompt::values::Vars) -> Option<(i64, i64, bool
     Some((hp.unwrap_or(0), maxhp.unwrap_or(0), hidden))
 }
 
-/// What the connection preset rings for `link`, while it is on. Each
-/// turn of the link counts under a cap of its own, so a redial that
-/// reaches the prompt 3 seconds after the drop still rings.
-pub(crate) fn connection(p: &Profile, link: Link) -> Option<Alert> {
-    let parts = parts(p, CONNECTION)?;
+/// What the connection preset raises for `link`, with nothing on while
+/// it is off. Each turn of the link counts under a cap of its own, so a
+/// redial that reaches the prompt 3 seconds after the drop still rings.
+pub(crate) fn connection(p: &Profile, link: Link) -> Alert {
     let (key, title) = match link {
         Link::Lost => ("lost", "Connection lost"),
         Link::Ready => ("ready", "Ready to log in"),
         Link::Stopped => ("stopped", "Vosh stopped trying"),
     };
-    Some(Alert {
+    Alert {
         cap: format!("preset:{CONNECTION}:{key}"),
-        ..preset(CONNECTION, title.into(), None, parts)
-    })
+        ..preset(CONNECTION, title.into(), None, heard(p, CONNECTION))
+    }
 }
 
 /// A tell you got, from Comm.Channel.
@@ -282,7 +280,7 @@ fn tell(p: &Profile, msg: &Message) -> Option<Alert> {
     if field("channel") != Some("tell") || field("direction") != Some("received") {
         return None;
     }
-    let parts = parts(p, TELLS)?;
+    let parts = heard(p, TELLS);
     let speaker = field("speaker")
         .filter(|s| !s.is_empty())
         .unwrap_or("someone");
@@ -319,6 +317,12 @@ pub(crate) fn parts(p: &Profile, id: &str) -> Option<AlertParts> {
         banner: true,
         ..AlertParts::default()
     }))
+}
+
+/// What the preset `id` does in `p`: its parts while it is on, and
+/// nothing while it is off, so its alert only marks a row.
+fn heard(p: &Profile, id: &str) -> AlertParts {
+    parts(p, id).unwrap_or_default()
 }
 
 /// Whether `line` holds `name` as a whole word, with its capital. A

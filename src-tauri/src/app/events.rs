@@ -137,6 +137,13 @@ pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without
 /// at. The page half of the alerts will play its tone and show its
 /// notice.
 pub(crate) const ALERT: &str = "session://alert";
+/// Something for you happened in the session, the event of an alert
+/// preset or an alert a trigger or Lua raised, that rang nothing: its
+/// alert is off or quiet, or the 10 second cap held it back. The payload
+/// is the session alone. `onMark` hears it, and the sessions sidebar
+/// marks the row as an alert that rang does (Sessions Q9). Vosh sends it
+/// only for a session other than the selected one.
+pub(crate) const MARK: &str = "session://mark";
 /// The alerts of a Lua owner ended, as its plugin turned off, stopped or
 /// loaded again. The payload is a [`crate::alert::AlertsEnded`]. No page
 /// listener hears it yet.

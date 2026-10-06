@@ -205,6 +205,54 @@ async fn a_session_counts_as_in_front_only_while_vosh_is_and_its_row_is_selected
     h.finish(grid).await;
 }
 
+/// How many times `session://mark` marked the row of `session`.
+fn marks(h: &Harness, session: SessionId) -> usize {
+    h.events_of(session, "session://mark").len()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn with_every_preset_off_a_tell_behind_still_marks_its_row_and_rings_nothing() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(orla()).await;
+    let (one, two) = (h.first, h.open_session().await);
+    h.connect_to(one, &h.servers[0]).await;
+    h.connect_to(two, &h.servers[1]).await;
+    h.until("both logins", |h| {
+        let welcome = "Welcome to the fake Aabahran, Orla.";
+        h.screen_of(one).iter().any(|r| r.contains(welcome))
+            && h.screen_of(two).iter().any(|r| r.contains(welcome))
+    })
+    .await;
+    h.state.focus.set("main", true);
+    // Every preset ships off. A tell to the session behind marks its row
+    // (Sessions Q9), and the one to the session you look at marks
+    // nothing.
+    h.servers[0].push(&tell_from("Tolliver"));
+    // A line after the tell shows once the session read the tell.
+    h.servers[0].push(&line("Maren walks in."));
+    h.servers[1].push(&tell_from("Tolliver"));
+    h.until("the mark behind", |h| marks(h, two) == 1).await;
+    h.until("the line after the tell", |h| {
+        h.screen_of(one)
+            .iter()
+            .any(|r| r.contains("Maren walks in."))
+    })
+    .await;
+    assert_eq!(marks(&h, one), 0);
+    assert_eq!(alerts(&h, one), Vec::<Json>::new());
+    assert_eq!(alerts(&h, two), Vec::<Json>::new());
+    assert_eq!(h.state.banners.recorded().len(), 0);
+    // With Vosh in the background too, nothing rings and the row behind
+    // takes its mark again.
+    h.state.focus.set("main", false);
+    h.servers[1].push(&tell_from("Maren"));
+    h.until("the second mark", |h| marks(h, two) == 2).await;
+    assert_eq!(h.state.banners.recorded().len(), 0);
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
 /// Turn the plugin `name` on or off in the first session, and deliver
 /// what it asks for.
 async fn plugin(h: &Harness, name: &str, on: bool) {

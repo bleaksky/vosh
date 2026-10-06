@@ -140,6 +140,7 @@ event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
+event session://mark app heard
 event session://output app heard
 event session://prompt-gag-without-reader app heard
 event session://prompt-state app heard
