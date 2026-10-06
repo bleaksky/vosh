@@ -20,6 +20,9 @@ import { placeMenu } from '../ui/menuPlacement';
 // the scroll depth chip would paint over a menu left inside it. A
 // session row's menu opens at the pointer instead, as a right click
 // menu does, and rises from the pointer near the bottom of the window.
+// It never runs past the window's foot: it stops 8 above it, and a
+// surface with a list that scrolls, as the session popover's list of
+// sessions does, gives way there.
 
 const GAP_BELOW_ANCHOR = 12;
 const WINDOW_INSET = 8;
@@ -42,6 +45,8 @@ type Props = Placement & {
   label: string;
   /** `dialog` while the surface holds a form instead of commands. */
   kind?: 'menu' | 'dialog';
+  /** It holds a list that scrolls, which takes what height is left. */
+  listed?: boolean;
   onClose: () => void;
   children: ReactNode;
 };
@@ -70,6 +75,7 @@ export function ShellMenu({
   width,
   label,
   kind = 'menu',
+  listed = false,
   onClose,
   children,
 }: Props) {
@@ -165,8 +171,13 @@ export function ShellMenu({
       ref={ref}
       role={kind}
       aria-label={label}
-      className="shell-menu"
-      style={{ left: pos.left, top: pos.top, width }}
+      className={listed ? 'shell-menu is-listed' : 'shell-menu'}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        width,
+        maxHeight: `calc(100vh - ${pos.top + WINDOW_INSET}px)`,
+      }}
       onKeyDown={onKeyDown}
     >
       {children}
