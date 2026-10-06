@@ -1,3 +1,5 @@
+import { createStore } from './store';
+
 export type ToastKind = 'success' | 'info' | 'error';
 
 export interface Toast {
@@ -25,28 +27,20 @@ export interface ToastInput {
 const DEFAULT_TIMEOUT_MS = 5000;
 const ERROR_TIMEOUT_MS = 8000;
 
-// Module-level toast queue, same shape as chatStore: producers call
-// pushToast from anywhere (session state handlers, command results),
-// the Toasts component subscribes and renders whatever is queued.
-// Every toast but a sticky one self-dismisses on a store-owned timer —
-// errors linger longer — and dismissToast is always available for a
-// manual close.
-let toasts: Toast[] = [];
-let listeners: Array<(toasts: Toast[]) => void> = [];
+// Module-level toast queue. Producers call pushToast from anywhere
+// (session state handlers, command results), and the Toasts component
+// subscribes and renders whatever is queued. Every toast but a sticky
+// one dismisses itself on a timer the store owns, an error after a
+// longer wait, and dismissToast closes one by hand at any time.
+const store = createStore<Toast[]>([]);
 let nextId = 1;
 const timers = new Map<number, number>();
-
-function notify() {
-  const snapshot = toasts;
-  for (const l of listeners) l(snapshot);
-}
 
 export function pushToast(input: ToastInput): number {
   const id = nextId++;
   const toast: Toast = { id, kind: input.kind, message: input.message };
   if (input.meta !== undefined) toast.meta = input.meta;
   if (input.metaMono) toast.metaMono = true;
-  toasts = [...toasts, toast];
   if (!input.sticky) {
     const delay =
       input.timeoutMs ?? (input.kind === 'error' ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
@@ -55,7 +49,7 @@ export function pushToast(input: ToastInput): number {
       window.setTimeout(() => dismissToast(id), delay),
     );
   }
-  notify();
+  store.set([...store.get(), toast]);
   return id;
 }
 
@@ -65,18 +59,13 @@ export function dismissToast(id: number): void {
     window.clearTimeout(timer);
     timers.delete(id);
   }
+  const toasts = store.get();
   if (!toasts.some((t) => t.id === id)) return;
-  toasts = toasts.filter((t) => t.id !== id);
-  notify();
+  store.set(toasts.filter((t) => t.id !== id));
 }
 
-export function getToasts(): Toast[] {
-  return toasts;
-}
+export const getToasts = store.get;
 
 export function subscribeToasts(cb: (toasts: Toast[]) => void): () => void {
-  listeners.push(cb);
-  return () => {
-    listeners = listeners.filter((l) => l !== cb);
-  };
+  return store.subscribe(() => cb(store.get()));
 }
