@@ -1,7 +1,8 @@
 //! Safe file writes. [`write_with_backup`] swaps the new text in whole
 //! and keeps a few timestamped backups beside the file. It refuses every
 //! file on the unread file list, so a save never writes the defaults over
-//! settings Vosh could not read.
+//! settings Vosh could not read. [`swap_in`] swaps the text in whole and
+//! keeps no backup.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -46,34 +47,57 @@ pub(crate) fn write_with_backup(path: &Path, contents: &str) -> std::io::Result<
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = tmp_path_for(path);
-    if let Err(e) = swap_in(path, &tmp, contents) {
-        // A temp file the write left behind goes, and the original stays.
-        if tmp.is_file() {
-            let _ = std::fs::remove_file(&tmp);
-        }
-        return Err(e);
-    }
+    swap(path, contents, true)?;
     prune_backups(path, BACKUP_RETENTION);
     Ok(())
 }
 
-/// Steps 2 to 4 of [`write_with_backup`]. Nothing here moves or changes
-/// `path` before the last step, the rename that swaps `tmp` in.
-fn swap_in(path: &Path, tmp: &Path, contents: &str) -> std::io::Result<()> {
-    std::fs::write(tmp, contents)?;
-    if path.exists() {
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_millis());
-        let backup = backup_path_for(path, now_ms);
-        if let Err(e) = std::fs::copy(path, &backup) {
-            // A copy cut short is no backup.
-            let _ = std::fs::remove_file(&backup);
-            return Err(e);
-        }
+/// Write `contents` to `path` whole, as steps 2 and 4 of
+/// [`write_with_backup`] do, and keep no backup. `path` holds the old
+/// text or the new, never part of either, and a write that fails leaves
+/// the old file in place. A plugin's files go this way, since a backup
+/// in its folder would ride along when you export the plugin.
+pub(crate) fn swap_in(path: &Path, contents: &str) -> std::io::Result<()> {
+    swap(path, contents, false)
+}
+
+/// Steps 2 to 4 of [`write_with_backup`], the backup only when `back_up`
+/// asks for one. Nothing here moves or changes `path` before the last
+/// step, the rename that swaps the temp file in. A step that fails takes
+/// the temp file away, and the original stays.
+fn swap(path: &Path, contents: &str, back_up: bool) -> std::io::Result<()> {
+    let tmp = tmp_path_for(path);
+    let swapped = std::fs::write(&tmp, contents)
+        .and_then(|()| {
+            if back_up {
+                copy_to_backup(path)
+            } else {
+                Ok(())
+            }
+        })
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if swapped.is_err() && tmp.is_file() {
+        let _ = std::fs::remove_file(&tmp);
     }
-    std::fs::rename(tmp, path)
+    swapped
+}
+
+/// Step 3 of [`write_with_backup`]: copy the file at `path`, if any, to
+/// a timestamped backup beside it.
+fn copy_to_backup(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    let backup = backup_path_for(path, now_ms);
+    if let Err(e) = std::fs::copy(path, &backup) {
+        // A copy cut short is no backup.
+        let _ = std::fs::remove_file(&backup);
+        return Err(e);
+    }
+    Ok(())
 }
 
 fn tmp_path_for(path: &Path) -> PathBuf {
@@ -278,6 +302,20 @@ mod tests {
         release_unread(&renamed);
         write_with_backup(&renamed, "fixed = true\n").unwrap();
         assert_eq!(std::fs::read_to_string(&renamed).unwrap(), "fixed = true\n");
+    }
+
+    #[test]
+    fn swap_in_writes_the_file_whole_and_keeps_no_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("main.lua");
+        swap_in(&path, "-- v1\n").unwrap();
+        swap_in(&path, "-- v2\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "-- v2\n");
+        let names: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["main.lua"]);
     }
 
     /// Helper for the backup tests: list every `<file>.bak.<digits>`

@@ -26,6 +26,10 @@ use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 use crate::sessions::Session;
 
+// The Scripts commands of the next commit call it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) mod folder;
+
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
     #[error("io: {0}")]
@@ -151,12 +155,12 @@ impl PluginManager {
     }
 }
 
-/// A plugin's entry script as it stands on disk.
+/// A plugin's manifest and entry script as they stand on disk.
 #[derive(Debug)]
 pub(crate) struct PluginCode {
-    /// The entry script's path inside the plugin folder, as the manifest
-    /// names it.
-    pub(crate) entry: String,
+    /// What manifest.toml says, the entry script's path inside the
+    /// plugin folder among it.
+    pub(crate) manifest: PluginManifest,
     pub(crate) code: String,
 }
 
@@ -164,7 +168,7 @@ impl PluginCode {
     /// The chunk name the plugin `name` runs under, which its errors
     /// name, like `@vitals_alert/main.lua`.
     pub(crate) fn chunk(&self, name: &str) -> String {
-        format!("@{name}/{}", self.entry)
+        format!("@{name}/{}", self.manifest.entry)
     }
 }
 
@@ -193,10 +197,7 @@ pub(crate) fn read_plugin(
         return Err(not_found());
     }
     let outside = || PluginError::EntryOutside(name.to_string(), manifest.entry.clone());
-    let inside = std::path::Path::new(&manifest.entry)
-        .components()
-        .all(|part| matches!(part, std::path::Component::Normal(_)));
-    if !inside || manifest.entry.is_empty() {
+    if !entry_stays_inside(&manifest.entry) {
         return Err(outside());
     }
     let entry_path = dir.join(&manifest.entry);
@@ -213,8 +214,18 @@ pub(crate) fn read_plugin(
     }
     Ok(PluginCode {
         code: std::fs::read_to_string(entry_path)?,
-        entry: manifest.entry,
+        manifest,
     })
+}
+
+/// True when `entry`, a manifest's entry script, names a file below the
+/// plugin folder by its parts alone, with no `..`, `.` or root. A link
+/// on the way can still lead out, which the caller checks on disk.
+fn entry_stays_inside(entry: &str) -> bool {
+    !entry.is_empty()
+        && std::path::Path::new(entry)
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
 }
 
 /// True when `name` names one folder, with no separator and no `.` or
