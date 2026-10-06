@@ -527,7 +527,7 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 The panel on the right holds your panes, the map over your affects at first, with your vitals pinned at its foot. You arrange it in the window itself, and Vosh keeps the arrangement for each character.
 
 - Show or hide the panel with the panel button at the right end of the title band, with `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` elsewhere, or with `Show panel` in the View menu or the palette. While it is hidden your vitals move to the status line.
-- Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
+- Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
 - Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
 - Drag the line between two panes to share the space between them. Tab to a line and the arrow keys move it 8 points, or 32 with `Shift`.
 - Drag the panel's left edge to change its width, from 200 to 800 points, and double click the edge to go back to 300. Tab to the edge and the arrow keys move it 8 points. Settings has the same `Width` under Layout, then Panel.
@@ -563,11 +563,12 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 - Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows. A color too faint to read on the pane goes lighter or darker, with its hue kept, until it reads clearly. The terminal still shows the theme's own color.
 - Recolor a channel from the pane's menu. Choose `Channel colors`, then the channel, then `Default` or one of your theme's 16 terminal colors. The pane follows at once, each profile keeps its own picks, and a theme switch carries them along. `Reset all` gives every channel its default again.
 - Point at a message to see when it arrived.
-- Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.
+- Filter with the channel select beside the pane's name. `All` shows every channel, and `Everything else` shows the channels no other chat pane shows. Each chat pane keeps its own filter, so you can split one off for tells alone.
+- Add a second chat pane and it starts on `tell`. A pane on `All` turns to `Everything else` at the same moment, so each tell lands in one pane, and a note says so with `Undo` to put it back on `All`. The panel holds up to four chat panes.
 - Route trigger output in. On a trigger under Automation, then Triggers, put a name in `Send to pane` under `Advanced`. Those lines land in the chat pane under that name, in their own words.
 - See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
 
-The buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
+The buffer holds a rolling 500 lines, survives closing and reopening the pane, and empties only when you choose `Disconnect` or connect to another world. Every chat pane reads the same buffer. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
 ### 4.4 Configure the vitals readout
 
@@ -869,7 +870,7 @@ The session button in the title band holds the connection controls. Its dot show
 
 `Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
 
-Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you disconnect, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
+Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you choose `Disconnect` or connect to another world, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
