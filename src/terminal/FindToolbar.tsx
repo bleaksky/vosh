@@ -32,6 +32,9 @@ interface Props {
    *  total number of matches across the scrollback. Displayed as
    *  "N of M" to the right of the search input. */
   results?: { index: number; count: number };
+  /** Another session shows. The bar keeps its query, its options and its
+   *  count for when its session shows again. */
+  hidden?: boolean;
 }
 
 const ICON = {
@@ -85,7 +88,7 @@ function Toggle(props: {
 // The indicator resets to `idle` on every keystroke so the user
 // always sees the freshest result.
 export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToolbar(
-  { onFindNext, onFindPrevious, onClose, results }: Props,
+  { onFindNext, onFindPrevious, onClose, results, hidden = false }: Props,
   ref,
 ) {
   const [query, setQuery] = useState('');
@@ -185,6 +188,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
   return (
     <div
       className="ov-find"
+      hidden={hidden}
       role="search"
       aria-label="Find in scrollback"
       // Stop wheel from leaking into the terminal area so scrolling

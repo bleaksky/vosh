@@ -1,7 +1,7 @@
 // What the main window tells the macOS native surface under it, and what
 // it hears back. Each effect does nothing while xterm draws the terminal.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   nativeSurfaceReady,
   nativeSurfaceSetBlinkText,
@@ -44,6 +44,8 @@ function pushNativeChromeTokens(): void {
 }
 
 interface BridgeInputs {
+  /** The selected session, whose grid shows. */
+  session: number;
   /** Whether blinking text blinks now. */
   blinkText: boolean;
   /** Your prompt shows lifted. */
@@ -56,6 +58,7 @@ interface BridgeInputs {
 }
 
 export function useNativeSurfaceBridge({
+  session,
   blinkText,
   promptLifted,
   cardBand,
@@ -112,11 +115,20 @@ export function useNativeSurfaceBridge({
   // prompt shows lifted, and under your design while the prompt card
   // draws it in the text (the 2026-09-30 addendum, item 2). xterm keeps
   // its own ground while the card is open, so In the text stays as it
-  // is there and the card's marks still show.
+  // is there and the card's marks still show. Each session's grid keeps
+  // its own, and the grid a selection brings to the front hears it. The
+  // card goes with the selection, so the grid of the session left keeps
+  // only the bands of its lifted prompts.
+  const bandsTold = useRef<number | null>(null);
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;
-    void nativeSurfaceSetPromptBands(promptLifted === true || cardBand).catch(() => {});
-  }, [promptLifted, cardBand]);
+    const left = bandsTold.current;
+    if (left !== null && left !== session) {
+      void nativeSurfaceSetPromptBands(promptLifted === true, left).catch(() => {});
+    }
+    bandsTold.current = session;
+    void nativeSurfaceSetPromptBands(promptLifted === true || cardBand, session).catch(() => {});
+  }, [promptLifted, cardBand, session]);
 
   // The band under the open row reaches past its last glyph for the
   // prompt card's line break mark and caret.
