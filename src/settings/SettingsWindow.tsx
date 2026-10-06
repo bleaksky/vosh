@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
+  AFFECTS_DISPLAY_FIELDS,
   affectsDisplayFields,
   affectsDisplayOf,
   sameAffectsDisplay,
@@ -8,7 +9,8 @@ import {
 } from '../ipc/affects';
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
-import { getUiConfig, type UiConfig, type UiFields } from '../ipc/uiConfig';
+import { THEME_PREFS_FIELDS } from '../ipc/theme';
+import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
 import { followReplacedUiConfig } from '../ipc/uiConfigSave';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
@@ -79,23 +81,6 @@ function takePendingTarget(): SettingsTarget | null {
     return null;
   }
 }
-
-/** The fields the theme broadcasts carry. */
-const THEME_PREFS_FIELDS: readonly (keyof UiFields)[] = [
-  'theme',
-  'follow_system_appearance',
-  'light_theme',
-  'dark_theme',
-];
-
-/** The fields the affects display broadcast carries. */
-const AFFECTS_DISPLAY_FIELDS: readonly (keyof UiFields)[] = [
-  'affects_style',
-  'affects_marker',
-  'affects_tint',
-  'affects_running_out_hours',
-  'affects_almost_gone_hours',
-];
 
 function clearPendingTarget() {
   try {

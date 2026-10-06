@@ -45,7 +45,7 @@ import {
   VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
-import type { CustomTheme, ThemeChoice } from './theme';
+import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
 
 export interface SystemFontEntry {
   family: string;
@@ -405,9 +405,10 @@ export async function fetchUiConfig(): Promise<UiConfig> {
   // the built-in keeps meaning the built-in. Every window moves it the
   // same way, so the save sends no events.
   if (freed !== raw) {
-    // Picked by hand, since themePrefsOf in theme/theme.ts would close an import loop.
-    const { custom_themes, theme, follow_system_appearance, light_theme, dark_theme } = config;
-    const moved = { custom_themes, theme, follow_system_appearance, light_theme, dark_theme };
+    const moved: UiFields = {
+      custom_themes: config.custom_themes,
+      ...Object.fromEntries(THEME_PREFS_FIELDS.map((field) => [field, config[field]])),
+    };
     try {
       await setUiFields(moved);
     } catch (e) {

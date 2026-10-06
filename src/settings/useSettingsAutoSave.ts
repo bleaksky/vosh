@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../lib/pendingWrites';
+import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import {
   setUiFields,
   subscribeUiConfigReplaced,
@@ -38,14 +39,9 @@ interface AutoSave {
   failed: (error: unknown) => void;
 }
 
-/** The fields the shown theme comes from. */
-const THEME_FIELDS: readonly (keyof UiFields)[] = [
-  'theme',
-  'follow_system_appearance',
-  'light_theme',
-  'dark_theme',
-  'custom_themes',
-];
+/** The fields the shown theme comes from, the four that pick it and
+ *  the custom themes that can draw it. */
+const THEME_FIELDS = [...THEME_PREFS_FIELDS, 'custom_themes'] as const;
 
 /** The saves on their way to the backend. A pick sent at once can go
  *  while an earlier save still waits on its answer. */

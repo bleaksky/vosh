@@ -52,6 +52,16 @@ export function subscribeThemeChanged(cb: (id: string) => void): Promise<Unliste
   return listen<string>(THEME_CHANGED, (event) => cb(event.payload));
 }
 
+/** The four fields that decide which theme a window shows, as
+ *  THEME_PREFS_CHANGED carries them. ThemePrefs in theme/theme.ts picks
+ *  these from the UI config. */
+export const THEME_PREFS_FIELDS = [
+  'theme',
+  'follow_system_appearance',
+  'light_theme',
+  'dark_theme',
+] as const;
+
 /** Tell every window, this one included, the four theme fields. */
 export function emitThemePrefsChanged(prefs: ThemePrefs): Promise<void> {
   return emit(THEME_PREFS_CHANGED, prefs);
