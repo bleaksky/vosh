@@ -23,7 +23,7 @@ pub(crate) struct DockEntryPersist {
 
 /// Content types a pane can show. The panel holds at most one of
 /// each, so a type doubles as its leaf's default id. Mirrored by
-/// `PANE_TYPES` in src/lib/paneLayout.ts.
+/// `PANE_TYPES` in src/panel/paneLayout.ts.
 pub(crate) const PANE_TYPES: [&str; 5] = ["map", "affects", "group", "chat", "imm"];
 
 /// Schema version written into every saved pane layout.
@@ -267,7 +267,7 @@ impl PaneLayoutPersist {
     /// splits nested deeper than [`PANE_MAX_SPLIT_DEPTH`] flatten,
     /// weights become positive shares that sum to 1 (rounded to four
     /// places), and the root is always a split. The same rules run in
-    /// `sanitize` in src/lib/paneLayout.ts, and both are checked
+    /// `sanitize` in src/panel/paneLayout.ts, and both are checked
     /// against fixtures/pane-layout/sanitize.json.
     pub(crate) fn sanitize(&mut self) {
         self.version = PANE_LAYOUT_VERSION;
@@ -691,7 +691,7 @@ pub(crate) mod tests {
 
     #[test]
     fn sanitize_matches_the_shared_fixtures() {
-        // The same cases run against sanitize in src/lib/paneLayout.ts,
+        // The same cases run against sanitize in src/panel/paneLayout.ts,
         // so the two implementations cannot drift apart.
         let text = include_str!("../../../fixtures/pane-layout/sanitize.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();

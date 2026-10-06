@@ -24,7 +24,7 @@ use crate::sessions::Session;
 use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
-use super::connection::{Connection, SharedConnection};
+use super::connection::Connection;
 use super::prompt_view::emit_prompt_vars;
 use super::socket::Stream;
 use super::walk::{self, Walker};
@@ -46,16 +46,12 @@ impl OutputSink<'_> {
         }
     }
 
-    /// A prompt var of `connection` changed. A read sends the prompt vars
+    /// A prompt var of `session` changed. A read sends the prompt vars
     /// once after its output, and anything else sends them now.
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        connection: &SharedConnection,
-    ) {
+    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
-            OutputSink::Direct => emit_prompt_vars(app, connection, true).await,
+            OutputSink::Direct => emit_prompt_vars(app, session, true).await,
         }
     }
 }
@@ -101,14 +97,10 @@ impl ScriptIo<'_, '_> {
         }
     }
 
-    async fn prompt_vars<R: tauri::Runtime>(
-        &mut self,
-        app: &AppHandle<R>,
-        connection: &SharedConnection,
-    ) {
+    async fn prompt_vars<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session) {
         match self {
-            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, connection).await,
-            ScriptIo::Collect { .. } => emit_prompt_vars(app, connection, true).await,
+            ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, session).await,
+            ScriptIo::Collect { .. } => emit_prompt_vars(app, session, true).await,
         }
     }
 
@@ -258,7 +250,7 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
         if apply.prompt_vars_changed {
-            io.prompt_vars(app, &session.connection).await;
+            io.prompt_vars(app, session).await;
         }
         for owner in std::mem::take(&mut apply.ended) {
             crate::alert::end_owner(app, session, &owner);
@@ -374,9 +366,9 @@ pub(super) fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 /// Run `line` through the input pipeline and note what it asks of the
 /// saved profile. Call with the profile lock held, and the connection's
 /// after it. A `#profile reset`, or a `#profile load` that reads its file,
-/// swaps the live UI config and panes, so their generations move in the
-/// same step. The profile file it reads holds none of the shared settings,
-/// so `shared` goes back over the result.
+/// swaps the live UI config and panes, so the panes generation moves in
+/// the same step. The profile file it reads holds none of the shared
+/// settings, so `shared` goes back over the result.
 pub(super) fn run_and_note_line(
     state: &AppState,
     p: &mut Profile,
@@ -392,7 +384,7 @@ pub(super) fn run_and_note_line(
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
-        state.note_ui_config_replaced();
+        state.bump_panes_generation();
     }
     ran
 }

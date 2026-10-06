@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. R14 is done and passed your app check on October 4. The Rust half of R14b is done and waits for your app check with one session, since the page still opens one. The Rust half of alerts and auto reconnect comes next, once you approve it, and the page half of R14b follows R20. The last commit of each phase updates this line.
+Milestone 2 of the one window redesign is done. The refactor before 1.0 is under way and follows `docs/refactor-plan.md`, which holds the status of every phase and the decisions taken. Stage C ran R15 to R20, as you approved on October 4, and all six are done. Your app check comes next, followed by the page half of R14b. The last commit of each phase updates this line.

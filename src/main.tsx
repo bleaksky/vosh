@@ -2,23 +2,15 @@
 // window never shows the dark stylesheet defaults under a light theme.
 import './prepaint';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { SettingsApp } from './SettingsApp';
-import { HelpApp } from './HelpApp';
-// The chrome typeface from the Ember redesign. Bundled through Vite so
-// the app never fetches fonts at runtime. Inter carries chrome body
-// text. Terminal text stays on the bundled mono faces.
-import '@fontsource-variable/inter';
-import './styles.css';
+import MainWindow from './shell/MainWindow';
+import { SettingsWindow } from './settings/SettingsWindow';
+import { HelpWindow } from './help/HelpWindow';
 import './styles/index.css';
-// The One Window frame: the shell grid, title band, input band, and
-// status line. After the token sheet so it reads the new tokens.
-import './styles/frame.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
 // tweaks. The two known cases that matter today:
 //   - Windows: the frameless-transparent Tauri window cannot composite
-//     behind rounded corners, so `border-radius` on `.app` leaks white
+//     behind rounded corners, so `border-radius` on `.shell` leaks white
 //     at the corners. CSS drops the radius when this attribute is
 //     `windows`.
 //   - Windows + Linux: WebView2 / WebKitGTK use the system scrollbar
@@ -64,7 +56,7 @@ window.addEventListener('unhandledrejection', (e) =>
   showBootError('unhandled rejection', e.reason),
 );
 
-// One frontend bundle, multiple windows: the main window loads App;
+// One frontend bundle, multiple windows: the main window loads MainWindow;
 // auxiliary Tauri windows pass a `?view=...` query so this entry
 // renders the right component for each. StrictMode is off because
 // xterm.js does not survive the double-mount dance.
@@ -72,7 +64,9 @@ const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 try {
-  root.render(view === 'settings' ? <SettingsApp /> : view === 'help' ? <HelpApp /> : <App />);
+  root.render(
+    view === 'settings' ? <SettingsWindow /> : view === 'help' ? <HelpWindow /> : <MainWindow />,
+  );
 } catch (e) {
   showBootError('render failed', e);
   throw e;

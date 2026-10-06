@@ -14,7 +14,7 @@ use crate::profile::file::ProfileConfig;
 use crate::profile::set::ProfileSet;
 use crate::profile::tests::james_like_set;
 
-/// Every preset in the library src/lib/presets.ts holds.
+/// Every preset in the library src/automation/presets.ts holds.
 const LIBRARY: &[&str] = &[
     "healing_basics",
     "defensive_combat",
@@ -31,7 +31,7 @@ const LIBRARY: &[&str] = &[
 
 #[test]
 fn the_library_here_is_the_one_presets_ts_holds() {
-    let library = include_str!("../../../../src/lib/presets.ts");
+    let library = include_str!("../../../../src/automation/presets.ts");
     // Each preset opens with its id, four spaces in, in the order
     // the page lists them.
     let ids: Vec<&str> = library

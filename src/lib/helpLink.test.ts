@@ -1,13 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
-import {
-  HELP_GOTO_EVENT,
-  HELP_PENDING_KEY,
-  helpNoMatchNotice,
-  helpOpensOn,
-  openHelpTopic,
-} from './helpLink';
+import { HELP_GOTO } from '../ipc/events';
+import { HELP_PENDING_KEY, helpNoMatchNotice, helpOpensOn, openHelpTopic } from './helpLink';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({ emit: vi.fn(() => Promise.resolve()) }));
@@ -46,7 +41,7 @@ describe('opening Help on a target', () => {
   it('leaves it for a cold open, tells an open window, and opens the window', () => {
     openHelpTopic('prompt');
     expect(stored.get(HELP_PENDING_KEY)).toBe('prompt');
-    expect(emit).toHaveBeenCalledWith(HELP_GOTO_EVENT, 'prompt');
+    expect(emit).toHaveBeenCalledWith(HELP_GOTO, 'prompt');
     expect(invoke).toHaveBeenCalledWith('open_help_window');
   });
 });

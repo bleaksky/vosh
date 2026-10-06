@@ -969,7 +969,7 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
 }
 
 /// Whether the row a pinned prompt left is open after `out`, the way the
-/// page tracks it from each payload (src/lib/stores/pinnedPromptStore.ts)
+/// page tracks it from each payload (src/stores/session/pinnedPromptStore.ts)
 /// to decide whether Enter on an empty line echoes a line end.
 fn pin_row_after(open: bool, out: &Output) -> bool {
     match out.pin_row {

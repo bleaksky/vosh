@@ -263,10 +263,11 @@ pub(crate) struct UiConfig {
     /// pick them from the theme dropdown like any other theme.
     #[serde(default)]
     pub custom_themes: Vec<CustomTheme>,
-    /// CSS color string applied to the 1px border that separates the
-    /// split-scrollback history pane from the live pane. Empty or
-    /// missing means use the theme default (`--c-border`). Any valid
-    /// CSS color is accepted; e.g. `#ff00ff`, `rgb(255, 0, 0)`.
+    /// CSS color string applied to the handle between the
+    /// split-scrollback history pane and the live pane. Empty or
+    /// missing means use the theme default (`--split-divider`, the
+    /// theme's tertiary tone). Any valid CSS color is accepted; e.g.
+    /// `#ff00ff`, `rgb(255, 0, 0)`.
     #[serde(default)]
     pub split_divider_color: Option<String>,
     /// CSS color applied to locally-echoed sent input so the user can
@@ -431,8 +432,9 @@ pub(crate) struct UiConfig {
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
     /// the color the game prints it in. Only the pane menu writes it,
-    /// through its own commands, so a whole config save from Settings
-    /// never carries an old copy back.
+    /// through its own commands. `ui_get_config` leaves it out and
+    /// `ui_set_fields` takes no field for it, so Settings never holds a
+    /// copy.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub chat_colors: BTreeMap<String, String>,
 }
@@ -990,7 +992,7 @@ pub(crate) fn coerce_terminal_line_height(value: String) -> String {
 }
 
 /// The color visions the game color fit knows (`COLOR_VISIONS` in
-/// lib/gameFit.ts). Anything else saves as the default.
+/// src/theme/gameFit.ts). Anything else saves as the default.
 pub(crate) const COLOR_VISIONS: [&str; 4] = ["typical", "deuteranopia", "protanopia", "tritanopia"];
 
 pub(crate) fn default_color_vision() -> String {
@@ -1830,7 +1832,7 @@ name = "haste"
     }
 
     #[test]
-    fn chat_colors_stay_with_each_character_and_out_of_the_whole_config_save() {
+    fn chat_colors_stay_with_each_character() {
         let mut ui = UiConfig::default();
         assert!(ui.chat_colors.is_empty());
         // A profile with no recolor writes no table.

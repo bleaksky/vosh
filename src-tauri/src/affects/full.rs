@@ -62,7 +62,7 @@ use tauri::{AppHandle, Manager};
 use tracing::warn;
 
 use crate::affects::snapshot::AFFECTS_PACKAGE;
-use crate::app::events::{broadcast, AFFECT_FULL_CHANGED};
+use crate::app::events::AFFECT_FULL_CHANGED;
 use crate::app::state::SharedState;
 use crate::sessions::Session;
 
@@ -544,7 +544,7 @@ fn write_character(path: &Path, job: &WriteJob) -> Result<(), WriteError> {
 /// Tell every window the map of `session` changed, and write it once the
 /// burst settles.
 fn changed<R: tauri::Runtime>(app: &AppHandle<R>, session: &Arc<Session>, map: &FullMap) {
-    broadcast(app, AFFECT_FULL_CHANGED, map);
+    session.emit_data(app, AFFECT_FULL_CHANGED, map);
     schedule_write(app, session);
 }
 
@@ -608,7 +608,7 @@ pub(crate) fn character_known<R: tauri::Runtime>(
 /// A new connection of `session`: nothing shows until its first list.
 pub(crate) fn connect<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
     if session.affect_full.connect() {
-        broadcast(app, AFFECT_FULL_CHANGED, &FullMap::new());
+        session.emit_data(app, AFFECT_FULL_CHANGED, &FullMap::new());
     }
 }
 
@@ -619,7 +619,7 @@ pub(crate) fn disconnect<R: tauri::Runtime>(
     session: &Session,
 ) {
     if session.affect_full.disconnect(&state.affect_file) {
-        broadcast(app, AFFECT_FULL_CHANGED, &FullMap::new());
+        session.emit_data(app, AFFECT_FULL_CHANGED, &FullMap::new());
     }
 }
 

@@ -216,8 +216,8 @@ const NIGHT_FIRST_HOUR: i64 = 19;
 impl Daylight {
     /// The day or night a World.Time packet `data` says: its `sunlight`,
     /// where rise, light and set are day and dark is night, as
-    /// `isDaytime` in src/components/shell/daylight.ts reads it, or else
-    /// its hour. None when it says neither.
+    /// `isDaytime` in src/shell/daylight.ts reads it, or else its hour.
+    /// None when it says neither.
     pub(crate) fn of_world_time(data: &serde_json::Value) -> Option<Self> {
         let sunlight = data
             .get("sunlight")
@@ -1459,7 +1459,7 @@ mod tests {
 
     /// The status line counts the time left in whole seconds rounded up
     /// and warns once that reaches Warn at (computeTick in
-    /// src/lib/stores/tickStore.ts, whose test checks the same cases).
+    /// src/stores/session/tickStore.ts, whose test checks the same cases).
     /// Each case is the time into a 30 second tick and whether the
     /// status line warns there with Warn at 5.
     const WARN_BOUNDARY: [(f64, bool); 6] = [

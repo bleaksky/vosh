@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use serde_json::json;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::time::Instant;
 use tracing::{info, warn};
 use vosh_protocol::telnet::Negotiator;
@@ -135,9 +135,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     // becomes `Char-Vitals`). The page's `onGmcpPackage` helper makes the
     // same swap when it picks the event to listen to.
     let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
-    if let Err(e) = conn.app.emit(&event_name, &msg.data) {
-        warn!(error = %e, package = %msg.package, "failed to emit GMCP event");
-    }
+    conn.session.emit_data(&conn.app, &event_name, &msg.data);
     // `perf.gmcp_packets` already incremented by the caller before
     // we ran. This `emit` count would otherwise duplicate that, so
     // we leave gmcp_packets as the single source.

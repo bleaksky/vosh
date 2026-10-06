@@ -5,16 +5,15 @@
 
 use std::collections::BTreeMap;
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::time::Instant;
-use tracing::warn;
 
 use crate::app::events;
 use crate::profile::live::Profile;
 use crate::prompt::{client_values, keep_table};
 use crate::sessions::Session;
 
-use super::connection::{Connection, SharedConnection};
+use super::connection::Connection;
 
 #[cfg(test)]
 thread_local! {
@@ -169,22 +168,21 @@ pub(super) async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, se
 /// went stale or was unset drops out.
 pub(super) async fn emit_prompt_vars<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    connection: &SharedConnection,
+    session: &Session,
     always: bool,
 ) {
-    let vars = connection.lock().prompt.take_prompt_vars(always);
+    let vars = session.connection.lock().prompt.take_prompt_vars(always);
     if let Some(vars) = vars {
-        send_prompt_vars(app, &vars);
+        send_prompt_vars(app, session, &vars);
     }
 }
 
 pub(super) fn send_prompt_vars<R: tauri::Runtime>(
     app: &AppHandle<R>,
+    session: &Session,
     vars: &BTreeMap<String, String>,
 ) {
-    if let Err(e) = app.emit(events::PROMPT_VARS, vars) {
-        warn!(error = %e, "failed to emit prompt vars");
-    }
+    session.emit_data(app, events::PROMPT_VARS, vars);
 }
 
 /// The prompt state while the card watches the prompt of `session`, for

@@ -5,9 +5,10 @@
 //! Each event of the session's stream whose payload is an object names
 //! the session that sent it in a `session` field beside the payload's
 //! own, through [`crate::sessions::Session::emit`], and `session://output`
-//! names it in [`crate::output::OutputPayload`]. `session://prompt-vars`,
-//! a map of values, and the GMCP packages, each the packet as the game
-//! sent it, keep their shape.
+//! names it in [`crate::output::OutputPayload`]. The GMCP packages, each
+//! the packet as the game sent it, `session://prompt-vars`, a map of
+//! values, and `vosh://affect-full-changed`, a map of fulls, carry
+//! `{session, data}` through [`crate::sessions::Session::emit_data`].
 //!
 //! Two names stay where they are built. The session sends each GMCP
 //! package from a `format!` template in session/gmcp.rs,
@@ -26,8 +27,8 @@
 //!
 //! The profile's `[prompt]` table rides along the same way, so a
 //! `#prompt` or `#unprompt` line tells Settings to read the prompt
-//! switch and design again. Settings saves its whole config, and a copy
-//! it read before would otherwise put the old ones back.
+//! switch and design again. Settings saves its whole `[prompt]` table,
+//! and a copy it read before would otherwise put the old ones back.
 //!
 //! So do the macro groups. The command line keeps its own map of the
 //! macro keys that fire, so a `#group` line or a Lua
@@ -95,8 +96,9 @@ pub(crate) const ROUTED: &str = "session://routed";
 /// [`vosh_prompt::values::Hidden`]. `onHidden` hears it.
 pub(crate) const HIDDEN: &str = "session://hidden";
 /// Your prompt values, when they changed or a prompt Vosh read sends
-/// them anyway. The payload maps each value's name to its text, with
-/// `?` for a value the game hides. `onPromptVars` hears it.
+/// them anyway. The payload is `{session, data}`, and `data` maps each
+/// value's name to its text, with `?` for a value the game hides.
+/// `onPromptVars` hears it.
 pub(crate) const PROMPT_VARS: &str = "session://prompt-vars";
 /// Whether Vosh reads your prompt, when that changed. The payload is
 /// `{status, last_match_at}`. `onPromptStatus` and
@@ -209,17 +211,18 @@ pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";
 /// null. `subscribeMigrationApplied` hears it.
 pub(crate) const MIGRATION_APPLIED: &str = "vosh://migration-applied";
 /// Sent to every window with the whole map of a session's connection
-/// whenever it changes, see [`crate::affects::full::FullMap`]. The map
-/// names no session. `subscribeAffectFullChanged` hears it.
+/// whenever it changes. The payload is `{session, data}`, and `data` is
+/// the [`crate::affects::full::FullMap`]. `subscribeAffectFullChanged`
+/// hears it.
 pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
 // The profile's `[ui]` table.
 
 /// Sent last by [`broadcast_profile_ui`]. The live
 /// profile's whole UI config was replaced, by a switch, an import,
-/// `#profile load` or `reset`. A window that saves the whole config
-/// (Settings) reads it again here, or its next save writes the old
-/// profile's values back. The payload is null.
+/// `#profile load` or `reset`. Settings reads the new config here and
+/// drops a save still waiting, which would write what you changed on
+/// the old profile onto the new one. The payload is null.
 /// `subscribeUiConfigReplaced` hears it.
 pub(crate) const UI_CONFIG_REPLACED: &str = "vosh://ui-config-replaced";
 /// Sent to every window with the pane layout whenever it changes: a
@@ -265,7 +268,7 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 // Windows and the menu.
 
 /// Sent to the main window on `#help <words>`. The payload is the
-/// words. `App` hears it and opens Help on the best match.
+/// words. `useAppCommands` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
@@ -279,7 +282,7 @@ pub(crate) const APP_MENU: &str = "vosh://app-menu";
 #[cfg(target_os = "macos")]
 pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
 /// Find, chosen while Help is in front, focuses the help search. The
-/// payload is null. `HelpApp` hears it.
+/// payload is null. `HelpWindow` hears it.
 #[cfg(target_os = "macos")]
 pub(crate) const HELP_FIND: &str = "vosh://help-find";
 
@@ -299,11 +302,12 @@ pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
 pub(crate) const NATIVE_COPIED: &str = "vosh://native-copied";
 /// A click the page forwarded to the native surface ended. The page
 /// cancels the press, so no DOM mouseup follows, and the command line
-/// takes focus from this instead. The payload is null. `App` hears it.
+/// takes focus from this instead. The payload is null.
+/// `useNativeSurfaceBridge` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
 /// The pointer over the native surface wants another cursor. The
-/// payload is the CSS cursor name. `App` hears it.
+/// payload is the CSS cursor name. `useNativeSurfaceBridge` hears it.
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 
@@ -570,7 +574,7 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
 /// the pane generation under the profile lock as they swap. Only a
 /// switch also sends `vosh://profile-switched`, so the status line hears
 /// these here after an import, a load, or a reset, and Settings reads
-/// its whole config again on [`UI_CONFIG_REPLACED`].
+/// the new config on [`UI_CONFIG_REPLACED`].
 pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,

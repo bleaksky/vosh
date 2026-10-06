@@ -10,7 +10,7 @@ import {
   setAppMenuState,
   type MenuStateInput,
 } from './appMenu';
-import { buildPaletteEntries, type PaletteDeps } from './palette';
+import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
