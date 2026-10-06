@@ -12,6 +12,7 @@ import { startGamePromptStore } from './gmcp/gamePromptStore';
 import { startHiddenStore } from './gmcp/hiddenStore';
 import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startRoomStore } from './gmcp/roomStore';
+import { startSessionsStore } from './session/sessionsStore';
 import { startTargetStore } from './session/targetStore';
 import { startTickCountStore } from './config/tickCountStore';
 import { startTickStore } from './session/tickStore';
@@ -28,7 +29,10 @@ import { startWorldStore } from './gmcp/worldStore';
 // Each start is idempotent, and each store also starts itself on its
 // first subscribe as a fallback.
 export function startStores(): void {
-  // First, so every store that ORs in the hidden state finds it
+  // The sessions first, so every store that shows the selected one
+  // finds the list on its way.
+  startSessionsStore();
+  // Then the hidden state, so every store that ORs it in finds it
   // listening.
   startHiddenStore();
   startChatStore();

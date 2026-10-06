@@ -172,16 +172,6 @@ const UNHEARD: &[Unheard] = &[
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",
     },
-    Unheard {
-        name: "vosh://session-selected",
-        why: "A click on a banner selected a session. The page opens one \
-              session until the page half of R14b after R20.",
-    },
-    Unheard {
-        name: "vosh://sessions-changed",
-        why: "The rows after a change to the session list. The sidebar and \
-              Settings of the R14b page half hear it in the next commits of A1.",
-    },
 ];
 
 /// A name argument, as far as the source tells it.
