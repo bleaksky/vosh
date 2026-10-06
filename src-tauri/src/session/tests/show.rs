@@ -1158,3 +1158,47 @@ fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
         }
     }
 }
+
+/// What the native grid shows after you send `line` with the prompt
+/// pinned and the game answers it, from the screen login left: its rows,
+/// how many rows its cursor sits below the last that shows anything, and
+/// its rows once a tell comes after.
+fn pinned_after(line: &str) -> (Vec<String>, i32, Vec<String>) {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    use vosh_prompt::PromptShow;
+    let mut mud = Mud::playing(Options::new(Build::New));
+    let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
+    let mut grid = crate::native::grid::TermGrid::new(60, 30);
+    grid.session_output(&session.read(&mud.login()).out);
+    let _ = session.send(line);
+    grid.local_write(format!("{}{line}\r\n", crate::input::ECHO_CARET).as_bytes());
+    session.local_write();
+    for write in mud.command(line) {
+        grid.session_output(&session.read(&write.bytes).out);
+    }
+    let rows = rows_of(&grid);
+    let last = i32::try_from(rows.len()).expect("few rows") - 1;
+    let below = grid.cursor().0 - last;
+    let tell = mud.pulse_later("Quenby tells you 'back soon'");
+    grid.session_output(&session.read(&tell).out);
+    (rows, below, rows_of(&grid))
+}
+
+#[test]
+fn a_blank_enter_while_pinned_leaves_the_text_where_a_command_does() {
+    // The game answers a blank line with a line end and the prompt
+    // (comm.c process_output), and `look` with its lines, a line end and
+    // the prompt. Either way the text waits on its last row, your echo
+    // for the blank line.
+    let (look, look_below, look_then) = pinned_after("look");
+    let (blank, blank_below, blank_then) = pinned_after("");
+    assert_eq!(look.last().map(String::as_str), Some("[Exits: south]"));
+    assert_eq!(blank.last().map(String::as_str), Some("\u{203a}"));
+    assert_eq!(blank_below, look_below, "look {look:?}\nblank {blank:?}");
+    assert_eq!(look_below, 0);
+    // What comes next starts after the empty row the game sent before
+    // the prompt, as it did before.
+    let tell = "Quenby tells you 'back soon'".to_string();
+    assert_eq!(look_then[look.len()..], [String::new(), tell.clone()]);
+    assert_eq!(blank_then[blank.len()..], [String::new(), tell]);
+}

@@ -260,6 +260,10 @@ export class RegionWriter {
   /** Line ends an output held back, written before the next write lands
    *  at the cursor. */
   private pendingHold = '';
+  /** `pendingHold` is the line end your echo ended on, and no session
+   *  output came since, so the line ends the next one holds back come
+   *  after it. */
+  private echoHeld = false;
   /** The row a pinned prompt left is where the next write lands. */
   private pinRow = false;
   /** Told where a replace that writes nothing erased from. */
@@ -515,7 +519,13 @@ export class RegionWriter {
       return;
     }
     if (item.kind === 'local') {
-      this.landText(item.text);
+      // While your prompt shows pinned, the line ends your echo ends on
+      // wait as held line ends do, so a reply that brings only a prompt
+      // leaves the text on your echo's row, as the last line of any
+      // other reply does. Only a pinned prompt brings held line ends or
+      // leaves its row open.
+      const pinned = this.pendingHold.length > 0 || this.pinRow;
+      this.landText(item.text, undefined, pinned);
       return;
     }
     const { replace } = item.out;
@@ -567,7 +577,17 @@ export class RegionWriter {
    *  the restore, once its text is written. `wrote` says it wrote text. */
   private settle(out: RegionOutput, wrote: boolean): void {
     const hold = out.hold ?? '';
-    if (wrote || hold.length > this.pendingHold.length) this.pendingHold = hold;
+    if (wrote) {
+      this.pendingHold = hold;
+    } else if (this.echoHeld) {
+      // The game's line ends come after your echo's own.
+      if (hold.length > 0) {
+        this.pendingHold += hold;
+        this.echoHeld = false;
+      }
+    } else if (hold.length > this.pendingHold.length) {
+      this.pendingHold = hold;
+    }
     if (out.pinRow !== undefined) this.pinRow = out.pinRow;
     if (out.restore !== undefined && this.openGen !== null) {
       this.restore = { gen: this.openGen, text: out.restore };
@@ -576,18 +596,30 @@ export class RegionWriter {
 
   /** Write `text` at the cursor after the held line ends, then run
    *  `then`. Your echo waits for xterm to parse what came before it, so
-   *  the row it lands on can decide its mark. */
-  private landText(text: string, then?: () => void): void {
+   *  the row it lands on can decide its mark. `hold` keeps back the line
+   *  ends it ends on, as held line ends. */
+  private landText(text: string, then?: () => void, hold = false): void {
     this.writeHold();
     if (!text.startsWith(ECHO_CARET)) {
-      this.write(this.land(text));
+      this.writeLanded(this.land(text), hold);
       then?.();
       return;
     }
     this.afterParse(() => {
-      this.write(this.withoutMark(this.land(text)));
+      this.writeLanded(this.withoutMark(this.land(text)), hold);
       then?.();
     });
+  }
+
+  /** Write `text`, keeping back the line ends it ends on when `hold`
+   *  says so. */
+  private writeLanded(text: string, hold: boolean): void {
+    const at = hold ? lineEndsStart(text) : text.length;
+    this.write(text.slice(0, at));
+    if (at < text.length) {
+      this.pendingHold = text.slice(at);
+      this.echoHeld = true;
+    }
   }
 
   /** Your echo `text` without its mark when the row it lands on already
@@ -617,6 +649,7 @@ export class RegionWriter {
     if (this.pendingHold.length === 0) return false;
     const hold = this.pendingHold;
     this.pendingHold = '';
+    this.echoHeld = false;
     this.write(hold);
     return true;
   }
@@ -681,4 +714,13 @@ export class RegionWriter {
     }
     return null;
   }
+}
+
+/** Where the run of `\r` and `\n` that `text` ends on starts, when it
+ *  holds a line end. `text.length` when there is none. The native grid's
+ *  twin is `line_ends_start` in regions.rs. */
+function lineEndsStart(text: string): number {
+  let at = text.length;
+  while (at > 0 && (text[at - 1] === '\r' || text[at - 1] === '\n')) at--;
+  return text.slice(at).includes('\n') ? at : text.length;
 }
