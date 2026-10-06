@@ -31,10 +31,15 @@ export const LUA_PANE = 'lua';
 export type PaneKind = PaneType | typeof LUA_PANE;
 
 /** A pane as the tree tells it apart: its type, plus the props that
- *  name a Lua pane. A leaf is one. */
+ *  name a Lua pane. A leaf is one, and the tree operations place one. */
 export interface PaneRef {
   pane: PaneKind;
   props: Record<string, string>;
+}
+
+/** The reference to a built-in pane, which needs no props. */
+export function paneRef(pane: PaneType): PaneRef {
+  return { pane, props: {} };
 }
 
 /** What makes a pane one of a kind in the tree: its type for a
@@ -388,24 +393,31 @@ export function findNode(tree: PaneNode, id: string): PaneNode | null {
   return null;
 }
 
-/** The id of the leaf showing `pane`, or null when the panel does not
+/** The id of the leaf showing `ref`, or null when the panel does not
  *  show it. */
-export function leafIdFor(node: PaneNode, pane: PaneType): string | null {
-  if (isLeaf(node)) return node.pane === pane ? node.id : null;
-  for (const child of node.children) {
-    const hit = leafIdFor(child, pane);
-    if (hit !== null) return hit;
-  }
-  return null;
+export function leafIdFor(node: PaneNode, ref: PaneRef): string | null {
+  const key = paneKey(ref);
+  let hit: string | null = null;
+  walk(node, (n) => {
+    if (hit === null && isLeaf(n) && paneKey(n) === key) hit = n.id;
+  });
+  return hit;
 }
 
-/** Built-in pane types in the tree, in reading order. */
-export function allPanes(tree: PaneSplit): PaneType[] {
-  const out: PaneType[] = [];
+/** The paneKey of every pane in the tree, in reading order. A built-in
+ *  pane's key is its type. */
+export function allPanes(tree: PaneSplit): string[] {
+  const out: string[] = [];
   walk(tree, (n) => {
-    if (isLeaf(n) && isPaneType(n.pane)) out.push(n.pane);
+    if (isLeaf(n)) out.push(paneKey(n));
   });
   return out;
+}
+
+// Drop the leaf showing `ref`, so the tree can place it somewhere else.
+function withoutPane(tree: PaneSplit, ref: PaneRef): PaneSplit {
+  const key = paneKey(ref);
+  return removeWhere(tree, (n) => isLeaf(n) && paneKey(n) === key);
 }
 
 /** `base` if no node uses it yet, else `base-2`, `base-3`, and so on. */
@@ -417,6 +429,11 @@ function freshId(tree: PaneSplit, base: string): string {
     const candidate = `${base}-${n}`;
     if (!ids.has(candidate)) return candidate;
   }
+}
+
+// A new leaf showing `ref`, with an id `tree` does not use yet.
+function freshLeaf(tree: PaneSplit, ref: PaneRef): PaneLeaf {
+  return { id: freshId(tree, ref.pane), pane: ref.pane, weight: 1, props: ref.props };
 }
 
 // Drop every non-root node matching `pred`. The result may hold empty
@@ -442,21 +459,16 @@ function mapTree(tree: PaneSplit, id: string, fn: (n: PaneNode) => PaneNode): Pa
   return isLeaf(out) ? tree : out;
 }
 
-/** Split the node `id` and put `newPane` after it: to its right for
+/** Split the node `id` and put `ref` after it: to its right for
  *  `row`, below it for `column`. Inside a split of the same direction
  *  the new pane becomes a sibling and the two halve the old share.
  *  A pane already shown elsewhere moves here. */
-export function splitPane(
-  tree: PaneSplit,
-  id: string,
-  dir: SplitDir,
-  newPane: PaneType,
-): PaneSplit {
+export function splitPane(tree: PaneSplit, id: string, dir: SplitDir, ref: PaneRef): PaneSplit {
   const target = findNode(tree, id);
   if (target === null || id === tree.id) return tree;
-  if (isLeaf(target) && target.pane === newPane) return tree;
-  const base = removeWhere(tree, (n) => isLeaf(n) && n.pane === newPane);
-  const fresh: PaneLeaf = { id: freshId(base, newPane), pane: newPane, weight: 1, props: {} };
+  if (isLeaf(target) && paneKey(target) === paneKey(ref)) return tree;
+  const base = withoutPane(tree, ref);
+  const fresh = freshLeaf(base, ref);
   const splitId = freshId(base, 'split');
   const insert = (node: PaneSplit): PaneSplit => {
     const at = node.children.findIndex((c) => c.id === id);
@@ -489,14 +501,16 @@ export function closePane(tree: PaneSplit, id: string): PaneSplit {
   return sanitize(removeWhere(tree, (n) => n.id === id));
 }
 
-/** Show `pane` in the leaf `id` instead of what it shows now (Show
- *  here instead). The leaf keeps its id and share and starts with
- *  fresh props. A pane already shown elsewhere moves here. */
-export function replacePane(tree: PaneSplit, id: string, pane: PaneType): PaneSplit {
+/** Show `ref` in the leaf `id` instead of what it shows now (Show
+ *  here instead). The leaf keeps its id and share and starts with the
+ *  props of `ref`. A pane already shown elsewhere moves here. */
+export function replacePane(tree: PaneSplit, id: string, ref: PaneRef): PaneSplit {
   const target = findNode(tree, id);
-  if (target === null || !isLeaf(target) || target.pane === pane) return tree;
-  const base = removeWhere(tree, (n) => isLeaf(n) && n.pane === pane);
-  return sanitize(mapTree(base, id, (n) => ({ id: n.id, pane, weight: n.weight, props: {} })));
+  if (target === null || !isLeaf(target) || paneKey(target) === paneKey(ref)) return tree;
+  const base = withoutPane(tree, ref);
+  return sanitize(
+    mapTree(base, id, (n) => ({ id: n.id, pane: ref.pane, weight: n.weight, props: ref.props })),
+  );
 }
 
 /** Set the shares of split `parentId`'s children, one weight per
@@ -514,16 +528,16 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
   );
 }
 
-/** Add `pane` at the bottom of the panel (Add a pane). Its share
+/** Add `ref` at the bottom of the panel (Add a pane). Its share
  *  stands to the panes already there as its reading height stands to
  *  theirs, so a short list such as Group takes a short share and the
  *  panes above keep their rows. An even share would squeeze Affects to
  *  its minimum and leave Group half empty. A row root nests under a new
  *  column so the pane still lands at the bottom. A pane already shown
  *  leaves the tree alone. */
-export function addPane(tree: PaneSplit, pane: PaneType): PaneSplit {
-  if (allPanes(tree).includes(pane)) return tree;
-  const fresh: PaneLeaf = { id: freshId(tree, pane), pane, weight: 1, props: {} };
+export function addPane(tree: PaneSplit, ref: PaneRef): PaneSplit {
+  if (leafIdFor(tree, ref) !== null) return tree;
+  const fresh = freshLeaf(tree, ref);
   if (tree.children.length === 0) {
     return sanitize({ ...tree, split: 'column', children: [fresh] });
   }
@@ -532,7 +546,7 @@ export function addPane(tree: PaneSplit, pane: PaneType): PaneSplit {
   const held = above.reduce((acc, c) => acc + c.weight, 0);
   const read = above.reduce((acc, c) => acc + readingHeight(c), 0);
   const weight =
-    held > 0 && read > 0 ? (held * PANE_MIN_H[pane]) / read : 1 / Math.max(1, above.length);
+    held > 0 && read > 0 ? (held * PANE_MIN_H[ref.pane]) / read : 1 / Math.max(1, above.length);
   return sanitize({
     id: tree.id,
     split: 'column',

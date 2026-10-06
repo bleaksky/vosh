@@ -4,11 +4,13 @@ import {
   closePane,
   isLeaf,
   leafIdFor,
+  paneRef,
   replacePane,
   sanitize,
   splitPane,
   type PaneLeaf,
   type PaneNode,
+  type PaneRef,
   type PaneSplit,
   type PaneType,
   type SplitDir,
@@ -29,8 +31,9 @@ export function usePaneLeaf(): PaneLeaf | null {
 }
 
 /** The pane a split adds: the first one the panel does not show. */
-export function paneToSplitIn(): PaneType | null {
-  return paneTypesToAdd(getPanelLayout()?.root ?? null)[0] ?? null;
+export function paneToSplitIn(): PaneRef | null {
+  const pane = paneTypesToAdd(getPanelLayout()?.root ?? null)[0];
+  return pane === undefined ? null : paneRef(pane);
 }
 
 export function splitHere(id: string, dir: SplitDir): void {
@@ -40,9 +43,9 @@ export function splitHere(id: string, dir: SplitDir): void {
   setPaneTree(splitPane(root, id, dir, pane));
 }
 
-export function showHereInstead(id: string, pane: PaneType): void {
+export function showHereInstead(id: string, ref: PaneRef): void {
   const root = getPanelLayout()?.root;
-  if (root) setPaneTree(replacePane(root, id, pane));
+  if (root) setPaneTree(replacePane(root, id, ref));
 }
 
 export function closeHere(id: string): void {
@@ -55,15 +58,16 @@ export function closeHere(id: string): void {
  *  comes back with it. */
 export function togglePane(pane: PaneType): void {
   updatePanelLayout((l) => {
-    const leaf = leafIdFor(l.root, pane);
+    const ref = paneRef(pane);
+    const leaf = leafIdFor(l.root, ref);
     if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
-    return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, pane) };
+    return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, ref) };
   });
 }
 
 /** Add a pane from the title band, at the bottom of the panel. */
 export function addPaneType(pane: PaneType): void {
-  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, pane) }));
+  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, paneRef(pane)) }));
 }
 
 /** Merge `patch` into the props of leaf `id`. An empty string value
