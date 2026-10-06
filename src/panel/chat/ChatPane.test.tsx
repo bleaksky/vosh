@@ -4,7 +4,8 @@ import { parseCommChannel, parseRoutedLine, type ChatLine } from '../../stores/g
 import { findTheme, themeTokens } from '../../theme/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
-import { ChatLog } from './ChatPane';
+import { PaneLeafContext } from '../paneActions';
+import { ChatLog, ChatPane } from './ChatPane';
 import { CHAT_TAG_OPACITY, normalizeChatColors } from './chatColors';
 import { chatTime } from '../paneText';
 
@@ -15,6 +16,25 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
+
+// The panel's tree, which a Chat pane reads for the channels the other
+// Chat panes show on their own, and the live theme it draws in.
+vi.mock('../panelLayoutStore', async (actual) => ({
+  ...(await actual<typeof import('../panelLayoutStore')>()),
+  usePanelLayout: () => null,
+}));
+vi.mock('../../theme/useActiveTheme', async () => {
+  const { findTheme } = await import('../../theme/themes');
+  return { useActiveTheme: () => findTheme('kanso-zen') };
+});
+vi.mock('../../theme/fitGameColors', async () => {
+  const { findTheme } = await import('../../theme/themes');
+  return { usePlayPalette: () => findTheme('kanso-zen').xterm };
+});
+vi.mock('../../stores/config/chatColorsStore', async () => {
+  const { NO_CHAT_COLORS } = await import('./chatColors');
+  return { useChatColors: () => NO_CHAT_COLORS };
+});
 
 const kanso = findTheme('kanso-zen').xterm;
 const rubric = findTheme('rubric').xterm;
@@ -242,5 +262,22 @@ describe('the chat line in panel.css', () => {
     expect(tag).toContain(`opacity: ${CHAT_TAG_OPACITY};`);
     expect(rule('.pane-chat-tag.is-solid')).toContain('opacity: 1;');
     expect(rule('.pane-chat-speaker')).toContain('font-weight: 700;');
+  });
+});
+
+describe('ChatPane', () => {
+  const header = (props: Record<string, string>) =>
+    renderToStaticMarkup(
+      <PaneLeafContext.Provider value={{ id: 'chat', pane: 'chat', weight: 1, props }}>
+        <ChatPane />
+      </PaneLeafContext.Provider>,
+    );
+
+  it('names its filter on the select and says what will show here', () => {
+    const rest = header({ rest: '1' });
+    expect(rest).toContain('aria-label="Channel, Everything else"');
+    expect(rest).toContain('Messages on other channels appear here.');
+    expect(header({ channel: 'tell' })).toContain('aria-label="Channel, tell"');
+    expect(header({})).toContain('aria-label="Channel, All"');
   });
 });

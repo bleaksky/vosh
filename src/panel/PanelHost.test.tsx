@@ -125,4 +125,24 @@ describe('PanelHost', () => {
     layout = null;
     expect(html.match(/class="pane pane-chat"/g)).toHaveLength(2);
   });
+
+  it('names each Chat pane by its filter only while two or more show', () => {
+    options = DEFAULT_VITALS_OPTIONS;
+    const chatLabels = (...props: Record<string, string>[]) => {
+      layout = sanitizeLayout({
+        root: {
+          split: 'column',
+          children: props.map((p, i) => ({ id: `chat-${i}`, pane: 'chat', props: p })),
+        },
+      });
+      const html = renderToStaticMarkup(<PanelHost promptShow={null} />);
+      layout = null;
+      return [...html.matchAll(/class="pane pane-chat" aria-label="([^"]*)"/g)].map((m) => m[1]);
+    };
+    expect(chatLabels({ channel: 'tell' }, { rest: '1' })).toEqual([
+      'Chat, tell',
+      'Chat, Everything else',
+    ]);
+    expect(chatLabels({ channel: 'tell' })).toEqual(['Chat']);
+  });
 });
