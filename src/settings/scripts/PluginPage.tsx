@@ -13,7 +13,7 @@ import { Button, Card, Segmented, Toggle, cx, type SegmentedOption } from '../..
 import { CodeEditor } from '../../ui/CodeEditor';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import type { LeaveGuard } from '../pageTypes';
-import { useCloseGuard } from '../automation/useCloseGuard';
+import { useCloseGuard } from '../useCloseGuard';
 import { LuaConsole } from './LuaConsole';
 import { ManifestCard } from './ManifestCard';
 import { errorMark, saveStatus, stopNote, type PluginSave } from './pluginState';

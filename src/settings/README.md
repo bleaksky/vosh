@@ -11,7 +11,7 @@ A page is the component its folder is named for, like `layout/LayoutPage.tsx`, a
 - `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Never keep a second copy of the config, since every page shows this one and each save reads what a field held from it.
 - `pathB` is true in loadout mode.
 - `navigate(target)` goes somewhere else in Settings.
-- `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group, or to another page inside the group, like the crumb back to Scripts from a plugin's page. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation and a plugin's page use it to ask before they drop unsaved changes. Clear it with null when the page unmounts.
+- `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group, or to another page inside the group, like the crumb back to Scripts from a plugin's page. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation and a plugin's page use it to ask before they drop unsaved changes. Clear it with null when the page unmounts. To ask the same before the window closes, a page calls `useCloseGuard` from `useCloseGuard.ts`, beside the frame.
 
 Register a page in `PAGES` in `SettingsWindow.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there. `selfScroll` can also be a function of the target, for a group where only some targets scroll on their own.
 
