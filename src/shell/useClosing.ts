@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { closeSession as closeSessionCall, type SessionRow } from '../ipc/session';
 import { errorText } from '../lib/text';
@@ -12,6 +12,12 @@ import { closeSessionQuestion, closeWindowQuestion, type CloseQuestion } from '.
 // otherwise, and Close window asks while any session is connected. Each
 // question names the sessions as closeQuestions words them, and the main
 // window draws it. Closing the last session closes the window.
+//
+// The red light on macOS and the close button on Windows and Linux reach
+// the window's close request, which the window always holds and answers
+// itself, so they ask as the Close window command does. A close for
+// real lets go of the request first, as Settings does, or it would come
+// back here.
 
 /** The question on screen, with what its danger button does. */
 export interface Asking extends CloseQuestion {
@@ -49,15 +55,20 @@ async function endSession(session: number): Promise<void> {
   await closeSessionCall(session);
 }
 
-function closeMainWindow(): void {
-  getCurrentWindow()
-    .close()
-    .catch((e: unknown) => console.error('[main] closing the window failed', e));
-}
-
 /** The main window's closing. Mount it once, in MainWindow. */
 export function useClosing(): Closing {
   const [asking, setAsking] = useState<Asking | null>(null);
+  // Lets go of the close request, so the close that follows goes
+  // through. Null until the window holds it.
+  const letGo = useRef<(() => void | Promise<void>) | null>(null);
+
+  const closeMainWindow = () => {
+    const stop = letGo.current;
+    letGo.current = null;
+    void Promise.resolve(stop?.())
+      .then(() => getCurrentWindow().close())
+      .catch((e: unknown) => console.error('[main] closing the window failed', e));
+  };
 
   /** Ask `question` and run `close` on its danger button, or run it at
    *  once with no question. */
@@ -76,6 +87,31 @@ export function useClosing(): Closing {
   };
 
   const closeWindow = () => ask(closeWindowQuestion(closeRows()), closeMainWindow);
+
+  // The window's close request, as the red light or the close button
+  // sends it. The latest closeWindow answers it.
+  const closeWindowRef = useRef(closeWindow);
+  useEffect(() => {
+    closeWindowRef.current = closeWindow;
+  });
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentWindow()
+      .onCloseRequested((event) => {
+        event.preventDefault();
+        closeWindowRef.current();
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else letGo.current = fn;
+      })
+      .catch((e: unknown) => console.error('[main] close listener failed', e));
+    return () => {
+      cancelled = true;
+      void letGo.current?.();
+      letGo.current = null;
+    };
+  }, []);
 
   const closeSession = (session = getSelected()) => {
     const rows = closeRows();

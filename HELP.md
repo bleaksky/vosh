@@ -94,6 +94,8 @@ The tick sound plays only for the session in front, and the `Connected` and `Con
 
 To close a session, point at its row and click the cross that takes the place of the port, or choose `Close session` from the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
+Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you choose `Close window` in the Session menu or press `Cmd+W` on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
+
 ## Play
 
 ### 2.1 Send commands
