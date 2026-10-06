@@ -1122,14 +1122,18 @@
   margin-top: 12px;
 }
 
-.st-chars-status {
+/* The quiet line under a list that says what its last action did, like
+   where an export went. The Scripts list says it the same way. */
+.st-chars-status,
+.st-plugin-status {
   margin: 12px 0 0;
   color: var(--secondary);
   font-size: 11px;
   line-height: 15px;
 }
 
-.st-chars-status:empty {
+.st-chars-status:empty,
+.st-plugin-status:empty {
   display: none;
 }
 
@@ -2155,6 +2159,13 @@
 .st-plugin-row .st-row-control {
   position: relative;
   z-index: 1;
+}
+
+/* The more button of the row whose menu is open keeps the selected row
+   fill while the menu shows (board 4). */
+.st-plugin-row .st-icon-button[aria-expanded='true'] {
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
 }
 
 .st-plugin-empty {
