@@ -5,7 +5,6 @@ import {
   subscribeGroupState,
   type GroupInfo,
   type GroupMember,
-  type GroupState,
 } from '../../stores/gmcp/groupStore';
 import { thirdsTone } from '../vitalsView';
 import { PaneHeader, PaneMeta } from '../PaneHeader';
@@ -20,30 +19,12 @@ import { PaneHeader, PaneMeta } from '../PaneHeader';
 // under lamented tears) the pane says so in place of the roster. The
 // store keeps no roster from before, so no stale health shows.
 
-// groupStore builds a fresh snapshot object on every read, so keep
-// the last one while its parts are unchanged. useSyncExternalStore
-// needs a stable value between pushes.
-let snapshot: GroupState | null = null;
-
 function subscribe(cb: () => void): () => void {
   return subscribeGroupState(() => cb());
 }
 
-function getSnapshot(): GroupState {
-  const fresh = getGroupState();
-  if (
-    !snapshot ||
-    snapshot.group !== fresh.group ||
-    snapshot.worth !== fresh.worth ||
-    snapshot.self !== fresh.self
-  ) {
-    snapshot = fresh;
-  }
-  return snapshot;
-}
-
 export function GroupPane() {
-  const { group } = useSyncExternalStore(subscribe, getSnapshot);
+  const { group } = useSyncExternalStore(subscribe, getGroupState);
   return <GroupPaneView group={group} />;
 }
 
