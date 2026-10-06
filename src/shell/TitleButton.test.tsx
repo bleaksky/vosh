@@ -43,7 +43,11 @@ const TOLLIVER = 1;
 const ORLA = 2;
 const HOST = 'play.theforsakenlands.com';
 
+/** The sessions whose link runs, as the app lists them. */
+const live = new Set<number>();
+
 const connected = (session: number) => {
+  live.add(session);
   fire('session://state', { session, kind: 'connecting', host: HOST, port: 1848, tls: false });
   fire('session://state', { session, kind: 'connected', host: HOST, port: 1848, tls: false });
 };
@@ -63,7 +67,8 @@ const select = (selected: number) =>
       port: 1848,
       tls: false,
       profile: id === TOLLIVER ? 'Tolliver' : 'Orla',
-      connected: true,
+      connected: live.has(id),
+      since: live.has(id) ? 1_000 : null,
       selected: id === selected,
     })),
   );
@@ -99,6 +104,7 @@ describe('the session button in the title band', () => {
     vi.resetModules();
     handlers.clear();
     titles.length = 0;
+    live.clear();
   });
 
   /** Mount the button on useConnection, and read what it says. */
@@ -139,9 +145,10 @@ describe('the session button in the title band', () => {
     const title = titles.at(-1);
     expect(title).toBe('Tolliver on The Forsaken Lands');
 
-    await act(async () =>
-      fire('session://state', { session: ORLA, kind: 'disconnected', reason: 'Connection reset' }),
-    );
+    await act(async () => {
+      live.delete(ORLA);
+      fire('session://state', { session: ORLA, kind: 'disconnected', reason: 'Connection reset' });
+    });
     expect(band.label()).toBe('Tolliver, connected to The Forsaken Lands');
     expect(titles.at(-1)).toBe(title);
 
@@ -227,6 +234,22 @@ describe('the session button in the title band', () => {
     expect(band.count()).toBeUndefined();
     await act(async () => mark(TOLLIVER, 'preset:alert_name'));
     expect(band.count()).toBe('1');
+    await act(async () => band.root.unmount());
+  });
+
+  it('reads a session that connected before the page started from the list', async () => {
+    live.add(ORLA);
+    const band = await mount();
+    await act(async () => select(ORLA));
+    expect(band.label()).toBe('Orla, connected to The Forsaken Lands');
+    // Tolliver connects in front, and the band follows Orla again after.
+    await act(async () => {
+      select(TOLLIVER);
+      connected(TOLLIVER);
+    });
+    expect(band.label()).toBe('Connected to The Forsaken Lands');
+    await act(async () => select(ORLA));
+    expect(band.label()).toBe('Orla, connected to The Forsaken Lands');
     await act(async () => band.root.unmount());
   });
 
