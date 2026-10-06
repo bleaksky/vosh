@@ -36,9 +36,14 @@ vi.mock('@tauri-apps/api/event', () => ({
 const lua = vi.hoisted(() => ({
   panes: new Map<string, unknown>(),
   rows: null as unknown[] | null,
+  /** How many draws read the Lua pane store. */
+  reads: 0,
 }));
 vi.mock('../stores/session/luaPanesStore', () => ({
-  useLuaPanes: () => lua.panes,
+  useLuaPanes: () => {
+    lua.reads += 1;
+    return lua.panes;
+  },
   getLuaPanes: () => lua.panes,
 }));
 vi.mock('../stores/session/pluginRowsStore', () => ({
@@ -420,6 +425,7 @@ describe('Add a pane', () => {
   afterEach(() => {
     lua.panes = new Map();
     lua.rows = null;
+    lua.reads = 0;
   });
 
   /** Weather and Worth, held in the order the plugins drew them. */
@@ -471,6 +477,14 @@ describe('Add a pane', () => {
       });
     return { lines, pick, onAddPane };
   }
+
+  it('reads the Lua panes only while the menu is open', async () => {
+    holdPanes();
+    renderToStaticMarkup(<TitleBand {...props} panelOpen paneTree={tree()} />);
+    expect(lua.reads).toBe(0);
+    await open(tree());
+    expect(lua.reads).toBeGreaterThan(0);
+  });
 
   it('lists the Lua panes after a rule, in title order, each with its plugin', async () => {
     holdPanes();
