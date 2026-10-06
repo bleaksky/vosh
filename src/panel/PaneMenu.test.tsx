@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from './chat/chatColors';
 import type { PaneLayout, PaneLeaf, PaneType } from './paneLayout';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
+import { openSettingsTab } from '../lib/settingsLink';
 import { findTheme } from '../theme/themes';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
 import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
@@ -25,12 +26,15 @@ vi.mock('../ipc/profiles', async (actual) => ({
   profilesList: vi.fn(() => new Promise(() => undefined)),
 }));
 // The menu draws its rows in place, with no page to portal into, and
-// reads the stores' values without the running app.
+// reads the stores' values without the running app. The rows of the
+// last menu drawn stay at hand, so a test can pick one.
+const drawn = vi.hoisted(() => ({ rows: null as unknown }));
 vi.mock('../ui/MenuSurface', async (actual) => ({
   ...(await actual<typeof import('../ui/MenuSurface')>()),
-  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => (
-    <menu aria-label={label}>{children}</menu>
-  ),
+  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => {
+    drawn.rows = children;
+    return <menu aria-label={label}>{children}</menu>;
+  },
 }));
 // The display the menu reads, the default unless a test picks a style.
 const shown = vi.hoisted(() => ({ style: null as string | null }));
@@ -42,6 +46,7 @@ vi.mock('../stores/config/affectsDisplayStore', async () => {
   };
 });
 vi.mock('../stores/config/chatColorsStore', () => ({ useChatColors: () => new Map() }));
+vi.mock('../lib/settingsLink', () => ({ openSettingsTab: vi.fn() }));
 // The layout the menu splits, none unless a test lays one out.
 const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
 vi.mock('./panelLayoutStore', async (actual) => ({
@@ -174,6 +179,34 @@ describe('PaneMenu', () => {
     expect(menu('chat')).toContain('Channel colors');
     for (const pane of ['map', 'affects', 'group'] as const) {
       expect(menu(pane), pane).not.toContain('Channel colors');
+    }
+  });
+
+  it('offers to edit the plugin of a Lua pane between Show here instead and Close pane', () => {
+    const leaf: PaneLeaf = {
+      id: 'leaf-weather',
+      pane: 'lua',
+      weight: 1,
+      props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
+    };
+    renderToStaticMarkup(<PaneMenu leaf={leaf} anchor={anchor} onClose={() => {}} />);
+    const node = drawn.rows as ReactNode;
+    const list = rows(node).map((row) => (row === '---' ? row : label(row)));
+    expect(list.slice(-5)).toEqual([
+      'Show here instead',
+      '---',
+      'Edit weather_pane in Scripts…',
+      '---',
+      'Close pane',
+    ]);
+    const edit = items(node).find((row) => label(row).startsWith('Edit'));
+    // Closing hands the caret back to the command line.
+    vi.stubGlobal('window', { dispatchEvent: () => true });
+    edit?.props.onSelect?.();
+    vi.unstubAllGlobals();
+    expect(openSettingsTab).toHaveBeenCalledWith('scripts:weather_pane');
+    for (const pane of ['map', 'affects', 'group', 'chat'] as const) {
+      expect(menu(pane), pane).not.toContain('in Scripts');
     }
   });
 
