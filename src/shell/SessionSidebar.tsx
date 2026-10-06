@@ -6,6 +6,7 @@ import {
   useState,
   type ComponentType,
   type MouseEvent,
+  type PointerEvent,
 } from 'react';
 import type { SessionRow } from '../ipc/session';
 import { useEscape } from '../lib/escapeStack';
@@ -17,6 +18,7 @@ import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } fro
 import { SidebarIcon } from './icons';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import { useModHeld } from './useModHeld';
+import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 
 // The sessions sidebar on the left of the main window, board 2 of the
 // Sessions review, drawn to otty's measures (Q17). MainWindow shows it
@@ -40,6 +42,11 @@ import { useModHeld } from './useModHeld';
 // leaves the row as it was, and a blank field clears the name, so the
 // row reads the character again.
 //
+// More rows than fit scroll under SESSIONS, which stays put and draws a
+// hairline once a row has passed under it, and the selected row scrolls
+// into view as ⌘1 to ⌘9 or a step reach it (board 8). Drag a row to move
+// it, see useRowDrag.
+//
 // WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
 // sessions, the caret would take your next Space and press it again, so
 // it goes back to the command line, as it does from the gear.
@@ -61,6 +68,8 @@ interface Props {
   onEditConnection: () => void;
   /** End a session's connection. */
   onDisconnect: (session: number) => void;
+  /** Move a session to the place `to` among the other rows, from 0. */
+  onMove: (session: number, to: number) => void;
 }
 
 /** What the main window asks of the sidebar. */
@@ -88,10 +97,19 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     onRename,
     onEditConnection,
     onDisconnect,
+    onMove,
   },
   ref,
 ) {
   const numbered = useModHeld();
+  const list = useRef<HTMLUListElement | null>(null);
+  // Whether a row has passed under SESSIONS, which draws its hairline.
+  const [scrolled, setScrolled] = useState(false);
+  const { drag, press, dropped } = useRowDrag(
+    list,
+    rows.map((row) => row.id),
+    onMove,
+  );
   // The session whose name is a field, and the row whose menu is open,
   // with the pointer it opened at.
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -113,6 +131,18 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     if (name !== undefined) onRename(session, name);
     if (caret) onCaret();
   };
+
+  // The selected row scrolls into view, whatever brought it to the
+  // front.
+  const at = rows.findIndex((row) => row.id === selected);
+  useEffect(() => {
+    const el = list.current;
+    if (!el || at < 0) return;
+    const top = at * ROW_PITCH;
+    if (top < el.scrollTop) el.scrollTop = top;
+    else if (top + ROW_PITCH > el.scrollTop + el.clientHeight)
+      el.scrollTop = top + ROW_PITCH - el.clientHeight;
+  }, [at]);
 
   const closeMenu = () => {
     setMenu(null);
@@ -149,8 +179,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
           </button>
         </div>
       </div>
-      <h2 className="shell-sessions-head">Sessions</h2>
-      <ul className="shell-sessions-list">
+      <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
+        Sessions
+      </h2>
+      <ul
+        ref={list}
+        className={drag ? 'shell-sessions-list is-dragging' : 'shell-sessions-list'}
+        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
+      >
         {rows.map((row, i) => (
           <SessionSlot
             key={row.id}
@@ -159,6 +195,12 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             current={row.id === selected}
             keys={numbered && i < 9 ? shortcutLabel(`Mod+${i + 1}`) : null}
             renaming={row.id === renaming}
+            lifted={drag?.session === row.id}
+            offset={
+              drag ? (drag.session === row.id ? drag.dy : partShift(i, drag.from, drag.to)) : 0
+            }
+            onPress={(e) => press(e, row.id)}
+            dropped={dropped}
             onSelect={onSelect}
             onClose={onClose}
             onCaret={onCaret}
@@ -167,6 +209,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             onRenamed={(name, caret) => renamed(row.id, name, caret)}
           />
         ))}
+        {/* The line where the row in the air lands. */}
+        {drag && (
+          <li
+            className="shell-sessions-drop"
+            aria-hidden="true"
+            style={{ top: drag.to * ROW_PITCH }}
+          />
+        )}
       </ul>
       {menu && menuRow && (
         <ShellMenu at={menu} width={ROW_MENU_WIDTH} label="Session options" onClose={closeMenu}>
@@ -216,6 +266,14 @@ interface SlotProps {
   keys: string | null;
   /** Its name is a field while you rename it. */
   renaming: boolean;
+  /** It is the row in the air. */
+  lifted: boolean;
+  /** How far it sits from its place while a row is in the air. */
+  offset: number;
+  /** A press that may lift the row. */
+  onPress: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** Whether the click under way ends a drag, and selects nothing. */
+  dropped: () => boolean;
   onSelect: (session: number) => void;
   onClose: (session: number) => void;
   onCaret: () => void;
@@ -234,6 +292,10 @@ function SessionSlot({
   current,
   keys,
   renaming,
+  lifted,
+  offset,
+  onPress,
+  dropped,
   onSelect,
   onClose,
   onCaret,
@@ -251,12 +313,13 @@ function SessionSlot({
   ) : (
     label.meta && <span className="shell-sessions-meta">{label.meta}</span>
   );
+  const moved = offset ? { transform: `translateY(${offset}px)` } : undefined;
 
   // A field cannot sit inside a button, so the row is a plain box while
   // you type, and it has no close button then.
   if (renaming) {
     return (
-      <li className="shell-sessions-slot">
+      <li className="shell-sessions-slot" style={moved}>
         <div className={`${look} is-edit`} aria-current={current ? 'true' : undefined}>
           <NameField
             initial={label.name}
@@ -270,13 +333,15 @@ function SessionSlot({
   }
 
   return (
-    <li className="shell-sessions-slot">
+    <li className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'} style={moved}>
       <button
         type="button"
         className={look}
         aria-current={current ? 'true' : undefined}
         title={label.tooltip ?? undefined}
+        onPointerDown={onPress}
         onClick={(e) => {
+          if (dropped()) return;
           onSelect(row.id);
           if (held(e)) onCaret();
         }}
