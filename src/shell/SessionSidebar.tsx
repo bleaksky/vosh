@@ -21,9 +21,12 @@ import {
 } from '../stores/session/sessionRowStore';
 import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
+import { cardWords, useCardFacts } from './cardFacts';
+import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import type { RowGlyph } from './rowGlyph';
 import { useSessionLine, type SessionLine } from './sessionLine';
+import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
 import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 
@@ -45,7 +48,9 @@ import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 // elsewhere), the first nine rows show the key that brings each to the
 // front there instead, as otty does (board 8). Under the pointer a row
 // shows its close button in that place, which closes its session (Q13,
-// S6). A click selects.
+// S6). Rest the pointer on a row and SessionCard opens beside it with
+// the rest of the session, which a screen reader hears as the row's
+// description. A click selects.
 //
 // A right click opens the row's menu at the pointer, board 9: Rename
 // session…, Edit connection…, Disconnect while the session is
@@ -121,6 +126,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   ref,
 ) {
   const numbered = useModHeld();
+  const [side, setSide] = useState<HTMLElement | null>(null);
   const list = useRef<HTMLUListElement | null>(null);
   // Whether a row has passed under SESSIONS, which draws its hairline.
   const [scrolled, setScrolled] = useState(false);
@@ -129,6 +135,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     rows.map((row) => row.id),
     onMove,
   );
+  const card = useHoverCard(drag !== null);
   // The session whose name is a field, and the row whose menu is open,
   // with the pointer it opened at and whether the row had the keyboard.
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -178,7 +185,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   };
 
   return (
-    <aside className="shell-sessions st-controls" aria-label="Sessions">
+    <aside ref={setSide} className="shell-sessions st-controls" aria-label="Sessions">
       <div className="shell-sessions-top" data-tauri-drag-region>
         <div className="shell-sessions-actions">
           <button
@@ -209,7 +216,11 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
       <ul
         ref={list}
         className={drag ? 'shell-sessions-list is-dragging' : 'shell-sessions-list'}
-        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
+        onScroll={(e) => {
+          setScrolled(e.currentTarget.scrollTop > 0);
+          card.leave();
+        }}
+        onPointerLeave={card.leave}
       >
         {rows.map((row, i) => (
           <SessionSlot
@@ -224,6 +235,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
               drag ? (drag.session === row.id ? drag.dy : partShift(i, drag.from, drag.to)) : 0
             }
             onPress={(e) => press(e, row.id)}
+            onRest={(slot) => card.rest(row.id, slot)}
+            card={card.shown?.session === row.id ? { slot: card.shown.slot, side } : null}
             dropped={dropped}
             onSelect={onSelect}
             onClose={onClose}
@@ -299,6 +312,11 @@ interface SlotProps {
   offset: number;
   /** A press that may lift the row. */
   onPress: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** The pointer moved on the row's slot. */
+  onRest: (slot: HTMLElement) => void;
+  /** Where the row's card shows while it does, level with its slot and
+   *  right of the sidebar, else null. */
+  card: { slot: HTMLElement; side: HTMLElement | null } | null;
   /** Whether the click under way ends a drag, and selects nothing. */
   dropped: () => boolean;
   onSelect: (session: number) => void;
@@ -323,6 +341,8 @@ function SessionSlot({
   lifted,
   offset,
   onPress,
+  onRest,
+  card,
   dropped,
   onSelect,
   onClose,
@@ -334,6 +354,8 @@ function SessionSlot({
   const label = sessionLabel(row, rows);
   const look = rowLook(useSessionRow(row.id), row, current);
   const line = useSessionLine(row);
+  const facts = useCardFacts(row, rows);
+  const described = `shell-sessions-card-${row.id}`;
   const rowClass = look.tone ? `shell-sessions-row is-${look.tone}` : 'shell-sessions-row';
   const moved = offset ? { transform: `translateY(${offset}px)` } : undefined;
 
@@ -357,12 +379,16 @@ function SessionSlot({
 
   const port = label.split?.port ?? label.meta;
   return (
-    <li className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'} style={moved}>
+    <li
+      className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'}
+      style={moved}
+      onPointerMove={(e) => onRest(e.currentTarget)}
+    >
       <button
         type="button"
         className={rowClass}
         aria-current={current ? 'true' : undefined}
-        title={label.tooltip ?? undefined}
+        aria-describedby={described}
         onPointerDown={onPress}
         onClick={() => {
           if (dropped()) return;
@@ -413,6 +439,10 @@ function SessionSlot({
       >
         <CloseIcon />
       </button>
+      <span id={described} hidden>
+        {cardWords(facts)}
+      </span>
+      {card?.side && <SessionCard facts={facts} slot={card.slot} side={card.side} />}
     </li>
   );
 }
