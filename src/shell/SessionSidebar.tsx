@@ -2,7 +2,7 @@ import type { ComponentType, MouseEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import { sessionLabel } from '../lib/sessionLabel';
 import { rowLook, useSessionRow, type RowGlyph } from '../stores/session/sessionRowStore';
-import { DotIcon, PlusIcon } from '../ui/icons';
+import { DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
 
 // The sessions sidebar on the left of the main window, board 2 of the
@@ -77,8 +77,12 @@ export function SessionSidebar({ rows, selected, onSelect, onNewSession, onHide,
   );
 }
 
-/** Each glyph, with the words a screen reader says for it, board 3's. */
+/** Each glyph, with the words a screen reader says for it, from board
+ *  3 and Q8, where the triangle means connect again yourself. */
 const GLYPHS: Record<RowGlyph, { icon: ComponentType; words: string }> = {
+  triangle: { icon: TriangleIcon, words: 'Connect again' },
+  hand: { icon: HandIcon, words: 'Logging in' },
+  spinner: { icon: SpinnerIcon, words: 'Connecting' },
   dot: { icon: DotIcon, words: 'Something for you' },
 };
 
@@ -93,7 +97,7 @@ interface SlotProps {
 /** One session's row. */
 function SessionSlot({ row, rows, current, onSelect, onCaret }: SlotProps) {
   const label = sessionLabel(row, rows);
-  const { glyph, tone } = rowLook(useSessionRow(row.id), current);
+  const { glyph, tone } = rowLook(useSessionRow(row.id), row, current);
   return (
     <li className="shell-sessions-slot">
       <button

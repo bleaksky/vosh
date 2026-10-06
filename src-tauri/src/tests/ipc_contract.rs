@@ -158,11 +158,6 @@ const UNHEARD: &[Unheard] = &[
               R18 (Alerts Q19).",
     },
     Unheard {
-        name: "session://reconnect",
-        why: "Where a redial stands. The reconnect notice of the page half \
-              hears it, after R18 (Alerts Q18).",
-    },
-    Unheard {
         name: "vosh://daylight-changed",
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",

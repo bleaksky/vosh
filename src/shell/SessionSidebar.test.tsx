@@ -14,10 +14,13 @@ import { SessionSidebar } from './SessionSidebar';
  *  nothing for reads quiet. */
 const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
 
-vi.mock('../stores/session/sessionRowStore', async (actual) => ({
-  ...(await actual<typeof import('../stores/session/sessionRowStore')>()),
-  useSessionRow: (id: number) => ({ lines: false, alert: false, ...states.get(id) }),
-}));
+vi.mock('../stores/session/sessionRowStore', async (actual) => {
+  const store = await actual<typeof import('../stores/session/sessionRowStore')>();
+  return {
+    ...store,
+    useSessionRow: (id: number) => ({ ...store.getSessionRow(id), ...states.get(id) }),
+  };
+});
 
 const PLAY = 'play.theforsakenlands.com';
 
@@ -95,7 +98,7 @@ describe('the sessions sidebar', () => {
   it('marks a row behind for new lines and alerts, with the dot in the meta place', () => {
     states.set(1, { lines: true, alert: true });
     states.set(2, { lines: true, alert: true });
-    states.set(3, { lines: true });
+    states.set(3, { lines: true, playing: true });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
     // The selected row shows neither.
     expect(tolliver).toContain('class="shell-sessions-row"');
@@ -107,5 +110,26 @@ describe('the sessions sidebar', () => {
     expect(orla).not.toContain('shell-sessions-meta');
     expect(build).toContain('class="shell-sessions-row is-new"');
     expect(build).not.toContain('shell-sessions-glyph');
+  });
+
+  it('shows the link of each session as a glyph, and dims one not connected', () => {
+    const glyphs = [
+      row(1, { character: 'Tolliver' }),
+      row(2, { port: 1825 }),
+      row(3, {}),
+      row(4, { character: 'Tolliver' }),
+      row(5, { character: 'Orla', port: 1825, connected: false }),
+    ];
+    states.set(3, { link: 'dialing' });
+    states.set(4, { link: 'failed' });
+    const [, login, dialing, failed, off] = buttons(draw(glyphs, 1));
+    const glyph = (kind: string, words: string) =>
+      `<span class="shell-sessions-glyph is-${kind}" role="img" aria-label="${words}"><svg`;
+    expect(login).toContain('1825</span>' + glyph('hand', 'Logging in'));
+    expect(dialing).toContain(glyph('spinner', 'Connecting'));
+    expect(failed).toContain(glyph('triangle', 'Connect again'));
+    expect(off).toContain('class="shell-sessions-row is-off"');
+    expect(off).toContain('<span class="shell-sessions-meta">1825</span>');
+    expect(off).not.toContain('shell-sessions-glyph');
   });
 });

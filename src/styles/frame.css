@@ -426,9 +426,14 @@
   white-space: nowrap;
 }
 
-/* A row behind brightens once the game prints a line there (Q9). */
+/* A row behind brightens once the game prints a line there (Q9), and
+   dims while its session is not connected (Q8). */
 .shell-sessions-row.is-new {
   color: var(--text);
+}
+
+.shell-sessions-row.is-off {
+  color: var(--tertiary);
 }
 
 /* A row under the pointer lights and its name takes the text tone. */
@@ -499,6 +504,28 @@
 
 .shell-sessions-glyph.is-dot {
   color: var(--accent);
+}
+
+.shell-sessions-glyph.is-hand {
+  color: var(--warn);
+}
+
+.shell-sessions-glyph.is-triangle {
+  color: var(--danger);
+}
+
+/* The spinner turns a spoke at a time, as otty's does, and holds still
+   for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .shell-sessions-glyph.is-spinner svg {
+    animation: shell-spinner 0.8s steps(8) infinite;
+  }
+}
+
+@keyframes shell-spinner {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Status line ───────────────────────────────────────────────────── */
