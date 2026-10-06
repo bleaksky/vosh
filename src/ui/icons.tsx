@@ -184,6 +184,16 @@ export function CopyIcon(props: IconProps) {
   );
 }
 
+/** A stroked triangle that points right, the button that plays an
+ *  alert tone. */
+export function PlayIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.75 4.25v7.5L11.75 8z" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 /** The more glyph is three filled dots with no stroke. */
 export function MoreIcon({ size = 16, className }: IconProps) {
   return (
