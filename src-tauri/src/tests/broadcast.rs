@@ -485,7 +485,6 @@ fn every_change_to_the_plugins_tells_every_window_once() {
         let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
         crate::app::plugins::follow_profile(
             handle,
-            &state,
             &session,
             crate::script::ApplyResult::default(),
         )

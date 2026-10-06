@@ -313,7 +313,7 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
 
     // What the plugins this profile turned on and the others asked for
     // as the switch made it live.
-    crate::app::plugins::follow_profile(app, state, session, plugins).await;
+    crate::app::plugins::follow_profile(app, session, plugins).await;
     Ok(())
 }
 

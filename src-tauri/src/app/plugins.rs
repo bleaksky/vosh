@@ -13,7 +13,6 @@
 //! loads it again through [`live`], shows its folder through [`reveal`],
 //! and installs and exports a plugin as a .zip through [`archive`].
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -23,7 +22,7 @@ use tokio::sync::Mutex;
 use tracing::{error, info};
 use vosh_script::Owner;
 
-use crate::app::state::{AppState, SharedState, NO_APP_DATA};
+use crate::app::state::{AppState, NO_APP_DATA};
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
@@ -71,19 +70,13 @@ fn default_entry() -> String {
     "main.lua".to_string()
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginRecord {
-    pub manifest: PluginManifest,
-    /// Absolute path to the plugin's directory.
-    pub dir: PathBuf,
-    pub enabled: bool,
-}
-
+/// The plugins in the plugins folder, as the last look found them. The
+/// profile each session plays says which are on, so the list holds only
+/// what each manifest says.
 #[derive(Debug, Default)]
 pub(crate) struct PluginManager {
     plugins_dir: Option<PathBuf>,
-    plugins: Vec<PluginRecord>,
-    enabled: BTreeSet<String>,
+    plugins: Vec<PluginManifest>,
 }
 
 pub(crate) type SharedPluginManager = Arc<Mutex<PluginManager>>;
@@ -91,20 +84,6 @@ pub(crate) type SharedPluginManager = Arc<Mutex<PluginManager>>;
 impl PluginManager {
     pub(crate) fn set_plugins_dir(&mut self, dir: PathBuf) {
         self.plugins_dir = Some(dir);
-    }
-
-    /// Replace the persisted enabled-set. Call once at startup with the
-    /// list loaded from profile.toml.
-    pub(crate) fn set_enabled(&mut self, enabled: impl IntoIterator<Item = String>) {
-        self.enabled = enabled.into_iter().collect();
-        for record in &mut self.plugins {
-            record.enabled = self.enabled.contains(&record.manifest.name);
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn enabled_names(&self) -> Vec<String> {
-        self.enabled.iter().cloned().collect()
     }
 
     /// Re-scan the plugins directory and update the in-memory list.
@@ -141,21 +120,16 @@ impl PluginManager {
             if dir_name != parsed.plugin.name {
                 continue;
             }
-            let enabled = self.enabled.contains(&parsed.plugin.name);
-            found.push(PluginRecord {
-                manifest: parsed.plugin,
-                dir: path,
-                enabled,
-            });
+            found.push(parsed.plugin);
         }
-        found.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
+        found.sort_by(|a, b| a.name.cmp(&b.name));
         self.plugins = found;
         Ok(())
     }
 
     /// The plugins the last [`PluginManager::discover`] found, sorted by
     /// name.
-    pub(crate) fn list(&self) -> &[PluginRecord] {
+    pub(crate) fn list(&self) -> &[PluginManifest] {
         &self.plugins
     }
 }
@@ -386,18 +360,6 @@ pub(crate) fn follow_profile_plugins(
     apply
 }
 
-/// Point the plugin list at `plugins_dir`, find the plugins in it, and
-/// mark the ones the profile `session` plays turns on.
-async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std::path::Path) {
-    let enabled = session.lock_profile().await.plugins.enabled.clone();
-    let mut mgr = state.plugins.lock().await;
-    mgr.set_plugins_dir(plugins_dir.to_path_buf());
-    if let Err(e) = mgr.discover() {
-        error!(error = %e, "plugin discovery failed");
-    }
-    mgr.set_enabled(enabled);
-}
-
 /// Once a profile switch made the next profile live for `session` and
 /// turned its plugins on and the others off, deliver what they ask for,
 /// `apply`. Their lines print in the terminal, and what they send goes to
@@ -405,21 +367,17 @@ async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std:
 /// that the plugins changed, so the Scripts page reads them again.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    state: &SharedState,
     session: &Arc<Session>,
     apply: ApplyResult,
 ) {
-    if let Some(app_data) = state.app_data.get() {
-        note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
-    }
     crate::session::effects::deliver_detached(app, session, apply).await;
     // The session runs other plugins now, and its profile turns others on.
     crate::app::events::broadcast(app, crate::app::events::PLUGINS_CHANGED, &());
 }
 
-/// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on into the engine of `session`, once each in the order its list
-/// gives, as a switch does from a start with none running. Launch calls
+/// Load each plugin in `plugins_dir` the profile turns on into the
+/// engine of `session`, once each in the order its list gives, as a
+/// switch does from a start with none running. Launch calls
 /// it for the session the app starts with, and `session_open` for each
 /// session you open. What an entry script asks for applies as on every
 /// other path that runs Lua, so its timers, `mud.input` lines and prompt
@@ -428,11 +386,9 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 /// it would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    state: &SharedState,
     session: &Arc<Session>,
     plugins_dir: std::path::PathBuf,
 ) {
-    note_plugins(state, session, &plugins_dir).await;
     let apply = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
@@ -492,7 +448,7 @@ mod tests {
         mgr.set_plugins_dir(tmp.path().to_path_buf());
         mgr.discover().unwrap();
         assert_eq!(mgr.list().len(), 1);
-        assert_eq!(mgr.list()[0].manifest.name, "alpha");
+        assert_eq!(mgr.list()[0].name, "alpha");
     }
 
     #[test]
@@ -503,27 +459,6 @@ mod tests {
         mgr.set_plugins_dir(tmp.path().to_path_buf());
         mgr.discover().unwrap();
         assert!(mgr.list().is_empty());
-    }
-
-    #[test]
-    fn enabled_state_round_trips_via_set_enabled() {
-        let tmp = tempdir();
-        write_plugin(tmp.path(), "a", "a", "");
-        write_plugin(tmp.path(), "b", "b", "");
-        let mut mgr = PluginManager::default();
-        mgr.set_plugins_dir(tmp.path().to_path_buf());
-        mgr.discover().unwrap();
-        mgr.set_enabled(["b".to_string()]);
-        let listed: Vec<(String, bool)> = mgr
-            .list()
-            .iter()
-            .map(|p| (p.manifest.name.clone(), p.enabled))
-            .collect();
-        assert_eq!(
-            listed,
-            vec![("a".to_string(), false), ("b".to_string(), true)]
-        );
-        assert_eq!(mgr.enabled_names(), vec!["b".to_string()]);
     }
 
     #[test]

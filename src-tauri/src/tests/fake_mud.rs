@@ -1857,13 +1857,8 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     .expect("the entry script");
     h.state.selected_profile().await.plugins.enabled = vec!["on_load".into()];
 
-    crate::app::plugins::load_enabled_plugins(
-        h.app.handle(),
-        &h.state,
-        &h.state.selected_session(),
-        plugins,
-    )
-    .await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state.selected_session(), plugins)
+        .await;
     assert!(
         h.state
             .selected_profile()
@@ -1955,13 +1950,8 @@ async fn lua_a_profile_switch_turns_its_plugins_on_and_the_others_off() {
         .save(&h.profile_file("Healer").await)
         .expect("Healer's file");
     h.state.selected_profile().await.plugins.enabled = vec!["everywhere".into()];
-    crate::app::plugins::load_enabled_plugins(
-        h.app.handle(),
-        &h.state,
-        &h.state.selected_session(),
-        plugins,
-    )
-    .await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state.selected_session(), plugins)
+        .await;
     h.connect().await;
     h.until_shown("Welcome to the fake Aabahran, Tester.").await;
 
@@ -2028,13 +2018,8 @@ async fn lua_a_plugin_load_prints_its_lines_once_you_connect() {
     }
     h.state.selected_profile().await.plugins.enabled =
         vec!["noisy".into(), "spin".into(), "noisy".into()];
-    crate::app::plugins::load_enabled_plugins(
-        h.app.handle(),
-        &h.state,
-        &h.state.selected_session(),
-        plugins,
-    )
-    .await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state.selected_session(), plugins)
+        .await;
     assert!(h
         .state
         .selected_session()
