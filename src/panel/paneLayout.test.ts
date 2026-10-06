@@ -4,16 +4,23 @@ import {
   addPane,
   allPanes,
   closePane,
+  countPanes,
   defaultLayout,
   findNode,
   isLeaf,
+  leafIdFor,
+  leafKey,
+  paneKey,
+  paneRef,
   replacePane,
   sanitize,
   sanitizeLayout,
   setWeights,
   splitPane,
   type PaneLayout,
+  type PaneLeaf,
   type PaneNode,
+  type PaneRef,
   type PaneSplit,
 } from './paneLayout';
 
@@ -100,7 +107,7 @@ describe('sanitize', () => {
 
 describe('splitPane', () => {
   it('splits right into a row that halves the old share', () => {
-    const next = splitPane(root(), 'affects', 'row', 'group');
+    const next = splitPane(root(), 'affects', 'row', paneRef('group'));
     expect(shape(next)).toEqual({
       column: [
         ['map', 0.525],
@@ -117,7 +124,7 @@ describe('splitPane', () => {
   });
 
   it('adds a sibling when the parent already runs that way', () => {
-    const next = splitPane(root(), 'affects', 'column', 'chat');
+    const next = splitPane(root(), 'affects', 'column', paneRef('chat'));
     expect(shape(next)).toEqual({
       column: [
         ['map', 0.525],
@@ -128,8 +135,8 @@ describe('splitPane', () => {
   });
 
   it('moves a pane already shown elsewhere', () => {
-    const three = addPane(root(), 'group');
-    const next = splitPane(three, 'affects', 'row', 'group');
+    const three = addPane(root(), paneRef('group'));
+    const next = splitPane(three, 'affects', 'row', paneRef('group'));
     expect(allPanes(next)).toEqual(['map', 'affects', 'group']);
     expect(shape(next)).toEqual({
       column: [
@@ -146,9 +153,9 @@ describe('splitPane', () => {
 
   it('leaves the tree alone for the root, an unknown id, or the same pane', () => {
     const tree = root();
-    expect(splitPane(tree, 'root', 'row', 'group')).toBe(tree);
-    expect(splitPane(tree, 'nope', 'row', 'group')).toBe(tree);
-    expect(splitPane(tree, 'map', 'row', 'map')).toBe(tree);
+    expect(splitPane(tree, 'root', 'row', paneRef('group'))).toBe(tree);
+    expect(splitPane(tree, 'nope', 'row', paneRef('group'))).toBe(tree);
+    expect(splitPane(tree, 'map', 'row', paneRef('map'))).toBe(tree);
   });
 });
 
@@ -158,7 +165,7 @@ describe('closePane', () => {
   });
 
   it('collapses a split left with one child', () => {
-    const split = splitPane(root(), 'affects', 'row', 'group');
+    const split = splitPane(root(), 'affects', 'row', paneRef('group'));
     const next = closePane(split, 'group');
     expect(next).toEqual(root());
   });
@@ -186,21 +193,21 @@ describe('replacePane', () => {
         { id: 'talk', pane: 'chat', weight: 0.4, props: { channel: 'tell' } },
       ],
     });
-    const next = replacePane(withProps, 'talk', 'group');
+    const next = replacePane(withProps, 'talk', paneRef('group'));
     expect(findNode(next, 'talk')).toEqual({ id: 'talk', pane: 'group', weight: 0.4, props: {} });
   });
 
   it('moves a pane already shown elsewhere', () => {
-    const next = replacePane(root(), 'affects', 'map');
+    const next = replacePane(root(), 'affects', paneRef('map'));
     expect(allPanes(next)).toEqual(['map']);
     expect(next.children[0].id).toBe('affects');
   });
 
   it('leaves the tree alone for a split, an unknown id, or the same pane', () => {
     const tree = root();
-    expect(replacePane(tree, 'root', 'chat')).toBe(tree);
-    expect(replacePane(tree, 'nope', 'chat')).toBe(tree);
-    expect(replacePane(tree, 'map', 'map')).toBe(tree);
+    expect(replacePane(tree, 'root', paneRef('chat'))).toBe(tree);
+    expect(replacePane(tree, 'nope', paneRef('chat'))).toBe(tree);
+    expect(replacePane(tree, 'map', paneRef('map'))).toBe(tree);
   });
 });
 
@@ -226,7 +233,7 @@ describe('setWeights', () => {
 describe('addPane', () => {
   it('appends to the root column with a share sized to its reading height', () => {
     // Group reads at 94 px against 340 for the map and affects above it.
-    expect(shape(addPane(root(), 'group'))).toEqual({
+    expect(shape(addPane(root(), paneRef('group')))).toEqual({
       column: [
         ['map', 0.4113],
         ['affects', 0.3721],
@@ -236,7 +243,7 @@ describe('addPane', () => {
   });
 
   it('keeps the panes above in step as more panes join', () => {
-    const next = addPane(addPane(root(), 'group'), 'chat');
+    const next = addPane(addPane(root(), paneRef('group')), paneRef('chat'));
     expect(shape(next)).toEqual({
       column: [
         ['map', 0.3222],
@@ -249,7 +256,7 @@ describe('addPane', () => {
 
   it('fills an empty panel', () => {
     const empty = closePane(root(), 'root');
-    expect(shape(addPane(empty, 'chat'))).toEqual({ column: [['chat', 1]] });
+    expect(shape(addPane(empty, paneRef('chat')))).toEqual({ column: [['chat', 1]] });
   });
 
   it('nests a row root under a new column and keeps the root id', () => {
@@ -258,7 +265,7 @@ describe('addPane', () => {
       split: 'row',
       children: [{ pane: 'map' }, { pane: 'group' }],
     });
-    const next = addPane(row, 'affects');
+    const next = addPane(row, paneRef('affects'));
     expect(next.id).toBe('root');
     // The row reads at its tallest pane, the map's 180 px.
     expect(shape(next)).toEqual({
@@ -276,7 +283,7 @@ describe('addPane', () => {
 
   it('leaves the tree alone when the pane is already shown', () => {
     const tree = root();
-    expect(addPane(tree, 'map')).toBe(tree);
+    expect(addPane(tree, paneRef('map'))).toBe(tree);
   });
 });
 
@@ -284,14 +291,150 @@ describe('tree operations', () => {
   it('never mutate their input and keep untouched ids', () => {
     // root() is deep frozen, so any write inside an operation throws.
     let tree = root();
-    tree = deepFreeze(splitPane(tree, 'affects', 'row', 'group'));
-    tree = deepFreeze(addPane(tree, 'chat'));
+    tree = deepFreeze(splitPane(tree, 'affects', 'row', paneRef('group')));
+    tree = deepFreeze(addPane(tree, paneRef('chat')));
     tree = deepFreeze(setWeights(tree, 'root', [2, 1, 1]));
-    tree = deepFreeze(replacePane(tree, 'chat', 'imm'));
+    tree = deepFreeze(replacePane(tree, 'chat', paneRef('imm')));
     tree = deepFreeze(closePane(tree, 'group'));
     expect(findNode(tree, 'map')).not.toBeNull();
     expect(findNode(tree, 'affects')).not.toBeNull();
     expect(allPanes(tree)).toEqual(['map', 'affects', 'imm']);
+  });
+});
+
+describe('Lua panes', () => {
+  const lua = (id: string, title: string): PaneRef => ({
+    pane: 'lua',
+    props: { id, plugin: 'weather_pane', title },
+  });
+  const weather = lua('weather', 'Weather');
+  const tides = lua('tides', 'Tides');
+  const luaLeaves = (tree: PaneSplit) =>
+    allPanes(tree).filter((key) => key.startsWith('lua:')).length;
+
+  it('key on their plugin and id, never on their title', () => {
+    expect(paneKey(weather)).toBe(paneKey(lua('weather', 'Rain')));
+    expect(paneKey(weather)).not.toBe(paneKey(tides));
+    expect(paneKey({ pane: 'lua', props: { plugin: 'other', id: 'weather' } })).not.toBe(
+      paneKey(weather),
+    );
+    expect(paneKey(paneRef('chat'))).toBe('chat');
+  });
+
+  it('add once per key, with the props of the reference', () => {
+    const one = addPane(root(), weather);
+    const two = addPane(one, tides);
+    expect(addPane(two, lua('weather', 'Rain'))).toBe(two);
+    expect(luaLeaves(two)).toBe(2);
+    expect(leafIdFor(two, weather)).toBe('lua');
+    expect(leafIdFor(two, tides)).toBe('lua-2');
+    expect(findNode(two, 'lua')).toMatchObject({ pane: 'lua', props: weather.props });
+  });
+
+  it('split in a second Lua pane and move one already shown', () => {
+    const tree = addPane(root(), weather);
+    const split = splitPane(tree, 'lua', 'row', tides);
+    expect(luaLeaves(split)).toBe(2);
+    const moved = splitPane(split, 'map', 'row', weather);
+    expect(luaLeaves(moved)).toBe(2);
+    expect(shape(moved)).toEqual({
+      column: [
+        {
+          row: [
+            ['map', 0.5],
+            ['lua', 0.5],
+          ],
+        },
+        expect.anything(),
+        expect.anything(),
+      ],
+    });
+    expect(splitPane(moved, leafIdFor(moved, weather) ?? '', 'row', weather)).toBe(moved);
+  });
+
+  it('move to the leaf you show here instead', () => {
+    const tree = addPane(addPane(root(), weather), tides);
+    const next = replacePane(tree, 'affects', weather);
+    expect(luaLeaves(next)).toBe(2);
+    expect(leafIdFor(next, weather)).toBe('affects');
+    expect(findNode(next, 'affects')).toMatchObject({ pane: 'lua', props: weather.props });
+    expect(findNode(next, 'lua')).toBeNull();
+    expect(replacePane(next, 'affects', weather)).toBe(next);
+  });
+
+  it('leave a tree of built-in panes byte for byte as before', () => {
+    let tree = root();
+    tree = splitPane(tree, 'affects', 'row', paneRef('group'));
+    tree = addPane(tree, paneRef('chat'));
+    tree = splitPane(tree, 'chat', 'row', paneRef('imm'));
+    tree = replacePane(tree, 'map', paneRef('group'));
+    tree = setWeights(tree, 'root', [3, 2, 1]);
+    tree = closePane(tree, 'imm');
+    tree = addPane(tree, paneRef('map'));
+    // What these calls gave when they took a bare pane type.
+    expect(JSON.stringify(tree)).toBe(
+      '{"id":"root","split":"column","weight":1,"children":[' +
+        '{"id":"map","pane":"group","weight":0.3375,"props":{}},' +
+        '{"id":"affects","pane":"affects","weight":0.225,"props":{}},' +
+        '{"id":"chat","pane":"chat","weight":0.1125,"props":{}},' +
+        '{"id":"map-2","pane":"map","weight":0.3249,"props":{}}]}',
+    );
+  });
+});
+
+describe('Chat panes', () => {
+  const chat = paneRef('chat');
+  const withChat = () => deepFreeze(addPane(root(), chat));
+
+  it('add another under a Chat, up to four', () => {
+    const two = addPane(withChat(), chat);
+    expect(allPanes(two)).toEqual(['map', 'affects', 'chat', 'chat']);
+    expect(findNode(two, 'chat-2')).toMatchObject({ pane: 'chat', props: {} });
+    const four = addPane(addPane(two, chat), chat);
+    expect(countPanes(four, chat)).toBe(4);
+    expect(addPane(four, chat)).toBe(four);
+  });
+
+  it('split in beside a Chat and leave the first in place', () => {
+    const tree = withChat();
+    const next = splitPane(tree, 'affects', 'row', chat);
+    expect(findNode(next, 'chat')).toEqual(findNode(tree, 'chat'));
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', expect.any(Number)],
+        {
+          row: [
+            ['affects', 0.5],
+            ['chat', 0.5],
+          ],
+        },
+        ['chat', expect.any(Number)],
+      ],
+    });
+    expect(leafIdFor(next, chat)).toBe('chat-2');
+    expect(splitPane(next, 'chat', 'column', chat)).not.toBe(next);
+  });
+
+  it('show here instead of Map and keep the other Chat', () => {
+    const tree = withChat();
+    const next = replacePane(tree, 'map', chat);
+    expect(allPanes(next)).toEqual(['chat', 'affects', 'chat']);
+    expect(findNode(next, 'chat')).toEqual(findNode(tree, 'chat'));
+    expect(replacePane(next, 'chat', chat)).toBe(next);
+  });
+
+  it('stop at four from a split or show here instead', () => {
+    let four = withChat();
+    for (let i = 0; i < 3; i += 1) four = addPane(four, chat);
+    expect(splitPane(four, 'map', 'row', chat)).toBe(four);
+    expect(replacePane(four, 'map', chat)).toBe(four);
+  });
+
+  it('key each box on its leaf, and every other pane on its type', () => {
+    const two = addPane(withChat(), chat);
+    expect(leafKey(findNode(two, 'chat') as PaneLeaf)).toBe('chat#chat');
+    expect(leafKey(findNode(two, 'chat-2') as PaneLeaf)).toBe('chat#chat-2');
+    expect(leafKey(findNode(two, 'map') as PaneLeaf)).toBe('map');
   });
 });
 

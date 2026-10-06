@@ -2,19 +2,24 @@ import { createContext, useContext } from 'react';
 import {
   addPane,
   closePane,
+  countPanes,
   isLeaf,
   leafIdFor,
+  paneRef,
   replacePane,
   sanitize,
   splitPane,
   type PaneLeaf,
   type PaneNode,
+  type PaneRef,
   type PaneSplit,
   type PaneType,
   type SplitDir,
 } from './paneLayout';
 import { getPanelLayout, setPaneTree, updatePanelLayout } from './panelLayoutStore';
-import { paneTypesToAdd } from './paneTypes';
+import { luaPaneRef, luaPanesToAdd, paneTypesToAdd } from './paneTypes';
+import { chatFilterOf, chatLeaves } from './chat/chatFilter';
+import { pushToast } from '../stores/toasts';
 
 // What a pane's header and menu, the palette and the title band can do
 // to the panel. Each action reads the store's current tree when it
@@ -28,21 +33,91 @@ export function usePaneLeaf(): PaneLeaf | null {
   return useContext(PaneLeafContext);
 }
 
-/** The pane a split adds: the first one the panel does not show. */
-export function paneToSplitIn(): PaneType | null {
-  return paneTypesToAdd(getPanelLayout()?.root ?? null)[0] ?? null;
+/** The pane a split of leaf `id` adds. On a Chat pane it is another
+ *  Chat while there is room. Elsewhere it is the first pane the panel
+ *  does not show, a built-in pane first and then a Lua pane, and
+ *  another Chat once the panel shows them all. */
+export function paneToSplitIn(id: string): PaneRef | null {
+  const tree = getPanelLayout()?.root ?? null;
+  const types = paneTypesToAdd(tree);
+  const chat = types.includes('chat');
+  if (chat && chatLeaves(tree).some((leaf) => leaf.id === id)) return paneRef('chat');
+  const fresh = types.find((t) => tree === null || countPanes(tree, paneRef(t)) === 0);
+  if (fresh !== undefined) return paneRef(fresh);
+  const lua = luaPanesToAdd(tree)[0];
+  if (lua !== undefined) return luaPaneRef(lua);
+  return chat ? paneRef('chat') : null;
+}
+
+/** What a new Chat pane starts on: tell while another Chat pane shows
+ *  and none shows tell yet, so tells land in a pane of their own, and
+ *  All otherwise. */
+export function chatRefToAdd(tree: PaneNode | null): PaneRef {
+  const chats = chatLeaves(tree);
+  const onTell = chats.some((leaf) => {
+    const filter = chatFilterOf(leaf);
+    return filter.kind === 'channel' && filter.channel === 'tell';
+  });
+  return chats.length > 0 && !onTell
+    ? { pane: 'chat', props: { channel: 'tell' } }
+    : paneRef('chat');
+}
+
+// Place `ref` in `root` with `put`. A new Chat pane starts on what
+// chatRefToAdd gives, and when that is tell, every Chat pane on All
+// turns to Everything else in the same write, so each tell lands in
+// one pane. A toast then says so and offers Undo, which puts those
+// panes back on All.
+function placePane(
+  root: PaneSplit,
+  ref: PaneRef,
+  put: (tree: PaneSplit, ref: PaneRef) => PaneSplit,
+): PaneSplit {
+  if (ref.pane !== 'chat') return put(root, ref);
+  const chat = chatRefToAdd(root);
+  const turned =
+    chat.props.channel === 'tell'
+      ? chatLeaves(root)
+          .filter((leaf) => chatFilterOf(leaf).kind === 'all')
+          .map((leaf) => leaf.id)
+      : [];
+  const base = turned.reduce((tree, id) => setLeafProps(tree, id, { rest: '1' }), root);
+  const next = put(base, chat);
+  if (next === base) return root;
+  if (turned.length > 0) {
+    pushToast({
+      kind: 'info',
+      message:
+        turned.length === 1
+          ? 'Your other Chat pane now shows Everything else.'
+          : 'Your other Chat panes now show Everything else.',
+      action: { label: 'Undo', run: () => backToAll(turned) },
+    });
+  }
+  return next;
+}
+
+// Undo for placePane: the panes it turned to Everything else go back
+// on All, where they still show it.
+function backToAll(ids: string[]): void {
+  const root = getPanelLayout()?.root;
+  if (!root) return;
+  const onRest = chatLeaves(root)
+    .filter((leaf) => ids.includes(leaf.id) && chatFilterOf(leaf).kind === 'rest')
+    .map((leaf) => leaf.id);
+  setPaneTree(onRest.reduce((tree, id) => setLeafProps(tree, id, { rest: '' }), root));
 }
 
 export function splitHere(id: string, dir: SplitDir): void {
   const root = getPanelLayout()?.root;
-  const pane = paneToSplitIn();
+  const pane = paneToSplitIn(id);
   if (!root || !pane) return;
-  setPaneTree(splitPane(root, id, dir, pane));
+  setPaneTree(placePane(root, pane, (tree, ref) => splitPane(tree, id, dir, ref)));
 }
 
-export function showHereInstead(id: string, pane: PaneType): void {
+export function showHereInstead(id: string, ref: PaneRef): void {
   const root = getPanelLayout()?.root;
-  if (root) setPaneTree(replacePane(root, id, pane));
+  if (root) setPaneTree(placePane(root, ref, (tree, r) => replacePane(tree, id, r)));
 }
 
 export function closeHere(id: string): void {
@@ -55,15 +130,19 @@ export function closeHere(id: string): void {
  *  comes back with it. */
 export function togglePane(pane: PaneType): void {
   updatePanelLayout((l) => {
-    const leaf = leafIdFor(l.root, pane);
+    const ref = paneRef(pane);
+    const leaf = leafIdFor(l.root, ref);
     if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
-    return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, pane) };
+    return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, ref) };
   });
 }
 
 /** Add a pane from the title band, at the bottom of the panel. */
-export function addPaneType(pane: PaneType): void {
-  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, pane) }));
+export function addPaneAtBottom(ref: PaneRef): void {
+  const root = getPanelLayout()?.root;
+  if (!root) return;
+  const next = placePane(root, ref, addPane);
+  updatePanelLayout((l) => ({ ...l, panel_open: true, root: next }));
 }
 
 /** Merge `patch` into the props of leaf `id`. An empty string value

@@ -153,8 +153,51 @@ describe('the session button in the title band', () => {
     expect(titles.at(-1)).toBe(title);
 
     await act(async () => select(ORLA));
-    expect(band.label()).toBe('Not connected');
+    expect(band.label()).toBe('Not connected. Connection reset');
     expect(titles.at(-1)).toBe('Vosh');
+    await act(async () => band.root.unmount());
+  });
+
+  it('keeps the error of a drop through every try of its redial, and goes idle on your Disconnect', async () => {
+    const band = await mount();
+    const drop = (reason: string | null) =>
+      fire('session://state', { session: TOLLIVER, kind: 'disconnected', reason });
+    const redial = (payload: object) =>
+      fire('session://reconnect', { session: TOLLIVER, ...payload });
+    await act(async () => {
+      connected(TOLLIVER);
+      login(TOLLIVER, 'Tolliver');
+      drop('server closed connection');
+      redial({ kind: 'waiting', try: 1, tries: 8, seconds: 5 });
+    });
+    expect(band.label()).toBe('Not connected. server closed connection');
+    expect(titles.at(-1)).toBe('Vosh');
+
+    // A try dials, ends its link with no reason, then says why it failed.
+    await act(async () => {
+      redial({ kind: 'dialing', try: 1, tries: 8 });
+      fire('session://state', {
+        session: TOLLIVER,
+        kind: 'connecting',
+        host: HOST,
+        port: 1848,
+        tls: false,
+      });
+    });
+    expect(band.label()).toBe('Connecting to The Forsaken Lands');
+    await act(async () => {
+      drop(null);
+      redial({ kind: 'failed', try: 1, tries: 8, reason: 'the game refused the connection' });
+      redial({ kind: 'waiting', try: 2, tries: 8, seconds: 10 });
+    });
+    expect(band.label()).toBe('Not connected. the game refused the connection');
+
+    await act(async () => {
+      redial({ kind: 'cancelled' });
+      connected(TOLLIVER);
+      drop(null);
+    });
+    expect(band.label()).toBe('Not connected');
     await act(async () => band.root.unmount());
   });
 

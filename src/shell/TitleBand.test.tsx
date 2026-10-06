@@ -1,10 +1,12 @@
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import tauriConf from '../../src-tauri/tauri.conf.json';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
-import { PANEL_WIDTH_MIN, panelWidthFloor } from '../panel/paneLayout';
+import type { LuaPane } from '../ipc/panes';
+import type { PluginRow } from '../ipc/scripts';
+import { PANEL_WIDTH_MIN, panelWidthFloor, type PaneSplit } from '../panel/paneLayout';
 import type { Connection } from '../stores/session/useConnection';
 import frameCss from '../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
@@ -29,9 +31,45 @@ vi.mock('@tauri-apps/api/window', () => ({
   }),
 }));
 
+// The staff queues store behind Add a pane reaches the Tauri bridge
+// when it starts.
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
+// The Lua panes the session in front holds and its plugin rows, none
+// unless a test sets them.
+const lua = vi.hoisted(() => ({
+  panes: new Map<string, unknown>(),
+  rows: null as unknown[] | null,
+  /** How many draws read the Lua pane store. */
+  reads: 0,
+}));
+vi.mock('../stores/session/luaPanesStore', () => ({
+  useLuaPanes: () => {
+    lua.reads += 1;
+    return lua.panes;
+  },
+  getLuaPanes: () => lua.panes,
+}));
+vi.mock('../stores/session/pluginRowsStore', () => ({
+  usePluginRows: () => lua.rows,
+  getPluginRows: () => lua.rows,
+}));
+// Add a pane draws its rows in place, with no page to portal into.
+vi.mock('./ShellMenu', async (actual) => ({
+  ...(await actual<typeof import('./ShellMenu')>()),
+  ShellMenu: ({ label, children }: { label: string; children: ReactNode }) => (
+    <div role="menu" aria-label={label}>
+      {children}
+    </div>
+  ),
+}));
+
 const connection: Connection = {
   status: { kind: 'idle' },
   live: false,
+  redialing: false,
   target: { host: 'play.theforsakenlands.com', port: 1848, tls: false },
   world: 'Aabahran',
   character: null,
@@ -261,7 +299,9 @@ function on(el: FakeElement): Record<string, Handler> {
   return (el as unknown as Record<string, Record<string, Handler>>)[key];
 }
 
-describe('pressing the Settings button', () => {
+/** Mount on the stand in DOM for the tests in the describe that calls
+ *  it, and unmount after each. */
+function useStandInDom(): (() => Promise<void>)[] {
   const cleanups: (() => Promise<void>)[] = [];
 
   beforeAll(async () => {
@@ -290,6 +330,11 @@ describe('pressing the Settings button', () => {
   afterAll(() => {
     vi.unstubAllGlobals();
   });
+  return cleanups;
+}
+
+describe('pressing the Settings button', () => {
+  const cleanups = useStandInDom();
 
   async function mount() {
     const onOpenSettings = vi.fn();
@@ -338,5 +383,203 @@ describe('pressing the Settings button', () => {
     expect(m.onOpenSettings).toHaveBeenCalledTimes(1);
     expect(m.onMenuClosed).not.toHaveBeenCalled();
     expect(doc.activeElement).toBe(field);
+  });
+});
+
+// ── Add a pane ───────────────────────────────────────────────────────
+
+const pane = (plugin: string, id: string, title: string): LuaPane => ({
+  plugin,
+  id,
+  title,
+  meta: '',
+  blocks: [],
+});
+
+const row = (name: string, on: boolean, stopped: PluginRow['stopped'] = null): PluginRow => ({
+  name,
+  version: '1.0',
+  author: '',
+  description: '',
+  entry: 'init.lua',
+  on,
+  stopped,
+  loaded_ms: null,
+  misnamed: false,
+});
+
+/** A panel that shows Affects and Chat, so Map, Group and a second
+ *  Chat are left. */
+const tree = (...extra: PaneSplit['children']): PaneSplit => ({
+  id: 'root',
+  split: 'column',
+  weight: 1,
+  children: [
+    { id: 'affects', pane: 'affects', weight: 1, props: {} },
+    { id: 'chat', pane: 'chat', weight: 1, props: {} },
+    ...extra,
+  ],
+});
+
+const allShown = (): PaneSplit =>
+  tree(
+    { id: 'map', pane: 'map', weight: 1, props: {} },
+    { id: 'group', pane: 'group', weight: 1, props: {} },
+    { id: 'chat-2', pane: 'chat', weight: 1, props: {} },
+    { id: 'chat-3', pane: 'chat', weight: 1, props: {} },
+    { id: 'chat-4', pane: 'chat', weight: 1, props: {} },
+  );
+
+describe('Add a pane', () => {
+  const cleanups = useStandInDom();
+
+  afterEach(() => {
+    lua.panes = new Map();
+    lua.rows = null;
+    lua.reads = 0;
+  });
+
+  /** Weather and Worth, held in the order the plugins drew them. */
+  function holdPanes(weather = true, worth = true) {
+    lua.panes = new Map([
+      ['["worth_pane","worth"]', pane('worth_pane', 'worth', 'Worth')],
+      ['["weather_pane","weather"]', pane('weather_pane', 'weather', 'Weather')],
+    ]);
+    lua.rows = [row('weather_pane', weather), row('worth_pane', worth)];
+  }
+
+  async function open(paneTree: PaneSplit) {
+    const onAddPane = vi.fn();
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(createElement(TitleBand, { ...props, panelOpen: true, paneTree, onAddPane }));
+    });
+    cleanups.push(async () => {
+      await act(async () => root.unmount());
+      doc.body.removeChild(container);
+    });
+    const [plus] = findAll(container, (el) => el.getAttribute('aria-label') === 'Add a pane');
+    if (!plus) throw new Error('no Add a pane button');
+    await act(async () => on(plus).onClick());
+    const [menu] = findAll(container, (el) => el.getAttribute('role') === 'menu');
+    if (!menu) throw new Error('no Add a pane menu');
+    /** Each row's text, with a rule as `---` and the plugin after a
+     *  bar, and the note when the menu has no rows. */
+    const lines = findAll(
+      menu,
+      (el) =>
+        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') || el.tagName === 'P',
+    ).map((el) => {
+      if (el.getAttribute('role') === 'separator') return '---';
+      if (el.tagName === 'P') return el.textContent;
+      const kbd = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-kbd')[0];
+      const name = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-label')[0];
+      return kbd ? `${name.textContent} | ${kbd.textContent}` : el.textContent;
+    });
+    const pick = (text: string) =>
+      act(async () => {
+        const item = findAll(
+          menu,
+          (el) => el.getAttribute('role') === 'menuitem' && el.textContent.startsWith(text),
+        )[0];
+        on(item).onClick();
+      });
+    return { lines, pick, onAddPane };
+  }
+
+  it('reads the Lua panes only while the menu is open', async () => {
+    holdPanes();
+    renderToStaticMarkup(<TitleBand {...props} panelOpen paneTree={tree()} />);
+    expect(lua.reads).toBe(0);
+    await open(tree());
+    expect(lua.reads).toBeGreaterThan(0);
+  });
+
+  it('lists the Lua panes after a rule, in title order, each with its plugin', async () => {
+    holdPanes();
+    expect((await open(tree())).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat | starts on tell',
+      '---',
+      'Weather | weather_pane',
+      'Worth | worth_pane',
+    ]);
+  });
+
+  it('lists a Lua pane only while its plugin is on and running', async () => {
+    holdPanes(false);
+    expect((await open(tree())).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat | starts on tell',
+      '---',
+      'Worth | worth_pane',
+    ]);
+    lua.rows = [row('weather_pane', true, 'time'), row('worth_pane', true)];
+    expect((await open(tree())).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat | starts on tell',
+      '---',
+      'Worth | worth_pane',
+    ]);
+    lua.rows = null;
+    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat | starts on tell']);
+  });
+
+  it('drops a Lua pane once the panel shows it', async () => {
+    holdPanes();
+    const weather = {
+      id: 'weather',
+      pane: 'lua',
+      weight: 1,
+      props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
+    } as const;
+    expect((await open(tree(weather))).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat | starts on tell',
+      '---',
+      'Worth | worth_pane',
+    ]);
+    expect((await open(allShown())).lines).toEqual([
+      'Weather | weather_pane',
+      'Worth | worth_pane',
+    ]);
+  });
+
+  it('says every pane is showing only when neither list has one', async () => {
+    expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
+    holdPanes(false, false);
+    expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
+  });
+
+  it('says a second Chat pane starts on tell', async () => {
+    const solo = (props: Record<string, string>): PaneSplit => ({
+      id: 'root',
+      split: 'column',
+      weight: 1,
+      children: [{ id: 'chat', pane: 'chat', weight: 1, props }],
+    });
+    const empty: PaneSplit = { id: 'root', split: 'column', weight: 1, children: [] };
+    expect((await open(empty)).lines).toContain('Chat');
+    expect((await open(solo({ rest: '1' }))).lines).toContain('Chat | starts on tell');
+    expect((await open(solo({ channel: 'tell' }))).lines).toContain('Chat');
+  });
+
+  it('adds a Lua pane by its plugin, id and title', async () => {
+    holdPanes();
+    const m = await open(tree());
+    await m.pick('Worth');
+    expect(m.onAddPane).toHaveBeenCalledWith({
+      pane: 'lua',
+      props: { plugin: 'worth_pane', id: 'worth', title: 'Worth' },
+    });
+    const n = await open(tree());
+    await n.pick('Map');
+    expect(n.onAddPane).toHaveBeenCalledWith({ pane: 'map', props: {} });
   });
 });

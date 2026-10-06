@@ -18,9 +18,57 @@ import { pendingWrites } from '../lib/pendingWrites';
 // are pure and always return a sanitized tree, so the panel can keep
 // the result in state and hand it straight back to setPaneLayout.
 
-/** Content a pane can show. The panel holds at most one of each. */
+/** The built-in content a pane can show. The panel holds up to
+ *  CHAT_PANES_MAX Chat panes and one of each other type. */
 export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
+
+/** How many Chat panes the panel holds. Mirrors CHAT_PANES_MAX in
+ *  src-tauri/src/profile/panes.rs. */
+export const CHAT_PANES_MAX = 4;
+
+/** The type of a pane a plugin draws with mud.pane. The panel holds
+ *  any number of them, but only one per `plugin` and `id` in the
+ *  leaf's props.
+ *  The props also keep `title`, the last title the pane showed, so a
+ *  pane whose plugin is not running can still name itself. */
+export const LUA_PANE = 'lua';
+export type PaneKind = PaneType | typeof LUA_PANE;
+
+/** A pane as the tree tells it apart: its type, plus the props that
+ *  name a Lua pane. A leaf is one, and the tree operations place one. */
+export interface PaneRef {
+  pane: PaneKind;
+  props: Record<string, string>;
+}
+
+/** The reference to a built-in pane, which needs no props. */
+export function paneRef(pane: PaneType): PaneRef {
+  return { pane, props: {} };
+}
+
+/** What the tree counts a pane as: its type for a built-in pane, its
+ *  plugin and id for a Lua pane. Mirrors PaneKey in
+ *  src-tauri/src/profile/panes.rs. */
+export function paneKey(ref: PaneRef): string {
+  if (ref.pane !== LUA_PANE) return ref.pane;
+  return `${LUA_PANE}:${JSON.stringify([ref.props.plugin ?? '', ref.props.id ?? ''])}`;
+}
+
+/** How many panes the tree keeps with the paneKey of `ref`:
+ *  CHAT_PANES_MAX for Chat, one for anything else. Mirrors pane_cap in
+ *  src-tauri/src/profile/panes.rs. */
+export function paneCap(ref: PaneRef): number {
+  return ref.pane === 'chat' ? CHAT_PANES_MAX : 1;
+}
+
+/** What React keys the pane's box on: its paneKey for a pane the tree
+ *  holds once, and the paneKey with the leaf id for a Chat pane, which
+ *  the tree can hold up to CHAT_PANES_MAX times. */
+export function leafKey(leaf: PaneLeaf): string {
+  const key = paneKey(leaf);
+  return paneCap(leaf) === 1 ? key : `${key}#${leaf.id}`;
+}
 
 /** The pane header, the --pane-header token. */
 export const PANE_HEADER_PX = 28;
@@ -28,14 +76,16 @@ export const PANE_HEADER_PX = 28;
 export const PANE_ROW_PX = 22;
 
 /** The height each pane type needs to be read: Affects its header and
- *  six rows, Group and Staff queues their header and three rows, Chat
- *  a couple of messages, and the Map a drawing you can follow. */
-export const PANE_MIN_H: Record<PaneType, number> = {
+ *  six rows, Group, Staff queues and a Lua pane their header and three
+ *  rows, Chat a couple of messages, and the Map a drawing you can
+ *  follow. */
+export const PANE_MIN_H: Record<PaneKind, number> = {
   map: 180,
   affects: PANE_HEADER_PX + 6 * PANE_ROW_PX,
   group: PANE_HEADER_PX + 3 * PANE_ROW_PX,
   chat: 120,
   imm: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+  lua: PANE_HEADER_PX + 3 * PANE_ROW_PX,
 };
 
 /** `column` stacks children top to bottom (Split down), `row` sets
@@ -45,10 +95,11 @@ export type SplitDir = 'row' | 'column';
 export interface PaneLeaf {
   /** Stable id to key pane state on. Kept across every operation. */
   id: string;
-  pane: PaneType;
+  pane: PaneKind;
   /** Share of the parent split. Siblings sum to 1. */
   weight: number;
-  /** Per-pane settings, such as the chat pane's channel filter. */
+  /** Per-pane settings, such as the chat pane's channel filter, and
+   *  the plugin, id and title of a Lua pane. */
   props: Record<string, string>;
 }
 
@@ -174,7 +225,8 @@ interface SanitizeContext {
    *  one a later node already owns. */
   reserved: Set<string>;
   used: Set<string>;
-  panes: Set<PaneType>;
+  /** How many leaves of each paneKey are placed so far. */
+  panes: Map<string, number>;
 }
 
 function claimId(ctx: SanitizeContext, raw: string, base: string): string {
@@ -191,10 +243,13 @@ function claimId(ctx: SanitizeContext, raw: string, base: string): string {
   }
 }
 
-function paneType(raw: string): PaneType | null {
+function paneType(raw: string): PaneKind | null {
   const wanted = raw.trim().toLowerCase();
+  if (wanted === LUA_PANE) return LUA_PANE;
   return PANE_TYPES.find((t) => t === wanted) ?? null;
 }
+
+const blank = (value: string | undefined) => (value ?? '').trim().length === 0;
 
 function splitDir(raw: string | null): SplitDir {
   return raw !== null && raw.trim().toLowerCase() === 'row' ? 'row' : 'column';
@@ -237,8 +292,13 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
   const weight = cleanWeight(raw.weight);
   if (raw.pane !== null) {
     const kind = paneType(raw.pane);
-    if (kind === null || ctx.panes.has(kind)) return null;
-    ctx.panes.add(kind);
+    if (kind === null) return null;
+    if (kind === LUA_PANE && (blank(raw.props.plugin) || blank(raw.props.id))) return null;
+    const ref = { pane: kind, props: raw.props };
+    const key = paneKey(ref);
+    const placed = ctx.panes.get(key) ?? 0;
+    if (placed >= paneCap(ref)) return null;
+    ctx.panes.set(key, placed + 1);
     return { id: claimId(ctx, raw.id, kind), pane: kind, weight, props: sortedProps(raw.props) };
   }
   const dir = splitDir(raw.split);
@@ -279,7 +339,9 @@ function sanitizeChildren(
 }
 
 /** Repair a pane tree from disk, the wire, or a hand edit. Unknown
- *  pane types and repeat panes drop out, blank or clashing ids get
+ *  pane types, panes past their paneCap and Lua panes without a plugin
+ *  or an id
+ *  drop out, blank or clashing ids get
  *  fresh ones, a split with one child gives way to that child, a split
  *  inside a split of the same direction merges into it, splits nested
  *  past depth three flatten, weights become positive shares that sum
@@ -292,7 +354,7 @@ export function sanitize(tree: unknown): PaneSplit {
     node.children.forEach(collect);
   };
   collect(rawRoot);
-  const ctx: SanitizeContext = { reserved, used: new Set(), panes: new Set() };
+  const ctx: SanitizeContext = { reserved, used: new Set(), panes: new Map() };
 
   // A bare leaf at the root gets wrapped so the root stays a split.
   const raw: RawNode =
@@ -354,24 +416,48 @@ export function findNode(tree: PaneNode, id: string): PaneNode | null {
   return null;
 }
 
-/** The id of the leaf showing `pane`, or null when the panel does not
- *  show it. */
-export function leafIdFor(node: PaneNode, pane: PaneType): string | null {
-  if (isLeaf(node)) return node.pane === pane ? node.id : null;
-  for (const child of node.children) {
-    const hit = leafIdFor(child, pane);
-    if (hit !== null) return hit;
-  }
-  return null;
+/** The id of the first leaf in reading order showing `ref`, or null
+ *  when the panel does not show it. */
+export function leafIdFor(node: PaneNode, ref: PaneRef): string | null {
+  const key = paneKey(ref);
+  let hit: string | null = null;
+  walk(node, (n) => {
+    if (hit === null && isLeaf(n) && paneKey(n) === key) hit = n.id;
+  });
+  return hit;
 }
 
-/** Pane types in the tree, in reading order. */
-export function allPanes(tree: PaneSplit): PaneType[] {
-  const out: PaneType[] = [];
+/** The paneKey of every pane in the tree, in reading order. A built-in
+ *  pane's key is its type. */
+export function allPanes(tree: PaneSplit): string[] {
+  const out: string[] = [];
   walk(tree, (n) => {
-    if (isLeaf(n)) out.push(n.pane);
+    if (isLeaf(n)) out.push(paneKey(n));
   });
   return out;
+}
+
+/** How many leaves of the tree show `ref`. */
+export function countPanes(tree: PaneNode, ref: PaneRef): number {
+  const key = paneKey(ref);
+  let count = 0;
+  walk(tree, (n) => {
+    if (isLeaf(n) && paneKey(n) === key) count += 1;
+  });
+  return count;
+}
+
+// The tree to place `ref` in. A pane the tree holds once leaves the
+// spot it shows in, so placing it moves it. A Chat pane stays where it
+// is and the new one joins it, unless CHAT_PANES_MAX already show, which
+// gives null.
+function roomFor(tree: PaneSplit, ref: PaneRef): PaneSplit | null {
+  const cap = paneCap(ref);
+  if (cap === 1) {
+    const key = paneKey(ref);
+    return removeWhere(tree, (n) => isLeaf(n) && paneKey(n) === key);
+  }
+  return countPanes(tree, ref) < cap ? tree : null;
 }
 
 /** `base` if no node uses it yet, else `base-2`, `base-3`, and so on. */
@@ -383,6 +469,12 @@ function freshId(tree: PaneSplit, base: string): string {
     const candidate = `${base}-${n}`;
     if (!ids.has(candidate)) return candidate;
   }
+}
+
+// A new leaf showing `ref`, with an id `tree` does not use yet, such as
+// chat-2 beside a chat.
+function freshLeaf(tree: PaneSplit, ref: PaneRef): PaneLeaf {
+  return { id: freshId(tree, ref.pane), pane: ref.pane, weight: 1, props: ref.props };
 }
 
 // Drop every non-root node matching `pred`. The result may hold empty
@@ -408,21 +500,19 @@ function mapTree(tree: PaneSplit, id: string, fn: (n: PaneNode) => PaneNode): Pa
   return isLeaf(out) ? tree : out;
 }
 
-/** Split the node `id` and put `newPane` after it: to its right for
+/** Split the node `id` and put `ref` after it: to its right for
  *  `row`, below it for `column`. Inside a split of the same direction
  *  the new pane becomes a sibling and the two halve the old share.
- *  A pane already shown elsewhere moves here. */
-export function splitPane(
-  tree: PaneSplit,
-  id: string,
-  dir: SplitDir,
-  newPane: PaneType,
-): PaneSplit {
+ *  A pane the tree holds once moves here from where it shows. Another
+ *  Chat pane joins the ones shown, and none comes once
+ *  CHAT_PANES_MAX show. */
+export function splitPane(tree: PaneSplit, id: string, dir: SplitDir, ref: PaneRef): PaneSplit {
   const target = findNode(tree, id);
   if (target === null || id === tree.id) return tree;
-  if (isLeaf(target) && target.pane === newPane) return tree;
-  const base = removeWhere(tree, (n) => isLeaf(n) && n.pane === newPane);
-  const fresh: PaneLeaf = { id: freshId(base, newPane), pane: newPane, weight: 1, props: {} };
+  if (paneCap(ref) === 1 && isLeaf(target) && paneKey(target) === paneKey(ref)) return tree;
+  const base = roomFor(tree, ref);
+  if (base === null) return tree;
+  const fresh = freshLeaf(base, ref);
   const splitId = freshId(base, 'split');
   const insert = (node: PaneSplit): PaneSplit => {
     const at = node.children.findIndex((c) => c.id === id);
@@ -455,14 +545,19 @@ export function closePane(tree: PaneSplit, id: string): PaneSplit {
   return sanitize(removeWhere(tree, (n) => n.id === id));
 }
 
-/** Show `pane` in the leaf `id` instead of what it shows now (Show
- *  here instead). The leaf keeps its id and share and starts with
- *  fresh props. A pane already shown elsewhere moves here. */
-export function replacePane(tree: PaneSplit, id: string, pane: PaneType): PaneSplit {
+/** Show `ref` in the leaf `id` instead of what it shows now (Show
+ *  here instead). The leaf keeps its id and share and starts with the
+ *  props of `ref`. A pane the tree holds once moves here from where it
+ *  shows. Other Chat panes stay, and a leaf already showing Chat, or a
+ *  tree with CHAT_PANES_MAX of them, is left alone. */
+export function replacePane(tree: PaneSplit, id: string, ref: PaneRef): PaneSplit {
   const target = findNode(tree, id);
-  if (target === null || !isLeaf(target) || target.pane === pane) return tree;
-  const base = removeWhere(tree, (n) => isLeaf(n) && n.pane === pane);
-  return sanitize(mapTree(base, id, (n) => ({ id: n.id, pane, weight: n.weight, props: {} })));
+  if (target === null || !isLeaf(target) || paneKey(target) === paneKey(ref)) return tree;
+  const base = roomFor(tree, ref);
+  if (base === null) return tree;
+  return sanitize(
+    mapTree(base, id, (n) => ({ id: n.id, pane: ref.pane, weight: n.weight, props: ref.props })),
+  );
 }
 
 /** Set the shares of split `parentId`'s children, one weight per
@@ -480,16 +575,16 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
   );
 }
 
-/** Add `pane` at the bottom of the panel (Add a pane). Its share
+/** Add `ref` at the bottom of the panel (Add a pane). Its share
  *  stands to the panes already there as its reading height stands to
  *  theirs, so a short list such as Group takes a short share and the
  *  panes above keep their rows. An even share would squeeze Affects to
  *  its minimum and leave Group half empty. A row root nests under a new
- *  column so the pane still lands at the bottom. A pane already shown
+ *  column so the pane still lands at the bottom. A pane at its paneCap
  *  leaves the tree alone. */
-export function addPane(tree: PaneSplit, pane: PaneType): PaneSplit {
-  if (allPanes(tree).includes(pane)) return tree;
-  const fresh: PaneLeaf = { id: freshId(tree, pane), pane, weight: 1, props: {} };
+export function addPane(tree: PaneSplit, ref: PaneRef): PaneSplit {
+  if (countPanes(tree, ref) >= paneCap(ref)) return tree;
+  const fresh = freshLeaf(tree, ref);
   if (tree.children.length === 0) {
     return sanitize({ ...tree, split: 'column', children: [fresh] });
   }
@@ -498,7 +593,7 @@ export function addPane(tree: PaneSplit, pane: PaneType): PaneSplit {
   const held = above.reduce((acc, c) => acc + c.weight, 0);
   const read = above.reduce((acc, c) => acc + readingHeight(c), 0);
   const weight =
-    held > 0 && read > 0 ? (held * PANE_MIN_H[pane]) / read : 1 / Math.max(1, above.length);
+    held > 0 && read > 0 ? (held * PANE_MIN_H[ref.pane]) / read : 1 / Math.max(1, above.length);
   return sanitize({
     id: tree.id,
     split: 'column',

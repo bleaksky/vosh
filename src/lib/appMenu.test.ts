@@ -12,6 +12,7 @@ import {
   type MenuStateInput,
 } from './appMenu';
 import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
+import { paneKey } from '../panel/paneLayout';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -215,6 +216,12 @@ describe('buildMenuState', () => {
     ]);
     const hidden = buildMenuState(input({ panelOpen: false }));
     expect(hidden.panes.every((p) => !p.visible)).toBe(true);
+  });
+
+  it('lists the built-in panes alone while a Lua pane shows', () => {
+    const lua = paneKey({ pane: 'lua', props: { plugin: 'weather_pane', id: 'weather' } });
+    const state = buildMenuState(input({ shownPanes: ['map', 'affects', lua] }));
+    expect(state).toEqual(buildMenuState(input()));
   });
 
   it('lists staff queues only once the MUD offers it or the panel shows it', () => {

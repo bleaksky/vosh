@@ -408,15 +408,25 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(
 ) {
     // The series ends first, so a try that connects as you disconnect
     // cannot put its link in the slot after the take below.
-    reconnect::cancel(app, session).await;
-    {
+    let mut cut = reconnect::cancel(app, session).await;
+    let live = {
         let mut current = session.slot.lock().await;
-        if let Some(handle) = current.take() {
+        let handle = current.take();
+        // A link that dropped stays in the slot after its loop ended.
+        let live = handle.as_ref().is_some_and(|h| !h.task.is_finished());
+        if let Some(handle) = handle {
             handle.shutdown().await;
         }
-    }
+        live
+    };
     // A link that dropped as it ended may have started a series.
-    reconnect::cancel(app, session).await;
+    cut |= reconnect::cancel(app, session).await;
+    // A link that ends says it ended. A series you cut short between its
+    // tries has none, so the page hears your Disconnect here, and a try
+    // cut short as it dialed stops showing as connecting.
+    if cut && !live {
+        emit_state(app, session, StatePayload::Disconnected { reason: None });
+    }
     if let Ok(mut g) = session.current_connection.lock() {
         *g = None;
     }

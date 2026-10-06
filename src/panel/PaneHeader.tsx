@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { usePaneLeaf } from './paneActions';
 import { MoreIcon } from '../ui/icons';
 import { PaneMenu } from './PaneMenu';
-import { PANE_LABELS } from './paneTypes';
+import { paneLabel } from './paneTypes';
 
 // The 28 px header every pane opens with (SPEC 9): the caps label at
 // x 18, an optional meta 8 px after it, and the more button 8 px from
@@ -11,14 +11,17 @@ import { PANE_LABELS } from './paneTypes';
 interface Props {
   /** Short state beside the label, like the area name or a count. */
   meta?: ReactNode;
+  /** The label in place of the one the leaf names, as a Lua pane shows
+   *  the title its plugin draws now. */
+  title?: string;
 }
 
-export function PaneHeader({ meta }: Props) {
+export function PaneHeader({ meta, title }: Props) {
   const leaf = usePaneLeaf();
   const moreRef = useRef<HTMLButtonElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   if (!leaf) return null;
-  const label = PANE_LABELS[leaf.pane];
+  const label = title ?? paneLabel(leaf);
   const anchor = moreRef.current;
 
   return (

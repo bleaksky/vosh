@@ -307,28 +307,29 @@ pub(crate) async fn session_reconnect_cancel<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Whether the profile the selected session plays dials again after the
-/// link drops while you play (Alerts Q14). On at first.
+/// Whether `profile`, or the profile the selected session plays when it
+/// names none, dials again after the link drops while you play (Alerts
+/// Q14). On at first.
 #[tauri::command]
-pub(crate) async fn reconnect_get(state: State<'_, SharedState>) -> Result<bool, String> {
-    Ok(state
-        .selected_session()
-        .lock_profile()
-        .await
-        .reconnect
-        .is_on())
+pub(crate) async fn reconnect_get(
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<bool, String> {
+    Ok(state.lock_named(profile).await?.reconnect.is_on())
 }
 
-/// Turn Reconnect when the link drops on or off for the profile the
-/// selected session plays, and save. A series that runs goes on.
+/// Turn Reconnect when the link drops on or off for `profile`, or for the
+/// profile the selected session plays when it names none, and save. A
+/// series that runs goes on.
 #[tauri::command]
 pub(crate) async fn reconnect_set<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     on: bool,
+    profile: Option<String>,
 ) -> Result<(), String> {
     let open = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         p.reconnect = crate::profile::file::OnSwitch(on);
         p.open().clone()
     };

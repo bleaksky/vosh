@@ -363,6 +363,92 @@
           ]
         }
       }
+    },
+    {
+      "name": "lua panes stay once per plugin and id and need both",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "map", "pane": "map", "weight": 2 },
+            {
+              "id": "",
+              "pane": "lua",
+              "props": { "id": "weather", "plugin": "weather_pane", "title": "Weather" }
+            },
+            {
+              "pane": "lua",
+              "props": { "id": "tides", "plugin": "weather_pane", "title": "Tides" }
+            },
+            {
+              "id": "again",
+              "pane": "lua",
+              "props": { "id": "weather", "plugin": "weather_pane" }
+            },
+            { "id": "no-id", "pane": "lua", "props": { "plugin": "weather_pane" } },
+            { "pane": "lua", "props": { "id": "weather", "plugin": " " } }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.5 },
+            {
+              "id": "lua",
+              "pane": "lua",
+              "weight": 0.25,
+              "props": { "id": "weather", "plugin": "weather_pane", "title": "Weather" }
+            },
+            {
+              "id": "lua-2",
+              "pane": "lua",
+              "weight": 0.25,
+              "props": { "id": "tides", "plugin": "weather_pane", "title": "Tides" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "chat panes stay up to four and other types once",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "map", "pane": "map" },
+            { "id": "", "pane": "chat", "props": { "channel": "tell" } },
+            { "pane": "chat", "props": { "rest": "1" } },
+            { "id": "again", "pane": "map" },
+            { "id": "c3", "pane": "chat" },
+            { "pane": "chat" },
+            { "id": "c5", "pane": "chat", "props": { "channel": "say" } }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.2 },
+            { "id": "chat", "pane": "chat", "weight": 0.2, "props": { "channel": "tell" } },
+            { "id": "chat-2", "pane": "chat", "weight": 0.2, "props": { "rest": "1" } },
+            { "id": "c3", "pane": "chat", "weight": 0.2 },
+            { "id": "chat-3", "pane": "chat", "weight": 0.2 }
+          ]
+        }
+      }
     }
   ]
 }

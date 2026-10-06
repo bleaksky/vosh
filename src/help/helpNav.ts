@@ -1,3 +1,4 @@
+import { codePieces } from './helpCode';
 import { classifyInline, inlinePieces } from './helpInline';
 import { HELP_TOPICS, parseHelpBody, searchTopics, type HelpTopic } from './helpContent';
 
@@ -12,11 +13,15 @@ export function sectionTopics(section: string, topics: HelpTopic[] = HELP_TOPICS
 
 /** The text a topic draws, piece by piece: its title, then each run of
  *  plain text and each backticked span of its body, without the
- *  backticks. A match never crosses two pieces, so marks and counts
+ *  backticks, and each colored run of a code block. A match never crosses two pieces, so marks and counts
  *  read the same pieces. */
 export function topicPieces(topic: HelpTopic): string[] {
   const pieces = [topic.title];
   for (const block of parseHelpBody(topic.body)) {
+    if (block.kind === 'code') {
+      for (const piece of codePieces(block.text, block.lang)) pieces.push(piece.text);
+      continue;
+    }
     const lines =
       block.kind === 'paragraph'
         ? [block.text]

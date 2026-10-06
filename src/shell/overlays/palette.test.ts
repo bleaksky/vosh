@@ -181,6 +181,11 @@ describe('paletteSections', () => {
     expect(last.destructive).toBeFalsy();
   });
 
+  it('offers Connect then Disconnect while a redial waits', () => {
+    const rows = buildPaletteEntries(deps({ connected: false, redialing: true }));
+    expect(rows.slice(-2).map((r) => r.id)).toEqual(['connect', 'disconnect']);
+  });
+
   it('leads with Recent and keeps destructive commands out of it', () => {
     const sections = paletteSections(buildPaletteEntries(deps()), '', [
       'disconnect',

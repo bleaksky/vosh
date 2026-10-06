@@ -223,7 +223,30 @@ async fn a_closing_line_since_the_last_prompt_never_redials() {
         .await;
     assert_eq!(
         last_of(&h, h.first, "declined"),
-        Some(json!({"kind": "declined", "why": "closing"}))
+        Some(json!({"kind": "declined", "why": "quit"}))
+    );
+    clock.stays_quiet().await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_ban_line_since_the_last_prompt_never_redials() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    // A ban as you play quits you, update.c:5094, then the link closes.
+    h.servers[0].push(
+        b"\n\rYour account has been banned.\n\rYou have escaped from the Forsaken Lands.\n\r",
+    );
+    h.until_shown("You have escaped from the Forsaken Lands.")
+        .await;
+    h.servers[0].cut();
+    h.until("the decline", |h| last_of(h, h.first, "declined").is_some())
+        .await;
+    assert_eq!(
+        last_of(&h, h.first, "declined"),
+        Some(json!({"kind": "declined", "why": "banned"}))
     );
     clock.stays_quiet().await;
     h.finish(grid).await;
@@ -256,12 +279,17 @@ async fn a_drop_at_the_account_menu_starts_nothing() {
 async fn with_reconnect_off_a_drop_rings_and_stays_down() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = logged_in(&["alert_connection"]).await;
-    let on = || crate::ipc::session::reconnect_get(h.app.state());
+    let on = || crate::ipc::session::reconnect_get(h.app.state(), None);
     assert_eq!(on().await, Ok(true), "on for every profile");
-    crate::ipc::session::reconnect_set(h.app.handle().clone(), h.app.state(), false)
+    crate::ipc::session::reconnect_set(h.app.handle().clone(), h.app.state(), false, None)
         .await
         .expect("the switch");
     assert_eq!(on().await, Ok(false));
+    let named = crate::ipc::session::reconnect_get(
+        h.app.state(),
+        Some(crate::profile::set::DEFAULT_PROFILE_NAME.into()),
+    );
+    assert_eq!(named.await, Ok(false), "the profile by name");
     let file = std::fs::read_to_string(
         h.profile_file(crate::profile::set::DEFAULT_PROFILE_NAME)
             .await,
@@ -295,6 +323,12 @@ async fn disconnect_during_a_wait_ends_the_series() {
     assert_eq!(wait, Duration::from_secs(3));
     h.disconnect().await;
     assert_eq!(kinds(&h, h.first), ["waiting", "cancelled"]);
+    // The page hears your Disconnect, with no reason, after the drop.
+    let states = h.events_of(h.first, "session://state");
+    assert_eq!(
+        states.last(),
+        Some(&json!({"kind": "disconnected", "reason": null}))
+    );
     let _ = done.send(());
     clock.stays_quiet().await;
     assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 1);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultLayout, splitPane } from './paneLayout';
+import { defaultLayout, paneRef, splitPane } from './paneLayout';
 import type { ImmQueues } from '../stores/gmcp/immStore';
 import { immRows, immSummary } from './imm/immRows';
 import { affectHours, affectWords, chatTime, exitsLabel } from './paneText';
@@ -70,7 +70,7 @@ describe('row text', () => {
 
 describe('setLeafProps', () => {
   it('sets a prop on one leaf and keeps every id', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'column', 'chat');
+    const tree = splitPane(defaultLayout().root, 'affects', 'column', paneRef('chat'));
     const next = setLeafProps(tree, 'chat', { channel: 'ooc' });
     const chat = JSON.stringify(next).includes('"channel":"ooc"');
     expect(chat).toBe(true);
@@ -80,7 +80,7 @@ describe('setLeafProps', () => {
   });
 
   it('removes a prop on an empty value and returns the same tree for no change', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'column', 'chat');
+    const tree = splitPane(defaultLayout().root, 'affects', 'column', paneRef('chat'));
     const withChannel = setLeafProps(tree, 'chat', { channel: 'ooc' });
     expect(setLeafProps(withChannel, 'chat', { channel: 'ooc' })).toBe(withChannel);
     const cleared = setLeafProps(withChannel, 'chat', { channel: '' });

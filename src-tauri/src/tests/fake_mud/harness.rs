@@ -20,7 +20,7 @@ use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
 use crate::sessions::SessionId;
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 18] = [
+const EVENTS: [&str; 19] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -39,6 +39,7 @@ const EVENTS: [&str; 18] = [
     crate::app::events::DAYLIGHT_CHANGED,
     crate::app::events::SESSIONS_CHANGED,
     crate::app::events::LUA_OUTPUT,
+    crate::app::events::LUA_PANES,
 ];
 
 /// What a test hands a link of the fake game that plays.

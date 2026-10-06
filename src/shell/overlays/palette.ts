@@ -91,6 +91,9 @@ export interface PaletteSessions {
 
 export interface PaletteDeps {
   connected: boolean;
+  /** A redial waits or dials after a drop, so Disconnect follows the
+   *  Connect row to end it. */
+  redialing?: boolean;
   /** Host of the live session, shown as the Session header chip. */
   host?: string | null;
   /** Display name of the world the connect row targets. */
@@ -437,26 +440,28 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     run: () => void sendInput('#profile save'),
   });
   // Disconnect is the final row. The palette opens with its first safe
-  // row selected, so ⌘K then Enter can never drop the session.
-  entries.push(
-    deps.connected
-      ? {
-          id: 'disconnect',
-          section: 'session',
-          title: 'Disconnect',
-          keywords: 'quit close session',
-          destructive: true,
-          run: deps.disconnect,
-        }
-      : {
-          id: 'connect',
-          section: 'session',
-          title: deps.worldName ? `Connect to ${deps.worldName}` : 'Connect',
-          keywords: 'open session login',
-          keys: APP_SHORTCUTS.connect,
-          run: deps.connect,
-        },
-  );
+  // row selected, so ⌘K then Enter can never drop the session. While a
+  // redial waits, Connect dials it now and Disconnect ends it.
+  if (!deps.connected) {
+    entries.push({
+      id: 'connect',
+      section: 'session',
+      title: deps.worldName ? `Connect to ${deps.worldName}` : 'Connect',
+      keywords: 'open session login',
+      keys: APP_SHORTCUTS.connect,
+      run: deps.connect,
+    });
+  }
+  if (deps.connected || deps.redialing) {
+    entries.push({
+      id: 'disconnect',
+      section: 'session',
+      title: 'Disconnect',
+      keywords: 'quit close session',
+      destructive: true,
+      run: deps.disconnect,
+    });
+  }
 
   return entries;
 }

@@ -2,11 +2,13 @@ import { Fragment, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from './chat/chatColors';
-import type { PaneLayout, PaneLeaf, PaneType } from './paneLayout';
+import type { PaneLayout, PaneLeaf, PaneSplit, PaneType } from './paneLayout';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
+import { openSettingsTab } from '../lib/settingsLink';
 import { findTheme } from '../theme/themes';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
-import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
+import { ChannelColorItems, ChannelColorRows, PaneMenu, ShowHereRows } from './PaneMenu';
+import { panesToShowInstead } from './paneTypes';
 import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind the menu reach the Tauri bridge when they start.
@@ -25,12 +27,15 @@ vi.mock('../ipc/profiles', async (actual) => ({
   profilesList: vi.fn(() => new Promise(() => undefined)),
 }));
 // The menu draws its rows in place, with no page to portal into, and
-// reads the stores' values without the running app.
+// reads the stores' values without the running app. The rows of the
+// last menu drawn stay at hand, so a test can pick one.
+const drawn = vi.hoisted(() => ({ rows: null as unknown }));
 vi.mock('../ui/MenuSurface', async (actual) => ({
   ...(await actual<typeof import('../ui/MenuSurface')>()),
-  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => (
-    <menu aria-label={label}>{children}</menu>
-  ),
+  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => {
+    drawn.rows = children;
+    return <menu aria-label={label}>{children}</menu>;
+  },
 }));
 // The display the menu reads, the default unless a test picks a style.
 const shown = vi.hoisted(() => ({ style: null as string | null }));
@@ -42,11 +47,34 @@ vi.mock('../stores/config/affectsDisplayStore', async () => {
   };
 });
 vi.mock('../stores/config/chatColorsStore', () => ({ useChatColors: () => new Map() }));
+vi.mock('../lib/settingsLink', () => ({ openSettingsTab: vi.fn() }));
 // The layout the menu splits, none unless a test lays one out.
 const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
 vi.mock('./panelLayoutStore', async (actual) => ({
   ...(await actual<typeof import('./panelLayoutStore')>()),
   getPanelLayout: () => laid.layout,
+}));
+// The Lua panes the session in front holds, Weather and Worth, and
+// whether their plugins run, neither unless a test turns them on.
+const lua = vi.hoisted(() => ({ on: false }));
+vi.mock('../stores/session/luaPanesStore', () => ({
+  getLuaPanes: () =>
+    new Map(
+      ['worth', 'weather'].map((id) => [
+        id,
+        {
+          plugin: `${id}_pane`,
+          id,
+          title: id[0].toUpperCase() + id.slice(1),
+          meta: '',
+          blocks: [],
+        },
+      ]),
+    ),
+}));
+vi.mock('../stores/session/pluginRowsStore', () => ({
+  getPluginRows: () =>
+    ['weather_pane', 'worth_pane'].map((name) => ({ name, on: lua.on, stopped: null })),
 }));
 vi.mock('../theme/useActiveTheme', async () => {
   const { findTheme: find } = await import('../theme/themes');
@@ -125,6 +153,7 @@ beforeEach(() => {
   vi.mocked(setChatColor).mockClear();
   shown.style = null;
   laid.layout = null;
+  lua.on = false;
 });
 
 describe('PaneMenu', () => {
@@ -174,6 +203,34 @@ describe('PaneMenu', () => {
     expect(menu('chat')).toContain('Channel colors');
     for (const pane of ['map', 'affects', 'group'] as const) {
       expect(menu(pane), pane).not.toContain('Channel colors');
+    }
+  });
+
+  it('offers to edit the plugin of a Lua pane between Show here instead and Close pane', () => {
+    const leaf: PaneLeaf = {
+      id: 'leaf-weather',
+      pane: 'lua',
+      weight: 1,
+      props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
+    };
+    renderToStaticMarkup(<PaneMenu leaf={leaf} anchor={anchor} onClose={() => {}} />);
+    const node = drawn.rows as ReactNode;
+    const list = rows(node).map((row) => (row === '---' ? row : label(row)));
+    expect(list.slice(-5)).toEqual([
+      'Show here instead',
+      '---',
+      'Edit weather_pane in Scripts…',
+      '---',
+      'Close pane',
+    ]);
+    const edit = items(node).find((row) => label(row).startsWith('Edit'));
+    // Closing hands the caret back to the command line.
+    vi.stubGlobal('window', { dispatchEvent: () => true });
+    edit?.props.onSelect?.();
+    vi.unstubAllGlobals();
+    expect(openSettingsTab).toHaveBeenCalledWith('scripts:weather_pane');
+    for (const pane of ['map', 'affects', 'group', 'chat'] as const) {
+      expect(menu(pane), pane).not.toContain('in Scripts');
     }
   });
 
@@ -277,5 +334,84 @@ describe('ChannelColorItems', () => {
     all[0].props.onSelect?.();
     expect(setChatColor).toHaveBeenLastCalledWith('tell', null);
     expect(done).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Show here instead', () => {
+  const weather: PaneLeaf = {
+    id: 'leaf-weather',
+    pane: 'lua',
+    weight: 1,
+    props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
+  };
+
+  const listed = (leaf: PaneLeaf, tree: PaneSplit | null = null) => {
+    const pick = vi.fn();
+    const list = rows(ShowHereRows({ ...panesToShowInstead(leaf, tree), pick }));
+    const text = list.map((row) => {
+      if (row === '---') return row;
+      const plugin = row.props.trailing as ReactElement<{ children: string }> | null;
+      return plugin ? `${label(row)} | ${plugin.props.children}` : label(row);
+    });
+    return { text, all: list.filter((r): r is Item => r !== '---'), pick };
+  };
+
+  it('lists the other panes, then a rule and the Lua panes in title order', () => {
+    lua.on = true;
+    const leaf: PaneLeaf = { id: 'leaf-chat', pane: 'chat', weight: 1, props: {} };
+    expect(listed(leaf).text).toEqual([
+      'Map',
+      'Affects',
+      'Group',
+      '---',
+      'Weather | weather_pane',
+      'Worth | worth_pane',
+    ]);
+  });
+
+  it('leaves out the Lua pane it is and those whose plugin is off', () => {
+    lua.on = true;
+    expect(listed(weather).text).toEqual([
+      'Map',
+      'Affects',
+      'Group',
+      'Chat',
+      '---',
+      'Worth | worth_pane',
+    ]);
+    lua.on = false;
+    expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Chat']);
+  });
+
+  it('offers Chat in place of another pane while fewer than four show', () => {
+    lua.on = false;
+    const leaf = (id: string, pane: PaneLeaf['pane']): PaneLeaf => ({
+      id,
+      pane,
+      weight: 1,
+      props: {},
+    });
+    const chats = (n: number): PaneSplit => ({
+      id: 'root',
+      split: 'column',
+      weight: 1,
+      children: [
+        leaf('map', 'map'),
+        ...Array.from({ length: n }, (_, i) => leaf(i === 0 ? 'chat' : `chat-${i + 1}`, 'chat')),
+      ],
+    });
+    expect(listed(leaf('map', 'map'), chats(3)).text).toEqual(['Affects', 'Group', 'Chat']);
+    expect(listed(leaf('map', 'map'), chats(4)).text).toEqual(['Affects', 'Group']);
+    expect(listed(leaf('chat', 'chat'), chats(1)).text).toEqual(['Map', 'Affects', 'Group']);
+  });
+
+  it('shows the Lua pane picked in place of the pane', () => {
+    lua.on = true;
+    const { all, pick } = listed(weather);
+    all.find((row) => label(row) === 'Worth')?.props.onSelect?.();
+    expect(pick).toHaveBeenCalledWith({
+      pane: 'lua',
+      props: { plugin: 'worth_pane', id: 'worth', title: 'Worth' },
+    });
   });
 });

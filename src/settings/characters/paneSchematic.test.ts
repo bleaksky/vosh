@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLayout, sanitize, type PaneSplit, type PaneType } from '../../panel/paneLayout';
+import { paneLabel as labelFor } from '../../panel/paneTypes';
 import { paneSchematic, schematicSentence } from './paneSchematic';
-
-const LABELS: Record<PaneType, string> = {
-  map: 'Map',
-  affects: 'Affects',
-  group: 'Group',
-  chat: 'Chat',
-  imm: 'Staff queues',
-};
-const labelFor = (pane: PaneType) => LABELS[pane];
 
 // A tree in the wire shape, repaired the way the backend's is.
 function tree(raw: unknown): PaneSplit {

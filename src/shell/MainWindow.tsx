@@ -6,6 +6,7 @@ import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
 import { Resizable } from '../terminal/Resizable';
+import { ReconnectNotice } from './overlays/ReconnectNotice';
 import { UpdateNotice } from './overlays/UpdateNotice';
 import { Toasts } from './overlays/Toasts';
 import { FindToolbar } from '../terminal/FindToolbar';
@@ -23,7 +24,7 @@ import {
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneType, togglePane } from '../panel/paneActions';
+import { addPaneAtBottom, togglePane } from '../panel/paneActions';
 import {
   promptConfigGet,
   promptConfigSet,
@@ -399,6 +400,7 @@ function MainWindow() {
   // labels track live state.
   const paletteDeps = (): PaletteDeps => ({
     connected,
+    redialing: connection.redialing,
     host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
     worldName: connection.world,
     panelOpen,
@@ -698,7 +700,7 @@ function MainWindow() {
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           onOpenSettings={() => runCommand('settings')}
           paneTree={panelLayout?.root ?? null}
-          onAddPane={addPaneType}
+          onAddPane={addPaneAtBottom}
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
@@ -710,6 +712,11 @@ function MainWindow() {
       statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} />}
     >
+      <ReconnectNotice
+        session={selected}
+        onTryAgain={() => void connection.connect()}
+        onError={handleError}
+      />
       <UpdateNotice />
       <Toasts />
       {terminalMenu && (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { onNativeCopied } from '../../ipc/nativeSurface';
 import {
   dismissToast,
@@ -13,6 +13,10 @@ import {
 const COPY_TOAST_MS = 1600;
 
 let copyListening = false;
+
+// A press on a toast's button leaves the caret on the command line, as
+// the update notice's buttons do.
+const keepCaret = (event: MouseEvent) => event.preventDefault();
 
 // Under the underlay the native renderer reports a selection copy as
 // `vosh://native-copied` with the character count, and the page shows
@@ -43,6 +47,10 @@ function startCopyToasts() {
 // toast dismisses it early. It works inside the positioned terminal
 // area or as a direct child of the shell grid, where overlays.css pins
 // it to the terminal cell.
+//
+// A toast with a button, such as Undo, is a card like the update
+// notice instead, since a button cannot hold another. The timer still
+// closes it, and pressing the button runs it and closes the toast.
 export function Toasts() {
   const [toasts, setToasts] = useState<Toast[]>(getToasts);
 
@@ -53,38 +61,64 @@ export function Toasts() {
 
   return (
     <div className="ov-toasts" role="status" aria-live="polite">
-      {toasts.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          className={`ov-toast is-${t.kind}`}
-          title="Dismiss"
-          onClick={() => dismissToast(t.id)}
-        >
-          {t.kind === 'success' ? (
-            <svg
-              className="ov-toast-check"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+      {toasts.map((t) =>
+        t.action ? (
+          <div key={t.id} className={`ov-toast has-action is-${t.kind}`}>
+            <ToastBody toast={t} />
+            <button
+              type="button"
+              className="ov-button"
+              onMouseDown={keepCaret}
+              onClick={() => {
+                dismissToast(t.id);
+                t.action?.run();
+              }}
             >
-              <path d="M3.5 8.5l3 3 6-7" />
-            </svg>
-          ) : (
-            <span className="ov-toast-dot" aria-hidden="true" />
-          )}
-          <span className="ov-toast-msg">{t.message}</span>
-          {t.meta && (
-            <span className={t.metaMono ? 'ov-toast-meta is-mono' : 'ov-toast-meta'}>{t.meta}</span>
-          )}
-        </button>
-      ))}
+              {t.action.label}
+            </button>
+          </div>
+        ) : (
+          <button
+            key={t.id}
+            type="button"
+            className={`ov-toast is-${t.kind}`}
+            title="Dismiss"
+            onClick={() => dismissToast(t.id)}
+          >
+            <ToastBody toast={t} />
+          </button>
+        ),
+      )}
     </div>
+  );
+}
+
+// The status mark, the message and the detail of a toast.
+function ToastBody({ toast: t }: { toast: Toast }): ReactNode {
+  return (
+    <>
+      {t.kind === 'success' ? (
+        <svg
+          className="ov-toast-check"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3.5 8.5l3 3 6-7" />
+        </svg>
+      ) : (
+        <span className="ov-toast-dot" aria-hidden="true" />
+      )}
+      <span className="ov-toast-msg">{t.message}</span>
+      {t.meta && (
+        <span className={t.metaMono ? 'ov-toast-meta is-mono' : 'ov-toast-meta'}>{t.meta}</span>
+      )}
+    </>
   );
 }

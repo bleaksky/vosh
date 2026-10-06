@@ -4,6 +4,7 @@ import {
   connectSession,
   disconnectSession,
   emitConnectionTargetChanged,
+  reconnectNow,
   setSessionAddress,
   subscribeConnectionTargetChanged,
   type ConnectionTarget,
@@ -13,6 +14,7 @@ import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 import { useSessionConnection, type ConnectionStatus } from './connectionStore';
+import { useReconnect, waitingTarget } from './reconnectStore';
 import { getSelected, getSessions, useSelectedRow } from './sessionsStore';
 
 // The session the title band shows and the session menu drives, which
@@ -175,6 +177,21 @@ export async function connectTo(target: ConnectionTarget, session: number): Prom
   await connectSession(target.host, target.port, target.tls, session);
 }
 
+/** Connect `session` to `target`, or while a redial of it waits to dial
+ *  that same target, dial that try now, as Reconnect now on the notice
+ *  does. A connect to another world ends the series (board 7). Cmd+R,
+ *  the session menu's Connect to row and the palette reach it. */
+export async function connectOrRedial(target: ConnectionTarget, session: number): Promise<void> {
+  const waits = waitingTarget(session);
+  const same =
+    waits !== null &&
+    waits.host === target.host &&
+    waits.port === target.port &&
+    waits.tls === target.tls;
+  if (same) await reconnectNow(session);
+  else await connectTo(target, session);
+}
+
 /** Dial a session its New session form opened, on the profile the form
  *  chose, so no profile match runs first (board 9). The target becomes
  *  the saved world the next form starts from, and the session keeps it
@@ -188,6 +205,8 @@ export interface Connection {
   status: ConnectionStatus;
   /** Connecting or connected. */
   live: boolean;
+  /** A redial waits or dials after a drop, so Disconnect can end it. */
+  redialing: boolean;
   /** Where Connect dials the selected session next, its own target or
    *  else the saved world. */
   target: ConnectionTarget;
@@ -195,7 +214,8 @@ export interface Connection {
    *  else the target. */
   world: string;
   character: string | null;
-  /** Dial the selected session at its target. */
+  /** Dial the selected session at its target, or its waiting redial
+   *  now. */
   connect: () => Promise<void>;
   /** Dial a session its New session form opened, as connectOpened
    *  does. */
@@ -214,6 +234,8 @@ export function useConnection(onError: (message: string, session: number) => voi
   const [target, saveTarget] = useSessionTarget();
   const { status, character } = useSessionConnection();
   const live = status.kind === 'connecting' || status.kind === 'connected';
+  const redial = useReconnect().kind;
+  const redialing = redial === 'waiting' || redial === 'dialing';
 
   // The actions read the newest values through refs, so they never
   // dial a stale target.
@@ -227,7 +249,7 @@ export function useConnection(onError: (message: string, session: number) => voi
   const dial = useCallback(async (to: ConnectionTarget) => {
     const session = getSelected();
     try {
-      await connectTo(to, session);
+      await connectOrRedial(to, session);
     } catch (e) {
       onErrorRef.current(String(e), session);
     }
@@ -256,5 +278,16 @@ export function useConnection(onError: (message: string, session: number) => voi
     status.kind === 'connected' || status.kind === 'connecting' ? status.host : target.host,
   );
 
-  return { status, live, target, world, character, connect, connectNew, disconnect, saveTarget };
+  return {
+    status,
+    live,
+    redialing,
+    target,
+    world,
+    character,
+    connect,
+    connectNew,
+    disconnect,
+    saveTarget,
+  };
 }

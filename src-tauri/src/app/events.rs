@@ -162,6 +162,13 @@ pub(crate) const RECONNECT: &str = "session://reconnect";
 /// hears it, and the Scripts page in Settings shows the lines in its
 /// Console.
 pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
+/// What the session's plugins changed in the panes they draw with
+/// `mud.pane`, once per flush: each pane that changed, whole, and each
+/// one that went as its plugin turned off, stopped or loaded again. The
+/// payload is a [`crate::script::panes::LuaPanesPayload`], and each block
+/// carries its `kind`, `row`, `gauge`, `line` or `rule`. `onLuaPanes`
+/// hears it, and the Lua panes of the main window show it.
+pub(crate) const LUA_PANES: &str = "session://lua-panes";
 
 // The lists.
 

@@ -63,12 +63,16 @@ const TAKE_GRACE: Duration = Duration::from_secs(10);
 
 /// The lines the game closes the link on while you play, matched as a
 /// whole line anywhere since the last prompt, since a reset can throw
-/// away the last bytes. Your quit and the idle auto quit alike print the
-/// first (`act_comm.c:3250`, `update.c:4051`), and a ban the second
-/// (`update.c:5142`, 5160).
-const CLOSING_LINES: [&str; 2] = [
-    "You have escaped from the Forsaken Lands.",
-    "This account has been banned.",
+/// away the last bytes, each with why a drop after it does not redial.
+/// Your quit and the idle auto quit alike print the first
+/// (`act_comm.c:3250`, `update.c:4051`). A ban prints the second to a
+/// character in play and quits it, so the first follows
+/// (`update.c:5094`, `act_wiz.c:671`), and the third to any other link
+/// (`update.c:5102`, 5120).
+const CLOSING_LINES: [(&str, Why); 3] = [
+    ("You have escaped from the Forsaken Lands.", Why::Quit),
+    ("Your account has been banned.", Why::Banned),
+    ("This account has been banned.", Why::Banned),
 ];
 
 /// The line `quit menu` prints as you step away to the account menu
@@ -87,8 +91,9 @@ pub(crate) struct LinkWatch {
     /// You play, from Char.Status or the vitals the game sends only in
     /// play, until you step away to the account menu.
     playing: bool,
-    /// A closing line came since the last prompt.
-    closing: bool,
+    /// Why the closing line that came since the last prompt declines a
+    /// redial.
+    closed: Option<Why>,
     /// When a quit of yours left.
     quit_at: Option<Instant>,
     /// The game asked whether to connect anyway, so a Y next takes the
@@ -107,10 +112,12 @@ pub(crate) struct LinkWatch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Why {
-    /// You sent a quit in the seconds before.
+    /// You sent a quit in the seconds before, or the game closed the link
+    /// with the line a quit prints, yours or the idle auto quit.
     Quit,
-    /// The game closed the link with a line that says so.
-    Closing,
+    /// The game closed the link with the line that says the account is
+    /// banned.
+    Banned,
     /// Another session took the character.
     Taken,
     /// Reconnect when the link drops is off in the profile.
@@ -131,8 +138,11 @@ impl LinkWatch {
     /// A complete line of the game came.
     pub(crate) fn line(&mut self, plain: &str) {
         let line = plain.trim();
-        if CLOSING_LINES.contains(&line) {
-            self.closing = true;
+        if let Some((_, why)) = CLOSING_LINES.iter().find(|(closing, _)| *closing == line) {
+            // The quit a ban forces prints its line after the ban's.
+            if self.closed != Some(Why::Banned) {
+                self.closed = Some(*why);
+            }
         } else if line == LEFT_PLAY {
             self.playing = false;
             self.taken = false;
@@ -143,7 +153,7 @@ impl LinkWatch {
 
     /// Your prompt came, so a closing line before it no longer counts.
     pub(crate) fn prompt(&mut self) {
-        self.closing = false;
+        self.closed = None;
     }
 
     /// You sent `bytes`, a line or more. A quit is spelled out in full,
@@ -189,17 +199,12 @@ impl LinkWatch {
     /// unexpected, so a redial may follow, or why it is expected.
     pub(crate) fn expected(&self, now: Instant) -> Option<Why> {
         if self.taken {
-            Some(Why::Taken)
-        } else if self.closing {
-            Some(Why::Closing)
-        } else if self
-            .quit_at
-            .is_some_and(|at| now.duration_since(at) < QUIT_GRACE)
-        {
-            Some(Why::Quit)
-        } else {
-            None
+            return Some(Why::Taken);
         }
+        let quit = self
+            .quit_at
+            .is_some_and(|at| now.duration_since(at) < QUIT_GRACE);
+        self.closed.or(quit.then_some(Why::Quit))
     }
 }
 
@@ -238,7 +243,7 @@ pub(crate) enum ReconnectPayload {
     /// Your Disconnect, a Connect or a close ended the series.
     Cancelled,
     /// The link dropped while you played and Vosh does not dial, for
-    /// `why`.
+    /// `why`: `quit`, `banned`, `taken` or `off`.
     Declined { why: Why },
 }
 
@@ -474,14 +479,18 @@ fn stop_taken<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, characte
 }
 
 /// End the series `session` runs, if any, and say so to the page.
-pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
-    if let Some(redial) = session.take_redial() {
-        if redial.end().await {
-            session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
-        }
+/// Returns true when the cancel cut a series short.
+pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) -> bool {
+    let cut = match session.take_redial() {
+        Some(redial) => redial.end().await,
+        None => false,
+    };
+    if cut {
+        session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
     }
     // A try the cancel cut short leaves no ring for the next link.
     session.awaiting_game_prompt.set(false);
+    cut
 }
 
 /// The redials of one series, each after its wait, until one connects or
@@ -688,11 +697,19 @@ mod tests {
         let now = Instant::now();
         let mut watch = LinkWatch::default();
         watch.line("You have escaped from the Forsaken Lands.");
-        assert_eq!(watch.expected(now), Some(Why::Closing));
+        assert_eq!(watch.expected(now), Some(Why::Quit));
         watch.prompt();
         assert_eq!(watch.expected(now), None);
         watch.line("This account has been banned.");
-        assert_eq!(watch.expected(now), Some(Why::Closing));
+        assert_eq!(watch.expected(now), Some(Why::Banned));
+        watch.prompt();
+        watch.line("Your account has been banned.");
+        watch.line("You have escaped from the Forsaken Lands.");
+        assert_eq!(
+            watch.expected(now),
+            Some(Why::Banned),
+            "the quit a ban forces"
+        );
     }
 
     #[test]

@@ -35,4 +35,15 @@ describe('toasts', () => {
     dismissToast(id);
     expect(getToasts()).toEqual([]);
   });
+
+  it('keeps the one button a toast carries', () => {
+    const run = vi.fn();
+    pushToast({
+      kind: 'info',
+      message: 'Your other Chat pane now shows Everything else.',
+      action: { label: 'Undo', run },
+    });
+    pushToast({ kind: 'info', message: 'Saved' });
+    expect(getToasts().map((t) => t.action?.label)).toEqual(['Undo', undefined]);
+  });
 });
