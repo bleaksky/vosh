@@ -1,13 +1,12 @@
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 
 // Staff work-queue counters from the Imm.Queues GMCP package. The
 // server pushes a complete snapshot to immortals whenever any queue
 // changes (a note posts, a vote opens, a dcheck resolves), so every
-// message replaces the whole model — never merge. Mortals never
-// receive the package; `received` stays false and the pane shows its
-// quiet placeholder. Module-singleton store in the groupStore /
-// chatStore pattern so the pane can close and reopen without losing
-// the last snapshot.
+// message replaces the whole model and nothing merges. Mortals never
+// receive the package, so `received` stays false and the pane shows
+// its quiet placeholder. The store keeps the last snapshot, so the
+// pane can close and reopen without losing it.
 
 export interface ImmQueues {
   /** Pending description checks. Global — the same for every
@@ -102,17 +101,6 @@ const ZERO_STRIKES: Record<ImmCounterKey, number> = {
   notes: 0,
 };
 
-let queues: ImmQueues = { ...ZERO_QUEUES };
-let received = false;
-let strikes: Record<ImmCounterKey, number> = { ...ZERO_STRIKES };
-let listeners: Array<(state: ImmState) => void> = [];
-let started = false;
-
-function notify() {
-  const snapshot: ImmState = { queues, received, strikes };
-  for (const l of listeners) l(snapshot);
-}
-
 function asCount(v: unknown): number {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : 0;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
@@ -156,42 +144,31 @@ function normalize(data: unknown): ImmQueues {
   };
 }
 
-export function startImmStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Imm.Queues', (data) => {
-    const next = normalize(data);
-    const nextStrikes = { ...strikes };
-    for (const k of Object.keys(next) as ImmCounterKey[]) {
-      if (next[k] > queues[k]) nextStrikes[k] += 1;
-    }
-    queues = next;
-    strikes = nextStrikes;
-    received = true;
-    notify();
-  });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      // Stale duty counts are worse than none: the next login gets a
-      // fresh snapshot, and a mortal alt should not inherit the imm
-      // board from the previous character.
-      queues = { ...ZERO_QUEUES };
-      strikes = { ...ZERO_STRIKES };
-      received = false;
-      notify();
-    }
-  });
-}
+// No `connection`, so a disconnect brings back the zero state. Stale
+// duty counts are worse than none. The next login gets a fresh
+// snapshot, and a mortal alt should not inherit the imm board from the
+// previous character.
+const store = createGmcpStore<ImmState>({
+  state: { queues: ZERO_QUEUES, received: false, strikes: ZERO_STRIKES },
+  packages: {
+    'Imm.Queues': (state, data) => {
+      const queues = normalize(data);
+      const strikes = { ...state.strikes };
+      for (const k of Object.keys(queues) as ImmCounterKey[]) {
+        if (queues[k] > state.queues[k]) strikes[k] += 1;
+      }
+      return { queues, received: true, strikes };
+    },
+  },
+});
+
+export const startImmStore = store.start;
 
 export function getImmState(): ImmState {
-  startImmStore();
-  return { queues, received, strikes };
+  store.start();
+  return store.get();
 }
 
 export function subscribeImmState(cb: (state: ImmState) => void): () => void {
-  startImmStore();
-  listeners.push(cb);
-  return () => {
-    listeners = listeners.filter((l) => l !== cb);
-  };
+  return store.subscribe(() => cb(store.get()));
 }
