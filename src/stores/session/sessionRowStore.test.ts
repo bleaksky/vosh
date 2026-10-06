@@ -268,7 +268,7 @@ describe('the glyph of a session row', () => {
 
   it('dims the name when a drop is expected or the redial is cancelled', async () => {
     const { look } = await load();
-    for (const why of ['quit', 'closing', 'taken']) {
+    for (const why of ['quit', 'banned', 'taken']) {
       connected(ORLA);
       disconnected(ORLA, 'server closed connection');
       redial(ORLA, { kind: 'declined', why });

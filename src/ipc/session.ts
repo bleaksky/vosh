@@ -112,9 +112,9 @@ export type StatePayload = { session: number } & (
  *  `ReconnectPayload` in src-tauri/src/session/reconnect.rs. A series
  *  waits and dials each try in turn until one reaches the game or the
  *  tries run out. Your Disconnect, a Connect or a close cancels it. A
- *  drop declines to redial for a quit of yours, the game's closing line,
- *  another session that took the character, or Reconnect when the link
- *  drops turned off. */
+ *  drop declines to redial for a quit, yours or the game's idle one, a
+ *  ban, another session that took the character, or Reconnect when the
+ *  link drops turned off. */
 export type ReconnectPayload =
   | { kind: 'waiting'; try: number; tries: number; seconds: number }
   | { kind: 'dialing'; try: number; tries: number }
@@ -122,7 +122,7 @@ export type ReconnectPayload =
   | { kind: 'reached'; try: number }
   | { kind: 'stopped'; tries: number }
   | { kind: 'cancelled' }
-  | { kind: 'declined'; why: 'quit' | 'closing' | 'taken' | 'off' };
+  | { kind: 'declined'; why: 'quit' | 'banned' | 'taken' | 'off' };
 
 /** Hear each step of a session's redial, with that session. */
 export async function onReconnect(

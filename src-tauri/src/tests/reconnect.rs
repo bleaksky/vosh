@@ -223,7 +223,30 @@ async fn a_closing_line_since_the_last_prompt_never_redials() {
         .await;
     assert_eq!(
         last_of(&h, h.first, "declined"),
-        Some(json!({"kind": "declined", "why": "closing"}))
+        Some(json!({"kind": "declined", "why": "quit"}))
+    );
+    clock.stays_quiet().await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_ban_line_since_the_last_prompt_never_redials() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = logged_in(&[]).await;
+    let mut clock = Clock::hold(&h);
+    // A ban as you play quits you, update.c:5094, then the link closes.
+    h.servers[0].push(
+        b"\n\rYour account has been banned.\n\rYou have escaped from the Forsaken Lands.\n\r",
+    );
+    h.until_shown("You have escaped from the Forsaken Lands.")
+        .await;
+    h.servers[0].cut();
+    h.until("the decline", |h| last_of(h, h.first, "declined").is_some())
+        .await;
+    assert_eq!(
+        last_of(&h, h.first, "declined"),
+        Some(json!({"kind": "declined", "why": "banned"}))
     );
     clock.stays_quiet().await;
     h.finish(grid).await;
