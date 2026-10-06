@@ -13,7 +13,8 @@ import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { savedSessionsText } from './logView';
 import { settingsSubpage } from '../../lib/settingsNav';
-import { KNOWN_WORLDS, knownWorld } from '../../lib/knownWorlds';
+import { KNOWN_WORLDS } from '../../lib/knownWorlds';
+import { useSessions } from '../../stores/session/sessionsStore';
 import { parseTarget, useSessionTarget } from '../../stores/session/useConnection';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
@@ -29,6 +30,7 @@ import {
   Toggle,
 } from '../../ui';
 import { SessionLogs } from './SessionLogs';
+import { OTHER, worldChoice, worldValue } from './worldChoice';
 
 // General (the approved SettingsGeneral board): where Connect dials,
 // updates, the settings every character shares, and the saved session
@@ -88,16 +90,15 @@ function GeneralSections({
 
 // ── Connection ─────────────────────────────────────────────────────
 
-const OTHER = 'other';
-const SAVED = 'saved';
-
 /** Where Connect and Cmd+R dial the selected session, the same target
- *  the session popover's Edit connection… edits. The World select picks
- *  a known world or Other…, which clears host and port for you to type.
- *  Host and port save when you leave them or press Enter, and go back
- *  to the target when they do not make one. */
+ *  the session popover's Edit connection… edits, which each session
+ *  keeps for itself (board 7). The World select picks a known world or
+ *  Other…, which clears host and port for you to type. Host and port
+ *  save when you leave them or press Enter, and go back to the target
+ *  when they do not make one. */
 function ConnectionSection() {
   const [target, storeTarget] = useSessionTarget();
+  const sessions = useSessions().length;
   const [host, setHost] = useState(target.host);
   const [port, setPort] = useState(String(target.port));
   const [other, setOther] = useState(false);
@@ -152,11 +153,8 @@ function ConnectionSection() {
     }
   };
 
-  const world = knownWorld(target.host);
-  const options = KNOWN_WORLDS.map((w) => ({ value: `world:${w.domain}`, label: w.name }));
-  if (!world) options.push({ value: SAVED, label: target.host });
-  options.push({ value: OTHER, label: 'Other…' });
-  const value = other ? OTHER : world ? `world:${world.domain}` : SAVED;
+  const choice = worldChoice(target);
+  const value = other ? OTHER : choice.value;
 
   const pickWorld = (next: string) => {
     if (next === OTHER) {
@@ -165,7 +163,7 @@ function ConnectionSection() {
       setPort('');
       return;
     }
-    const picked = KNOWN_WORLDS.find((w) => `world:${w.domain}` === next);
+    const picked = KNOWN_WORLDS.find((w) => worldValue(w) === next);
     if (picked) saveTarget({ host: picked.host, port: picked.port, tls: latest.current.tls });
     else revert();
   };
@@ -174,10 +172,10 @@ function ConnectionSection() {
     <Section id="connection" title="Connection">
       <Row
         label="World"
-        description={`Where Connect and ${shortcutLabel(APP_SHORTCUTS.connect)} take you.`}
+        description={`Where Connect and ${shortcutLabel(APP_SHORTCUTS.connect)} take ${sessions > 1 ? 'this session' : 'you'}.`}
         anchor="world"
       >
-        <Select value={value} onChange={pickWorld} options={options} width={296} />
+        <Select value={value} onChange={pickWorld} options={choice.options} width={296} />
       </Row>
       <Row label="Host and port" anchor="host">
         <span
