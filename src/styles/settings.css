@@ -1157,7 +1157,7 @@
   padding: 8px 16px;
 }
 
-.st-auto-cardnote.is-warn + .st-import-grid {
+.st-card-note.is-warn + .st-import-grid {
   padding-top: 0;
 }
 
@@ -1785,7 +1785,11 @@
   border-bottom-right-radius: var(--r-card);
 }
 
-.st-auto-cardnote {
+/* CardNote in src/ui, the quiet line at the head of a card. The
+   st-auto- card recipe around it, st-auto-card, -value, -mono, -block
+   and -quiet, began on Automation and now draws the cards of Scripts and
+   of the import sheet under Characters too. */
+.st-card-note {
   margin: 0;
   padding: 12px 16px;
   color: var(--secondary);
@@ -1794,14 +1798,14 @@
 }
 
 /* What needs you about this item, in warn with the pane status dot. */
-.st-auto-cardnote.is-warn {
+.st-card-note.is-warn {
   display: flex;
   gap: 6px;
   padding: 10px 16px;
   color: var(--warn-text);
 }
 
-.st-auto-warndot {
+.st-warn-dot {
   display: block;
   flex: none;
   width: 8px;

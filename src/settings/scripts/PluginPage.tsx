@@ -9,7 +9,7 @@ import {
   type PluginRow,
 } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
-import { Button, Card, Segmented, Toggle, cx, type SegmentedOption } from '../../ui';
+import { Button, Card, CardNote, Segmented, Toggle, cx, type SegmentedOption } from '../../ui';
 import { CodeEditor } from '../../ui/CodeEditor';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import type { LeaveGuard } from '../pageTypes';
@@ -215,10 +215,7 @@ export function PluginPage({
         <div className="st-plugin-body">
           {stopped && (
             <Card>
-              <p className="st-auto-cardnote is-warn">
-                <span className="st-auto-warndot" aria-hidden="true" />
-                <span>{stopNote(name, stopped)}</span>
-              </p>
+              <CardNote tone="warn">{stopNote(name, stopped)}</CardNote>
             </Card>
           )}
           <CodeEditor
