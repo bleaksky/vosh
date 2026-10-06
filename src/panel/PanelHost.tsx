@@ -7,7 +7,14 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { PANE_TYPES, setWeights, type PaneType } from './paneLayout';
+import {
+  PANE_TYPES,
+  isPaneType,
+  paneKey,
+  setWeights,
+  type PaneLeaf,
+  type PaneType,
+} from './paneLayout';
 import type { PromptShowState } from '../ipc/prompt';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { panelShowsVitals } from './vitalsView';
@@ -20,7 +27,7 @@ import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
-import { PANE_LABELS } from './paneTypes';
+import { paneLabel } from './paneTypes';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
 
@@ -33,7 +40,7 @@ import { VitalsFooter } from './VitalsFooter';
 // owns the panel's column, its left edge drag, and its label.
 //
 // Every pane renders as a flat, absolutely placed sibling keyed by its
-// pane type, which the tree holds at most once. Splitting, closing, or
+// paneKey, which the tree holds at most once. Splitting, closing, or
 // showing a pane somewhere else only moves boxes, so the map canvas
 // and each pane's scroll position survive every tree edit, and a pane
 // moved with Show here instead keeps its state too.
@@ -61,6 +68,18 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   chat: () => <ChatPane />,
   imm: () => <ImmPane />,
 };
+
+// Built-in panes in type order, then Lua panes by key. Not tree order,
+// so no edit ever reorders the DOM.
+function domRank(leaf: PaneLeaf): number {
+  return isPaneType(leaf.pane) ? PANE_TYPES.indexOf(leaf.pane) : PANE_TYPES.length;
+}
+
+function domOrder(a: PaneLeaf, b: PaneLeaf): number {
+  const ka = paneKey(a);
+  const kb = paneKey(b);
+  return domRank(a) - domRank(b) || (ka < kb ? -1 : ka > kb ? 1 : 0);
+}
 
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
@@ -101,12 +120,7 @@ export function PanelHost({
     () => (root ? layoutPanes(root, box.w, box.h, mins, textSize) : null),
     [root, box.w, box.h, mins, textSize],
   );
-  // Type order, not tree order, so no edit ever reorders the DOM.
-  const leaves = geometry
-    ? [...geometry.leaves].sort(
-        (a, b) => PANE_TYPES.indexOf(a.leaf.pane) - PANE_TYPES.indexOf(b.leaf.pane),
-      )
-    : [];
+  const leaves = geometry ? [...geometry.leaves].sort((a, b) => domOrder(a.leaf, b.leaf)) : [];
 
   return (
     <PaneTextSizeContext.Provider value={textSize}>
@@ -114,9 +128,9 @@ export function PanelHost({
         <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
-              key={leaf.pane}
+              key={paneKey(leaf)}
               className={`pane pane-${leaf.pane}`}
-              aria-label={PANE_LABELS[leaf.pane]}
+              aria-label={paneLabel(leaf)}
               style={{
                 left: rect.x,
                 top: rect.y,
@@ -125,7 +139,9 @@ export function PanelHost({
                 overflowY: rect.h < paneMinH(leaf.pane, textSize) ? 'auto' : undefined,
               }}
             >
-              <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
+              <PaneLeafContext.Provider value={leaf}>
+                {isPaneType(leaf.pane) ? PANES[leaf.pane]() : null}
+              </PaneLeafContext.Provider>
             </section>
           ))}
           {geometry?.handles.map((h) => (

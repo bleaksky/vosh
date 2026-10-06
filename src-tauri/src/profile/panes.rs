@@ -21,10 +21,16 @@ pub(crate) struct DockEntryPersist {
     pub align: Option<String>,
 }
 
-/// Content types a pane can show. The panel holds at most one of
-/// each, so a type doubles as its leaf's default id. Mirrored by
-/// `PANE_TYPES` in src/panel/paneLayout.ts.
+/// The built-in content types a pane can show. The panel holds at
+/// most one of each, so a type doubles as its leaf's default id.
+/// Mirrored by `PANE_TYPES` in src/panel/paneLayout.ts.
 pub(crate) const PANE_TYPES: [&str; 5] = ["map", "affects", "group", "chat", "imm"];
+
+/// The type of a pane a plugin draws with `mud.pane`. The panel holds
+/// any number of them, one per `plugin` and `id` in the leaf's props.
+/// The props also keep `title`, the last title the pane showed, so a
+/// pane whose plugin is not running can still name itself.
+pub(crate) const LUA_PANE: &str = "lua";
 
 /// Schema version written into every saved pane layout.
 pub(crate) const PANE_LAYOUT_VERSION: u32 = 1;
@@ -70,7 +76,7 @@ pub(crate) struct PaneNode {
     /// unless it is blank or already taken.
     #[serde(default)]
     pub id: String,
-    /// Leaf content, one of [`PANE_TYPES`].
+    /// Leaf content, one of [`PANE_TYPES`] or [`LUA_PANE`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pane: Option<String>,
     /// Split direction: `"column"` stacks children top to bottom,
@@ -261,7 +267,8 @@ impl PaneLayoutPersist {
     }
 
     /// Repair a layout read from disk or sent by the frontend. Unknown
-    /// pane types and repeat panes drop out, blank or clashing ids get
+    /// pane types, repeat panes and Lua panes without a plugin or an id
+    /// drop out, blank or clashing ids get
     /// fresh ones, a split with one child gives way to that child, a
     /// split inside a split of the same direction merges into it,
     /// splits nested deeper than [`PANE_MAX_SPLIT_DEPTH`] flatten,
@@ -338,14 +345,41 @@ fn migrated_weight(id: &str, has_map: bool, has_affects: bool, others: usize) ->
     }
 }
 
-/// Walks a raw tree once, handing out ids and remembering which pane
-/// types it has already placed.
+/// What makes a leaf one of a kind in the tree: its type for a
+/// built-in pane, its plugin and id for a Lua pane. Mirrored by
+/// `paneKey` in src/panel/paneLayout.ts.
+#[derive(PartialEq, Eq, Hash)]
+enum PaneKey {
+    Builtin(&'static str),
+    Lua { plugin: String, id: String },
+}
+
+/// The key of a leaf of type `kind`, or None for a Lua leaf whose
+/// props lack a plugin or an id.
+fn pane_key(kind: &'static str, props: &BTreeMap<String, String>) -> Option<PaneKey> {
+    if kind != LUA_PANE {
+        return Some(PaneKey::Builtin(kind));
+    }
+    let prop = |name: &str| {
+        props
+            .get(name)
+            .filter(|value| !value.trim().is_empty())
+            .cloned()
+    };
+    Some(PaneKey::Lua {
+        plugin: prop("plugin")?,
+        id: prop("id")?,
+    })
+}
+
+/// Walks a raw tree once, handing out ids and remembering which panes
+/// it has already placed.
 struct TreeSanitizer {
     /// Every non-blank id in the raw tree, so a fresh id never steals
     /// one a later node already owns.
     reserved: HashSet<String>,
     used: HashSet<String>,
-    panes: HashSet<&'static str>,
+    panes: HashSet<PaneKey>,
 }
 
 impl TreeSanitizer {
@@ -412,7 +446,7 @@ impl TreeSanitizer {
         let weight = clean_weight(raw.weight);
         if let Some(kind) = raw.pane.as_deref() {
             let kind = pane_type(kind)?;
-            if !self.panes.insert(kind) {
+            if !self.panes.insert(pane_key(kind, &raw.props)?) {
                 return None;
             }
             let id = self.claim_id(&raw.id, kind);
@@ -481,7 +515,11 @@ fn collect_leaves(nodes: Vec<PaneNode>) -> Vec<PaneNode> {
 
 fn pane_type(raw: &str) -> Option<&'static str> {
     let wanted = raw.trim().to_lowercase();
-    PANE_TYPES.iter().copied().find(|t| *t == wanted)
+    PANE_TYPES
+        .iter()
+        .copied()
+        .chain([LUA_PANE])
+        .find(|t| *t == wanted)
 }
 
 fn split_dir(raw: Option<&str>) -> &'static str {

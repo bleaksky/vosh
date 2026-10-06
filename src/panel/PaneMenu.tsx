@@ -38,7 +38,7 @@ import { fitsPanel } from './paneGeometry';
 import { PaneTextSizeContext } from './paneTextSize';
 import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
-import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
+import { PANE_LABELS, offeredPaneTypes, paneLabel } from './paneTypes';
 
 // The more menu on every pane header (SPEC 9): Split right, Split
 // down, Show here instead with a submenu of pane types, and Close pane.
@@ -284,7 +284,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     <>
       <MenuSurface
         id={menuId}
-        label={`${PANE_LABELS[leaf.pane]} options`}
+        label={`${paneLabel(leaf)} options`}
         anchor={anchor}
         at={at}
         onClose={close}

@@ -63,7 +63,14 @@ describe('distribute', () => {
 describe('PANE_MIN_H', () => {
   it('reads each pane type at its header plus its rows, or a set height', () => {
     // 28 px header, 22 px rows.
-    expect(PANE_MIN_H).toEqual({ map: 180, affects: 160, group: 94, chat: 120, imm: 94 });
+    expect(PANE_MIN_H).toEqual({
+      map: 180,
+      affects: 160,
+      group: 94,
+      chat: 120,
+      imm: 94,
+      lua: 94,
+    });
     expect(PANE_FLOOR_H).toBe(50);
   });
 });
@@ -493,6 +500,7 @@ describe('at your panel size', () => {
   it('keeps every stock minimum and the floor at 12 px', () => {
     for (const pane of PANE_TYPES) expect(paneMinH(pane, 12), pane).toBe(PANE_MIN_H[pane]);
     for (const pane of PANE_TYPES) expect(paneMinH(pane), pane).toBe(PANE_MIN_H[pane]);
+    expect(paneMinH('lua', 12)).toBe(PANE_MIN_H.lua);
     expect(paneFloorH(12)).toBe(PANE_FLOOR_H);
     expect(paneFloorH()).toBe(PANE_FLOOR_H);
   });
@@ -503,6 +511,7 @@ describe('at your panel size', () => {
     expect(paneMinH('affects', 16)).toBe(37 + 6 * 29);
     expect(paneMinH('group', 16)).toBe(37 + 3 * 29);
     expect(paneMinH('imm', 16)).toBe(37 + 3 * 29);
+    expect(paneMinH('lua', 16)).toBe(37 + 3 * 29);
     expect(paneMinH('map', 16)).toBe(37 + 203);
     expect(paneMinH('chat', 16)).toBe(37 + 123);
     expect(paneFloorH(16)).toBe(37 + 29);
