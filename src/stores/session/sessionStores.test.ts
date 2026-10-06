@@ -213,6 +213,64 @@ describe('the tick store with two sessions', () => {
   });
 });
 
+describe('the connection store with two sessions', () => {
+  /** The list the app keeps, with Orla playing on the build port while
+   *  Tolliver waits unconnected, and `selected` the one selected. */
+  const rows = (selected: number, orla = true) =>
+    [TOLLIVER, ORLA].map((id) => ({
+      id,
+      name: null,
+      character: id === ORLA && orla ? 'Orla' : null,
+      host: 'play.theforsakenlands.com',
+      port: id === TOLLIVER ? 1848 : 1825,
+      tls: false,
+      profile: 'Default',
+      connected: id === ORLA && orla,
+      since: id === ORLA && orla ? 1_000 : null,
+      selected: id === selected,
+    }));
+
+  const ORLA_LIVE = {
+    status: { kind: 'connected', host: 'play.theforsakenlands.com', port: 1825, tls: false },
+    character: 'Orla',
+  };
+
+  it('reads a session that connected before the page started from the list', async () => {
+    commands.set('sessions_list', () => rows(ORLA));
+    await load();
+    const connection = await import('./connectionStore');
+    expect(connection.getSessionConnection()).toEqual(ORLA_LIVE);
+    expect(connection.sessionLive(ORLA)).toBe(true);
+    expect(connection.sessionLive(TOLLIVER)).toBe(false);
+  });
+
+  it('keeps it through a connect of another session and a switch back', async () => {
+    commands.set('sessions_list', () => rows(ORLA));
+    await load();
+    const connection = await import('./connectionStore');
+    fire('vosh://sessions-changed', rows(TOLLIVER));
+    expect(connection.getSessionConnection().status.kind).toBe('idle');
+    state(TOLLIVER, 'connecting');
+    state(TOLLIVER, 'connected');
+    fire('vosh://sessions-changed', rows(TOLLIVER));
+    expect(connection.getSessionConnection().status.kind).toBe('connected');
+    fire('vosh://sessions-changed', rows(ORLA));
+    expect(connection.getSessionConnection()).toEqual(ORLA_LIVE);
+  });
+
+  it('follows the events of a session once one names it', async () => {
+    commands.set('sessions_list', () => rows(ORLA));
+    await load();
+    const connection = await import('./connectionStore');
+    state(ORLA, 'disconnected');
+    // A list that still says connected never brings the link back.
+    fire('vosh://sessions-changed', rows(ORLA));
+    expect(connection.getSessionConnection().status.kind).toBe('idle');
+    fire('vosh://sessions-changed', rows(ORLA, false));
+    expect(connection.sessionLive(ORLA)).toBe(false);
+  });
+});
+
 describe('the pinned prompt store with two sessions', () => {
   it('shows the band of the selected session and clears only the one that disconnects', async () => {
     const s = await load();
