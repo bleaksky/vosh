@@ -11,7 +11,7 @@ import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
-import { followReplacedUiConfig } from '../ipc/uiConfigSave';
+import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../theme/theme';

@@ -4,7 +4,7 @@ import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import { pendingWrites } from '../lib/pendingWrites';
 import { queueSettingsChange } from '../settings/useSettingsAutoSave';
 import { getUiConfig, normalizeUiConfig, type RawUiConfig, type UiConfig } from './uiConfig';
-import { broadcastUiConfigChanges, followReplacedUiConfig } from './uiConfigSave';
+import { broadcastUiConfigChanges, followReplacedUiConfig } from './uiConfigBroadcast';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

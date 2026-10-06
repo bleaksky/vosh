@@ -23,7 +23,7 @@ import {
   type UiConfig,
   type UiFields,
 } from './uiConfig';
-import { broadcastUiConfigChanges } from './uiConfigSave';
+import { broadcastUiConfigChanges } from './uiConfigBroadcast';
 import { galleryThemes } from '../theme/themeThumb';
 import {
   BUILTIN_THEMES,
