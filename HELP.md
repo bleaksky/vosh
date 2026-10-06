@@ -316,6 +316,8 @@ A macro fires only while the command line has focus. On macOS the `Cmd` shortcut
 
 Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
 
+The `Numpad movement` preset lets you walk with the numpad. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. The keys work with NumLock on or off. Turn the preset on in Settings under Automation, then Presets, where it sits under Movement. A key one of your macros already uses stays yours. The preset's card marks that key and says which direction has none until you move your macro. Turning the preset off removes the macros it added and leaves yours.
+
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
 `#record` builds something different. It captures the commands you type and saves them as an alias you invoke by name, not by key. Use Automation, then Macros when you want a key, `#record` when you want a word.
@@ -612,7 +614,7 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 
 To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened.
 
-In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro on the same key, yours stays, and the line under the list says so.
+In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so. The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.
 
 Plugins the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning, since Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
 

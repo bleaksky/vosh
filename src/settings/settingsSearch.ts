@@ -422,7 +422,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Presets',
-    keywords: 'preset triggers built in',
+    keywords: 'preset triggers macros built in numpad movement walk keys',
     target: at('automation', 'presets'),
   },
   {
