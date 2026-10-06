@@ -11,5 +11,6 @@ mod reconnect;
 mod sessions;
 mod throughput;
 mod upgrade_order;
+mod vitals_text;
 pub(crate) mod walk;
 mod wizard_roundtrip;

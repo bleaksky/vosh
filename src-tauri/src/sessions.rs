@@ -177,6 +177,9 @@ pub(crate) struct Session {
     /// The prompt card watches your prompt, so `session://prompt-state`
     /// follows each prompt the session reads.
     pub(crate) prompt_watch: AtomicBool,
+    /// A footer or the status line draws your vitals text, and at what
+    /// width, so `session://vitals-text` follows what moves it.
+    pub(crate) vitals_watch: crate::session::vitals_text::VitalsWatch,
     /// You are selecting text in xterm or reading back in its split, as
     /// the webview last said. A clock repaint of your prompt waits while
     /// it holds, so the row you select or read never moves.
@@ -231,6 +234,7 @@ impl Session {
             last_packages: LastPackages::default(),
             affect_full: AffectFull::default(),
             prompt_watch: AtomicBool::new(false),
+            vitals_watch: crate::session::vitals_text::VitalsWatch::default(),
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),

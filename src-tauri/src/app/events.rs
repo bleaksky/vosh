@@ -162,6 +162,12 @@ pub(crate) const RECONNECT: &str = "session://reconnect";
 /// hears it, and the Scripts page in Settings shows the lines in its
 /// Console.
 pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
+/// Your vitals text, drawn for the footer or the status line that
+/// watches it through `vitals_text_watch`. The payload is a
+/// [`vosh_prompt::vitals::VitalsText`], the rows at the live values and
+/// at full values with which of them read a fight. No page listener
+/// hears it yet.
+pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
 
 // The lists.
 

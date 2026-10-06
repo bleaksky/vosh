@@ -9,12 +9,15 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, State};
+use vosh_prompt::vitals::VitalsText;
 
-use crate::app::events::CHAT_COLORS_CHANGED;
+use crate::app::events::{self, CHAT_COLORS_CHANGED};
 use crate::app::state::SharedState;
 use crate::app::system_fonts::FontEntry;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::profile::open::OpenProfile;
+use crate::session::vitals_text;
+use crate::sessions::SessionId;
 
 /// The UI config as `ui_get_config` hands it to the page.
 #[derive(serde::Serialize)]
@@ -234,30 +237,49 @@ pub(crate) enum UiField {
 /// Save the fields a page names and leave every other one as it is, so
 /// two windows that each change a field keep both changes. With no
 /// profile it writes the selected session's. It sends no event, since
-/// the page that saved tells the windows.
+/// the page that saved tells the windows, apart from the vitals text a
+/// new `vitals_text` draws in each session that watches it.
 #[tauri::command]
-pub(crate) async fn ui_set_fields(
+pub(crate) async fn ui_set_fields<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     fields: Vec<UiField>,
     profile: Option<String>,
 ) -> Result<(), String> {
-    set_fields(state.inner(), fields, profile).await
+    for (session, drawn) in set_fields(state.inner(), fields, profile).await? {
+        crate::sessions::emit_for(&app, session, events::VITALS_TEXT, &drawn);
+    }
+    Ok(())
 }
 
 /// Write `fields` onto the profile named `profile`, which a session must
 /// play, or onto the selected session's when it names none, and save it.
+/// Returns the vitals text a new `vitals_text` drew in each session on
+/// the profile that watches it.
 async fn set_fields(
     state: &SharedState,
     fields: Vec<UiField>,
     profile: Option<String>,
-) -> Result<(), String> {
-    let open = {
+) -> Result<Vec<(SessionId, VitalsText)>, String> {
+    let sessions = state.all_sessions();
+    let (open, drawn) = {
         let mut p = state.lock_named(profile).await?;
+        let text = p.ui.vitals_text.clone();
         apply_fields(&mut p.ui, fields);
-        p.open().clone()
+        let mut drawn = Vec::new();
+        if p.ui.vitals_text != text {
+            let now = tokio::time::Instant::now();
+            for session in p.players(&sessions) {
+                let c = session.connection.lock();
+                if let Some(text) = vitals_text::render(session, &p, &c, now) {
+                    drawn.push((session.id, text));
+                }
+            }
+        }
+        (p.open().clone(), drawn)
     };
     persist_profile(state, &open).await;
-    Ok(())
+    Ok(drawn)
 }
 
 /// Write each field onto `ui` through its coercer. The affects
