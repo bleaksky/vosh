@@ -27,6 +27,7 @@ import {
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { chatRefToAdd } from '../panel/paneActions';
 import { TitleButton } from './TitleButton';
 
 // The 32 px title band across the top of the window (SPEC 1 and 9). No
@@ -207,7 +208,7 @@ export function TitleBand({
   );
 }
 
-// Add a pane's menu: the pane types the tree does not show, then the
+// Add a pane's menu: the pane types the tree has room for, then the
 // Lua panes it does not show. It reads the Lua pane and plugin stores
 // only while it is open, since a plugin can send its panes on every
 // prompt and the band should not draw again for each one.
@@ -226,6 +227,8 @@ function AddPaneMenu({
   const pluginRows = usePluginRows();
   const builtIns = paneTypesToAdd(paneTree);
   const luaToAdd = luaPanesToAdd(paneTree, offeredLuaPanes(luaPanes, pluginRows));
+  // A second Chat pane starts on tell, and the menu says so.
+  const chatOnTell = chatRefToAdd(paneTree).props.channel === 'tell';
   return (
     <ShellMenu
       anchor={anchor}
@@ -238,7 +241,15 @@ function AddPaneMenu({
         <p className="shell-menu-note">Every pane is showing.</p>
       )}
       {builtIns.map((pane) => (
-        <ShellMenuItem key={pane} onSelect={() => onAdd(paneRef(pane))}>
+        <ShellMenuItem
+          key={pane}
+          trailing={
+            pane === 'chat' && chatOnTell ? (
+              <span className="shell-menu-kbd">starts on tell</span>
+            ) : undefined
+          }
+          onSelect={() => onAdd(paneRef(pane))}
+        >
           {PANE_LABELS[pane]}
         </ShellMenuItem>
       ))}

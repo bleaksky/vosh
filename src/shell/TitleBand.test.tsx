@@ -495,7 +495,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
-      'Chat',
+      'Chat | starts on tell',
       '---',
       'Weather | weather_pane',
       'Worth | worth_pane',
@@ -507,7 +507,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
-      'Chat',
+      'Chat | starts on tell',
       '---',
       'Worth | worth_pane',
     ]);
@@ -515,12 +515,12 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
-      'Chat',
+      'Chat | starts on tell',
       '---',
       'Worth | worth_pane',
     ]);
     lua.rows = null;
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat']);
+    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat | starts on tell']);
   });
 
   it('drops a Lua pane once the panel shows it', async () => {
@@ -534,7 +534,7 @@ describe('Add a pane', () => {
     expect((await open(tree(weather))).lines).toEqual([
       'Map',
       'Group',
-      'Chat',
+      'Chat | starts on tell',
       '---',
       'Worth | worth_pane',
     ]);
@@ -548,6 +548,19 @@ describe('Add a pane', () => {
     expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
     holdPanes(false, false);
     expect((await open(allShown())).lines).toEqual(['Every pane is showing.']);
+  });
+
+  it('says a second Chat pane starts on tell', async () => {
+    const solo = (props: Record<string, string>): PaneSplit => ({
+      id: 'root',
+      split: 'column',
+      weight: 1,
+      children: [{ id: 'chat', pane: 'chat', weight: 1, props }],
+    });
+    const empty: PaneSplit = { id: 'root', split: 'column', weight: 1, children: [] };
+    expect((await open(empty)).lines).toContain('Chat');
+    expect((await open(solo({ rest: '1' }))).lines).toContain('Chat | starts on tell');
+    expect((await open(solo({ channel: 'tell' }))).lines).toContain('Chat');
   });
 
   it('adds a Lua pane by its plugin, id and title', async () => {
