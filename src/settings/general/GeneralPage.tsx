@@ -14,7 +14,7 @@ import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { savedSessionsText } from './logView';
 import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS, knownWorld } from '../../lib/knownWorlds';
-import { parseTarget, useSavedTarget } from '../../stores/session/useConnection';
+import { parseTarget, useSessionTarget } from '../../stores/session/useConnection';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import {
@@ -91,19 +91,19 @@ function GeneralSections({
 const OTHER = 'other';
 const SAVED = 'saved';
 
-/** The saved target Connect and Cmd+R dial, the same one the session
- *  popover's Edit connection… edits. The World select picks a known
- *  world or Other…, which clears host and port for you to type. Host
- *  and port save when you leave them or press Enter, and go back to
- *  the saved target when they do not make a target. */
+/** Where Connect and Cmd+R dial the selected session, the same target
+ *  the session popover's Edit connection… edits. The World select picks
+ *  a known world or Other…, which clears host and port for you to type.
+ *  Host and port save when you leave them or press Enter, and go back
+ *  to the target when they do not make one. */
 function ConnectionSection() {
-  const [target, storeTarget] = useSavedTarget();
+  const [target, storeTarget] = useSessionTarget();
   const [host, setHost] = useState(target.host);
   const [port, setPort] = useState(String(target.port));
   const [other, setOther] = useState(false);
   const hostRef = useRef<HTMLInputElement | null>(null);
   const portId = useId();
-  // The newest saved target. Leaving the host field for the TLS switch
+  // The newest target. Leaving the host field for the TLS switch
   // saves the host and flips TLS in one gesture, before a render.
   const latest = useRef(target);
 
@@ -112,7 +112,7 @@ function ConnectionSection() {
     storeTarget(next);
   };
 
-  // Follow the saved target, from here or from the session popover.
+  // Follow the target, from here, the session popover or a selection.
   useEffect(() => {
     latest.current = target;
     setHost(target.host);

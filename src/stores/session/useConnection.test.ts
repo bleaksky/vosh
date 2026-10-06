@@ -6,11 +6,13 @@ import { pushToast } from '../toasts';
 import {
   connectOpened,
   connectTo,
+  keepTarget,
   loadTarget,
   parseTarget,
   profileSwitchErrorMessage,
   saveConnectionTarget,
   subscribeConnectionTarget,
+  targetOf,
 } from './useConnection';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -142,6 +144,40 @@ describe('connectOpened', () => {
     vi.mocked(invoke).mockImplementation(() => Promise.resolve());
     await connectOpened(target, 2);
     expect(vi.mocked(invoke).mock.calls).toEqual([['session_connect', { ...target, session: 2 }]]);
+    expect(loadTarget()).toEqual(target);
+    expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_CHANGED, target);
+  });
+});
+
+describe('the target of a session', () => {
+  const saved = { host: 'play.theforsakenlands.com', port: 1848, tls: false };
+  const store = new Map<string, string>();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.mocked(invoke).mockReset();
+    vi.mocked(emit).mockClear();
+    store.clear();
+  });
+
+  it('is the target the session keeps, else the saved world', () => {
+    const own = { host: 'play.theforsakenlands.com', port: 1825, tls: true };
+    expect(targetOf(own, saved)).toEqual(own);
+    expect(targetOf({ host: null, port: null, tls: false }, saved)).toBe(saved);
+    expect(targetOf(null, saved)).toBe(saved);
+  });
+
+  it('keeps a new target for the session and as the saved world', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    });
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+    const target = { host: 'play.theforsakenlands.com', port: 1825, tls: false };
+    await keepTarget(target, 2);
+    expect(vi.mocked(invoke).mock.calls).toEqual([
+      ['session_set_address', { session: 2, ...target }],
+    ]);
     expect(loadTarget()).toEqual(target);
     expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_CHANGED, target);
   });

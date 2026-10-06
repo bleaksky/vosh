@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { profileResolveMatch, profileSwitch, profilesList } from '../../ipc/profiles';
 import {
   connectSession,
   disconnectSession,
   emitConnectionTargetChanged,
+  setSessionAddress,
   subscribeConnectionTargetChanged,
   type ConnectionTarget,
+  type SessionRow,
 } from '../../ipc/session';
 import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 import { useSessionConnection, type ConnectionStatus } from './connectionStore';
-import { getSelected, getSessions } from './sessionsStore';
+import { getSelected, getSessions, useSelectedRow } from './sessionsStore';
 
 // The session the title band shows and the session menu drives, which
-// is the selected session, with the saved target Connect dials.
+// is the selected session, with the target Connect dials for it.
 // MainWindow mounts the hook once. The connection store keeps each
 // session's state, so it lives as long as the window and not only while
 // the session menu or another control that shows it is mounted. The
@@ -28,13 +30,13 @@ export const DEFAULT_TARGET: ConnectionTarget = {
   tls: false,
 };
 
-// The last target you saved or dialed, so Connect after a relaunch
-// dials the world you last used instead of the stock one. This is a
-// per-machine convenience in browser storage. The backend has no saved
-// connection model yet. It is the one saved target: the session
-// popover and Settings › General › Connection both edit it through
-// saveConnectionTarget, and every window follows it through
-// subscribeConnectionTarget.
+// The saved world, the last target you saved or dialed from a form, in
+// browser storage on this machine. Each session keeps its own target in
+// its row, which the app keeps for the next launch (board 7). The saved
+// world is where a New session form starts, and where a session dials
+// before it has a target of its own. The session popover and Settings ›
+// General › Connection save both, and every window follows the saved
+// world through subscribeConnectionTarget.
 const TARGET_KEY = 'vosh.connection.target';
 
 /** A target read back from storage or a form, or null when the host is
@@ -65,7 +67,7 @@ function storeTarget(target: ConnectionTarget): void {
   }
 }
 
-/** Save where Connect and ⌘R dial, and tell every window. */
+/** Save the saved world, and tell every window. */
 export function saveConnectionTarget(target: ConnectionTarget): void {
   storeTarget(target);
   emitConnectionTargetChanged(target).catch(() => {
@@ -95,15 +97,40 @@ export function subscribeConnectionTarget(cb: (target: ConnectionTarget) => void
   };
 }
 
-/** The saved target and a setter that saves it for every window. */
-export function useSavedTarget(): [ConnectionTarget, (target: ConnectionTarget) => void] {
-  const [target, setTarget] = useState<ConnectionTarget>(loadTarget);
-  useEffect(() => subscribeConnectionTarget(setTarget), []);
-  const save = useCallback((next: ConnectionTarget) => {
-    setTarget(next);
-    saveConnectionTarget(next);
+/** Where `row`'s session dials: the target it keeps, else the saved
+ *  world. A session keeps none before its first connect or form, nor a
+ *  lone session with no name after a relaunch. */
+export function targetOf(
+  row: Pick<SessionRow, 'host' | 'port' | 'tls'> | null,
+  saved: ConnectionTarget,
+): ConnectionTarget {
+  if (!row || row.host === null || row.port === null) return saved;
+  return { host: row.host, port: row.port, tls: row.tls };
+}
+
+/** Keep `target` as where `session` dials, and as the saved world the
+ *  next New session form starts from. */
+export async function keepTarget(target: ConnectionTarget, session: number): Promise<void> {
+  saveConnectionTarget(target);
+  await setSessionAddress(session, target);
+}
+
+/** Where the selected session dials, and a setter that keeps a new
+ *  target for it. Every window follows both, and the target keeps its
+ *  identity until one of its parts changes. */
+export function useSessionTarget(): [ConnectionTarget, (target: ConnectionTarget) => void] {
+  const [saved, setSaved] = useState<ConnectionTarget>(loadTarget);
+  useEffect(() => subscribeConnectionTarget(setSaved), []);
+  const row = useSelectedRow();
+  const host = row?.host ?? null;
+  const port = row?.port ?? null;
+  const tls = row?.tls ?? false;
+  const target = useMemo(() => targetOf({ host, port, tls }, saved), [host, port, tls, saved]);
+  const keep = useCallback((next: ConnectionTarget) => {
+    setSaved(next);
+    keepTarget(next, getSelected()).catch((e: unknown) => console.warn('[session target]', e));
   }, []);
-  return [target, save];
+  return [target, keep];
 }
 
 /** The sentence a profile switch that failed at connect shows you. The
@@ -161,19 +188,21 @@ export interface Connection {
   status: ConnectionStatus;
   /** Connecting or connected. */
   live: boolean;
-  /** Where Connect dials next. */
+  /** Where Connect dials the selected session next, its own target or
+   *  else the saved world. */
   target: ConnectionTarget;
   /** The world the title names: the live host while a session runs,
    *  else the target. */
   world: string;
   character: string | null;
-  /** Dial the target. */
+  /** Dial the selected session at its target. */
   connect: () => Promise<void>;
   /** Dial a session its New session form opened, as connectOpened
    *  does. */
   connectNew: (target: ConnectionTarget, session: number) => Promise<void>;
   disconnect: () => Promise<void>;
-  /** Save the target for the next Connect without dialing. */
+  /** Keep a target for the selected session without dialing, as
+   *  keepTarget does. */
   saveTarget: (target: ConnectionTarget) => void;
 }
 
@@ -182,7 +211,7 @@ export interface Connection {
  *  action that failed, with the session it was for. Mount it once, in
  *  MainWindow. */
 export function useConnection(onError: (message: string, session: number) => void): Connection {
-  const [target, setTarget] = useState<ConnectionTarget>(loadTarget);
+  const [target, saveTarget] = useSessionTarget();
   const { status, character } = useSessionConnection();
   const live = status.kind === 'connecting' || status.kind === 'connected';
 
@@ -194,23 +223,6 @@ export function useConnection(onError: (message: string, session: number) => voi
     targetRef.current = target;
     onErrorRef.current = onError;
   });
-
-  const saveTarget = useCallback((next: ConnectionTarget) => {
-    targetRef.current = next;
-    setTarget(next);
-    saveConnectionTarget(next);
-  }, []);
-
-  // Settings edits the same saved target. Follow it, so the popover,
-  // the title, and Cmd+R dial what Settings shows.
-  useEffect(
-    () =>
-      subscribeConnectionTarget((next) => {
-        targetRef.current = next;
-        setTarget(next);
-      }),
-    [],
-  );
 
   const dial = useCallback(async (to: ConnectionTarget) => {
     const session = getSelected();
