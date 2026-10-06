@@ -111,6 +111,8 @@ Settings edits the profile of the session in front. With two or more sessions op
 
 When you bring a session on another profile to the front while a list under Automation holds unsaved changes, Settings stays on the profile you were editing. Its header keeps naming that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile Orla plays. Each change you make in Settings saves to the profile it was made on, whichever session is in front by the time it lands.
 
+Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
+
 To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
 Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`

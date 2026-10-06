@@ -54,6 +54,11 @@ describe('searchSettingsRows', () => {
     expect(labels('missing')).toContain('Tracked affects');
   });
 
+  it('finds where the session in front connects', () => {
+    expect(labels('session port')).toEqual(['World', 'Host and port']);
+    expect(labels('session tls')).toEqual(['Use TLS']);
+  });
+
   it('needs every word, in any field', () => {
     expect(labels('dark theme')[0]).toBe('Dark theme');
     expect(labels('import')).toEqual(['Import a theme', 'Import from another client']);

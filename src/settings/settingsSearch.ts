@@ -42,17 +42,17 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // General, from the approved board.
   {
     label: 'World',
-    keywords: 'connect connection mud server',
+    keywords: 'connect connection mud server session port build',
     target: at('general', 'connection', 'world'),
   },
   {
     label: 'Host and port',
-    keywords: 'connect connection address server',
+    keywords: 'connect connection address server session',
     target: at('general', 'connection', 'host'),
   },
   {
     label: 'Use TLS',
-    keywords: 'connect connection secure ssl encrypted',
+    keywords: 'connect connection secure ssl encrypted session',
     target: at('general', 'connection', 'tls'),
   },
   {
