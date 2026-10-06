@@ -1213,7 +1213,7 @@ describe('the help on auto reconnect and Lua alerts', () => {
     const text = body('get-connected.reconnect');
     expect(text).toContain('then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries');
     expect(text).toContain('Vosh never dials again after your `Disconnect`, a `quit` you typed');
-    expect(text).toContain('add `reconnect = false` to its profile file');
+    expect(text).toContain('turn off `Reconnect when the link drops` in Settings under General');
   });
 
   it('says what a Mac waits for and that only macOS takes banners back', () => {
