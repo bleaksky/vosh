@@ -184,7 +184,9 @@ export function SessionMenu({
       <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
       </ShellMenuItem>
-      <ShellMenuSeparator />
+      {/* Board 05 draws no line here while the list sits above, so
+        five rows fit whole at 720 by 450. */}
+      {!listSessions && <ShellMenuSeparator />}
       <ShellMenuItem
         shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
         onSelect={() => run(openNewSession)}
