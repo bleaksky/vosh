@@ -11,5 +11,4 @@ const store = createConfigStore<VitalsDensity>({
 });
 
 export const startVitalsDensityStore = store.start;
-export const getVitalsDensity = store.get;
 export const useVitalsDensity = store.use;
