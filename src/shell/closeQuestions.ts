@@ -1,13 +1,16 @@
 import type { SessionRow } from '../ipc/session';
 import { worldName } from '../lib/knownWorlds';
 import { sessionLabel, type LabelSource } from '../lib/sessionLabel';
-import { possessive } from '../lib/text';
+import { listJoin, possessive } from '../lib/text';
 
 // The words Vosh asks with before it closes a session or the main
 // window, by Q13 and board 6 of the Sessions review. Close session asks
 // while its session is connected, and Close window while any session
 // is. A session goes by its label, the name you gave it or else its
 // character, with the world and the port where its row shows the port.
+// With two or more sessions open, a question names each connected
+// session and leaves the others out. Board 6 words two, and three or
+// more read the same way, with the count and all three in place of both.
 
 /** A session as a question reads it, its row and whether it is
  *  connected. */
@@ -18,6 +21,39 @@ export interface CloseQuestion {
   body: string;
   /** The button that closes, in the danger tone. */
   confirm: string;
+}
+
+/** How many sessions, as a sentence opens with the count. */
+const COUNTS = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+/** `Two`, `Three`, and past ten the number itself. */
+function countWord(n: number): string {
+  return COUNTS[n - 2] ?? String(n);
+}
+
+/** What a close ends, `both` or `all three`. */
+function allOf(n: number): string {
+  return n === 2 ? 'both' : `all ${countWord(n).toLowerCase()}`;
+}
+
+/** Where a session plays, ` to The Forsaken Lands 1825`, or nothing
+ *  before it has an address. */
+function toPlace(place: string | null): string {
+  return place ? ` to ${place}` : '';
+}
+
+/** A connected session as a list names it, `Orla on The Forsaken Lands
+ *  1825`, or `one on The Forsaken Lands 1825` at the login. */
+function named(row: CloseRow, rows: readonly CloseRow[]): string {
+  const { who, place, name } = sessionLabel(row, rows);
+  return place ? `${who ?? 'one'} on ${place}` : name;
+}
+
+/** `Two sessions are connected, Tolliver on The Forsaken Lands and Orla
+ *  on The Forsaken Lands 1825.` */
+function connectedSentence(live: readonly CloseRow[], rows: readonly CloseRow[]): string {
+  const list = listJoin(live.map((row) => named(row, rows)));
+  return `${countWord(live.length)} sessions are connected, ${list}.`;
 }
 
 /** What Close session asks before it closes `session` among the open
@@ -31,7 +67,7 @@ export function closeSessionQuestion(
   const row = rows.find((r) => r.id === session);
   if (!row?.connected) return null;
   const { who, place } = sessionLabel(row, rows);
-  const to = place ? ` to ${place}` : '';
+  const to = toPlace(place);
   const confirm = 'Close session';
   if (!who) {
     return {
@@ -48,14 +84,27 @@ export function closeSessionQuestion(
 }
 
 /** What Close window asks while a session is connected, or null while
- *  none is, which closes at once. */
+ *  none is, which closes at once. With one session open it asks in the
+ *  words it used before sessions. */
 export function closeWindowQuestion(rows: readonly CloseRow[]): CloseQuestion | null {
-  const live = rows.find((row) => row.connected);
-  if (!live) return null;
-  const to = live.host ? ` to ${worldName(live.host)}` : '';
-  return {
-    title: 'Close this window?',
-    body: `You are connected${to}. Closing this window ends your session and quits Vosh.`,
-    confirm: 'Close window',
-  };
+  const live = rows.filter((row) => row.connected);
+  if (live.length === 0) return null;
+  const ask = (body: string) => ({ title: 'Close this window?', body, confirm: 'Close window' });
+  if (rows.length === 1) {
+    const { host } = rows[0];
+    const to = toPlace(host === null ? null : worldName(host));
+    return ask(`You are connected${to}. Closing this window ends your session and quits Vosh.`);
+  }
+  if (live.length === 1) {
+    const { who, place } = sessionLabel(live[0], rows);
+    const to = toPlace(place);
+    return ask(
+      who
+        ? `${who} is connected${to}. Closing this window disconnects ${who} and quits Vosh.`
+        : `A session is connected${to}. Closing this window ends it and quits Vosh.`,
+    );
+  }
+  return ask(
+    `${connectedSentence(live, rows)} Closing this window ends ${allOf(live.length)} and quits Vosh.`,
+  );
 }

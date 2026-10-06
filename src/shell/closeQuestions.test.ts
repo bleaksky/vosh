@@ -57,6 +57,54 @@ describe('closeWindowQuestion', () => {
 
   it('closes at once while no session is connected', () => {
     expect(closeWindowQuestion([{ ...tolliver, connected: false }])).toBeNull();
+    expect(
+      closeWindowQuestion([
+        { ...tolliver, connected: false },
+        { ...orla, connected: false },
+      ]),
+    ).toBeNull();
     expect(closeWindowQuestion([])).toBeNull();
+  });
+
+  it('names both connected sessions in board 6 words', () => {
+    expect(closeWindowQuestion([tolliver, orla])).toEqual({
+      title: 'Close this window?',
+      body: 'Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825. Closing this window ends both and quits Vosh.',
+      confirm: 'Close window',
+    });
+  });
+
+  it('counts three or more and ends all of them', () => {
+    const maren = row(3, { character: 'Maren' });
+    expect(closeWindowQuestion([tolliver, maren, orla])?.body).toBe(
+      'Three sessions are connected, Tolliver on The Forsaken Lands, Maren on The Forsaken Lands, and Orla on The Forsaken Lands 1825. Closing this window ends all three and quits Vosh.',
+    );
+  });
+
+  it('leaves a session that is not connected unnamed', () => {
+    const maren = row(3, { character: 'Maren', connected: false });
+    expect(closeWindowQuestion([tolliver, maren, orla])?.body).toBe(
+      'Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825. Closing this window ends both and quits Vosh.',
+    );
+    expect(closeWindowQuestion([{ ...tolliver, connected: false }, orla])?.body).toBe(
+      'Orla is connected to The Forsaken Lands 1825. Closing this window disconnects Orla and quits Vosh.',
+    );
+  });
+
+  it('names a session at the login by its world', () => {
+    const login = row(3, { port: 1825 });
+    expect(closeWindowQuestion([tolliver, login])?.body).toBe(
+      'Two sessions are connected, Tolliver on The Forsaken Lands and one on The Forsaken Lands 1825. Closing this window ends both and quits Vosh.',
+    );
+    expect(closeWindowQuestion([{ ...tolliver, connected: false }, login])?.body).toBe(
+      'A session is connected to The Forsaken Lands 1825. Closing this window ends it and quits Vosh.',
+    );
+  });
+
+  it('counts past ten in numbers', () => {
+    const many = Array.from({ length: 11 }, (_, i) => row(i + 1, { character: 'Tolliver' }));
+    expect(closeWindowQuestion(many)?.body).toMatch(
+      /^11 sessions are connected, .* Closing this window ends all 11 and quits Vosh\.$/,
+    );
   });
 });

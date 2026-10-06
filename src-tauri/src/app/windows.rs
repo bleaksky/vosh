@@ -302,7 +302,9 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
 /// (settings, etc.) down with it. Tauri only exits the process
 /// when the LAST window closes, so without this the settings
 /// popup hangs around alone after the user closes the main
-/// client.
+/// client. They go once the main window is gone, not at its close
+/// request, since the page holds that request while it asks whether
+/// to end a connected session (Sessions Q13), and Cancel keeps them.
 pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
     // The focus rule of the alerts counts Vosh in front while any of its
     // windows has focus, Settings and Help included.
@@ -327,7 +329,7 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
         return;
     }
     match event {
-        tauri::WindowEvent::CloseRequested { .. } => {
+        tauri::WindowEvent::Destroyed => {
             let app = window.app_handle();
             for (label, w) in app.webview_windows() {
                 if label != "main" {
