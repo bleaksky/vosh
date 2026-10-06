@@ -157,6 +157,35 @@
   display: none;
 }
 
+/* The sessions sidebar's line as its width handle. It starts below the
+   top 32, which still drags the window. The sidebar draws the
+   line itself, so the handle shows only while it has the keyboard. Its
+   hit area reaches 3 px each side, as the panel's edge does. */
+.shell-sessions-edge {
+  grid-row: 2 / -1;
+  grid-column: 1;
+  justify-self: end;
+  position: relative;
+  z-index: 2;
+  width: 1px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.shell-sessions-edge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.shell-sessions-edge:focus-visible {
+  background: var(--accent);
+}
+
 /* ── Title band ────────────────────────────────────────────────────── */
 
 .shell-band {
@@ -909,6 +938,54 @@
   font-size: 12px;
   line-height: 16px;
   color: var(--tertiary);
+}
+
+/* The session popover's list of sessions while the sidebar is folded
+   (board 8). SESSIONS in the palette's caps style heads it. Each row
+   reads its session as the sidebar's row does, the port in quiet meta,
+   and at its right the check or the row's glyph before its key. */
+.shell-menu-head {
+  margin: 0;
+  padding: 7px 12px 3px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.shell-menu-session {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.shell-menu-session-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-menu-meta {
+  flex: none;
+  margin-left: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-menu-side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The glyph takes 8 of the row, the width of the dot it draws most. */
+.shell-menu-side .shell-sessions-glyph {
+  margin: 0 -4px;
 }
 
 /* The connection form the session menu swaps in. Fields, buttons, and

@@ -1,0 +1,169 @@
+import { act, createElement } from 'react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { SessionRow } from '../ipc/session';
+import type { SessionRowState } from '../stores/session/sessionRowStore';
+import type { Connection } from '../stores/session/useConnection';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+
+// The session popover while the sidebar is folded, board 8. SESSIONS
+// heads a list of every session, the selected one with the check and
+// each other one with its port, any glyph and its key, and then the
+// board 4 rows. A click brings that session to the front.
+
+const store = vi.hoisted(() => ({
+  rows: [] as SessionRow[],
+  selected: 1,
+  goTo: vi.fn(),
+  states: new Map<number, Partial<SessionRowState>>(),
+}));
+
+vi.mock('../stores/session/sessionsStore', async (actual) => ({
+  ...(await actual<typeof import('../stores/session/sessionsStore')>()),
+  useSessions: () => store.rows,
+  useSelected: () => store.selected,
+  goTo: store.goTo,
+}));
+
+vi.mock('../stores/session/sessionRowStore', async (actual) => {
+  const rows = await actual<typeof import('../stores/session/sessionRowStore')>();
+  return {
+    ...rows,
+    useSessionRow: (id: number) => ({ ...rows.getSessionRow(id), ...store.states.get(id) }),
+  };
+});
+
+const row = (id: number, fields: Partial<SessionRow>): SessionRow => ({
+  id,
+  name: null,
+  character: null,
+  host: 'play.theforsakenlands.com',
+  port: 1848,
+  tls: false,
+  profile: 'Default',
+  connected: true,
+  selected: false,
+  ...fields,
+});
+
+const connection = {
+  live: true,
+  target: { host: 'play.theforsakenlands.com', port: 1848, tls: false },
+  connect: () => Promise.resolve(),
+  disconnect: () => Promise.resolve(),
+  saveTarget: () => undefined,
+} as unknown as Connection;
+
+type Handler = (e?: unknown) => void;
+
+function on(el: FakeElement): Record<string, Handler> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, Handler>>)[key];
+}
+
+const doc = new FakeDocument();
+let createRoot: typeof import('react-dom/client').createRoot;
+const cleanups: (() => Promise<void>)[] = [];
+
+beforeAll(async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('window', {
+    document: doc,
+    innerWidth: 720,
+    innerHeight: 450,
+    location: { protocol: 'about:' },
+    HTMLIFrameElement: class {},
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: '' });
+  vi.stubGlobal('Node', FakeNode);
+  vi.stubGlobal('Element', FakeElement);
+  vi.stubGlobal('HTMLElement', FakeElement);
+  // The menu looks for the caret and its first row as it opens.
+  const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+    for (let n = other; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  };
+  el.querySelector = function (this: FakeElement): FakeElement | null {
+    return findAll(this, (child) => child.getAttribute('role') === 'menuitem')[0] ?? null;
+  };
+  ({ createRoot } = await import('react-dom/client'));
+});
+
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
+  store.goTo.mockClear();
+  store.states.clear();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
+async function mount(listSessions: boolean) {
+  const { SessionMenu } = await import('./SessionMenu');
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const onClose = vi.fn();
+  await act(async () => {
+    root.render(createElement(SessionMenu, { connection, anchor: null, listSessions, onClose }));
+  });
+  cleanups.push(async () => {
+    await act(async () => root.unmount());
+    doc.body.removeChild(container);
+  });
+  const menu = findAll(doc.body, (el) => el.getAttribute('role') === 'menu')[0];
+  const items = findAll(menu, (el) => el.getAttribute('role') === 'menuitem');
+  return { menu, items, onClose };
+}
+
+const hasClass = (name: string) => (el: FakeElement) =>
+  (el.getAttribute('class') ?? '').split(' ').includes(name);
+
+describe('the session popover with the sidebar folded', () => {
+  store.rows = [
+    row(1, { character: 'Tolliver', selected: true }),
+    row(2, { character: 'Orla', port: 1825 }),
+    row(3, { port: 1825, connected: false }),
+  ];
+
+  it('lists every session under SESSIONS before the board 4 rows, as frame b8-narrow draws it', async () => {
+    // A tell rang in Orla's session behind.
+    store.states.set(2, { alert: true });
+    const { menu, items } = await mount(true);
+    expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
+    expect(items.map((el) => el.textContent)).toEqual([
+      'Tolliver',
+      'Orla1825⌘2',
+      'The Forsaken Lands 1825⌘3',
+      'Edit connection…',
+      'Rename session…',
+      'New session…⌘T',
+      'Disconnect',
+    ]);
+    // The selected session wears the check, and Orla the dot before her key.
+    expect(items[0].getAttribute('aria-current')).toBe('true');
+    expect(findAll(items[0], hasClass('pane-menu-check'))).toHaveLength(1);
+    expect(findAll(items[1], hasClass('shell-menu-meta'))[0]?.textContent).toBe('1825');
+    const dot = findAll(items[1], hasClass('shell-sessions-glyph'))[0];
+    expect(dot?.getAttribute('aria-label')).toBe('Something for you');
+    expect(findAll(items[2], hasClass('shell-sessions-glyph'))).toHaveLength(0);
+  });
+
+  it('brings the session you pick to the front and closes', async () => {
+    const { items, onClose } = await mount(true);
+    await act(async () => on(items[1]).onClick());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(store.goTo).toHaveBeenCalledWith(2);
+  });
+
+  it('lists no session while the sidebar shows', async () => {
+    const { menu, items } = await mount(false);
+    expect(findAll(menu, hasClass('shell-menu-head'))).toHaveLength(0);
+    expect(items[0].textContent).toBe('Edit connection…');
+  });
+});

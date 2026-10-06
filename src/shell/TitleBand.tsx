@@ -51,6 +51,9 @@ interface Props {
   /** Turn the selected session's name into a field in its row, while
    *  the sessions sidebar shows. */
   renameInRow?: (() => void) | undefined;
+  /** The sessions sidebar folded with two or more sessions open, so the
+   *  session popover lists them. */
+  listSessions?: boolean;
 }
 
 export function TitleBand({
@@ -63,6 +66,7 @@ export function TitleBand({
   onAddPane,
   onMenuClosed,
   renameInRow,
+  listSessions = false,
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
@@ -171,6 +175,7 @@ export function TitleBand({
           anchor={sessionRef.current}
           request={session.request}
           renameInRow={renameInRow}
+          listSessions={listSessions}
           onClose={closeMenu}
         />
       )}

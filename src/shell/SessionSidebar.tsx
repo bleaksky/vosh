@@ -436,7 +436,8 @@ function NameField({ initial, unnamed, onDone }: NameFieldProps) {
   );
 }
 
-function RowGlyphMark({ glyph }: { glyph: RowGlyph }) {
+/** A row's glyph, which the session popover's list shows too. */
+export function RowGlyphMark({ glyph }: { glyph: RowGlyph }) {
   const { icon: Icon, words } = GLYPHS[glyph];
   return (
     <span className={`shell-sessions-glyph is-${glyph}`} role="img" aria-label={words}>

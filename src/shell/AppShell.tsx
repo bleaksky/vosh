@@ -9,6 +9,14 @@ import {
 } from 'react';
 import { isMacPlatform } from '../lib/shortcuts';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
+import {
+  clampSessionsWidth,
+  MIN_TERMINAL_WIDTH,
+  SESSIONS_WIDTH_MAX,
+  SESSIONS_WIDTH_MIN,
+  SESSIONS_WIDTH_STOCK,
+  sessionsColumn,
+} from './sessionsColumn';
 
 // The One Window frame (SPEC 1). A CSS grid with the sessions column,
 // the terminal column and the panel column. Rows are the 32 px title
@@ -32,18 +40,19 @@ import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
 // panel's clamp counts. With one session the sidebar is gone, the first
 // column takes 0, and the frame is the one it was before sessions.
 //
+// The sidebar's 1 px line is its width handle too, below the sidebar's
+// top 32, the way the panel's edge is the panel's. Each drag writes its
+// columns straight to the root and keeps the width on release.
+//
 // On Windows and Linux the panel draws at least 248 px wide, so the
 // title band's buttons and window controls all sit over it. A saved
 // width under that stays saved, and macOS draws it as saved.
 
-/** The terminal keeps at least this much width when you drag the
- *  panel wider. */
-const MIN_TERMINAL_WIDTH = 320;
-/** Arrow keys on the panel edge move it this far. */
+/** Arrow keys on either edge move it this far. */
 const KEY_STEP = 8;
-/** The sessions sidebar's column, 220 of rows and its 1 px line, as
- *  otty draws its tab sidebar. */
-const SESSIONS_COLUMN = 221;
+
+/** The panel's edge, or the sessions sidebar's line. */
+type Edge = 'panel' | 'sessions';
 
 interface Props {
   panelOpen: boolean;
@@ -56,6 +65,10 @@ interface Props {
   /** The sessions sidebar while it shows, which takes the first column,
    *  or null. */
   sessions?: ReactNode;
+  /** The sidebar's rows' width, 180 to 320, without its line. */
+  sessionsWidth?: number;
+  /** Keep the width a drag or a key gave the sidebar. */
+  onSessionsWidth?: (px: number) => void;
   titleBand: ReactNode;
   terminal: ReactNode;
   input: ReactNode;
@@ -86,6 +99,8 @@ export function AppShell({
   panelWidth,
   onPanelWidth,
   sessions = null,
+  sessionsWidth = SESSIONS_WIDTH_STOCK,
+  onSessionsWidth,
   titleBand,
   terminal,
   input,
@@ -96,12 +111,16 @@ export function AppShell({
 }: Props) {
   const floor = panelWidthFloor(isMacPlatform());
   const width = Math.max(floor, panelWidth);
-  const side = sessions === null ? 0 : SESSIONS_COLUMN;
+  const side = sessions === null ? 0 : sessionsColumn(sessionsWidth);
   const rootRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; start: number; last: number } | null>(
-    null,
-  );
+  const dragRef = useRef<{
+    edge: Edge;
+    pointerId: number;
+    startX: number;
+    start: number;
+    last: number;
+  } | null>(null);
 
   // A hidden panel keeps its panes mounted (so the map and chat keep
   // their state) but leaves the tab order and the accessibility tree.
@@ -109,37 +128,52 @@ export function AppShell({
     if (panelRef.current) panelRef.current.inert = !panelOpen;
   }, [panelOpen]);
 
-  // Drag frames write the width straight to the root and tell the
+  // The width an edge lands on: the panel past the sessions column and
+  // the terminal's floor, the sidebar never so wide that it would fold.
+  const clampEdge = (edge: Edge, px: number) =>
+    edge === 'panel'
+      ? clampWidth(px, floor, side)
+      : clampSessionsWidth(px, window.innerWidth, panelOpen ? floor : 0);
+
+  // Drag frames write the columns straight to the root and tell the
   // terminal to refit in the same frame, the way Resizable does. React
-  // state catches up once, on release.
-  const preview = (px: number) => {
+  // state catches up once, on release. The panel's column counts the
+  // sidebar's, so the sidebar writes both.
+  const preview = (edge: Edge, px: number) => {
     const root = rootRef.current;
     if (!root) return;
-    root.style.setProperty('--panel-w', `${px}px`);
-    root.style.setProperty('--panel-col', panelColumn(px, side));
+    if (edge === 'panel') {
+      root.style.setProperty('--panel-w', `${px}px`);
+      root.style.setProperty('--panel-col', panelColumn(px, side));
+    } else {
+      root.style.setProperty('--sessions-col', `${sessionsColumn(px)}px`);
+      if (panelOpen) root.style.setProperty('--panel-col', panelColumn(width, sessionsColumn(px)));
+    }
     window.dispatchEvent(new CustomEvent('vosh:resize-progress', { detail: { size: px } }));
   };
 
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+  const keep = (edge: Edge, px: number) =>
+    edge === 'panel' ? onPanelWidth(px) : onSessionsWidth?.(px);
+
+  const onPointerDown = (edge: Edge) => (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      start: width,
-      last: width,
-    };
+    const start = edge === 'panel' ? width : sessionsWidth;
+    dragRef.current = { edge, pointerId: e.pointerId, startX: e.clientX, start, last: start };
     document.body.style.cursor = 'col-resize';
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    const next = clampWidth(drag.start + drag.startX - e.clientX, floor, side);
+    // The panel sits on the right, so a drag left widens it, and the
+    // sidebar on the left, so a drag right widens it.
+    const moved = e.clientX - drag.startX;
+    const next = clampEdge(drag.edge, drag.start + (drag.edge === 'panel' ? -moved : moved));
     if (next === drag.last) return;
     drag.last = next;
-    preview(next);
+    preview(drag.edge, next);
   };
 
   const endDrag = (e: PointerEvent<HTMLDivElement>) => {
@@ -150,17 +184,18 @@ export function AppShell({
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     document.body.style.cursor = '';
-    if (drag.last !== drag.start) onPanelWidth(drag.last);
+    if (drag.last !== drag.start) keep(drag.edge, drag.last);
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    // The panel sits on the right, so Left widens it.
-    const delta = e.key === 'ArrowLeft' ? KEY_STEP : e.key === 'ArrowRight' ? -KEY_STEP : 0;
-    if (delta === 0) return;
+  const onKeyDown = (edge: Edge) => (e: KeyboardEvent<HTMLDivElement>) => {
+    // Left widens the panel and narrows the sidebar.
+    const step = e.key === 'ArrowLeft' ? KEY_STEP : e.key === 'ArrowRight' ? -KEY_STEP : 0;
+    if (step === 0) return;
     e.preventDefault();
-    const next = clampWidth(width + delta, floor, side);
-    preview(next);
-    onPanelWidth(next);
+    const next =
+      edge === 'panel' ? clampEdge(edge, width + step) : clampEdge(edge, sessionsWidth - step);
+    preview(edge, next);
+    keep(edge, next);
   };
 
   const frame = {
@@ -178,6 +213,29 @@ export function AppShell({
       onMouseUp={onMouseUp}
     >
       {sessions !== null && <div className="shell-slot-sessions">{sessions}</div>}
+      {/* Beside the sidebar, so Tab reaches the line after its rows. */}
+      {sessions !== null && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Sessions width"
+          aria-valuemin={SESSIONS_WIDTH_MIN}
+          aria-valuemax={SESSIONS_WIDTH_MAX}
+          aria-valuenow={sessionsWidth}
+          tabIndex={0}
+          className="shell-sessions-edge"
+          onPointerDown={onPointerDown('sessions')}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={() => {
+            const stock = clampEdge('sessions', SESSIONS_WIDTH_STOCK);
+            preview('sessions', stock);
+            keep('sessions', stock);
+          }}
+          onKeyDown={onKeyDown('sessions')}
+        />
+      )}
       <div className="shell-slot-band">{titleBand}</div>
       <div className="shell-slot-term">{terminal}</div>
       <div className="shell-slot-input">{input}</div>
@@ -194,12 +252,12 @@ export function AppShell({
         aria-valuenow={width}
         tabIndex={panelOpen ? 0 : -1}
         className="shell-panel-edge"
-        onPointerDown={onPointerDown}
+        onPointerDown={onPointerDown('panel')}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={() => onPanelWidth(null)}
-        onKeyDown={onKeyDown}
+        onKeyDown={onKeyDown('panel')}
       />
       {children}
     </main>

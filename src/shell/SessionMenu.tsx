@@ -1,13 +1,19 @@
 import { useState } from 'react';
+import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
+import { sessionLabel } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
+import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
+import { goTo, useSelected, useSessions } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
+import { CheckIcon } from '../ui/icons';
 import { ConnectionForm } from './ConnectionForm';
 import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
+import { RowGlyphMark } from './SessionSidebar';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button, by board 4 of the
@@ -20,6 +26,13 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 // opens a session and comes back on that session's own form. Disconnect
 // is destructive, so it sits last in the danger tone and is never the
 // row focus lands on.
+//
+// While the sidebar is folded with two or more sessions open, in a
+// narrow window or after Hide sessions, the popover lists every session
+// at its top under SESSIONS, board 8. The selected one wears the check,
+// and each other one its port, any glyph its row would show and the key
+// that brings it to the front. A click brings that session to the
+// front.
 
 const MENU_WIDTH = 272;
 
@@ -36,6 +49,8 @@ interface Props {
   /** Turn the selected session's name into a field in its row, while
    *  the sessions sidebar shows. */
   renameInRow?: (() => void) | undefined;
+  /** List every session at the top, while the sidebar is folded. */
+  listSessions?: boolean;
   onClose: () => void;
 }
 
@@ -44,10 +59,13 @@ export function SessionMenu({
   anchor,
   request = { mode: 'menu' },
   renameInRow,
+  listSessions = false,
   onClose,
 }: Props) {
   const [mode, setMode] = useState(request.mode);
   const { live, target } = connection;
+  const rows = useSessions();
+  const selected = useSelected();
 
   const run = (action: () => Promise<void> | void) => {
     onClose();
@@ -114,6 +132,22 @@ export function SessionMenu({
 
   return (
     <ShellMenu anchor={anchor} align="center" width={MENU_WIDTH} label="Session" onClose={onClose}>
+      {listSessions && (
+        <>
+          <p className="shell-menu-head">Sessions</p>
+          {rows.map((row, i) => (
+            <SessionItem
+              key={row.id}
+              row={row}
+              rows={rows}
+              place={i + 1}
+              current={row.id === selected}
+              onSelect={() => run(() => goTo(row.id))}
+            />
+          ))}
+          <ShellMenuSeparator />
+        </>
+      )}
       {!live && (
         <ShellMenuItem
           shortcut={shortcutLabel(APP_SHORTCUTS.connect)}
@@ -142,5 +176,40 @@ export function SessionMenu({
         </>
       )}
     </ShellMenu>
+  );
+}
+
+interface ItemProps {
+  row: SessionRow;
+  rows: SessionRow[];
+  /** Its place in the list, from 1. */
+  place: number;
+  current: boolean;
+  onSelect: () => void;
+}
+
+/** One session in the popover's list, as its row in the sidebar names
+ *  it, with the port in quiet meta. */
+function SessionItem({ row, rows, place, current, onSelect }: ItemProps) {
+  const label = sessionLabel(row, rows);
+  const { glyph } = rowLook(useSessionRow(row.id), row, current);
+  return (
+    <ShellMenuItem
+      current={current}
+      shortcut={current || place > 9 ? undefined : shortcutLabel(`Mod+${place}`)}
+      trailing={
+        current ? (
+          <CheckIcon className="pane-menu-check" />
+        ) : (
+          glyph && <RowGlyphMark glyph={glyph} />
+        )
+      }
+      onSelect={onSelect}
+    >
+      <span className="shell-menu-session">
+        <span className="shell-menu-session-name">{label.name}</span>
+        {label.meta && <span className="shell-menu-meta">{label.meta}</span>}
+      </span>
+    </ShellMenuItem>
   );
 }
