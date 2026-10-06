@@ -1,4 +1,4 @@
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PluginRow } from '../../ipc/scripts';
@@ -6,11 +6,41 @@ import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
 import { NO_PLUGINS, PluginList } from './PluginList';
 
 // The Plugins section of Scripts, drawn as markup for what it shows and
-// mounted for the switch.
+// mounted for the switch, the menu and Install.
 
 const calls = vi.hoisted(() => ({
   invoked: [] as { cmd: string; args: unknown }[],
   answer: (() => Promise.resolve([])) as (cmd: string) => Promise<unknown>,
+}));
+
+// The menu draws its rows in place, with no page to portal into, and a
+// confirm draws its words and buttons with no focus trap, which needs
+// more of the DOM than src/test/fakeDom.ts holds.
+vi.mock('../../ui/MenuSurface', async (actual) => ({
+  ...(await actual<typeof import('../../ui/MenuSurface')>()),
+  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) => (
+    <menu aria-label={label}>{children}</menu>
+  ),
+}));
+vi.mock('../../ui/ConfirmDialog', () => ({
+  ConfirmDialog: (props: {
+    title: string;
+    body: string;
+    confirmLabel: string;
+    tone?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }) => (
+    <div role="dialog" aria-label={props.title} data-tone={props.tone ?? 'danger'}>
+      <p>{props.body}</p>
+      <button type="button" onClick={props.onCancel}>
+        Cancel
+      </button>
+      <button type="button" onClick={props.onConfirm}>
+        {props.confirmLabel}
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -84,10 +114,11 @@ function rows(html: string) {
 }
 
 describe('the Plugins section', () => {
-  it('heads the card with New plugin and the book that opens Help on Lua', () => {
+  it('heads the card with Install, New plugin and the book that opens Help on Lua', () => {
     const html = draw([]);
     expect(html).toContain('data-st-anchor="plugins"');
     expect(html).toMatch(/<h2[^>]*>Plugins<\/h2>/);
+    expect(html).toMatch(/<button[^>]*>Install…<\/button><input type="file" accept=".zip"/);
     expect(html).toMatch(
       /class="st-button st-button-secondary st-button-iconed">.*New plugin<\/button>/,
     );
@@ -299,5 +330,214 @@ describe('a press on the list', () => {
     const { opened, asked } = await pressOn((el) => el.textContent === 'New plugin');
     expect(asked).toBe(1);
     expect(opened).toEqual([]);
+  });
+});
+
+describe('the more menu and Install', () => {
+  const doc = new FakeDocument();
+  let createRoot: typeof import('react-dom/client').createRoot;
+
+  beforeAll(async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node' });
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Call a React handler on `el`. This DOM sends no events. */
+  function handler<E>(el: FakeElement, name: string): (e: E) => void {
+    const key = Object.keys(el).find((k) => k.startsWith('__reactProps$')) ?? '';
+    return (el as unknown as Record<string, Record<string, (e: E) => void>>)[key][name];
+  }
+
+  /** Let every answer and file read settle. */
+  const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+  /** Board 4's list, mounted, with what it handed back. */
+  async function mount() {
+    calls.invoked.length = 0;
+    const shown: PluginRow[][] = [];
+    const errors: (string | null)[] = [];
+    let reads = 0;
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(
+        createElement(PluginList, {
+          plugins: BOARD,
+          onPlugins: (list) => void shown.push(list),
+          onError: (e) => void errors.push(e),
+          onChanged: () => void reads++,
+          onNew: none,
+          onOpen: none,
+        }),
+      );
+    });
+    const button = (text: string) =>
+      findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === text)[0];
+    const press = async (el: FakeElement | undefined, e: unknown = {}) => {
+      if (!el) throw new Error('nothing to press');
+      await act(async () => handler(el, 'onClick')(e));
+      await settle();
+    };
+    // The more button of `name` as a press hands it, placed where the
+    // board draws vitals_alert's.
+    const openMenu = (name: string) => {
+      const more = findAll(container, (el) => el.getAttribute('aria-label') === `${name} options`);
+      return press(more[0], {
+        currentTarget: {
+          getBoundingClientRect: () => ({ left: 812, right: 840, top: 92, bottom: 116 }),
+          focus() {},
+        },
+      });
+    };
+    const pick = async (file: File) => {
+      const input = findAll(container, (el) => el.getAttribute('type') === 'file')[0];
+      await act(async () => handler(input, 'onChange')({ target: { files: [file], value: '' } }));
+      await settle();
+    };
+    const text = (cls: string) =>
+      findAll(container, (el) => el.getAttribute('class') === cls)[0]?.textContent;
+    const dialog = () =>
+      findAll(container, (el) => el.getAttribute('role') === 'dialog').map((el) => ({
+        title: el.getAttribute('aria-label'),
+        tone: el.getAttribute('data-tone'),
+        body: el.childNodes[0].textContent,
+      }))[0];
+    const unmount = async () => {
+      await act(async () => root.unmount());
+      doc.body.removeChild(container);
+    };
+    return {
+      container,
+      shown,
+      errors,
+      reads: () => reads,
+      button,
+      press,
+      openMenu,
+      pick,
+      text,
+      dialog,
+      unmount,
+    };
+  }
+
+  it('opens the menu of a row and marks its more button open', async () => {
+    const m = await mount();
+    await m.openMenu('vitals_alert');
+    const menu = findAll(m.container, (el) => el.nodeName === 'MENU')[0];
+    expect(menu.getAttribute('aria-label')).toBe('vitals_alert options');
+    const expanded = findAll(m.container, (el) => el.getAttribute('aria-haspopup') === 'menu').map(
+      (el) => el.getAttribute('aria-expanded'),
+    );
+    expect(expanded).toEqual(['true', 'false', 'false']);
+    await m.unmount();
+  });
+
+  it('reloads the plugin and shows the list Reload hands back', async () => {
+    const after = BOARD.map((p) => ({ ...p, stopped: null }));
+    calls.answer = () => Promise.resolve(after);
+    const m = await mount();
+    await m.openMenu('wait_full');
+    await m.press(m.button('Reload'));
+    expect(calls.invoked).toEqual([{ cmd: 'plugin_reload', args: { name: 'wait_full' } }]);
+    expect(m.shown).toEqual([after]);
+    expect(m.errors).toEqual([null]);
+    expect(findAll(m.container, (el) => el.nodeName === 'MENU')).toEqual([]);
+    await m.unmount();
+  });
+
+  it('shows the folder in the file manager', async () => {
+    calls.answer = () => Promise.resolve(null);
+    const m = await mount();
+    await m.openMenu('vitals_alert');
+    await m.press(m.button('Show the folder'));
+    expect(calls.invoked).toEqual([{ cmd: 'plugin_reveal', args: { name: 'vitals_alert' } }]);
+    expect(m.errors).toEqual([null]);
+    await m.unmount();
+  });
+
+  it('says under the list where an export went', async () => {
+    calls.answer = () => Promise.resolve('vitals_alert.zip');
+    const m = await mount();
+    expect(m.text('st-plugin-status')).toBe('');
+    await m.openMenu('vitals_alert');
+    await m.press(m.button('Export to Downloads'));
+    expect(calls.invoked).toEqual([{ cmd: 'plugin_export', args: { name: 'vitals_alert' } }]);
+    expect(m.text('st-plugin-status')).toBe(
+      'Vosh saved vitals_alert.zip in your Downloads folder.',
+    );
+    await m.unmount();
+  });
+
+  it('asks before Remove, then removes the plugin from every profile', async () => {
+    const after = BOARD.filter((p) => p.name !== 'weather_pane');
+    calls.answer = () => Promise.resolve(after);
+    const m = await mount();
+    await m.openMenu('weather_pane');
+    await m.press(m.button('Remove…'));
+    expect(calls.invoked).toEqual([]);
+    expect(m.dialog()).toEqual({
+      title: 'Remove weather_pane?',
+      tone: 'danger',
+      body: 'Vosh deletes the weather_pane folder and turns the plugin off in every profile. You cannot undo this.',
+    });
+    await m.press(m.button('Remove'));
+    expect(calls.invoked).toEqual([{ cmd: 'plugin_remove', args: { name: 'weather_pane' } }]);
+    expect(m.shown).toEqual([after]);
+    expect(m.dialog()).toBeUndefined();
+    await m.unmount();
+  });
+
+  it('asks once about a .zip you pick, then installs it', async () => {
+    const check = { name: 'weather_pane', version: '0.2.0', author: 'Tolliver', existing: null };
+    calls.answer = (cmd) => Promise.resolve(cmd === 'plugin_install_check' ? check : BOARD);
+    const m = await mount();
+    await m.pick(new File(['PK'], 'weather_pane.zip'));
+    const sent = { fileName: 'weather_pane.zip', bytes: [80, 75] };
+    expect(calls.invoked).toEqual([{ cmd: 'plugin_install_check', args: sent }]);
+    expect(m.dialog()).toMatchObject({ title: 'Install weather_pane?', tone: 'primary' });
+    await m.press(m.button('Install'));
+    expect(calls.invoked.slice(1)).toEqual([{ cmd: 'plugin_install', args: sent }]);
+    expect(m.shown).toEqual([BOARD]);
+    expect(m.dialog()).toBeUndefined();
+    await m.unmount();
+  });
+
+  it('shows why Vosh refuses a plugin in the error line, and asks nothing', async () => {
+    calls.answer = () => Promise.reject('Vosh found no manifest.toml in weather_pane.zip.');
+    const m = await mount();
+    await m.pick(new File(['PK'], 'weather_pane.zip'));
+    expect(m.errors).toEqual(['Vosh found no manifest.toml in weather_pane.zip.']);
+    expect(m.dialog()).toBeUndefined();
+    await m.unmount();
+  });
+
+  it('shows a refusal at install in the error line and reads the list again', async () => {
+    const check = { name: 'weather_pane', version: '0.2.0', author: 'Tolliver', existing: null };
+    calls.answer = (cmd) =>
+      cmd === 'plugin_install_check'
+        ? Promise.resolve(check)
+        : Promise.reject('Vosh could not install weather_pane.zip.');
+    const m = await mount();
+    await m.pick(new File(['PK'], 'weather_pane.zip'));
+    await m.press(m.button('Install'));
+    expect(m.errors).toEqual([null, 'Vosh could not install weather_pane.zip.']);
+    expect(m.reads()).toBe(1);
+    expect(m.dialog()).toBeUndefined();
+    await m.unmount();
   });
 });

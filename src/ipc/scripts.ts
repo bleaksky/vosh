@@ -96,6 +96,67 @@ export async function pluginSetEnabled(name: string, on: boolean): Promise<Plugi
   return invoke('plugin_set_enabled', { name, on });
 }
 
+/** Read the plugin `name` from its folder again and load it in every
+ *  session whose profile turns it on, which clears a stop. Resolves to
+ *  the list after it. */
+export async function pluginReload(name: string): Promise<PluginRow[]> {
+  return invoke('plugin_reload', { name });
+}
+
+/** Write the plugin `name` to a .zip in your Downloads folder. Resolves
+ *  to the name of the file, like `vitals_alert.zip`. */
+export async function pluginExport(name: string): Promise<string> {
+  return invoke('plugin_export', { name });
+}
+
+/** Delete the folder of the plugin `name` and take it off the list of
+ *  every profile. Resolves to the list without it. */
+export async function pluginRemove(name: string): Promise<PluginRow[]> {
+  return invoke('plugin_remove', { name });
+}
+
+/** One file of a folder you dropped, by its path inside what you
+ *  dropped, like `weather_pane/main.lua`. Bytes travel as numbers. */
+export interface DroppedFile {
+  path: string;
+  bytes: number[];
+}
+
+/** What Install reads a plugin from: a .zip you picked as its bytes, or
+ *  the files of a folder you dropped, under the name of the file or the
+ *  folder, which every sentence about the install names. */
+export interface PluginPackage {
+  fileName: string;
+  bytes?: number[];
+  files?: DroppedFile[];
+}
+
+/** What Install asks about before it installs a plugin. */
+export interface PluginInstallCheck {
+  name: string;
+  version: string;
+  author: string;
+  /** The plugin of that name you have, which the install replaces,
+   *  with the profiles that turn it on by the names Settings shows. */
+  existing: { version: string; on_in: string[] } | null;
+}
+
+/** Read and check the plugin in `pkg` without installing it. Rejects
+ *  with the sentence that says why Vosh refuses it. */
+export async function pluginInstallCheck(pkg: PluginPackage): Promise<PluginInstallCheck> {
+  return invoke('plugin_install_check', {
+    fileName: pkg.fileName,
+    bytes: pkg.bytes,
+    files: pkg.files,
+  });
+}
+
+/** Install the plugin in `pkg` in place of the one of that name you
+ *  have. It starts off in every profile. Resolves to the list with it. */
+export async function pluginInstall(pkg: PluginPackage): Promise<PluginRow[]> {
+  return invoke('plugin_install', { fileName: pkg.fileName, bytes: pkg.bytes, files: pkg.files });
+}
+
 /** What a line in the Output ring is. */
 export type LuaKind = 'print' | 'error' | 'note' | 'input';
 
@@ -145,9 +206,9 @@ export async function subscribeLuaOutput(
   });
 }
 
-/** Hear that a plugin was made, saved, turned on or off, loaded again
- *  or stopped, or that a profile switch turned a session's plugins
- *  over. */
+/** Hear that a plugin was made, saved, installed, removed, turned on or
+ *  off, loaded again or stopped, or that a profile switch turned a
+ *  session's plugins over. */
 export async function subscribePluginsChanged(cb: () => void): Promise<UnlistenFn> {
   return listen(PLUGINS_CHANGED, () => {
     cb();
