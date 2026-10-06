@@ -21,6 +21,7 @@ export const PROMPT_STATUS = 'session://prompt-status';
 export const PROMPT_STATE = 'session://prompt-state';
 export const GAME_PROMPT_SEEN = 'session://game-prompt-seen';
 export const PROMPT_GAG_WITHOUT_READER = 'session://prompt-gag-without-reader';
+export const ALERT = 'session://alert';
 
 export const LUA_OUTPUT = 'session://lua-output';
 

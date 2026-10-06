@@ -323,4 +323,24 @@ mod tests {
             .collect();
         assert_eq!(sounds, ["Glass", "Ping", "Tink", "Basso"]);
     }
+
+    #[test]
+    fn the_page_draws_the_tones_that_have_system_sounds() {
+        // The page draws each tone with Web Audio from ALERT_TONES in
+        // src/stores/session/alertTones.ts, and a system sound stands in
+        // for it only while the window hides, so both sides know the same
+        // four.
+        let page = include_str!("../../../src/stores/session/alertTones.ts");
+        let start = page
+            .find("export const ALERT_TONES")
+            .expect("alertTones.ts declares ALERT_TONES");
+        let list = &page[start..];
+        let list = &list[..list.find("];").expect("the page list ends")];
+        let tones: Vec<&str> = regex::Regex::new(r"value: '(\w+)'")
+            .unwrap()
+            .captures_iter(list)
+            .map(|caps| caps.get(1).unwrap().as_str())
+            .collect();
+        assert_eq!(tones, ["chime", "bell", "knock", "low"]);
+    }
 }
