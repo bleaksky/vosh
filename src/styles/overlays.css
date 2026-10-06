@@ -1,9 +1,9 @@
 /* One Window overlays: the command palette, the terminal menu, the
-   find bar, toasts, the update notice, the confirm dialog, and the
-   scroll depth chip. Every floating surface takes the SPEC 3 recipe
-   (--raised ground, radius 16, --shadow-float) and reads only the One
-   Window tokens. Class names carry the ov- prefix so nothing in the
-   interim migration.css reaches them. */
+   find bar, toasts, the update and reconnect notices, the confirm
+   dialog, and the scroll depth chip. Every floating surface takes the
+   SPEC 3 recipe (--raised ground, radius 16, --shadow-float) and reads
+   only the One Window tokens. Class names carry the ov- prefix so
+   nothing in the interim migration.css reaches them. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40
@@ -592,6 +592,18 @@
   color: var(--tertiary);
 }
 
+/* A toast with a button is a card like the update notice: the button
+   sits 8 inside the card, its radius 8 concentric with the card's 16,
+   and 8 after the message. */
+.ov-toast.has-action {
+  padding: 8px 8px 8px 12px;
+}
+
+.ov-toast.has-action > .ov-button {
+  flex: none;
+  margin-left: 8px;
+}
+
 /* Prompt codes in a toast read in the terminal's face (P14). */
 .ov-toast-meta.is-mono {
   font-family: var(--font-mud);
@@ -799,6 +811,13 @@
   background: var(--danger);
 }
 
+/* A redial that dials rings in the success tone, as the title band's
+   connecting dot does. */
+.ov-update.is-wait .ov-update-dot {
+  background: none;
+  border: 1.25px solid var(--success);
+}
+
 .ov-update-msg {
   flex: none;
 }
@@ -832,4 +851,14 @@
 
 .shell > .ov-update ~ .ov-toasts {
   bottom: 68px;
+}
+
+/* The reconnect notice mounts first, so the update notice rises above
+   it, and the toasts clear both. */
+.shell > .ov-update ~ .ov-update {
+  bottom: 68px;
+}
+
+.shell > .ov-update ~ .ov-update ~ .ov-toasts {
+  bottom: 120px;
 }

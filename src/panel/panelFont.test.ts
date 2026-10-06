@@ -154,6 +154,7 @@ describe('the panel faces in the stylesheets', () => {
       '.shell-statusline: var(--font-panel)',
       '.map-glyph-grid: var(--font-panel-glyph)',
       '.panel-host: var(--font-panel)',
+      '.pane-lua-line: var(--font-panel-game)',
       '.pane-chat-log: var(--font-panel-game)',
     ]);
   });

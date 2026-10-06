@@ -16,6 +16,7 @@ import {
   PANE_MIN_H,
   PANE_ROW_PX,
   isLeaf,
+  type PaneKind,
   type PaneLeaf,
   type PaneNode,
   type PaneSplit,
@@ -99,16 +100,17 @@ export const MIN_PANE_W = 120;
 
 /** Minimum heights that follow what a pane shows right now, in place
  *  of its PANE_MIN_H entry. */
-export type PaneMins = Partial<Record<PaneType, number>>;
+export type PaneMins = Partial<Record<PaneKind, number>>;
 
 /** A pane type's stock minimum height at panel size `size` px:
- *  Affects its header and six rows, Group and Staff queues their header
- *  and three rows, and the Map and Chat their header and a body as
- *  much taller as their text. Each is its PANE_MIN_H entry at 12 px. */
-export function paneMinH(pane: PaneType, size: number = PANE_TEXT_PX): number {
+ *  Affects its header and six rows, Group, Staff queues and a Lua pane
+ *  their header and three rows, and the Map and Chat their header and
+ *  a body as much taller as their text. Each is its PANE_MIN_H entry
+ *  at 12 px. */
+export function paneMinH(pane: PaneKind, size: number = PANE_TEXT_PX): number {
   const text = paneText(size);
   if (pane === 'affects') return text.header + 6 * text.affectsRow;
-  if (pane === 'group' || pane === 'imm') return text.header + 3 * text.row;
+  if (pane === 'group' || pane === 'imm' || pane === 'lua') return text.header + 3 * text.row;
   return text.header + textPx(PANE_MIN_H[pane] - PANE_HEADER_PX, size);
 }
 

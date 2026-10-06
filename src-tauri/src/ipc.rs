@@ -126,6 +126,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         affects::tracked_affects_set,
         characters::profile_detail_get,
         panes::pane_layout_reset,
+        panes::lua_panes_get,
         characters::profile_set_login,
         characters::profile_set_world,
         characters::session_identity_get,

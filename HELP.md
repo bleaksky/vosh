@@ -31,9 +31,15 @@ The session button reports the connection through its status dot. The dot turns 
 - Scroll up or press `PageUp` to read output from before the drop. The terminal scrollback survives a disconnect, and nothing clears it unless you choose `Clear scrollback` yourself.
 - To stage commands while offline, type the first command, press `Shift+Enter` to stack more lines under it, and leave the block in the command line. After you reconnect, press `Enter` once and each line submits separately, in order.
 
-When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed. A connect or `Disconnect` ends the tries. Each profile reconnects until you add `reconnect = false` to its profile file while Vosh is closed. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
+When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed.
 
-Two things reset on a disconnect. The chat pane buffer empties the moment the session drops, and session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
+While Vosh dials again, a notice at the bottom right shows how it goes for the session in front. It counts down to each try, such as `Reconnecting in 6s` with `Try 2 of 8`. Click `Reconnect now`, press `Cmd+R` on macOS or `Ctrl+R` elsewhere, or choose the `Connect to` row to dial at once. `Cancel` or `Disconnect` ends the tries. While a try dials, the notice reads `Connecting`. When all 8 fail, it reads `Vosh stopped after 8 tries`, and `Try again` dials the world once more. Through every try the status dot keeps its error ring.
+
+When the link drops and Vosh will not dial again, a notice reads `Vosh will not reconnect` and says why, such as `you quit`, `the game banned this account` or `another session took Orla`.
+
+To stop the redial for a profile, turn off `Reconnect when the link drops` in Settings under General, then Connection. A drop then shows only `Connection lost`. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
+
+Two things reset between connections. The chat pane empties when you choose `Disconnect` or connect to another world. A drop keeps it, so your tells are still there once Vosh reconnects. Session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
 
 `Disconnect` lives in three places. The session button while connected, the Session menu in the macOS menu bar, and the `Cmd+K` palette.
 
@@ -121,7 +127,7 @@ Every row shows one mark at its left, the row in front too.
 
 A row shows one mark at a time, the triangle first, then the hand, then the spinner.
 
-The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
+The tick sound plays only for the session in front, and the `Connected`, `Connection lost` and reconnect notices speak for it alone.
 
 Each session keeps these of its own.
 
@@ -141,7 +147,7 @@ Settings edits the profile of the session in front. With two or more sessions op
 
 When you bring a session on another profile to the front while a list under Automation holds unsaved changes, Settings stays on the profile you were editing. Its header keeps naming that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile Orla plays. Each change you make in Settings saves to the profile it was made on, whichever session is in front by the time it lands.
 
-Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
+Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. Its `Reconnect when the link drops` row belongs to the profile, so it reaches every session on it. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
 
 To close a session, point at its row and click the cross that takes the place of the count, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
@@ -461,7 +467,7 @@ Lua scripts run inside Vosh and register automation through the global `mud` tab
 - After editing a file, type `#script reload`. Vosh reads every loaded script and plugin from disk again and runs them in the order they first loaded, and an error in one stops none after it.
 - Run one liners with `#lua <code>`.
 
-Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`.
+Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
 
 `mud.alert(title, options)` posts a banner with the title while you are not looking at the session the Lua runs in. In `options`, `sound = 'chime'`, `'bell'`, `'knock'` or `'low'` plays that tone, `attention = 'once'` bounces the Dock once and `'until'` until you come back, or flashes the taskbar on Windows, `background = false` rings while you look too, and `words = true` with a `text` adds a line under the title. One title from one script rings at most once in 10 seconds, and on macOS turning a plugin off takes back the banners it posted. macOS shows a banner only once you allow Vosh to post them, and Vosh asks for that the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows. It also needs a signed Vosh, so a dev build you run from the source shows none there.
 
@@ -503,6 +509,39 @@ Each preset rings at most once in 10 seconds, so a burst rings once. Tells you g
 
 To ring on a line of your own choosing, press a part in the `Alert` row of a trigger, as Create a trigger at 3.2 shows.
 
+### 3.10 Make a pane with Lua
+
+A plugin can draw its own pane. You send Vosh rows, gauges and lines, and Vosh draws them in the pane's style. Every value shows as plain text.
+
+```lua
+-- weather_pane/main.lua
+local pane = mud.pane("weather", "Weather")
+local weather, state = {}, {}
+
+local function draw()
+  pane:meta(weather.region or "")
+  pane:set({
+    { row = { "Sky", weather.sky } },
+    { row = { "Temperature", weather.temp and (weather.temp .. " " .. weather.unit) } },
+    { row = { "Position", state.position } },
+    { row = { "Language", state.language } },
+  })
+end
+
+mud.on_gmcp("Room.Weather", function(data) weather = data; draw() end)
+mud.on_gmcp("Char.State", function(data) state = data; draw() end)
+```
+
+| Call                                | What it does                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `mud.pane(id, title)`               | A pane this plugin owns, listed in Add a pane by its title. The id keeps your layout when the title changes. |
+| `pane:set(blocks)`                  | Replaces what the pane shows.                                                                                |
+| `{ row = { label, value } }`        | A row with a label and a value.                                                                              |
+| `{ gauge = { label, value, max } }` | A row with a meter, like the Group pane.                                                                     |
+| `{ line = text }`                   | Terminal font text. `{red}` and `{reset}` color it.                                                          |
+| `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                      |
+| `pane:meta(text)`                   | The words beside the pane's name.                                                                            |
+
 ## Shape the window
 
 ### 4.1 Arrange the panels
@@ -510,8 +549,8 @@ To ring on a line of your own choosing, press a part in the `Alert` row of a tri
 The panel on the right holds your panes, the map over your affects at first, with your vitals pinned at its foot. You arrange it in the window itself, and Vosh keeps the arrangement for each character.
 
 - Show or hide the panel with the panel button at the right end of the title band, with `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` elsewhere, or with `Show panel` in the View menu or the palette. While it is hidden your vitals move to the status line.
-- Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
-- Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
+- Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
+- Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it, or another Chat pane once it shows them all. On a Chat pane they put in another Chat pane. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
 - Drag the line between two panes to share the space between them. Tab to a line and the arrow keys move it 8 points, or 32 with `Shift`.
 - Drag the panel's left edge to change its width, from 200 to 800 points, and double click the edge to go back to 300. Tab to the edge and the arrow keys move it 8 points. Settings has the same `Width` under Layout, then Panel.
 - Show or hide one pane with its row in the View menu or the palette, like `Show map`.
@@ -546,11 +585,12 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 - Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows. A color too faint to read on the pane goes lighter or darker, with its hue kept, until it reads clearly. The terminal still shows the theme's own color.
 - Recolor a channel from the pane's menu. Choose `Channel colors`, then the channel, then `Default` or one of your theme's 16 terminal colors. The pane follows at once, each profile keeps its own picks, and a theme switch carries them along. `Reset all` gives every channel its default again.
 - Point at a message to see when it arrived.
-- Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.
+- Filter with the channel select beside the pane's name. `All` shows every channel, and `Everything else` shows the channels no other chat pane shows. Each chat pane keeps its own filter, so you can split one off for tells alone.
+- Add a second chat pane and it starts on `tell`. A pane on `All` turns to `Everything else` at the same moment, so each tell lands in one pane, and a note says so with `Undo` to put it back on `All`. The panel holds up to four chat panes.
 - Route trigger output in. On a trigger under Automation, then Triggers, put a name in `Send to pane` under `Advanced`. Those lines land in the chat pane under that name, in their own words.
 - See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
 
-The buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
+The buffer holds a rolling 500 lines, survives closing and reopening the pane, and empties only when you choose `Disconnect` or connect to another world. Every chat pane reads the same buffer. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
 ### 4.4 Configure the vitals readout
 
@@ -850,9 +890,9 @@ The session button in the title band holds the connection controls. Its dot show
 - Choose `Edit connection…` to check the address of this session. The form holds `Host`, `Port`, and `Use TLS`, and the defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
 - Choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere.
 
-`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
+`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows. Its `Reconnect when the link drops` row turns the redial after a drop on or off for the profile of that session.
 
-Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane buffer clears at disconnect. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
+Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you choose `Disconnect` or connect to another world, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 

@@ -131,7 +131,7 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-async function mount(listSessions: boolean) {
+async function mount(listSessions: boolean, live: Partial<Connection> = {}) {
   const { SessionMenu } = await import('./SessionMenu');
   const container = doc.createElement('div');
   doc.body.appendChild(container);
@@ -141,7 +141,7 @@ async function mount(listSessions: boolean) {
   await act(async () => {
     root.render(
       createElement(SessionMenu, {
-        connection,
+        connection: { ...connection, ...live },
         anchor: null,
         listSessions,
         onCloseSession,
@@ -255,5 +255,18 @@ describe('the session popover with the sidebar folded', () => {
     const { menu, items } = await mount(false);
     expect(findAll(menu, hasClass('shell-menu-head'))).toHaveLength(0);
     expect(items[0].textContent).toBe('Edit connection…');
+  });
+});
+
+describe('the session popover while a redial waits', () => {
+  it('offers Connect to dial now and Disconnect to end the tries', async () => {
+    const { items } = await mount(false, { live: false, redialing: true });
+    expect(items.map((el) => el.textContent)).toEqual([
+      'Connect to The Forsaken Lands⌘R',
+      'Edit connection…',
+      'Rename session…',
+      'New session…⌘T',
+      'Disconnect',
+    ]);
   });
 });

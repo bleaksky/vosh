@@ -115,9 +115,9 @@ export type StatePayload = { session: number } & (
  *  `ReconnectPayload` in src-tauri/src/session/reconnect.rs. A series
  *  waits and dials each try in turn until one reaches the game or the
  *  tries run out. Your Disconnect, a Connect or a close cancels it. A
- *  drop declines to redial for a quit of yours, the game's closing line,
- *  another session that took the character, or Reconnect when the link
- *  drops turned off. */
+ *  drop declines to redial for a quit, yours or the game's idle one, a
+ *  ban, another session that took the character, or Reconnect when the
+ *  link drops turned off. */
 export type ReconnectPayload =
   | { kind: 'waiting'; try: number; tries: number; seconds: number }
   | { kind: 'dialing'; try: number; tries: number }
@@ -125,7 +125,7 @@ export type ReconnectPayload =
   | { kind: 'reached'; try: number }
   | { kind: 'stopped'; tries: number }
   | { kind: 'cancelled' }
-  | { kind: 'declined'; why: 'quit' | 'closing' | 'taken' | 'off' };
+  | { kind: 'declined'; why: 'quit' | 'banned' | 'taken' | 'off' };
 
 /** Hear each step of a session's redial, with that session. */
 export async function onReconnect(
@@ -134,6 +134,30 @@ export async function onReconnect(
   return listen<ReconnectPayload & { session?: number }>(RECONNECT, (event) => {
     cb(event.payload, sessionOf(event.payload));
   });
+}
+
+/** Dial a session that waits to reconnect now, Reconnect now on the
+ *  notice. Rust answers an error when no redial waits. */
+export async function reconnectNow(session: number): Promise<void> {
+  await invoke('session_reconnect_now', { session });
+}
+
+/** End the redials of a session, Cancel on the notice. */
+export async function reconnectCancel(session: number): Promise<void> {
+  await invoke('session_reconnect_cancel', { session });
+}
+
+/** Whether `profile`, or the selected session's profile when it names
+ *  none, dials again after the link drops. */
+export async function reconnectGet(profile?: string | null): Promise<boolean> {
+  return invoke<boolean>('reconnect_get', { profile });
+}
+
+/** Turn the redial after a drop on or off for `profile`, or the
+ *  selected session's profile when it names none. Rust saves the
+ *  profile at once. */
+export async function reconnectSet(on: boolean, profile?: string | null): Promise<void> {
+  await invoke('reconnect_set', { on, profile });
 }
 
 /** Where Connect dials. */

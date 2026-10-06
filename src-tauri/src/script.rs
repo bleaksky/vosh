@@ -7,6 +7,7 @@
 //! prints joins the session's Output ring in [`output`].
 
 pub(crate) mod output;
+pub(crate) mod panes;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -181,6 +182,9 @@ pub(crate) struct ApplyResult {
     /// Vosh stopped a plugin, so the Scripts page reads its list again,
     /// see `vosh://plugins-changed`.
     pub plugin_stopped: bool,
+    /// A plugin drew, filled or lost a pane, so the session sends what
+    /// changed on `session://lua-panes`, once per flush.
+    pub panes_changed: bool,
 }
 
 impl ApplyResult {
@@ -204,6 +208,7 @@ impl ApplyResult {
         self.ended.extend(later.ended);
         self.lua_lines.extend(later.lua_lines);
         self.plugin_stopped |= later.plugin_stopped;
+        self.panes_changed |= later.panes_changed;
     }
 
     /// Keep the lines `text` prints under the `[lua]` tag about the Lua
@@ -290,10 +295,12 @@ pub(crate) fn apply_actions(
             Action::RemovePluginAlias { plugin, name } => {
                 c.plugin_aliases.remove(&plugin, &name);
             }
-            // The plugin turned off, stopped or loaded again, and its
-            // alerts end with its aliases.
-            Action::DropPluginAliases(plugin) => {
+            // The plugin turned off, stopped or loaded again, so its
+            // aliases, its alerts and its panes end, and its panes empty
+            // at once.
+            Action::DropPlugin(plugin) => {
                 c.plugin_aliases.remove_plugin(&plugin);
+                result.panes_changed |= c.lua_panes.drop_plugin(&plugin);
                 result.ended.push(vosh_script::Owner::Plugin(plugin).tag());
             }
             // Only profile-scoped vars are persisted; session vars
@@ -332,12 +339,21 @@ pub(crate) fn apply_actions(
                 toggle_group(profile, &name, enabled);
                 result.durable_changed = true;
             }
+            Action::Pane { plugin, id, title } => {
+                c.lua_panes.draw(plugin, id, title);
+                result.panes_changed = true;
+            }
+            Action::PaneSet { plugin, id, blocks } => {
+                result.panes_changed |= c.lua_panes.set(plugin, id, blocks);
+            }
+            Action::PaneMeta { plugin, id, text } => {
+                result.panes_changed |= c.lua_panes.meta(plugin, id, text);
+            }
+            // The script engine consumes the Lua registrations in its own
+            // drain loop, so they should not reach here.
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger { .. }
-            | Action::SubscribeGmcp { .. } => {
-                // The script engine consumes these in its own drain loop;
-                // they should not reach here. Ignore defensively.
-            }
+            | Action::SubscribeGmcp { .. } => {}
             Action::Timer {
                 delay,
                 callback_id,
@@ -720,6 +736,108 @@ mod tests {
         };
         let apply = apply_actions(&mut p, &mut c, outcome);
         assert_eq!(apply.new_timers.len(), 1);
+    }
+
+    /// What `actions`, from the plugin `weather_pane`, do to `c`.
+    fn apply_pane(c: &mut Connection, actions: Vec<Action>) -> ApplyResult {
+        let outcome = ScriptOutcome {
+            actions,
+            ..ScriptOutcome::default()
+        };
+        apply_actions(&mut Profile::default(), c, outcome)
+    }
+
+    fn draw(id: &str) -> Action {
+        Action::Pane {
+            plugin: "weather_pane".into(),
+            id: id.into(),
+            title: "Weather".into(),
+        }
+    }
+
+    fn row(id: &str, value: &str) -> Action {
+        Action::PaneSet {
+            plugin: "weather_pane".into(),
+            id: id.into(),
+            blocks: vec![vosh_script::PaneBlock::Row {
+                label: "Sky".into(),
+                value: value.into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn a_plugin_fills_its_pane_and_two_sets_send_it_once() {
+        let mut c = Connection::default();
+        let meta = Action::PaneMeta {
+            plugin: "weather_pane".into(),
+            id: "weather".into(),
+            text: "Coastal North".into(),
+        };
+        let apply = apply_pane(
+            &mut c,
+            vec![
+                draw("weather"),
+                row("weather", "cloudy"),
+                row("weather", "rainy"),
+                meta,
+            ],
+        );
+        assert!(apply.panes_changed);
+        let sent = c.lua_panes.take_changes().expect("the pane");
+        assert_eq!(sent.panes.len(), 1, "{sent:?}");
+        assert_eq!(sent.removed, Vec::new());
+        let pane = &sent.panes[0];
+        assert_eq!(
+            (pane.title.as_str(), pane.meta.as_str()),
+            ("Weather", "Coastal North")
+        );
+        assert_eq!(
+            pane.blocks,
+            [panes::Block::Row {
+                label: "Sky".into(),
+                value: "rainy".into()
+            }]
+        );
+        // A set for a pane the plugin never drew changes nothing.
+        assert!(!apply_pane(&mut c, vec![row("worth", "rainy")]).panes_changed);
+        assert_eq!(c.lua_panes.take_changes(), None);
+    }
+
+    #[test]
+    fn a_dropped_plugin_empties_its_panes_at_once() {
+        let mut c = Connection::default();
+        apply_pane(&mut c, vec![draw("weather"), row("weather", "rainy")]);
+        c.lua_panes.take_changes();
+        let apply = apply_pane(&mut c, vec![Action::DropPlugin("weather_pane".into())]);
+        assert!(apply.panes_changed);
+        assert_eq!(c.lua_panes.all(), Vec::new());
+        let sent = c.lua_panes.take_changes().expect("the removal");
+        assert_eq!(sent.panes, Vec::new());
+        assert_eq!(
+            sent.removed,
+            [panes::PaneId {
+                plugin: "weather_pane".into(),
+                id: "weather".into()
+            }]
+        );
+        // A plugin that draws none changes nothing as it goes.
+        assert!(!apply_pane(&mut c, vec![Action::DropPlugin("worth_pane".into())]).panes_changed);
+    }
+
+    #[test]
+    fn a_reload_that_draws_the_pane_again_sends_it_and_no_removal() {
+        let mut c = Connection::default();
+        apply_pane(&mut c, vec![draw("weather"), row("weather", "rainy")]);
+        c.lua_panes.take_changes();
+        apply_pane(
+            &mut c,
+            vec![Action::DropPlugin("weather_pane".into()), draw("weather")],
+        );
+        let sent = c.lua_panes.take_changes().expect("the pane");
+        assert_eq!(sent.removed, Vec::new());
+        assert_eq!(sent.panes.len(), 1);
+        assert_eq!(sent.panes[0].blocks, Vec::new());
     }
 
     #[test]

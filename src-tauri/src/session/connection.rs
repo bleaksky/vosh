@@ -116,6 +116,10 @@ pub(crate) struct Connection {
     /// disconnect keeps them, so the lines plugins print at launch and
     /// before a connect stay.
     pub(crate) lua_output: crate::script::output::LuaOutput,
+    /// The panes the session's plugins draw with `mud.pane`, beside the
+    /// aliases they make. A disconnect keeps them, since only the plugin
+    /// that draws a pane changes or removes it.
+    pub(crate) lua_panes: crate::script::panes::LuaPanes,
 }
 
 impl Connection {

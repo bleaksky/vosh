@@ -10,12 +10,18 @@
 // of the pane it will show in.
 
 import { useLayoutEffect, useRef, type MutableRefObject } from 'react';
-import { onState, setWindowSize, type StatePayload } from '../ipc/session';
+import {
+  onReconnect,
+  onState,
+  setWindowSize,
+  type ReconnectPayload,
+  type StatePayload,
+} from '../ipc/session';
 import { terminalLocalWrite } from '../ipc/terminal';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { noteConnectionError } from '../stores/session/connectionStore';
-import { getSelected, othersOnProfile } from '../stores/session/sessionsStore';
-import { pushToast } from '../stores/toasts';
+import { getSelected, getSessions, othersOnProfile } from '../stores/session/sessionsStore';
+import { dismissToast, pushToast } from '../stores/toasts';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { showLaunchNotices } from './launchNotices';
@@ -37,6 +43,19 @@ export interface SessionTerminals {
    *  loaded, in the session launch selected, which takes what launch
    *  has to tell you. */
   onScrollbackLoaded: (session: number) => (() => void) | undefined;
+}
+
+/** Each step of a session's redial, with the session it is. */
+const onRedial = (cb: (payload: ReconnectPayload & { session: number }) => void) =>
+  onReconnect((payload, session) => cb({ ...payload, session }));
+
+/** Why Vosh will not redial `session` after a drop, for the toast that
+ *  says so. */
+function declinedWhy(why: 'quit' | 'banned' | 'taken', session: number): string {
+  if (why === 'quit') return 'you quit';
+  if (why === 'banned') return 'the game banned this account';
+  const character = getSessions().find((row) => row.id === session)?.character;
+  return `another session took ${character ?? 'it'}`;
 }
 
 /** The live terminals of the sessions in `opened`, with `selected` the
@@ -77,6 +96,15 @@ export function useSessionTerminals(selected: number, opened: readonly number[])
     writeTo(session, `\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
   };
 
+  // The Connection lost toast of the selected session's last drop, which
+  // the reconnect notice takes the place of, or a toast that says Vosh
+  // will not redial.
+  const lostToast = useRef<number | null>(null);
+  const dropLostToast = () => {
+    if (lostToast.current !== null) dismissToast(lostToast.current);
+    lostToast.current = null;
+  };
+
   useTauriEvent(onState, (payload: StatePayload) => {
     const shown = payload.session === getSelected();
     if (payload.kind === 'disconnected') {
@@ -85,7 +113,13 @@ export function useSessionTerminals(selected: number, opened: readonly number[])
       // reason goes into the terminal of the session that dropped.
       if (payload.reason) {
         writeTo(payload.session, `\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
-        if (shown) pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
+        if (shown) {
+          lostToast.current = pushToast({
+            kind: 'error',
+            message: 'Connection lost',
+            meta: payload.reason,
+          });
+        }
       }
     } else if (payload.kind === 'connected') {
       if (shown) {
@@ -107,6 +141,22 @@ export function useSessionTerminals(selected: number, opened: readonly number[])
         const { cols, rows } = handle.windowSize();
         void setWindowSize(cols, rows, payload.session).catch(() => {});
       }
+    }
+  });
+
+  // The first wait of a redial puts the notice where the drop's toast
+  // stood. A drop Vosh will not redial says why, unless Reconnect is off,
+  // where Connection lost says enough.
+  useTauriEvent(onRedial, (payload) => {
+    if (payload.session !== getSelected()) return;
+    if (payload.kind === 'waiting' && payload.try === 1) dropLostToast();
+    if (payload.kind === 'declined' && payload.why !== 'off') {
+      dropLostToast();
+      pushToast({
+        kind: 'error',
+        message: 'Vosh will not reconnect',
+        meta: declinedWhy(payload.why, payload.session),
+      });
     }
   });
 

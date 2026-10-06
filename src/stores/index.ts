@@ -12,7 +12,10 @@ import { startGameTimeStore } from './config/gameTimeStore';
 import { startGamePromptStore } from './gmcp/gamePromptStore';
 import { startHiddenStore } from './gmcp/hiddenStore';
 import { startInputModeStore } from './session/inputModeStore';
+import { startLuaPanesStore } from './session/luaPanesStore';
 import { startPinnedPromptStore } from './session/pinnedPromptStore';
+import { startPluginRowsStore } from './session/pluginRowsStore';
+import { startReconnectStore } from './session/reconnectStore';
 import { startRoomStore } from './gmcp/roomStore';
 import { startSessionRowStore } from './session/sessionRowStore';
 import { startSessionsStore } from './session/sessionsStore';
@@ -37,6 +40,7 @@ export function startStores(): void {
   startSessionsStore();
   startConnectionStore();
   startSessionRowStore();
+  startReconnectStore();
   // Then the hidden state, so every store that ORs it in finds it
   // listening.
   startHiddenStore();
@@ -62,4 +66,6 @@ export function startStores(): void {
   startChipStyleStore();
   startPinnedPromptStore();
   startInputModeStore();
+  startLuaPanesStore();
+  startPluginRowsStore();
 }

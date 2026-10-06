@@ -1,7 +1,8 @@
 //! The commands for the pane layout. The main window reads the tree of
 //! the profile in front and writes it back as you split, resize and close
 //! panes. The command palette and Settings > Characters put a profile's
-//! panes back to the stock tree.
+//! panes back to the stock tree. The main window also reads the panes a
+//! session's plugins draw.
 
 use std::sync::Arc;
 
@@ -14,6 +15,8 @@ use crate::profile::inactive::{
     broadcast_profile_changed, reset_inactive_panes, reset_open_panes, Stored,
 };
 use crate::profile::panes::PaneLayoutPersist;
+use crate::script::panes::LuaPane;
+use crate::sessions::SessionId;
 
 /// Read the pane layout of the profile `profile` names, which a session
 /// must play, or of the selected session's. A profile that has never
@@ -135,4 +138,17 @@ pub(crate) async fn pane_layout_reset(
         broadcast_profile_changed(&app, &name);
     }
     Ok(envelope)
+}
+
+/// Every pane the plugins of `session` draw, or of the selected session,
+/// by plugin and then id. `session://lua-panes` carries what changes
+/// after.
+#[tauri::command]
+pub(crate) async fn lua_panes_get(
+    state: State<'_, SharedState>,
+    session: Option<SessionId>,
+) -> Result<Vec<LuaPane>, String> {
+    let session = state.session(session)?;
+    let panes = session.connection.lock().lua_panes.all();
+    Ok(panes)
 }

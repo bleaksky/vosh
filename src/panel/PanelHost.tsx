@@ -7,7 +7,14 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { PANE_TYPES, setWeights, type PaneType } from './paneLayout';
+import {
+  PANE_TYPES,
+  isPaneType,
+  leafKey,
+  setWeights,
+  type PaneLeaf,
+  type PaneType,
+} from './paneLayout';
 import type { PromptShowState } from '../ipc/prompt';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { panelShowsVitals } from './vitalsView';
@@ -15,12 +22,14 @@ import { AffectsPane } from './affects/AffectsPane';
 import { ChatPane } from './chat/ChatPane';
 import { GroupPane } from './group/GroupPane';
 import { ImmPane } from './imm/ImmPane';
+import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
-import { PANE_LABELS } from './paneTypes';
+import { paneLabel } from './paneTypes';
+import { chatFilterLabel, chatFilterOf, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
 
@@ -33,10 +42,12 @@ import { VitalsFooter } from './VitalsFooter';
 // owns the panel's column, its left edge drag, and its label.
 //
 // Every pane renders as a flat, absolutely placed sibling keyed by its
-// pane type, which the tree holds at most once. Splitting, closing, or
-// showing a pane somewhere else only moves boxes, so the map canvas
-// and each pane's scroll position survive every tree edit, and a pane
-// moved with Show here instead keeps its state too.
+// leafKey: its paneKey for a pane the tree holds once, with the leaf id
+// added for a Chat pane, which the tree can hold up to four times.
+// Splitting, closing, or showing a pane somewhere else only moves
+// boxes, so the map canvas and each pane's scroll position survive
+// every tree edit, and a pane moved with Show here instead keeps its
+// state too.
 //
 // Every pane draws at your panel size. The main window writes it on the
 // root as --panel-text-px for panel.css, and the panel hands it to
@@ -61,6 +72,18 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   chat: () => <ChatPane />,
   imm: () => <ImmPane />,
 };
+
+// Built-in panes in type order, then Lua panes, each by leafKey within
+// its rank. Not tree order, so no edit ever reorders the DOM.
+function domRank(leaf: PaneLeaf): number {
+  return isPaneType(leaf.pane) ? PANE_TYPES.indexOf(leaf.pane) : PANE_TYPES.length;
+}
+
+function domOrder(a: PaneLeaf, b: PaneLeaf): number {
+  const ka = leafKey(a);
+  const kb = leafKey(b);
+  return domRank(a) - domRank(b) || (ka < kb ? -1 : ka > kb ? 1 : 0);
+}
 
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
@@ -101,12 +124,14 @@ export function PanelHost({
     () => (root ? layoutPanes(root, box.w, box.h, mins, textSize) : null),
     [root, box.w, box.h, mins, textSize],
   );
-  // Type order, not tree order, so no edit ever reorders the DOM.
-  const leaves = geometry
-    ? [...geometry.leaves].sort(
-        (a, b) => PANE_TYPES.indexOf(a.leaf.pane) - PANE_TYPES.indexOf(b.leaf.pane),
-      )
-    : [];
+  const leaves = geometry ? [...geometry.leaves].sort((a, b) => domOrder(a.leaf, b.leaf)) : [];
+  // With two or more Chat panes, each one's label names its filter, as
+  // Chat, tell, so a screen reader tells them apart.
+  const chatsNamed = chatLeaves(root).length > 1;
+  const sectionLabel = (leaf: PaneLeaf) =>
+    chatsNamed && leaf.pane === 'chat'
+      ? `${paneLabel(leaf)}, ${chatFilterLabel(chatFilterOf(leaf))}`
+      : paneLabel(leaf);
 
   return (
     <PaneTextSizeContext.Provider value={textSize}>
@@ -114,9 +139,9 @@ export function PanelHost({
         <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
-              key={leaf.pane}
+              key={leafKey(leaf)}
               className={`pane pane-${leaf.pane}`}
-              aria-label={PANE_LABELS[leaf.pane]}
+              aria-label={sectionLabel(leaf)}
               style={{
                 left: rect.x,
                 top: rect.y,
@@ -125,7 +150,9 @@ export function PanelHost({
                 overflowY: rect.h < paneMinH(leaf.pane, textSize) ? 'auto' : undefined,
               }}
             >
-              <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
+              <PaneLeafContext.Provider value={leaf}>
+                {isPaneType(leaf.pane) ? PANES[leaf.pane]() : <LuaPane />}
+              </PaneLeafContext.Provider>
             </section>
           ))}
           {geometry?.handles.map((h) => (

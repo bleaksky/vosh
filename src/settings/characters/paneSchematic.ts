@@ -1,4 +1,10 @@
-import { isLeaf, type PaneNode, type PaneSplit, type PaneType } from '../../panel/paneLayout';
+import {
+  isLeaf,
+  type PaneKind,
+  type PaneLeaf,
+  type PaneNode,
+  type PaneSplit,
+} from '../../panel/paneLayout';
 import { listJoin, possessive } from '../../lib/text';
 
 // The small drawing of a profile's panel in Settings > Characters
@@ -44,7 +50,7 @@ export interface SchematicRect {
 }
 
 export interface SchematicRegion {
-  pane: PaneType;
+  pane: PaneKind;
   label: string;
   rect: SchematicRect;
 }
@@ -99,12 +105,12 @@ function inner(value: number, max: number): number {
 function layout(
   node: PaneNode,
   rect: SchematicRect,
-  labelFor: (pane: PaneType) => string,
+  labelFor: (leaf: PaneLeaf) => string,
   regions: SchematicRegion[],
   lines: string[],
 ): void {
   if (isLeaf(node)) {
-    regions.push({ pane: node.pane, label: labelFor(node.pane), rect });
+    regions.push({ pane: node.pane, label: labelFor(node), rect });
     return;
   }
   const kids = node.children;
@@ -150,8 +156,8 @@ function labelY(rect: SchematicRect): number {
 
 /** A node as a noun phrase: a pane's name, `Group and Chat side by
  *  side` for a split across, `Map over Affects` for a split down. */
-function nounPhrase(node: PaneNode, labelFor: (pane: PaneType) => string): string {
-  if (isLeaf(node)) return labelFor(node.pane);
+function nounPhrase(node: PaneNode, labelFor: (leaf: PaneLeaf) => string): string {
+  if (isLeaf(node)) return labelFor(node);
   const parts = node.children.map((child) => nounPhrase(child, labelFor));
   if (parts.length === 1) return parts[0];
   return node.split === 'row' ? `${listJoin(parts)} side by side` : parts.join(' over ');
@@ -162,7 +168,7 @@ function pronoun(node: PaneNode): string {
 }
 
 /** Where each of the root's children sits, as clauses. */
-function rootClauses(root: PaneSplit, labelFor: (pane: PaneType) => string): string[] {
+function rootClauses(root: PaneSplit, labelFor: (leaf: PaneLeaf) => string): string[] {
   const kids = root.children;
   if (kids.length === 1) return [`${nounPhrase(kids[0], labelFor)} fills the panel`];
   return kids.map((kid, i) => {
@@ -182,7 +188,7 @@ function rootClauses(root: PaneSplit, labelFor: (pane: PaneType) => string): str
  *  Affects below it, Vitals along the bottom.` */
 export function schematicSentence(
   root: PaneSplit,
-  labelFor: (pane: PaneType) => string,
+  labelFor: (leaf: PaneLeaf) => string,
   owner: string,
 ): string {
   const head = `${possessive(owner)} panel.`;
@@ -191,10 +197,10 @@ export function schematicSentence(
 }
 
 /** Draw `root`, the tree a profile's panel shows, for `owner` (the
- *  name the sentence uses). `labelFor` names each pane type. */
+ *  name the sentence uses). `labelFor` names each pane. */
 export function paneSchematic(
   root: PaneSplit,
-  labelFor: (pane: PaneType) => string,
+  labelFor: (leaf: PaneLeaf) => string,
   owner: string,
 ): PaneSchematic {
   const regions: SchematicRegion[] = [];

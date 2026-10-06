@@ -56,6 +56,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('general', 'connection', 'tls'),
   },
   {
+    label: 'Reconnect when the link drops',
+    description:
+      'Vosh dials up to 8 times over about 5 minutes, and you log in yourself. The game closes its login prompt after about 2 minutes.',
+    keywords: 'reconnect redial auto automatic drop dropped link dead disconnect retry',
+    target: at('general', 'connection', 'reconnect'),
+  },
+  {
     label: 'Check for updates',
     keywords: 'update version install restart',
     target: at('general', 'updates'),

@@ -26,6 +26,7 @@ export const MARK = 'session://mark';
 export const RECONNECT = 'session://reconnect';
 
 export const LUA_OUTPUT = 'session://lua-output';
+export const LUA_PANES = 'session://lua-panes';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';

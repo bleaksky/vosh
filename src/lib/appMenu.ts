@@ -203,7 +203,9 @@ export interface MenuStateInput {
   panelOpen: boolean;
   /** The split is open, or the native grid is scrolled back. */
   splitOpen: boolean;
-  shownPanes: readonly PaneType[];
+  /** The paneKey of every pane the panel tree holds. The menu lists
+   *  the built-in panes alone, whose key is their type. */
+  shownPanes: readonly string[];
   /** The MUD sent Imm.Queues this session. */
   staffOffered: boolean;
   /** Every theme in gallery order. */

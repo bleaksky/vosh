@@ -12,26 +12,39 @@ import { usePlayPalette } from '../../theme/fitGameColors';
 import { useChatColors } from '../../stores/config/chatColorsStore';
 import { themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
-import { MenuItem, MenuSurface } from '../../ui/MenuSurface';
+import { MenuItem, MenuSeparator, MenuSurface } from '../../ui/MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from '../paneActions';
+import { usePanelLayout } from '../panelLayoutStore';
 import { PaneHeader } from '../PaneHeader';
 import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { chatTime } from '../paneText';
 import { usePaneText } from '../paneTextSize';
+import {
+  EVERYTHING_ELSE,
+  chatFilterLabel,
+  chatFilterOf,
+  chatLinesFor,
+  ownPaneChannels,
+  type ChatFilter,
+} from './chatFilter';
 
 // Channel chat, the line you had from May to September on the theme
 // (the approved Chat A board). Messages sit at the bottom like the
 // terminal, one mono line each, [channel] Speaker: text in the color
 // the game prints that channel in, or the theme color you picked for it
 // under Channel colors in the pane menu, lifted where it would read
-// under 3:1 on the panel (chatColors.ts). The channel filter lives in
-// the pane's props, so it follows the profile and two chat panes can
-// each show a different channel. The messages follow your panel size,
-// and the lines and the gaps between them scale with it.
+// under 3:1 on the panel (chatColors.ts). The filter lives in the
+// pane's props, so it follows the profile and two chat panes can each
+// show a different channel, or one a channel and the other Everything
+// else (chatFilter.ts). The messages follow your panel size, and the
+// lines and the gaps between them scale with it.
 
 export function ChatPane() {
   const leaf = usePaneLeaf();
-  const channel = leaf?.props.channel ?? '';
+  const tree = usePanelLayout()?.root ?? null;
+  const filter: ChatFilter = leaf ? chatFilterOf(leaf) : { kind: 'all' };
+  const label = chatFilterLabel(filter);
+  const owned = useMemo(() => ownPaneChannels(tree, leaf?.id ?? ''), [tree, leaf?.id]);
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const theme = useActiveTheme();
   const palette = usePlayPalette();
@@ -48,7 +61,7 @@ export function ChatPane() {
   useEffect(() => subscribeChatLines(setLines), []);
 
   const channels = Array.from(new Set(lines.map((l) => l.pane))).sort();
-  const visible = channel ? lines.filter((l) => l.pane === channel) : lines;
+  const visible = chatLinesFor(lines, filter, owned);
 
   // Follow the newest line while you are at the bottom. A new terminal
   // size makes every line taller or shorter with the pane the same
@@ -76,7 +89,7 @@ export function ChatPane() {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     stickyRef.current = true;
-  }, [channel]);
+  }, [label]);
 
   return (
     <>
@@ -84,9 +97,15 @@ export function ChatPane() {
         meta={
           leaf ? (
             <ChannelSelect
-              channel={channel}
+              filter={filter}
               channels={channels}
-              onPick={(next) => updateLeafProps(leaf.id, { channel: next })}
+              owned={owned}
+              onPick={(next) =>
+                updateLeafProps(leaf.id, {
+                  channel: next.kind === 'channel' ? next.channel : '',
+                  rest: next.kind === 'rest' ? '1' : '',
+                })
+              }
             />
           ) : null
         }
@@ -101,9 +120,11 @@ export function ChatPane() {
       >
         {visible.length === 0 ? (
           <p className="pane-empty">
-            {channel
-              ? `Messages on ${channel} appear here.`
-              : 'Chat appears when someone talks on a channel.'}
+            {filter.kind === 'channel'
+              ? `Messages on ${filter.channel} appear here.`
+              : filter.kind === 'rest'
+                ? 'Messages on other channels appear here.'
+                : 'Chat appears when someone talks on a channel.'}
           </p>
         ) : (
           <ChatLog lines={visible} palette={palette} ground={ground} colors={colors} />
@@ -179,21 +200,33 @@ function ChatMessage({ line, ink }: { line: ChatLine; ink: ChatInk }) {
   );
 }
 
+// The filter menu: All, Everything else, then the channels heard plus
+// the one the pane names, sorted. A channel another Chat pane shows on
+// its own says so.
 function ChannelSelect({
-  channel,
+  filter,
   channels,
+  owned,
   onPick,
 }: {
-  channel: string;
+  filter: ChatFilter;
   channels: string[];
-  onPick: (channel: string) => void;
+  owned: ReadonlySet<string>;
+  onPick: (filter: ChatFilter) => void;
 }) {
   const ref = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const label = channel || 'All';
-  const options = channel && !channels.includes(channel) ? [...channels, channel] : channels;
+  const label = chatFilterLabel(filter);
+  const named = filter.kind === 'channel' ? filter.channel : '';
+  const options = named && !channels.includes(named) ? [...channels, named].sort() : channels;
   const anchor = ref.current;
   const rect = open && anchor ? anchor.getBoundingClientRect() : null;
+  const pick = (next: ChatFilter) => () => {
+    setOpen(false);
+    onPick(next);
+    returnToCommandLine();
+  };
+  const check = <CheckIcon className="pane-menu-check" />;
 
   return (
     <>
@@ -220,17 +253,32 @@ function ChannelSelect({
             if (reason !== 'outside') returnToCommandLine();
           }}
         >
-          {['', ...options].map((c) => (
+          <MenuItem
+            onSelect={pick({ kind: 'all' })}
+            trailing={filter.kind === 'all' ? check : null}
+          >
+            All
+          </MenuItem>
+          <MenuItem
+            onSelect={pick({ kind: 'rest' })}
+            trailing={filter.kind === 'rest' ? check : null}
+          >
+            {EVERYTHING_ELSE}
+          </MenuItem>
+          {options.length > 0 && <MenuSeparator />}
+          {options.map((c) => (
             <MenuItem
-              key={c || '*'}
-              onSelect={() => {
-                setOpen(false);
-                onPick(c);
-                returnToCommandLine();
-              }}
-              trailing={c === channel ? <CheckIcon className="pane-menu-check" /> : null}
+              key={c}
+              onSelect={pick({ kind: 'channel', channel: c })}
+              trailing={
+                c === named ? (
+                  check
+                ) : owned.has(c) ? (
+                  <span className="shell-menu-kbd">own pane</span>
+                ) : null
+              }
             >
-              {c || 'All'}
+              {c}
             </MenuItem>
           ))}
         </MenuSurface>
