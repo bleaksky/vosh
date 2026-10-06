@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../../lib/affects';
 import { affectsSnapshotGet } from '../../ipc/affects';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, asText, isHiddenFlag } from '../store';
 
@@ -105,7 +105,7 @@ function outlasts(next: number | null, prev: number | null): boolean {
 
 const EMPTY: AffectsState = { list: null, hidden: false };
 
-const store = createGmcpStore<AffectsState>({
+const store = createSessionStore<AffectsState>({
   state: EMPTY,
   packages: { 'Char.Affects': (_, data) => parseAffectsPacket(data) },
   snapshot: {

@@ -1,5 +1,5 @@
 import { asNumber, asText } from '../store';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // Game time and the moons for the status line. Aabahran sends
 // World.Time `{hour, day, month, year, sunlight, sky}` at login and on
@@ -133,7 +133,7 @@ export function moonLabel(moons: Moons | null): string | null {
   return word ? `${moon.name} ${word}` : moon.name;
 }
 
-const store = createGmcpStore<WorldState>({
+const store = createSessionStore<WorldState>({
   state: { time: null, moons: null },
   packages: {
     'World.Time': (world, data) => {

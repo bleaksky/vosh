@@ -1,5 +1,5 @@
 import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getHiddenOf, subscribeHiddenOf } from './hiddenStore';
 import { asNumber, isHiddenFlag } from '../store';
 
@@ -230,7 +230,7 @@ function empty(session: number, last: Vitals | null = null): VitalsState {
   });
 }
 
-const store = createGmcpStore<VitalsState, Vitals | null>({
+const store = createSessionStore<VitalsState, Vitals | null>({
   state: (session) => empty(session),
   packages: {
     'Char.Vitals': (state, data) => {

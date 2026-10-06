@@ -7,7 +7,7 @@ import {
   type TickPayload,
 } from '../../ipc/tick';
 import { type TickCount } from '../../ipc/uiConfig';
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getSelected } from './sessionsStore';
 import { playTickSound } from './tickSound';
 
@@ -168,7 +168,7 @@ function readConfig(apply: Apply): void {
 
 // Each session's state is its last report, or null while its count
 // hides. A disconnect hides it, as the factory puts back null.
-const store = createGmcpStore<TickPayload | null, TickState>({
+const store = createSessionStore<TickPayload | null, TickState>({
   state: null,
   events: [
     (apply) =>

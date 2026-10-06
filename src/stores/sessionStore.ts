@@ -1,21 +1,22 @@
 import { useSyncExternalStore } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
-import { onGmcpPackage, onState, type StatePayload } from '../../ipc/session';
-import { createStore } from '../store';
+import { onGmcpPackage, onState, type StatePayload } from '../ipc/session';
+import { createStore } from './store';
 import {
   getSelected,
   getSessions,
   subscribeSelected,
   subscribeSessions,
-} from '../session/sessionsStore';
+} from './session/sessionsStore';
 
-// A store for what the game sends over GMCP. It keeps one state for each
-// session, since a session behind keeps playing. The session stores, such
-// as your target and the tick, build on it too, since they keep their
-// state for each session the same way. Every input moves the state of
-// the session it names only through a change, a function that takes that
-// state and returns the next one, or the same state when nothing moved.
-// A session's state starts the first time anything names it, and goes
+// A store that keeps one state for each session, since a session behind
+// keeps playing, and shows the selected one's. The GMCP stores build on
+// it with the packages each hears, and the session stores, such as your
+// target, the tick and the rows of the sessions sidebar, with the
+// session events each hears. Every input moves the state of the session
+// it names only through a change, a function that takes that state and
+// returns the next one, or the same state when nothing moved. A
+// session's state starts the first time anything names it, and goes
 // once the session leaves the list.
 //
 // The panes read the selected session. After each change to it, and on
@@ -48,7 +49,7 @@ type Change<S> = (state: S) => S;
 /** Apply a change to the state of the session it names. */
 type Apply<S> = (session: number, change: Change<S>) => void;
 
-interface GmcpStoreSpec<S, V> {
+interface SessionStoreSpec<S, V> {
   /** The state before anything is heard. A function gives it afresh
    *  for a session as its state starts and at a disconnect that puts it
    *  back, for a state that starts from what another store holds. */
@@ -85,14 +86,14 @@ interface Slot<S> {
   asked: boolean;
 }
 
-export function createGmcpStore<S, V = S>({
+export function createSessionStore<S, V = S>({
   state: initial,
   packages = {},
   connection,
   events = [],
   snapshot,
   view = (state) => state as unknown as V,
-}: GmcpStoreSpec<S, V>) {
+}: SessionStoreSpec<S, V>) {
   const fresh = typeof initial === 'function' ? (initial as (session: number) => S) : () => initial;
   const slots = new Map<number, Slot<S>>();
   const first = getSelected();

@@ -8,7 +8,7 @@ import {
 } from '../../ipc/session';
 import { onGameLine } from '../../ipc/terminal';
 import { knownWorld } from '../../lib/knownWorlds';
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getSelected, subscribeSelected } from './sessionsStore';
 
 // What each session's row in the sessions sidebar says beyond its name,
@@ -130,7 +130,7 @@ function waitsForLines(session: number): boolean {
   return !shown(session) && !store.stateOf(session).lines;
 }
 
-const store = createGmcpStore<SessionRowState>({
+const store = createSessionStore<SessionRowState>({
   state: QUIET,
   packages: { 'Char.Status': playing, 'Char.Vitals': playing },
   connection: linked,

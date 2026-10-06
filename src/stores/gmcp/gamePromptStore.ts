@@ -1,4 +1,4 @@
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // Your prompt settings in the game, from Char.Prompt. Aabahran sends
 // `{enabled, prompt, fprompt}` at login and whenever you change or show
@@ -51,7 +51,7 @@ interface GamePromptState {
   awaitingLogin: boolean;
 }
 
-const store = createGmcpStore<GamePromptState, GamePromptSeen | null>({
+const store = createSessionStore<GamePromptState, GamePromptSeen | null>({
   state: { seen: null, awaitingLogin: false },
   packages: {
     'Char.Prompt': (state, data) => {

@@ -1,4 +1,4 @@
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getHiddenOf, subscribeHiddenOf, type HiddenState } from './hiddenStore';
 import { asNumber, asText, isHiddenFlag } from '../store';
 
@@ -109,7 +109,7 @@ export function withHidden(
 
 // The state is the last fight as Char.Combat sent it, and the panes read
 // it with the hidden state laid over it.
-const store = createGmcpStore<CombatOpponent | null>({
+const store = createSessionStore<CombatOpponent | null>({
   state: null,
   packages: { 'Char.Combat': (_, data) => parseCombat(data) },
   // The view reads the session's flags in the hidden store, so each

@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { dockRows } from '../../prompt/pinnedDock';
 import { type PromptSpan } from '../../ipc/promptDesign';
 import { onOutput, type SessionOutput } from '../../ipc/terminal';
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // The prompt the session pinned above the command line, as the text the
 // band draws: the output's pin field, decoded, with where each piece of
@@ -34,7 +34,7 @@ export function bandAfterOutput(
 
 const decoder = new TextDecoder('utf-8', { fatal: false });
 
-const store = createGmcpStore<PinnedBand | null>({
+const store = createSessionStore<PinnedBand | null>({
   state: null,
   events: [
     // Only a write that changes the band decodes, in any session.

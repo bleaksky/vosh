@@ -6,7 +6,7 @@ import {
 } from '../../ipc/prompt';
 import { onState } from '../../ipc/session';
 import { subscribeUiConfigReplaced } from '../../ipc/uiConfig';
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getSelected, subscribeSelected } from './sessionsStore';
 
 // The triggers that hid your prompt in a session while the profile reads
@@ -61,7 +61,7 @@ function reread(apply: Apply): void {
     .catch(() => undefined);
 }
 
-const store = createGmcpStore<Gags>({
+const store = createSessionStore<Gags>({
   state: NONE,
   events: [
     (apply) =>

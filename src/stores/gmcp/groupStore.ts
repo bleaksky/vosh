@@ -1,4 +1,4 @@
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { getHiddenOf, subscribeHiddenOf } from './hiddenStore';
 import { isHiddenFlag } from '../store';
 
@@ -112,7 +112,7 @@ function takeName(state: GroupState, data: unknown): GroupState {
     : state;
 }
 
-const store = createGmcpStore<GroupState>({
+const store = createSessionStore<GroupState>({
   state: EMPTY,
   packages: {
     'Group.Info': (state, data) => ({ ...state, group: parseGroupInfo(data) }),

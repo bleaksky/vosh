@@ -1,5 +1,5 @@
 import { onRouted, type RoutedPayload } from '../../ipc/session';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 /** Which way a tell went. Aabahran marks a tell you receive
  *  `received`. It sends nothing for a tell you send, so a `sent` line
@@ -117,7 +117,7 @@ function append(lines: ChatLine[], line: ChatLine | null): ChatLine[] {
 // session's here, so closing and reopening the pane keeps the history.
 // Only the session's own disconnect clears them, since a new connection
 // makes the old chat irrelevant.
-const store = createGmcpStore<ChatLine[]>({
+const store = createSessionStore<ChatLine[]>({
   state: [],
   packages: {
     'Comm.Channel': (lines, data) => append(lines, parseCommChannel(data)),
