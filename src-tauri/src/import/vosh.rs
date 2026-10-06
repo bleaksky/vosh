@@ -360,28 +360,12 @@ fn join<T: Clone>(
 /// `Healer profile (2).toml` reads as Healer.
 fn name_from_file(file_name: &str) -> (Option<String>, bool) {
     let stem = file_name.strip_suffix(".toml");
-    let base = drop_copy_number(stem.unwrap_or(file_name));
+    let base = crate::disk::paths::drop_copy_number(stem.unwrap_or(file_name));
     let (base, profile) = match base.strip_suffix(" profile") {
         Some(base) => (base, true),
         None => (base, false),
     };
     (sanitize_name(base).ok(), stem.is_some() && profile)
-}
-
-/// `stem` without a trailing ` (n)`.
-fn drop_copy_number(stem: &str) -> &str {
-    let Some(inner) = stem.strip_suffix(')') else {
-        return stem;
-    };
-    let Some(at) = inner.rfind(" (") else {
-        return stem;
-    };
-    let digits = &inner[at + 2..];
-    if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
-        &stem[..at]
-    } else {
-        stem
-    }
 }
 
 #[cfg(test)]

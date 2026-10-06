@@ -349,7 +349,7 @@ pub(crate) fn export(plugins_dir: &Path, name: &str, downloads: &Path) -> Result
         format!("Vosh could not save {name} in your Downloads folder.")
     };
     let files = folder::regular_files(&dir).map_err(|e| could_not(&e))?;
-    let path = export_path(downloads, name);
+    let path = crate::disk::paths::export_path(downloads, name, "zip");
     // Made new, so a file that came since the look stays as it is.
     let out = File::create_new(&path).map_err(|e| could_not(&e))?;
     if let Err(e) = write_zip(out, &dir, name, &files) {
@@ -357,23 +357,6 @@ pub(crate) fn export(plugins_dir: &Path, name: &str, downloads: &Path) -> Result
         return Err(could_not(&e));
     }
     Ok(path)
-}
-
-/// Where an export of the plugin `name` lands in `downloads`, the way
-/// [`crate::profile::inactive::export_path`] names a profile export.
-fn export_path(downloads: &Path, name: &str) -> PathBuf {
-    let first = downloads.join(format!("{name}.zip"));
-    if !first.exists() {
-        return first;
-    }
-    let mut n = 2u32;
-    loop {
-        let path = downloads.join(format!("{name} ({n}).zip"));
-        if !path.exists() {
-            return path;
-        }
-        n += 1;
-    }
 }
 
 /// Write `files`, by their paths inside `dir`, to `out` as a .zip, each

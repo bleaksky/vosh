@@ -5,7 +5,7 @@
 //! Settings and the prompt card also ask who is logged in.
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
@@ -95,11 +95,7 @@ pub(crate) async fn profile_export_file(
     characters: Vec<String>,
 ) -> Result<ProfileExport, String> {
     let toml = export_text(state.inner(), &name, &characters).await?;
-    let dir = app
-        .path()
-        .download_dir()
-        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
-    let path = export_path(&dir, &name);
+    let path = export_path(&super::downloads_dir(&app)?, &name);
     std::fs::write(&path, toml).map_err(|e| {
         warn!(error = %e, path = %path.display(), "profile export write failed");
         format!(
