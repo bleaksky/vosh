@@ -46,6 +46,11 @@ pub(crate) const ECHO_BYTES: usize = 64 * 1024;
 pub(crate) const NAME_BYTES: usize = 4 * 1024;
 /// The most text one call may queue in all.
 pub(crate) const CALL_BYTES: usize = 256 * 1024;
+/// The most blocks one pane shows. The rest drop.
+pub(crate) const PANE_BLOCKS: usize = 200;
+/// The most characters one piece of text in a pane block may hold. The
+/// rest is cut.
+pub(crate) const PANE_LINE_CHARS: usize = 500;
 
 /// The chunk name of Vosh's own Lua, which a stop never points at.
 pub(crate) const INTERNAL_CHUNK: &str = "=[vosh]";

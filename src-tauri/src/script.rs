@@ -332,12 +332,15 @@ pub(crate) fn apply_actions(
                 toggle_group(profile, &name, enabled);
                 result.durable_changed = true;
             }
+            // The script engine consumes the Lua registrations in its own
+            // drain loop, so they should not reach here, and nothing
+            // draws a Lua pane yet.
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger { .. }
-            | Action::SubscribeGmcp { .. } => {
-                // The script engine consumes these in its own drain loop;
-                // they should not reach here. Ignore defensively.
-            }
+            | Action::SubscribeGmcp { .. }
+            | Action::Pane { .. }
+            | Action::PaneSet { .. }
+            | Action::PaneMeta { .. } => {}
             Action::Timer {
                 delay,
                 callback_id,

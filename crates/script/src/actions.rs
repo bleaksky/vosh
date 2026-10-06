@@ -9,7 +9,7 @@ use vosh_automation::vars::Scope;
 
 use crate::owner::Owner;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     /// Bytes to send to the server, with CRLF appended by the session.
     Send(String),
@@ -129,6 +129,49 @@ pub enum Action {
         text: Option<String>,
         parts: AlertParts,
     },
+    /// A pane the plugin `plugin` draws, from `mud.pane`. Add a pane
+    /// lists it by `title`, and a layout keeps it by `plugin` and `id`.
+    Pane {
+        plugin: String,
+        id: String,
+        title: String,
+    },
+    /// Replace what the pane `id` of the plugin `plugin` shows.
+    PaneSet {
+        plugin: String,
+        id: String,
+        blocks: Vec<PaneBlock>,
+    },
+    /// The words beside the name of the pane `id` of `plugin`.
+    PaneMeta {
+        plugin: String,
+        id: String,
+        text: String,
+    },
+}
+
+/// One block of a pane a plugin draws, which the page shows as text.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PaneBlock {
+    /// A label and a value on one row.
+    Row { label: String, value: String },
+    /// A row with a meter, filled `value` of `max`.
+    Gauge { label: String, value: f64, max: f64 },
+    /// A line in the terminal font, with Vosh color codes.
+    Line(String),
+    /// A thin line between blocks.
+    Rule,
+}
+
+impl PaneBlock {
+    /// How many bytes of text the block holds.
+    fn text_len(&self) -> usize {
+        match self {
+            PaneBlock::Row { label, value } => label.len() + value.len(),
+            PaneBlock::Gauge { label, .. } | PaneBlock::Line(label) => label.len(),
+            PaneBlock::Rule => 0,
+        }
+    }
 }
 
 /// Where in your Lua an error or a stop happened: the chunk as Lua
@@ -178,6 +221,11 @@ impl Action {
                     + text.as_ref().map_or(0, String::len)
                     + parts.sound.as_ref().map_or(0, String::len)
             }
+            Action::Pane { plugin, id, title } => plugin.len() + id.len() + title.len(),
+            Action::PaneSet { plugin, id, blocks } => {
+                plugin.len() + id.len() + blocks.iter().map(PaneBlock::text_len).sum::<usize>()
+            }
+            Action::PaneMeta { plugin, id, text } => plugin.len() + id.len() + text.len(),
         }
     }
 
@@ -193,6 +241,7 @@ impl Action {
                 | Action::Timer { .. }
                 | Action::SetPluginAlias { .. }
                 | Action::RemovePluginAlias { .. }
+                | Action::Pane { .. }
         )
     }
 }

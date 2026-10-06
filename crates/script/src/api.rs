@@ -17,7 +17,7 @@ use crate::state::{Callback, EngineState, StateInner};
 /// A piece of text Lua hands a `mud` function, copied out of Lua only
 /// when it holds at most `cap` bytes, since the copy counts toward no
 /// memory limit. None when it is longer.
-fn capped(text: &mlua::String, cap: usize) -> LuaResult<Option<String>> {
+pub(crate) fn capped(text: &mlua::String, cap: usize) -> LuaResult<Option<String>> {
     if text.as_bytes().len() > cap {
         return Ok(None);
     }
@@ -103,6 +103,7 @@ pub(crate) fn mud_table(lua: &Lua, owner: Option<Owner>) -> LuaResult<Table> {
     mud.set("on_gmcp", owned(lua, owner.as_ref(), mud_on_gmcp)?)?;
 
     mud.set("alert", owned(lua, owner.as_ref(), mud_alert)?)?;
+    mud.set("pane", owned(lua, owner.as_ref(), crate::pane::mud_pane)?)?;
 
     mud.set("timer", owned(lua, owner.as_ref(), mud_timer)?)?;
     mud.set(
@@ -134,7 +135,7 @@ fn registrant(s: &StateInner, owner: Option<&Owner>) -> Owner {
     owner.cloned().unwrap_or_else(|| s.owner())
 }
 
-fn with_state<F, R>(lua: &Lua, f: F) -> LuaResult<R>
+pub(crate) fn with_state<F, R>(lua: &Lua, f: F) -> LuaResult<R>
 where
     F: FnOnce(&mut StateInner) -> LuaResult<R>,
 {

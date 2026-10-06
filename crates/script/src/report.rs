@@ -5,7 +5,8 @@
 use crate::actions::{Action, Place};
 use crate::budget::{Event, EVENT_BUDGET};
 use crate::limits::{
-    At, Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, STATE_MEMORY, TIME_BUDGET,
+    At, Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, PANE_BLOCKS, STATE_MEMORY,
+    TIME_BUDGET,
 };
 use crate::owner::{Owner, Site};
 
@@ -172,6 +173,19 @@ pub(crate) fn text_cap_line(owner: &Owner, site: &Site) -> String {
         _ => capitalized(&subject),
     };
     format!("{subject} queued more text than one call may. Vosh dropped what went past the limit.")
+}
+
+/// The line for a call that gave a pane more blocks than one pane
+/// shows.
+pub(crate) fn pane_cap_line(owner: &Owner, site: &Site) -> String {
+    let subject = subject(owner, site);
+    let subject = match owner {
+        Owner::Plugin(_) | Owner::Script(_) => subject,
+        _ => capitalized(&subject),
+    };
+    format!(
+        "{subject} gave a pane more than {PANE_BLOCKS} blocks. Vosh shows the first {PANE_BLOCKS}."
+    )
 }
 
 /// The line for the first handler of `owner` that `event` skipped, once
