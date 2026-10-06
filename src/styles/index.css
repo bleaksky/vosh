@@ -20,3 +20,4 @@
 @import './prompt.css'; /* prompt-, pc- */
 @import './help.css'; /* hp- */
 @import './frame.css'; /* shell, shell- */
+@import './sessions.css'; /* shell-sessions- */
