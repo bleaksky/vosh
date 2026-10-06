@@ -206,6 +206,9 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
       return scene.prompt.seen ?? null;
     case 'session_identity_get':
       return scene.prompt.identity ?? null;
+    // The Macros page reads macros_list through the macro list store,
+    // to ring a key your macro keeps from a preset.
+    case 'macros_list':
     case 'plugins_list':
     case 'lua_output_get':
       return [];

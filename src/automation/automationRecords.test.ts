@@ -165,19 +165,27 @@ describe('macros', () => {
     const store = start.map((m) => ({ ...m }));
     const calls: string[] = [];
     let failOn: string | null = null;
+    // As set_macro and delete_macro in src-tauri/src/ipc/automation.rs
+    // do: a preset macro takes only its group, and an unbind removes
+    // only yours.
     const api: MacroStoreApi = {
       deleteMacro: async (key) => {
         calls.push(`delete ${key}`);
-        store.splice(0, store.length, ...store.filter((m) => m.key !== key));
+        store.splice(0, store.length, ...store.filter((m) => m.preset || m.key !== key));
       },
-      setMacro: async (key, command, group, enabled) => {
+      setMacro: async (key, command, group, enabled, preset) => {
         if (key === failOn) {
           failOn = null;
           throw new Error('disk full');
         }
-        calls.push(`set ${key}`);
+        calls.push(preset ? `group ${preset} ${key} ${group}` : `set ${key}`);
+        const at = store.findIndex((m) => m.key === key && m.preset === preset);
+        if (preset) {
+          const { group: _, ...rest } = store[at];
+          store[at] = { ...rest, ...(group ? { group } : {}) };
+          return;
+        }
         const next = { key, command, enabled, ...(group ? { group } : {}) };
-        const at = store.findIndex((m) => m.key === key);
         if (at >= 0) store[at] = next;
         else store.push(next);
       },
@@ -251,6 +259,94 @@ describe('macros', () => {
       'The macro on F1 needs a command.',
     );
     expect(validateMacros([macros[0], macros[0]])).toContain('Two macros use F1');
+  });
+
+  describe('a preset macro', () => {
+    const rec = normalizeMacro({ key: 'Numpad3', command: 'rec' });
+    const north = normalizeMacro({ key: 'Numpad8', command: 'n', preset: 'numpad_movement' });
+    const down = normalizeMacro({
+      key: 'Numpad3',
+      command: 'd',
+      enabled: false,
+      preset: 'numpad_movement',
+    });
+    const stored = [rec, north, down];
+
+    it('keeps the preset that added it', () => {
+      expect(down).toEqual({
+        key: 'Numpad3',
+        command: 'd',
+        enabled: false,
+        preset: 'numpad_movement',
+      });
+      expect('preset' in normalizeMacro({ key: 'F1', command: 'x', preset: '' })).toBe(false);
+    });
+
+    it('lets your macro use its key, and needs nothing of it', () => {
+      expect(validateMacros(stored)).toBeNull();
+      expect(validateMacros([...stored, { ...north, command: ' ' }])).toBeNull();
+      // Two of yours on one key still clash.
+      expect(validateMacros([...stored, { ...rec, command: 'rest' }])).toBe(
+        'Two macros use Numpad3. Give each one its own key.',
+      );
+    });
+
+    it('saves only a new group, under the key and preset it loaded with', () => {
+      let draft = createDraft(stored);
+      const [, n, d] = draft.items;
+      draft = updateDraftItem(draft, n.uid, (m) => ({ ...m, group: 'travel', command: 'north' }));
+      // A command or a switch the JSON view changed sends nothing.
+      draft = updateDraftItem(draft, d.uid, (m) => ({ ...m, enabled: true }));
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [],
+        set: [{ uid: n.uid, macro: { ...north, group: 'travel' } }],
+      });
+      // A key the JSON view changed saves the group under the old key.
+      draft = updateDraftItem(draft, n.uid, (m) => ({ ...m, key: 'F9' }));
+      expect(macroSavePlan(draft).set).toEqual([
+        { uid: n.uid, macro: { ...north, group: 'travel' } },
+      ]);
+    });
+
+    it('never unbinds your key for a preset macro the JSON view removed or added', async () => {
+      const { store, calls, api } = macroStore(stored);
+      let draft = createDraft(stored.map((m) => ({ ...m })));
+      draft = removeDraftItem(draft, draft.items[2].uid);
+      draft = addDraftItem(draft, { ...north, key: 'Numpad6', command: 'e' });
+      expect(macroSavePlan(draft)).toEqual({ remove: [], set: [] });
+      await saveMacroDraft(draft, () => {}, api);
+      expect(calls).toEqual([]);
+      expect(store).toEqual(stored);
+    });
+
+    it('takes a row the JSON view moved from yours to a preset as yours removed', () => {
+      let draft = createDraft(stored);
+      const [r] = draft.items;
+      draft = updateDraftItem(draft, r.uid, (m) => ({ ...m, preset: 'numpad_movement' }));
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [{ key: 'Numpad3', uids: [r.uid] }],
+        set: [],
+      });
+      // And one moved from a preset to yours as yours added.
+      draft = createDraft(stored);
+      const [, n] = draft.items;
+      draft = updateDraftItem(draft, n.uid, ({ preset: _, ...m }) => m);
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [],
+        set: [{ uid: n.uid, macro: { key: 'Numpad8', command: 'n', enabled: true } }],
+      });
+    });
+
+    it('sends the group of a preset macro through macros_set with its preset', async () => {
+      const { store, calls, api } = macroStore(stored);
+      let draft = createDraft(stored.map((m) => ({ ...m })));
+      const [r, , d] = draft.items;
+      draft = updateDraftItem(draft, d.uid, (m) => ({ ...m, group: 'travel' }));
+      draft = updateDraftItem(draft, r.uid, (m) => ({ ...m, command: 'recite' }));
+      await saveMacroDraft(draft, () => {}, api);
+      expect(calls).toEqual(['set Numpad3', 'group numpad_movement Numpad3 travel']);
+      expect(store).toEqual([{ ...rec, command: 'recite' }, north, { ...down, group: 'travel' }]);
+    });
   });
 });
 

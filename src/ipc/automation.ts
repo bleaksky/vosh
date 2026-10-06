@@ -226,18 +226,22 @@ export async function listMacros(): Promise<Macro[]> {
 }
 
 /** Bind or rebind a key. `enabled` turns the binding on or off. Leave
- *  it out to keep an existing binding's state, or make a new one on. */
+ *  it out to keep an existing binding's state, or make a new one on.
+ *  With `preset`, change only the group of the macro that preset added
+ *  on `key`, which leaves your macro on the same key alone. */
 export async function setMacro(
   key: string,
   command: string,
   group: string | null = null,
   enabled?: boolean,
+  preset?: string,
 ): Promise<Macro[]> {
   return invoke('macros_set', {
     key,
     command,
     group: group && group.length > 0 ? group : null,
     enabled: enabled ?? null,
+    preset: preset ?? null,
   });
 }
 

@@ -23,7 +23,7 @@ import {
   type Macro,
 } from '../ipc/automation';
 import { type TickConfig } from '../ipc/tick';
-import { errorText, quoted } from '../lib/text';
+import { errorText, listJoin, quoted } from '../lib/text';
 
 // ── Aliases ─────────────────────────────────────────────────────────
 
@@ -127,6 +127,8 @@ export interface MacroRecord {
   command: string;
   group?: string;
   enabled: boolean;
+  /** The id of the preset that added it, absent for one of yours. */
+  preset?: string;
 }
 
 export function normalizeMacro(raw: unknown): MacroRecord {
@@ -138,6 +140,7 @@ export function normalizeMacro(raw: unknown): MacroRecord {
   };
   const group = typeof r.group === 'string' ? r.group.trim() : '';
   if (group) out.group = group;
+  if (typeof r.preset === 'string' && r.preset) out.preset = r.preset;
   return out;
 }
 
@@ -145,9 +148,13 @@ export function blankMacro(): MacroRecord {
   return { key: '', command: '', enabled: true };
 }
 
+/** Why the draft cannot save yet, or null. Only your macros need a key
+ *  and a command of their own, since a preset macro saves nothing but
+ *  its group, and yours may use a key a preset macro wants. */
 export function validateMacros(list: readonly MacroRecord[]): string | null {
   const seen = new Set<string>();
   for (const m of list) {
+    if (m.preset) continue;
     if (!m.key) return 'Press a key for every macro before you save.';
     if (seen.has(m.key)) return `Two macros use ${m.key}. Give each one its own key.`;
     seen.add(m.key);
@@ -165,16 +172,36 @@ export interface MacroSavePlan {
 
 /** The macros_delete and macros_set calls that make the store match
  *  the draft. A macro whose key changed unbinds the old key. Unbinding
- *  runs first, so a key another macro takes over ends up bound. */
+ *  runs first, so a key another macro takes over ends up bound.
+ *
+ *  A preset macro saves only a new group, under the key and preset it
+ *  loaded with, and never unbinds its key, since macros_delete removes
+ *  your macro on that key. One added or removed in Edit all as JSON
+ *  sends nothing, since launch installs the preset's own. A row the JSON
+ *  view moved between yours and a preset counts as one removed and one
+ *  added. */
 export function macroSavePlan(draft: Draft<MacroRecord>): MacroSavePlan {
   const { added, removed, changed } = draftChanges(draft);
+  const moved = changed.filter((c) => c.before.preset !== c.after.preset);
+  const gone = [...removed, ...moved.map((c) => ({ uid: c.uid, value: c.before }))];
+  const made = [...added, ...moved.map((c) => ({ uid: c.uid, value: c.after }))];
   const remove = new Map<string, string[]>();
   const unbind = (key: string, uid: string) => remove.set(key, [...(remove.get(key) ?? []), uid]);
-  for (const item of removed) unbind(item.value.key, item.uid);
-  const set = added.map((item) => ({ uid: item.uid, macro: item.value }));
+  for (const item of gone) if (!item.value.preset) unbind(item.value.key, item.uid);
+  const set = made.flatMap((item) =>
+    item.value.preset ? [] : [{ uid: item.uid, macro: item.value }],
+  );
   for (const { uid, before, after } of changed) {
-    if (before.key !== after.key) unbind(before.key, uid);
-    set.push({ uid, macro: after });
+    if (before.preset !== after.preset) continue;
+    if (!before.preset) {
+      if (before.key !== after.key) unbind(before.key, uid);
+      set.push({ uid, macro: after });
+    } else if ((before.group ?? '') !== (after.group ?? '')) {
+      const macro = { ...before };
+      if (after.group) macro.group = after.group;
+      else delete macro.group;
+      set.push({ uid, macro });
+    }
   }
   return { remove: [...remove].map(([key, uids]) => ({ key, uids })), set };
 }
@@ -182,11 +209,14 @@ export function macroSavePlan(draft: Draft<MacroRecord>): MacroSavePlan {
 /** The two calls Macros saves through, one binding at a time. */
 export interface MacroStoreApi {
   deleteMacro: (key: string) => Promise<unknown>;
+  /** `preset` names the preset of a preset macro, which takes only the
+   *  group. Absent for yours. */
   setMacro: (
     key: string,
     command: string,
     group: string | null,
     enabled: boolean,
+    preset?: string,
   ) => Promise<unknown>;
 }
 
@@ -208,7 +238,7 @@ export async function saveMacroDraft(
     for (const uid of uids) written({ uid, stored: null });
   }
   for (const { uid, macro } of plan.set) {
-    await api.setMacro(macro.key, macro.command, macro.group ?? null, macro.enabled);
+    await api.setMacro(macro.key, macro.command, macro.group ?? null, macro.enabled, macro.preset);
     written({ uid, stored: macro });
   }
 }
@@ -471,6 +501,18 @@ export function presetLaunchPlan(
 export function keysYoursHold(preset: Preset, macros: readonly Macro[]): string[] {
   const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
   return (preset.macros ?? []).map((m) => m.key).filter((key) => yours.has(key));
+}
+
+/** What a preset's card says when your macros keep keys the preset
+ *  wants, and the card of a preset macro that waits for yours. No board
+ *  draws more than one such key, so two or more share one plural
+ *  sentence, the keys in the order given. */
+export function keysYoursHoldNote(held: readonly Omit<Macro, 'preset'>[]): string {
+  const keys = listJoin(held.map((m) => m.key));
+  const sends = listJoin(held.map((m) => m.command));
+  return held.length === 1
+    ? `Your macro on ${keys} keeps the key, so ${sends} has none until you move it.`
+    : `Your macros on ${keys} keep their keys, so ${sends} have none until you move them.`;
 }
 
 /** Bring the preset triggers and macros in line with `enabled`, the
