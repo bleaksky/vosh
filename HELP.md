@@ -92,7 +92,7 @@ A port that is not the world's own shows in grey beside the name, so Orla on the
 Line two says what the session is doing. While you play it reads the room, such as `Thickening Woods`, or who you fight while a fight lasts, such as `Fighting a Blackwatch guard`, with your health at the right, such as `91%`. Health turns red once it runs low. The game hides your vitals in some places, and then the line shows no health. Otherwise the line says what happened.
 
 - `Waiting for your login` while the game waits for you to log in.
-- `Connecting…` while Vosh dials, and `Reconnecting, try 2 of 5` while it dials again after a drop.
+- `Connecting…` while Vosh dials, and `Reconnecting, try 2 of 8` while it dials again after a drop.
 - `Couldn’t connect` when the first dial fails.
 - `Dropped 4 min ago` when the link dropped and Vosh does not dial again.
 - The world it dials, such as `The Forsaken Lands`, while the session is not connected.
