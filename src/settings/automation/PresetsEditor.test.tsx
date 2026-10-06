@@ -10,7 +10,8 @@ import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 // macro list store loads, follows each list the backend sends and asks
 // again on a profile switch, as it does in the app. Then the Alerts
 // category of board 2 of the Alerts review, in the whole editor over a
-// fake profile.
+// fake profile, and the ask before the first banner of board 3 with the
+// warn ring and the note.
 
 type Handler = (event: { payload: unknown }) => void;
 const bus = vi.hoisted(() => ({
@@ -19,6 +20,10 @@ const bus = vi.hoisted(() => ({
   /** What ui_get_config and alert_presets_get answer. */
   enabled: [] as string[],
   alerts: {} as unknown,
+  /** What alerts_permission answers, and alerts_ask_permission after
+   *  you choose. */
+  permission: 'granted' as string,
+  answer: 'granted' as string,
   /** Every command the editor sent, with its arguments, but the reads. */
   calls: [] as [string, unknown][],
 }));
@@ -37,6 +42,11 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (cmd === 'macros_list') return bus.macros;
     if (cmd === 'ui_get_config') return { enabled_presets: bus.enabled };
     if (cmd === 'alert_presets_get') return bus.alerts;
+    if (cmd === 'alerts_permission') return bus.permission;
+    if (cmd === 'alerts_ask_permission' || cmd === 'alerts_open_settings') {
+      bus.calls.push([cmd, args]);
+      return cmd === 'alerts_ask_permission' ? bus.answer : null;
+    }
     if (['alert_presets_set', 'ui_set_fields', 'presets_install', 'presets_remove'].includes(cmd)) {
       bus.calls.push([cmd, args]);
       // Keep what a set writes, so a load after Save reads it back.
@@ -51,6 +61,31 @@ vi.mock('@tauri-apps/api/core', () => ({
     throw new Error(`no fake for ${cmd}`);
   },
 }));
+
+// The ask as its props draw it. Its focus trap needs a real DOM, and
+// ConfirmDialog.test.tsx checks its markup.
+vi.mock('../../ui/ConfirmDialog', async () => {
+  const { createElement: h } = await import('react');
+  return {
+    ConfirmDialog: (p: {
+      title: string;
+      body: string;
+      confirmLabel: string;
+      cancelLabel?: string;
+      tone?: string;
+      onConfirm: () => void;
+      onCancel: () => void;
+    }) =>
+      h(
+        'div',
+        { className: 'ov-confirm', 'data-tone': p.tone },
+        h('h2', null, p.title),
+        h('p', null, p.body),
+        h('button', { type: 'button', onClick: p.onCancel }, p.cancelLabel ?? 'Cancel'),
+        h('button', { type: 'button', onClick: p.onConfirm }, p.confirmLabel),
+      ),
+  };
+});
 
 const doc = new FakeDocument();
 let createRoot: typeof import('react-dom/client').createRoot;
@@ -259,7 +294,13 @@ function reactProps(el: FakeElement): Record<string, (e?: unknown) => void> {
 
 /** The whole Presets editor over a profile with `enabled` stored and
  *  the alert presets `on` with `alerts` for parts. */
-async function mountEditor(enabled: string[], on: string[], alerts: Record<string, unknown>) {
+async function mountEditor(
+  enabled: string[],
+  on: string[],
+  alerts: Record<string, unknown>,
+  permission = 'granted',
+) {
+  bus.permission = permission;
   bus.enabled = enabled;
   bus.alerts = { ids: ALERT_IDS, on, alerts };
   bus.calls = [];
@@ -326,6 +367,42 @@ async function mountEditor(enabled: string[], on: string[], alerts: Record<strin
       ).map((b) => `${b.getAttribute('aria-pressed') === 'true' ? '+' : ''}${b.textContent}`),
     status: () =>
       findAll(container, (el) => el.getAttribute('class') === 'st-savebar-status')[0]?.textContent,
+    /** The ask's tone, then its title, body and buttons, or undefined. */
+    ask: () => {
+      const card = findAll(container, (el) => hasClass(el, 'ov-confirm'))[0];
+      return (
+        card && [
+          card.getAttribute('data-tone'),
+          ...findAll(card, (el) => ['H2', 'P', 'BUTTON'].includes(el.nodeName)).map(
+            (el) => el.textContent,
+          ),
+        ]
+      );
+    },
+    /** The Banner part, with its warn ring and its title. */
+    banner: () => {
+      const b = findAll(card(), (el) => el.nodeName === 'BUTTON' && el.textContent === 'Banner')[0];
+      return { warn: hasClass(b, 'is-warn'), title: b.getAttribute('title') };
+    },
+    /** The warn note the card opens with, or undefined. */
+    note: () =>
+      findAll(card(), (el) => el.getAttribute('class') === 'st-card-note is-warn')[0]?.textContent,
+    /** Flip the preset's switch, as a click does. */
+    toggle: () =>
+      act(async () => {
+        const input = findAll(card(), (el) => el.getAttribute('role') === 'switch')[0];
+        reactProps(input).onChange({
+          target: { checked: !(input as unknown as { checked: boolean }).checked },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
+    /** Whether the preset's switch reads on. */
+    on: () =>
+      (
+        findAll(card(), (el) => el.getAttribute('role') === 'switch')[0] as unknown as {
+          checked: boolean;
+        }
+      ).checked,
   };
 }
 
@@ -423,5 +500,100 @@ describe('the Alerts category', () => {
       ([cmd]) => cmd === 'presets_install' || cmd === 'presets_remove',
     );
     expect(JSON.stringify(installs)).not.toContain('alert_');
+  });
+});
+
+const ASK = [
+  'primary',
+  'Let Vosh post banners?',
+  'Vosh posts banners only for the alerts you turn on. macOS asks you next.',
+  'Not now',
+  'Continue',
+];
+const OFF_NOTE =
+  'Banners from Vosh are off in System Settings, so Banner shows nothing. Sound and Bounce still work.';
+
+// Not now holds for the window, so its test runs last.
+describe('asking before the first banner', () => {
+  it('asks when you press Banner on, and Continue asks macOS and keeps its answer', async () => {
+    const editor = await mountEditor([], [], {}, 'not_asked');
+    await editor.pick('Low health');
+    await editor.click('Banner');
+    expect(editor.ask()).toBeUndefined();
+    expect(editor.parts()).toEqual(['Banner', 'Sound', 'Bounce']);
+
+    await editor.click('Banner');
+    expect(editor.ask()).toEqual(ASK);
+    bus.answer = 'granted';
+    await editor.click('Continue');
+    expect(bus.calls.map(([cmd]) => cmd)).toEqual(['alerts_ask_permission']);
+    expect(editor.ask()).toBeUndefined();
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+    expect(editor.banner()).toEqual({ warn: false, title: null });
+    expect(editor.note()).toBeUndefined();
+  });
+
+  it('asks when you turn on Your name with Banner on, and rings Banner once macOS says no', async () => {
+    const editor = await mountEditor([], [], {}, 'not_asked');
+    await editor.pick('Your name');
+    await editor.toggle();
+    expect(editor.ask()).toEqual(ASK);
+    bus.answer = 'denied';
+    await editor.click('Continue');
+    expect(editor.on()).toBe(true);
+    expect(editor.banner()).toEqual({
+      warn: true,
+      title: 'Banners from Vosh are off in System Settings, so Banner shows nothing.',
+    });
+    expect(editor.note()).toBe(OFF_NOTE + 'Open notification settings');
+  });
+
+  it('rings Banner on every card while macOS turns banners off, and the button opens its settings', async () => {
+    const editor = await mountEditor([], [], {}, 'denied');
+    await editor.pick('Tells you get');
+    expect(editor.banner().warn).toBe(true);
+    expect(editor.note()).toBe(OFF_NOTE + 'Open notification settings');
+    await editor.click('Open notification settings');
+    expect(bus.calls).toEqual([['alerts_open_settings', undefined]]);
+
+    await editor.click('Banner');
+    await editor.click('Banner');
+    await editor.toggle();
+    expect(editor.ask()).toBeUndefined();
+    await editor.pick('Connection');
+    expect(editor.banner().warn).toBe(true);
+  });
+
+  it('asks nothing and rings nothing while banners are allowed or cannot post', async () => {
+    for (const permission of ['granted', 'unavailable']) {
+      const editor = await mountEditor([], [], {}, permission);
+      await editor.pick('Your name');
+      await editor.click('Banner');
+      await editor.click('Banner');
+      await editor.toggle();
+      expect(editor.ask()).toBeUndefined();
+      expect(editor.on()).toBe(true);
+      expect(editor.banner()).toEqual({ warn: false, title: null });
+      expect(editor.note()).toBeUndefined();
+    }
+    expect(bus.calls).toEqual([]);
+  });
+
+  it('leaves Banner on after Not now and asks no more in this window', async () => {
+    const editor = await mountEditor([], [], {}, 'not_asked');
+    await editor.pick('Being attacked');
+    await editor.click('Banner');
+    await editor.click('Banner');
+    await editor.click('Not now');
+    expect(editor.ask()).toBeUndefined();
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+
+    await editor.click('Banner');
+    await editor.click('Banner');
+    await editor.pick('Your name');
+    await editor.toggle();
+    expect(editor.ask()).toBeUndefined();
+    expect(editor.on()).toBe(true);
+    expect(bus.calls).toEqual([]);
   });
 });

@@ -21,7 +21,7 @@ Use monospace only for MUD text. That means patterns, sent commands, macro keys,
 
 `Card` is the radius 12 block on the `--inputband` fill. It takes every div prop. `columns` sets its rows two by two with a 1 px line between the columns, like General's `Keep the same for every character`. Only rows below the first pair draw the hairline. Pass `card={false}` to the `Section` and put the `Card` in yourself.
 
-`CardNote` is a quiet 11/15 line of copy at the head of a card, above its rows, like the note over a plugin's Manifest. `tone="warn"` sets it in the warn color after the pane status dot, for what needs you about the card's item, like a plugin Vosh stopped or a trigger that hides your prompt.
+`CardNote` is a quiet 11/15 line of copy at the head of a card, above its rows, like the note over a plugin's Manifest. `tone="warn"` sets it in the warn color after the pane status dot, for what needs you about the card's item, like a plugin Vosh stopped or a trigger that hides your prompt. `action` puts a button at the end of a warn note, for the way to fix it, like `Open notification settings` on an alert preset.
 
 `Row` is one card row, 44 high at least, with padding 10 16.
 

@@ -1815,6 +1815,13 @@
   background: var(--warn);
 }
 
+/* The way to fix it, at the end of a warn note. */
+.st-card-note.is-warn > .st-button {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+}
+
 .st-auto-value {
   color: var(--secondary);
   font-size: 12px;

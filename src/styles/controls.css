@@ -134,6 +134,12 @@
   margin-left: -3px;
 }
 
+/* A segment that needs you, like Banner while the system turns Vosh's
+   banners off. The ring sits inside it, as on a warn automation row. */
+.st-seg-item.is-warn {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
 .st-select {
   position: relative;
   display: block;

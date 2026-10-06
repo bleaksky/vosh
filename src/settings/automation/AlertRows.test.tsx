@@ -7,13 +7,42 @@ import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 // alert, board 1 of the Alerts review: Sound with its play button,
 // Bounce, Banner shows and the switch. This mounts the card on one
 // trigger, opens Advanced, and drives the rows through the handlers
-// React keeps on each element, since this DOM sends no events.
+// React keeps on each element, since this DOM sends no events. Then the
+// Alert row on that card asks before the first banner (board 3) and
+// wears the warn ring while the system turns banners off.
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
   emit: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+/** What alerts_permission and alerts_ask_permission answer, and every
+ *  command the card sent. */
+const system = vi.hoisted(() => ({
+  permission: 'granted',
+  answer: 'granted',
+  sent: [] as string[],
+}));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn((cmd: string) => {
+    system.sent.push(cmd);
+    if (cmd === 'alerts_permission') return Promise.resolve(system.permission);
+    if (cmd === 'alerts_ask_permission') return Promise.resolve(system.answer);
+    return Promise.resolve();
+  }),
+}));
+// The ask as its props draw it. Its focus trap needs a real DOM.
+vi.mock('../../ui/ConfirmDialog', async () => {
+  const { createElement: h } = await import('react');
+  return {
+    ConfirmDialog: (p: { title: string; confirmLabel: string; onConfirm: () => void }) =>
+      h(
+        'div',
+        { className: 'ov-confirm' },
+        h('h2', null, p.title),
+        h('button', { type: 'button', onClick: p.onConfirm }, p.confirmLabel),
+      ),
+  };
+});
 // CodeMirror needs a real DOM, and Advanced holds the Lua script row.
 vi.mock('../../ui/CodeEditor', () => ({ CodeEditor: () => null }));
 vi.mock('../../stores/session/promptGagStore', () => ({
@@ -61,6 +90,8 @@ const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const clean of cleanups.splice(0)) await clean();
   played.splice(0);
+  system.permission = 'granted';
+  system.sent.splice(0);
   delete doc.documentElement.dataset.platform;
 });
 
@@ -92,7 +123,10 @@ async function mount(start: TriggerRecord) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
-  await act(async () => root.render(<Card />));
+  await act(async () => {
+    root.render(<Card />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   cleanups.push(async () => {
     await act(async () => root.unmount());
     doc.body.removeChild(container);
@@ -155,6 +189,30 @@ async function mount(start: TriggerRecord) {
       ),
     turn: (on: boolean) => fire(toggle(), 'onChange', { target: { checked: on } }),
     play: () => fire(play(), 'onClick', {}),
+    /** Press a part of the Alert row, and let the system's answer land. */
+    alert: (part: string) =>
+      act(async () => {
+        props(segments('Alert').find((b) => b.textContent === part) as FakeElement).onClick({});
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
+    /** The Banner part, with its warn ring and its title. */
+    banner: () => {
+      const b = segments('Alert').find((el) => el.textContent === 'Banner') as FakeElement;
+      return {
+        warn: b.getAttribute('class') === 'st-seg-item is-warn',
+        title: b.getAttribute('title'),
+      };
+    },
+    /** The ask's title, or undefined while it is closed. */
+    ask: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'ov-confirm')[0]?.childNodes[0]
+        ?.textContent,
+    confirm: () =>
+      act(async () => {
+        const card = findAll(container, (el) => el.getAttribute('class') === 'ov-confirm')[0];
+        props(findAll(card, (el) => el.nodeName === 'BUTTON')[0]).onClick({});
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
   };
 }
 
@@ -253,5 +311,46 @@ describe('the alert rows under Advanced', () => {
     });
     expect(card.disabled()).toEqual(Array(7).fill(true));
     expect(card.tone()).toBe('bell');
+  });
+});
+
+describe('the Alert row of a trigger', () => {
+  it('asks before the first banner, and Continue asks the system and keeps its answer', async () => {
+    system.permission = 'not_asked';
+    system.answer = 'denied';
+    const card = await mount(VISITOR);
+    await card.alert('Banner');
+    expect(card.ask()).toBe('Let Vosh post banners?');
+    expect(card.value().alert).toBeUndefined();
+
+    await card.confirm();
+    expect(card.ask()).toBeUndefined();
+    expect(system.sent).toContain('alerts_ask_permission');
+    expect(card.value().alert?.banner).toBe(true);
+    expect(card.banner()).toEqual({
+      warn: true,
+      title: 'Banners from Vosh are off in System Settings, so Banner shows nothing.',
+    });
+  });
+
+  it('rings Banner while the system turns banners off, and names Windows Settings there', async () => {
+    system.permission = 'denied';
+    doc.documentElement.dataset.platform = 'windows';
+    const card = await mount(VISITOR);
+    expect(card.banner()).toEqual({
+      warn: true,
+      title: 'Banners from Vosh are off in Windows Settings, so Banner shows nothing.',
+    });
+    await card.alert('Banner');
+    expect(card.ask()).toBeUndefined();
+    expect(card.value().alert?.banner).toBe(true);
+  });
+
+  it('asks nothing and rings nothing while banners are allowed', async () => {
+    const card = await mount(VISITOR);
+    await card.alert('Banner');
+    expect(card.ask()).toBeUndefined();
+    expect(card.banner()).toEqual({ warn: false, title: null });
+    expect(system.sent).not.toContain('alerts_ask_permission');
   });
 });

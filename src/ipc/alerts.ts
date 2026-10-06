@@ -63,3 +63,23 @@ export async function alertPresetsGet(): Promise<AlertPresets> {
 export async function alertPresetsSet(id: string, alert: AlertParts | null): Promise<void> {
   await invoke('alert_presets_set', { id, alert });
 }
+
+/** Whether the system lets Vosh post banners, as Rust serializes
+ *  Permission in src-tauri/src/alert/banner.rs. `unavailable` is a build
+ *  that cannot post them, such as a dev build on macOS. */
+export type Permission = 'granted' | 'denied' | 'not_asked' | 'unavailable';
+
+export async function alertsPermission(): Promise<Permission> {
+  return invoke<Permission>('alerts_permission');
+}
+
+/** Ask the system to let Vosh post banners. macOS shows its own question
+ *  the first time, and this answers once you choose. */
+export async function alertsAskPermission(): Promise<Permission> {
+  return invoke<Permission>('alerts_ask_permission');
+}
+
+/** Open the system's notification settings, at Vosh where it can. */
+export async function alertsOpenSettings(): Promise<void> {
+  await invoke('alerts_open_settings');
+}
