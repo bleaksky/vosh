@@ -64,7 +64,7 @@ export const TERMINAL_CURSOR = 'vosh://terminal-cursor';
 // The events the windows send each other.
 
 // A Settings save sends every window each value that changed, in the
-// order broadcastUiConfigChanges in uiConfigSave.ts sends them. The two
+// order broadcastUiConfigChanges in uiConfigBroadcast.ts sends them. The two
 // theme events also go out on their own, as on a palette pick.
 
 /** Carries the four theme fields after a save or a palette pick, so a
