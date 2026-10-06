@@ -21,10 +21,16 @@ export const KNOWN_WORLDS: readonly KnownWorld[] = [
   },
 ];
 
+/** A host as Vosh compares it, trimmed, in lower case and without a
+ *  closing dot. */
+export function hostKey(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
 /** The known world a host plays, matching its domain or any subdomain,
  *  or undefined for any other host. */
 export function knownWorld(host: string): KnownWorld | undefined {
-  const clean = host.trim().toLowerCase().replace(/\.$/, '');
+  const clean = hostKey(host);
   return KNOWN_WORLDS.find((w) => clean === w.domain || clean.endsWith(`.${w.domain}`));
 }
 
@@ -32,4 +38,14 @@ export function knownWorld(host: string): KnownWorld | undefined {
  *  `play.theforsakenlands.com`. Unknown hosts show as typed. */
 export function worldName(host: string): string {
   return knownWorld(host)?.name ?? host.trim();
+}
+
+/** The world a host and port play, like `The Forsaken Lands` on its own
+ *  port 1848 and `The Forsaken Lands 1825` on the build port. A known
+ *  world adds a port that is not its own, so two ports of one game read
+ *  apart. Any other host has no port of its own and shows as typed. */
+export function worldLabel(host: string, port: number): string {
+  const world = knownWorld(host);
+  if (!world) return host.trim();
+  return port === world.port ? world.name : `${world.name} ${port}`;
 }
