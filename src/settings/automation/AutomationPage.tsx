@@ -11,7 +11,7 @@ import { PresetsEditor } from './PresetsEditor';
 import { TimersEditor } from './TimersEditor';
 import { TriggersEditor } from './TriggersEditor';
 import { isAutomationKind, isListKind, type AutomationKind, type DirtyReport } from './types';
-import { useCloseGuard } from './useCloseGuard';
+import { useCloseGuard } from '../useCloseGuard';
 
 // Settings, Automation (the approved SettingsAutomation board). One
 // list and detail editor for every kind behind the kind switcher, with
