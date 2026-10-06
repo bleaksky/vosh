@@ -39,7 +39,7 @@ use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
-use crate::profile::export::VoshExport;
+use crate::profile::export::{self, VoshExport};
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
@@ -814,7 +814,7 @@ fn a_profile_file_writes_these_bytes() {
 /// Export to Downloads writes the full profile's bytes, then the
 /// `[vosh_export]` table with its world and the one character of its two
 /// you ticked (Scripts Q10). A profile reads the export as the profile
-/// alone.
+/// alone, and the table reads back.
 #[test]
 fn an_export_writes_these_bytes() {
     let profile = profile_bytes(&full_profile());
@@ -824,6 +824,7 @@ fn an_export_writes_these_bytes() {
     check("export.full.toml", &text);
     let back = ProfileConfig::from_toml(&text).unwrap();
     assert_eq!(back.to_toml().unwrap(), profile);
+    assert_eq!(export::read(&text).unwrap(), Some(table));
 }
 
 #[test]

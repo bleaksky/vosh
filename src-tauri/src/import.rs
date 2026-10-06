@@ -12,12 +12,16 @@
 //!   - **GMUD** plain-text config (`gmud.cfg`-style line directives)
 //!   - **CMUD** exports (XML rooted at `<cmud>`)
 //!   - **`TinTin`++** scripts (`.tin`), which `#import-tintin` reads
+//!
+//! `vosh.rs` reads a Vosh profile export for the import under Characters,
+//! which takes a whole profile rather than this report.
 
 mod cmud;
 mod gmud;
 mod mudlet;
 mod mushclient;
 pub(crate) mod tintin;
+pub(crate) mod vosh;
 
 use quick_xml::events::BytesStart;
 use quick_xml::name::QName;
