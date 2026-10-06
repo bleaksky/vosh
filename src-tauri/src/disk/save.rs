@@ -13,19 +13,23 @@
 //! 2. [`PERSIST_LOCK`]. Nothing else waits for it while holding another
 //!    lock, so `#profile save`, which runs under the profile lock, only
 //!    tries it.
-//! 3. The session map in [`AppState`]. Its holders take no other lock
+//! 3. The turn [`broadcast_sessions`] holds while it reads the session
+//!    rows and sends them. Under it the rows take the session map and
+//!    then each session's connection, one at a time.
+//! 4. The session map in [`AppState`]. Its holders take no other lock
 //!    of this list.
-//! 4. The loadouts in [`AppState`].
-//! 5. The profiles the sessions play, the one that opened first first.
-//! 6. The profile set. The save in loadout mode reads the sharing scope
+//! 5. The loadouts in [`AppState`].
+//! 6. The profiles the sessions play, the one that opened first first.
+//! 7. The profile set. The save in loadout mode reads the sharing scope
 //!    from it while it holds the profile, so a step that holds the set
 //!    never waits for the profile.
-//! 7. A session's connection, one at a time.
+//! 8. A session's connection, one at a time.
 //!
 //! The catalog and the plugin manager are only ever held alone, and the
 //! log comes before the log reader. docs/architecture.md says why.
 //!
 //! [`AppState`]: crate::app::state::AppState
+//! [`broadcast_sessions`]: crate::sessions::broadcast_sessions
 
 use std::sync::Arc;
 
