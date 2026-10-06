@@ -316,7 +316,9 @@ A macro fires only while the command line has focus. On macOS the `Cmd` shortcut
 
 Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
 
-The `Numpad movement` preset lets you walk with the numpad. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. The keys work with NumLock on or off. Turn the preset on in Settings under Automation, then Presets, where it sits under Movement. A key one of your macros already uses stays yours. The preset's card marks that key and says which direction has none until you move your macro. In Macros the six sit under `From presets`, where only their group changes, and a ring marks your macro on a key the preset wants. Turning the preset off removes the macros it added and leaves yours.
+To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
+
+A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. Turning the preset off removes its six and none of yours.
 
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
@@ -822,7 +824,7 @@ In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the gr
 
 Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and snaps to the live tail. Right click opens the terminal menu.
 
-Bind your own keys as macros in Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`.
+Bind your own keys as macros in Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`. While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2` and `Numpad4` walk north, east, south and west, and `Numpad9` and `Numpad3` go up and down.
 
 ### 9.3 Prompt design codes
 

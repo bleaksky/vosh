@@ -1263,12 +1263,25 @@ describe('the help on Numpad movement', () => {
       '`Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`.',
     );
     expect(text).toContain('`Numpad7`, `Numpad1` and `Numpad5` stay free.');
-    expect(text).toContain('A key one of your macros already uses stays yours.');
+    // The keys go by event.code (src/automation/macroKeys.ts).
+    expect(text).toContain(
+      'Vosh reads the key itself, so NumLock does not matter and the digit row still types.',
+    );
     // The Macros list of board 7 (B2 chunk 5).
     expect(text).toContain(
-      'In Macros the six sit under `From presets`, where only their group changes, and a ring marks your macro on a key the preset wants.',
+      'It adds six macros under `From presets` in Macros, where only their group changes.',
     );
-    expect(text).toContain('Turning the preset off removes the macros it added and leaves yours.');
+    expect(text).toContain(
+      "A key one of your macros uses stays yours, and the preset's macro on it waits.",
+    );
+    expect(text).toContain('The direction takes the key once you move or delete your macro.');
+    expect(text).toContain('Turning the preset off removes its six and none of yours.');
+  });
+
+  it('names the six keys among the shortcuts', () => {
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      'While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2` and `Numpad4` walk north, east, south and west, and `Numpad9` and `Numpad3` go up and down.',
+    );
   });
 
   it('matches HELP.md word for word', () => {
