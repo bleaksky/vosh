@@ -102,13 +102,17 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   return out;
 }
 
-/** Hear each write to a session's terminal, decoded, with that
- *  session. */
+/** Hear each write to a session's terminal that `wants` takes, decoded,
+ *  with that session. `wants` reads the session and the payload as it
+ *  came, so a write no listener needs, such as one to a terminal of
+ *  another session, decodes nothing. */
 export async function onOutput(
+  wants: (session: number, payload: OutputPayload) => boolean,
   cb: (out: SessionOutput, session: number) => void,
 ): Promise<UnlistenFn> {
   return listen<OutputPayload>(OUTPUT, (event) => {
-    cb(decodeOutputPayload(event.payload), sessionOf(event.payload));
+    const session = sessionOf(event.payload);
+    if (wants(session, event.payload)) cb(decodeOutputPayload(event.payload), session);
   });
 }
 

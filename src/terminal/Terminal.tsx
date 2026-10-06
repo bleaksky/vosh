@@ -554,51 +554,54 @@ export function Terminal({
         });
       }
     });
-    onOutput((out, from) => {
-      // Each pane writes its own session's output only.
-      if (from !== session) return;
-      if (out.id !== undefined && out.id > outputTaken) outputTaken = out.id;
-      // A copy the native grid hides writes nothing. It only decodes
-      // the text for the recent names cache below.
-      if (!mirror.mirrors()) {
+    // Each pane writes its own session's output only, and a write to
+    // another session's terminal decodes nothing here.
+    onOutput(
+      (from) => from === session,
+      (out) => {
+        if (out.id !== undefined && out.id > outputTaken) outputTaken = out.id;
+        // A copy the native grid hides writes nothing. It only decodes
+        // the text for the recent names cache below.
+        if (!mirror.mirrors()) {
+          if (!quietRef.current) {
+            const { text, replace } = shaper.text(out);
+            ingestRecentNames(text, session);
+            if (replace !== null) ingestRecentNames(replace, session);
+          }
+          return;
+        }
+        const { output, text } = shaper.shape(out);
+        if (output) {
+          mirror.write(() => writer.output(output));
+          // Live pane is a strict tail of server output. Without this
+          // snap, dragging the split-scrollback divider can leave the
+          // live pane's viewport above its baseY — xterm preserves
+          // absolute viewportY across the resize, but baseY shifts as
+          // rows are added/removed, so the viewport ends up "stuck"
+          // showing the line you were on when the drag started. xterm's
+          // default auto-scroll-on-write only kicks in if viewport ==
+          // baseY pre-write, so subsequent server lines pile up below
+          // the visible region instead of advancing the tail. Forcing a
+          // snap on every write makes the live pane behave like a true
+          // live tail. The history pane (quiet=true) opts out so users
+          // can read past output in the split. A pane on its tail asks
+          // nothing, since a resize may have left xterm's scrollbar a
+          // frame behind (src/terminal/terminalRows.ts).
+          if (!quietRef.current) {
+            mirror.write(() => keepTail(term));
+          }
+        }
+        // Feed the decoded text into the recent-names cache so Tab
+        // completion can complete people the user has seen in
+        // who-lists, comm-channel chatter, considers, etc. — not just
+        // names they have typed before or chars currently in the room.
+        // Cost is one regex pass per output chunk; sub-millisecond.
         if (!quietRef.current) {
-          const { text, replace } = shaper.text(out);
           ingestRecentNames(text, session);
-          if (replace !== null) ingestRecentNames(replace, session);
+          if (output?.replace) ingestRecentNames(output.replace.text, session);
         }
-        return;
-      }
-      const { output, text } = shaper.shape(out);
-      if (output) {
-        mirror.write(() => writer.output(output));
-        // Live pane is a strict tail of server output. Without this
-        // snap, dragging the split-scrollback divider can leave the
-        // live pane's viewport above its baseY — xterm preserves
-        // absolute viewportY across the resize, but baseY shifts as
-        // rows are added/removed, so the viewport ends up "stuck"
-        // showing the line you were on when the drag started. xterm's
-        // default auto-scroll-on-write only kicks in if viewport ==
-        // baseY pre-write, so subsequent server lines pile up below
-        // the visible region instead of advancing the tail. Forcing a
-        // snap on every write makes the live pane behave like a true
-        // live tail. The history pane (quiet=true) opts out so users
-        // can read past output in the split. A pane on its tail asks
-        // nothing, since a resize may have left xterm's scrollbar a
-        // frame behind (src/terminal/terminalRows.ts).
-        if (!quietRef.current) {
-          mirror.write(() => keepTail(term));
-        }
-      }
-      // Feed the decoded text into the recent-names cache so Tab
-      // completion can complete people the user has seen in
-      // who-lists, comm-channel chatter, considers, etc. — not just
-      // names they have typed before or chars currently in the room.
-      // Cost is one regex pass per output chunk; sub-millisecond.
-      if (!quietRef.current) {
-        ingestRecentNames(text, session);
-        if (output?.replace) ingestRecentNames(output.replace.text, session);
-      }
-    }).then((unlisten) => {
+      },
+    ).then((unlisten) => {
       unsubOutput = unlisten;
     });
 

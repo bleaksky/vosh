@@ -37,8 +37,12 @@ const decoder = new TextDecoder('utf-8', { fatal: false });
 const store = createGmcpStore<PinnedBand | null>({
   state: null,
   events: [
+    // Only a write that changes the band decodes, in any session.
     (apply) =>
-      onOutput((out, session) => apply(session, (band) => bandAfterOutput(band, out, decoder))),
+      onOutput(
+        (_, payload) => typeof payload.pin === 'string',
+        (out, session) => apply(session, (band) => bandAfterOutput(band, out, decoder)),
+      ),
   ],
 });
 
