@@ -148,7 +148,7 @@ command ui_set_theme(theme, lightTheme?, darkTheme?)
 command updater_check()
 command updater_install_and_relaunch()
 command window_backdrop_set(background?, appearance?)
-event session://alert app unheard
+event session://alert app heard
 event session://alerts-ended app unheard
 event session://game-prompt-seen app heard
 event session://gmcp/* app heard
