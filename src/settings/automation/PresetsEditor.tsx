@@ -70,7 +70,10 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
       // in loadout mode every profile shares one, next to the preset
       // triggers in the shared catalog.
       load: async (profile) => {
-        const [config, alerts] = await Promise.all([getUiConfig(profile), alertPresetsGet()]);
+        const [config, alerts] = await Promise.all([
+          getUiConfig(profile),
+          alertPresetsGet(profile),
+        ]);
         return [
           ...presetToggles(config.enabled_presets),
           ...alerts.ids.map((id) => ({
@@ -87,7 +90,11 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
           if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
             continue;
           }
-          await alertPresetsSet(after.id, isPresetDefault(after.alert) ? null : after.alert);
+          await alertPresetsSet(
+            after.id,
+            isPresetDefault(after.alert) ? null : after.alert,
+            profile,
+          );
         }
         const plan = presetSavePlan(draft);
         for (const id of plan.remove) await presetsRemove(id, profile);

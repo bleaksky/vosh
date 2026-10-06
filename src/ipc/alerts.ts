@@ -67,15 +67,19 @@ export interface AlertPresets {
   on: string[];
 }
 
-export async function alertPresetsGet(): Promise<AlertPresets> {
-  return invoke<AlertPresets>('alert_presets_get');
+export async function alertPresetsGet(profile?: string | null): Promise<AlertPresets> {
+  return invoke<AlertPresets>('alert_presets_get', { profile });
 }
 
 /** Set what the preset `id` does, or with null, forget its parts so it
  *  posts a banner alone. Rust saves the profile at once. Whether it
  *  rings stays with enabled_presets. */
-export async function alertPresetsSet(id: string, alert: AlertParts | null): Promise<void> {
-  await invoke('alert_presets_set', { id, alert });
+export async function alertPresetsSet(
+  id: string,
+  alert: AlertParts | null,
+  profile?: string | null,
+): Promise<void> {
+  await invoke('alert_presets_set', { id, alert, profile });
 }
 
 /** Whether the system lets Vosh post banners, as Rust serializes
