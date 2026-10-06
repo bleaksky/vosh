@@ -135,6 +135,20 @@ pub(crate) struct LuaOutputPayload {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_page_keeps_the_ring_size_and_reads_the_owner_tag() {
+        // The Scripts page keeps as many lines as a session's ring.
+        let page = include_str!("../../../src/settings/scripts/ScriptsPage.tsx");
+        assert!(page.contains(&format!("const CONSOLE_LINES = {OUTPUT_LINES};")));
+        // It finds a plugin's lines by the tag Owner::tag gives them.
+        let ipc = include_str!("../../../src/ipc/scripts.ts");
+        assert!(ipc.contains("return `plugin:${name}`;"));
+        assert_eq!(
+            Owner::Plugin("vitals_alert".into()).tag(),
+            "plugin:vitals_alert"
+        );
+    }
+
     fn print(owner: &str, text: &str) -> LuaLine {
         LuaLine {
             ts_ms: 0,

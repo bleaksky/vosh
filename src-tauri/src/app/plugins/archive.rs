@@ -374,6 +374,30 @@ fn write_zip(out: File, dir: &Path, name: &str, files: &[String]) -> zip::result
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_page_holds_the_same_caps_and_refusal() {
+        // A dropped folder is checked as the page reads it, in
+        // src/settings/scripts/pluginPackage.ts, so a folder dropped by
+        // mistake is never read whole into the window.
+        const MB: u64 = 1024 * 1024;
+        let page = include_str!("../../../../src/settings/scripts/pluginPackage.ts");
+        assert!(page.contains(&format!(
+            "const MAX_BYTES = {} * 1024 * 1024;",
+            MAX_BYTES / MB
+        )));
+        assert!(page.contains(&format!("const MAX_FILES = {MAX_FILES};")));
+        let refusal = too_big("${fileName}");
+        assert!(
+            page.contains(&format!("new Error(`{refusal}`)")),
+            "{refusal}"
+        );
+        // The refusal names the caps it enforces.
+        assert!(refusal.contains(&format!(
+            "more than {} MB or {MAX_FILES} files",
+            MAX_BYTES / MB
+        )));
+    }
+
     use super::*;
 
     /// `weather_pane`'s manifest as board 4 of the Scripts design shows it.

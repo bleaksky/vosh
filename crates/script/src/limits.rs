@@ -378,3 +378,28 @@ pub(crate) fn install(lua: &Lua, limits: &Arc<Limits>, log: Function) -> mlua::R
     lua.set_memory_limit(STATE_MEMORY)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_stop_note_on_a_plugin_page_names_these_limits() {
+        // STOP_REASON in src/settings/scripts/pluginState.ts says why a
+        // plugin is stopped over its editor.
+        let page = include_str!("../../../src/settings/scripts/pluginState.ts");
+        for reason in [
+            format!("time: 'one call ran past {} ms',", TIME_BUDGET.as_millis()),
+            format!(
+                "call_memory: 'one call used more than {} MB',",
+                CALL_MEMORY / MB
+            ),
+            format!(
+                "state_memory: 'your scripts held more than {} MB',",
+                STATE_MEMORY / MB
+            ),
+        ] {
+            assert!(page.contains(&reason), "{reason}");
+        }
+    }
+}
