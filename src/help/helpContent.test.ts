@@ -860,6 +860,34 @@ describe('the help code block', () => {
   });
 });
 
+describe('the help on Lua panes', () => {
+  it('shows the weather pane script and every block mud.pane takes', () => {
+    const blocks = parseHelpBody(body('automate.lua-panes'));
+    expect(blocks.map((b) => b.kind)).toEqual(['paragraph', 'code', 'table']);
+    const code = blocks[1];
+    expect(code.kind === 'code' && code.text).toMatch(
+      /^-- weather_pane\/main\.lua\nlocal pane = mud\.pane\("weather", "Weather"\)/,
+    );
+    const table = blocks[2];
+    const calls = table.kind === 'table' ? table.rows.map((r) => r[0]) : [];
+    expect(calls).toEqual([
+      '`mud.pane(id, title)`',
+      '`pane:set(blocks)`',
+      '`{ row = { label, value } }`',
+      '`{ gauge = { label, value, max } }`',
+      '`{ line = text }`',
+      '`{ rule = true }`',
+      '`pane:meta(text)`',
+    ]);
+  });
+
+  it('points from Script Vosh with Lua to the new topic', () => {
+    expect(body('automate.lua-scripts')).toContain(
+      'A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.',
+    );
+  });
+});
+
 describe('the help on folding groups in Automation', () => {
   it('says how a heading folds its group and what the list remembers', () => {
     const text = body('automate.first-alias');

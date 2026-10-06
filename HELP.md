@@ -445,7 +445,7 @@ Lua scripts run inside Vosh and register automation through the global `mud` tab
 - After editing a file, type `#script reload`. Vosh reads every loaded script and plugin from disk again and runs them in the order they first loaded, and an error in one stops none after it.
 - Run one liners with `#lua <code>`.
 
-Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`.
+Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`. A plugin can draw a pane of its own with `mud.pane`, as Make a pane with Lua at 3.10 shows.
 
 `mud.alert(title, options)` posts a banner with the title while you are not looking at the session the Lua runs in. In `options`, `sound = 'chime'`, `'bell'`, `'knock'` or `'low'` plays that tone, `attention = 'once'` bounces the Dock once and `'until'` until you come back, or flashes the taskbar on Windows, `background = false` rings while you look too, and `words = true` with a `text` adds a line under the title. One title from one script rings at most once in 10 seconds, and on macOS turning a plugin off takes back the banners it posted. macOS shows a banner only once you allow Vosh to post them, and Vosh asks for that the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows. It also needs a signed Vosh, so a dev build you run from the source shows none there.
 
@@ -486,6 +486,39 @@ The first time you turn on a `Banner`, on a preset or on a trigger, Vosh asks be
 Each preset rings at most once in 10 seconds, so a burst rings once. Tells you get counts each sender on their own, so three tells from Tolliver ring once and a tell from Maren still rings. Connection counts the drop, the login and the stop apart, so each one rings.
 
 To ring on a line of your own choosing, press a part in the `Alert` row of a trigger, as Create a trigger at 3.2 shows.
+
+### 3.10 Make a pane with Lua
+
+A plugin can draw its own pane. You send Vosh rows, gauges and lines, and Vosh draws them in the pane's style. Every value shows as plain text.
+
+```lua
+-- weather_pane/main.lua
+local pane = mud.pane("weather", "Weather")
+local weather, state = {}, {}
+
+local function draw()
+  pane:meta(weather.region or "")
+  pane:set({
+    { row = { "Sky", weather.sky } },
+    { row = { "Temperature", weather.temp and (weather.temp .. " " .. weather.unit) } },
+    { row = { "Position", state.position } },
+    { row = { "Language", state.language } },
+  })
+end
+
+mud.on_gmcp("Room.Weather", function(data) weather = data; draw() end)
+mud.on_gmcp("Char.State", function(data) state = data; draw() end)
+```
+
+| Call                                | What it does                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `mud.pane(id, title)`               | A pane this plugin owns, listed in Add a pane by its title. The id keeps your layout when the title changes. |
+| `pane:set(blocks)`                  | Replaces what the pane shows.                                                                                |
+| `{ row = { label, value } }`        | A row with a label and a value.                                                                              |
+| `{ gauge = { label, value, max } }` | A row with a meter, like the Group pane.                                                                     |
+| `{ line = text }`                   | Terminal font text. `{red}` and `{reset}` color it.                                                          |
+| `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                      |
+| `pane:meta(text)`                   | The words beside the pane's name.                                                                            |
 
 ## Shape the window
 
