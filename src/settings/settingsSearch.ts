@@ -442,6 +442,19 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('automation', undefined, 'json'),
   },
 
+  // Scripts, from the approved boards. A section here names a plugin,
+  // so each row is an anchor on the list page.
+  {
+    label: 'Plugins',
+    keywords: 'lua script plugin install new',
+    target: at('scripts', undefined, 'plugins'),
+  },
+  {
+    label: 'Console',
+    keywords: 'lua print run output errors',
+    target: at('scripts', undefined, 'console'),
+  },
+
   // Characters, from the approved board. No section means the active
   // profile.
   {

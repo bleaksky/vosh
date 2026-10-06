@@ -46,9 +46,10 @@ import { InputPage } from './input/InputPage';
 import { AutomationPage } from './automation/AutomationPage';
 import { CharactersPage } from './characters/CharactersPage';
 import { AppearancePage } from './appearance/AppearancePage';
+import { ScriptsPage } from './scripts/ScriptsPage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
-// with search and the six group nav, and a content column with the
+// with search and the seven group nav, and a content column with the
 // breadcrumb in the 32 px band over the group's page. On macOS the
 // native traffic lights sit over the sidebar. Windows and Linux draw
 // minimize, maximize, and close at the right of the band.
@@ -73,6 +74,8 @@ const PAGES: Record<SettingsGroup, GroupPage> = {
   layout: { Page: LayoutPage },
   input: { Page: InputPage },
   automation: { Page: AutomationPage, selfScroll: true },
+  // A plugin's page pins its editor and Output to the window.
+  scripts: { Page: ScriptsPage, selfScroll: (target) => settingsSubpage(target) !== null },
   characters: { Page: CharactersPage },
 };
 

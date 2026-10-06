@@ -105,7 +105,7 @@ The page side mirrors the app.
 | Windows and the menu                   | `vosh://help-open`, `vosh://flush-pending-writes`, `vosh://session-selected`, `vosh://daylight-changed`, and on macOS `vosh://app-menu`, `vosh://settings-find` and `vosh://help-find`                                                                                                                                                                                                                            |
 | The native renderer                    | `vosh://native-grid-size`, `vosh://native-scroll`, `vosh://native-copied`, `vosh://terminal-clicked`, `vosh://terminal-cursor`                                                                                                                                                                                                                                                                                    |
 
-The page hears none of the five events the alerts Rust half added, so they sit on the unheard list of the contract test until the page half. Nor does it hear `session://lua-output` or `vosh://plugins-changed` yet, which wait there for the Scripts page. The other 25 names in names.txt are `vosh://` events the page sends itself, from one window to the others, such as `vosh://theme-changed`.
+The page hears none of the five events the alerts Rust half added, so they sit on the unheard list of the contract test until the page half. The other 25 names in names.txt are `vosh://` events the page sends itself, from one window to the others, such as `vosh://theme-changed`.
 
 ### Lock order
 

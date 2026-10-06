@@ -580,6 +580,10 @@
   color: var(--danger-text);
 }
 
+.st-meta[data-tone='warn'] {
+  color: var(--warn-text);
+}
+
 /* Two fields that share one row, like General's host and port. */
 .st-field-pair {
   display: flex;
@@ -1644,7 +1648,7 @@
 }
 
 /* A quiet button with no ring in the secondary color, like Edit all
-   as JSON…. */
+   as JSON… and Clear over the Scripts Console. */
 .st-button.st-auto-quiet {
   padding: 0 10px;
   box-shadow: none;
@@ -2103,5 +2107,127 @@
   position: absolute;
   border-radius: var(--r-key);
   box-shadow: 0 0 0 1px var(--warn);
+  pointer-events: none;
+}
+
+/* ── Scripts (Scripts and Panels, boards 2 and 4) ──────────────────── */
+
+/* A plugin row names the plugin in the MUD font, as its folder reads,
+   and keeps its description to one line. */
+.st-plugin-row .st-row-label {
+  font-family: var(--font-mud);
+}
+
+.st-plugin-row .st-row-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-plugin-empty {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The Console: the [lua] lines the terminal gets, in the MUD font, over
+   the field that runs Lua, all on the input band well. */
+.st-lua-out {
+  display: flex;
+  flex-direction: column;
+  padding-top: 10px;
+  border-radius: var(--r-card);
+  background: var(--inputband);
+}
+
+/* With no line yet, the note sits in a 150 px well over the field. */
+.st-lua-out.is-empty {
+  height: 150px;
+  padding-top: 0;
+}
+
+.st-lua-empty {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Thirteen lines show at once, so the Console fits the 600 px window
+   under three plugins. The rest scroll, and the newest shows. */
+.st-lua-lines {
+  max-height: calc(13 * 17px);
+  margin: 0;
+  padding: 0 16px;
+  overflow-y: auto;
+  list-style: none;
+  font-family: var(--font-mud);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.st-lua-line {
+  display: flex;
+  gap: 12px;
+}
+
+.st-lua-time {
+  flex: none;
+  width: 50px;
+  color: var(--tertiary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A line too long for the well wraps under its text, 6ch in, past the
+   `[lua] ` tag. */
+.st-lua-text {
+  min-width: 0;
+  padding-left: 6ch;
+  text-indent: -6ch;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.st-lua-tag {
+  color: var(--tertiary);
+}
+
+.st-lua-line.is-error .st-lua-text {
+  color: var(--danger-text);
+}
+
+.st-lua-line.is-error .st-lua-tag {
+  color: color-mix(in srgb, var(--danger-text) 70%, transparent);
+}
+
+.st-lua-line.is-note .st-lua-text,
+.st-lua-line.is-input .st-lua-text {
+  color: var(--secondary);
+}
+
+.st-lua-prompt {
+  position: relative;
+  margin: 8px;
+}
+
+.st-lua-prompt .st-field {
+  padding-left: 28px;
+}
+
+.st-lua-glyph {
+  position: absolute;
+  top: 5px;
+  left: 12px;
+  color: var(--tertiary);
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 18px;
   pointer-events: none;
 }

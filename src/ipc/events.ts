@@ -22,6 +22,8 @@ export const PROMPT_STATE = 'session://prompt-state';
 export const GAME_PROMPT_SEEN = 'session://game-prompt-seen';
 export const PROMPT_GAG_WITHOUT_READER = 'session://prompt-gag-without-reader';
 
+export const LUA_OUTPUT = 'session://lua-output';
+
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';
 export const PROMPT_CONFIG_CHANGED = 'vosh://prompt-config-changed';
@@ -29,6 +31,8 @@ export const MACRO_GROUPS_CHANGED = 'vosh://macro-groups-changed';
 export const GROUPS_CHANGED = 'vosh://groups-changed';
 export const MACROS_CHANGED = 'vosh://macros-changed';
 export const TIMERS_CHANGED = 'vosh://timers-changed';
+
+export const PLUGINS_CHANGED = 'vosh://plugins-changed';
 
 export const PROFILES_CHANGED = 'vosh://profiles-changed';
 export const PROFILE_SWITCHED = 'vosh://profile-switched';

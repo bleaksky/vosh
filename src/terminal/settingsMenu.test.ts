@@ -29,10 +29,10 @@ const PINNED = new Set<string>([
 ]);
 
 describe('the Settings list in the terminal menu', () => {
-  it('lists the four Automation lists, the six pages, then Help', () => {
+  it('lists the four Automation lists, the seven pages, then Help', () => {
     expect(SETTINGS_MENU.map((group) => group.map((row) => row.label))).toEqual([
       ['Triggers', 'Aliases', 'Macros', 'Timers'],
-      ['General', 'Appearance', 'Layout', 'Input', 'Automation', 'Characters'],
+      ['General', 'Appearance', 'Layout', 'Input', 'Automation', 'Scripts', 'Characters'],
       ['Help'],
     ]);
   });

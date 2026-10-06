@@ -14,7 +14,7 @@ describe('SETTINGS_ROWS', () => {
     }
   });
 
-  it('covers all six groups', () => {
+  it('covers all seven groups', () => {
     const groups = new Set(SETTINGS_ROWS.map((r) => r.target.group));
     expect([...groups]).toEqual([
       'general',
@@ -22,6 +22,7 @@ describe('SETTINGS_ROWS', () => {
       'layout',
       'input',
       'automation',
+      'scripts',
       'characters',
     ]);
   });
@@ -74,6 +75,17 @@ describe('searchSettingsRows', () => {
   it('ignores case and accents', () => {
     expect(labels('LINE HEIGHT')).toEqual(['Line height']);
     expect(labels('thème')[0]).toBe('Theme');
+  });
+
+  it('finds Plugins and Console on the Scripts list by lua', () => {
+    expect(labels('lua')).toEqual(['Plugins', 'Console']);
+    expect(labels('install plugin')).toEqual(['Plugins']);
+    expect(labels('print')).toEqual(['Console']);
+    expect(labels('scripts')).toEqual(['Plugins', 'Console']);
+    expect(searchSettingsRows('lua', mac).map(settingsRowKey)).toEqual([
+      'scripts#plugins',
+      'scripts#console',
+    ]);
   });
 
   it('shows loadouts only in loadout mode', () => {

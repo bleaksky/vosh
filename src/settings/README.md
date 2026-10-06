@@ -1,6 +1,6 @@
 # Settings
 
-`src/settings/SettingsWindow.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. Each page lives in a folder of its own, `general/`, `appearance/`, `layout/`, `input/`, `automation/`, and `characters/`. Every page is built from its board and from the primitives in `src/ui`, which `src/ui/README.md` lists with their props.
+`src/settings/SettingsWindow.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. Each page lives in a folder of its own, `general/`, `appearance/`, `layout/`, `input/`, `automation/`, `scripts/`, and `characters/`. Every page is built from its board and from the primitives in `src/ui`, which `src/ui/README.md` lists with their props.
 
 ## Pages
 
@@ -15,11 +15,13 @@ A page is the component its folder is named for, like `layout/LayoutPage.tsx`, a
 
 Register a page in `PAGES` in `SettingsWindow.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there. `selfScroll` can also be a function of the target, for a group where only some targets scroll on their own.
 
-A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it.
+A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it. Under Scripts every section is a page inside the group, a plugin's own page, titled with the plugin's name, so `scripts:vitals_alert` reads `Settings › Scripts › vitals_alert`.
 
 A page that saves as you go takes `update` from `useSettingsAutoSave`, beside the frame. `update(patch)` patches the config copy and saves the fields the patch names once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
 `characters/CharactersPage.tsx` is the Characters board and `appearance/AppearancePage.tsx` the Appearance board, each with its parts beside it. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `automation/AutomationPage.tsx` is the Automation board, described under Automation below.
+
+`scripts/ScriptsPage.tsx` is the list page of the Scripts boards, your plugins in `scripts/PluginList.tsx` and the Console in `scripts/LuaConsole.tsx`. It reads the plugins and the Lua lines as it opens and keeps them itself, following `vosh://plugins-changed`, `vosh://profile-switched` and `session://lua-output`.
 
 `general/GeneralPage.tsx` is the General board, with the session log view in `general/SessionLogs.tsx`. `input/InputPage.tsx` and `layout/LayoutPage.tsx` are the Input and Layout boards. Layout's Status line section holds `layout/TickTimeStyleRow.tsx`, the Tick and time row, and under it `layout/TickCountRow.tsx`, the Tick counts row.
 
@@ -27,7 +29,7 @@ A page that saves as you go takes `update` from `useSettingsAutoSave`, beside th
 
 A deep link is a string like `automation:macros` or `characters:Ilsabet#tracked`. `src/lib/settingsNav.ts` resolves it and maps every old tab id. `src/lib/settingsLink.ts` opens Settings on one from the main window.
 
-What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. Everywhere else it is a section `id` the frame scrolls to.
+What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. In Scripts it is a plugin name, and no section means the list. Profile and plugin names keep their case. Everywhere else it is a section `id` the frame scrolls to.
 
 Search finds rows. `settingsSearch.ts` lists every row with its label and target. When a page adds a row, add it there too, and give the element the same anchor, `anchor` on `Row` or `Disclosure` and `id` on `Section`. The frame scrolls to it and flashes a row (`revealAnchor.ts`). When the anchor sits inside a closed `Disclosure`, open it when `target.anchor` names it.
 

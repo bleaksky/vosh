@@ -92,11 +92,11 @@ describe('the terminal menu', () => {
 const ITEM_SELECTOR = ':scope > li > [role="menuitem"]:not([aria-disabled="true"])';
 
 // A 1280 by 800 window. The terminal menu is 232 by 274 and the
-// Settings list 160 by 368.
+// Settings list 160 by 398.
 const VW = 1280;
 const VH = 800;
 const MENU = { w: 232, h: 274 };
-const LIST = { w: 160, h: 368 };
+const LIST = { w: 160, h: 398 };
 
 interface Box {
   left: number;
@@ -486,6 +486,7 @@ describe('the Settings list in the terminal menu', () => {
       'Layout',
       'Input',
       'Automation',
+      'Scripts',
       'Characters',
       '---',
       // Help shows its shortcut, ⌘/ on macOS.
