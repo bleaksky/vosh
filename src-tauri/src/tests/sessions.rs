@@ -2033,3 +2033,199 @@ async fn selecting_orla_hands_every_window_builds_settings_then_its_name() {
 
     h.finish(grid).await;
 }
+
+/// The events that tell every window a list or the tick settings of the
+/// profile in front changed.
+const CHANGE_EVENTS: [&str; 8] = [
+    crate::app::events::TRIGGERS_CHANGED,
+    crate::app::events::ALIASES_CHANGED,
+    crate::app::events::PROMPT_CONFIG_CHANGED,
+    crate::app::events::MACRO_GROUPS_CHANGED,
+    crate::app::events::GROUPS_CHANGED,
+    crate::app::events::MACROS_CHANGED,
+    crate::app::events::TIMERS_CHANGED,
+    crate::app::events::TICK_CONFIG_CHANGED,
+];
+
+/// Change the lists of the profile `session` plays from that session:
+/// an alias typed, one a `#lua` line makes, a macro group turned off,
+/// one more alias that Lua makes as a trigger fires on a line of the
+/// game, and the macros Settings saves. Then change its tick interval.
+/// The profile holds a macro in the combat group.
+async fn change_the_lists(h: &Harness, session: SessionId) {
+    use crate::disk::save::{save_then_broadcast, SavePolicy};
+    let open = h
+        .state
+        .session(Some(session))
+        .expect("the session")
+        .profile();
+    open.lock().await.macros.push(crate::profile::live::Macro {
+        key: "F1".into(),
+        command: "kick".into(),
+        group: Some("combat".into()),
+        enabled: true,
+    });
+    h.type_in(session, "#alias kk kick").await;
+    h.type_in(session, "#lua mud.alias('hh', 'spam 3')").await;
+    h.type_in(session, "#group combat off").await;
+    h.type_in(
+        session,
+        "#lua mud.trigger('ss', 'Line 1 of 1 of the spam', function() mud.alias('ss', 'spam 2') end)",
+    )
+    .await;
+    h.type_in(session, "spam 1").await;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !aliases_of(h, session).await.contains(&"ss".to_string()) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the trigger's alias never came"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(aliases_of(h, session).await, ["hh", "kk", "ss"]);
+    assert!(open.lock().await.disabled_macro_groups.contains("combat"));
+    // Settings saves the macros of the profile it edits this way.
+    let macros = open.lock().await.macros.clone();
+    let events = crate::app::events::MACROS_CHANGED;
+    save_then_broadcast(
+        h.app.handle(),
+        &h.state,
+        &open,
+        SavePolicy::NowUnlessHeld,
+        events,
+        &macros,
+    )
+    .await;
+    h.type_in(session, "#tick interval 40").await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_list_orla_changes_on_build_behind_tells_no_window() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    log_in(&h, h.first, 0, "Tolliver").await;
+    let two = open_session_on(&h, "Build").await;
+    log_in(&h, two, 1, "Orla").await;
+    let heard = hear(&h, &CHANGE_EVENTS);
+    change_the_lists(&h, two).await;
+    let got = take(&heard);
+    assert!(got.is_empty(), "{got:?}");
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_list_maren_changes_behind_on_the_profile_in_front_tells_every_window() {
+    use crate::app::events::{
+        ALIASES_CHANGED, GROUPS_CHANGED, MACROS_CHANGED, MACRO_GROUPS_CHANGED, TICK_CONFIG_CHANGED,
+    };
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    log_in(&h, h.first, 0, "Tolliver").await;
+    // Maren, whom no profile claims, plays Default beside Tolliver.
+    h.servers[1].options.lock().expect("the options").name = "Maren".into();
+    let two = h.open_session().await;
+    log_in(&h, two, 1, "Maren").await;
+    assert_eq!(plays(&h, two).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    let heard = hear(&h, &CHANGE_EVENTS);
+    change_the_lists(&h, two).await;
+    let got: Vec<&str> = take(&heard).into_iter().map(|(event, _)| event).collect();
+    let count = |name| got.iter().filter(|event| **event == name).count();
+    assert_eq!(count(ALIASES_CHANGED), 3, "{got:?}");
+    assert_eq!(count(MACRO_GROUPS_CHANGED), 1, "{got:?}");
+    assert_eq!(count(GROUPS_CHANGED), 1, "{got:?}");
+    assert_eq!(count(MACROS_CHANGED), 1, "{got:?}");
+    assert_eq!(count(TICK_CONFIG_CHANGED), 1, "{got:?}");
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_that_moves_a_session_behind_tells_every_window_its_row_alone() {
+    use crate::app::events::{PROFILE_SWITCHED, SESSIONS_CHANGED, SESSION_IDENTITY_CHANGED};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    log_in(&h, h.first, 0, "Tolliver").await;
+    let two = h.open_session().await;
+    let mut names = profile_ui_names(&h);
+    names.extend([PROFILE_SWITCHED, SESSION_IDENTITY_CHANGED, SESSIONS_CHANGED]);
+    let heard = hear(&h, &names);
+
+    // Orla logs in on Default, and Build, which claims her, takes her
+    // session behind the one in front.
+    log_in(&h, two, 1, "Orla").await;
+    h.until("the switch to Build", |h| {
+        shows(h, two, "Vosh switched to the Build profile.")
+    })
+    .await;
+    h.until("the row on Build", |h| {
+        heard_row(h, two)["profile"] == json!("Build")
+    })
+    .await;
+    let got: Vec<&str> = take(&heard).into_iter().map(|(event, _)| event).collect();
+    assert!(
+        got.iter().all(|event| *event == SESSIONS_CHANGED),
+        "{got:?}"
+    );
+    assert_eq!(plays(&h, h.first).as_deref(), Some(DEFAULT_PROFILE_NAME));
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn who_is_logged_in_goes_out_for_the_selected_session_and_again_on_a_selection() {
+    use crate::app::events::SESSION_IDENTITY_CHANGED;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    let heard = hear(&h, &[SESSION_IDENTITY_CHANGED]);
+    let character = |heard: &Heard| {
+        let heard = heard.lock().expect("the events");
+        heard
+            .last()
+            .map(|(_, identity)| identity["character"].clone())
+    };
+    let (one, two) = (h.first, open_session_on(&h, "Build").await);
+    log_in(&h, one, 0, "Tolliver").await;
+    h.until("Tolliver named", |_| {
+        character(&heard) == Some(json!("Tolliver"))
+    })
+    .await;
+
+    // Orla logs in behind, and no window hears of her.
+    log_in(&h, two, 1, "Orla").await;
+    h.until("the row with Orla", |h| {
+        heard_row(h, two)["character"] == json!("Orla")
+    })
+    .await;
+    let got = take(&heard);
+    assert!(
+        got.iter()
+            .all(|(_, identity)| identity["character"] != json!("Orla")),
+        "{got:?}"
+    );
+
+    // Her row brings her to the front.
+    select(&h, two).await;
+    let got = take(&heard);
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(
+        (&got[0].1["character"], &got[0].1["profile"]),
+        (&json!("Orla"), &json!("Build"))
+    );
+
+    // Tolliver leaves behind, and no window hears of it until his row
+    // comes to the front again, with nobody logged in.
+    h.disconnect_session(one).await;
+    let got = take(&heard);
+    assert!(got.is_empty(), "{got:?}");
+    select(&h, one).await;
+    let got = take(&heard);
+    assert_eq!(got, [(SESSION_IDENTITY_CHANGED, serde_json::Value::Null)]);
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}

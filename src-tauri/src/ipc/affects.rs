@@ -3,15 +3,13 @@
 //! menu changes how it draws, and the tracked affects editor saves the
 //! list of affects it watches for.
 
-use std::sync::Arc;
-
 use serde_json::Value;
 use tauri::{AppHandle, State};
 
 use crate::affects::full::FullMap;
 use crate::app::events::{AffectsDisplay, AFFECTS_DISPLAY_CHANGED, TRACKED_AFFECTS_CHANGED};
 use crate::app::state::SharedState;
-use crate::disk::save::{save_by, save_then_broadcast, SavePolicy};
+use crate::disk::save::{save_then_broadcast, SavePolicy};
 use crate::profile::inactive::{broadcast_profile_changed, edit_inactive_profile, Stored};
 use crate::sessions::SessionId;
 
@@ -21,11 +19,10 @@ use crate::sessions::SessionId;
 ///
 /// With no `profile` the selected session's profile takes the list. A
 /// `profile` a session plays takes it in memory and saves, and any other
-/// has its file rewritten. The selected session's profile also
-/// broadcasts the list as `vosh://tracked-affects-changed` to every
-/// window. Any other sends only `vosh://profile-changed`, since the
-/// tracked affects event would hand another profile's list to the main
-/// window's store.
+/// has its file rewritten. The profile in front also broadcasts the list
+/// as `vosh://tracked-affects-changed` to every window. Any other sends
+/// only `vosh://profile-changed`, since the tracked affects event would
+/// hand another profile's list to the main window's store.
 #[tauri::command]
 pub(crate) async fn tracked_affects_set(
     app: AppHandle,
@@ -58,19 +55,15 @@ pub(crate) async fn tracked_affects_set(
         p.ui.tracked_affects.clone_from(&list);
         p.open().clone()
     };
-    if Arc::ptr_eq(&open, &selected.profile()) {
-        save_then_broadcast(
-            &app,
-            &shared,
-            &open,
-            SavePolicy::Now,
-            TRACKED_AFFECTS_CHANGED,
-            &list,
-        )
-        .await;
-    } else {
-        save_by(&app, &shared, &open, SavePolicy::Now).await;
-    }
+    save_then_broadcast(
+        &app,
+        &shared,
+        &open,
+        SavePolicy::Now,
+        TRACKED_AFFECTS_CHANGED,
+        &list,
+    )
+    .await;
     if let Some(name) = open.name() {
         broadcast_profile_changed(&app, &name);
     }

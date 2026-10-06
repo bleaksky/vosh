@@ -292,8 +292,21 @@ impl AppState {
             .extend(notices);
     }
 
-    /// The name of the profile the selected session plays, for the
-    /// events that name it. None before any profile loads.
+    /// Whether `open` is the profile in front, the one the selected
+    /// session plays, which every window shows. An event that carries
+    /// one profile's settings or lists goes out only while that profile
+    /// is in front, so a change in a session on it counts whichever
+    /// session that is. A profile behind loses nothing, since a selection
+    /// that brings it to the front sends its settings, see
+    /// [`crate::app::launch::show_selection`]. Take it with no profile
+    /// held.
+    pub(crate) fn in_front(&self, open: &Arc<OpenProfile>) -> bool {
+        Arc::ptr_eq(&self.selected_session().profile(), open)
+    }
+
+    /// The name of the profile the selected session plays, for a test.
+    /// None before any profile loads.
+    #[cfg(test)]
     pub(crate) fn active_profile(&self) -> Option<String> {
         self.selected_session().profile().name()
     }

@@ -140,7 +140,10 @@ pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
             crate::prompt::choose_in_other_sessions(&shared, session.id, open, chosen).await;
         }
     }
-    if effects.replaced || effects.tick_before.is_some() {
+    // The windows hear the settings of the profile in front alone, so a
+    // replace or a `#tick` in a session on a profile behind waits for the
+    // selection that brings it to the front.
+    if (effects.replaced || effects.tick_before.is_some()) && shared.in_front(open) {
         let events = {
             let p = open.lock().await;
             line_effect_events(&shared, &effects, &p)
@@ -187,9 +190,11 @@ pub(crate) enum SavePolicy {
 }
 
 /// Save `open`, the profile a command changed, by `policy`, then send
-/// `event` with `payload` to every window. A command that changed one
-/// part of the profile ends this way, so the save always comes before the
-/// event.
+/// `event` with `payload` to every window while `open` is the profile in
+/// front, see [`AppState::in_front`]. A command that changed one part of
+/// the profile ends this way, so the save always comes before the event.
+///
+/// [`AppState::in_front`]: crate::app::state::AppState::in_front
 pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -199,7 +204,9 @@ pub(crate) async fn save_then_broadcast<R: tauri::Runtime, S: serde::Serialize +
     payload: &S,
 ) {
     save_by(app, state, open, policy).await;
-    broadcast(app, event, payload);
+    if state.in_front(open) {
+        broadcast(app, event, payload);
+    }
 }
 
 /// Save `open` by `policy`, for a command that tells no window of the
