@@ -115,6 +115,26 @@ describe('the help on the affects pane', () => {
   });
 });
 
+describe('the help on searching the logs', () => {
+  // Session means a tab in the sidebar, so the log rows call one
+  // logged connection a log (Q21).
+  it('calls one logged connection a log, in both places', () => {
+    const topic = HELP_TOPICS.find((t) => t.id === 'characters-and-data.search-logs');
+    expect(topic?.number).toBe('7.4');
+    const text = body('characters-and-data.search-logs');
+    for (const line of [
+      'A log is the record of one connection, so a session that connects three times saves three.',
+      'The row counts your saved logs and lines.',
+      'Pick a log in the menu at the right to search only that one. `All logs` searches everything.',
+      'With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text.',
+    ]) {
+      expect(text).toContain(line);
+      expect(helpMd).toContain(line);
+    }
+    expect(helpMd).toContain(`### 7.4 ${topic?.title}\n\n${text}\n`);
+  });
+});
+
 describe('the help on password prompts', () => {
   const kept =
     'Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place.';
@@ -126,15 +146,14 @@ describe('the help on password prompts', () => {
     expect(helpMd).toContain(kept);
   });
 
-  it('says a session from an older version can still hold a password, and how to clear it', () => {
+  it('says a log from an older version can still hold a password, and how to clear it', () => {
     // Earlier builds wrote every sent line to logs.sqlite in full, and
     // the game shows some passwords as you type them, so the help must
     // not read as if none exist. #logs forget-passwords clears them
-    // without deleting every saved session.
+    // without deleting every saved log.
     const older =
-      'Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.';
-    const changeIt =
-      'If you copied or shared one of those sessions, change your password in the game.';
+      'Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.';
+    const changeIt = 'If you copied or shared one of those logs, change your password in the game.';
     for (const text of [body('characters-and-data.search-logs'), helpMd]) {
       expect(text).toContain(older);
       expect(text).toContain(changeIt);
@@ -297,7 +316,7 @@ describe('the help on the prompt capture move', () => {
 
 describe('the help on forgetting passwords in the session log', () => {
   const logsParagraph =
-    'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file.';
+    'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many logs, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file.';
   const referenceBullet =
     '- `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.';
   const howToBullet =

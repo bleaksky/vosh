@@ -11,7 +11,7 @@ import { checkForUpdate, installUpdateAndRelaunch } from '../../ipc/updater';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
-import { savedSessionsText } from './logView';
+import { savedLogsText } from './logView';
 import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS } from '../../lib/knownWorlds';
 import { useSessions } from '../../stores/session/sessionsStore';
@@ -77,7 +77,7 @@ function GeneralSections({
         title="Session logs"
         help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
       >
-        <Row label="Saved sessions" description={<SavedSessionsCount onError={onError} />}>
+        <Row label="Saved logs" description={<SavedLogsCount onError={onError} />}>
           <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>
             Search logs…
           </Button>
@@ -383,17 +383,18 @@ function ScopeSection({ onError }: { onError: (message: string | null) => void }
 
 // ── Session logs ───────────────────────────────────────────────────
 
-/** How many sessions and lines Vosh saved, leaving out sessions to
- *  this machine the way the log view does. */
-function SavedSessionsCount({ onError }: { onError: (message: string | null) => void }) {
-  const [counts, setCounts] = useState<{ sessions: number; lines: number } | null>(null);
+/** How many logs and lines Vosh saved, leaving out connections to
+ *  this machine the way the log view does. A log is one connection,
+ *  which the store calls a session (Q21). */
+function SavedLogsCount({ onError }: { onError: (message: string | null) => void }) {
+  const [counts, setCounts] = useState<{ logs: number; lines: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
     listLogSessions(0, { hideLocal: true })
       .then((rows) => {
         if (cancelled) return;
         setCounts({
-          sessions: rows.length,
+          logs: rows.length,
           lines: rows.reduce((sum, row) => sum + row.line_count, 0),
         });
       })
@@ -402,8 +403,8 @@ function SavedSessionsCount({ onError }: { onError: (message: string | null) => 
       cancelled = true;
     };
   }, [onError]);
-  if (!counts) return 'Counting your saved sessions…';
-  return savedSessionsText(counts.sessions, counts.lines, computerName());
+  if (!counts) return 'Counting your saved logs…';
+  return savedLogsText(counts.logs, counts.lines, computerName());
 }
 
 // ── Advanced (Windows and Linux) ───────────────────────────────────

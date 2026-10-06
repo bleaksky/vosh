@@ -73,7 +73,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Session logs',
-    keywords: 'log saved sessions history lines',
+    keywords: 'log logs saved sessions history lines',
     target: at('general', 'session-logs'),
   },
   {

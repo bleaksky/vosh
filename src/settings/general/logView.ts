@@ -34,12 +34,13 @@ export function formatCount(n: number): string {
 const plural = (n: number, one: string, many: string) =>
   `${formatCount(n)} ${n === 1 ? one : many}`;
 
-/** The Session logs row on General, like `447 sessions and 708,350
- *  lines on this Mac.` `place` names the computer: Mac, PC, or
- *  computer. */
-export function savedSessionsText(sessions: number, lines: number, place: string): string {
-  if (sessions === 0) return `Vosh has not saved a session on this ${place} yet.`;
-  return `${plural(sessions, 'session', 'sessions')} and ${plural(lines, 'line', 'lines')} on this ${place}.`;
+/** The Session logs row on General, like `447 logs and 708,350 lines
+ *  on this Mac.` A log is one connection, so a session that connects
+ *  three times saves three (Q21). `place` names the computer: Mac,
+ *  PC, or computer. */
+export function savedLogsText(logs: number, lines: number, place: string): string {
+  if (logs === 0) return `Vosh has not saved a log on this ${place} yet.`;
+  return `${plural(logs, 'log', 'logs')} and ${plural(lines, 'line', 'lines')} on this ${place}.`;
 }
 
 /** The count beside the pattern: `Newest 500 of 2,423 lines` while

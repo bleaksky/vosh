@@ -242,6 +242,7 @@ describe('searchSettingsRows', () => {
     const [row] = searchSettingsRows('search logs', mac);
     expect(row.label).toBe('Search logs');
     expect(row.target).toEqual(resolveSettingsTarget('logs'));
+    expect(labels('saved logs')[0]).toBe('Session logs');
     expect(labels('saved sessions')[0]).toBe('Session logs');
   });
 });

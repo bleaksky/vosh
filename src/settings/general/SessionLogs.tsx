@@ -36,12 +36,13 @@ import { CopyIcon, Field, SearchIcon, Select } from '../../ui';
 // The log view inside General (the approved SettingsGeneralLogs
 // board), at general:logs. One toolbar over the results: the pattern,
 // a regular expression over MUD text in the terminal font, the Aa
-// match case switch, the count, and the sessions to search. The
+// match case switch, the count, and the logs to search. A log is one
+// connection, which the store calls a session (Q21). The
 // results read oldest first like the terminal and sit scrolled to the
 // newest line, under day headings. Each line keeps its own SGR colors
 // with your matches marked the way the find bar marks them, and
-// earlier matches load as you scroll up. Sessions to 127.0.0.1 and
-// localhost stay out, and Copy as text shows once you pick a session.
+// earlier matches load as you scroll up. Connections to 127.0.0.1 and
+// localhost stay out, and Copy as text shows once you pick a log.
 
 const ALL = 'all';
 // Wait this long after your last keystroke before searching.
@@ -236,7 +237,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
 
   const scopeOptions = useMemo(
     () => [
-      { value: ALL, label: 'All sessions' },
+      { value: ALL, label: 'All logs' },
       ...sessions.map((s) => ({ value: String(s.id), label: logSessionLabel(s.started_at_ms) })),
     ],
     [sessions],
@@ -268,7 +269,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
           autoFocus
           aria-label="Search logs"
           aria-describedby={countId}
-          placeholder={sessionId === null ? 'Search all sessions' : 'Search this session'}
+          placeholder={sessionId === null ? 'Search all logs' : 'Search this log'}
           value={pattern}
           onChange={setPattern}
           onKeyDown={(e) => {
@@ -311,8 +312,8 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         )}
         <Select
           className="st-logs-scope"
-          aria-label="Sessions to search"
-          // A picked session reads like `September 24, 16:07`, which
+          aria-label="Logs to search"
+          // A picked log reads like `September 24, 16:07`, which
           // needs more than the board's 160.
           width={sessionId === null ? 160 : 196}
           value={sessionId === null ? ALL : String(sessionId)}
@@ -339,7 +340,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
               ? 'No saved line matches that pattern.'
               : sessionId === null
                 ? 'Vosh saves every line as you play. It has none saved yet.'
-                : 'This session has no saved lines.'}
+                : 'This log has no saved lines.'}
           </p>
         )}
         {days.map((group) => (
