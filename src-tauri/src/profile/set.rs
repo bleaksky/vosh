@@ -122,8 +122,8 @@ pub(crate) struct ProfilesIndex {
 }
 
 /// A session as profiles.toml keeps it for the next launch: its id, which
-/// names its scrollback file, the name you gave it, where it last
-/// connected and the profile it last played.
+/// names its scrollback file, the name you gave it, where it dials and
+/// the profile it last played.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct SessionEntry {
     pub id: SessionId,

@@ -95,19 +95,20 @@ impl SessionId {
 /// split with [`Connection`] is by lock, not by meaning. All the session
 /// state the line pipeline changes sits in its [`Connection`], under one
 /// std lock that lives as long as the session. Here sit the name you gave
-/// it, where it last connected, which the row keeps once the connection
-/// ends, the host, port and character of the live connection, which a
-/// disconnect clears, the terminal size, the last affects and their
-/// fulls, beside the task that runs its connection, its Lua timers, its
-/// scrollback and the count of what reached its terminal. It points at
-/// the profile it plays.
+/// it, where it dials, which the row keeps once the connection ends, the
+/// host, port and character of the live connection, which a disconnect
+/// clears, the terminal size, the last affects and their fulls, beside
+/// the task that runs its connection, its Lua timers, its scrollback and
+/// the count of what reached its terminal. It points at the profile it
+/// plays.
 pub(crate) struct Session {
     pub(crate) id: SessionId,
     /// The name you gave the session, which its row and a line in another
     /// session read in place of its character. A leaf lock, held for a
     /// copy.
     name: std::sync::Mutex<Option<String>>,
-    /// Where the session last connected. It outlives the connection, so
+    /// Where the session dials: where it last connected, or where the
+    /// session form set it to dial since. It outlives the connection, so
     /// the row still names the world once the session disconnects. A leaf
     /// lock, held for a copy.
     pub(crate) address: std::sync::Mutex<Option<Address>>,
@@ -300,9 +301,9 @@ impl Session {
 
     /// What a line in another session or a banner calls this one, as its
     /// row reads: the name you gave it, or the character logged in, or
-    /// else the world where it last connected with the port, like `The
-    /// Forsaken Lands 1825`, which a drop and each failed redial keep.
-    /// None while it has no name and never connected.
+    /// else the world where it dials with the port, like `The Forsaken
+    /// Lands 1825`, which a drop and each failed redial keep. None while
+    /// it has no name and no place to dial.
     pub(crate) fn label(&self) -> Option<String> {
         self.name().or_else(|| self.character()).or_else(|| {
             let address = self
@@ -495,7 +496,7 @@ pub(crate) struct SessionRow {
     pub(crate) name: Option<String>,
     /// The character logged in on its live connection.
     pub(crate) character: Option<String>,
-    /// Where it last connected, None before its first connect.
+    /// Where it dials, None before its first connect or address.
     pub(crate) host: Option<String>,
     pub(crate) port: Option<u16>,
     pub(crate) tls: bool,
@@ -544,6 +545,20 @@ impl Sessions {
         self.next += 1;
         self.list.push(session.clone());
         session
+    }
+
+    /// Move the session `id` to the place `to` in the list, or to the end
+    /// when `to` lies past it. The others keep their order, and the
+    /// selection stays on the session it names.
+    pub(crate) fn move_to(&mut self, id: SessionId, to: usize) -> Result<(), &'static str> {
+        let from = self
+            .list
+            .iter()
+            .position(|session| session.id == id)
+            .ok_or(NO_SUCH_SESSION)?;
+        let session = self.list.remove(from);
+        self.list.insert(to.min(self.list.len()), session);
+        Ok(())
     }
 
     /// Take the session `id` out of the list and return it. When it was
@@ -951,6 +966,34 @@ mod tests {
             Err(NO_SUCH_SESSION.to_string())
         );
         assert_eq!(state.selected_session().id, three);
+    }
+
+    #[test]
+    fn a_move_keeps_the_others_in_order_and_the_selection_where_it_was() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let state = AppState::default();
+        let one = state.selected_session().id;
+        let profile = state.selected_session().profile();
+        let two = state.open_session(profile.clone()).id;
+        let three = state.open_session(profile).id;
+        assert_eq!(state.select_session(two), Ok(()));
+        let order = || -> Vec<(SessionId, bool)> {
+            let rows = state.session_rows();
+            rows.iter().map(|row| (row.id, row.selected)).collect()
+        };
+        assert_eq!(state.move_session(three, 0), Ok(()));
+        assert_eq!(order(), [(three, false), (one, false), (two, true)]);
+        // A place past the end moves it last.
+        assert_eq!(state.move_session(three, 9), Ok(()));
+        assert_eq!(order(), [(one, false), (two, true), (three, false)]);
+        assert_eq!(state.move_session(two, 0), Ok(()));
+        assert_eq!(order(), [(two, true), (one, false), (three, false)]);
+        assert_eq!(
+            state.move_session(SessionId(9), 0),
+            Err(NO_SUCH_SESSION.to_string())
+        );
+        assert_eq!(crate::native::grid::shown(), two);
     }
 
     #[test]
