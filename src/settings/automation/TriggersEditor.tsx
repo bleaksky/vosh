@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
@@ -102,9 +102,11 @@ export function TriggersEditor(props: EditorProps) {
   // A trigger that hid your prompt this session while the profile reads
   // no prompt carries the warn ring in the list.
   const gags = usePromptGags();
-  return (
-    <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNames={gags} warnNote={HIDES_PROMPT_NOTE} />
+  const warnNotes = useMemo(
+    () => new Map([...gags].map((name) => [name, HIDES_PROMPT_NOTE])),
+    [gags],
   );
+  return <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNotes={warnNotes} />;
 }
 
 /** Why a trigger carries the warn ring: it hid your prompt this session

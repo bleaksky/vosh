@@ -47,9 +47,8 @@ interface RowProps {
   monoName: boolean;
   monoMeta: boolean;
   anchor: string | undefined;
-  /** Carries the warn ring. */
-  warn: boolean;
-  /** Why it carries it, which a reader hears as the row's description. */
+  /** Why the row carries the warn ring, which a reader hears as its
+   *  description. Undefined for a row with no ring. */
   warnNote: string | undefined;
   onSelect: (uid: string) => void;
   onFocus: () => void;
@@ -69,12 +68,12 @@ const ListRow = memo(function ListRow({
   monoName,
   monoMeta,
   anchor,
-  warn,
   warnNote,
   onSelect,
   onFocus,
 }: RowProps) {
-  const noteId = warn && warnNote ? `st-auto-warn-${uid}` : undefined;
+  const warn = warnNote !== undefined;
+  const noteId = warn ? `st-auto-warn-${uid}` : undefined;
   return (
     <div className="st-auto-rowwrap">
       <button
@@ -130,12 +129,11 @@ export interface ItemListProps {
   monoMeta: boolean;
   /** Quiet content under the list, like Edit all as JSON…. */
   footer?: ReactNode;
-  /** Names of rows that carry the warn ring while they are on, like a
-   *  trigger that hides your prompt with nothing drawn in its place. */
-  warnNames?: ReadonlySet<string> | undefined;
-  /** Why a row carries the warn ring, which a reader hears as its
-   *  description, since the ring is a picture. */
-  warnNote?: string | undefined;
+  /** The rows that carry the warn ring while they are on, by name, each
+   *  with why, like a trigger that hides your prompt with nothing drawn
+   *  in its place. A reader hears the why as the row's description,
+   *  since the ring is a picture. */
+  warnNotes?: ReadonlyMap<string, string> | undefined;
   /** The groups that show folded, by fold key. */
   folded: ReadonlySet<string>;
   /** Fold or open a group from its heading. */
@@ -175,8 +173,7 @@ export function ItemList({
   monoName,
   monoMeta,
   footer,
-  warnNames,
-  warnNote,
+  warnNotes,
   folded,
   onFold,
   groupSwitches,
@@ -278,7 +275,6 @@ export function ItemList({
               monoName={false}
               monoMeta={false}
               anchor={pinned.anchor}
-              warn={false}
               warnNote={undefined}
               onSelect={onSelect}
               onFocus={onRowFocus}
@@ -301,8 +297,7 @@ export function ItemList({
                     monoName={monoName}
                     monoMeta={monoMeta}
                     anchor={undefined}
-                    warn={entry.enabled && (warnNames?.has(entry.name) ?? false)}
-                    warnNote={warnNote}
+                    warnNote={entry.enabled ? warnNotes?.get(entry.name) : undefined}
                     onSelect={onSelect}
                     onFocus={onRowFocus}
                   />
