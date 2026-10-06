@@ -27,8 +27,8 @@
 //!
 //! The profile's `[prompt]` table rides along the same way, so a
 //! `#prompt` or `#unprompt` line tells Settings to read the prompt
-//! switch and design again. Settings saves its whole config, and a copy
-//! it read before would otherwise put the old ones back.
+//! switch and design again. Settings saves its whole `[prompt]` table,
+//! and a copy it read before would otherwise put the old ones back.
 //!
 //! So do the macro groups. The command line keeps its own map of the
 //! macro keys that fire, so a `#group` line or a Lua
@@ -194,9 +194,9 @@ pub(crate) const AFFECT_FULL_CHANGED: &str = "vosh://affect-full-changed";
 
 /// Sent last by [`broadcast_profile_ui`]. The live
 /// profile's whole UI config was replaced, by a switch, an import,
-/// `#profile load` or `reset`. A window that saves the whole config
-/// (Settings) reads it again here, or its next save writes the old
-/// profile's values back. The payload is null.
+/// `#profile load` or `reset`. Settings reads the new config here and
+/// drops a save still waiting, which would write what you changed on
+/// the old profile onto the new one. The payload is null.
 /// `subscribeUiConfigReplaced` hears it.
 pub(crate) const UI_CONFIG_REPLACED: &str = "vosh://ui-config-replaced";
 /// Sent to every window with the pane layout whenever it changes: a
@@ -548,7 +548,7 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
 /// the pane generation under the profile lock as they swap. Only a
 /// switch also sends `vosh://profile-switched`, so the status line hears
 /// these here after an import, a load, or a reset, and Settings reads
-/// its whole config again on [`UI_CONFIG_REPLACED`].
+/// the new config on [`UI_CONFIG_REPLACED`].
 pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
