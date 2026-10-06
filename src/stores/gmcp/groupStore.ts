@@ -1,4 +1,4 @@
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
 import { isHiddenFlag } from '../store';
 
@@ -44,35 +44,32 @@ export interface GroupState {
   self?: string | undefined;
 }
 
-// Module-level store for Group.Info + Char.Worth. Mirrors chatStore
-// so the ChatGroupPane can close and reopen without losing the
-// last-pushed roster / worth snapshot. Subscribes to GMCP once on
-// first read and keeps the latest state per package.
+// The last Group.Info and Char.Worth, kept at module scope so the Group
+// pane can close and reopen without losing the last roster and worth.
+// The store starts on its first read, and a disconnect empties it.
 //
 // An older server build sends the whole roster under lamented tears,
 // your own row with its health included, and no flag. The backend
 // works out that it is hidden, and while hiddenStore's `group` holds,
 // the store reads as the hidden Group.Info the new build sends, so no
 // roster shows.
-let group: GroupInfo = {};
-let worth: Worth = {};
-let self: string | undefined;
-let listeners: Array<(state: GroupState) => void> = [];
-let started = false;
-let hiddenByBackend = false;
+interface GroupStoreState extends GroupState {
+  /** The backend works out that the game hides your group. */
+  hiddenByBackend: boolean;
+}
+
+/** Nothing heard yet, hidden as the backend says now. */
+function empty(): GroupStoreState {
+  return { group: {}, worth: {}, self: undefined, hiddenByBackend: getHidden().group };
+}
 
 /** The Group.Info a hidden group reads as. One object, so a pane that
  *  compares snapshots sees no change while the group stays hidden. */
 const HIDDEN_GROUP: GroupInfo = { hidden: true };
 
 /** The group the panes see, hidden while the backend says so. */
-function shownGroup(): GroupInfo {
+function shownGroup({ group, hiddenByBackend }: GroupStoreState): GroupInfo {
   return hiddenByBackend && group.hidden !== true ? HIDDEN_GROUP : group;
-}
-
-function notify() {
-  const snapshot = { group: shownGroup(), worth, self };
-  for (const l of listeners) l(snapshot);
 }
 
 /** Dedupe key for a member. The server `id` when present, else the
@@ -112,53 +109,49 @@ export function parseGroupInfo(data: unknown): GroupInfo {
   return dedupeMembers(data as GroupInfo);
 }
 
-export function startGroupStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Group.Info', (data) => {
-    group = parseGroupInfo(data);
-    notify();
-  });
-  void onGmcpPackage<unknown>('Char.Worth', (data) => {
-    if (data && typeof data === 'object') {
-      worth = { ...worth, ...(data as Worth) };
-      notify();
-    }
-  });
-  const takeName = (data: { name?: unknown }) => {
-    if (typeof data?.name === 'string' && data.name.trim().length > 0) {
-      self = data.name.trim();
-      notify();
-    }
-  };
-  void onGmcpPackage<{ name?: unknown }>('Char.Status', takeName);
-  void onGmcpPackage<{ name?: unknown }>('Char.Name', takeName);
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      group = {};
-      worth = {};
-      self = undefined;
-      notify();
-    }
-  });
-  hiddenByBackend = getHidden().group;
-  subscribeHidden(() => {
-    const now = getHidden().group;
-    if (now === hiddenByBackend) return;
-    hiddenByBackend = now;
-    notify();
-  });
+/** Your name from Char.Status or Char.Name, trimmed. */
+function takeName(state: GroupStoreState, data: unknown): GroupStoreState {
+  const name = (data as { name?: unknown } | null)?.name;
+  return typeof name === 'string' && name.trim().length > 0
+    ? { ...state, self: name.trim() }
+    : state;
 }
 
+const store = createGmcpStore<GroupStoreState, GroupState>({
+  state: empty,
+  packages: {
+    'Group.Info': (state, data) => ({ ...state, group: parseGroupInfo(data) }),
+    'Char.Worth': (state, data) =>
+      data && typeof data === 'object' ? { ...state, worth: { ...state.worth, ...data } } : state,
+    'Char.Status': takeName,
+    'Char.Name': takeName,
+  },
+  events: [
+    (apply) =>
+      subscribeHidden(() =>
+        apply((state) => {
+          const hiddenByBackend = getHidden().group;
+          return hiddenByBackend === state.hiddenByBackend ? state : { ...state, hiddenByBackend };
+        }),
+      ),
+  ],
+  // One snapshot while its parts stay the same, so a pane reads the same
+  // value between pushes.
+  view: (state, last) => {
+    const group = shownGroup(state);
+    return last?.group === group && last.worth === state.worth && last.self === state.self
+      ? last
+      : { group, worth: state.worth, self: state.self };
+  },
+});
+
+export const startGroupStore = store.start;
+
 export function getGroupState(): GroupState {
-  startGroupStore();
-  return { group: shownGroup(), worth, self };
+  store.start();
+  return store.get();
 }
 
 export function subscribeGroupState(cb: (state: GroupState) => void): () => void {
-  startGroupStore();
-  listeners.push(cb);
-  return () => {
-    listeners = listeners.filter((l) => l !== cb);
-  };
+  return store.subscribe(() => cb(store.get()));
 }

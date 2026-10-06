@@ -25,8 +25,10 @@ import { createStore } from '../store';
 type Change<S> = (state: S) => S;
 
 interface GmcpStoreSpec<S, V> {
-  /** The state before anything is heard. */
-  state: S;
+  /** The state before anything is heard. A function gives it afresh
+   *  as the store starts and at a disconnect that puts it back, for a
+   *  state that starts from what another store holds. */
+  state: S | (() => S);
   /** The change each package's data makes, by package name. */
   packages?: Record<string, (state: S, data: unknown) => S>;
   /** The change a connection state makes. Without it a disconnect
@@ -55,11 +57,12 @@ export function createGmcpStore<S, V = S>({
   snapshot,
   view = (state) => state as unknown as V,
 }: GmcpStoreSpec<S, V>) {
-  let current = initial;
+  const fresh = typeof initial === 'function' ? (initial as () => S) : () => initial;
+  let current = fresh();
   const store = createStore<V>(view(current));
   const connectionChange =
     connection ??
-    ((state: S, payload: StatePayload) => (payload.kind === 'disconnected' ? initial : state));
+    ((state: S, payload: StatePayload) => (payload.kind === 'disconnected' ? fresh() : state));
   let started = false;
   let generation = 0;
 
@@ -77,6 +80,7 @@ export function createGmcpStore<S, V = S>({
   function start(): void {
     if (started) return;
     started = true;
+    apply(fresh);
     const listening: unknown[] = [
       ...Object.entries(packages).map(([name, change]) =>
         onGmcpPackage<unknown>(name, (data) => hear((state) => change(state, data))),
