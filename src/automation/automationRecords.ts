@@ -8,11 +8,12 @@
 
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { groupKeyOf, searchText, type ListEntry } from './automationList';
-import { defaultEnabledIds, PRESETS, presetTriggers } from './presets';
+import { defaultEnabledIds, PRESETS, presetMacros, presetTriggers } from './presets';
 import {
   deleteMacro,
   exportAliases,
   importAliases,
+  listMacros,
   listTriggers,
   presetsInstall,
   presetsRemove,
@@ -441,13 +442,13 @@ export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
   };
 }
 
-/** What launch does with the preset triggers. `installed` names the
- *  preset of every trigger the store holds, as the trigger's `preset`
- *  tag. Every preset that is on installs again, so this build's
- *  patterns replace older copies. Every preset the store holds that is
+/** What launch does with the preset triggers and macros. `installed`
+ *  names the preset of every trigger and macro the stores hold, as its
+ *  `preset` tag. Every preset that is on installs again, so this build's
+ *  patterns replace older copies. Every preset the stores hold that is
  *  off, or that this build no longer has, comes out, so a preset you
- *  turned off stays off even when its triggers came back from another
- *  profile or an older build. */
+ *  turned off stays off even when its triggers or macros came back from
+ *  another profile or an older build. */
 export function presetLaunchPlan(
   stored: readonly string[],
   installed: Iterable<string | null | undefined>,
@@ -461,19 +462,25 @@ export function presetLaunchPlan(
   return { install, remove: [...remove].sort() };
 }
 
-/** Bring the preset triggers in line with `enabled`, the stored
- *  enabled_presets, at launch. Take out every preset that is off, or that
- *  this build no longer has, and install every one that is on again, so
- *  this build's patterns replace older copies. In loadout mode the
- *  triggers and the list are shared by every profile, and without the
- *  removal a preset you turned off came back after a launch as another
- *  character. A failed call is logged and the rest still run. */
+/** Bring the preset triggers and macros in line with `enabled`, the
+ *  stored enabled_presets, at launch. Take out every preset that is off,
+ *  or that this build no longer has, and install every one that is on
+ *  again, so this build's patterns replace older copies. In loadout mode
+ *  the triggers, the macros and the list are shared by every profile, and
+ *  without the removal a preset you turned off came back after a launch
+ *  as another character. A failed call is logged and the rest still
+ *  run. */
 export async function installLaunchPresets(enabled: readonly string[]): Promise<void> {
-  let installed: (string | null | undefined)[] = [];
+  const installed: (string | null | undefined)[] = [];
   try {
-    installed = (await listTriggers()).map((t) => t.preset);
+    installed.push(...(await listTriggers()).map((t) => t.preset));
   } catch (e) {
     console.error('[presets] listing triggers failed:', e);
+  }
+  try {
+    installed.push(...(await listMacros()).map((m) => m.preset));
+  } catch (e) {
+    console.error('[presets] listing macros failed:', e);
   }
   const plan = presetLaunchPlan(enabled, installed);
   for (const id of plan.remove) {
@@ -483,10 +490,12 @@ export async function installLaunchPresets(enabled: readonly string[]): Promise<
       console.error(`[presets] removing ${id} failed:`, e);
     }
   }
-  const toInstall = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
-  if (toInstall.length > 0) {
+  const on = PRESETS.filter((p) => plan.install.includes(p.id));
+  const triggers = on.flatMap(presetTriggers);
+  const macros = on.flatMap(presetMacros);
+  if (triggers.length > 0 || macros.length > 0) {
     try {
-      await presetsInstall(toInstall, []);
+      await presetsInstall(triggers, macros);
     } catch (e) {
       console.error('[presets] startup install failed:', e);
     }

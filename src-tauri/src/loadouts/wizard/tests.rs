@@ -27,6 +27,7 @@ const LIBRARY: &[&str] = &[
     "herb_labels",
     "sent_tells",
     "room_and_time",
+    "numpad_movement",
 ];
 
 #[test]
@@ -1568,14 +1569,13 @@ async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
         crate::loadouts::presets::hold_taken_keys(&mut config.macros);
         config.save(&set.profile_path(name)).unwrap();
     }
-    let library: Vec<&str> = LIBRARY.iter().copied().chain(["numpad_movement"]).collect();
     let state = launch_state(dir.path()).await;
 
     // Default's two Numpad3 rows used to fold into one with Healer's d,
     // and the wizard asked you to pick between rec and d.
-    let plan = analyze_migration(&state, &library).await.unwrap();
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
     assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
-    apply_migration(&state, &[], &library).await.unwrap();
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
 
     // The catalog keeps rec beside one copy of each preset macro. A
     // launch installs those for Test-Prompt too, so they need no group,

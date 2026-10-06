@@ -580,6 +580,25 @@ describe('presets', () => {
     expect(presetLaunchPlan([], defaultEnabledIds()).remove).toEqual([]);
     expect(presetLaunchPlan([PRESETS_OFF_MARKER], [null, undefined]).remove).toEqual([]);
   });
+
+  it('reads the preset tags of the macros beside those of the triggers at launch', () => {
+    // The trigger tags, then the macro tags. Your F1 has none, and Numpad
+    // movement tags the six keys it binds.
+    const installed = [
+      ...defaultEnabledIds(),
+      undefined,
+      ...Array<string>(6).fill('numpad_movement'),
+    ];
+    // Off, so a launch takes its macros out, even after another profile
+    // or an older build put them back.
+    expect(presetLaunchPlan([], installed)).toEqual({
+      install: defaultEnabledIds(),
+      remove: ['numpad_movement'],
+    });
+    // On, so a launch installs it again and takes nothing out.
+    const on = [...defaultEnabledIds(), 'numpad_movement'];
+    expect(presetLaunchPlan(on, installed)).toEqual({ install: on, remove: [] });
+  });
 });
 
 describe('loadouts', () => {
