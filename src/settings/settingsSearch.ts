@@ -407,7 +407,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Macros',
-    keywords: 'macro key binding keyboard shortcut',
+    keywords: 'macro key binding keyboard shortcut numpad',
     target: at('automation', 'macros'),
   },
   {

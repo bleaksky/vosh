@@ -93,6 +93,11 @@ describe('searchSettingsRows', () => {
     ]);
   });
 
+  it('finds Macros and Presets by numpad', () => {
+    expect(labels('numpad')).toEqual(['Macros', 'Presets']);
+    expect(labels('walk keys')).toEqual(['Presets']);
+  });
+
   it('shows loadouts only in loadout mode', () => {
     expect(labels('loadouts')).not.toContain('Loadouts');
     expect(labels('loadouts', { pathB: true, mac: true })).toContain('Loadouts');
