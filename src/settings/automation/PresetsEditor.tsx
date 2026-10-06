@@ -1,5 +1,16 @@
 import { useMemo } from 'react';
-import { countPhrase, draftValues } from '../../automation/automationDraft';
+import { normalizeAlert, withAlertPart, withAlertParts } from '../../automation/alertParts';
+import {
+  alertPresetById,
+  isAlertPresetId,
+  PRESET_ALERT_DEFAULT,
+} from '../../automation/alertPresets';
+import {
+  countPhrase,
+  draftChanges,
+  draftValues,
+  serializeValue,
+} from '../../automation/automationDraft';
 import { searchText } from '../../automation/automationList';
 import {
   keptKeyNote,
@@ -17,17 +28,21 @@ import {
   PRESETS,
   presetTriggers,
 } from '../../automation/presets';
-import { presetsInstall, presetsRemove } from '../../ipc/automation';
+import { alertPresetsGet, alertPresetsSet } from '../../ipc/alerts';
+import { type AlertParts, presetsInstall, presetsRemove } from '../../ipc/automation';
 import { getUiConfig, setUiFields } from '../../ipc/uiConfig';
 import { listJoin } from '../../lib/text';
 import { useMacroList } from '../../stores/config/macroListStore';
 import type { SetUiConfig } from '../pageTypes';
 import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
+import { AlertDetailRows, AlertRow, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 const MACRO_NOUN = { one: 'macro', many: 'macros' };
+const ALERT_NOUN = { one: 'alert', many: 'alerts' };
+const ALERTS_CATEGORY = 'Alerts';
 
 interface PresetsEditorProps {
   setConfig: SetUiConfig;
@@ -38,10 +53,12 @@ interface PresetsEditorProps {
   profileScoped: boolean;
 }
 
-/** The presets, one toggle each under its category. Save installs the
- *  triggers and macros of the presets you turned on, removes the ones you
- *  turned off, and stores the list in enabled_presets, which launch reads
- *  to put the ones that are on back and take the rest out. */
+/** The presets, one toggle each under its category, the five alert
+ *  presets under Alerts. Save first writes the parts of each alert
+ *  preset you changed, then installs the triggers and macros of the
+ *  presets you turned on, removes the ones you turned off, and stores
+ *  the list in enabled_presets, which launch reads to put the ones that
+ *  are on back and take the rest out. */
 export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: PresetsEditorProps) {
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
@@ -53,22 +70,49 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
       // Read the stored list fresh, so a profile switch loads the new
       // profile's presets. In loadout mode the list is shared, and a
       // switch keeps it.
-      load: async () => presetToggles((await getUiConfig()).enabled_presets),
+      load: async () => {
+        const [config, alerts] = await Promise.all([getUiConfig(), alertPresetsGet()]);
+        return [
+          ...presetToggles(config.enabled_presets),
+          ...alerts.ids.map((id) => ({
+            id,
+            enabled: alerts.on.includes(id),
+            alert: normalizeAlert(alerts.alerts[id]) ?? PRESET_ALERT_DEFAULT,
+          })),
+        ];
+      },
       save: async (draft) => {
+        // Rust saves each one at once. A Save that fails after them keeps
+        // the draft unsaved, and the next Save sends the same parts again.
+        for (const { before, after } of draftChanges(draft).changed) {
+          if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
+            continue;
+          }
+          await alertPresetsSet(after.id, isPresetDefault(after.alert) ? null : after.alert);
+        }
         const plan = presetSavePlan(draft);
         for (const id of plan.remove) await presetsRemove(id);
         const on = PRESETS.filter((p) => plan.install.includes(p.id));
         const triggers = on.flatMap(presetTriggers);
         const macros = on.flatMap(presetMacros);
         if (triggers.length > 0 || macros.length > 0) await presetsInstall(triggers, macros);
-        // Keep the ids this page has no preset for, such as the alert
-        // presets, as the profile holds them now.
+        // Keep the ids no preset of this build knows, as the profile
+        // holds them now.
         const stored = (await getUiConfig()).enabled_presets;
         const enabled_presets = storedPresetIds(draftValues(draft), stored);
         await setUiFields({ enabled_presets });
         setConfig((prev) => (prev ? { ...prev, enabled_presets } : prev));
       },
       entry: (t) => {
+        const alert = alertPresetById(t.id);
+        if (alert) {
+          return {
+            name: alert.name,
+            group: ALERTS_CATEGORY,
+            enabled: t.enabled,
+            text: searchText(alert.name, alert.description, ALERTS_CATEGORY),
+          };
+        }
         const preset = presetById(t.id);
         const category = preset ? PRESET_CATEGORIES[preset.category] : '';
         return {
@@ -79,7 +123,12 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
         };
       },
       keyOf: (t) => t.id,
-      renderDetail: (props) => <PresetDetail {...props} />,
+      renderDetail: (props) =>
+        isAlertPresetId(props.value.id) ? (
+          <AlertPresetDetail {...props} />
+        ) : (
+          <PresetDetail {...props} />
+        ),
     }),
     [setConfig],
   );
@@ -113,6 +162,55 @@ export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
         <span className="st-auto-value">{adds}</span>
       </Row>
       {binds.length > 0 && <PresetKeys preset={preset} />}
+    </Card>
+  );
+}
+
+function isPresetDefault(alert: AlertParts): boolean {
+  return serializeValue(alert) === serializeValue(PRESET_ALERT_DEFAULT);
+}
+
+/** The card of an alert preset, as board 2 draws it: its toggle, what
+ *  it listens to, the Alert row, the rows of the parts that are pressed
+ *  and the switch. Banner shows waits for a preset whose banner can
+ *  carry words. A preset always holds its parts, so releasing every one
+ *  keeps the table and the preset rings nothing. */
+export function AlertPresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
+  const preset = alertPresetById(t.id);
+  if (!preset) return null;
+  const alert = t.alert ?? PRESET_ALERT_DEFAULT;
+  const rows: AlertDetail[] = [
+    ...(alert.sound !== undefined ? (['sound'] as const) : []),
+    ...(alert.attention !== undefined ? (['attention'] as const) : []),
+    ...(alert.banner && preset.words ? (['words'] as const) : []),
+    'background',
+  ];
+  return (
+    <Card className="st-auto-card">
+      <Row label={preset.name} description={preset.description}>
+        <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
+      </Row>
+      <Row label="Listens to">
+        <span className="st-auto-value">{preset.listensTo}</span>
+      </Row>
+      <AlertRow
+        alert={alert}
+        disabled={false}
+        onPress={(part, on) =>
+          update((v) => ({ ...v, alert: withAlertPart(v.alert ?? alert, part, on) }))
+        }
+      />
+      <AlertDetailRows
+        alert={alert}
+        disabled={false}
+        only={rows}
+        onChange={(patch) =>
+          update((v) => ({ ...v, alert: withAlertParts(v.alert ?? alert, patch) }))
+        }
+      />
+      <Row label="Adds">
+        <span className="st-auto-value">{countPhrase(1, ALERT_NOUN)}</span>
+      </Row>
     </Card>
   );
 }
