@@ -166,8 +166,8 @@ pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 /// `mud.pane`, once per flush: each pane that changed, whole, and each
 /// one that went as its plugin turned off, stopped or loaded again. The
 /// payload is a [`crate::script::panes::LuaPanesPayload`], and each block
-/// carries its `kind`, `row`, `gauge`, `line` or `rule`. No page listener
-/// hears it yet.
+/// carries its `kind`, `row`, `gauge`, `line` or `rule`. `onLuaPanes`
+/// hears it, and the Lua panes of the main window show it.
 pub(crate) const LUA_PANES: &str = "session://lua-panes";
 
 // The lists.

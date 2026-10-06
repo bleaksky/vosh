@@ -158,11 +158,6 @@ const UNHEARD: &[Unheard] = &[
               R18 (Alerts Q19).",
     },
     Unheard {
-        name: "session://lua-panes",
-        why: "What a plugin changed in its panes. The Lua pane in the main \
-              window hears it once it lands (Scripts and Panels Q18).",
-    },
-    Unheard {
         name: "vosh://daylight-changed",
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",
