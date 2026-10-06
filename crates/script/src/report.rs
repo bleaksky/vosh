@@ -2,11 +2,42 @@
 //! and line where Lua knows them, a stop, the action cap, and the
 //! handlers an event skipped.
 
+use crate::actions::{Action, Place};
 use crate::budget::{Event, EVENT_BUDGET};
 use crate::limits::{
-    Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, STATE_MEMORY, TIME_BUDGET,
+    At, Stop, StopReason, ACTIONS_PER_CALL, CALL_MEMORY, ECHO_BYTES, MB, STATE_MEMORY, TIME_BUDGET,
 };
 use crate::owner::{Owner, Site};
+
+/// The line for a Lua error of `owner`, with the place Lua names.
+pub(crate) fn error(owner: &Owner, err: &mlua::Error) -> Action {
+    let (at, message) = parts(err);
+    let at = at
+        .as_deref()
+        .map_or_else(|| leading_place(&message), leading_place);
+    Action::Error {
+        owner: owner.clone(),
+        text: describe(err),
+        at,
+    }
+}
+
+/// The place `source:line` at the start of `text`, the way Lua puts it
+/// before an error's message, like `vitals_alert/main.lua:22`.
+fn leading_place(text: &str) -> Option<Place> {
+    text.match_indices(':').find_map(|(colon, _)| {
+        let after = &text[colon + 1..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        let rest = &after[digits..];
+        if digits == 0 || !(rest.is_empty() || rest.starts_with(':')) {
+            return None;
+        }
+        Some(Place {
+            source: text[..colon].to_string(),
+            line: after[..digits].parse().ok()?,
+        })
+    })
+}
 
 /// The line for a Lua error: the place Lua names, then what went
 /// wrong, without the stack traceback mlua adds. A message longer than
@@ -65,8 +96,10 @@ fn first_frame(traceback: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The lines for a stop of `owner`, who ran `site` when Vosh stopped it.
-pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<String> {
+/// The lines for a stop of `owner`, who ran `site` when Vosh stopped it:
+/// the stop as an error, and for a plugin a note on how long it stays
+/// off, which the board draws plain.
+pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<Action> {
     let subject = subject(owner, site);
     // Only the stop of a plugin names the file and line, the way the
     // Scripts design writes its lines.
@@ -90,23 +123,29 @@ pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<String>
             STATE_MEMORY / MB
         ),
     };
+    let error = |text: String| Action::Error {
+        owner: owner.clone(),
+        text,
+        at: stop.at.as_ref().map(place),
+    };
     match (owner, site) {
         (Owner::Plugin(name), _) => vec![
-            what,
-            format!(
-                "{name} stays off until you save it under Scripts in Settings or restart Vosh."
-            ),
+            error(what),
+            Action::Note {
+                owner: owner.clone(),
+                text: format!(
+                    "{name} stays off until you save it under Scripts in Settings or restart Vosh."
+                ),
+            },
         ],
-        (Owner::Trigger(name) | Owner::Alias(name), _) => {
-            vec![format!(
-                "{what} {name} stays off until you save it or restart Vosh."
-            )]
-        }
-        (Owner::Script(_), _) => vec![format!("{what} It stays off until #script reload.")],
+        (Owner::Trigger(name) | Owner::Alias(name), _) => vec![error(format!(
+            "{what} {name} stays off until you save it or restart Vosh."
+        ))],
+        (Owner::Script(_), _) => vec![error(format!("{what} It stays off until #script reload."))],
         (Owner::Typed, Site::LuaTrigger { .. } | Site::Gmcp { .. }) => {
-            vec![format!("{what} Vosh removed it.")]
+            vec![error(format!("{what} Vosh removed it."))]
         }
-        (Owner::Typed, Site::Entry | Site::Timer { .. }) => vec![what],
+        (Owner::Typed, Site::Entry | Site::Timer { .. }) => vec![error(what)],
     }
 }
 
@@ -180,14 +219,28 @@ fn capitalized(text: &str) -> String {
 /// The file of plugin `name` a chunk name points at, like `main.lua`
 /// for `@vitals_alert/main.lua`.
 fn file_in(name: &str, source: &str) -> String {
-    let path = source
-        .strip_prefix('@')
-        .or_else(|| source.strip_prefix('='))
-        .unwrap_or(source);
+    let path = shown_source(source);
     path.strip_prefix(name)
         .and_then(|rest| rest.strip_prefix('/'))
         .unwrap_or(path)
         .to_string()
+}
+
+/// The place a stop happened, as Lua names it in a message.
+fn place(at: &At) -> Place {
+    Place {
+        source: shown_source(&at.source).to_string(),
+        line: at.line,
+    }
+}
+
+/// A chunk name as Lua shows it in a message, without the `@` or `=`
+/// it starts with.
+fn shown_source(source: &str) -> &str {
+    source
+        .strip_prefix('@')
+        .or_else(|| source.strip_prefix('='))
+        .unwrap_or(source)
 }
 
 #[cfg(test)]
@@ -205,28 +258,67 @@ mod tests {
         }
     }
 
+    /// The text of each line in `actions`.
+    fn texts(actions: &[Action]) -> Vec<&str> {
+        actions
+            .iter()
+            .map(|action| match action {
+                Action::Error { text, .. } | Action::Note { text, .. } => text.as_str(),
+                other => panic!("no line: {other:?}"),
+            })
+            .collect()
+    }
+
     #[test]
     fn a_plugin_stop_reads_as_the_board_writes_it() {
         let owner = Owner::Plugin("wait_full".into());
         let at = Some(("@wait_full/main.lua", 5));
+        // The stop is an error at its place, and the second line a note
+        // the board draws plain.
         assert_eq!(
             stop_lines(&owner, &Site::Entry, &stop(StopReason::Time, at)),
             [
-                "Vosh stopped wait_full at main.lua line 5 after 100 ms.",
-                "wait_full stays off until you save it under Scripts in Settings or restart Vosh.",
+                Action::Error {
+                    owner: owner.clone(),
+                    text: "Vosh stopped wait_full at main.lua line 5 after 100 ms.".into(),
+                    at: Some(Place {
+                        source: "wait_full/main.lua".into(),
+                        line: 5,
+                    }),
+                },
+                Action::Note {
+                    owner: owner.clone(),
+                    text: "wait_full stays off until you save it under Scripts in Settings or restart Vosh."
+                        .into(),
+                },
             ]
         );
         assert_eq!(
-            stop_lines(&owner, &Site::Entry, &stop(StopReason::CallMemory, at))[0],
+            texts(&stop_lines(
+                &owner,
+                &Site::Entry,
+                &stop(StopReason::CallMemory, at)
+            ))[0],
             "Vosh stopped wait_full at main.lua line 5. One call used more than 32 MB."
         );
         assert_eq!(
-            stop_lines(&owner, &Site::Entry, &stop(StopReason::StateMemory, at))[0],
+            texts(&stop_lines(
+                &owner,
+                &Site::Entry,
+                &stop(StopReason::StateMemory, at)
+            ))[0],
             "Vosh stopped wait_full. Your scripts hold more than 128 MB."
         );
         assert_eq!(
-            stop_lines(&owner, &Site::Entry, &stop(StopReason::Time, None))[0],
-            "Vosh stopped wait_full after 100 ms."
+            texts(&stop_lines(
+                &owner,
+                &Site::Entry,
+                &stop(StopReason::Time, None)
+            )),
+            [
+                "Vosh stopped wait_full after 100 ms.",
+                "wait_full stays off until you save it under Scripts in Settings or restart Vosh.",
+            ]
         );
         assert_eq!(
             cap_line(&owner, &Site::Entry),
@@ -237,20 +329,33 @@ mod tests {
     #[test]
     fn the_other_stops_read_as_the_board_writes_them() {
         let time = stop(StopReason::Time, Some(("=trigger tells", 1)));
+        let tells = Owner::Trigger("tells".into());
+        // Each is one error, at the place the stop names.
         assert_eq!(
-            stop_lines(&Owner::Trigger("tells".into()), &Site::Entry, &time),
-            ["Vosh stopped the Lua in trigger tells after 100 ms. tells stays off until you save it or restart Vosh."]
+            stop_lines(&tells, &Site::Entry, &time),
+            [Action::Error {
+                owner: tells.clone(),
+                text: "Vosh stopped the Lua in trigger tells after 100 ms. tells stays off until you save it or restart Vosh.".into(),
+                at: Some(Place {
+                    source: "trigger tells".into(),
+                    line: 1,
+                }),
+            }]
         );
         assert_eq!(
-            stop_lines(&Owner::Alias("heal".into()), &Site::Entry, &time),
+            texts(&stop_lines(&Owner::Alias("heal".into()), &Site::Entry, &time)),
             ["Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."]
         );
         assert_eq!(
-            stop_lines(&Owner::Script("combat.lua".into()), &Site::Entry, &time),
+            texts(&stop_lines(
+                &Owner::Script("combat.lua".into()),
+                &Site::Entry,
+                &time
+            )),
             ["Vosh stopped combat.lua after 100 ms. It stays off until #script reload."]
         );
         assert_eq!(
-            stop_lines(&Owner::Typed, &Site::Entry, &time),
+            texts(&stop_lines(&Owner::Typed, &Site::Entry, &time)),
             ["Vosh stopped your #lua line after 100 ms."]
         );
         let handler = Site::Gmcp {
@@ -258,7 +363,7 @@ mod tests {
             callback_id: 1,
         };
         assert_eq!(
-            stop_lines(&Owner::Typed, &handler, &time),
+            texts(&stop_lines(&Owner::Typed, &handler, &time)),
             ["Vosh stopped a Char.Vitals handler after 100 ms. Vosh removed it."]
         );
         assert_eq!(
@@ -307,5 +412,35 @@ mod tests {
             cause: std::sync::Arc::new(mlua::Error::RuntimeError("script engine state missing".into())),
         };
         assert_eq!(describe(&callback), "#lua:1: script engine state missing");
+    }
+
+    #[test]
+    fn an_error_carries_the_place_lua_names() {
+        let owner = Owner::Plugin("vitals_alert".into());
+        let place = |source: &str, line| {
+            Some(Place {
+                source: source.into(),
+                line,
+            })
+        };
+        let at = |err: &mlua::Error| match error(&owner, err) {
+            Action::Error { at, .. } => at,
+            other => panic!("no error: {other:?}"),
+        };
+        let runtime = mlua::Error::RuntimeError(
+            "vitals_alert/main.lua:22: attempt to concatenate a nil value (field 'hp_pct')".into(),
+        );
+        assert_eq!(at(&runtime), place("vitals_alert/main.lua", 22));
+        let callback = mlua::Error::CallbackError {
+            traceback: "stack traceback:\n\t[C]: in function 'mud.send'\n\t#lua:2: in main chunk"
+                .into(),
+            cause: std::sync::Arc::new(mlua::Error::RuntimeError("bad argument #1".into())),
+        };
+        assert_eq!(at(&callback), place("#lua", 2));
+        // A colon in the chunk name or the message is no place.
+        let quoted = mlua::Error::RuntimeError("[string \"a:b\"]:3: near 'x': 12:30".into());
+        assert_eq!(at(&quoted), place("[string \"a:b\"]", 3));
+        let bare = mlua::Error::RuntimeError("the clock says 12:30 now".into());
+        assert_eq!(at(&bare), None);
     }
 }

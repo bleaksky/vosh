@@ -91,7 +91,11 @@ fn slash_script_reload(
             Some(Ok((chunk, code))) => {
                 outcome.append(c.script.load_script(owner, &chunk, &code));
             }
-            Some(Err(line)) => outcome.actions.push(Action::Error(line)),
+            Some(Err(text)) => outcome.actions.push(Action::Error {
+                owner,
+                text,
+                at: None,
+            }),
             None => {}
         }
     }

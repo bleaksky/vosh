@@ -96,8 +96,9 @@ pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &Sc
 /// theme's bright black, so the line reads as Vosh and not the game.
 const LUA_TAG: &str = "\x1b[90m[lua]\x1b[0m";
 
-/// The terminal lines for `text` from `print` or `mud.log`, one tagged
-/// line for each line of the text, in the default color.
+/// The terminal lines for `text` from `print`, `mud.log` or a note of
+/// Vosh's, one tagged line for each line of the text, in the default
+/// color.
 fn lua_lines(text: &str) -> impl Iterator<Item = String> + '_ {
     text.split('\n')
         .map(|line| format!("{LUA_TAG} {}", line.trim_end_matches('\r')))
@@ -203,10 +204,12 @@ pub(crate) fn apply_actions(
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
-            Action::Log(text) => {
+            // A note, such as how long a stopped plugin stays off, reads
+            // plain, as a print does.
+            Action::Log { text, .. } | Action::Note { text, .. } => {
                 result.echoes.extend(lua_lines(&text));
             }
-            Action::Error(text) => {
+            Action::Error { text, .. } => {
                 result.echoes.extend(lua_error_lines(&text));
             }
             Action::SetAlias { name, expansion } => {
