@@ -256,12 +256,17 @@ async fn a_drop_at_the_account_menu_starts_nothing() {
 async fn with_reconnect_off_a_drop_rings_and_stays_down() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = logged_in(&["alert_connection"]).await;
-    let on = || crate::ipc::session::reconnect_get(h.app.state());
+    let on = || crate::ipc::session::reconnect_get(h.app.state(), None);
     assert_eq!(on().await, Ok(true), "on for every profile");
-    crate::ipc::session::reconnect_set(h.app.handle().clone(), h.app.state(), false)
+    crate::ipc::session::reconnect_set(h.app.handle().clone(), h.app.state(), false, None)
         .await
         .expect("the switch");
     assert_eq!(on().await, Ok(false));
+    let named = crate::ipc::session::reconnect_get(
+        h.app.state(),
+        Some(crate::profile::set::DEFAULT_PROFILE_NAME.into()),
+    );
+    assert_eq!(named.await, Ok(false), "the profile by name");
     let file = std::fs::read_to_string(
         h.profile_file(crate::profile::set::DEFAULT_PROFILE_NAME)
             .await,
