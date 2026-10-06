@@ -468,6 +468,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('characters', undefined, 'new-profile'),
   },
   {
+    label: 'Import a profile',
+    keywords: 'import export toml share',
+    target: at('characters', undefined, 'import-profile'),
+  },
+  {
     label: 'Use this profile when you log in',
     keywords: 'auto match login character automatic switch',
     target: at('characters', undefined, 'login'),

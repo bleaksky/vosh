@@ -25,7 +25,12 @@ import {
   takenProfileName,
   takenSentence,
 } from '../../lib/characterProfiles';
-import { profileExportFile, profileSetLogin, type SessionIdentity } from '../../ipc/characters';
+import {
+  profileExportFile,
+  profileImportRead,
+  profileSetLogin,
+  type SessionIdentity,
+} from '../../ipc/characters';
 import {
   profileCreate,
   profileDelete,
@@ -34,7 +39,9 @@ import {
   profileSwitch,
   type ProfilesList,
 } from '../../ipc/profiles';
+import { errorText } from '../../lib/text';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
+import type { ImportFile } from './profileImport';
 
 // The profile list on the Characters board: one 38 px row per profile
 // in index order, the profile in use marked by an accent dot, its world
@@ -42,7 +49,10 @@ import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } fro
 // that profile. It never switches the live session. Each row has a
 // more menu (SPEC 7) that switches, renames, duplicates, exports, and
 // deletes, and a quiet line under the list says what the last action
-// did when that is not plain to see.
+// did when that is not plain to see. Import… beside New profile reads a
+// Vosh profile export you pick (board 5 of the Scripts design), and the
+// page shows its sheet. A file that is no export reads as such on the
+// line under the list.
 
 interface Props {
   list: ProfilesList;
@@ -58,6 +68,8 @@ interface Props {
   onError: (message: string | null) => void;
   /** Read the list again after an edit, ahead of the backend's event. */
   onChanged: () => void;
+  /** A profile export you picked, read, for the import sheet. */
+  onImport: (file: ImportFile) => void;
 }
 
 type Editing =
@@ -88,6 +100,7 @@ export function ProfileList({
   onStatus,
   onError,
   onChanged,
+  onImport,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -95,6 +108,7 @@ export function ProfileList({
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const names = list.profiles.map((p) => p.name);
 
   // A field or the dialog that held focus is gone, so focus would sit on
@@ -254,6 +268,27 @@ export function ProfileList({
     }
   };
 
+  // Read the file you picked. A refusal, like a file that is no
+  // export, reads on the line under the list, as board 5 draws it. A
+  // file the window cannot read gets the sentence Vosh gives one it
+  // cannot parse.
+  const importFile = async (file: File) => {
+    onError(null);
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      onStatus(`Vosh could not read ${file.name}.`);
+      return;
+    }
+    try {
+      const preview = await profileImportRead(file.name, text);
+      onImport({ fileName: file.name, text, preview });
+    } catch (e) {
+      onStatus(errorText(e));
+    }
+  };
+
   const exportProfile = (name: string) =>
     void run(async () => {
       const saved = await profileExportFile(name);
@@ -379,17 +414,39 @@ export function ProfileList({
         )}
       </ul>
 
-      <Button
-        ref={newRef}
-        className="st-chars-new"
-        icon={<PlusIcon />}
-        data-st-anchor="new-profile"
-        data-st-flash=""
-        disabled={editing?.kind === 'new'}
-        onClick={() => setEditing({ kind: 'new' })}
-      >
-        New profile
-      </Button>
+      <div className="st-chars-actions">
+        <Button
+          ref={newRef}
+          icon={<PlusIcon />}
+          data-st-anchor="new-profile"
+          data-st-flash=""
+          disabled={editing?.kind === 'new'}
+          onClick={() => setEditing({ kind: 'new' })}
+        >
+          New profile
+        </Button>
+        <Button
+          data-st-anchor="import-profile"
+          data-st-flash=""
+          onClick={() => fileRef.current?.click()}
+        >
+          Import…
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".toml"
+          className="st-visually-hidden"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Clear the pick so the same file can be picked again.
+            e.target.value = '';
+            if (file) void importFile(file);
+          }}
+        />
+      </div>
 
       <p className="st-chars-status" role="status">
         {status}
