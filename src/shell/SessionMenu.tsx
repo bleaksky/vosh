@@ -26,7 +26,8 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 // one Name field while it does not, as with one session. New session
 // opens a session and comes back on that session's own form. Disconnect
 // is destructive, so it sits last in the danger tone and is never the
-// row focus lands on.
+// row focus lands on. While a redial waits after a drop the popover
+// offers both, Connect to dial now and Disconnect to end the tries.
 //
 // While the sidebar is folded with two or more sessions open, in a
 // narrow window or after Hide sessions, the popover lists every session
@@ -71,7 +72,7 @@ export function SessionMenu({
   onClose,
 }: Props) {
   const [mode, setMode] = useState(request.mode);
-  const { live, target } = connection;
+  const { live, redialing, target } = connection;
   const rows = useSessions();
   const selected = useSelected();
 
@@ -191,7 +192,7 @@ export function SessionMenu({
       >
         New session…
       </ShellMenuItem>
-      {live && (
+      {(live || redialing) && (
         <>
           <ShellMenuSeparator />
           <ShellMenuItem danger onSelect={() => run(connection.disconnect)}>
