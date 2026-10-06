@@ -222,6 +222,7 @@ describe('the chat store through a redial', () => {
     return (payload) => handler({ payload });
   }
   const state = (payload: Record<string, unknown>) => heard('session://state')(payload);
+  const redial = (payload: Record<string, unknown>) => heard('session://reconnect')(payload);
   const tell = () => {
     const { data } = aabahranChatPacket('tell.gmcp');
     heard('session://gmcp/Comm-Channel')({ data });
@@ -231,6 +232,7 @@ describe('the chat store through a redial', () => {
 
   beforeEach(() => {
     getChatLines();
+    redial({ kind: 'cancelled' });
     state({ kind: 'disconnected', reason: null });
     dial('play.theforsakenlands.com');
     tell();
@@ -251,6 +253,30 @@ describe('the chat store through a redial', () => {
     dial('play.theforsakenlands.com');
     state({ kind: 'connected', host: 'play.theforsakenlands.com', port: 1848, tls: false });
     expect(speakers()).toEqual(['Tolliver']);
+  });
+
+  it('keeps the lines through a try that fails', () => {
+    state({ kind: 'disconnected', reason: 'server closed connection' });
+    redial({ kind: 'waiting', try: 1, tries: 5, seconds: 3 });
+    redial({ kind: 'dialing', try: 1, tries: 5 });
+    dial('play.theforsakenlands.com');
+    // A try that fails tells the page the link is down with no reason.
+    state({ kind: 'disconnected', reason: null });
+    redial({ kind: 'failed', try: 1, tries: 5, reason: 'connection refused' });
+    redial({ kind: 'waiting', try: 2, tries: 5, seconds: 6 });
+    redial({ kind: 'dialing', try: 2, tries: 5 });
+    dial('play.theforsakenlands.com');
+    state({ kind: 'connected', host: 'play.theforsakenlands.com', port: 1848, tls: false });
+    redial({ kind: 'reached', try: 2 });
+    expect(speakers()).toEqual(['Tolliver']);
+  });
+
+  it('empties the lines at your Disconnect between the tries', () => {
+    state({ kind: 'disconnected', reason: 'server closed connection' });
+    redial({ kind: 'waiting', try: 1, tries: 5, seconds: 3 });
+    redial({ kind: 'cancelled' });
+    state({ kind: 'disconnected', reason: null });
+    expect(getChatLines()).toEqual([]);
   });
 
   it('empties the lines at a dial to another world', () => {
