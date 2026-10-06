@@ -72,6 +72,8 @@ pub(crate) async fn profile_rename(
 ) -> Result<(), String> {
     rename_profile(state.inner(), &old, &new).await?;
     broadcast(&app, PROFILES_CHANGED, &new);
+    // The row of each session on the profile names it anew.
+    crate::sessions::broadcast_sessions(&app, state.inner());
     Ok(())
 }
 

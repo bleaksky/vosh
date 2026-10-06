@@ -109,9 +109,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // on the profile is connected, whose count already follows the switch
     // as it stands. The prompt engine starts with no packets and the
     // host's rules.
-    let others = app
-        .state::<crate::app::state::SharedState>()
-        .other_sessions(session.id);
+    let shared = app.state::<crate::app::state::SharedState>();
+    let others = shared.other_sessions(session.id);
     {
         let mut p = session.lock_profile().await;
         let joins = p.players(&others).any(|other| other.connected());
@@ -129,6 +128,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
     }
+    // The row reads the session as connected from here, since the count
+    // marks it in session, after the connected state went out.
+    crate::sessions::broadcast_sessions(&app, &shared);
 
     let mut poll = tokio::time::interval(POLL_INTERVAL);
     poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
