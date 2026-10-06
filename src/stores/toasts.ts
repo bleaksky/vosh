@@ -2,6 +2,13 @@ import { createStore } from './store';
 
 export type ToastKind = 'success' | 'info' | 'error';
 
+/** The one button a toast can carry, such as Undo. Pressing it runs
+ *  `run` and closes the toast. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface Toast {
   id: number;
   kind: ToastKind;
@@ -10,6 +17,7 @@ export interface Toast {
   meta?: string;
   /** The meta reads in the terminal's face, as prompt codes do (P14). */
   metaMono?: boolean;
+  action?: ToastAction;
 }
 
 export interface ToastInput {
@@ -18,6 +26,7 @@ export interface ToastInput {
   meta?: string;
   /** The meta reads in the terminal's face, as prompt codes do (P14). */
   metaMono?: boolean;
+  action?: ToastAction;
   /** Auto-dismiss delay override. Defaults below apply otherwise. */
   timeoutMs?: number;
   /** Stays up until you click it, for a notice that holds until you act. */
@@ -41,6 +50,7 @@ export function pushToast(input: ToastInput): number {
   const toast: Toast = { id, kind: input.kind, message: input.message };
   if (input.meta !== undefined) toast.meta = input.meta;
   if (input.metaMono) toast.metaMono = true;
+  if (input.action) toast.action = input.action;
   if (!input.sticky) {
     const delay =
       input.timeoutMs ?? (input.kind === 'error' ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
