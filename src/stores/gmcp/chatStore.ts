@@ -1,4 +1,10 @@
-import { onRouted, type RoutedPayload, type StatePayload } from '../../ipc/session';
+import {
+  onReconnect,
+  onRouted,
+  type ReconnectPayload,
+  type RoutedPayload,
+  type StatePayload,
+} from '../../ipc/session';
 import { createSessionStore } from '../sessionStore';
 
 /** Which way a tell went. Aabahran marks a tell you receive
@@ -119,13 +125,14 @@ interface World {
 }
 
 /** A session's chat lines and the world they came from, null until the
- *  page sees the session dial. */
+ *  page sees the session dial, and whether a series of redials runs. */
 interface ChatState {
   lines: ChatLine[];
   world: World | null;
+  redialing: boolean;
 }
 
-const EMPTY: ChatState = { lines: [], world: null };
+const EMPTY: ChatState = { lines: [], world: null, redialing: false };
 
 /** The state with `line` added. */
 function addLine(state: ChatState, line: ChatLine | null): ChatState {
@@ -135,16 +142,28 @@ function addLine(state: ChatState, line: ChatLine | null): ChatState {
 
 /** The state after a change in the connection. Your Disconnect, which
  *  carries no reason, empties the lines, and so does a dial to another
- *  world. A drop keeps them, so the tells you got stay through every
- *  try of a redial. Lines heard before the page saw the session dial
- *  stay through its next dial, since their world is unknown. */
+ *  world. A drop keeps them, and so does a try of a redial that fails,
+ *  which carries no reason either, so the tells you got stay through
+ *  every try. Lines heard before the page saw the session dial stay
+ *  through its next dial, since their world is unknown. */
 function onConnection(state: ChatState, payload: StatePayload): ChatState {
-  if (payload.kind === 'disconnected') return payload.reason === null ? EMPTY : state;
+  if (payload.kind === 'disconnected') {
+    return payload.reason === null && !state.redialing ? EMPTY : state;
+  }
   const { host, port } = payload;
   const { world } = state;
   if (world?.host === host && world.port === port) return state;
   const elsewhere = payload.kind === 'connecting' && world !== null;
-  return { lines: elsewhere ? [] : state.lines, world: { host, port } };
+  return { ...state, lines: elsewhere ? [] : state.lines, world: { host, port } };
+}
+
+/** The state after a step of a redial. A series runs from its first
+ *  wait or dial until a try reaches the game, the tries run out, or it
+ *  is cancelled. */
+function onRedial(state: ChatState, payload: ReconnectPayload): ChatState {
+  const redialing =
+    payload.kind === 'waiting' || payload.kind === 'dialing' || payload.kind === 'failed';
+  return redialing === state.redialing ? state : { ...state, redialing };
 }
 
 // The most recent MAX_LINES chat lines of each session, from the channel
@@ -163,6 +182,8 @@ const store = createSessionStore<ChatState, ChatLine[]>({
       onRouted((payload, session) =>
         apply(session, (state) => addLine(state, parseRoutedLine(payload))),
       ),
+    (apply) =>
+      onReconnect((payload, session) => apply(session, (state) => onRedial(state, payload))),
   ],
   view: (state) => state.lines,
 });
