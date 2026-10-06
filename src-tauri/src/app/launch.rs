@@ -15,6 +15,7 @@ use tauri::{AppHandle, Manager};
 use tracing::{error, info};
 use vosh_log::LogStore;
 
+use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
 use crate::app::state::SharedState;
 use crate::disk::paths;
 use crate::disk::save::PERSIST_LOCK;
@@ -23,7 +24,7 @@ use crate::loadouts::catalog::{lay_catalog_over, loadout_mode_on, save_global_ca
 use crate::loadouts::presets::{adopt_catalog_presets, profile_preset_lists};
 use crate::loadouts::wizard::journal::{self, WizardRun};
 use crate::profile::file::load_at_launch;
-use crate::profile::open::lock_both;
+use crate::profile::open::{lock_both, OpenProfile};
 use crate::profile::set::ProfileSet;
 use crate::sessions::Session;
 
@@ -330,19 +331,46 @@ pub(crate) async fn open_restored<R: tauri::Runtime>(
 /// reads its scrollback the first time, see [`open_restored`], and
 /// profiles.toml then keeps it as the selected one. Every window hears
 /// the rows with the new selection, the one a banner click makes among
-/// them.
+/// them, and then what the selection brings to the front, see
+/// [`show_selection`].
 pub(crate) async fn select_session<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     id: crate::sessions::SessionId,
 ) -> Result<(), String> {
+    let front = state.selected_session().profile();
     state.select_session(id)?;
     let selected = state.session(Some(id))?;
     let opened = open_restored(app, state, &selected).await;
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    crate::profile::set::save_sessions(state).await;
-    crate::sessions::broadcast_sessions(app, state);
+    {
+        let _persist_guard = PERSIST_LOCK.lock().await;
+        crate::profile::set::save_sessions(state).await;
+        crate::sessions::broadcast_sessions(app, state);
+    }
+    show_selection(app, state, &front).await;
     opened
+}
+
+/// Tell every window what the selected session brings to the front, once
+/// the selection moved from a session that played `front`. The windows
+/// show the profile the selected session plays, so when it plays another
+/// one every window takes its panes, tracked affects, tick settings and
+/// the rest, then hears its name on `vosh://profile-switched`, as after a
+/// switch. Settings › Characters hears who the session is logged in as.
+/// Call it once profiles.toml names the new active profile, which
+/// Characters reads again on the switch.
+pub(crate) async fn show_selection<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    front: &Arc<OpenProfile>,
+) {
+    let selected = state.selected_session();
+    let plays = selected.profile();
+    if !Arc::ptr_eq(&plays, front) {
+        broadcast_profile_ui(app, state).await;
+        broadcast(app, PROFILE_SWITCHED, &plays.name());
+    }
+    crate::session::identity::broadcast_session_identity(app, state, &selected).await;
 }
 
 /// Read the lines the scrollback file of `session` kept into its ring.
