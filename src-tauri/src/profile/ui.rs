@@ -1770,7 +1770,7 @@ name = "haste"
     }
 
     #[test]
-    fn chat_colors_stay_with_each_character_and_out_of_the_whole_config_save() {
+    fn chat_colors_stay_with_each_character() {
         let mut ui = UiConfig::default();
         assert!(ui.chat_colors.is_empty());
         // A profile with no recolor writes no table.
