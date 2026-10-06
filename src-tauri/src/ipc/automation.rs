@@ -101,15 +101,7 @@ pub(crate) async fn aliases_import(
     let count = parsed.len();
     let open = {
         let mut p = state.lock_named(profile).await?;
-        let mut store = vosh_automation::alias::AliasStore::new();
-        for alias in parsed {
-            store.set(alias);
-        }
-        // The disabled-groups set is user state about GROUPS, not items;
-        // replacing the store without carrying it over silently
-        // re-enabled every disabled group on each editor save.
-        store.set_disabled_groups(p.aliases.disabled_groups());
-        p.aliases = store;
+        p.aliases = imported_aliases(parsed, &p.aliases);
         p.open().clone()
     };
     // Same persistence rule as triggers_import: the editor saves here.
@@ -117,6 +109,24 @@ pub(crate) async fn aliases_import(
     persist_profile(&shared, &open).await;
     broadcast_list_changes(&app, &open, ListChanges::ALIASES);
     Ok(count)
+}
+
+/// The store a Settings save of the alias list leaves, built from
+/// `parsed` over `old`. The disabled-groups set is user state about
+/// groups, not items, so it carries over, or every save would turn each
+/// disabled group back on. A stopped alias stays off, under each key,
+/// unless this save changed it, as the trigger import keeps its stops.
+fn imported_aliases(
+    parsed: Vec<vosh_automation::alias::Alias>,
+    old: &vosh_automation::alias::AliasStore,
+) -> vosh_automation::alias::AliasStore {
+    let mut store = vosh_automation::alias::AliasStore::new();
+    for alias in parsed {
+        store.set(alias);
+    }
+    store.set_disabled_groups(old.disabled_groups());
+    store.keep_stops_from(old);
+    store
 }
 
 /// Snapshot of every keyboard macro binding. Used by the Settings
@@ -629,6 +639,24 @@ mod tests {
             enabled,
             loadouts: None,
         }
+    }
+
+    #[test]
+    fn an_alias_list_save_keeps_the_stops_of_each_alias_it_leaves_alone() {
+        use super::imported_aliases;
+        use vosh_automation::alias::{Alias, AliasStore};
+        use vosh_automation::StopKey;
+        let (one, two) = (StopKey(1), StopKey(2));
+        let mut old = AliasStore::new();
+        old.set(Alias::new("hl", "cast heal"));
+        old.set(Alias::new("kk", "kick"));
+        old.stop("hl", one);
+        old.stop("kk", two);
+        let saved = vec![Alias::new("hl", "cast heal"), Alias::new("kk", "kick %1")];
+        let store = imported_aliases(saved, &old);
+        assert!(store.is_stopped("hl", one));
+        assert!(!store.is_stopped("hl", two));
+        assert!(!store.is_stopped("kk", two));
     }
 
     #[test]
