@@ -162,5 +162,12 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         scripts::lua_output_get,
         scripts::lua_output_clear,
         scripts::lua_run,
+        scripts::plugins_list,
+        scripts::plugin_read,
+        scripts::plugin_create,
+        scripts::plugin_save,
+        scripts::plugin_set_enabled,
+        scripts::plugin_reload,
+        scripts::plugin_reveal,
     ]
 }

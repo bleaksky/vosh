@@ -57,6 +57,13 @@ command pane_layout_get()
 command pane_layout_reset(profile?)
 command pane_layout_set(layout, generation?)
 command pending_writes_flushed()
+command plugin_create(name, session?)
+command plugin_read(name)
+command plugin_reload(name, session?)
+command plugin_reveal(name)
+command plugin_save(name, manifest, code, session?)
+command plugin_set_enabled(name, on, session?)
+command plugins_list(session?)
 command presets_install(triggers)
 command presets_remove(presetId)
 command profile_create(name, copyFrom?, autoMatch?)
@@ -187,6 +194,7 @@ event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
+event vosh://plugins-changed app unheard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard
 event vosh://profiles-changed app heard

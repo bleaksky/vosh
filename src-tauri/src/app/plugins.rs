@@ -8,7 +8,10 @@
 //! are on in that profile. The plugins it names load at launch and in
 //! each session you open, and a profile switch turns the next profile's
 //! plugins on and the others off in the session it switches while you
-//! play. You edit the list by hand while Vosh is closed.
+//! play. The Scripts page in Settings makes, reads and saves a plugin's
+//! folder through [`folder`], turns a plugin on or off in a profile and
+//! loads it again through [`live`], and shows its folder through
+//! [`reveal`].
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -20,15 +23,15 @@ use tokio::sync::Mutex;
 use tracing::{error, info};
 use vosh_script::Owner;
 
-use crate::app::state::SharedState;
+use crate::app::state::{AppState, SharedState, NO_APP_DATA};
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 use crate::sessions::Session;
 
-// The Scripts commands of the next commit call it.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod folder;
+pub(crate) mod live;
+pub(crate) mod reveal;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -149,7 +152,8 @@ impl PluginManager {
         Ok(())
     }
 
-    #[cfg(test)]
+    /// The plugins the last [`PluginManager::discover`] found, sorted by
+    /// name.
     pub(crate) fn list(&self) -> &[PluginRecord] {
         &self.plugins
     }
@@ -274,6 +278,16 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
     }
 }
 
+/// The plugins folder, or the error a command returns when launch could
+/// not find the app data folder.
+pub(crate) fn plugins_dir_of(state: &AppState) -> Result<PathBuf, String> {
+    state
+        .app_data
+        .get()
+        .map(|app_data| crate::disk::paths::plugins_dir(app_data))
+        .ok_or_else(|| NO_APP_DATA.to_string())
+}
+
 /// Turn the plugin `name` on, or load it again: read it from
 /// `plugins_dir` as it stands and load it. Returns what it asks of the
 /// session. When Vosh cannot read it, a red `[lua]` line says so, and
@@ -284,23 +298,37 @@ pub(crate) fn plugin_on(
     plugins_dir: &std::path::Path,
     name: &str,
 ) -> ApplyResult {
-    let plugin = match read_plugin(plugins_dir, name) {
-        Ok(plugin) => plugin,
-        Err(e) => {
-            error!(name = %name, error = %e, "plugin entry missing");
-            c.script.list_unread_plugin(name);
-            let outcome = vosh_script::ScriptOutcome {
-                actions: vec![vosh_script::Action::Error {
-                    owner: Owner::Plugin(name.to_string()),
-                    text: format!("Vosh could not read plugin {name} and left it off."),
-                    at: None,
-                }],
-                failed: true,
-                ..vosh_script::ScriptOutcome::default()
-            };
-            return crate::script::apply_actions(p, c, outcome);
-        }
+    match read_plugin(plugins_dir, name) {
+        Ok(plugin) => load_plugin(p, c, name, &plugin),
+        Err(e) => left_off(p, c, name, &e),
+    }
+}
+
+/// Say in a red `[lua]` line that Vosh could not read the plugin `name`,
+/// for `e`, and list it for `#script reload`, which tries it again.
+fn left_off(p: &mut Profile, c: &mut Connection, name: &str, e: &PluginError) -> ApplyResult {
+    error!(name = %name, error = %e, "plugin entry missing");
+    c.script.list_unread_plugin(name);
+    let outcome = vosh_script::ScriptOutcome {
+        actions: vec![vosh_script::Action::Error {
+            owner: Owner::Plugin(name.to_string()),
+            text: format!("Vosh could not read plugin {name} and left it off."),
+            at: None,
+        }],
+        failed: true,
+        ..vosh_script::ScriptOutcome::default()
     };
+    crate::script::apply_actions(p, c, outcome)
+}
+
+/// Load `plugin`, the plugin `name` as Vosh just read it, which takes the
+/// place of what it ran before and clears a stop.
+fn load_plugin(
+    p: &mut Profile,
+    c: &mut Connection,
+    name: &str,
+    plugin: &PluginCode,
+) -> ApplyResult {
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
     crate::script::refresh_vars(p, c);
@@ -372,7 +400,8 @@ async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std:
 /// Once a profile switch made the next profile live for `session` and
 /// turned its plugins on and the others off, deliver what they ask for,
 /// `apply`. Their lines print in the terminal, and what they send goes to
-/// the game when the session runs a connection.
+/// the game when the session runs a connection. Every window then hears
+/// that the plugins changed, so the Scripts page reads them again.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &SharedState,
@@ -383,6 +412,8 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
         note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
     }
     crate::session::effects::deliver_detached(app, session, apply).await;
+    // The session runs other plugins now, and its profile turns others on.
+    crate::app::events::broadcast(app, crate::app::events::PLUGINS_CHANGED, &());
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns
