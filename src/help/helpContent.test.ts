@@ -1188,3 +1188,49 @@ describe('the help on Color vision', () => {
     expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
   });
 });
+
+describe('the help on importing a profile', () => {
+  // Board 5 of the Scripts design, Scripts Q9 and Q10.
+  it('imports a profile under Characters as a new one or over one you have', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain(
+      'To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export.',
+    );
+    expect(text).toContain(
+      '`Replace a profile` lays it over the profile you pick, which keeps its own world and characters.',
+    );
+    expect(text).toContain(
+      'Plugins the file turns on come in off, so you turn each one on under Scripts.',
+    );
+    expect(text).toContain('Vosh names each one under a warning');
+  });
+
+  it('says how characters come with the file, and that an export names them only by choice', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain('A character no other profile has starts on and joins the new profile.');
+    expect(text).toContain('A new profile with no character starts with its login off.');
+    expect(text).toContain(
+      'Each starts off, so a profile you share names your characters only when you turn them on.',
+    );
+  });
+
+  it('sends a Vosh export from the importers to Characters', () => {
+    expect(body('characters-and-data.tintin-import')).toMatch(
+      /A Vosh profile export goes in under Characters, with `Import…` beside `New profile`\.$/,
+    );
+  });
+
+  it('keeps colons and semicolons out of the new prose', () => {
+    const paragraphs = body('characters-and-data.profiles').split('\n\n');
+    for (const start of [
+      '`Export to Downloads`',
+      'To bring in',
+      'Plugins the file',
+      'A new profile',
+    ]) {
+      const paragraph = paragraphs.find((p) => p.startsWith(start)) ?? '';
+      expect(paragraph, start).not.toBe('');
+      expect(paragraph, start).not.toMatch(/[;:] /);
+    }
+  });
+});

@@ -606,6 +606,14 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 
 `Duplicate…` copies a profile's whole setup but leaves its world and login behind. You cannot delete the profile in use, so switch away first.
 
+`Export to Downloads` saves the profile as a file in your Downloads folder. A profile with characters asks first which ones the file names. Each starts off, so a profile you share names your characters only when you turn them on.
+
+To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened.
+
+Plugins the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning, since Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
+
+A new profile takes the world the file names, with a switch for each character the file names. A character no other profile has starts on and joins the new profile. One another profile has starts off and stays there. Turn it on to move it, and when that leaves the other profile with no character, its login turns off. A new profile with no character starts with its login off.
+
 Some settings can stay the same for every character. Under General, Keep the same for every character holds `Theme`, `Font and size`, `Keep last command`, and `Check for updates`. With a switch on, every character shares one value. Turn it off and each character keeps its own.
 
 From the command line, `#profile save` and `#profile load` write and reload the active profile's file on demand.
@@ -646,7 +654,7 @@ The importer handles `#alias {name} {expansion}` and `#variable {name} {value}`,
 
 Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder, and a skip line of `event=2 ticker=1` reports two `event` directives and one `ticker` directive left behind.
 
-Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable.
+Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
 
 ### 7.4 Search session logs
 
