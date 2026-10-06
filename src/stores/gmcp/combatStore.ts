@@ -111,6 +111,8 @@ export function withHidden(
 const store = createGmcpStore<CombatOpponent | null>({
   state: null,
   packages: { 'Char.Combat': (_, data) => parseCombat(data) },
+  // The view reads the hidden store, so each report it makes runs the
+  // view again.
   events: [(apply) => subscribeHidden(() => apply((sent) => sent))],
   view: (sent, last) => {
     const next = withHidden(sent, getHidden());
