@@ -42,12 +42,27 @@
 //! a copy of the old profile's. [`profile_ui_events`] reads them in the
 //! order they go out, and [`line_effect_events`] decides what a run of
 //! typed lines sends.
+//!
+//! The windows show one profile, the profile in front, which is the one
+//! the selected session plays. An event that carries one profile's
+//! settings or lists goes out only while that profile is in front, see
+//! [`AppState::in_front`], whichever session on it made the change: the
+//! list events, the macros and the timers, the `[ui]` events, a replace
+//! and `vosh://profile-switched`. A session on a profile behind tells the
+//! windows only through its row on `vosh://sessions-changed`, and a
+//! selection that brings its profile to the front sends that profile's
+//! settings, so the windows lose nothing. The selected session alone
+//! sends `vosh://session-identity-changed`, and a selection sends it
+//! again.
 
-use tauri::{AppHandle, Emitter};
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
 
 use crate::app::state::{AppState, SharedState};
 use crate::profile::live::Profile;
+use crate::profile::open::OpenProfile;
 use crate::profile::panes::PaneLayoutPersist;
 use crate::session::connection::Connection;
 use crate::tick::TickConfig;
@@ -183,11 +198,13 @@ pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
 /// inactive profile can never reach the main window's stores.
 /// `subscribeProfileChanged` hears it.
 pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
-/// Sent with the new [`crate::session::identity::SessionIdentity`], or null,
-/// after a connect, a disconnect, and the first sight of a character
-/// name after login. Settings is its own webview and may open after all
-/// of those, so it also reads the current value with
-/// `session_identity_get`. `subscribeSessionIdentity` hears it.
+/// Sent with the selected session's
+/// [`crate::session::identity::SessionIdentity`], or null, after its
+/// connect, its disconnect, and the first sight of a character name
+/// after its login, and again as a selection brings a session to the
+/// front. Settings is its own webview and may open after all of those,
+/// so it also reads the current value with `session_identity_get`.
+/// `subscribeSessionIdentity` hears it.
 pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-changed";
 /// Sent to every window when Vosh selected a session itself, as a click
 /// on an alert banner does. The payload is a
@@ -320,20 +337,30 @@ pub(crate) const TERMINAL_CLICKED: &str = "vosh://terminal-clicked";
 #[cfg(native_surface)]
 pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 
-/// The payload of [`PROMPT_CONFIG_CHANGED`]: the active profile whose
+/// The payload of [`PROMPT_CONFIG_CHANGED`]: the profile in front, whose
 /// table changed, None before any profile loads.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct PromptConfigChanged {
     pub(crate) profile: Option<String>,
 }
 
-/// Tell every window the active profile's `[prompt]` table changed.
-pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(app: &AppHandle<R>) {
-    use tauri::Manager;
-    let profile = app
-        .try_state::<crate::app::state::SharedState>()
-        .and_then(|state| state.active_profile());
-    broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
+/// Tell every window the `[prompt]` table of `open` changed, while it is
+/// the profile in front.
+pub(crate) fn broadcast_prompt_config_changed<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    open: &Arc<OpenProfile>,
+) {
+    if in_front(app, open) {
+        let profile = open.name();
+        broadcast(app, PROMPT_CONFIG_CHANGED, &PromptConfigChanged { profile });
+    }
+}
+
+/// Whether `open` is the profile in front, see [`AppState::in_front`].
+/// An app that holds no state plays no profile, so none is.
+fn in_front<R: tauri::Runtime>(app: &AppHandle<R>, open: &Arc<OpenProfile>) -> bool {
+    app.try_state::<SharedState>()
+        .is_some_and(|state| state.in_front(open))
 }
 
 /// The trigger and alias list revisions, the prompt table's, and the
@@ -452,12 +479,22 @@ impl ListChanges {
     }
 }
 
-/// Send one event to every window for each list that changed. Call it
-/// after the profile lock is released.
-pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(app: &AppHandle<R>, changes: ListChanges) {
-    for event in changes.events() {
+/// Send one event to every window for each list of `open`, the profile
+/// a step changed, that changed, while it is the profile in front. Call
+/// it after the profile lock is released.
+pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    open: &Arc<OpenProfile>,
+    changes: ListChanges,
+) {
+    let events = changes.events();
+    if events.is_empty() || !in_front(app, open) {
+        return;
+    }
+    for event in events {
         if event == PROMPT_CONFIG_CHANGED {
-            broadcast_prompt_config_changed(app);
+            let profile = open.name();
+            broadcast(app, event, &PromptConfigChanged { profile });
         } else {
             broadcast(app, event, &"");
         }

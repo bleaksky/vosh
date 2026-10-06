@@ -219,7 +219,7 @@ pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
     }
     if applied {
         crate::disk::save::mark_profile_dirty(app, open);
-        broadcast_list_changes(app, ListChanges::PROMPT);
+        broadcast_list_changes(app, open, ListChanges::PROMPT);
     }
 }
 

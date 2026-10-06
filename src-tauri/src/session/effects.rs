@@ -212,8 +212,12 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         // by triggers or timers) ride the same debounced save the slash
         // commands use, or they would never reach disk.
         mark_durable(app, &apply);
-        // A Lua `mud.alias` changes the list an open Settings page shows.
-        broadcast_list_changes(app, apply.lists);
+        // A Lua `mud.alias` changes the list an open Settings page shows,
+        // while the profile it ran under is in front. Every path names
+        // that profile through `ran_under`.
+        if let Some(open) = &apply.profile {
+            broadcast_list_changes(app, open, apply.lists);
+        }
 
         if !apply.send_bytes.is_empty() {
             io.send(&apply.send_bytes).await?;
@@ -230,7 +234,9 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
                 continue;
             };
             mark_durable(app, &released);
-            broadcast_list_changes(app, std::mem::take(&mut released.lists));
+            if let Some(open) = &released.profile {
+                broadcast_list_changes(app, open, std::mem::take(&mut released.lists));
+            }
             if !released.send_bytes.is_empty() {
                 io.send(&std::mem::take(&mut released.send_bytes)).await?;
             }

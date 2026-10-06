@@ -88,7 +88,7 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
         mark_profile_dirty(&app, &open);
         choose_in_other_sessions(&state, session.id, &open, &chosen).await;
         request_prompt_repaint(&session).await;
-        broadcast_prompt_config_changed(&app);
+        broadcast_prompt_config_changed(&app, &open);
     }
     Ok(())
 }
@@ -113,7 +113,7 @@ pub(crate) async fn prompt_card_open<R: tauri::Runtime>(
     if changed {
         mark_profile_dirty(&app, &open);
         choose_in_other_sessions(&state, session.id, &open, &config).await;
-        broadcast_prompt_config_changed(&app);
+        broadcast_prompt_config_changed(&app, &open);
     }
     Ok(config)
 }

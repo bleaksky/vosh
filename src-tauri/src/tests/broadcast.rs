@@ -22,6 +22,7 @@ use crate::app::events::{
 use crate::app::state::{AppState, SharedState};
 use crate::input::LineEffects;
 use crate::profile::live::{Macro, Profile};
+use crate::profile::open::OpenProfile;
 use crate::session::connection::Connection;
 
 /// The main window, and Settings and Help open beside it.
@@ -132,6 +133,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     );
     broadcast_list_changes(
         handle,
+        &state.selected_session().profile(),
         ListChanges {
             triggers: true,
             aliases: true,
@@ -200,7 +202,7 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
 }
 
 #[test]
-fn the_prompt_table_event_names_the_active_profile() {
+fn the_prompt_table_event_names_the_profile_in_front() {
     let app = app_with_settings_open();
     let handle = app.handle();
     let payloads = Arc::new(Mutex::new(Vec::new()));
@@ -208,11 +210,17 @@ fn the_prompt_table_event_names_the_active_profile() {
     let id = app.listen_any(PROMPT_CONFIG_CHANGED, move |event| {
         heard.lock().unwrap().push(event.payload().to_string());
     });
-    // Before any profile loads it names none.
-    crate::app::events::broadcast_list_changes(handle, ListChanges::PROMPT);
     let state: SharedState = app.state::<SharedState>().inner().clone();
+    let front = state.selected_session().profile();
+    // Before any profile loads it names none.
+    crate::app::events::broadcast_list_changes(handle, &front, ListChanges::PROMPT);
     tauri::async_runtime::block_on(state.selected_profile()).set_name("Second");
-    crate::app::events::broadcast_prompt_config_changed(handle);
+    crate::app::events::broadcast_prompt_config_changed(handle, &front);
+    // A profile no selected session plays stays behind, and tells no
+    // window.
+    let behind = state.add_open_profile("Third", Profile::default());
+    crate::app::events::broadcast_list_changes(handle, &behind, ListChanges::PROMPT);
+    crate::app::events::broadcast_prompt_config_changed(handle, &behind);
     app.unlisten(id);
     assert_eq!(
         *payloads.lock().unwrap(),
@@ -231,13 +239,19 @@ fn grouped_macro(key: &str, command: &str, group: &str) -> Macro {
     }
 }
 
+/// The profile in front in the app of `handle`.
+fn in_front(handle: &tauri::AppHandle<MockRuntime>) -> Arc<OpenProfile> {
+    handle.state::<SharedState>().selected_session().profile()
+}
+
 /// Run `line` the way typed input, timer and tick commands and
-/// `mud.input` lines run, and tell the windows what it changed.
+/// `mud.input` lines run, on the profile in front, and tell the windows
+/// what it changed.
 fn run_and_tell(handle: &tauri::AppHandle<MockRuntime>, p: &mut Profile, line: &str) {
     let mut c = Connection::default();
     let before = ListRevisions::of(p, &c);
     let _ = crate::input::run_line(&AppState::default(), p, &mut c, line);
-    broadcast_list_changes(handle, ListChanges::since(before, p, &c));
+    broadcast_list_changes(handle, &in_front(handle), ListChanges::since(before, p, &c));
 }
 
 /// Apply a Lua `mud.set_group_enabled` the way a trigger, a timer, a
@@ -257,7 +271,7 @@ fn toggle_from_lua(
         ..vosh_script::ScriptOutcome::default()
     };
     let apply = crate::script::apply_actions(p, &mut Connection::default(), outcome);
-    broadcast_list_changes(handle, apply.lists);
+    broadcast_list_changes(handle, &in_front(handle), apply.lists);
 }
 
 #[test]

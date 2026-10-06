@@ -47,7 +47,7 @@ pub(crate) async fn triggers_import(
     // lives only in memory and vanishes on restart.
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    broadcast_list_changes(&app, ListChanges::TRIGGERS);
+    broadcast_list_changes(&app, &open, ListChanges::TRIGGERS);
     Ok(count)
 }
 
@@ -96,7 +96,7 @@ pub(crate) async fn aliases_import(
     // Same persistence rule as triggers_import: the editor saves here.
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    broadcast_list_changes(&app, ListChanges::ALIASES);
+    broadcast_list_changes(&app, &open, ListChanges::ALIASES);
     Ok(count)
 }
 
@@ -321,7 +321,7 @@ pub(crate) async fn groups_set_enabled<R: tauri::Runtime>(
         let shared: SharedState = state.inner().clone();
         persist_profile(&shared, &open).await;
     }
-    broadcast_list_changes(&app, lists);
+    broadcast_list_changes(&app, &open, lists);
     Ok(switches)
 }
 
@@ -448,7 +448,7 @@ pub(crate) async fn presets_install(
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
     if installed > 0 {
-        broadcast_list_changes(&app, ListChanges::TRIGGERS);
+        broadcast_list_changes(&app, &open, ListChanges::TRIGGERS);
     }
     Ok(installed)
 }
@@ -469,7 +469,7 @@ pub(crate) async fn presets_remove(
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
     if removed > 0 {
-        broadcast_list_changes(&app, ListChanges::TRIGGERS);
+        broadcast_list_changes(&app, &open, ListChanges::TRIGGERS);
     }
     Ok(removed)
 }
@@ -548,10 +548,10 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    if macros_changed {
+    if macros_changed && state.in_front(&open) {
         broadcast(&app, MACROS_CHANGED, &macros_snapshot);
     }
-    broadcast_list_changes(&app, lists);
+    broadcast_list_changes(&app, &open, lists);
     Ok(ImportSummary {
         aliases: report.aliases.len(),
         triggers: report.triggers.len() - rejected.len(),

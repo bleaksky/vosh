@@ -1,7 +1,7 @@
-//! Who is logged in. The session sends it to every window after a
-//! connect, a disconnect and the first sight of a character name after
-//! login, and Settings > Characters reads it through
-//! `session_identity_get`.
+//! Who is logged in. The selected session sends it to every window after
+//! a connect, a disconnect and the first sight of a character name after
+//! login, and again as a selection brings it to the front, and Settings >
+//! Characters reads it through `session_identity_get`.
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -58,11 +58,17 @@ pub(crate) async fn session_identity(
     })
 }
 
+/// Tell every window who is logged in on `session`, while it is the
+/// selected one. Settings > Characters shows the session in front, and a
+/// session behind tells the windows through its row alone.
 pub(crate) async fn broadcast_session_identity<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
     session: &Session,
 ) {
+    if state.selected_session().id != session.id {
+        return;
+    }
     let identity = session_identity(state, session).await;
     broadcast(app, SESSION_IDENTITY_CHANGED, &identity);
 }

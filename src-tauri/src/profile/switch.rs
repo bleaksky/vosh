@@ -301,15 +301,18 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     let open = plugins.profile.clone().unwrap_or_else(|| session.profile());
     crate::prompt::report_game_prompt_seen(app, session, &open, seen);
 
-    // Hand every window the new profile's panes, tracked affects, tick
-    // settings, and chip style from here, then the replace notice, on
-    // which the main window reads the config again and sends every
-    // window the rest. These go out before profile-switched so the
-    // stores already hold the new values when windows react to the
-    // switch.
-    broadcast_profile_ui(app, state).await;
-
-    broadcast(app, PROFILE_SWITCHED, &name);
+    // A switch in the selected session brings the next profile to the
+    // front. Hand every window its panes, tracked affects, tick settings,
+    // and chip style from here, then the replace notice, on which the
+    // main window reads the config again and sends every window the
+    // rest. These go out before profile-switched so the stores already
+    // hold the new values when windows react to the switch. A session
+    // behind leaves the profile in front as it was, and the windows take
+    // its next profile when a selection brings it to the front.
+    if state.selected_session().id == session.id {
+        broadcast_profile_ui(app, state).await;
+        broadcast(app, PROFILE_SWITCHED, &name);
+    }
     // The session's row names the profile it now plays.
     crate::sessions::broadcast_sessions(app, state);
 
