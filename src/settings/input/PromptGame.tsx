@@ -15,6 +15,7 @@ import {
   type PromptLastSeen,
 } from '../../ipc/prompt';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 import { CommandBox } from '../../prompt/PromptCodes';
 import { Button, Field, IconButton, MoreIcon, Row } from '../../ui';
 
@@ -335,9 +336,8 @@ export function LineRow({
               setMenu(null);
               return;
             }
-            const r = e.currentTarget.getBoundingClientRect();
             setMenu({
-              at: { x: r.left, y: r.bottom + 4, flipX: r.right, flipY: r.top - 4 },
+              at: menuBelow(e.currentTarget.getBoundingClientRect()),
               anchor: e.currentTarget,
             });
           }}

@@ -13,6 +13,7 @@ import {
   type MenuCloseReason,
   type MenuPlacement,
 } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 import { useEscape } from '../../lib/escapeStack';
 import {
   copyName,
@@ -162,11 +163,7 @@ export function ProfileList({
   };
 
   const openMenu = (name: string, button: HTMLButtonElement | null, point?: MenuPlacement) => {
-    let at = point;
-    if (!at && button) {
-      const r = button.getBoundingClientRect();
-      at = { x: r.left, y: r.bottom + 4, flipX: r.right, flipY: r.top - 4 };
-    }
+    const at = point ?? (button && menuBelow(button.getBoundingClientRect()));
     if (at) setMenu({ name, at, anchor: button });
   };
 
