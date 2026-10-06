@@ -9,7 +9,7 @@
 //!   `prompt` and `fprompt`, counts misses and reports the status.
 //! - [`config`] is the `[prompt]` table a profile file saves, with
 //!   Vosh's default design and the rule that a profile with no design of
-//!   its own follows the game.
+//!   its own follows the game. It also holds Vosh's vitals text.
 //! - [`design`] is the template language. It parses a design into tokens
 //!   and the pieces the editor shows, writes tokens back as text, and
 //!   holds the look algebra the editor uses to keep each piece's look.
@@ -33,6 +33,7 @@
 //!   each field's state, says what each piece of a design is, makes the
 //!   edits, reports what a capture compiles to, offers the presets, writes
 //!   the sentences you read and groups the candidates.
+//! - [`legacy`] rewrites your 0.7 vitals template in today's codes.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does, plays a fake Aabahran for tests and scripted runs, and
 //!   holds the designs and clocks many tests share.
@@ -49,6 +50,7 @@ pub mod card;
 pub mod config;
 pub mod design;
 pub mod engine;
+pub mod legacy;
 pub mod render;
 pub mod stage;
 #[cfg(feature = "testkit")]
@@ -56,7 +58,7 @@ pub mod testkit;
 pub mod values;
 pub mod wrap;
 
-pub use config::{CaptureConfig, PromptConfig, PromptShow, DEFAULT_DESIGN};
+pub use config::{CaptureConfig, PromptConfig, PromptShow, DEFAULT_DESIGN, DEFAULT_VITALS_TEXT};
 pub use design::{FieldRef, Template};
 pub use engine::{GamePromptSeen, PromptEngine, Status};
 pub use render::{render, render_str, RenderOptions, Rendered, Span};
