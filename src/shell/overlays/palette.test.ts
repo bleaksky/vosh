@@ -165,6 +165,18 @@ describe('paletteSections', () => {
     expect(sections[0].rows.map((r) => r.id)).toEqual(['find', 'settings-themes', 'profile-save']);
   });
 
+  it('lists New session… with its key once you type, leading the Session rows', () => {
+    const newSession = vi.fn();
+    const entries = buildPaletteEntries(deps({ newSession }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('session-new');
+    const session = paletteSections(entries, 'session', []).find((s) => s.label === 'Session');
+    const row = session?.rows[0];
+    expect(row).toMatchObject({ id: 'session-new', title: 'New session…', keys: 'Mod+T' });
+    void row?.run();
+    expect(newSession).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-new')).toBe(false);
+  });
+
   it('hides search only rows until you type, then ranks matches by section', () => {
     const entries = buildPaletteEntries(deps());
     expect(flat(paletteSections(entries, '', [])).some((r) => r.searchOnly)).toBe(false);

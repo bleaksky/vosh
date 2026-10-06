@@ -95,7 +95,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &connect,
             &item("session-edit", "Edit connection…")?,
             &sep()?,
-            &item("session-new", "New connection…")?,
+            &item("session-new", "New session…")?,
             &sep()?,
             &item("close-window", "Close window")?,
             &item("profile-save", "Save profile")?,

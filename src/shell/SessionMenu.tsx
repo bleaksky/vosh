@@ -1,34 +1,37 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import type { SessionMenuMode } from '../lib/appMenu';
+import type { SessionMenuRequest } from '../lib/appMenu';
 import { shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
-import type { ConnectionTarget } from '../ipc/session';
-import { parseTarget, type Connection } from '../stores/session/useConnection';
+import type { Connection } from '../stores/session/useConnection';
+import { ConnectionForm } from './ConnectionForm';
+import { openNewSession } from './newSession';
+import { NewSessionForm } from './NewSessionForm';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
-// The session popover under the title button (Session.dc.html): Connect
-// to the saved world or Disconnect, Edit connection, and New
-// connection. The two connection items swap the list for a host, port,
-// and TLS form in the same popover. Disconnect is destructive, so it
-// sits last in the danger tone and is never the row focus lands on.
+// The session popover under the title button, by board 4 of the
+// Sessions review: Connect to the selected session's world or
+// Disconnect, Edit connection, and New session. Edit connection swaps
+// the list for a host, port and TLS form in the same popover. New
+// session opens a session and comes back on that session's own form.
+// Disconnect is destructive, so it sits last in the danger tone and is
+// never the row focus lands on.
 
 const MENU_WIDTH = 272;
-
-type Mode = SessionMenuMode;
 
 interface Props {
   connection: Connection;
   anchor: HTMLElement | null;
-  /** Where the popover opens. The macOS menu bar's Edit connection and
-   *  New connection open it on their form, and Cancel there closes it
-   *  instead of stepping back to a list you never saw. */
-  initialMode?: Mode;
+  /** What the popover opens on. The macOS menu bar's Edit connection
+   *  opens it on its form, and Cancel there closes it instead of
+   *  stepping back to a list you never saw. New session… opens it on
+   *  the form of the session it opened. */
+  request?: SessionMenuRequest;
   onClose: () => void;
 }
 
-export function SessionMenu({ connection, anchor, initialMode = 'menu', onClose }: Props) {
-  const [mode, setMode] = useState<Mode>(initialMode);
+export function SessionMenu({ connection, anchor, request = { mode: 'menu' }, onClose }: Props) {
+  const [mode, setMode] = useState(request.mode);
   const { live, target } = connection;
 
   const run = (action: () => Promise<void> | void) => {
@@ -36,27 +39,39 @@ export function SessionMenu({ connection, anchor, initialMode = 'menu', onClose 
     void action();
   };
 
-  if (mode !== 'menu') {
+  if (request.mode === 'new') {
     return (
       <ShellMenu
         anchor={anchor}
         align="center"
         width={MENU_WIDTH}
-        label={mode === 'edit' ? 'Edit connection' : 'New connection'}
+        label="New session"
+        kind="dialog"
+        onClose={onClose}
+      >
+        <NewSessionForm opened={request.opened} connection={connection} onClose={onClose} />
+      </ShellMenu>
+    );
+  }
+
+  if (mode === 'edit') {
+    return (
+      <ShellMenu
+        anchor={anchor}
+        align="center"
+        width={MENU_WIDTH}
+        label="Edit connection"
         kind="dialog"
         onClose={onClose}
       >
         <ConnectionForm
-          mode={mode}
-          initial={mode === 'edit' ? target : null}
-          onCancel={() => (initialMode === 'menu' ? setMode('menu') : onClose())}
+          title="Edit connection"
+          submitLabel="Save"
+          initial={target}
+          onCancel={() => (request.mode === 'menu' ? setMode('menu') : onClose())}
           onSubmit={(next) => {
-            if (mode === 'edit') {
-              connection.saveTarget(next);
-              onClose();
-            } else {
-              run(() => connection.connectNew(next));
-            }
+            connection.saveTarget(next);
+            onClose();
           }}
         />
       </ShellMenu>
@@ -75,7 +90,12 @@ export function SessionMenu({ connection, anchor, initialMode = 'menu', onClose 
       )}
       <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
       <ShellMenuSeparator />
-      <ShellMenuItem onSelect={() => setMode('new')}>New connection…</ShellMenuItem>
+      <ShellMenuItem
+        shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
+        onSelect={() => run(openNewSession)}
+      >
+        New session…
+      </ShellMenuItem>
       {live && (
         <>
           <ShellMenuSeparator />
@@ -85,78 +105,5 @@ export function SessionMenu({ connection, anchor, initialMode = 'menu', onClose 
         </>
       )}
     </ShellMenu>
-  );
-}
-
-interface FormProps {
-  mode: 'edit' | 'new';
-  /** Prefill for Edit. New starts blank. */
-  initial: ConnectionTarget | null;
-  onCancel: () => void;
-  onSubmit: (target: ConnectionTarget) => void;
-}
-
-function ConnectionForm({ mode, initial, onCancel, onSubmit }: FormProps) {
-  const [host, setHost] = useState(initial?.host ?? '');
-  const [port, setPort] = useState(initial ? String(initial.port) : '');
-  const [tls, setTls] = useState(initial?.tls ?? false);
-  const parsed = parseTarget({ host, port, tls });
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (parsed) onSubmit(parsed);
-  };
-
-  return (
-    <form className="shell-form" onSubmit={submit}>
-      <h2 className="shell-form-title">{mode === 'edit' ? 'Edit connection' : 'New connection'}</h2>
-      <label className="shell-field">
-        <span className="shell-field-label">Host</span>
-        <input
-          className="shell-textfield is-mono"
-          type="text"
-          value={host}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          placeholder="mud.example.org"
-          onChange={(e) => setHost(e.target.value)}
-        />
-      </label>
-      <div className="shell-form-row">
-        <label className="shell-field shell-field-port">
-          <span className="shell-field-label">Port</span>
-          <input
-            className="shell-textfield is-mono"
-            type="text"
-            inputMode="numeric"
-            value={port}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="4000"
-            onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ''))}
-          />
-        </label>
-        <label className="shell-toggle">
-          <input
-            className="shell-toggle-input"
-            type="checkbox"
-            checked={tls}
-            onChange={(e) => setTls(e.target.checked)}
-          />
-          <span className="shell-toggle-track" aria-hidden="true" />
-          <span>Use TLS</span>
-        </label>
-      </div>
-      <div className="shell-form-actions">
-        <button type="button" className="shell-btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="shell-btn shell-btn-primary" disabled={!parsed}>
-          {mode === 'edit' ? 'Save' : 'Connect'}
-        </button>
-      </div>
-    </form>
   );
 }

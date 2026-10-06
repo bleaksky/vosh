@@ -148,6 +148,15 @@ export async function connectTo(target: ConnectionTarget, session: number): Prom
   await connectSession(target.host, target.port, target.tls, session);
 }
 
+/** Dial a session its New session form opened, on the profile the form
+ *  chose, so no profile match runs first (board 9). The target becomes
+ *  the saved world the next form starts from, and the session keeps it
+ *  as its own as it dials. */
+export async function connectOpened(target: ConnectionTarget, session: number): Promise<void> {
+  saveConnectionTarget(target);
+  await connectSession(target.host, target.port, target.tls, session);
+}
+
 export interface Connection {
   status: ConnectionStatus;
   /** Connecting or connected. */
@@ -160,8 +169,9 @@ export interface Connection {
   character: string | null;
   /** Dial the target. */
   connect: () => Promise<void>;
-  /** Save a new target and dial it, replacing a live session. */
-  connectNew: (target: ConnectionTarget) => Promise<void>;
+  /** Dial a session its New session form opened, as connectOpened
+   *  does. */
+  connectNew: (target: ConnectionTarget, session: number) => Promise<void>;
   disconnect: () => Promise<void>;
   /** Save the target for the next Connect without dialing. */
   saveTarget: (target: ConnectionTarget) => void;
@@ -213,13 +223,13 @@ export function useConnection(onError: (message: string, session: number) => voi
 
   const connect = useCallback(() => dial(targetRef.current), [dial]);
 
-  const connectNew = useCallback(
-    (next: ConnectionTarget) => {
-      saveTarget(next);
-      return dial(next);
-    },
-    [dial, saveTarget],
-  );
+  const connectNew = useCallback(async (to: ConnectionTarget, session: number) => {
+    try {
+      await connectOpened(to, session);
+    } catch (e) {
+      onErrorRef.current(String(e), session);
+    }
+  }, []);
 
   const disconnect = useCallback(async () => {
     const session = getSelected();

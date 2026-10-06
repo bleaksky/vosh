@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import { SESSION_MENU_EVENT, type SessionMenuMode } from '../lib/appMenu';
+import { SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
 import type { PaneSplit, PaneType } from '../panel/paneLayout';
 import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
@@ -62,11 +62,12 @@ export function TitleBand({
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
-  // The mode the session popover opens in. The menu bar's Edit
-  // connection and New connection open it straight on their form, and
-  // the key remounts it so a second request starts fresh.
-  const [session, setSession] = useState<{ mode: SessionMenuMode; key: number }>({
-    mode: 'menu',
+  // What the session popover opens on. The menu bar's Edit connection
+  // opens it straight on its form, New session… on the form of the
+  // session it opened, and the key remounts it so a second request
+  // starts fresh.
+  const [session, setSession] = useState<{ request: SessionMenuRequest; key: number }>({
+    request: { mode: 'menu' },
     key: 0,
   });
   const sessionRef = useRef<HTMLButtonElement | null>(null);
@@ -76,14 +77,14 @@ export function TitleBand({
     onMenuClosed();
   };
   const toggleMenu = (which: 'session' | 'add') => {
-    if (which === 'session') setSession((s) => ({ mode: 'menu', key: s.key + 1 }));
+    if (which === 'session') setSession((s) => ({ request: { mode: 'menu' }, key: s.key + 1 }));
     setMenu((current) => (current === which ? null : which));
   };
   useEffect(() => {
     const onRequest = (e: Event) => {
-      const mode = (e as CustomEvent<unknown>).detail;
-      if (mode !== 'menu' && mode !== 'edit' && mode !== 'new') return;
-      setSession((s) => ({ mode, key: s.key + 1 }));
+      const request = (e as CustomEvent<SessionMenuRequest | undefined>).detail;
+      if (!request) return;
+      setSession((s) => ({ request, key: s.key + 1 }));
       setMenu('session');
     };
     window.addEventListener(SESSION_MENU_EVENT, onRequest);
@@ -164,7 +165,7 @@ export function TitleBand({
           key={session.key}
           connection={connection}
           anchor={sessionRef.current}
-          initialMode={session.mode}
+          request={session.request}
           onClose={closeMenu}
         />
       )}

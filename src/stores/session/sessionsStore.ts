@@ -96,13 +96,13 @@ export function startSessionsStore(): void {
 }
 
 /** Select a session. Every view here shows it at once, and the app
- *  hears it after. The window opens it once the app finished. A
- *  selection the app refuses reads the list again. */
-export function select(id: number): void {
+ *  hears it after. The window opens it once the app finished, which the
+ *  answer waits for. A selection the app refuses reads the list again. */
+export function select(id: number): Promise<void> {
   generation += 1;
   const now = store.get();
   if (now.selected !== id) store.set({ ...now, selected: id });
-  selectSession(id).then(
+  return selectSession(id).then(
     () => opens(id),
     () => read(),
   );

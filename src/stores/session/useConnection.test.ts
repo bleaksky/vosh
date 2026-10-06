@@ -4,6 +4,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { CONNECTION_TARGET_CHANGED } from '../../ipc/events';
 import { pushToast } from '../toasts';
 import {
+  connectOpened,
   connectTo,
   loadTarget,
   parseTarget,
@@ -119,6 +120,30 @@ describe('connectTo', () => {
     expect(invoke).toHaveBeenCalledWith('profile_switch', { name: 'Healer', session: 2 });
     expect(pushToast).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenLastCalledWith('session_connect', { ...target, session: 2 });
+  });
+});
+
+describe('connectOpened', () => {
+  const target = { host: 'play.theforsakenlands.com', port: 1825, tls: false };
+  const store = new Map<string, string>();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.mocked(invoke).mockReset();
+    vi.mocked(emit).mockClear();
+    store.clear();
+  });
+
+  it('dials the new session on the profile its form chose, with no match first', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    });
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+    await connectOpened(target, 2);
+    expect(vi.mocked(invoke).mock.calls).toEqual([['session_connect', { ...target, session: 2 }]]);
+    expect(loadTarget()).toEqual(target);
+    expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_CHANGED, target);
   });
 });
 

@@ -34,6 +34,7 @@ import {
   themesInGalleryOrder,
   type PaletteDeps,
 } from './overlays/palette';
+import { openNewSession } from './newSession';
 import type { ScrollbackFind } from './useFind';
 import type { ScrollbackSplit } from './useScrollbackSplit';
 
@@ -213,10 +214,10 @@ export function useAppCommands({
         toggleSplit();
         return;
       case 'session-edit':
-        requestSessionMenu('edit');
+        requestSessionMenu({ mode: 'edit' });
         return;
       case 'session-new':
-        requestSessionMenu('new');
+        void openNewSession();
         return;
       case 'close-window':
         if (live) setConfirmClose(true);

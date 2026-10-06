@@ -900,6 +900,34 @@
   outline-offset: 2px;
 }
 
+/* The line under the New session form's Profile row, tucked up to the
+   select it explains, and the warn note with its dot. */
+.shell-form-hint {
+  margin: -6px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+.shell-form-warn {
+  display: flex;
+  gap: 6px;
+  margin: -2px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--warn-text);
+}
+
+.shell-form-warn::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 3.5px;
+  border-radius: 4px;
+  background: var(--warn);
+}
+
 .shell-form-actions {
   display: flex;
   justify-content: flex-end;
