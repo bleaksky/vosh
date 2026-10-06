@@ -1,45 +1,23 @@
 // Tab completion on the command line, from typed history, the characters
-// in the room and the names seen in the output.
+// in the room and the names seen in the output, all of the selected
+// session.
 
-import { useRef, type RefObject } from 'react';
-import { onGmcpPackage } from '../ipc/session';
-import { useTauriEvent } from '../ipc/useTauriEvent';
+import { useEffect, useRef, type RefObject } from 'react';
+import { getRoom } from '../stores/gmcp/roomStore';
 import { recentNames } from './recentNames';
 
 /** Complete the word under the caret in `inputRef`, which holds `value`,
  *  and write each completion through `setValue`. `history` holds the
- *  typed commands, oldest first. Input calls complete on Tab, with -1
- *  for Shift+Tab, and resetCycle on every other key and edit. */
+ *  typed commands of `session`, the selected session, oldest first.
+ *  Input calls complete on Tab, with -1 for Shift+Tab, and resetCycle on
+ *  every other key and edit and on each selection. */
 export function useTabCompletion(
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement>,
   value: string,
   setValue: (next: string) => void,
-  history: string[],
+  history: readonly string[],
+  session: number,
 ) {
-  // Room characters from Room.Chars GMCP. Used as a noun source for
-  // Tab completion so the user can complete combat target names
-  // without typing the whole word.
-  const roomCharsRef = useRef<string[]>([]);
-  useTauriEvent<unknown>(
-    (cb) => onGmcpPackage('Room.Chars', cb),
-    (data) => {
-      if (!Array.isArray(data)) {
-        roomCharsRef.current = [];
-        return;
-      }
-      const names: string[] = [];
-      for (const entry of data) {
-        if (entry && typeof entry === 'object') {
-          const name = (entry as { name?: unknown }).name;
-          if (typeof name === 'string' && name.length > 0) {
-            names.push(name);
-          }
-        }
-      }
-      roomCharsRef.current = names;
-    },
-  );
-
   // Tab-completion cycling state. When the user presses Tab we
   // resolve the word being typed, build a candidate list, and
   // remember the cycle so consecutive Tab presses walk through the
@@ -79,10 +57,12 @@ export function useTabCompletion(
         consider(token);
       }
     }
-    for (const name of roomCharsRef.current) {
-      consider(name);
+    // The people in the session's room, from its Room.Chars, so you can
+    // complete a combat target without typing the whole name.
+    for (const person of getRoom().people) {
+      consider(person.name);
     }
-    for (const name of recentNames()) {
+    for (const name of recentNames(session)) {
       consider(name);
     }
     return matches;
@@ -144,6 +124,11 @@ export function useTabCompletion(
   const resetCycle = () => {
     tabStateRef.current = null;
   };
+  // A cycle belongs to the draft it began in, which stays with its
+  // session as the selection moves.
+  useEffect(() => {
+    tabStateRef.current = null;
+  }, [session]);
 
   return { complete, resetCycle };
 }

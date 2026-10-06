@@ -563,8 +563,8 @@ export function Terminal({
       if (!mirror.mirrors()) {
         if (!quietRef.current) {
           const { text, replace } = shaper.text(out);
-          ingestRecentNames(text);
-          if (replace !== null) ingestRecentNames(replace);
+          ingestRecentNames(text, session);
+          if (replace !== null) ingestRecentNames(replace, session);
         }
         return;
       }
@@ -595,8 +595,8 @@ export function Terminal({
       // names they have typed before or chars currently in the room.
       // Cost is one regex pass per output chunk; sub-millisecond.
       if (!quietRef.current) {
-        ingestRecentNames(text);
-        if (output?.replace) ingestRecentNames(output.replace.text);
+        ingestRecentNames(text, session);
+        if (output?.replace) ingestRecentNames(output.replace.text, session);
       }
     }).then((unlisten) => {
       unsubOutput = unlisten;

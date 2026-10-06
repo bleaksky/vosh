@@ -124,24 +124,27 @@ export async function setWindowSize(cols: number, rows: number, session?: number
   await invoke('session_set_window_size', { cols, rows, session });
 }
 
-/// Run a typed input line through the backend pipeline. Variables, aliases,
-/// and slash commands are handled there; the result either goes to the
-/// connection or echoes back as a session://output event.
-export async function sendInput(line: string): Promise<void> {
-  await invoke('session_send_input', { line });
+/// Run a typed input line through the backend pipeline of a session, the
+/// selected one when it names none. Variables, aliases, and slash commands
+/// are handled there; the result either goes to the connection or echoes
+/// back as a session://output event.
+export async function sendInput(line: string, session?: number): Promise<void> {
+  await invoke('session_send_input', { line, session });
 }
 
-/// Send a line typed into the masked password field. It goes to the
-/// server exactly as typed, past aliases, variables, and slash commands,
-/// and the session log keeps `> (hidden)` in its place.
-export async function sendMaskedInput(line: string): Promise<void> {
-  await invoke('session_send_masked', { line });
+/// Send a line typed into the masked password field to a session, the
+/// selected one when it names none. It goes to the server exactly as
+/// typed, past aliases, variables, and slash commands, and the session
+/// log keeps `> (hidden)` in its place.
+export async function sendMaskedInput(line: string, session?: number): Promise<void> {
+  await invoke('session_send_masked', { line, session });
 }
 
-/// Stop the walk under way, as Esc in the command line does. The session
-/// says nothing when you are not walking.
-export async function stopWalk(): Promise<void> {
-  await invoke('session_walk_stop');
+/// Stop the walk under way in a session, the selected one when it names
+/// none, as Esc in the command line does. The session says nothing when
+/// you are not walking.
+export async function stopWalk(session?: number): Promise<void> {
+  await invoke('session_walk_stop', { session });
 }
 
 /** What a GMCP package, the prompt values and the affect fulls carry,

@@ -29,6 +29,7 @@ import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
+import { getSelected, useSelected } from '../stores/session/sessionsStore';
 import { getTargetState } from '../stores/session/targetStore';
 
 export interface InputHandle {
@@ -40,8 +41,11 @@ export interface InputHandle {
 
 interface Props {
   enabled: boolean;
-  onError?: (message: string) => void;
-  onLocalEcho?: (text: string) => void;
+  /** A send to `session` failed. */
+  onError?: (message: string, session: number) => void;
+  /** Text the command line writes into the terminal of `session`, the
+   *  session the line went to. */
+  onLocalEcho?: (text: string, session: number) => void;
   /** Scroll the terminal scrollback by N pages. Called from
    *  PageUp/PageDown handling (which on macOS is Fn+Up/Fn+Down). */
   onScrollTerminal?: (pages: number) => void;
@@ -104,6 +108,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   }: Props,
   ref,
 ) {
+  // The one command line types into the selected session. Each line goes
+  // to the session that was selected as you sent it, and each session
+  // keeps its own history and draft.
+  const session = useSelected();
+  // The session this command line last showed, which a selection moves
+  // before the line shows the next one.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const [value, setValue] = useState('');
   const [passwordMode, setPasswordMode] = useState(getPasswordMode);
   // The mask from the newest input-mode event. The event sets it at once,
@@ -115,7 +127,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const passwordModeRef = useRef(passwordMode);
   const maskedNow = () => isMasked(passwordMode, passwordModeRef.current);
   const { history, searchPrefix, remember, resetSearch, recallOlder, recallNewer } =
-    useCommandHistory(value, setValue);
+    useCommandHistory(value, setValue, session);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   // Line-number gutter next to the multi-line prompt. Kept in its own
   // ref so the textarea's scroll position can be mirrored onto it once a
@@ -156,12 +168,15 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   // The masked field follows the selected session: the game's echo in
   // that session, and each selection. The listener reads the newest
-  // render's resetSearch.
+  // render's resetSearch. A selection hears the mask of the next session
+  // before the line shows it, and that session's own draft comes back
+  // with it (useCommandHistory), so only a flip the game makes in the
+  // session that shows empties the draft.
   const maskChanged = (password: boolean) => {
     const wasMasked = passwordModeRef.current;
     passwordModeRef.current = password;
     setPasswordMode(password);
-    if (wasMasked !== password) {
+    if (wasMasked !== password && sessionRef.current === getSelected()) {
       setValue((draft) => draftAfterMaskChange(wasMasked, password, draft));
       resetSearch();
     }
@@ -170,7 +185,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   maskChangedRef.current = maskChanged;
   useEffect(() => subscribePasswordMode(() => maskChangedRef.current(getPasswordMode())), []);
 
-  const { complete, resetCycle } = useTabCompletion(inputRef, value, setValue, history);
+  const { complete, resetCycle } = useTabCompletion(inputRef, value, setValue, history, session);
 
   // A line that starts with one of the selected session's quick keys
   // skips the local echo. The backend echoes the expansion (`bash blah`)
@@ -227,7 +242,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // A line from the masked password field leaves no trace. planSubmit
   // gives it a bare line break for an echo, keeps it out of history, and
   // routes it through the masked send, which skips the input pipeline.
-  const submitLine = async (line: string) => {
+  const submitLine = async (line: string, to: number) => {
     const masked = maskedNow();
     const firstWord = line.split(/\s+/)[0] ?? '';
     const plan = planSubmit(line, {
@@ -236,7 +251,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       echoColor: echoColorRef.current,
       echoCaret: echoCaretRef.current,
     });
-    if (plan.remember) remember(line);
+    if (plan.remember) remember(line, to);
     // #nativesurface is handled here, not in the backend, because the
     // renderer flag lives in localStorage (terminalRenderer.ts reads it
     // at startup). It takes effect on macOS only, where `off` forces
@@ -244,7 +259,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // Linux always draw with xterm.
     if (plan.local) {
       const arg = (line.split(/\s+/)[1] ?? '').toLowerCase();
-      const notice = (text: string) => onLocalEcho?.(`\x1b[38;5;244m${text}\x1b[0m\r\n`);
+      const notice = (text: string) => onLocalEcho?.(`\x1b[38;5;244m${text}\x1b[0m\r\n`, to);
       if (arg === 'on' || arg === 'off') {
         localStorage.setItem('vosh.nativesurface', arg === 'on' ? '1' : '0');
         notice(`native renderer forced ${arg}. restart Vosh to apply.`);
@@ -256,11 +271,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }
       return;
     }
-    if (plan.echo !== null) onLocalEcho?.(plan.echo);
+    if (plan.echo !== null) onLocalEcho?.(plan.echo, to);
     try {
-      await (plan.masked ? sendMaskedInput(line) : sendInput(line));
+      await (plan.masked ? sendMaskedInput(line, to) : sendInput(line, to));
     } catch (e) {
-      onError?.(String(e));
+      onError?.(String(e), to);
     }
   };
 
@@ -302,16 +317,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     pasteCancelRef.current = false;
     const delay = pasteDelayRef.current;
     const total = lines.length;
+    // The burst goes to the session you pasted into, even when you
+    // select another before it ends.
+    const to = session;
     // Single-line bursts skip the indicator and the delay — they read
     // as a normal Enter to the user.
     if (total === 1) {
-      await submitLine(lines[0]);
+      await submitLine(lines[0], to);
       return;
     }
     setPasteBurst({ sent: 0, total });
     for (let i = 0; i < total; i++) {
       if (pasteCancelRef.current) break;
-      await submitLine(lines[i]);
+      await submitLine(lines[i], to);
       setPasteBurst({ sent: i + 1, total });
       if (i < total - 1 && delay > 0) {
         await new Promise<void>((resolve) => {
@@ -367,11 +385,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           echoColor: echoColorRef.current,
           echoCaret: echoCaretRef.current,
         });
-        if (echo !== null) onLocalEcho?.(echo);
+        if (echo !== null) onLocalEcho?.(echo, session);
         try {
-          await sendInput(command);
+          await sendInput(command, session);
         } catch (e) {
-          onError?.(String(e));
+          onError?.(String(e), session);
         }
         return;
       }
@@ -388,7 +406,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       const inputHasSelection = el.selectionStart != null && el.selectionStart !== el.selectionEnd;
       if (!inputHasSelection) {
         event.preventDefault();
-        void nativeSurfaceCopy().catch(() => {});
+        void nativeSurfaceCopy(session).catch(() => {});
         return;
       }
     }
@@ -410,7 +428,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     ) {
       event.preventDefault();
       if (nativeSurfaceEnabled()) {
-        void nativeSurfaceSelectAll().catch(() => {});
+        void nativeSurfaceSelectAll(session).catch(() => {});
       } else {
         onSelectAllTerminal?.();
       }
@@ -424,7 +442,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       event.preventDefault();
       onScrollTerminal?.(event.key === 'PageUp' ? -1 : 1);
       if (nativeSurfaceEnabled()) {
-        void nativeSurfaceScroll(event.key === 'PageUp' ? 'pageup' : 'pagedown').catch(() => {});
+        void nativeSurfaceScroll(event.key === 'PageUp' ? 'pageup' : 'pagedown', session).catch(
+          () => {},
+        );
       }
       return;
     }
@@ -439,10 +459,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         setPasteBurst(null);
         return;
       }
-      void stopWalk().catch(() => {});
+      void stopWalk(session).catch(() => {});
       onExitSplit?.();
       if (nativeSurfaceEnabled()) {
-        void nativeSurfaceScroll('bottom').catch(() => {});
+        void nativeSurfaceScroll('bottom', session).catch(() => {});
       }
       return;
     }
@@ -520,10 +540,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // MUD prompts and paginated output.
       const composedLines = composed.split('\n').filter((l) => l.trim().length > 0);
       if (composedLines.length === 0) {
-        await submitLine('');
+        await submitLine('', session);
       } else {
         for (const cmd of composedLines) {
-          await submitLine(cmd);
+          await submitLine(cmd, session);
         }
       }
       return;
