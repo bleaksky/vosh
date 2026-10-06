@@ -279,9 +279,11 @@ pub(crate) fn plugin_on(
             error!(name = %name, error = %e, "plugin entry missing");
             c.script.list_unread_plugin(name);
             let outcome = vosh_script::ScriptOutcome {
-                actions: vec![vosh_script::Action::Error(format!(
-                    "Vosh could not read plugin {name} and left it off."
-                ))],
+                actions: vec![vosh_script::Action::Error {
+                    owner: Owner::Plugin(name.to_string()),
+                    text: format!("Vosh could not read plugin {name} and left it off."),
+                    at: None,
+                }],
                 failed: true,
                 ..vosh_script::ScriptOutcome::default()
             };
@@ -671,6 +673,42 @@ mod tests {
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);
+    }
+
+    /// `wait_full` as the Scripts design writes it, which never returns
+    /// while you are hurt.
+    const WAIT_FULL: &str = "-- wait_full
+-- Stand up once your hit points are full.
+
+mud.on_gmcp(\"Char.Vitals\", function(data)
+  while data.hp < data.maxhp do
+    -- data never changes inside this loop, so it never ends
+  end
+  mud.send(\"stand\")
+end)
+";
+
+    #[test]
+    fn a_plugin_stop_prints_as_the_terminal_frame_draws_it() {
+        let tmp = tempdir();
+        write_plugin(tmp.path(), "wait_full", "wait_full", WAIT_FULL);
+        let mut p = Profile::default();
+        let mut c = Connection::default();
+        p.plugins.enabled = vec!["wait_full".into()];
+        follow_profile_plugins(&mut p, &mut c, tmp.path());
+        let stopped = c.script.dispatch_gmcp(
+            "Char.Vitals",
+            &serde_json::json!({"hp": 186, "maxhp": 1020}),
+        );
+        let apply = crate::script::apply_actions(&mut p, &mut c, stopped);
+        // The stop reads red, and how long the plugin stays off plain.
+        assert_eq!(
+            apply.echoes,
+            [
+                "\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped wait_full at main.lua line 5 after 100 ms.\x1b[0m",
+                "\x1b[90m[lua]\x1b[0m wait_full stays off until you save it under Scripts in Settings or restart Vosh.",
+            ]
+        );
     }
 
     #[test]

@@ -53,9 +53,10 @@ pub(crate) const INTERNAL_CHUNK: &str = "=[vosh]";
 /// The message Lua gives a failed allocation.
 const MEMORY_MESSAGE: &str = "not enough memory";
 
-/// Why Vosh stopped a call.
+/// Why Vosh stopped a call, and so the plugin or loose script that ran
+/// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StopReason {
+pub enum StopReason {
     /// It ran past [`TIME_BUDGET`].
     Time,
     /// It held [`CALL_MEMORY`] more than when it began.
