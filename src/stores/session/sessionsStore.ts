@@ -155,14 +155,17 @@ function selectedRow(): SessionRow | null {
   return rows.find((row) => row.id === selected) ?? null;
 }
 
+// The title band names the selected session among the rows, so these
+// two also answer a band drawn as static markup, as its tests draw it.
+
 /** Every session's row, in the order the sidebar lists them. */
 export function useSessions(): SessionRow[] {
-  return useSyncExternalStore(subscribeSessions, getSessions);
+  return useSyncExternalStore(subscribeSessions, getSessions, getSessions);
 }
 
 /** The selected session's id, which a view keys what it shows by. */
 export function useSelected(): number {
-  return useSyncExternalStore(subscribeSessions, getSelected);
+  return useSyncExternalStore(subscribeSessions, getSelected, getSelected);
 }
 
 /** The selected session's row, or null until a list names it. */

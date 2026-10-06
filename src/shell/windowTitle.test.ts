@@ -16,6 +16,12 @@ describe('windowTitle', () => {
     );
   });
 
+  it('names a session by the name you gave it, on the world with its port', () => {
+    expect(windowTitle(live, 'Builder', 'The Forsaken Lands 1825')).toBe(
+      'Builder on The Forsaken Lands 1825',
+    );
+  });
+
   it('names the world alone before you log in', () => {
     expect(windowTitle(live, null, 'The Forsaken Lands')).toBe('The Forsaken Lands');
   });

@@ -156,4 +156,40 @@ describe('the session button in the title band', () => {
     expect(band.label()).toBe('Orla, connected to The Forsaken Lands');
     await act(async () => band.root.unmount());
   });
+
+  it('adds the port after the world when it is not the world own, and reads a name you gave', async () => {
+    const band = await mount();
+    const rows = (name: string | null) =>
+      fire('vosh://sessions-changed', [
+        {
+          id: ORLA,
+          name,
+          character: 'Orla',
+          host: HOST,
+          port: 1825,
+          tls: false,
+          profile: 'Orla',
+          connected: true,
+          selected: true,
+        },
+      ]);
+    await act(async () => {
+      rows(null);
+      fire('session://state', {
+        session: ORLA,
+        kind: 'connected',
+        host: HOST,
+        port: 1825,
+        tls: false,
+      });
+      login(ORLA, 'Orla');
+    });
+    expect(band.label()).toBe('Orla, connected to The Forsaken Lands 1825');
+    expect(titles.at(-1)).toBe('Orla on The Forsaken Lands 1825');
+
+    await act(async () => rows('Builder'));
+    expect(band.label()).toBe('Builder, connected to The Forsaken Lands 1825');
+    expect(titles.at(-1)).toBe('Builder on The Forsaken Lands 1825');
+    await act(async () => band.root.unmount());
+  });
 });

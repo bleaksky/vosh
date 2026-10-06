@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_WORLDS, knownWorld, worldName } from './knownWorlds';
+import { KNOWN_WORLDS, knownWorld, worldLabel, worldName } from './knownWorlds';
 
 describe('knownWorld', () => {
   it('finds the world a host plays', () => {
@@ -33,5 +33,16 @@ describe('worldName', () => {
   it('shows any other host as typed', () => {
     expect(worldName('mud.example.org')).toBe('mud.example.org');
     expect(worldName('nottheforsakenlands.com')).toBe('nottheforsakenlands.com');
+  });
+});
+
+describe('worldLabel', () => {
+  it('adds a port that is not the world own', () => {
+    expect(worldLabel('play.theforsakenlands.com', 1848)).toBe('The Forsaken Lands');
+    expect(worldLabel('play.theforsakenlands.com', 1825)).toBe('The Forsaken Lands 1825');
+  });
+
+  it('shows any other host as typed, with no port', () => {
+    expect(worldLabel(' mud.example.org ', 4000)).toBe('mud.example.org');
   });
 });
