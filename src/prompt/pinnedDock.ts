@@ -34,12 +34,13 @@ export function dockHeight(rows: number, cellH: number): number {
 }
 
 /** The rows the dock shows: the rows of the band, the last `zone` of
- *  them, and one while it shows no band. That is before your first
- *  prompt and after you disconnect, so the first prompt never moves the
- *  text, and while prompts are off, when the row holds the sentence that
- *  says so. */
+ *  them, and one while prompts are off, when the row holds the sentence
+ *  that says so. None while nothing is pinned, before your first prompt
+ *  and after you disconnect, so a login menu or a farewell sits right
+ *  over the command line instead of over an empty band and its gap. */
 export function dockRows(pin: string | null, zone: number, promptsOff: boolean): number {
-  if (promptsOff || !pin) return 1;
+  if (promptsOff) return 1;
+  if (!pin) return 0;
   return Math.max(1, bandRows(pin, Math.max(1, zone)).length);
 }
 

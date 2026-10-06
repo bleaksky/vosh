@@ -129,10 +129,20 @@ describe('the pinned band', () => {
     expect(html).toContain('data-rows="2"');
   });
 
-  it('keeps its one row place before any prompt and after you disconnect', () => {
-    const empty = draw(null, { zone: 3 });
-    expect(dockBox(empty)).toEqual({ height: 48.5, reach: 0, place: 48.5 });
-    expect(empty).not.toContain('data-prompt-band');
+  it('takes no room before any prompt and after you disconnect', () => {
+    // The login menu ends with no prompt Vosh reads, so an empty row and
+    // its gap under it read as two blank lines after the menu.
+    for (const zone of [1, 2, 3]) {
+      expect(dockRows(null, zone, false)).toBe(0);
+      expect(draw(null, { zone })).toBe('');
+    }
+    // While prompts are off the row still holds the sentence.
+    expect(dockRows(null, 2, true)).toBe(1);
+    expect(dockBox(draw(null, { zone: 2, promptsOff: true }))).toEqual({
+      height: 48.5,
+      reach: 0,
+      place: 48.5,
+    });
   });
 
   it('holds the prompts off sentence on its one row', () => {
@@ -144,7 +154,7 @@ describe('the pinned band', () => {
     expect(px(note, 'top')).toBe(48.5 - 3.5 - 2 - 17.5 + (17.5 - 16) / 2);
   });
 
-  it('never takes more rows than the zone, and never fewer than one', () => {
+  it('never takes more rows than the zone, and never fewer than one for a prompt', () => {
     const three = 'one\r\ntwo\r\nthree';
     expect(dockRows(three, 2, false)).toBe(2);
     expect(dockRows(three, 3, false)).toBe(3);
@@ -153,12 +163,10 @@ describe('the pinned band', () => {
     expect(dockRows(CALM, 2, false)).toBe(1);
     // Rows that show nothing at the end take no room.
     expect(dockRows(`${CALM}\r\n  \r\n`, 3, false)).toBe(1);
-    expect(dockRows(null, 2, false)).toBe(1);
-    expect(dockRows('', 2, false)).toBe(1);
     expect(dockRows(FIGHT, 2, true)).toBe(1);
     expect(dockBox(draw(three, { zone: 2 }))).toEqual({ height: 66, reach: 17.5, place: 48.5 });
     // Whatever it shows, its place under the terminal stays the same.
-    for (const pin of [null, CALM, FIGHT, three]) {
+    for (const pin of [CALM, FIGHT, three]) {
       for (const zone of [1, 2, 3, 6]) {
         expect(dockBox(draw(pin, { zone })).place).toBe(48.5);
       }
