@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessionLabel, type LabelSource } from './sessionLabel';
+import { sessionLabel, typedName, type LabelSource } from './sessionLabel';
 
 // Q7 of the Sessions review: a row reads the name you gave the session,
 // else the character, else the world with its port, else New session.
@@ -111,5 +111,21 @@ describe('sessionLabel', () => {
       name: `${long} 7000`,
       split: { world: long, port: '7000' },
     });
+  });
+});
+
+describe('typedName', () => {
+  it('changes nothing while the field still reads as the session did', () => {
+    expect(typedName('Tolliver', 'Tolliver')).toBeUndefined();
+    expect(typedName('  Tolliver ', 'Tolliver')).toBeUndefined();
+  });
+
+  it('gives the text you typed, without its outer spaces', () => {
+    expect(typedName(' Builder  ', 'Tolliver')).toBe('Builder');
+  });
+
+  it('clears the name with a blank field', () => {
+    expect(typedName('', 'Builder')).toBeNull();
+    expect(typedName('   ', 'Builder')).toBeNull();
   });
 });

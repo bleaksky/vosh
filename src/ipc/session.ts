@@ -70,6 +70,14 @@ export async function closeSession(session: number): Promise<void> {
   await invoke('session_close', { session });
 }
 
+/** Give a session the name its row, the title band and the window title
+ *  read in place of its character. With none, or a blank one, it reads
+ *  its character again. The app keeps the name for the next launch and
+ *  sends every window the rows. */
+export async function renameSession(session: number, name: string | null): Promise<void> {
+  await invoke('session_rename', { session, name });
+}
+
 /** Hear every session's row after a step that changed what one shows. */
 export async function onSessionsChanged(cb: (rows: SessionRow[]) => void): Promise<UnlistenFn> {
   return listen<SessionRow[]>(SESSIONS_CHANGED, (event) => {

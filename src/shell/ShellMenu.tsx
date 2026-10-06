@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../lib/escapeStack';
+import { placeMenu } from '../ui/menuPlacement';
 
 // The floating menu the title band opens: the session menu and Add a
 // pane. SPEC 7 menu recipe on the SPEC 3 floating ground. It hangs 12
@@ -16,24 +17,34 @@ import { useEscape } from '../lib/escapeStack';
 // outside it, and moves focus with the arrow keys. Its role is menu, or
 // dialog while it holds a form. It renders into the body, like the pane
 // menus, because the band is a stacking context and the find bar and
-// the scroll depth chip would paint over a menu left inside it.
+// the scroll depth chip would paint over a menu left inside it. A
+// session row's menu opens at the pointer instead, as a right click
+// menu does, and rises from the pointer near the bottom of the window.
 
 const GAP_BELOW_ANCHOR = 12;
 const WINDOW_INSET = 8;
 
-interface Props {
-  /** The button that opened the menu. Presses on it are left to its
-   *  own toggle. */
-  anchor: HTMLElement | null;
-  /** Center under the button, or line up the right edges. */
-  align: 'center' | 'end';
+/** Where the surface sits: under the button that opened it, or with its
+ *  top left at the pointer that right clicked. */
+type Placement =
+  | {
+      /** The button that opened the menu. Presses on it are left to its
+       *  own toggle. */
+      anchor: HTMLElement | null;
+      /** Center under the button, or line up the right edges. */
+      align: 'center' | 'end';
+      at?: undefined;
+    }
+  | { at: { x: number; y: number }; anchor?: undefined; align?: undefined };
+
+type Props = Placement & {
   width: number;
   label: string;
   /** `dialog` while the surface holds a form instead of commands. */
   kind?: 'menu' | 'dialog';
   onClose: () => void;
   children: ReactNode;
-}
+};
 
 const ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)';
 
@@ -53,8 +64,9 @@ function placeUnder(
 }
 
 export function ShellMenu({
-  anchor,
-  align,
+  anchor = null,
+  align = 'center',
+  at,
   width,
   label,
   kind = 'menu',
@@ -62,9 +74,15 @@ export function ShellMenu({
   children,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
-  // Placed from the button on the first render, so the surface is
-  // visible and focusable from its first frame.
-  const [pos, setPos] = useState(() => placeUnder(anchor, align, width));
+  const x = at?.x;
+  const y = at?.y;
+  // Placed on the first render, so the surface is visible and focusable
+  // from its first frame. A surface at the pointer measures its height
+  // before the first paint and moves up when it would run off the
+  // bottom.
+  const [pos, setPos] = useState(() =>
+    x === undefined || y === undefined ? placeUnder(anchor, align, width) : { left: x, top: y },
+  );
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -76,7 +94,18 @@ export function ShellMenu({
   // and with the column it sits over when the panel or the sessions
   // sidebar comes or goes, as a New session form's profile pick can do.
   useLayoutEffect(() => {
-    const place = () => setPos(placeUnder(anchor, align, width));
+    const place = () =>
+      setPos(
+        x === undefined || y === undefined
+          ? placeUnder(anchor, align, width)
+          : placeMenu(
+              { x, y, flipY: y },
+              width,
+              ref.current?.offsetHeight ?? 0,
+              window.innerWidth,
+              window.innerHeight,
+            ),
+      );
     place();
     window.addEventListener('resize', place);
     const slot = anchor?.parentElement;
@@ -86,7 +115,7 @@ export function ShellMenu({
       window.removeEventListener('resize', place);
       watch?.disconnect();
     };
-  }, [anchor, align, width]);
+  }, [anchor, align, width, x, y]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {

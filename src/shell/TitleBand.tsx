@@ -48,6 +48,9 @@ interface Props {
   /** Runs after a menu closes, or after the gear opens Settings, to
    *  hand the caret back to the command line. */
   onMenuClosed: () => void;
+  /** Turn the selected session's name into a field in its row, while
+   *  the sessions sidebar shows. */
+  renameInRow?: (() => void) | undefined;
 }
 
 export function TitleBand({
@@ -59,6 +62,7 @@ export function TitleBand({
   paneTree,
   onAddPane,
   onMenuClosed,
+  renameInRow,
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
@@ -166,6 +170,7 @@ export function TitleBand({
           connection={connection}
           anchor={sessionRef.current}
           request={session.request}
+          renameInRow={renameInRow}
           onClose={closeMenu}
         />
       )}

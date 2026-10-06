@@ -1,8 +1,10 @@
+import { act, createElement, createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRow } from '../ipc/session';
 import type { SessionRowState } from '../stores/session/sessionRowStore';
-import { SessionSidebar } from './SessionSidebar';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 
 // The sessions sidebar of boards 2 and 3. Each row reads its session as
 // sessionLabel names it, the selected one marked current, a port that is
@@ -54,6 +56,9 @@ function draw(rows: SessionRow[], selected: number): string {
       onClose={() => undefined}
       onHide={() => undefined}
       onCaret={() => undefined}
+      onRename={() => undefined}
+      onEditConnection={() => undefined}
+      onDisconnect={() => undefined}
     />,
   );
 }
@@ -188,5 +193,277 @@ describe('the sessions sidebar', () => {
     mod.held = true;
     const [tolliver] = buttons(draw(rows, 1));
     expect(tolliver).toContain('<span class="shell-sessions-meta is-key">Ctrl+1</span>');
+  });
+});
+
+type Handler = (e?: unknown) => void;
+
+/** The handlers React keeps on an element. This DOM sends no events. */
+function on(el: FakeElement): Record<string, Handler> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, Handler>>)[key];
+}
+
+/** The one element under `root` that `match` finds. */
+function only(root: FakeNode, what: string, match: (el: FakeElement) => boolean): FakeElement {
+  const found = findAll(root, match);
+  if (found.length !== 1) throw new Error(`found ${found.length} of ${what}`);
+  return found[0];
+}
+
+const hasClass = (name: string) => (el: FakeElement) =>
+  (el.getAttribute('class') ?? '').split(' ').includes(name);
+
+describe('renaming a session in its row', () => {
+  const doc = new FakeDocument();
+  /** The escape stack's keydown listener, which the window holds. */
+  const windowListeners = new Map<string, Handler>();
+  const rows = [row(1, { character: 'Tolliver' }), row(2, { character: 'Tolliver', port: 1825 })];
+  let createRoot: typeof import('react-dom/client').createRoot;
+  const cleanups: (() => Promise<void>)[] = [];
+
+  beforeEach(async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      innerWidth: 1280,
+      innerHeight: 800,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener: (type: string, fn: Handler) => void windowListeners.set(type, fn),
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: '' });
+    vi.stubGlobal('Node', FakeNode);
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    // The field selects its text as it opens, and the row menu looks for
+    // the caret and its first row. The fake DOM holds none of that.
+    const el = FakeElement.prototype as unknown as Record<string, unknown>;
+    el.select = () => undefined;
+    el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+      for (let n = other; n; n = n.parentNode) if (n === this) return true;
+      return false;
+    };
+    el.querySelector = function (this: FakeElement): FakeElement | null {
+      return findAll(this, (child) => child.getAttribute('role') === 'menuitem')[0] ?? null;
+    };
+    // React DOM checks for a DOM once, when it loads.
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+  });
+
+  async function mount(shown = rows, selected = 1) {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    const handle = createRef<SessionSidebarHandle>();
+    const calls = {
+      onSelect: vi.fn(),
+      onClose: vi.fn(),
+      onCaret: vi.fn(),
+      onRename: vi.fn(),
+      onEditConnection: vi.fn(),
+      onDisconnect: vi.fn(),
+    };
+    await act(async () => {
+      root.render(
+        createElement(SessionSidebar, {
+          ref: handle,
+          rows: shown,
+          selected,
+          onNewSession: () => undefined,
+          onHide: () => undefined,
+          ...calls,
+        }),
+      );
+    });
+    cleanups.push(async () => {
+      await act(async () => root.unmount());
+      doc.body.removeChild(container);
+    });
+    const run = (fn: () => void) => act(async () => fn());
+    const field = () => findAll(container, hasClass('shell-sessions-field'))[0] ?? null;
+    return {
+      container,
+      calls,
+      run,
+      field,
+      rename: (session: number) => run(() => handle.current?.rename(session)),
+      type: (text: string) => run(() => on(field()!).onChange({ target: { value: text } })),
+      enter: () =>
+        run(() =>
+          on(field()!).onKeyDown({
+            key: 'Enter',
+            nativeEvent: { isComposing: false },
+            preventDefault() {},
+          }),
+        ),
+      escape: () =>
+        run(() =>
+          windowListeners.get('keydown')?.({
+            key: 'Escape',
+            isComposing: false,
+            target: field(),
+            preventDefault() {},
+            stopPropagation() {},
+          }),
+        ),
+      blur: () => run(() => on(field()!).onBlur()),
+    };
+  }
+
+  it('brings the session to the front and turns its name into a field, its text selected', async () => {
+    const m = await mount();
+    expect(m.field()).toBeNull();
+    await m.rename(2);
+    expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+    const field = m.field();
+    expect(field?.value).toBe('Tolliver');
+    expect(field?.getAttribute('placeholder')).toBe('Tolliver');
+    expect(doc.activeElement).toBe(field);
+    // The meta stays beside it, and the row has no close button then.
+    const slots = findAll(m.container, hasClass('shell-sessions-slot'));
+    expect(slots[1].textContent).toBe('1825');
+    expect(findAll(slots[1], hasClass('shell-sessions-close'))).toHaveLength(0);
+  });
+
+  it('keeps what you typed on Return and hands the caret back', async () => {
+    const m = await mount();
+    await m.rename(2);
+    await m.type('Builder');
+    await m.enter();
+    expect(m.calls.onRename).toHaveBeenCalledWith(2, 'Builder');
+    expect(m.calls.onCaret).toHaveBeenCalledTimes(1);
+    expect(m.field()).toBeNull();
+  });
+
+  it('leaves the row as it was on Escape', async () => {
+    const m = await mount();
+    await m.rename(2);
+    await m.type('Builder');
+    await m.escape();
+    expect(m.calls.onRename).not.toHaveBeenCalled();
+    expect(m.calls.onCaret).toHaveBeenCalledTimes(1);
+    expect(m.field()).toBeNull();
+  });
+
+  it('keeps what you typed when you click elsewhere, and leaves the caret there', async () => {
+    const m = await mount();
+    await m.rename(2);
+    await m.type('Builder');
+    await m.blur();
+    expect(m.calls.onRename).toHaveBeenCalledWith(2, 'Builder');
+    expect(m.calls.onCaret).not.toHaveBeenCalled();
+    expect(m.field()).toBeNull();
+  });
+
+  it('clears the name with an empty field, so the row reads the character again', async () => {
+    const named = [rows[0], { ...rows[1], name: 'Builder' }];
+    const m = await mount(named, 2);
+    await m.rename(2);
+    expect(m.calls.onSelect).not.toHaveBeenCalled();
+    expect(m.field()?.value).toBe('Builder');
+    expect(m.field()?.getAttribute('placeholder')).toBe('Tolliver');
+    await m.type('');
+    await m.enter();
+    expect(m.calls.onRename).toHaveBeenCalledWith(2, null);
+  });
+
+  it('changes nothing when Return keeps the name the row read', async () => {
+    const m = await mount();
+    await m.rename(2);
+    await m.enter();
+    expect(m.calls.onRename).not.toHaveBeenCalled();
+    expect(m.field()).toBeNull();
+  });
+
+  it('opens the field from a double click on the name', async () => {
+    const m = await mount();
+    const names = findAll(m.container, hasClass('shell-sessions-name'));
+    await m.run(() => on(names[1]).onDoubleClick());
+    expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+    expect(m.field()?.value).toBe('Tolliver');
+  });
+
+  it('opens the row menu at the pointer on a right click, as board 9 draws it', async () => {
+    const m = await mount();
+    const buttons = findAll(m.container, hasClass('shell-sessions-row'));
+    let prevented = false;
+    await m.run(() =>
+      on(buttons[1]).onContextMenu({
+        clientX: 146,
+        clientY: 120,
+        preventDefault: () => (prevented = true),
+      }),
+    );
+    expect(prevented).toBe(true);
+    const menu = only(doc.body, 'the row menu', (el) => el.getAttribute('role') === 'menu');
+    expect(menu.getAttribute('aria-label')).toBe('Session options');
+    const items = findAll(menu, (el) => el.getAttribute('role') === 'menuitem');
+    expect(items.map((el) => el.textContent)).toEqual([
+      'Rename session…',
+      'Edit connection…',
+      'Disconnect',
+      'Close session',
+    ]);
+    expect(findAll(menu, hasClass('shell-menu-sep'))).toHaveLength(1);
+
+    // Rename session… closes the menu, brings the row to the front and
+    // turns its name into a field.
+    await m.run(() => on(items[0]).onClick());
+    expect(findAll(doc.body, (el) => el.getAttribute('role') === 'menu')).toHaveLength(0);
+    expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+    expect(m.field()?.value).toBe('Tolliver');
+  });
+
+  it('runs each row of the menu on the session it opened on', async () => {
+    const m = await mount();
+    const open = () =>
+      m.run(() =>
+        on(findAll(m.container, hasClass('shell-sessions-row'))[1]).onContextMenu({
+          clientX: 146,
+          clientY: 120,
+          preventDefault() {},
+        }),
+      );
+    const item = (label: string) =>
+      only(
+        doc.body,
+        label,
+        (el) => el.getAttribute('role') === 'menuitem' && el.textContent === label,
+      );
+    await open();
+    await m.run(() => on(item('Edit connection…')).onClick());
+    expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+    expect(m.calls.onEditConnection).toHaveBeenCalledTimes(1);
+    await open();
+    await m.run(() => on(item('Disconnect')).onClick());
+    expect(m.calls.onDisconnect).toHaveBeenCalledWith(2);
+    await open();
+    await m.run(() => on(item('Close session')).onClick());
+    expect(m.calls.onClose).toHaveBeenCalledWith(2);
+  });
+
+  it('offers Disconnect only while the session is connected', async () => {
+    const m = await mount([rows[0], { ...rows[1], connected: false }]);
+    await m.run(() =>
+      on(findAll(m.container, hasClass('shell-sessions-row'))[1]).onContextMenu({
+        clientX: 146,
+        clientY: 120,
+        preventDefault() {},
+      }),
+    );
+    const items = findAll(doc.body, (el) => el.getAttribute('role') === 'menuitem');
+    expect(items.map((el) => el.textContent)).toEqual([
+      'Rename session…',
+      'Edit connection…',
+      'Close session',
+    ]);
   });
 });

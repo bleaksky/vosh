@@ -115,6 +115,9 @@ export interface PaletteDeps {
   /** Open a session on its New session form. The row appears when the
    *  shell passes it. */
   newSession?: () => void;
+  /** Name the selected session, in its row or in the session popover.
+   *  The row appears when the shell passes it. */
+  renameSession?: (() => void) | undefined;
   /** Close the selected session, asking first while it is connected.
    *  The row appears when the shell passes it. */
   closeSession?: () => void;
@@ -375,6 +378,16 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
         run: () => sessions.step(-1),
       },
     );
+  }
+  if (deps.renameSession) {
+    entries.push({
+      id: 'session-rename',
+      section: 'session',
+      title: 'Rename session…',
+      keywords: 'name label tab',
+      searchOnly: true,
+      run: deps.renameSession,
+    });
   }
   if (deps.closeSession) {
     entries.push({

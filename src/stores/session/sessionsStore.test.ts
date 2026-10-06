@@ -147,6 +147,54 @@ describe('sessionsStore', () => {
     expect(store.getSelected()).toBe(1);
   });
 
+  it('renames a session at once and then tells the app', async () => {
+    const store = await load();
+    commands.set('session_rename', () => null);
+    const heard = vi.fn();
+    store.subscribeSessions(heard);
+    void store.rename(2, 'Builder');
+    expect(store.getSessions()[1].name).toBe('Builder');
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(calls.at(-1)).toEqual(['session_rename', { session: 2, name: 'Builder' }]);
+  });
+
+  it('keeps a rename over a list read before it', async () => {
+    const store = await load();
+    commands.set('session_rename', () => null);
+    let answer: (rows: SessionRow[]) => void = () => undefined;
+    commands.set(
+      'sessions_list',
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    fire('vosh://session-selected', { session: 1 });
+    await settle();
+    void store.rename(2, 'Builder');
+    answer([TOLLIVER, ORLA]);
+    await settle();
+    expect(store.getSessions()[1].name).toBe('Builder');
+  });
+
+  it('reads the list again and says so when the app refuses a rename', async () => {
+    const store = await load();
+    const { getToasts } = await import('../toasts');
+    // The notice leaves on a window timer.
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    try {
+      commands.set('session_rename', () => {
+        throw new Error('No session 2.');
+      });
+      await store.rename(2, 'Builder');
+      await settle();
+      expect(store.getSessions()[1].name).toBeNull();
+      expect(getToasts().at(-1)).toMatchObject({ kind: 'error', message: 'No session 2.' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('opens the session the first list selects, and each selection the app finished', async () => {
     let finish: (value: null) => void = () => undefined;
     commands.set(

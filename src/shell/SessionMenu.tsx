@@ -11,11 +11,13 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button, by board 4 of the
 // Sessions review: Connect to the selected session's world or
-// Disconnect, Edit connection, and New session. Edit connection swaps
-// the list for a host, port and TLS form in the same popover. New
-// session opens a session and comes back on that session's own form.
-// Disconnect is destructive, so it sits last in the danger tone and is
-// never the row focus lands on.
+// Disconnect, Edit connection, Rename session, and New session. Edit
+// connection swaps the list for a host, port and TLS form in the same
+// popover. Rename session turns the selected row's name into a field
+// while the sessions sidebar shows (board 9). New session opens a
+// session and comes back on that session's own form. Disconnect is
+// destructive, so it sits last in the danger tone and is never the row
+// focus lands on.
 
 const MENU_WIDTH = 272;
 
@@ -27,10 +29,19 @@ interface Props {
    *  stepping back to a list you never saw. New session… opens it on
    *  the form of the session it opened. */
   request?: SessionMenuRequest;
+  /** Turn the selected session's name into a field in its row, while
+   *  the sessions sidebar shows. */
+  renameInRow?: (() => void) | undefined;
   onClose: () => void;
 }
 
-export function SessionMenu({ connection, anchor, request = { mode: 'menu' }, onClose }: Props) {
+export function SessionMenu({
+  connection,
+  anchor,
+  request = { mode: 'menu' },
+  renameInRow,
+  onClose,
+}: Props) {
   const [mode, setMode] = useState(request.mode);
   const { live, target } = connection;
 
@@ -89,6 +100,9 @@ export function SessionMenu({ connection, anchor, request = { mode: 'menu' }, on
         </ShellMenuItem>
       )}
       <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
+      {renameInRow && (
+        <ShellMenuItem onSelect={() => run(renameInRow)}>Rename session…</ShellMenuItem>
+      )}
       <ShellMenuSeparator />
       <ShellMenuItem
         shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}

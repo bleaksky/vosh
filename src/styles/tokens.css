@@ -101,7 +101,8 @@
    itself to read on its ground. A color swatch rings in --key-ring.
    --mark-tint is a mark over terminal text it cannot redraw, the prompt
    card's marks on your prompt, where the opaque selection would hide the
-   glyphs. */
+   glyphs. The text selected in a session's name field takes it too, the
+   accent tint board 9 of the Sessions review draws there. */
 :root,
 :root[data-appearance='dark'] {
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px var(--edge);

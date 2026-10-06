@@ -4,10 +4,13 @@ import {
   listSessions,
   onSessionSelected,
   onSessionsChanged,
+  renameSession,
   selectSession,
   type SessionRow,
 } from '../../ipc/session';
+import { errorText } from '../../lib/text';
 import { createStore } from '../store';
+import { pushToast } from '../toasts';
 
 // The sessions the app holds, in the order the sidebar lists them, and
 // the one selected, which the GMCP stores show. Each window keeps its
@@ -19,8 +22,9 @@ import { createStore } from '../store';
 //
 // Until the first list comes, the selected session is the one the app
 // starts with. A read applies only when no list came and no selection
-// was made here after it began, so its answer never puts back older
-// rows or another selection.
+// or rename was made here after it began, so its answer never puts back
+// older rows or another selection. A rename shows here at once, as a
+// selection does, and the list the app sends after it carries the name.
 //
 // The store also keeps the sessions this window opened, which the main
 // window gives a terminal each. That is the session the first list
@@ -41,7 +45,7 @@ const store = createStore<Sessions>({ rows: [], selected: FIRST_SESSION, opened:
 let started = false;
 /** Whether a list came yet. */
 let listed = false;
-/** Counts each list heard and each selection made here. */
+/** Counts each list heard and each selection and rename made here. */
 let generation = 0;
 
 /** Take the rows of a list and the selection it marks. */
@@ -106,6 +110,20 @@ export function select(id: number): Promise<void> {
     () => opens(id),
     () => read(),
   );
+}
+
+/** Give `id` the name `name`, or none, so it reads its character again.
+ *  Every view here shows it at once, and the app keeps it after and
+ *  sends the rows. A rename the app refuses reads the list again and
+ *  says so. */
+export function rename(id: number, name: string | null): Promise<void> {
+  generation += 1;
+  const now = store.get();
+  store.set({ ...now, rows: now.rows.map((row) => (row.id === id ? { ...row, name } : row)) });
+  return renameSession(id, name).catch((e: unknown) => {
+    read();
+    pushToast({ kind: 'error', message: errorText(e) || 'Vosh could not rename the session.' });
+  });
 }
 
 /** The selected session's id. */
