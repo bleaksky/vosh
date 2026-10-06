@@ -10,7 +10,7 @@ use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
 use crate::app::plugins::SharedPluginManager;
 use crate::logs::SharedLogStore;
 use crate::profile::live::Profile;
-use crate::profile::open::OpenProfile;
+use crate::profile::open::{OpenProfile, ProfileGuard};
 use crate::sessions::{Session, SessionId, SessionRow, Sessions, NO_SUCH_SESSION};
 
 /// What every command, window and session shares. The sessions with the
@@ -191,6 +191,20 @@ impl AppState {
         self.sessions().profile(name)
     }
 
+    /// The profile a Settings command edits, locked: the open profile
+    /// `profile` names, or the selected session's when it names none. A
+    /// name no session plays is an error, in a sentence. It finds the
+    /// profile in the session map, so take it before any other lock.
+    pub(crate) async fn lock_named(&self, profile: Option<String>) -> Result<ProfileGuard, String> {
+        match profile {
+            None => Ok(self.selected_session().lock_profile().await),
+            Some(name) => match self.open_profile(&name) {
+                Some(open) => Ok(open.lock().await),
+                None => Err(format!("No session plays the profile {name}.")),
+            },
+        }
+    }
+
     /// Keep `profile`, named `name`, open for a session to play, see
     /// [`Sessions::add_profile`].
     pub(crate) fn add_open_profile(&self, name: &str, profile: Profile) -> Arc<OpenProfile> {
@@ -249,7 +263,7 @@ impl AppState {
 
     /// The selected session's profile, locked, for a test.
     #[cfg(test)]
-    pub(crate) async fn selected_profile(&self) -> crate::profile::open::ProfileGuard {
+    pub(crate) async fn selected_profile(&self) -> ProfileGuard {
         self.selected_session().lock_profile().await
     }
 

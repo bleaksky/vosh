@@ -205,16 +205,7 @@ async fn set_fields(
     profile: Option<String>,
 ) -> Result<(), String> {
     let open = {
-        let mut p = match profile {
-            None => state.selected_session().lock_profile().await,
-            Some(name) => {
-                state
-                    .open_profile(&name)
-                    .ok_or_else(|| format!("No session plays the profile {name}."))?
-                    .lock()
-                    .await
-            }
-        };
+        let mut p = state.lock_named(profile).await?;
         apply_fields(&mut p.ui, fields);
         p.open().clone()
     };
