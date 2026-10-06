@@ -121,8 +121,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     }
     apply_script_result(&conn.app, &mut io, &conn.session, script_apply).await?;
     walk_gmcp(conn, &msg, batch).await?;
-    // Keep the last affects list for a window that opens between ticks.
-    conn.session.last_affects.observe(&msg.package, &msg.data);
+    // Keep the last affects, vitals and combat for a window that opens
+    // between packets.
+    conn.session.last_packages.observe(&msg.package, &msg.data);
     // A list that changes the affect fulls sends them first, so the
     // windows never draw the list against the old ones (a recast at
     // fewer hours than the old full).

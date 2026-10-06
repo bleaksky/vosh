@@ -17,6 +17,7 @@ pub(crate) mod terminal;
 pub(crate) mod tick;
 pub(crate) mod ui_config;
 pub(crate) mod updater;
+pub(crate) mod vitals;
 pub(crate) mod windows;
 pub(crate) mod wizard;
 
@@ -130,6 +131,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         characters::session_identity_get,
         affects::affects_snapshot_get,
         affects::affect_full_get,
+        vitals::vitals_snapshot_get,
         prompt::hidden_get,
         prompt::prompt_show_get,
         prompt::prompt_last_seen,
