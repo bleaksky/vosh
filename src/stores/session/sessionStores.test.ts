@@ -285,3 +285,28 @@ describe('the masked field with two sessions', () => {
     expect(s.inputMode.getPasswordMode()).toBe(false);
   });
 });
+
+describe('the connection of a session that drops', () => {
+  it('is not live once the link drops, with a reason or without', async () => {
+    await load();
+    const { sessionLive } = await import('./connectionStore');
+    state(TOLLIVER, 'connected');
+    state(ORLA, 'connected');
+    expect(sessionLive(TOLLIVER)).toBe(true);
+    fire('session://state', {
+      session: TOLLIVER,
+      kind: 'disconnected',
+      reason: 'server closed connection',
+    });
+    fire('session://reconnect', {
+      session: TOLLIVER,
+      kind: 'failed',
+      try: 1,
+      tries: 8,
+      reason: 'no answer in 10 seconds',
+    });
+    state(ORLA, 'disconnected');
+    expect(sessionLive(TOLLIVER)).toBe(false);
+    expect(sessionLive(ORLA)).toBe(false);
+  });
+});
