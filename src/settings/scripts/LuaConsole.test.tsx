@@ -201,7 +201,7 @@ describe('the Console', () => {
     await act(async () => {
       handler<unknown>(clearButton(m.container), 'onClick')({});
     });
-    expect(calls.invoked).toEqual([{ cmd: 'lua_output_clear', args: undefined }]);
+    expect(calls.invoked).toEqual([{ cmd: 'lua_output_clear', args: { owner: undefined } }]);
     expect(m.cleared()).toBe(1);
     expect(m.errors).toEqual([null]);
     await m.unmount();

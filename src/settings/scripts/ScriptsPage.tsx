@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { subscribeProfileSwitched } from '../../ipc/profiles';
 import {
   luaOutputGet,
+  pluginOwner,
   pluginsList,
   subscribeLuaOutput,
   subscribePluginsChanged,
@@ -12,20 +13,27 @@ import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { errorText } from '../../lib/text';
 import type { SettingsPageProps } from '../pageTypes';
 import { LuaConsole } from './LuaConsole';
+import { NewPluginDialog } from './NewPluginDialog';
 import { PluginList } from './PluginList';
+import { PluginPage } from './PluginPage';
+import type { PluginSave } from './pluginState';
 
-// Settings > Scripts (Scripts and Panels, boards 2 and 4). Your plugins
+// Settings > Scripts (Scripts and Panels, boards 1 to 4). Your plugins
 // as the selected session sees them, and the Console with every [lua]
 // line it printed. The page reads both as it opens and follows them
 // through the plugin and Lua output events, so its own state holds
-// them and no store does.
+// them and no store does. A plugin opens on a page of its own inside
+// the group, `scripts:<name>`, which takes its share of both.
 
 /** The lines the page keeps, as many as a session's Output ring. */
 const CONSOLE_LINES = 500;
 
-export function ScriptsPage({ onError }: SettingsPageProps) {
+export function ScriptsPage({ target, onError, navigate, setLeaveGuard }: SettingsPageProps) {
   const [plugins, setPlugins] = useState<PluginRow[] | null>(null);
   const [lines, setLines] = useState<LuaLine[]>([]);
+  const [creating, setCreating] = useState(false);
+  // Each plugin's last save in this window, which its save bar tells.
+  const [saves, setSaves] = useState<Readonly<Record<string, PluginSave>>>({});
 
   const readPlugins = useCallback(() => {
     pluginsList()
@@ -47,6 +55,27 @@ export function ScriptsPage({ onError }: SettingsPageProps) {
     setLines((prev) => [...prev, ...payload.lines].slice(-CONSOLE_LINES)),
   );
 
+  const open = (name: string) => navigate({ group: 'scripts', section: name });
+
+  const name = target.section;
+  if (name !== undefined) {
+    return (
+      <PluginPage
+        key={name}
+        name={name}
+        plugins={plugins}
+        lines={lines}
+        saved={saves[name]}
+        onSaved={(save) => setSaves((prev) => ({ ...prev, [name]: save }))}
+        onPlugins={setPlugins}
+        onChanged={readPlugins}
+        onCleared={() => setLines((prev) => prev.filter((l) => l.owner !== pluginOwner(name)))}
+        onError={onError}
+        setLeaveGuard={setLeaveGuard}
+      />
+    );
+  }
+
   return (
     <>
       <PluginList
@@ -54,8 +83,22 @@ export function ScriptsPage({ onError }: SettingsPageProps) {
         onPlugins={setPlugins}
         onError={onError}
         onChanged={readPlugins}
+        onNew={() => setCreating(true)}
+        onOpen={open}
       />
       <LuaConsole lines={lines} onCleared={() => setLines([])} onError={onError} />
+      {creating && (
+        <NewPluginDialog
+          plugins={plugins ?? []}
+          onCreated={(list, created) => {
+            setPlugins(list);
+            setCreating(false);
+            open(created);
+          }}
+          onCancel={() => setCreating(false)}
+          onError={onError}
+        />
+      )}
     </>
   );
 }

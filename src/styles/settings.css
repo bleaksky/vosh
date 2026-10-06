@@ -2124,6 +2124,39 @@
   white-space: nowrap;
 }
 
+/* A press anywhere on a plugin row opens the plugin, as a profile row
+   does in Characters. The name and description are one button whose
+   press area stretches over the row, and the switch and the more
+   button sit above it. */
+.st-plugin-open {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.st-plugin-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.st-plugin-open:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.st-plugin-row .st-row-control {
+  position: relative;
+  z-index: 1;
+}
+
 .st-plugin-empty {
   margin: 0;
   padding: 14px 16px;
@@ -2230,4 +2263,80 @@
   font-size: 13px;
   line-height: 18px;
   pointer-events: none;
+}
+
+/* A plugin's page (boards 1 and 3): the file and On for this profile,
+   then the stop note while Vosh holds the plugin off, the editor and
+   Output, 12 apart over the save bar. The editor shows 14 lines of
+   18.2 px, or 12 under the note, so the page fits the 880 by 600
+   window, and Output takes the rest of the column. */
+.st-plugin-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.st-plugin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 12px;
+}
+
+.st-plugin-code {
+  flex: none;
+}
+
+/* The height goes on the editor, since the React wrapper holds its
+   scroller at the editor's full height. */
+.st-app .st-plugin-code .cm-editor {
+  height: calc(14 * 18.2px + 10px);
+}
+
+.st-app .st-plugin-code.is-short .cm-editor {
+  height: calc(12 * 18.2px + 10px);
+}
+
+/* Output fills what the editor leaves, its lines scroll inside the
+   well, and the field sits at the foot of it. The space over the first
+   line scrolls with the lines, so a well a few pixels short of its
+   lines, as board 1's is at 600, hides that space before any text. */
+.st-plugin-output {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.st-plugin-output .st-lua-out {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 0;
+}
+
+.st-plugin-output .st-lua-out.is-empty {
+  height: auto;
+}
+
+.st-plugin-output .st-lua-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding-top: 10px;
+}
+
+/* The folder a plugin lives in, under the Folder label, in the MUD font
+   on a line of its own, so the line takes that font's height. */
+.st-plugin-folder {
+  display: block;
+  font-family: var(--font-mud);
+}
+
+/* The Manifest tab scrolls on its own over the save bar. */
+.st-plugin-manifest {
+  display: block;
+  overflow-y: auto;
 }

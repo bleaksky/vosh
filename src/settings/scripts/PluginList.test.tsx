@@ -59,7 +59,14 @@ const none = () => undefined;
 
 function draw(plugins: PluginRow[] | null): string {
   return renderToStaticMarkup(
-    <PluginList plugins={plugins} onPlugins={none} onError={none} onChanged={none} />,
+    <PluginList
+      plugins={plugins}
+      onPlugins={none}
+      onError={none}
+      onChanged={none}
+      onNew={none}
+      onOpen={none}
+    />,
   );
 }
 
@@ -170,6 +177,8 @@ describe('the On switch', () => {
           onPlugins: (list) => void shown.push(list),
           onError: (e) => void errors.push(e),
           onChanged: () => void reads++,
+          onNew: none,
+          onOpen: none,
         }),
       );
     });
@@ -212,5 +221,83 @@ describe('the On switch', () => {
     expect(shown[0][0].on).toBe(false);
     expect(errors).toEqual(['Vosh could not save your profile.']);
     expect(reads).toBe(1);
+  });
+});
+
+describe('a press on the list', () => {
+  const doc = new FakeDocument();
+  let createRoot: typeof import('react-dom/client').createRoot;
+
+  beforeAll(async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node' });
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Mount board 4's list, press the button `pick` finds, and say what
+   *  the list asked for. */
+  async function pressOn(pick: (el: FakeElement) => boolean) {
+    calls.invoked.length = 0;
+    const opened: string[] = [];
+    let asked = 0;
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(
+        createElement(PluginList, {
+          plugins: BOARD,
+          onPlugins: none,
+          onError: none,
+          onChanged: none,
+          onNew: () => void asked++,
+          onOpen: (name) => void opened.push(name),
+        }),
+      );
+    });
+    const button = findAll(container, (el) => el.nodeName === 'BUTTON' && pick(el))[0];
+    const key = Object.keys(button).find((k) => k.startsWith('__reactProps$')) ?? '';
+    const props = (button as unknown as Record<string, { onClick: (e: unknown) => void }>)[key];
+    await act(async () => {
+      props.onClick({});
+    });
+    const switches = findAll(container, (el) => el.getAttribute('role') === 'switch').map((el) =>
+      el.getAttribute('aria-label'),
+    );
+    await act(async () => {
+      root.unmount();
+    });
+    doc.body.removeChild(container);
+    return { opened, asked, switches };
+  }
+
+  it('opens the plugin from its row, and names each switch by its plugin', async () => {
+    const { opened, asked, switches } = await pressOn(
+      (el) =>
+        el.getAttribute('class') === 'st-row-text st-plugin-open' &&
+        el.textContent?.startsWith('wait_full') === true,
+    );
+    expect(opened).toEqual(['wait_full']);
+    expect(asked).toBe(0);
+    expect(calls.invoked).toEqual([]);
+    expect(switches).toEqual(['vitals_alert', 'wait_full', 'weather_pane']);
+  });
+
+  it('asks for a new plugin from New plugin', async () => {
+    const { opened, asked } = await pressOn((el) => el.textContent === 'New plugin');
+    expect(asked).toBe(1);
+    expect(opened).toEqual([]);
   });
 });
