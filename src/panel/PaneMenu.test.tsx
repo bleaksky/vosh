@@ -2,7 +2,7 @@ import { Fragment, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHAT_CHANNELS, chatChannelColor, type ChatColors } from './chat/chatColors';
-import type { PaneLayout, PaneLeaf, PaneType } from './paneLayout';
+import type { PaneLayout, PaneLeaf, PaneSplit, PaneType } from './paneLayout';
 import { resetChatColors, setChatColor } from '../ipc/uiConfig';
 import { openSettingsTab } from '../lib/settingsLink';
 import { findTheme } from '../theme/themes';
@@ -345,9 +345,9 @@ describe('Show here instead', () => {
     props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
   };
 
-  const listed = (leaf: PaneLeaf) => {
+  const listed = (leaf: PaneLeaf, tree: PaneSplit | null = null) => {
     const pick = vi.fn();
-    const list = rows(ShowHereRows({ ...panesToShowInstead(leaf), pick }));
+    const list = rows(ShowHereRows({ ...panesToShowInstead(leaf, tree), pick }));
     const text = list.map((row) => {
       if (row === '---') return row;
       const plugin = row.props.trailing as ReactElement<{ children: string }> | null;
@@ -381,6 +381,28 @@ describe('Show here instead', () => {
     ]);
     lua.on = false;
     expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Chat']);
+  });
+
+  it('offers Chat in place of another pane while fewer than four show', () => {
+    lua.on = false;
+    const leaf = (id: string, pane: PaneLeaf['pane']): PaneLeaf => ({
+      id,
+      pane,
+      weight: 1,
+      props: {},
+    });
+    const chats = (n: number): PaneSplit => ({
+      id: 'root',
+      split: 'column',
+      weight: 1,
+      children: [
+        leaf('map', 'map'),
+        ...Array.from({ length: n }, (_, i) => leaf(i === 0 ? 'chat' : `chat-${i + 1}`, 'chat')),
+      ],
+    });
+    expect(listed(leaf('map', 'map'), chats(3)).text).toEqual(['Affects', 'Group', 'Chat']);
+    expect(listed(leaf('map', 'map'), chats(4)).text).toEqual(['Affects', 'Group']);
+    expect(listed(leaf('chat', 'chat'), chats(1)).text).toEqual(['Map', 'Affects', 'Group']);
   });
 
   it('shows the Lua pane picked in place of the pane', () => {
