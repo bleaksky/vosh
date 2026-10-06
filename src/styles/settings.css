@@ -2331,9 +2331,11 @@
 
 /* A plugin's page (boards 1 and 3): the file and On for this profile,
    then the stop note while Vosh holds the plugin off, the editor and
-   Output, 12 apart over the save bar. The editor shows 14 lines of
-   18.2 px, or 12 under the note, so the page fits the 880 by 600
-   window, and Output takes the rest of the column. */
+   Output, 12 apart over the save bar. In the 880 by 600 window the
+   editor shows 14 lines of 18.2 px, or 12 under the note, and Output
+   takes the rest of the column. A taller or shorter window grows or
+   shrinks the editor alone, so Output keeps the lines it shows at 600,
+   the stop line of board 3 among them. */
 .st-plugin-page {
   display: flex;
   flex-direction: column;
@@ -2355,24 +2357,27 @@
 }
 
 /* The height goes on the editor, since the React wrapper holds its
-   scroller at the editor's full height. */
+   scroller at the editor's full height. It gains or loses what the
+   window has past or under 600, and never shows fewer than 6 lines. */
 .st-app .st-plugin-code .cm-editor {
-  height: calc(14 * 18.2px + 10px);
+  height: max(calc(6 * 18.2px + 10px), calc(14 * 18.2px + 10px + 100vh - 600px));
 }
 
 .st-app .st-plugin-code.is-short .cm-editor {
-  height: calc(12 * 18.2px + 10px);
+  height: max(calc(6 * 18.2px + 10px), calc(12 * 18.2px + 10px + 100vh - 600px));
 }
 
 /* Output fills what the editor leaves, its lines scroll inside the
    well, and the field sits at the foot of it. The space over the first
    line scrolls with the lines, so a well a few pixels short of its
-   lines, as board 1's is at 600, hides that space before any text. */
+   lines, as board 1's is at 600, hides that space before any text. It
+   never drops under its head and its 8 px gap, the newest two lines,
+   and the field with its margins. */
 .st-plugin-output {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: calc(36px + 2 * 17px + 44px);
 }
 
 .st-plugin-output .st-lua-out {
