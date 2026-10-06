@@ -1119,16 +1119,25 @@
   white-space: nowrap;
 }
 
+/* The world, and its port when the port is not the world's own. A
+   tight row ends the world in an ellipsis and keeps the port whole. */
 .st-profile-meta {
+  display: flex;
+  gap: 4px;
   flex: 0 1 auto;
   min-width: 0;
   max-width: 120px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--tertiary);
   font-size: 11px;
   line-height: 15px;
+}
+
+.st-profile-world {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .st-profile-select[aria-current='true'] .st-profile-meta {

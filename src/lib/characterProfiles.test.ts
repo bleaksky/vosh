@@ -14,7 +14,7 @@ import {
   parseCharacterNames,
   parsePort,
   profileDisplayName,
-  profileWorldName,
+  profileWorld,
   takenProfileName,
   takenSentence,
   worldKey,
@@ -180,12 +180,36 @@ describe('the World select', () => {
     ]);
   });
 
+  it('labels a known world on another port as its row reads', () => {
+    const options = worldOptions([
+      { host: TFL, port: 1825 },
+      { host: 'mud.example.org', port: 1825 },
+    ]);
+    expect(options.map((o) => o.label)).toEqual([
+      'The Forsaken Lands',
+      'The Forsaken Lands 1825',
+      'mud.example.org:1825',
+      'No world',
+    ]);
+  });
+
   it('shows a profile row its world by name', () => {
-    expect(profileWorldName(JAMES[0])).toBe('The Forsaken Lands');
+    expect(profileWorld(JAMES[0])).toEqual({ world: 'The Forsaken Lands', port: null });
     expect(
-      profileWorldName({ name: 'x', auto_match: { host: 'mud.example.org', characters: [] } }),
-    ).toBe('mud.example.org');
-    expect(profileWorldName({ name: 'y', auto_match: null })).toBeNull();
+      profileWorld({ name: 'x', auto_match: { host: 'mud.example.org', characters: [] } }),
+    ).toEqual({ world: 'mud.example.org', port: null });
+    expect(profileWorld({ name: 'y', auto_match: null })).toBeNull();
+  });
+
+  it("adds the port of a known world when it is not the world's own", () => {
+    const on = (port: number | null) =>
+      profileWorld({ name: 'Build', auto_match: { host: TFL, port, characters: [] } });
+    expect(on(1825)).toEqual({ world: 'The Forsaken Lands', port: 1825 });
+    expect(on(1848)).toEqual({ world: 'The Forsaken Lands', port: null });
+    expect(on(null)).toEqual({ world: 'The Forsaken Lands', port: null });
+    expect(
+      profileWorld({ name: 'x', auto_match: { host: 'mud.example.org', port: 4000 } }),
+    ).toEqual({ world: 'mud.example.org', port: null });
   });
 });
 
