@@ -107,6 +107,8 @@ A row whose content sits under its label line at full width, like the prompt tem
 - `label`, `description`, and `anchor` as on `Row`.
 - `onClick` runs on press. Call the page's `navigate` there.
 
+`ConfirmDialog` is the 320 wide card that asks before a choice, imported by path. Pass `title`, `body`, `confirmLabel`, `onConfirm` and `onCancel`. `tone` is `danger` by default and `primary` for a choice that makes something. `cancelLabel` names the other button, `Cancel` by default, like the banner ask's `Not now`.
+
 `VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.

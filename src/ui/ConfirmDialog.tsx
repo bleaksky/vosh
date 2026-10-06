@@ -7,6 +7,9 @@ interface Props {
   title: string;
   body: string;
   confirmLabel: string;
+  /** The cancel button's label, `Cancel` unless the choice reads better
+   *  another way, like the banner ask's Not now. */
+  cancelLabel?: string;
   /** The confirm button's look. `danger`, the default, for a choice
    *  that deletes or drops something, and `primary`, the accent fill,
    *  for one that makes something, like New plugin's Create. */
@@ -22,7 +25,7 @@ interface Props {
 
 // A confirm on the floating recipe (SPEC 3): a 320 wide card, radius
 // 16, the title at 15/20 semibold, quiet body copy, any fields, and
-// right-aligned Cancel and the confirm button, danger by default. No
+// right-aligned Cancel, or the label you name, and the confirm button, danger by default. No
 // scrim. A clear layer behind the card still catches a press outside
 // it, which cancels. Exists because Tauri webviews silently reject
 // window.confirm().
@@ -38,6 +41,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel,
+  cancelLabel = 'Cancel',
   tone = 'danger',
   confirmDisabled = false,
   children,
@@ -100,7 +104,7 @@ export function ConfirmDialog({
         {children}
         <div className="ov-confirm-actions">
           <button ref={cancelRef} type="button" className="ov-button" onClick={onCancel}>
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"
