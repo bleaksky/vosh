@@ -29,6 +29,7 @@ import {
   Select,
   Toggle,
 } from '../../ui';
+import { ReconnectRow } from './ReconnectRow';
 import { SessionLogs } from './SessionLogs';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
@@ -65,7 +66,7 @@ function GeneralSections({
   const mac = isMacPlatform();
   return (
     <>
-      <ConnectionSection />
+      <ConnectionSection onError={onError} />
       <UpdatesSection
         autoUpdate={config?.auto_update ?? false}
         onAutoUpdate={(on) => update({ auto_update: on })}
@@ -95,8 +96,9 @@ function GeneralSections({
  *  keeps for itself (board 7). The World select picks a known world or
  *  Other…, which clears host and port for you to type. Host and port
  *  save when you leave them or press Enter, and go back to the target
- *  when they do not make one. */
-function ConnectionSection() {
+ *  when they do not make one. Reconnect when the link drops belongs to
+ *  the profile Settings shows, not the session. */
+function ConnectionSection({ onError }: { onError: (message: string | null) => void }) {
   const [target, storeTarget] = useSessionTarget();
   const sessions = useSessions().length;
   const [host, setHost] = useState(target.host);
@@ -211,6 +213,7 @@ function ConnectionSection() {
       <Row label="Use TLS" anchor="tls">
         <Toggle checked={target.tls} onChange={(tls) => saveTarget({ ...latest.current, tls })} />
       </Row>
+      <ReconnectRow onError={onError} />
     </Section>
   );
 }
