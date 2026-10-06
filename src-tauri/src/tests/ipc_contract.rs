@@ -158,6 +158,11 @@ const UNHEARD: &[Unheard] = &[
               R18 (Alerts Q19).",
     },
     Unheard {
+        name: "session://vitals-text",
+        why: "Your vitals text for the footer or the status line. The page \
+              half of vitals styles hears it (Vitals Styles Q7).",
+    },
+    Unheard {
         name: "vosh://daylight-changed",
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",

@@ -43,6 +43,8 @@
 //!   of redials.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
+//! - `vitals_text` renders your vitals text for a footer or the status
+//!   line while the page watches it.
 //! - `tests` drives the steps the way the loop does.
 
 mod batch;
@@ -65,6 +67,7 @@ pub(crate) mod reconnect;
 pub(crate) mod room_block;
 mod socket;
 mod steps;
+pub(crate) mod vitals_text;
 pub(crate) mod walk;
 
 use std::sync::Arc;

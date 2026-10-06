@@ -429,6 +429,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 {
                     error!(error = %e, "settings timer firing failed");
                 }
+                super::vitals_text::on_poll(&conn.app, &conn.session).await;
             }
             _ = perf_report_interval.tick() => {
                 conn.perf.report_and_reset();

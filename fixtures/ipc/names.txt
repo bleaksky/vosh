@@ -150,6 +150,7 @@ command ui_set_theme(theme, lightTheme?, darkTheme?, profile?)
 command updater_check()
 command updater_install_and_relaunch()
 command vitals_snapshot_get(session?)
+command vitals_text_watch(session?, cols?)
 command window_backdrop_set(background?, appearance?)
 event session://alert app heard
 event session://alerts-ended app unheard
@@ -169,6 +170,7 @@ event session://routed app heard
 event session://state app heard
 event session://target app heard
 event session://tick app heard
+event session://vitals-text app unheard
 event vosh://affect-full-changed app heard
 event vosh://affects-display-changed app page heard
 event vosh://aliases-changed app heard

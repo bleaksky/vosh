@@ -29,6 +29,7 @@ use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptI
 use super::gmcp_vars;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
+use super::vitals_text;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
 /// Room, and Comm cover the player view; World powers the tick timer reset
@@ -70,7 +71,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight) = {
+    let (tick_step, script_apply, daylight, vitals_text) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -87,8 +88,11 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let daylight = (msg.package == "World.Time")
             .then(|| c.tick.observe_daylight(&msg.data))
             .flatten();
-        (tick_step, apply.ran_under(p.open()), daylight)
+        // Your vitals or the fight moved, so a vitals text draws again.
+        let vitals_text = vitals_text::after_package(&conn.session, &p, &c, &msg.package, now);
+        (tick_step, apply.ran_under(p.open()), daylight, vitals_text)
     };
+    vitals_text::emit(&conn.app, &conn.session, vitals_text);
     if let Some(phase) = daylight {
         conn.session.emit(
             &conn.app,

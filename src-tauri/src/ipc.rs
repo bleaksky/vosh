@@ -132,6 +132,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         affects::affects_snapshot_get,
         affects::affect_full_get,
         vitals::vitals_snapshot_get,
+        vitals::vitals_text_watch,
         prompt::hidden_get,
         prompt::prompt_show_get,
         prompt::prompt_last_seen,
