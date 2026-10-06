@@ -19,12 +19,8 @@ import { PaneHeader, PaneMeta } from '../PaneHeader';
 // under lamented tears) the pane says so in place of the roster. The
 // store keeps no roster from before, so no stale health shows.
 
-function subscribe(cb: () => void): () => void {
-  return subscribeGroupState(() => cb());
-}
-
 export function GroupPane() {
-  const { group } = useSyncExternalStore(subscribe, getGroupState);
+  const { group } = useSyncExternalStore(subscribeGroupState, getGroupState);
   return <GroupPaneView group={group} />;
 }
 
