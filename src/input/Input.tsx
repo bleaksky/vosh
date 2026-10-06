@@ -12,16 +12,7 @@ import {
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
-import {
-  getTarget,
-  onInputMode,
-  onTarget,
-  sendInput,
-  sendMaskedInput,
-  stopWalk,
-  type QuickKey,
-} from '../ipc/session';
-import { useTauriEvent } from '../ipc/useTauriEvent';
+import { sendInput, sendMaskedInput, stopWalk } from '../ipc/session';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
   draftAfterMaskChange,
@@ -37,6 +28,8 @@ import { useMacroKeys } from './useMacroKeys';
 import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
+import { getPasswordMode, subscribePasswordMode } from '../stores/session/inputModeStore';
+import { getTargetState } from '../stores/session/targetStore';
 
 export interface InputHandle {
   focus: () => void;
@@ -112,14 +105,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   ref,
 ) {
   const [value, setValue] = useState('');
-  const [passwordMode, setPasswordMode] = useState(false);
+  const [passwordMode, setPasswordMode] = useState(getPasswordMode);
   // The mask from the newest input-mode event. The event sets it at once,
   // while the state above waits for a render. The key, paste, and submit
   // handlers ask maskedNow, which masks when either one says so. The
   // draft a handler holds goes with the last render, so an Enter pressed
   // before the row catches up still treats a password as a password,
   // whether the server just took echo or just handed it back.
-  const passwordModeRef = useRef(false);
+  const passwordModeRef = useRef(passwordMode);
   const maskedNow = () => isMasked(passwordMode, passwordModeRef.current);
   const { history, searchPrefix, remember, resetSearch, recallOlder, recallNewer } =
     useCommandHistory(value, setValue);
@@ -161,37 +154,30 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
   }, [value, passwordMode, fontKey]);
 
-  useTauriEvent(onInputMode, (payload) => {
+  // The masked field follows the selected session: the game's echo in
+  // that session, and each selection. The listener reads the newest
+  // render's resetSearch.
+  const maskChanged = (password: boolean) => {
     const wasMasked = passwordModeRef.current;
-    passwordModeRef.current = payload.password;
-    setPasswordMode(payload.password);
-    if (wasMasked !== payload.password) {
-      setValue((draft) => draftAfterMaskChange(wasMasked, payload.password, draft));
+    passwordModeRef.current = password;
+    setPasswordMode(password);
+    if (wasMasked !== password) {
+      setValue((draft) => draftAfterMaskChange(wasMasked, password, draft));
       resetSearch();
     }
-  });
+  };
+  const maskChangedRef = useRef(maskChanged);
+  maskChangedRef.current = maskChanged;
+  useEffect(() => subscribePasswordMode(() => maskChangedRef.current(getPasswordMode())), []);
 
   const { complete, resetCycle } = useTabCompletion(inputRef, value, setValue, history);
 
-  // Track configured quick-keys so we can skip the local echo when
-  // the user types one. The backend echoes the expansion (`bash
-  // blah`) via session://output, so the shortcut itself never lands
-  // in xterm — only the resolved command does.
-  const quickKeysRef = useRef<QuickKey[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    getTarget()
-      .then((snap) => {
-        if (!cancelled) quickKeysRef.current = snap.quick_keys;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  useTauriEvent(onTarget, (payload) => {
-    quickKeysRef.current = payload.quick_keys;
-  });
+  // A line that starts with one of the selected session's quick keys
+  // skips the local echo. The backend echoes the expansion (`bash blah`)
+  // via session://output, so the shortcut itself never lands in xterm,
+  // only the resolved command does.
+  const isQuickKey = (word: string) =>
+    getTargetState().quick_keys.some((q) => q.name === word && q.verb.length > 0);
 
   const {
     spellcheckPrompt,
@@ -246,8 +232,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     const firstWord = line.split(/\s+/)[0] ?? '';
     const plan = planSubmit(line, {
       masked,
-      quickKey:
-        !masked && quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
+      quickKey: !masked && isQuickKey(firstWord),
       echoColor: echoColorRef.current,
       echoCaret: echoCaretRef.current,
     });
@@ -378,7 +363,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         const echo = macroEcho(command, {
           enabled: echoMacrosRef.current,
           masked: maskedNow(),
-          quickKey: quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
+          quickKey: isQuickKey(firstWord),
           echoColor: echoColorRef.current,
           echoCaret: echoCaretRef.current,
         });

@@ -1,7 +1,12 @@
+import { getSelected } from './sessionsStore';
+
 // The tick sound. The session reports each tick on session://tick, and
 // the report that lands the tick carries fired true, once per tick. With
 // Play a sound on it also carries sound true, and the tick store plays
 // this short soft tone. Web Audio draws it, so Vosh ships no sound file.
+// Every session keeps its own count, but only the session in front, the
+// selected one, plays its tick (Q10), so two sessions never ring over
+// each other.
 //
 // The sound was switched off while the backend fired on its own clock,
 // which rang ahead of or behind the real tick. The game's own tick now
@@ -15,9 +20,11 @@ const MIN_GAP_MS = 500;
 
 let lastPlayed = Number.NEGATIVE_INFINITY;
 
-/** Play the tick sound, a 0.2 second 880 Hz tone that fades in and out.
- *  Does nothing where the web view has no audio. */
-export function playTickSound(): void {
+/** Play the tick sound of `session`, a 0.2 second 880 Hz tone that
+ *  fades in and out. Does nothing for a session behind, or where the web
+ *  view has no audio. */
+export function playTickSound(session: number): void {
+  if (session !== getSelected()) return;
   const now = Date.now();
   if (now - lastPlayed < MIN_GAP_MS) return;
   lastPlayed = now;
