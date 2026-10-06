@@ -224,6 +224,7 @@ export function PluginPage({
             className={cx('st-code', 'st-plugin-code', stopped && 'is-short')}
             ariaLabel={entry}
             page
+            maxHeight="none"
             language="lua"
             value={draft.code}
             onChange={(code) => setDraft((now) => now && { ...now, code })}
