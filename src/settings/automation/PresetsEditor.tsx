@@ -46,7 +46,7 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
         const plan = presetSavePlan(draft);
         for (const id of plan.remove) await presetsRemove(id);
         const install = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
-        if (install.length > 0) await presetsInstall(install);
+        if (install.length > 0) await presetsInstall(install, []);
         // Keep the ids this page has no preset for, such as the alert
         // presets, as the profile holds them now.
         const stored = (await getUiConfig()).enabled_presets;

@@ -185,8 +185,10 @@ export async function importAliases(json: string): Promise<number> {
   return invoke('aliases_import', { json });
 }
 
-export async function presetsInstall(triggers: TriggerRecord[]): Promise<number> {
-  return invoke('presets_install', { triggers });
+/** Install the triggers and macros of the presets you turned on. Each
+ *  carries its preset's id. */
+export async function presetsInstall(triggers: TriggerRecord[], macros: Macro[]): Promise<number> {
+  return invoke('presets_install', { triggers, macros });
 }
 
 export async function presetsRemove(presetId: string): Promise<number> {
@@ -207,6 +209,9 @@ export interface Macro {
    *  were not bound. The backend omits the field while it is on, so
    *  absent means on. */
   enabled?: boolean;
+  /** The id of the preset that added it, absent for one of yours. A
+   *  preset macro on a key one of yours uses comes with enabled false. */
+  preset?: string | null;
 }
 
 /** One row in any groups-list response: name + current enabled state.

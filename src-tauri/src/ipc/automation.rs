@@ -1,6 +1,6 @@
 //! The commands for your automation. Settings lists and saves your
 //! triggers, aliases, macros and timers through them, adds and removes
-//! the preset triggers, and imports another client's file into the live
+//! what the presets add, and imports another client's file into the live
 //! profile. The command line reads your macros through them too.
 
 use serde::de::value::{self, StrDeserializer};
@@ -15,7 +15,9 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
-use crate::loadouts::presets::{hold_taken_keys, install_preset_triggers};
+use crate::loadouts::presets::{
+    hold_taken_keys, install_preset_macros, install_preset_triggers, remove_preset_macros,
+};
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::script::{list_groups, set_list_group, GroupList};
@@ -468,48 +470,62 @@ pub(crate) async fn timers_delete(
     Ok(updated)
 }
 
-/// Bulk-install a set of preset triggers. Each trigger should already
-/// have its `preset` field set to the preset id; this command
-/// validates and inserts them so the engine starts matching
-/// immediately. Returns the number installed.
+/// Install the triggers and macros of the presets you turned on. Each
+/// one should already have its `preset` field set to the preset id; this
+/// command validates and inserts them so the engine starts matching and
+/// the keys start sending at once. Returns the number installed.
 #[tauri::command]
 pub(crate) async fn presets_install(
     app: AppHandle,
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
+    macros: Vec<Macro>,
 ) -> Result<usize, String> {
-    let (open, installed) = {
+    let (triggers_came, macros_came) = (!triggers.is_empty(), !macros.is_empty());
+    let (open, installed, macros) = {
         let mut p = state.selected_session().lock_profile().await;
-        let installed = install_preset_triggers(&mut p, triggers)?;
-        (p.open().clone(), installed)
+        // The macros go first, since they refuse before they change
+        // anything.
+        let mut installed = install_preset_macros(&mut p, macros)?;
+        installed += install_preset_triggers(&mut p, triggers)?;
+        let macros = macros_came.then(|| p.macros.clone());
+        (p.open().clone(), installed, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    if installed > 0 {
+    if triggers_came {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
+    }
+    if let Some(macros) = macros {
+        broadcast(&app, MACROS_CHANGED, &macros);
     }
     Ok(installed)
 }
 
-/// Remove every trigger tagged with the given preset id. Returns the
-/// number removed.
+/// Remove every trigger and macro tagged with the given preset id.
+/// Returns the number removed.
 #[tauri::command]
 pub(crate) async fn presets_remove(
     app: AppHandle,
     state: State<'_, SharedState>,
     preset_id: String,
 ) -> Result<usize, String> {
-    let (open, removed) = {
+    let (open, triggers_removed, macros_removed, macros) = {
         let mut p = state.selected_session().lock_profile().await;
-        let removed = p.triggers.remove_by_preset(&preset_id);
-        (p.open().clone(), removed)
+        let triggers_removed = p.triggers.remove_by_preset(&preset_id);
+        let macros_removed = remove_preset_macros(&mut p, &preset_id);
+        let macros = p.macros.clone();
+        (p.open().clone(), triggers_removed, macros_removed, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    if removed > 0 {
+    if triggers_removed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
     }
-    Ok(removed)
+    if macros_removed > 0 {
+        broadcast(&app, MACROS_CHANGED, &macros);
+    }
+    Ok(triggers_removed + macros_removed)
 }
 
 /// Detect which import format a file uses, based on content sniffing.
