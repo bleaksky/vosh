@@ -2,7 +2,7 @@ import type { ComponentType, MouseEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import { sessionLabel } from '../lib/sessionLabel';
 import { rowLook, useSessionRow, type RowGlyph } from '../stores/session/sessionRowStore';
-import { DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
+import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
 
 // The sessions sidebar on the left of the main window, board 2 of the
@@ -13,7 +13,8 @@ import { SidebarIcon } from './icons';
 // and each row reads the session as sessionLabel names it, the selected
 // one a filled pill. A row's glyph takes the meta's place while it shows,
 // and its name takes the tone the row store gives it (board 3). A click
-// selects.
+// selects. Under the pointer a row shows its close button in the place
+// of the meta or the glyph, which closes its session (Q13).
 //
 // WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
 // sessions, the caret would take your next Space and press it again, so
@@ -24,6 +25,8 @@ interface Props {
   selected: number;
   onSelect: (session: number) => void;
   onNewSession: () => void;
+  /** Close a session, asking first while it is connected. */
+  onClose: (session: number) => void;
   /** Fold the sidebar away in this window. */
   onHide: () => void;
   /** Hand the caret back to the command line. */
@@ -33,7 +36,15 @@ interface Props {
 /** Whether a click left the caret on the button it pressed. */
 const held = (e: MouseEvent<HTMLButtonElement>) => document.activeElement === e.currentTarget;
 
-export function SessionSidebar({ rows, selected, onSelect, onNewSession, onHide, onCaret }: Props) {
+export function SessionSidebar({
+  rows,
+  selected,
+  onSelect,
+  onNewSession,
+  onClose,
+  onHide,
+  onCaret,
+}: Props) {
   return (
     <aside className="shell-sessions st-controls" aria-label="Sessions">
       <div className="shell-sessions-top" data-tauri-drag-region>
@@ -69,6 +80,7 @@ export function SessionSidebar({ rows, selected, onSelect, onNewSession, onHide,
             rows={rows}
             current={row.id === selected}
             onSelect={onSelect}
+            onClose={onClose}
             onCaret={onCaret}
           />
         ))}
@@ -91,11 +103,12 @@ interface SlotProps {
   rows: SessionRow[];
   current: boolean;
   onSelect: (session: number) => void;
+  onClose: (session: number) => void;
   onCaret: () => void;
 }
 
 /** One session's row. */
-function SessionSlot({ row, rows, current, onSelect, onCaret }: SlotProps) {
+function SessionSlot({ row, rows, current, onSelect, onClose, onCaret }: SlotProps) {
   const label = sessionLabel(row, rows);
   const { glyph, tone } = rowLook(useSessionRow(row.id), row, current);
   return (
@@ -123,6 +136,23 @@ function SessionSlot({ row, rows, current, onSelect, onCaret }: SlotProps) {
         ) : (
           label.meta && <span className="shell-sessions-meta">{label.meta}</span>
         )}
+      </button>
+      {/* A sibling of the row, since a button holds no button. It shows
+          only under the pointer, so Tab passes it by, and the Session
+          menu and the palette close a session from the keyboard. The
+          caret goes back first, so a question that asks returns it
+          there. */}
+      <button
+        type="button"
+        className="shell-sessions-close"
+        aria-label="Close session"
+        tabIndex={-1}
+        onClick={(e) => {
+          if (held(e)) onCaret();
+          onClose(row.id);
+        }}
+      >
+        <CloseIcon />
       </button>
     </li>
   );

@@ -77,7 +77,10 @@ fn routes_follow_the_board() {
     // Help opens its own window from wherever you are, so the main
     // window never has to be in front for it.
     assert_eq!(route("help"), Route::OpenHelp);
-    assert_eq!(route("close-window"), Route::CloseWindow);
+    assert_eq!(route("close-window"), Route::CloseFront);
+    // Close session closes Settings or Help in front, as Close window
+    // does, and never a game behind them.
+    assert_eq!(route("session-close"), Route::CloseFront);
     assert_eq!(route("copy"), Route::Copy);
     assert_eq!(route("find"), Route::Find);
     assert_eq!(route("palette"), Route::Main { raise: true });

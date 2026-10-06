@@ -97,6 +97,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &sep()?,
             &item("session-new", "New session…")?,
             &sep()?,
+            &item("session-close", "Close session")?,
             &item("close-window", "Close window")?,
             &item("profile-save", "Save profile")?,
         ],
@@ -232,7 +233,7 @@ pub(crate) fn on_event(app: &AppHandle, event: MenuEvent) {
             });
         }
         Route::Quit => app.exit(0),
-        Route::CloseWindow => {
+        Route::CloseFront => {
             if is_front(app, "settings") {
                 if let Some(settings) = app.get_webview_window("settings") {
                     // A close request, the same as the close button.

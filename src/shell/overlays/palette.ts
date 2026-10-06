@@ -97,6 +97,9 @@ export interface PaletteDeps {
   /** Open a session on its New session form. The row appears when the
    *  shell passes it. */
   newSession?: () => void;
+  /** Close the selected session, asking first while it is connected.
+   *  The row appears when the shell passes it. */
+  closeSession?: () => void;
   disconnect: () => void;
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
@@ -325,6 +328,16 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       keys: APP_SHORTCUTS['session-new'],
       searchOnly: true,
       run: deps.newSession,
+    });
+  }
+  if (deps.closeSession) {
+    entries.push({
+      id: 'session-close',
+      section: 'session',
+      title: 'Close session',
+      keywords: 'end remove tab',
+      searchOnly: true,
+      run: deps.closeSession,
     });
   }
   entries.push({

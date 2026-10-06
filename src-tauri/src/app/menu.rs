@@ -1,7 +1,7 @@
 //! The macOS menu bar (the approved `MenuBar` board). Rust owns the menu,
 //! so it is there before the page loads and survives a page reload, and
-//! Settings, Help, Copy, and Close window work whichever window is in
-//! front.
+//! Settings, Help, Copy, Close session and Close window work whichever
+//! window is in front.
 //!
 //! Vosh commands reach the main window as `vosh://app-menu` with the
 //! palette entry id as the payload, and shell/useAppCommands.ts runs them
@@ -124,9 +124,11 @@ enum Route {
     OpenSettings,
     /// Open Help, or bring it to the front.
     OpenHelp,
-    /// Close the window in front. The main window asks first while you
-    /// are connected.
-    CloseWindow,
+    /// Close what is in front. Settings and Help close. In the main
+    /// window the command runs, Close window or Close session, and asks
+    /// first while a session it ends is connected. So Close session never
+    /// closes a game from Settings (Sessions Q11).
+    CloseFront,
     /// Copy in the window in front.
     Copy,
     /// Find in the window in front: settings search in Settings, help
@@ -149,7 +151,7 @@ fn route(id: &str) -> Route {
         "quit" => Route::Quit,
         "settings" => Route::OpenSettings,
         "help" => Route::OpenHelp,
-        "close-window" => Route::CloseWindow,
+        "close-window" | "session-close" => Route::CloseFront,
         "copy" => Route::Copy,
         "find" => Route::Find,
         // A theme repaints every window, so picking one from Settings

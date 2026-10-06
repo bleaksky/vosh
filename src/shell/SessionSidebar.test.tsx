@@ -46,6 +46,7 @@ function draw(rows: SessionRow[], selected: number): string {
       selected={selected}
       onSelect={() => undefined}
       onNewSession={() => undefined}
+      onClose={() => undefined}
       onHide={() => undefined}
       onCaret={() => undefined}
     />,
@@ -87,6 +88,17 @@ describe('the sessions sidebar', () => {
     expect(build).toContain(
       '<span class="shell-sessions-name is-world"><span class="shell-sessions-world">The Forsaken Lands</span>1825</span>',
     );
+  });
+
+  it('gives each row a close button beside it, out of the Tab order', () => {
+    const html = draw(rows, 1);
+    const slots = html.match(/<li class="shell-sessions-slot">[^]*?<\/li>/g) ?? [];
+    expect(slots).toHaveLength(3);
+    for (const slot of slots) {
+      expect(slot).toMatch(
+        /<\/button><button type="button" class="shell-sessions-close" aria-label="Close session" tabindex="-1"><svg[^]*<\/button><\/li>$/,
+      );
+    }
   });
 
   it('marks the session the selection moves to', () => {

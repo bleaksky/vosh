@@ -401,10 +401,14 @@
 }
 
 /* Rows on a 38 pitch, the pill 36 high and inset 8 with Vosh's row
-   radius, the name 12 inside it at x 20 and the meta ending at 200. */
+   radius, the name 12 inside it at x 20 and the meta ending at 200. The
+   slot lets the pointer through, so it counts as under the pointer only
+   while its row or the row's close button is. */
 .shell-sessions-slot {
+  position: relative;
   height: 38px;
   padding: 1px 8px;
+  pointer-events: none;
 }
 
 .shell-sessions-row {
@@ -424,6 +428,7 @@
   font-weight: 400;
   text-align: left;
   white-space: nowrap;
+  pointer-events: auto;
 }
 
 /* A row behind brightens once the game prints a line there (Q9), and
@@ -436,16 +441,18 @@
   color: var(--tertiary);
 }
 
-/* A row under the pointer lights and its name takes the text tone. */
-.shell-sessions-row:hover {
+/* A row under the pointer lights and its name takes the text tone, its
+   close button under the pointer too. */
+.shell-sessions-slot:hover .shell-sessions-row {
   background: var(--hover);
   color: var(--text);
 }
 
 /* The selected row is the filled pill, its name in the text tone, at
    600 on a dark theme and 400 on a light one as otty draws Nord and
-   Paper. A light theme rings it through .st-controls, as Settings does. */
-.shell-sessions-row[aria-current='true'] {
+   Paper. A light theme rings it through .st-controls, as Settings does.
+   The slot keeps the pill over the light of a row under the pointer. */
+.shell-sessions-slot .shell-sessions-row[aria-current='true'] {
   background: var(--selrow);
   box-shadow: var(--st-selrow-ring);
   color: var(--text);
@@ -500,6 +507,44 @@
 
 .shell-sessions-glyph svg {
   display: block;
+}
+
+/* Under the pointer the close button takes the place of the meta or the
+   glyph, an 8 by 8 cross centered at otty's x 196.75 on the row's
+   center, 15.25 in from the slot's right (board 3). */
+.shell-sessions-close {
+  position: absolute;
+  top: 11px;
+  right: 15.25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tertiary);
+  visibility: hidden;
+  pointer-events: auto;
+}
+
+.shell-sessions-close svg {
+  display: block;
+}
+
+.shell-sessions-close:hover {
+  color: var(--secondary);
+}
+
+.shell-sessions-slot:hover .shell-sessions-close {
+  visibility: visible;
+}
+
+.shell-sessions-slot:hover .shell-sessions-meta,
+.shell-sessions-slot:hover .shell-sessions-glyph {
+  visibility: hidden;
 }
 
 .shell-sessions-glyph.is-dot {

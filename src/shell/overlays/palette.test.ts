@@ -177,6 +177,21 @@ describe('paletteSections', () => {
     expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-new')).toBe(false);
   });
 
+  it('lists Close session once you type, after New session…', () => {
+    const closeSession = vi.fn();
+    const entries = buildPaletteEntries(deps({ newSession: vi.fn(), closeSession }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('session-close');
+    const session = paletteSections(entries, 'session', []).find((s) => s.label === 'Session');
+    const ids = session?.rows.map((r) => r.id) ?? [];
+    expect(ids.indexOf('session-close')).toBe(ids.indexOf('session-new') + 1);
+    const row = session?.rows.find((r) => r.id === 'session-close');
+    expect(row).toMatchObject({ title: 'Close session' });
+    expect(row?.destructive).toBeUndefined();
+    void row?.run();
+    expect(closeSession).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-close')).toBe(false);
+  });
+
   it('hides search only rows until you type, then ranks matches by section', () => {
     const entries = buildPaletteEntries(deps());
     expect(flat(paletteSections(entries, '', [])).some((r) => r.searchOnly)).toBe(false);
