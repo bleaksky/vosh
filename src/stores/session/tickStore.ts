@@ -1,6 +1,4 @@
-import { useSyncExternalStore } from 'react';
 import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { onState } from '../../ipc/session';
 import {
   onTick,
   subscribeTickConfigChanged,
@@ -9,8 +7,9 @@ import {
   type TickPayload,
 } from '../../ipc/tick';
 import { type TickCount } from '../../ipc/uiConfig';
+import { createGmcpStore } from '../gmcp/gmcpStore';
+import { getSelected } from './sessionsStore';
 import { playTickSound } from './tickSound';
-import { createStore } from '../store';
 
 // The tick for the status line. The backend tick timer is the source.
 // The game's own tick decides it, a World.Time hour change or a line
@@ -22,6 +21,12 @@ import { createStore } from '../store';
 // tick config and all the while the tick is late. It passes the
 // interval on as well, so the ring before the tick in the Icon style
 // fills against it.
+//
+// Each session runs its own count (Q10), so the store keeps the last
+// report of each session and shows the selected one's. The tick settings
+// are the profile's, and the store reads those of the profile in front,
+// the selected session's, again on each vosh://profile-switched, which a
+// selection across profiles sends too.
 
 /** Warn threshold when the tick config sets none. Matches the five
  *  seconds the old chip used. */
@@ -138,77 +143,71 @@ function sameTick(a: TickState, b: TickState): boolean {
   );
 }
 
-const store = createStore<TickState>(computeTick(null, null));
-let payload: TickPayload | null = null;
+/** The tick settings of the profile in front. */
 let config: TickConfig | null = null;
-let staleTimer: number | undefined;
 let configGeneration = 0;
-let started = false;
+/** For each session, the timer that hides its count once its reports
+ *  stop. */
+const staleTimers = new Map<number, number>();
 
-function publish(): void {
-  const next = computeTick(payload, config);
-  // Reports land four times a second. Publish only when the shown
-  // number or state moves.
-  if (!sameTick(store.get(), next)) store.set(next);
-}
+type Apply = (session: number, change: (now: TickPayload | null) => TickPayload | null) => void;
 
-function refetchConfig(): void {
+/** Read the settings of the profile in front, and show the selected
+ *  session's count by them. A change that keeps its report still runs
+ *  the view, which reads the settings again. */
+function readConfig(apply: Apply): void {
   const mine = ++configGeneration;
   tickGetConfig()
     .then((cfg) => {
       if (mine !== configGeneration) return;
       config = cfg;
-      publish();
+      apply(getSelected(), (now) => now);
     })
     .catch(() => undefined);
 }
 
-export function startTickStore(): void {
-  if (started) return;
-  started = true;
-  refetchConfig();
-  void onTick((next) => {
-    // The report that lands the tick, once per tick.
-    if (next.fired && next.sound) playTickSound();
-    payload = next;
-    window.clearTimeout(staleTimer);
-    staleTimer = window.setTimeout(() => {
-      payload = null;
-      publish();
-    }, STALE_MS);
-    publish();
-  });
-  void subscribeTickConfigChanged((cfg) => {
-    configGeneration += 1;
-    config = cfg;
-    // Turned off, the timer stops reporting. Hide the count now rather
-    // than when the last report goes stale.
-    if (!cfg.enabled) {
-      payload = null;
-      window.clearTimeout(staleTimer);
-    }
-    publish();
-  });
-  // Tick config is per profile, and a switch does not broadcast it.
-  void subscribeProfileSwitched(() => refetchConfig());
-  void onState((state) => {
-    if (state.kind === 'disconnected') {
-      payload = null;
-      window.clearTimeout(staleTimer);
-      publish();
-    }
-  });
-}
+// Each session's state is its last report, or null while its count
+// hides. A disconnect hides it, as the factory puts back null.
+const store = createGmcpStore<TickPayload | null, TickState>({
+  state: null,
+  events: [
+    (apply) =>
+      onTick((next, session) => {
+        // The report that lands the tick, once per tick.
+        if (next.fired && next.sound) playTickSound(session);
+        window.clearTimeout(staleTimers.get(session));
+        staleTimers.set(
+          session,
+          window.setTimeout(() => {
+            staleTimers.delete(session);
+            apply(session, () => null);
+          }, STALE_MS),
+        );
+        apply(session, () => next);
+      }),
+    (apply) => {
+      readConfig(apply);
+      return subscribeTickConfigChanged((cfg) => {
+        configGeneration += 1;
+        config = cfg;
+        // Turned off, the timer stops reporting. Hide the count now
+        // rather than when the last report goes stale. A session behind
+        // on the same profile hides its own once its reports stop.
+        apply(getSelected(), (now) => (cfg.enabled ? now : null));
+      });
+    },
+    // Tick config is per profile, and a switch does not broadcast it.
+    (apply) => subscribeProfileSwitched(() => readConfig(apply)),
+  ],
+  // Reports land four times a second. Hand back what the status line
+  // reads when the shown number and state did not move.
+  view: (payload, last) => {
+    const next = computeTick(payload, config);
+    return last && sameTick(last, next) ? last : next;
+  },
+});
 
-export function getTick(): TickState {
-  return store.get();
-}
-
-export function subscribeTick(cb: () => void): () => void {
-  startTickStore();
-  return store.subscribe(cb);
-}
-
-export function useTick(): TickState {
-  return useSyncExternalStore(subscribeTick, getTick);
-}
+export const startTickStore = store.start;
+export const getTick = store.get;
+export const subscribeTick = store.subscribe;
+export const useTick = store.use;

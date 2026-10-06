@@ -200,13 +200,20 @@ export interface TargetPayload {
   quick_keys: QuickKey[];
 }
 
-export async function getTarget(): Promise<TargetPayload> {
-  return invoke('target_get');
+/** A session's target and quick keys, the selected session's when it
+ *  names none. */
+export async function getTarget(session?: number): Promise<TargetPayload> {
+  return invoke('target_get', { session });
 }
 
-export async function onTarget(cb: (payload: TargetPayload) => void): Promise<UnlistenFn> {
-  return listen<TargetPayload>(TARGET, (event) => {
-    cb(event.payload);
+/** Hear each change to a session's target or quick keys, with that
+ *  session. */
+export async function onTarget(
+  cb: (payload: TargetPayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<TargetPayload & { session?: number }>(TARGET, (event) => {
+    const { name, room_idx, quick_keys } = event.payload;
+    cb({ name, room_idx, quick_keys }, sessionOf(event.payload));
   });
 }
 
@@ -220,8 +227,12 @@ export interface InputModePayload {
   password: boolean;
 }
 
-export async function onInputMode(cb: (payload: InputModePayload) => void): Promise<UnlistenFn> {
-  return listen<InputModePayload>(INPUT_MODE, (event) => {
-    cb(event.payload);
+/** Hear the game turn its echo off or on in a session, with that
+ *  session. */
+export async function onInputMode(
+  cb: (payload: InputModePayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<InputModePayload & { session?: number }>(INPUT_MODE, (event) => {
+    cb({ password: event.payload.password }, sessionOf(event.payload));
   });
 }

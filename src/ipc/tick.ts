@@ -3,6 +3,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { TICK, TICK_CONFIG_CHANGED } from './events';
+import { sessionOf } from './session';
 
 /** The tick timer as the session loop reports it on session://tick,
  *  four times a second and on every tick. */
@@ -23,9 +24,12 @@ export interface TickPayload {
   sound: boolean;
 }
 
-export async function onTick(cb: (payload: TickPayload) => void): Promise<UnlistenFn> {
-  return listen<TickPayload>(TICK, (event) => {
-    cb(event.payload);
+/** Hear each report of a session's tick timer, with that session. */
+export async function onTick(
+  cb: (payload: TickPayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<TickPayload & { session?: number }>(TICK, (event) => {
+    cb(event.payload, sessionOf(event.payload));
   });
 }
 

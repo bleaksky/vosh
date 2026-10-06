@@ -590,19 +590,20 @@ export async function onPromptStatus(
 }
 
 /** A trigger hid your prompt and set prompt values while this profile
- *  draws nothing in its place, once per trigger per session. */
+ *  draws nothing in its place, once per trigger per session. The
+ *  listener gets the session too. */
 export async function onPromptGagWithoutReader(
-  cb: (payload: { trigger: string }) => void,
+  cb: (payload: { trigger: string }, session: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<{ trigger: string }>(PROMPT_GAG_WITHOUT_READER, (event) => {
-    cb(event.payload);
+  return listen<{ trigger: string; session?: number }>(PROMPT_GAG_WITHOUT_READER, (event) => {
+    cb({ trigger: event.payload.trigger }, sessionOf(event.payload));
   });
 }
 
-/** The triggers that hid your prompt this session with nothing drawn in
+/** The triggers that hid your prompt in a session with nothing drawn in
  *  its place, for a window that opens after the session named them. */
-export async function promptGagsWithoutReader(): Promise<string[]> {
-  return invoke('prompt_gags_without_reader');
+export async function promptGagsWithoutReader(session?: number): Promise<string[]> {
+  return invoke('prompt_gags_without_reader', { session });
 }
 
 /** Where your prompt shows: in the text, lifted on a band in the text,

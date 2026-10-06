@@ -1,16 +1,16 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { dockRows } from '../../prompt/pinnedDock';
 import { type PromptSpan } from '../../ipc/promptDesign';
-import { onState } from '../../ipc/session';
 import { onOutput, type SessionOutput } from '../../ipc/terminal';
-import { createStore } from '../store';
+import { createGmcpStore } from '../gmcp/gmcpStore';
 
 // The prompt the session pinned above the command line, as the text the
 // band draws: the output's pin field, decoded, with where each piece of
 // your design landed on it. It listens from launch, so the band shows
 // the latest prompt even when it mounts after the output that carried
 // it, as it does when you choose Pinned. An empty pin and a disconnect
-// clear it.
+// clear it. Each session pins its own prompt, so the store keeps the band
+// of each session and the dock shows the selected one's.
 
 /** What the band shows: its text, and where each piece of your design
  *  landed on it, rows counted from the band's first. No pieces when it
@@ -19,9 +19,6 @@ export interface PinnedBand {
   text: string;
   spans: PromptSpan[];
 }
-
-const store = createStore<PinnedBand | null>(null);
-let started = false;
 
 /** The band after `out`: what its pin says, or `band` as it was when it
  *  carries none. An empty pin clears it. */
@@ -35,31 +32,26 @@ export function bandAfterOutput(
   return { text: decoder.decode(out.pin), spans: out.pinSpans ?? [] };
 }
 
-export function startPinnedPromptStore(): void {
-  if (started) return;
-  started = true;
-  const decoder = new TextDecoder('utf-8', { fatal: false });
-  void onOutput((out) => {
-    store.set(bandAfterOutput(store.get(), out, decoder));
-  });
-  void onState((state) => {
-    if (state.kind === 'disconnected') store.set(null);
-  });
-}
+const decoder = new TextDecoder('utf-8', { fatal: false });
+
+const store = createGmcpStore<PinnedBand | null>({
+  state: null,
+  events: [
+    (apply) =>
+      onOutput((out, session) => apply(session, (band) => bandAfterOutput(band, out, decoder))),
+  ],
+});
+
+export const startPinnedPromptStore = store.start;
 
 export function getPinnedPrompt(): string | null {
   return store.get()?.text ?? null;
 }
 
 /** The band with the pieces of your design on it, or null. */
-export function getPinnedBand(): PinnedBand | null {
-  return store.get();
-}
+export const getPinnedBand = store.get;
 
-export function subscribePinnedPrompt(cb: () => void): () => void {
-  startPinnedPromptStore();
-  return store.subscribe(cb);
-}
+export const subscribePinnedPrompt = store.subscribe;
 
 /** The latest pinned prompt, or null before one comes and after you
  *  disconnect. */

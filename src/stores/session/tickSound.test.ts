@@ -1,5 +1,43 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The sessions store hears the list on a fake Tauri event bus, so a test
+// can select a session.
+type Handler = (event: { payload: unknown }) => void;
+const handlers = new Map<string, Set<Handler>>();
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (event: string, cb: Handler) => {
+    let set = handlers.get(event);
+    if (!set) handlers.set(event, (set = new Set()));
+    set.add(cb);
+    return () => set.delete(cb);
+  },
+  emit: async () => undefined,
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: async () => [] }));
+
+const TOLLIVER = 1;
+const ORLA = 2;
+
+/** The list the app sends, with Orla's session selected. */
+function selectOrla(): void {
+  const rows = [TOLLIVER, ORLA].map((id) => ({
+    id,
+    name: null,
+    character: id === TOLLIVER ? 'Tolliver' : 'Orla',
+    host: 'play.theforsakenlands.com',
+    port: 1848,
+    tls: false,
+    profile: id === TOLLIVER ? 'Tolliver' : 'Orla',
+    connected: true,
+    selected: id === ORLA,
+  }));
+  for (const cb of handlers.get('vosh://sessions-changed') ?? []) cb({ payload: rows });
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 /** A stand in for Web Audio that records the tone it was asked for. */
 function fakeAudio() {
   const made: FakeContext[] = [];
@@ -43,6 +81,7 @@ function fakeAudio() {
 
 beforeEach(() => {
   vi.resetModules();
+  handlers.clear();
 });
 
 afterEach(() => {
@@ -55,7 +94,7 @@ describe('playTickSound', () => {
     const { made, FakeContext } = fakeAudio();
     vi.stubGlobal('window', { AudioContext: FakeContext });
     const { playTickSound } = await import('./tickSound');
-    playTickSound();
+    playTickSound(TOLLIVER);
     expect(made).toHaveLength(1);
     const osc = made[0].oscillators[0];
     expect(osc.frequency.value).toBe(880);
@@ -71,17 +110,34 @@ describe('playTickSound', () => {
     const { made, FakeContext } = fakeAudio();
     vi.stubGlobal('window', { AudioContext: FakeContext });
     const { playTickSound } = await import('./tickSound');
-    playTickSound();
-    playTickSound();
+    playTickSound(TOLLIVER);
+    playTickSound(TOLLIVER);
     expect(made).toHaveLength(1);
     vi.advanceTimersByTime(600);
-    playTickSound();
+    playTickSound(TOLLIVER);
     expect(made).toHaveLength(2);
   });
 
   it('stays quiet where the web view has no audio', async () => {
     vi.stubGlobal('window', {});
     const { playTickSound } = await import('./tickSound');
-    expect(() => playTickSound()).not.toThrow();
+    expect(() => playTickSound(TOLLIVER)).not.toThrow();
+  });
+
+  it('plays nothing for a tick in a session behind', async () => {
+    const { made, FakeContext } = fakeAudio();
+    vi.stubGlobal('window', { AudioContext: FakeContext });
+    const { playTickSound } = await import('./tickSound');
+    const sessions = await import('./sessionsStore');
+    // Before the list comes, the first session is in front.
+    playTickSound(ORLA);
+    expect(made).toHaveLength(0);
+    sessions.startSessionsStore();
+    await settle();
+    selectOrla();
+    playTickSound(TOLLIVER);
+    expect(made).toHaveLength(0);
+    playTickSound(ORLA);
+    expect(made).toHaveLength(1);
   });
 });

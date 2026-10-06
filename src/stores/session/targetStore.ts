@@ -1,55 +1,34 @@
-import { useSyncExternalStore } from 'react';
-import { getTarget, onState, onTarget, type TargetPayload } from '../../ipc/session';
-import { createStore } from '../store';
+import { getTarget, onTarget, type TargetPayload } from '../../ipc/session';
+import { createGmcpStore } from '../gmcp/gmcpStore';
 
 // The client target you set with the target command, for the status
-// line and the target marker in the room rows. The backend owns it and
-// broadcasts session://target on every change, including the clear on
-// disconnect. This is not the Char.Combat opponent (see combatStore).
-// Lifted from StatusBar.
+// line and the target marker in the room rows, with the quick keys that
+// act on it. The backend owns both and broadcasts session://target on
+// every change, including the clear on disconnect. This is not the
+// Char.Combat opponent (see combatStore).
+//
+// Each session keeps its own target and its own set of quick keys, which
+// start as the stock slots and last until the session closes, as you
+// answered on October 4. The store keeps them for each session and
+// publishes the selected session's. A window that shows a session for
+// the first time asks target_get for it.
 
 const EMPTY: TargetPayload = { name: null, room_idx: null, quick_keys: [] };
 
-const store = createStore<TargetPayload>(EMPTY);
-let started = false;
-// Set once a broadcast lands, so the initial target_get cannot replace
-// a newer value if it resolves late.
-let heard = false;
+const store = createGmcpStore<TargetPayload>({
+  state: EMPTY,
+  events: [(apply) => onTarget((payload, session) => apply(session, () => payload))],
+  // The backend sends its own clear, but only when a target was set.
+  // Clearing here too keeps a stale name off the status line if that
+  // event is missed. The quick keys belong to the session and stay.
+  connection: (now, payload) =>
+    payload.kind === 'disconnected' && (now.name !== null || now.room_idx !== null)
+      ? { ...now, name: null, room_idx: null }
+      : now,
+  snapshot: { ask: getTarget, take: (_now, data) => data as TargetPayload },
+});
 
-export function startTargetStore(): void {
-  if (started) return;
-  started = true;
-  getTarget()
-    .then((snap) => {
-      if (!heard) store.set(snap);
-    })
-    .catch(() => undefined);
-  void onTarget((payload) => {
-    heard = true;
-    store.set(payload);
-  });
-  void onState((payload) => {
-    // The backend emits its own clear, but only when a target was set.
-    // Clearing here too keeps a stale name off the status line if that
-    // event is missed. Quick keys are profile config and stay.
-    if (payload.kind === 'disconnected') {
-      const prev = store.get();
-      if (prev.name !== null || prev.room_idx !== null) {
-        store.set({ ...prev, name: null, room_idx: null });
-      }
-    }
-  });
-}
-
-export function getTargetState(): TargetPayload {
-  return store.get();
-}
-
-export function subscribeTargetState(cb: () => void): () => void {
-  startTargetStore();
-  return store.subscribe(cb);
-}
-
-export function useTarget(): TargetPayload {
-  return useSyncExternalStore(subscribeTargetState, getTargetState);
-}
+export const startTargetStore = store.start;
+export const getTargetState = store.get;
+export const subscribeTargetState = store.subscribe;
+export const useTarget = store.use;

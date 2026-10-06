@@ -5,8 +5,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { OUTPUT } from './events';
 import type { PromptSpan } from './promptDesign';
+import { sessionOf } from './session';
 
 export interface OutputPayload {
+  /** The session whose terminal takes the output. */
+  session?: number;
   /** Output bytes as standard base64. Decoded once with `atob` in
    *  `onOutput`. Replaces the old `number[]` array, which made the
    *  backend serialize one JSON number per byte. */
@@ -99,9 +102,13 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   return out;
 }
 
-export async function onOutput(cb: (out: SessionOutput) => void): Promise<UnlistenFn> {
+/** Hear each write to a session's terminal, decoded, with that
+ *  session. */
+export async function onOutput(
+  cb: (out: SessionOutput, session: number) => void,
+): Promise<UnlistenFn> {
   return listen<OutputPayload>(OUTPUT, (event) => {
-    cb(decodeOutputPayload(event.payload));
+    cb(decodeOutputPayload(event.payload), sessionOf(event.payload));
   });
 }
 

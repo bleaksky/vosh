@@ -10,6 +10,7 @@ import { startCombatStore } from './gmcp/combatStore';
 import { startGameTimeStore } from './config/gameTimeStore';
 import { startGamePromptStore } from './gmcp/gamePromptStore';
 import { startHiddenStore } from './gmcp/hiddenStore';
+import { startInputModeStore } from './session/inputModeStore';
 import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startRoomStore } from './gmcp/roomStore';
 import { startSessionsStore } from './session/sessionsStore';
@@ -56,4 +57,5 @@ export function startStores(): void {
   startGameTimeStore();
   startChipStyleStore();
   startPinnedPromptStore();
+  startInputModeStore();
 }

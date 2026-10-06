@@ -10,11 +10,13 @@ import {
 } from '../session/sessionsStore';
 
 // A store for what the game sends over GMCP. It keeps one state for each
-// session, since a session behind keeps playing. Every input moves the
-// state of the session it names only through a change, a function that
-// takes that state and returns the next one, or the same state when
-// nothing moved. A session's state starts the first time anything names
-// it, and goes once the session leaves the list.
+// session, since a session behind keeps playing. The session stores, such
+// as your target and the tick, build on it too, since they keep their
+// state for each session the same way. Every input moves the state of
+// the session it names only through a change, a function that takes that
+// state and returns the next one, or the same state when nothing moved.
+// A session's state starts the first time anything names it, and goes
+// once the session leaves the list.
 //
 // The panes read the selected session. After each change to it, and on
 // each selection, the store publishes what they read through
