@@ -295,6 +295,12 @@ async fn disconnect_during_a_wait_ends_the_series() {
     assert_eq!(wait, Duration::from_secs(3));
     h.disconnect().await;
     assert_eq!(kinds(&h, h.first), ["waiting", "cancelled"]);
+    // The page hears your Disconnect, with no reason, after the drop.
+    let states = h.events_of(h.first, "session://state");
+    assert_eq!(
+        states.last(),
+        Some(&json!({"kind": "disconnected", "reason": null}))
+    );
     let _ = done.send(());
     clock.stays_quiet().await;
     assert_eq!(h.servers[0].connects.lock().expect("the connects").len(), 1);

@@ -474,14 +474,18 @@ fn stop_taken<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, characte
 }
 
 /// End the series `session` runs, if any, and say so to the page.
-pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
-    if let Some(redial) = session.take_redial() {
-        if redial.end().await {
-            session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
-        }
+/// Returns true when the cancel cut a series short.
+pub(crate) async fn cancel<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) -> bool {
+    let cut = match session.take_redial() {
+        Some(redial) => redial.end().await,
+        None => false,
+    };
+    if cut {
+        session.emit(app, events::RECONNECT, &ReconnectPayload::Cancelled);
     }
     // A try the cancel cut short leaves no ring for the next link.
     session.awaiting_game_prompt.set(false);
+    cut
 }
 
 /// The redials of one series, each after its wait, until one connects or
