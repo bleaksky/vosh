@@ -112,10 +112,11 @@ function append(lines: ChatLine[], line: ChatLine | null): ChatLine[] {
   return lines.length >= MAX_LINES ? [...lines.slice(1), line] : [...lines, line];
 }
 
-// The most recent MAX_LINES chat lines, from the channel packages and
-// the lines triggers route. ChatPane reads them here, so closing and
-// reopening the pane keeps the history. Only a disconnect clears them,
-// since a new connection makes the old chat irrelevant.
+// The most recent MAX_LINES chat lines of each session, from the channel
+// packages and the lines triggers route. ChatPane reads the selected
+// session's here, so closing and reopening the pane keeps the history.
+// Only the session's own disconnect clears them, since a new connection
+// makes the old chat irrelevant.
 const store = createGmcpStore<ChatLine[]>({
   state: [],
   packages: {
@@ -123,7 +124,10 @@ const store = createGmcpStore<ChatLine[]>({
     'Comm.Channel.Text': (lines, data) => append(lines, parseCommChannel(data)),
   },
   events: [
-    (apply) => onRouted((payload) => apply((lines) => append(lines, parseRoutedLine(payload)))),
+    (apply) =>
+      onRouted((payload, session) =>
+        apply(session, (lines) => append(lines, parseRoutedLine(payload))),
+      ),
   ],
 });
 

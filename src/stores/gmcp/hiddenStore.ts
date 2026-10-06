@@ -5,9 +5,10 @@ import { createGmcpStore } from './gmcpStore';
 // prompt engine in the backend works it out on every server build from
 // the latest Char.Vitals, Char.Affects, Group.Info and Char.Combat and
 // from your prompt, and never stores it. It reports each change once, so
-// the store also asks hidden_get for the last report when it starts, or
-// a window that opens or reloads during the song, Settings among them,
-// would show the true values an older build sends.
+// the store also asks hidden_get for a session's last report the first
+// time it shows that session, or a window that opens or reloads during
+// the song, Settings among them, would show the true values an older
+// build sends. Each session keeps its own flags.
 //
 // The new build marks each hidden packet with `"hidden": true`, and
 // the stores read that flag themselves, so this store adds nothing
@@ -59,7 +60,9 @@ function report(state: HiddenState, payload: unknown): HiddenState {
 
 const store = createGmcpStore<HiddenState>({
   state: NOTHING_HIDDEN,
-  events: [(apply) => onHidden((payload) => apply((state) => report(state, payload)))],
+  events: [
+    (apply) => onHidden((payload, session) => apply(session, (state) => report(state, payload))),
+  ],
   snapshot: {
     ask: hiddenGet,
     take: (state, payload) => (payload == null ? state : report(state, payload)),

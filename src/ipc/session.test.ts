@@ -52,13 +52,13 @@ describe('onGmcpPackage', () => {
     }
   });
 
-  it('hands its listener the data the session sends beside its id', async () => {
+  it('hands its listener the data the session sends and its id', async () => {
     const { package: name, data } = aabahranPacket('char-vitals.gmcp');
     vi.mocked(listen).mockClear();
     const heard = vi.fn();
     await onGmcpPackage(name, heard);
     const [event, handler] = vi.mocked(listen).mock.calls[0];
-    handler({ event, id: 1, payload: { session: 1, data } });
-    expect(heard).toHaveBeenCalledWith(data);
+    handler({ event, id: 1, payload: { session: 2, data } });
+    expect(heard).toHaveBeenCalledWith(data, 2);
   });
 });

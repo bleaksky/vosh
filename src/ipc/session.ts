@@ -19,6 +19,13 @@ import {
  *  src-tauri/src/sessions.rs. */
 export const FIRST_SESSION = 1;
 
+/** The session an event's payload names. Every session event the app
+ *  sends names its own. A payload that names none reads as the first
+ *  session's, as every event did before the page told sessions apart. */
+export function sessionOf(payload: { session?: unknown }): number {
+  return typeof payload.session === 'number' ? payload.session : FIRST_SESSION;
+}
+
 /** One session as the sidebar lists it, `SessionRow` in
  *  src-tauri/src/sessions.rs. */
 export interface SessionRow {
@@ -64,10 +71,12 @@ export async function onSessionSelected(cb: (session: number) => void): Promise<
   });
 }
 
-export type StatePayload =
+/** Where a session's connection stands, with the session it is. */
+export type StatePayload = { session: number } & (
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
   | { kind: 'connected'; host: string; port: number; tls: boolean }
-  | { kind: 'disconnected'; reason: string | null };
+  | { kind: 'disconnected'; reason: string | null }
+);
 
 /** Where Connect dials. */
 export interface ConnectionTarget {
@@ -147,16 +156,16 @@ export interface SessionData<T> {
 //
 // The payload is a SessionData, and the callback gets its data, the
 // packet as the game sent it, in the type the caller names as the
-// generic.
+// generic, and the session that sent it.
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function onGmcpPackage<T = any>(
   name: string,
-  cb: (data: T) => void,
+  cb: (data: T, session: number) => void,
 ): Promise<UnlistenFn> {
   const channel = `session://gmcp/${name.replace(/\./g, '-')}`;
   return listen<SessionData<T>>(channel, (event) => {
-    cb(event.payload.data);
+    cb(event.payload.data, sessionOf(event.payload));
   });
 }
 
@@ -165,9 +174,13 @@ export interface RoutedPayload {
   text: string;
 }
 
-export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<UnlistenFn> {
-  return listen<RoutedPayload>(ROUTED, (event) => {
-    cb(event.payload);
+/** Hear each line a trigger routes to a pane, with the session that
+ *  printed it. */
+export async function onRouted(
+  cb: (payload: RoutedPayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<RoutedPayload & { session?: number }>(ROUTED, (event) => {
+    cb(event.payload, sessionOf(event.payload));
   });
 }
 
@@ -199,7 +212,7 @@ export async function onTarget(cb: (payload: TargetPayload) => void): Promise<Un
 
 export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
   return listen<StatePayload>(STATE, (event) => {
-    cb(event.payload);
+    cb({ ...event.payload, session: sessionOf(event.payload) });
   });
 }
 
