@@ -1264,6 +1264,10 @@ describe('the help on Numpad movement', () => {
     );
     expect(text).toContain('`Numpad7`, `Numpad1` and `Numpad5` stay free.');
     expect(text).toContain('A key one of your macros already uses stays yours.');
+    // The Macros list of board 7 (B2 chunk 5).
+    expect(text).toContain(
+      'In Macros the six sit under `From presets`, where only their group changes, and a ring marks your macro on a key the preset wants.',
+    );
     expect(text).toContain('Turning the preset off removes the macros it added and leaves yours.');
   });
 
