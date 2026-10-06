@@ -1,7 +1,9 @@
 // The alerts a session rings, from a trigger's alert, an alert preset or
 // mud.alert in Lua.
 
+import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { AlertParts } from './automation';
 import { ALERT } from './events';
 
 /** An alert that rang, on session://alert. Mirrors AlertPayload in
@@ -36,4 +38,28 @@ export async function onAlert(cb: (alert: AlertPayload) => void): Promise<Unlist
   return listen<AlertPayload>(ALERT, (event) => {
     cb(event.payload);
   });
+}
+
+/** What the alert presets of the selected session's profile do, from
+ *  alert_presets_get. Mirrors AlertPresets in src-tauri/src/ipc/alerts.rs. */
+export interface AlertPresets {
+  /** What each preset does, by id, the profile's `[alerts]` table. A
+   *  preset it leaves out posts a banner alone. */
+  alerts: Record<string, AlertParts>;
+  /** The five ids, in the order the Alerts category lists them. */
+  ids: string[];
+  /** The ids that ring. Rust reads them off enabled_presets, where the
+   *  marker that turns every preset off wins over the list. */
+  on: string[];
+}
+
+export async function alertPresetsGet(): Promise<AlertPresets> {
+  return invoke<AlertPresets>('alert_presets_get');
+}
+
+/** Set what the preset `id` does, or with null, forget its parts so it
+ *  posts a banner alone. Rust saves the profile at once. Whether it
+ *  rings stays with enabled_presets. */
+export async function alertPresetsSet(id: string, alert: AlertParts | null): Promise<void> {
+  await invoke('alert_presets_set', { id, alert });
 }

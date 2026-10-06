@@ -329,3 +329,14 @@ fn low_health_rings_as_the_latch_rises_and_never_while_hidden() {
         }
     }
 }
+
+#[test]
+fn the_page_lists_the_presets_in_this_order() {
+    let page = include_str!("../../../../src/automation/alertPresets.ts");
+    let ids: Vec<&str> = regex::Regex::new(r"(?m)^\s*id: '([^']*)',$")
+        .unwrap()
+        .captures_iter(page)
+        .map(|id| id.get(1).unwrap().as_str())
+        .collect();
+    assert_eq!(ids, PRESETS);
+}
