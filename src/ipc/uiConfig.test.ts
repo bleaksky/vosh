@@ -498,6 +498,28 @@ describe('vitals options', () => {
     expect(normalizeUiConfig(raw({ vitals_meter: 'bar' })).vitals_meter).toBe('bar');
   });
 
+  it('reads junk in the vitals styles keys as something Vosh draws', () => {
+    const ui = normalizeUiConfig(
+      raw({
+        vitals_style: 'rows',
+        vitals_place: 'footer',
+        vitals_order: ['move', 'move', 'tp'],
+        vitals_off: ['opponent', 'tp', 'move'],
+        vitals_opponent: 'middle',
+        vitals_colors: { hp: 16, mana: 4, move: 'red', tp: 2 },
+        vitals_text_previous: ['', 'a', 'a', 'b', 'c'],
+      }),
+    );
+    expect(ui.vitals_style).toBeNull();
+    expect(ui.vitals_place).toBe('panel');
+    expect(ui.vitals_order).toEqual(['move', 'hp', 'mana']);
+    expect(ui.vitals_off).toEqual(['move', 'opponent']);
+    expect(ui.vitals_opponent).toBe('top');
+    expect(ui.vitals_colors).toEqual({ mana: 4 });
+    expect(ui.vitals_text_previous).toEqual(['a', 'b']);
+    expect(normalizeUiConfig(raw({ vitals_style: 'pips' })).vitals_style).toBe('pips');
+  });
+
   it('coerces anything else to the defaults', () => {
     expect(normalizeVitalsValues('both')).toBe('current-max');
     expect(normalizeVitalsValues(undefined)).toBe('current-max');

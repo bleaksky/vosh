@@ -59,6 +59,22 @@ pub(crate) struct UiConfigPayload {
     pub vitals_meter: String,
     pub vitals_warn_thirds: bool,
     pub vitals_hide_when_pinned: bool,
+    /// `ledger`, `gauges`, `pips` or `text`, or None for Rows and One
+    /// line, which `vitals_density` holds.
+    pub vitals_style: Option<String>,
+    /// `panel` or `status`.
+    pub vitals_place: String,
+    /// `hp`, `mana` and `move`, each once.
+    pub vitals_order: Vec<String>,
+    /// The vitals you turned off, and `opponent` for your opponent's row.
+    pub vitals_off: Vec<String>,
+    /// `top` or `bottom`.
+    pub vitals_opponent: String,
+    /// Each vital's ANSI slot, 0 to 15. A vital left out takes Default.
+    pub vitals_colors: std::collections::BTreeMap<String, u8>,
+    pub vitals_text: String,
+    /// At most two earlier texts, newest first.
+    pub vitals_text_previous: Vec<String>,
     pub chip_style: String,
     pub tick_count: String,
     pub game_time: String,
@@ -109,6 +125,14 @@ impl UiConfigPayload {
             vitals_meter: ui.vitals_meter.clone(),
             vitals_warn_thirds: ui.vitals_warn_thirds,
             vitals_hide_when_pinned: ui.vitals_hide_when_pinned,
+            vitals_style: ui.vitals_style.clone(),
+            vitals_place: ui.vitals_place.clone(),
+            vitals_order: ui.vitals_order.clone(),
+            vitals_off: ui.vitals_off.clone(),
+            vitals_opponent: ui.vitals_opponent.clone(),
+            vitals_colors: ui.vitals_colors.clone(),
+            vitals_text: ui.vitals_text.clone(),
+            vitals_text_previous: ui.vitals_text_previous.clone(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
             game_time: ui.game_time.clone(),
@@ -175,6 +199,16 @@ pub(crate) enum UiField {
     VitalsMeter(String),
     VitalsWarnThirds(bool),
     VitalsHideWhenPinned(bool),
+    VitalsStyle(Option<String>),
+    VitalsPlace(String),
+    VitalsOrder(Vec<String>),
+    VitalsOff(Vec<String>),
+    VitalsOpponent(String),
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_vitals_colors")]
+    VitalsColors(std::collections::BTreeMap<String, u8>),
+    /// The text it replaces goes first among the earlier texts.
+    VitalsText(String),
+    VitalsTextPrevious(Vec<String>),
     ChipStyle(String),
     TickCount(String),
     GameTime(String),
@@ -266,6 +300,16 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::VitalsMeter(v) => ui.vitals_meter = cfg::coerce_vitals_meter(v),
             UiField::VitalsWarnThirds(v) => ui.vitals_warn_thirds = v,
             UiField::VitalsHideWhenPinned(v) => ui.vitals_hide_when_pinned = v,
+            UiField::VitalsStyle(v) => ui.vitals_style = cfg::coerce_vitals_style(v),
+            UiField::VitalsPlace(v) => ui.vitals_place = cfg::coerce_vitals_place(v),
+            UiField::VitalsOrder(v) => ui.vitals_order = cfg::coerce_vitals_order(v),
+            UiField::VitalsOff(v) => ui.vitals_off = cfg::coerce_vitals_off(v),
+            UiField::VitalsOpponent(v) => ui.vitals_opponent = cfg::coerce_vitals_opponent(v),
+            UiField::VitalsColors(v) => ui.vitals_colors = v,
+            UiField::VitalsText(v) => cfg::replace_vitals_text(ui, v),
+            UiField::VitalsTextPrevious(v) => {
+                ui.vitals_text_previous = cfg::normalize_vitals_text_previous(v);
+            }
             UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
             UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
             UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
@@ -843,6 +887,69 @@ mod tests {
         assert!(!through_payload(&ui).vitals_warn_thirds);
         ui.vitals_warn_thirds = true;
         assert!(through_payload(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn the_vitals_styles_keys_round_trip() {
+        use std::collections::BTreeMap;
+        let fresh = UiConfig::default();
+        let back = through_payload(&fresh);
+        assert_eq!(back.vitals_style, None);
+        assert_eq!(back.vitals_order, fresh.vitals_order);
+        assert_eq!(back.vitals_text_previous, Vec::<String>::new());
+
+        let ui = UiConfig {
+            vitals_style: Some("text".into()),
+            vitals_place: "status".into(),
+            vitals_order: vec!["mana".into(), "move".into(), "hp".into()],
+            vitals_off: vec!["hp".into(), "opponent".into()],
+            vitals_opponent: "bottom".into(),
+            vitals_colors: BTreeMap::from([("move".into(), 10)]),
+            vitals_text: "%hp/%maxhp %mn/%maxmn %mv/%maxmv".into(),
+            vitals_text_previous: vec!["%hp(%pct_hp)h".into(), "%mv(%pct_mv)v".into()],
+            ..UiConfig::default()
+        };
+        let back = through_payload(&ui);
+        assert_eq!(back.vitals_style, ui.vitals_style);
+        assert_eq!(back.vitals_place, ui.vitals_place);
+        assert_eq!(back.vitals_order, ui.vitals_order);
+        assert_eq!(back.vitals_off, ui.vitals_off);
+        assert_eq!(back.vitals_opponent, ui.vitals_opponent);
+        assert_eq!(back.vitals_colors, ui.vitals_colors);
+        assert_eq!(back.vitals_text, ui.vitals_text);
+        assert_eq!(back.vitals_text_previous, ui.vitals_text_previous);
+    }
+
+    #[test]
+    fn the_vitals_setters_coerce_junk_and_a_new_text_keeps_the_old_one() {
+        use std::collections::BTreeMap;
+        let mut ui = UiConfig::default();
+        let fields = vec![
+            setter("vitals_style", &"rows".into()),
+            setter("vitals_place", &"footer".into()),
+            setter("vitals_order", &serde_json::json!(["move", "move", "tp"])),
+            setter("vitals_off", &serde_json::json!(["opponent", "tp"])),
+            setter("vitals_opponent", &"middle".into()),
+            setter(
+                "vitals_colors",
+                &serde_json::json!({ "hp": 300, "mana": 4, "move": "red", "tp": 2 }),
+            ),
+        ];
+        super::apply_fields(&mut ui, fields);
+        assert_eq!(ui.vitals_style, None);
+        assert_eq!(ui.vitals_place, "panel");
+        assert_eq!(ui.vitals_order, ["move", "hp", "mana"]);
+        assert_eq!(ui.vitals_off, ["opponent"]);
+        assert_eq!(ui.vitals_opponent, "top");
+        assert_eq!(ui.vitals_colors, BTreeMap::from([("mana".into(), 4)]));
+
+        let text = |t: &str| vec![setter("vitals_text", &t.into())];
+        super::apply_fields(&mut ui, text("%hp/%maxhp"));
+        super::apply_fields(&mut ui, text("%mn/%maxmn"));
+        super::apply_fields(&mut ui, text("%mv/%maxmv"));
+        super::apply_fields(&mut ui, text("%mv/%maxmv"));
+        assert_eq!(ui.vitals_text, "%mv/%maxmv");
+        assert_eq!(ui.vitals_text_previous, ["%mn/%maxmn", "%hp/%maxhp"]);
     }
 
     #[test]
