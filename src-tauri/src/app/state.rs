@@ -165,6 +165,13 @@ impl AppState {
         self.sessions().open(profile)
     }
 
+    /// Move the session `id` to the place `to` in the list, see
+    /// [`Sessions::move_to`]. A session Vosh does not hold is an error, in
+    /// a sentence.
+    pub(crate) fn move_session(&self, id: SessionId, to: usize) -> Result<(), String> {
+        self.sessions().move_to(id, to).map_err(str::to_string)
+    }
+
     /// Take the session `id` out of the map, see [`Sessions::close`].
     /// A session Vosh does not hold, or the only one, is an error, in a
     /// sentence.

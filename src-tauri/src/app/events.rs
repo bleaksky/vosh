@@ -194,12 +194,12 @@ pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-chang
 /// yet, since the page opens one session.
 pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 /// Sent to every window with every session's row after a step that
-/// changed what a row shows: a session opened, closed, was renamed or
-/// selected, one of its connects started, connected or ended, a login
-/// named its character, or the profile it plays switched or took a new
-/// name. The payload is the list of [`crate::sessions::SessionRow`] in
-/// list order, with `selected` set on one. No page listener hears it
-/// yet.
+/// changed what a row shows: a session opened, closed, moved, was renamed
+/// or selected, or took a place to dial, one of its connects started,
+/// connected or ended, a login named its character, or the profile it
+/// plays switched or took a new name. The payload is the list of
+/// [`crate::sessions::SessionRow`] in list order, with `selected` set on
+/// one. No page listener hears it yet.
 pub(crate) const SESSIONS_CHANGED: &str = "vosh://sessions-changed";
 /// Sent to every window when the game of a session turns to day or
 /// night, from World.Time (Alerts Q16). The payload is a

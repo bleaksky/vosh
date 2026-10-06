@@ -1,12 +1,11 @@
 //! The commands for your sessions and their connections to the game.
-//! The page lists, opens, selects, renames and closes sessions, connects
-//! and disconnects
-//! through them, sends the lines you type, plain or masked, stops a walk
-//! on Esc, tells the game the size of the terminal, and reads the target
-//! you track. Each acts on the session it names, or on the selected
-//! session when it names none. Every window hears the rows again after a
-//! step that changes what one shows, see
-//! [`crate::sessions::broadcast_sessions`].
+//! The page lists, opens, selects, renames, moves and closes sessions,
+//! keeps where each one dials, connects and disconnects through them,
+//! sends the lines you type, plain or masked, stops a walk on Esc, tells
+//! the game the size of the terminal, and reads the target you track.
+//! Each acts on the session it names, or on the selected session when it
+//! names none. Every window hears the rows again after a step that
+//! changes what one shows, see [`crate::sessions::broadcast_sessions`].
 
 use tauri::{AppHandle, State};
 
@@ -16,7 +15,7 @@ use crate::input;
 use crate::output;
 use crate::profile::set::save_sessions;
 use crate::session::TargetPayload;
-use crate::sessions::{broadcast_sessions, SessionId, SessionRow};
+use crate::sessions::{broadcast_sessions, Address, SessionId, SessionRow};
 
 /// Open a session after the others, with nothing connected, and return
 /// its id. It plays `profile`, which it joins when another session plays
@@ -121,6 +120,64 @@ pub(crate) async fn session_rename<R: tauri::Runtime>(
     name: Option<String>,
 ) -> Result<(), String> {
     state.session(Some(session))?.rename(name.as_deref());
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    save_sessions(state.inner()).await;
+    broadcast_sessions(&app, state.inner());
+    Ok(())
+}
+
+/// Move the session `session` names to the place `to` in the list, or to
+/// its end when `to` lies past it, as a drag of its row does. The
+/// selection stays, and profiles.toml keeps the order for the next
+/// launch (Q18).
+#[tauri::command]
+pub(crate) async fn session_move<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    session: SessionId,
+    to: usize,
+) -> Result<(), String> {
+    // Under the save lock, so no step opens, closes or moves a session
+    // between the move and the save.
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    state.move_session(session, to)?;
+    save_sessions(state.inner()).await;
+    broadcast_sessions(&app, state.inner());
+    Ok(())
+}
+
+/// What a session's place to dial says without a host or a port.
+const NO_ADDRESS: &str = "Give the session a host and a port to dial.";
+
+/// Keep `host` on `port`, over TLS when `tls` says so, as where the
+/// session `session` names dials, without dialing, as the session form
+/// saves it. Each session keeps its own (board 7 and Q12). Its row names
+/// that world from then on, and profiles.toml keeps it for the next
+/// launch while it keeps the list, see
+/// [`crate::profile::set::SessionEntry::list`]. A blank host or port 0
+/// is refused.
+#[tauri::command]
+pub(crate) async fn session_set_address<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    session: SessionId,
+    host: String,
+    port: u16,
+    tls: bool,
+) -> Result<(), String> {
+    let host = host.trim();
+    if host.is_empty() || port == 0 {
+        return Err(NO_ADDRESS.into());
+    }
+    let session = state.session(Some(session))?;
+    *session
+        .address
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Address {
+        host: host.to_string(),
+        port,
+        tls,
+    });
     let _persist_guard = PERSIST_LOCK.lock().await;
     save_sessions(state.inner()).await;
     broadcast_sessions(&app, state.inner());
@@ -388,6 +445,24 @@ mod tests {
             .await
             .unwrap();
         after(json!([[one, null, false], [two, "Alt", true]]));
+        super::session_move(app.handle().clone(), app.state(), two, 0)
+            .await
+            .unwrap();
+        after(json!([[two, "Alt", true], [one, null, false]]));
+        let host = " play.theforsakenlands.com ".to_string();
+        super::session_set_address(app.handle().clone(), app.state(), two, host, 1825, true)
+            .await
+            .unwrap();
+        let rows = heard.lock().unwrap().last().cloned().unwrap_or_default();
+        assert_eq!(
+            (&rows[0]["host"], &rows[0]["port"], &rows[0]["tls"]),
+            (
+                &json!("play.theforsakenlands.com"),
+                &json!(1825),
+                &json!(true)
+            )
+        );
+        after(json!([[two, "Alt", true], [one, null, false]]));
         super::session_close(app.handle().clone(), app.state(), two)
             .await
             .unwrap();
@@ -396,6 +471,31 @@ mod tests {
         let gone = super::session_select(app.handle().clone(), app.state(), SessionId::numbered(9));
         assert!(gone.await.is_err());
         assert_eq!(last_rows(&heard).1, sent);
+    }
+
+    #[tokio::test]
+    async fn a_session_needs_a_host_and_a_port_to_dial() {
+        let app = app();
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        let one = state.selected_session();
+        let set = |session, host: &str, port| {
+            let host = host.to_string();
+            super::session_set_address(
+                app.handle().clone(),
+                app.state(),
+                session,
+                host,
+                port,
+                false,
+            )
+        };
+        for (host, port) in [(" ", 1848), ("play.theforsakenlands.com", 0)] {
+            let refused = set(one.id, host, port).await;
+            assert_eq!(refused, Err(super::NO_ADDRESS.to_string()));
+        }
+        assert!(one.address.lock().unwrap().is_none());
+        let gone = set(SessionId::numbered(9), "play.theforsakenlands.com", 1848).await;
+        assert_eq!(gone, Err(crate::sessions::NO_SUCH_SESSION.to_string()));
     }
 
     #[tokio::test]

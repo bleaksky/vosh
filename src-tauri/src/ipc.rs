@@ -50,6 +50,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_select,
         session::session_close,
         session::session_rename,
+        session::session_move,
+        session::session_set_address,
         session::sessions_list,
         session::session_connect,
         session::session_send_input,

@@ -381,7 +381,10 @@ mod tests {
 
     use crate::app::state::{AppState, SharedState};
     use crate::disk::paths;
-    use crate::ipc::session::{session_close, session_open, session_rename, session_select};
+    use crate::ipc::session::{
+        session_close, session_move, session_open, session_rename, session_select,
+        session_set_address,
+    };
     use crate::profile::file::ProfileConfig;
     use crate::profile::live::Profile;
     use crate::profile::set::{ProfileSet, SessionEntry, DEFAULT_PROFILE_NAME};
@@ -567,6 +570,42 @@ mod tests {
             Err(crate::sessions::NO_SUCH_SESSION.to_string())
         );
         assert_eq!(open_names(&state), [DEFAULT_PROFILE_NAME]);
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_moved_order_and_where_each_session_dials_survive_a_relaunch() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().expect("a folder");
+        let root = dir.path();
+        let (_, app) = launch(root).await;
+        let first = SessionId::FIRST;
+        let two = session_open(app.handle().clone(), app.state(), None)
+            .await
+            .expect("a second session");
+        let host = "play.theforsakenlands.com".to_string();
+        session_set_address(app.handle().clone(), app.state(), two, host, 1825, true)
+            .await
+            .expect("the address");
+        session_move(app.handle().clone(), app.state(), two, 0)
+            .await
+            .expect("the move");
+
+        let (state, _app) = launch(root).await;
+        let rows: Vec<_> = state
+            .session_rows()
+            .into_iter()
+            .map(|row| (row.id, row.host, row.port, row.tls, row.selected))
+            .collect();
+        let host = Some("play.theforsakenlands.com".to_string());
+        assert_eq!(
+            rows,
+            [
+                (two, host, Some(1825), true, false),
+                (first, None, None, false, true)
+            ]
+        );
     }
 
     #[allow(clippy::await_holding_lock)]
