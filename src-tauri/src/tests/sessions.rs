@@ -2152,7 +2152,7 @@ async fn save_wait_full(
     code: &str,
     session: SessionId,
 ) -> Vec<crate::ipc::scripts::PluginRow> {
-    let folder = crate::ipc::scripts::plugin_read(h.app.state(), "wait_full".into())
+    let folder = crate::ipc::scripts::plugin_read(h.app.state(), "wait_full".into(), None)
         .await
         .expect("the plugin");
     crate::ipc::scripts::plugin_save(
