@@ -1830,6 +1830,37 @@
   white-space: nowrap;
 }
 
+/* The Keys row of a macro preset (Scripts board 7). Each key on a
+   keycap 4 before the command it sends, in the game's font, and the
+   pairs 12 apart. A pair your macro holds takes the warn ring. */
+.st-auto-keys {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.st-auto-keypair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.st-auto-keysend {
+  color: var(--text);
+  font-family: var(--font-mud);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-auto-keypair.is-warn .st-keycap {
+  border-color: var(--warn);
+  color: var(--warn-text);
+}
+
+.st-auto-keypair.is-warn .st-auto-keysend {
+  color: var(--warn-text);
+}
+
 /* A row that stacks its label over a block: Lua, patterns, a pasted
    file. */
 .st-row.st-auto-coderow,

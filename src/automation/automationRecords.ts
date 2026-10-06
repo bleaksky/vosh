@@ -8,7 +8,7 @@
 
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { groupKeyOf, searchText, type ListEntry } from './automationList';
-import { defaultEnabledIds, PRESETS, presetMacros, presetTriggers } from './presets';
+import { defaultEnabledIds, type Preset, PRESETS, presetMacros, presetTriggers } from './presets';
 import {
   deleteMacro,
   exportAliases,
@@ -20,6 +20,7 @@ import {
   setMacro,
   timersDelete,
   timersSet,
+  type Macro,
 } from '../ipc/automation';
 import { type TickConfig } from '../ipc/tick';
 import { errorText, quoted } from '../lib/text';
@@ -460,6 +461,16 @@ export function presetLaunchPlan(
     if (id && !on.has(id)) remove.add(id);
   }
   return { install, remove: [...remove].sort() };
+}
+
+/** The keys of `preset` that one of your macros uses, in the preset's
+ *  order. Yours keeps such a key, and the preset's macro on it waits off
+ *  (hold_taken_keys in src-tauri/src/loadouts/presets.rs). `macros` is
+ *  every macro the store holds, and a macro a preset added keeps no
+ *  key. */
+export function keysYoursHold(preset: Preset, macros: readonly Macro[]): string[] {
+  const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
+  return (preset.macros ?? []).map((m) => m.key).filter((key) => yours.has(key));
 }
 
 /** Bring the preset triggers and macros in line with `enabled`, the

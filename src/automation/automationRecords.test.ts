@@ -25,6 +25,7 @@ import {
   formatInterval,
   importErrorMessage,
   jsonListText,
+  keysYoursHold,
   loadoutToggles,
   macroSavePlan,
   normalizeAlias,
@@ -52,7 +53,7 @@ import {
   type TimerStoreApi,
 } from './automationRecords';
 import { buildSections, foldedStorageKey } from './automationList';
-import { defaultEnabledIds, PRESETS } from './presets';
+import { defaultEnabledIds, presetById, PRESETS } from './presets';
 
 describe('aliases', () => {
   it('normalizes and saves in the shape aliases_import reads', () => {
@@ -598,6 +599,25 @@ describe('presets', () => {
     // On, so a launch installs it again and takes nothing out.
     const on = [...defaultEnabledIds(), 'numpad_movement'];
     expect(presetLaunchPlan(on, installed)).toEqual({ install: on, remove: [] });
+  });
+
+  it('names the keys of a preset your macros keep, in the preset order', () => {
+    const numpad = presetById('numpad_movement');
+    if (!numpad) throw new Error('no numpad_movement preset');
+    const theirs = { key: 'Numpad8', command: 'n', preset: 'numpad_movement' };
+    expect(keysYoursHold(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
+    // Yours keeps a key while it is on, off or in a group.
+    expect(
+      keysYoursHold(numpad, [
+        { key: 'Numpad3', command: 'rec', enabled: false },
+        { key: 'Numpad9', command: 'gate', group: 'travel' },
+        theirs,
+      ]),
+    ).toEqual(['Numpad9', 'Numpad3']);
+    // A preset with no macros holds no key.
+    const heals = presetById('healing_basics');
+    if (!heals) throw new Error('no healing_basics preset');
+    expect(keysYoursHold(heals, [{ key: 'Numpad3', command: 'rec' }])).toEqual([]);
   });
 });
 
