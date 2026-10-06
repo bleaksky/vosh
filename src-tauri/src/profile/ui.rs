@@ -656,6 +656,33 @@ impl Default for VitalsConfig {
     }
 }
 
+impl VitalsConfig {
+    /// The style that grew from these 0.7 vitals, which the gallery marks
+    /// Yours in 0.7 (Q13 of the Vitals Styles review). A template that was
+    /// on drew in place of every layout, so it gives `text`. Otherwise
+    /// `gauges`, `pips`, `line` for strip and inline, and `rows` for
+    /// stacked. Every profile saved `ember` by default, so it gives none.
+    pub(crate) fn legacy_style(&self) -> Option<&'static str> {
+        if self.template_enabled {
+            return Some("text");
+        }
+        match self.layout.as_str() {
+            "gauges" => Some("gauges"),
+            "pips" => Some("pips"),
+            "strip" | "inline" => Some("line"),
+            "stacked" => Some("rows"),
+            _ => None,
+        }
+    }
+
+    /// The 0.7 template in today's codes, the text Text starts from, while
+    /// it was on.
+    pub(crate) fn legacy_text(&self) -> Option<String> {
+        self.template_enabled
+            .then(|| vosh_prompt::legacy::rewrite_07_vitals(&self.template, self.bar_width))
+    }
+}
+
 fn default_template() -> String {
     "%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time".to_string()
 }
