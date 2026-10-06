@@ -25,6 +25,7 @@ Use monospace only for MUD text. That means patterns, sent commands, macro keys,
 
 - `label` labels the first `Toggle`, `Select`, or `Field` inside the row. You do not pass ids.
 - `description` is the 11/15 secondary line under the label. The control is described by it.
+- `descriptionTone` set to `danger` sets the description in the danger tone, for a line that says why the control's value is refused, like a profile name you have.
 - `anchor` is the search and deep link anchor. The frame scrolls the row into view and flashes it.
 - `children` is the control, right aligned.
 
@@ -52,6 +53,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `width` in px or any CSS length, 240 by default.
 - `mono` sets MUD text in the terminal font.
 - `icon` adds a leading 16 px icon, like the search icon on the Automation filter.
+- `invalid` draws a danger ring inside the fill and sets `aria-invalid`, for text Vosh will not take.
 
 `FieldArea` is a `Field` for text where a newline means something, like the commands a trigger or timer sends. At one line it looks exactly like `Field`, and it grows a line at a time. It takes `value`, `onChange`, `width`, and `mono` like `Field` and forwards its ref. A plain `Field` drops newlines, so use this one for any value that can hold them.
 

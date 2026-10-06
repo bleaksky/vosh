@@ -36,9 +36,11 @@ import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { loadTarget } from '../../stores/session/useConnection';
 import type { SettingsPageProps } from '../pageTypes';
 import { Row, Section, Select, Toggle } from '../../ui';
+import { ImportSheet } from './ImportSheet';
 import { PanelLayout } from './PanelLayout';
 import { ProfileAdvanced } from './ProfileAdvanced';
 import { ProfileList } from './ProfileList';
+import type { ImportFile } from './profileImport';
 import { TrackedAffects } from './TrackedAffects';
 
 // Settings > Characters (SettingsCharacters.dc.html). The profile list
@@ -56,6 +58,11 @@ import { TrackedAffects } from './TrackedAffects';
 // the whole UI config, so editing an inactive profile cannot reach the
 // main window. The page follows edits from anywhere through the
 // profile events and the session identity event.
+//
+// A profile export you pick with Import… takes the detail column as the
+// import sheet, and no row reads selected while it shows. Cancel, a
+// press on a row or a link puts the profile back, and an import selects
+// the profile the file went to.
 
 export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsPageProps) {
   const [list, setList] = useState<ProfilesList | null>(null);
@@ -64,6 +71,9 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  // The export the import sheet shows. Each pick counts, so a second
+  // pick of a file with the same name starts a fresh sheet.
+  const [importing, setImporting] = useState<{ file: ImportFile; pick: number } | null>(null);
 
   // The profile a navigation asked for, applied once the list shows
   // it. No section means the profile in use.
@@ -117,9 +127,11 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
     reloadDetail();
   }, [reloadList, reloadDetail]);
 
-  // Each navigation, even to the same link, picks its profile again.
+  // Each navigation, even to the same link, picks its profile again,
+  // and closes the import sheet.
   useEffect(() => {
     pending.current = { section: target.section };
+    setImporting(null);
     if (listRef.current) choose(listRef.current);
   }, [navSeq, target.section, choose]);
 
@@ -152,8 +164,17 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
   });
 
   const select = (name: string) => {
-    if (name === selected) return;
+    if (name === selected && !importing) return;
+    setImporting(null);
     setStatus(null);
+    setSelected(name);
+  };
+
+  // Show `name` once the list holds it, after a create, a copy, a
+  // rename or an import.
+  const show = (name: string) => {
+    setImporting(null);
+    pending.current = { section: name };
     setSelected(name);
   };
 
@@ -248,23 +269,39 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       {list ? (
         <ProfileList
           list={list}
-          selected={selected}
+          selected={importing ? null : selected}
           identity={identity}
           status={status}
           onSelect={select}
-          onShow={(name) => {
-            pending.current = { section: name };
-            setSelected(name);
-          }}
+          onShow={show}
           onStatus={setStatus}
           onError={onError}
           onChanged={reloadAll}
+          onImport={(file) => {
+            setStatus(null);
+            setImporting((prev) => ({ file, pick: (prev?.pick ?? 0) + 1 }));
+          }}
         />
       ) : (
         <div className="st-chars-list" />
       )}
       <div className="st-chars-detail">
-        {detail && (
+        {importing && list && (
+          <ImportSheet
+            key={importing.pick}
+            file={importing.file}
+            profiles={list.profiles}
+            fallback={selected ?? list.active}
+            onImported={(result, sentence) => {
+              show(result.name);
+              setStatus(sentence);
+              reloadAll();
+            }}
+            onCancel={() => setImporting(null)}
+            onError={onError}
+          />
+        )}
+        {!importing && detail && (
           <>
             <Section
               title={detail.display_name || profileDisplayName(detail.name)}

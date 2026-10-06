@@ -17,12 +17,26 @@ export interface FieldProps extends Omit<
   /** A leading 16 px icon 10 px from the left edge, with the text
    *  starting at 32. The Automation filter field uses the search icon. */
   icon?: ReactNode;
+  /** Text Vosh will not take, like a profile name you already have:
+   *  a danger ring inside the fill, and aria-invalid. */
+  invalid?: boolean;
 }
 
 /** A settings text field: 28 high, radius 8, white 6% fill (white with
  *  a hairline ring on light themes), padding 0 10, 13 px text. */
 export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
-  { value, onChange, width = 240, mono = false, icon, id, className, type = 'text', ...rest },
+  {
+    value,
+    onChange,
+    width = 240,
+    mono = false,
+    icon,
+    invalid = false,
+    id,
+    className,
+    type = 'text',
+    ...rest
+  },
   ref,
 ) {
   const row = useRowIds();
@@ -41,6 +55,7 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
         icon === undefined && className,
       )}
       value={value}
+      aria-invalid={invalid || undefined}
       aria-describedby={rest['aria-describedby'] ?? row?.descriptionId}
       onChange={(e) => onChange(e.target.value)}
       style={icon === undefined ? { width } : undefined}

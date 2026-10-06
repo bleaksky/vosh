@@ -561,6 +561,11 @@
   font-weight: 400;
 }
 
+/* Why the row's value is refused, like a profile name you have. */
+.st-row-desc[data-tone='danger'] {
+  color: var(--danger-text);
+}
+
 .st-row-control {
   display: flex;
   align-items: center;
@@ -1118,7 +1123,10 @@
   height: 36px;
 }
 
-.st-chars-new {
+/* New profile and Import… share the row under the list, 12 apart. */
+.st-chars-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 12px;
 }
 
@@ -1135,6 +1143,51 @@
 .st-chars-status:empty,
 .st-plugin-status:empty {
   display: none;
+}
+
+/* What a profile export holds, in the import sheet (board 5 of the
+   Scripts design): label and value pairs 24 high in two columns, with
+   Runs Lua and Plugins across both. Under the Lua warning the pairs
+   start at once. */
+.st-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  margin: 0;
+  padding: 8px 16px;
+}
+
+.st-auto-cardnote.is-warn + .st-import-grid {
+  padding-top: 0;
+}
+
+.st-import-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-import-row.is-wide {
+  grid-column: 1 / -1;
+}
+
+.st-import-key {
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.st-import-value {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .st-menu-danger {

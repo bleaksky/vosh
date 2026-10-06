@@ -192,6 +192,12 @@
   -webkit-appearance: none;
 }
 
+/* A field holding text Vosh will not take, like a profile name you
+   already have: a danger ring inside the fill, as on a color field. */
+.st-field[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
 .st-field-mono {
   font-family: var(--font-mud);
   line-height: 17.5px;

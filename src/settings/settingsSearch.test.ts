@@ -57,7 +57,12 @@ describe('searchSettingsRows', () => {
 
   it('needs every word, in any field', () => {
     expect(labels('dark theme')[0]).toBe('Dark theme');
-    expect(labels('import')).toEqual(['Import a theme', 'Import from another client']);
+    expect(labels('import')).toEqual([
+      'Import a theme',
+      'Import from another client',
+      'Import a profile',
+    ]);
+    expect(labels('toml')).toEqual(['Import a profile']);
   });
 
   it('finds a group by its name', () => {

@@ -99,6 +99,86 @@ export async function profileExportFile(
   return invoke('profile_export_file', { name, characters });
 }
 
+// Import. Characters reads a Vosh profile export you pick and imports it
+// as a new profile or over one you have (Scripts Q9 and Q10).
+
+/** A trigger or an alias in an export that runs Lua. */
+export interface ImportLuaItem {
+  kind: 'trigger' | 'alias';
+  name: string;
+}
+
+/** A character the export names, and the profile of yours that has it
+ *  on that world, raw like `default`, or null when none does. */
+export interface ImportCharacter {
+  name: string;
+  claimed_by: string | null;
+}
+
+/** What a Vosh profile export holds and where it would go. */
+export interface ImportPreview {
+  /** The name the file name gives, or null when it breaks the profile
+   *  name rule, so you type one. */
+  name: string | null;
+  triggers: number;
+  aliases: number;
+  macros: number;
+  timers: number;
+  /** Whether the file sets the tick its own way. */
+  tick: boolean;
+  variables: number;
+  /** Pane type ids in tree order, like `map`. */
+  panes: string[];
+  runs_lua: ImportLuaItem[];
+  /** The plugins the file turns on. Each comes in off. */
+  plugins: string[];
+  /** The world the file names, with its display name. */
+  world: { host: string; port: number | null; name: string } | null;
+  /** The characters the file names. Only a file with a world names any. */
+  characters: ImportCharacter[];
+}
+
+/** Read `text`, the file you picked as `fileName`, as a Vosh profile
+ *  export, and say what it holds. Changes nothing. A file that is no
+ *  export is refused with the sentence to show. */
+export async function profileImportRead(fileName: string, text: string): Promise<ImportPreview> {
+  return invoke('profile_import_read', { fileName, text });
+}
+
+/** How an import adds the file. */
+export type ImportAddAs = 'new' | 'replace';
+
+/** What an import did. Profile names are raw, like `default`. */
+export interface ImportResult {
+  /** The profile the file went to. */
+  name: string;
+  /** Each character that left another profile for the new one, and
+   *  whether that profile's login reads off now. */
+  moved_from: { character: string; profile: string; login_off: boolean }[];
+  /** Each character the file names that stays with the profile that
+   *  has it. */
+  kept_with: { character: string; profile: string }[];
+  /** In loadout mode, the catalog group the file's triggers, aliases
+   *  and macros joined. */
+  catalog_group: string | null;
+  /** The file's items the catalog already had, which stay yours. */
+  clashes: { kind: 'trigger' | 'alias' | 'macro'; name: string }[];
+}
+
+/** Import `text`, the export you picked as `fileName`, as a new profile
+ *  named `name` or over your profile `name`. A new profile takes each
+ *  character in `logins`, from another profile if one has it. Replace
+ *  keeps that profile's world, characters and plugins. */
+export async function profileImportApply(
+  fileName: string,
+  text: string,
+  addAs: ImportAddAs,
+  name: string,
+  logins: string[],
+): Promise<ImportResult> {
+  return invoke('profile_import_apply', { fileName, text, addAs, name, logins });
+}
+
 /** Who is logged in. */
 export interface SessionIdentity {
   host: string;
