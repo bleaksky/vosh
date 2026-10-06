@@ -6,11 +6,12 @@
 //! as its session sees it then.
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 use vosh_script::{Owner, StopReason};
 
 use crate::app::events::{broadcast, PLUGINS_CHANGED};
+use crate::app::plugins::archive::{self, DroppedFile, Package, Source};
 use crate::app::plugins::folder::{self, plugin_name_ok, PluginFolder};
 use crate::app::plugins::{live, plugins_dir_of, reveal, PluginManifest};
 use crate::app::state::SharedState;
@@ -200,6 +201,145 @@ pub(crate) async fn plugin_reveal(
         warn!(plugin = %name, error = %e, "could not open the file manager");
         format!("Vosh could not show the folder of {name}.")
     })
+}
+
+/// What Install asks about before it installs a plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PluginInstallCheck {
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) author: String,
+    /// The plugin of that name you have, which the install replaces.
+    pub(crate) existing: Option<InstalledPlugin>,
+}
+
+/// A plugin an install would replace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct InstalledPlugin {
+    pub(crate) version: String,
+    /// The profiles that turn it on, by the names Settings shows.
+    pub(crate) on_in: Vec<String>,
+}
+
+/// What Install reads: the bytes of a .zip, or else the files of a
+/// dropped folder. Neither reads as an empty folder, which holds no
+/// manifest.
+fn source(bytes: Option<Vec<u8>>, files: Option<Vec<DroppedFile>>) -> Source {
+    match bytes {
+        Some(bytes) => Source::Zip(bytes),
+        None => Source::Folder(files.unwrap_or_default()),
+    }
+}
+
+/// Read and check the plugin in `file_name`, a .zip as `bytes` or a
+/// dropped folder as `files`. Returns it with the version of the plugin
+/// of that name you have, if you have one. One you have in another case
+/// is refused, as New plugin refuses it.
+fn package(
+    plugins_dir: &std::path::Path,
+    file_name: &str,
+    bytes: Option<Vec<u8>>,
+    files: Option<Vec<DroppedFile>>,
+) -> Result<(Package, Option<String>), String> {
+    let package = archive::read(file_name, source(bytes, files))?;
+    let existing = folder::installed(plugins_dir, &package.manifest.name)?;
+    Ok((package, existing))
+}
+
+/// Check the plugin in `file_name`, a .zip as `bytes` or a dropped folder
+/// as `files`, for the question Install asks: its name, version and
+/// author, and the plugin of that name you have, with the profiles that
+/// turn it on. A plugin Vosh refuses is the sentence that says why.
+#[tauri::command]
+pub(crate) async fn plugin_install_check(
+    state: State<'_, SharedState>,
+    file_name: String,
+    bytes: Option<Vec<u8>>,
+    files: Option<Vec<DroppedFile>>,
+) -> Result<PluginInstallCheck, String> {
+    let (package, existing) = package(&plugins_dir_of(&state)?, &file_name, bytes, files)?;
+    let manifest = package.manifest;
+    let existing = match existing {
+        Some(version) => Some(InstalledPlugin {
+            version,
+            on_in: live::turned_on_in(&state, &manifest.name).await?,
+        }),
+        None => None,
+    };
+    Ok(PluginInstallCheck {
+        name: manifest.name,
+        version: manifest.version,
+        author: manifest.author,
+        existing,
+    })
+}
+
+/// Install the plugin in `file_name`, a .zip as `bytes` or a dropped
+/// folder as `files`, in place of the plugin of that name you have. It
+/// starts off in every profile, so a profile that turns the name on
+/// turns it off first and its sessions unload it (Q6).
+#[tauri::command]
+pub(crate) async fn plugin_install<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    file_name: String,
+    bytes: Option<Vec<u8>>,
+    files: Option<Vec<DroppedFile>>,
+    session: Option<SessionId>,
+) -> Result<Vec<PluginRow>, String> {
+    let session = state.session(session)?;
+    let plugins_dir = plugins_dir_of(&state)?;
+    let (package, _) = package(&plugins_dir, &file_name, bytes, files)?;
+    live::off_everywhere(&app, &state, &package.manifest.name).await?;
+    let installed = {
+        // Held alone, so a listing never finds the folder halfway.
+        let _manager = state.plugins.lock().await;
+        archive::install(&plugins_dir, &package)
+    };
+    // The plugin is off everywhere now, even when its folder stayed.
+    let rows = changed(&app, &state, &session).await;
+    installed.and(rows)
+}
+
+/// Write the plugin `name` to a .zip in your Downloads folder. Returns
+/// the name of the file, for the line that says where it went.
+#[tauri::command]
+pub(crate) async fn plugin_export<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<String, String> {
+    let downloads = app
+        .path()
+        .download_dir()
+        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
+    let path = archive::export(&plugins_dir_of(&state)?, &name, &downloads)?;
+    Ok(path
+        .file_name()
+        .map(|file| file.to_string_lossy().into_owned())
+        .unwrap_or_default())
+}
+
+/// Remove the plugin `name`: unload it in every session, take it off the
+/// list of every profile, so no profile names a plugin you no longer
+/// have, and delete its folder.
+#[tauri::command]
+pub(crate) async fn plugin_remove<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    name: String,
+    session: Option<SessionId>,
+) -> Result<Vec<PluginRow>, String> {
+    let session = state.session(session)?;
+    let plugins_dir = plugins_dir_of(&state)?;
+    folder::existing(&plugins_dir, &name)?;
+    live::off_everywhere(&app, &state, &name).await?;
+    let removed = {
+        let _manager = state.plugins.lock().await;
+        folder::remove(&plugins_dir, &name)
+    };
+    let rows = changed(&app, &state, &session).await;
+    removed.and(rows)
 }
 
 /// The lines in the Output ring of `session`, oldest first.

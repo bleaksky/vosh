@@ -491,6 +491,32 @@ fn every_change_to_the_plugins_tells_every_window_once() {
         )
         .await;
         listening.finish("follow_profile", &mut heard, &mut want);
+
+        // Install puts back the plugin you exported, which turns it off
+        // in every profile first, and Remove deletes it.
+        let set = crate::profile::set::ProfileSet::load_or_migrate(dir.path().to_path_buf());
+        state.set_profiles(set.unwrap()).await;
+        let plugins = crate::disk::paths::plugins_dir(dir.path());
+        let exported = crate::app::plugins::archive::export(&plugins, &name(), dir.path()).unwrap();
+        let bytes = std::fs::read(exported).unwrap();
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        scripts::plugin_install(
+            handle.clone(),
+            app.state(),
+            "wait_full.zip".into(),
+            Some(bytes),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        listening.finish("plugin_install", &mut heard, &mut want);
+
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        scripts::plugin_remove(handle.clone(), app.state(), name(), None)
+            .await
+            .unwrap();
+        listening.finish("plugin_remove", &mut heard, &mut want);
     });
     assert_eq!(heard, want);
 }

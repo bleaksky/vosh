@@ -29,8 +29,6 @@ use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 use crate::sessions::Session;
 
-// The commands that install and export a plugin come next.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod archive;
 pub(crate) mod folder;
 pub(crate) mod live;

@@ -2242,3 +2242,189 @@ async fn a_save_reloads_a_stopped_plugin_and_says_so_in_its_output() {
 
     h.finish(grid).await;
 }
+
+/// Two sessions on Default, where `helper` and `keeper` 0.1.0 are on,
+/// with Healer's file turning `keeper` on too and Warrior's turning on
+/// only `helper`. Returns the plugins folder and the files of Healer and
+/// Warrior.
+async fn keeper_on_in_two_profiles() -> (
+    Harness,
+    SessionId,
+    SessionId,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let (h, plugins) = harness_with_plugins().await;
+    write_plugin(&plugins, "helper", HELPER);
+    write_plugin(&plugins, "keeper", KEEPER);
+    std::fs::write(
+        plugins.join("keeper").join("manifest.toml"),
+        "[plugin]\nname = \"keeper\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("keeper's manifest");
+    let (one, two) = (h.first, h.open_session().await);
+    switch_plugin(&h, "helper", true, one).await;
+    switch_plugin(&h, "keeper", true, one).await;
+    h.state
+        .profile_set
+        .lock()
+        .await
+        .as_mut()
+        .expect("the set")
+        .create("Warrior")
+        .expect("Warrior");
+    let mut files = Vec::new();
+    for (profile, enabled) in [
+        ("Healer", vec!["keeper", "helper"]),
+        ("Warrior", vec!["helper"]),
+    ] {
+        let file = h.profile_file(profile).await;
+        let mut config = crate::profile::file::ProfileConfig::default();
+        config.plugins.enabled = enabled.into_iter().map(str::to_string).collect();
+        config.save(&file).expect("the profile file");
+        files.push(file);
+    }
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper", "keeper"]);
+    }
+    let warrior = files.pop().expect("Warrior's file");
+    let healer = files.pop().expect("Healer's file");
+    (h, one, two, plugins, healer, warrior)
+}
+
+/// The plugins a profile file turns on.
+fn saved_plugins(file: &std::path::Path) -> Vec<String> {
+    crate::profile::file::ProfileConfig::load(file)
+        .expect("the profile file")
+        .plugins
+        .enabled
+}
+
+/// `keeper` 0.2.0 from Orla, in a .zip of one folder.
+fn keeper_zip() -> Vec<u8> {
+    use std::io::Write;
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let manifest = "[plugin]\nname = \"keeper\"\nversion = \"0.2.0\"\nauthor = \"Orla\"\n";
+    for (name, text) in [
+        ("keeper/manifest.toml", manifest),
+        ("keeper/main.lua", "mud.alias('kk', 'look')"),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .expect("an entry");
+        zip.write_all(text.as_bytes()).expect("its bytes");
+    }
+    zip.finish().expect("the zip").into_inner()
+}
+
+/// Whether `session` holds the trigger `keeper` 0.1.0 makes, with the
+/// count of its Lua timers and its plugin aliases.
+async fn keeper_left(h: &Harness, session: SessionId) -> (bool, usize, Vec<String>) {
+    let (triggers, timers, aliases) = registered(h, session).await;
+    (triggers.contains(&"hunger".to_string()), timers, aliases)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn installing_over_a_plugin_turns_it_off_in_every_profile_first() {
+    use crate::ipc::scripts::{InstalledPlugin, PluginInstallCheck};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two, plugins, healer, warrior) = keeper_on_in_two_profiles().await;
+
+    let check = crate::ipc::scripts::plugin_install_check(
+        h.app.state(),
+        "keeper.zip".into(),
+        Some(keeper_zip()),
+        None,
+    )
+    .await
+    .expect("the check");
+    assert_eq!(
+        check,
+        PluginInstallCheck {
+            name: "keeper".into(),
+            version: "0.2.0".into(),
+            author: "Orla".into(),
+            existing: Some(InstalledPlugin {
+                version: "0.1.0".into(),
+                on_in: vec!["Default".into(), "Healer".into()],
+            }),
+        }
+    );
+
+    let rows = crate::ipc::scripts::plugin_install(
+        h.app.handle().clone(),
+        h.app.state(),
+        "keeper.zip".into(),
+        Some(keeper_zip()),
+        None,
+        Some(two),
+    )
+    .await
+    .expect("the install");
+    let keeper = rows
+        .iter()
+        .find(|row| row.name == "keeper")
+        .expect("its row");
+    assert_eq!((keeper.on, keeper.version.as_str()), (false, "0.2.0"));
+    // Both sessions on Default let go of all it registered, and keep
+    // helper running.
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper"]);
+        assert_eq!(keeper_left(&h, id).await, (false, 0, Vec::new()));
+    }
+    // Default drops it in memory and in its file, Healer in its file,
+    // and Warrior, which never turned it on, keeps its file as it was.
+    assert_eq!(h.state.selected_profile().await.plugins.enabled, ["helper"]);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_plugins(&default_file), ["helper"]);
+    assert_eq!(saved_plugins(&healer), ["helper"]);
+    assert_eq!(saved_plugins(&warrior), ["helper"]);
+    assert_eq!(backups(&warrior), 0);
+    // The new code is in place and runs once you turn it on.
+    assert_eq!(
+        std::fs::read_to_string(plugins.join("keeper").join("main.lua")).expect("main.lua"),
+        "mud.alias('kk', 'look')"
+    );
+    switch_plugin(&h, "keeper", true, one).await;
+    for id in [one, two] {
+        assert_eq!(keeper_left(&h, id).await, (false, 0, vec!["kk".into()]));
+    }
+
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn removing_a_plugin_clears_every_list_and_its_folder() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two, plugins, healer, _) = keeper_on_in_two_profiles().await;
+    let remove = |name: &str| {
+        crate::ipc::scripts::plugin_remove(
+            h.app.handle().clone(),
+            h.app.state(),
+            name.into(),
+            Some(one),
+        )
+    };
+
+    let rows = remove("keeper").await.expect("the remove");
+    let names: Vec<&str> = rows.iter().map(|row| row.name.as_str()).collect();
+    assert_eq!(names, ["helper"]);
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper"]);
+        assert_eq!(keeper_left(&h, id).await, (false, 0, Vec::new()));
+    }
+    assert_eq!(h.state.selected_profile().await.plugins.enabled, ["helper"]);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_plugins(&default_file), ["helper"]);
+    assert_eq!(saved_plugins(&healer), ["helper"]);
+    assert!(!plugins.join("keeper").exists());
+    assert!(plugins.join("helper").is_dir());
+    assert_eq!(
+        remove("keeper").await.expect_err("nothing left"),
+        "You have no plugin named keeper."
+    );
+
+    h.finish(grid).await;
+}

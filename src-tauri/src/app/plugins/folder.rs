@@ -1,7 +1,8 @@
-//! A plugin's folder as the Scripts page in Settings makes, reads and
-//! saves it. Every function here checks the name it gets against the
-//! rule New plugin shows, letters, digits and underscores, so a name
-//! from the page can only ever name one folder inside the plugins folder.
+//! A plugin's folder as the Scripts page in Settings makes, reads,
+//! saves and removes it. Every function here checks the name it gets
+//! against the rule New plugin shows, letters, digits and underscores,
+//! so a name from the page can only ever name one folder inside the
+//! plugins folder.
 //! The loader in [`super`] reads a folder you made by hand with a looser
 //! rule, so it still loads at launch, but the Scripts page leaves it out.
 //!
@@ -68,12 +69,8 @@ pub(crate) fn create(plugins_dir: &Path, name: &str) -> Result<(), String> {
         format!("Vosh could not make the folder for {name}.")
     };
     std::fs::create_dir_all(plugins_dir).map_err(could_not)?;
-    for entry in std::fs::read_dir(plugins_dir).map_err(could_not)? {
-        let taken = entry.map_err(could_not)?.file_name();
-        let taken = taken.to_string_lossy();
-        if taken.eq_ignore_ascii_case(name) {
-            return Err(format!("You already have a plugin named {taken}."));
-        }
+    if let Some(taken) = in_any_case(plugins_dir, name).map_err(could_not)? {
+        return Err(already_have(&taken));
     }
     let dir = plugins_dir.join(name);
     // Not `create_dir_all`, so a folder made since the look above stays
@@ -95,6 +92,67 @@ pub(crate) fn create(plugins_dir: &Path, name: &str) -> Result<(), String> {
         return Err(could_not(e));
     }
     Ok(())
+}
+
+/// The name of the folder in `plugins_dir` that has `name` in any case,
+/// if one does, which on the disks of macOS and Windows is the folder a
+/// write to `name` reaches. One in the same case comes first.
+fn in_any_case(plugins_dir: &Path, name: &str) -> std::io::Result<Option<String>> {
+    let mut found = None;
+    for entry in std::fs::read_dir(plugins_dir)? {
+        let taken = entry?.file_name().to_string_lossy().into_owned();
+        if taken == name {
+            return Ok(Some(taken));
+        }
+        if found.is_none() && taken.eq_ignore_ascii_case(name) {
+            found = Some(taken);
+        }
+    }
+    Ok(found)
+}
+
+fn already_have(taken: &str) -> String {
+    format!("You already have a plugin named {taken}.")
+}
+
+/// The version of the plugin `name` in `plugins_dir` that an install
+/// would replace, or None when you have no plugin of that name. One you
+/// have in another case is refused as New plugin refuses it, since the
+/// install would replace a plugin of another name there.
+pub(crate) fn installed(plugins_dir: &Path, name: &str) -> Result<Option<String>, String> {
+    if !plugin_name_ok(name) {
+        return Err(NAME_RULE.to_string());
+    }
+    let taken = match in_any_case(plugins_dir, name) {
+        Ok(taken) => taken,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            warn!(error = %e, "could not read the plugins folder");
+            return Err("Vosh could not read your plugins folder.".to_string());
+        }
+    };
+    match taken {
+        None => Ok(None),
+        Some(taken) if taken != name => Err(already_have(&taken)),
+        // A manifest Vosh cannot read names no version.
+        Some(_) => Ok(Some(
+            std::fs::read_to_string(plugins_dir.join(name).join("manifest.toml"))
+                .ok()
+                .and_then(|raw| toml::from_str::<PluginManifestFile>(&raw).ok())
+                .map(|file| file.plugin.version)
+                .unwrap_or_default(),
+        )),
+    }
+}
+
+/// Delete the folder of the plugin `name` in `plugins_dir`, for Remove.
+/// A link in its place goes, and never what it leads to.
+pub(crate) fn remove(plugins_dir: &Path, name: &str) -> Result<(), String> {
+    let dir = existing(plugins_dir, name)?;
+    std::fs::remove_dir_all(&dir).map_err(|e| {
+        warn!(plugin = %name, error = %e, "could not remove a plugin");
+        format!("Vosh could not remove {name}.")
+    })
 }
 
 /// A plugin's folder as the Scripts page shows it.
@@ -480,6 +538,53 @@ entry = \"main.lua\"
             WAIT_FULL_MANIFEST
         );
         assert_eq!(names_in(&tmp.path().join("plugins")), ["wait_full"]);
+    }
+
+    #[test]
+    fn installed_names_the_version_an_install_replaces() {
+        let (_tmp, plugins) = plugins();
+        // No plugins folder yet, so nothing to replace.
+        assert_eq!(installed(&plugins, "wait_full"), Ok(None));
+        create(&plugins, "wait_full").unwrap();
+        assert_eq!(installed(&plugins, "wait_full"), Ok(Some("0.1.0".into())));
+        assert_eq!(installed(&plugins, "weather_pane"), Ok(None));
+        // One you have in another case is taken, as for New plugin.
+        assert_eq!(
+            installed(&plugins, "Wait_Full"),
+            Err("You already have a plugin named wait_full.".to_string())
+        );
+        assert_eq!(installed(&plugins, "../x"), Err(NAME_RULE.to_string()));
+        // A manifest Vosh cannot read names no version.
+        std::fs::write(plugins.join("wait_full").join("manifest.toml"), "[plugin").unwrap();
+        assert_eq!(installed(&plugins, "wait_full"), Ok(Some(String::new())));
+    }
+
+    #[test]
+    fn remove_deletes_the_folder() {
+        let (_tmp, plugins) = plugins();
+        create(&plugins, "wait_full").unwrap();
+        create(&plugins, "weather_pane").unwrap();
+        remove(&plugins, "wait_full").unwrap();
+        assert_eq!(names_in(&plugins), ["weather_pane"]);
+        assert_eq!(
+            remove(&plugins, "wait_full"),
+            Err("You have no plugin named wait_full.".to_string())
+        );
+        assert_eq!(remove(&plugins, "../plugins"), Err(NAME_RULE.to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_takes_a_link_and_leaves_what_it_leads_to() {
+        let (tmp, plugins) = plugins();
+        create(&plugins, "weather_pane").unwrap();
+        let elsewhere = tmp.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("main.lua"), "-- yours\n").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, plugins.join("linked")).unwrap();
+        remove(&plugins, "linked").unwrap();
+        assert_eq!(names_in(&plugins), ["weather_pane"]);
+        assert_eq!(names_in(&elsewhere), ["main.lua"]);
     }
 
     #[test]
