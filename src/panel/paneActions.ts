@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import {
   addPane,
   closePane,
+  countPanes,
   isLeaf,
   leafIdFor,
   paneRef,
@@ -32,14 +33,20 @@ export function usePaneLeaf(): PaneLeaf | null {
   return useContext(PaneLeafContext);
 }
 
-/** The pane a split adds: the first one Add a pane lists, a built-in
- *  pane first and then a Lua pane. */
-export function paneToSplitIn(): PaneRef | null {
+/** The pane a split of leaf `id` adds. On a Chat pane it is another
+ *  Chat while there is room. Elsewhere it is the first pane the panel
+ *  does not show, a built-in pane first and then a Lua pane, and
+ *  another Chat once the panel shows them all. */
+export function paneToSplitIn(id: string): PaneRef | null {
   const tree = getPanelLayout()?.root ?? null;
-  const pane = paneTypesToAdd(tree)[0];
-  if (pane !== undefined) return paneRef(pane);
+  const types = paneTypesToAdd(tree);
+  const chat = types.includes('chat');
+  if (chat && chatLeaves(tree).some((leaf) => leaf.id === id)) return paneRef('chat');
+  const fresh = types.find((t) => tree === null || countPanes(tree, paneRef(t)) === 0);
+  if (fresh !== undefined) return paneRef(fresh);
   const lua = luaPanesToAdd(tree)[0];
-  return lua === undefined ? null : luaPaneRef(lua);
+  if (lua !== undefined) return luaPaneRef(lua);
+  return chat ? paneRef('chat') : null;
 }
 
 /** What a new Chat pane starts on: tell while another Chat pane shows
@@ -103,7 +110,7 @@ function backToAll(ids: string[]): void {
 
 export function splitHere(id: string, dir: SplitDir): void {
   const root = getPanelLayout()?.root;
-  const pane = paneToSplitIn();
+  const pane = paneToSplitIn(id);
   if (!root || !pane) return;
   setPaneTree(placePane(root, pane, (tree, ref) => splitPane(tree, id, dir, ref)));
 }

@@ -528,7 +528,7 @@ The panel on the right holds your panes, the map over your affects at first, wit
 
 - Show or hide the panel with the panel button at the right end of the title band, with `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` elsewhere, or with `Show panel` in the View menu or the palette. While it is hidden your vitals move to the status line.
 - Add a pane with `Add a pane`, the plus button in the title band. It lists the panes the panel does not show yet, and the one you pick lands at the bottom. Chat stays on the list while fewer than four Chat panes show. The panes are Map, Affects, Group, Chat, and Staff queues, which joins the list once the game sends it.
-- Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
+- Open a pane's menu with the more button in its header. `Split right` and `Split down` put the first pane the panel does not show beside or under it, or another Chat pane once it shows them all. On a Chat pane they put in another Chat pane. `Show here instead` swaps in another pane, and `Close pane` takes it out. Closing a pane loses nothing.
 - Drag the line between two panes to share the space between them. Tab to a line and the arrow keys move it 8 points, or 32 with `Shift`.
 - Drag the panel's left edge to change its width, from 200 to 800 points, and double click the edge to go back to 300. Tab to the edge and the arrow keys move it 8 points. Settings has the same `Width` under Layout, then Panel.
 - Show or hide one pane with its row in the View menu or the palette, like `Show map`.

@@ -128,7 +128,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     action();
   };
 
-  const splitIn = paneToSplitIn();
+  const splitIn = paneToSplitIn(leaf.id);
   const showHere = panesToShowInstead(leaf, getPanelLayout()?.root ?? null);
   const area = anchor.closest('.panel-panes');
   const canSplit = (dir: SplitDir) => {
