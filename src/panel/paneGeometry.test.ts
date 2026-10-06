@@ -7,6 +7,7 @@ import {
 } from './affects/affectsView';
 import {
   addPane,
+  paneRef,
   defaultLayout,
   PANE_TYPES,
   sanitize,
@@ -151,7 +152,7 @@ describe('affectsMinIn', () => {
   it('counts one column once Split right leaves the pane narrow', () => {
     // The pane draws one column at 247 px, so its minimum holds all
     // eight slots, the hairline, faerie fire, and the count.
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(affectsMinIn(tree, 494, twenty)).toBe(28 + 8 * 22 + 9 + 2 * 22);
     const { leaves } = layoutPanes(tree, 494, 664, { affects: affectsMinIn(tree, 494, twenty) });
     const affects = leaves.find((l) => l.leaf.pane === 'affects');
@@ -251,7 +252,7 @@ describe('countdownMinH', () => {
   });
 
   it('follows the style the pane draws', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(affectsMinIn(tree, 494, rows(thirty), 'countdown')).toBe(28 + 6 * 23);
     expect(affectsMinIn(tree, 494, rows(thirty), 'timers')).toBe(affectsMinH(rows(thirty), 1));
   });
@@ -277,7 +278,7 @@ describe('chipsMinH', () => {
   });
 
   it('follows the style the pane draws, packed to its own width', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(affectsMinIn(tree, 494, rows(thirty), 'chips')).toBe(204);
     expect(affectsMinIn(defaultLayout().root, 494, rows(thirty), 'chips')).toBe(160);
     // Draining chips packs the same chips, so it holds the same lines.
@@ -288,7 +289,7 @@ describe('chipsMinH', () => {
 
 describe('paneWidth', () => {
   it('reads the width a pane gets, whatever the heights', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(paneWidth(tree, 494, 'affects')).toBe(247);
     expect(paneWidth(tree, 494, 'group')).toBe(246);
     expect(paneWidth(defaultLayout().root, 494, 'affects')).toBe(494);
@@ -308,7 +309,7 @@ describe('groupMinH', () => {
 
 describe('minExtent', () => {
   it('adds up a stack and takes the tallest of a row', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     // map, then affects beside group, with a 1 px handle between.
     expect(minExtent(tree, 'column')).toBe(180 + 1 + 160);
     expect(minExtent(tree, 'row')).toBe(120 + 1 + 120);
@@ -330,9 +331,9 @@ describe('fitsPanel', () => {
   });
 
   it('refuses a third pane side by side in the stock width', () => {
-    const two = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const two = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(fitsPanel(two, 300, 664)).toBe(true);
-    const three = splitPane(two, 'group', 'row', 'chat');
+    const three = splitPane(two, 'group', 'row', paneRef('chat'));
     expect(fitsPanel(three, 300, 664)).toBe(false);
     expect(fitsPanel(three, 362, 664)).toBe(true);
   });
@@ -400,7 +401,7 @@ describe('layoutPanes', () => {
   });
 
   it('sets a split right pane beside its sibling inside the stack', () => {
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     const { leaves, handles } = layoutPanes(tree, 440, 664);
     const byPane = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect]));
     expect(byPane.map).toEqual({ x: 0, y: 0, w: 440, h: 348 });
@@ -423,7 +424,7 @@ describe('layoutPanes', () => {
   });
 
   it('stacks without overlap when the panel is too short for every minimum', () => {
-    const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
+    const tree = addPane(addPane(defaultLayout().root, paneRef('group')), paneRef('chat'));
     const { leaves } = layoutPanes(tree, 300, 400);
     const rects = leaves.map((l) => l.rect);
     for (let i = 1; i < rects.length; i += 1) {
@@ -441,7 +442,7 @@ describe('layoutPanes', () => {
   it('keeps every harmful affect and every group member in view after adding panes', () => {
     // Add Group, then Chat, at 1280 by 800, with the slots in a fight
     // and four group members.
-    const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
+    const tree = addPane(addPane(defaultLayout().root, paneRef('group')), paneRef('chat'));
     const mins = { affects: affectsMinH(FIGHT_AFFECTS), group: groupMinH(4) };
     const { leaves } = layoutPanes(tree, 300, 664, mins);
     const h = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect.h]));
@@ -547,7 +548,7 @@ describe('at your panel size', () => {
   });
 
   it('lays every pane out at its minimum at 16 px, and at its floor on a short panel', () => {
-    const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
+    const tree = addPane(addPane(defaultLayout().root, paneRef('group')), paneRef('chat'));
     const tall = layoutPanes(tree, 300, 900, {}, 16);
     for (const { leaf, rect } of tall.leaves) {
       expect(rect.h, leaf.pane).toBeGreaterThanOrEqual(paneMinH(leaf.pane, 16));
@@ -569,7 +570,7 @@ describe('at your panel size', () => {
     expect(affectsStyleMinH(FIGHT_AFFECTS, 400, 'timers', FIXED_MEASURE, 16)).toBe(
       affectsMinH(FIGHT_AFFECTS, 1, 16),
     );
-    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', paneRef('group'));
     expect(affectsMinIn(tree, 494, rows(thirty), 'countdown', FIXED_MEASURE, 16)).toBe(
       countdownMinH(rows(thirty), 1, 16),
     );

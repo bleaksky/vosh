@@ -22,7 +22,7 @@ import { useAffectsDisplay } from '../stores/config/affectsDisplayStore';
 import { useChatColors } from '../stores/config/chatColorsStore';
 import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
-import { splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
+import { paneRef, splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
@@ -152,7 +152,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
       label: 'Show here instead',
       items: () =>
         others.map((t) => (
-          <MenuItem key={t} onSelect={run(() => showHereInstead(leaf.id, t))}>
+          <MenuItem key={t} onSelect={run(() => showHereInstead(leaf.id, paneRef(t)))}>
             {PANE_LABELS[t]}
           </MenuItem>
         )),

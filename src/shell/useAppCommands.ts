@@ -18,7 +18,6 @@ import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import type { MacroKeys } from '../input/useMacroKeys';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
-import type { PaneType } from '../panel/paneLayout';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
 import { goTo, sessionAt, sessionStep } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
@@ -63,8 +62,8 @@ interface CommandInputs
   /** Puts the caret on the command line. */
   focusInput: () => void;
   panelOpen: boolean;
-  /** The panes the panel tree holds. */
-  shownPanes: readonly PaneType[];
+  /** The paneKey of every pane the panel tree holds. */
+  shownPanes: readonly string[];
   /** How many sessions are open, and whether you keep the sidebar
    *  showing them, though a narrow window can fold it. */
   sessionCount: number;
