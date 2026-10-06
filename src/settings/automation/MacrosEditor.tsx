@@ -12,9 +12,11 @@ import {
 import { withGroup } from '../../automation/automationTriggers';
 import { labelForKey } from '../../automation/macroKeys';
 import { listMacros, subscribeMacrosChanged } from '../../ipc/automation';
+import { isMacPlatform } from '../../lib/shortcuts';
 import { Card, Field, Row, Toggle } from '../../ui';
-import { GroupField, KeyCaptureField } from './fields';
+import { CardNote, GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';
+import { macroClashNote } from './macroClash';
 import type { DetailProps, EditorProps, KindSpec } from './types';
 
 const MACROS_SPEC: KindSpec<MacroRecord> = {
@@ -62,9 +64,14 @@ function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<Macr
   }, [fresh]);
 
   const set = (patch: Partial<MacroRecord>) => update((v) => ({ ...v, ...patch }));
+  // A key the session keys share stays with this macro in the sessions
+  // on its profile (Sessions Q11), and the card says what it does
+  // elsewhere.
+  const clash = macroClashNote(m.key, isMacPlatform());
 
   return (
     <Card className="st-auto-card">
+      {clash && <CardNote>{clash}</CardNote>}
       <Row label="Key">
         <KeyCaptureField ref={keyRef} width="100%" value={m.key} onChange={(key) => set({ key })} />
       </Row>

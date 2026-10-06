@@ -1,9 +1,11 @@
 import type { ComponentType, MouseEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import { sessionLabel } from '../lib/sessionLabel';
+import { shortcutLabel } from '../lib/shortcuts';
 import { rowLook, useSessionRow, type RowGlyph } from '../stores/session/sessionRowStore';
 import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
+import { useModHeld } from './useModHeld';
 
 // The sessions sidebar on the left of the main window, board 2 of the
 // Sessions review, drawn to otty's measures (Q17). MainWindow shows it
@@ -14,7 +16,9 @@ import { SidebarIcon } from './icons';
 // one a filled pill. A row's glyph takes the meta's place while it shows,
 // and its name takes the tone the row store gives it (board 3). A click
 // selects. Under the pointer a row shows its close button in the place
-// of the meta or the glyph, which closes its session (Q13).
+// of the meta or the glyph, which closes its session (Q13). While you
+// hold ⌘ (Ctrl elsewhere), the first nine rows show the key that brings
+// each to the front in that place instead, as otty does (board 8).
 //
 // WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
 // sessions, the caret would take your next Space and press it again, so
@@ -45,6 +49,7 @@ export function SessionSidebar({
   onHide,
   onCaret,
 }: Props) {
+  const numbered = useModHeld();
   return (
     <aside className="shell-sessions st-controls" aria-label="Sessions">
       <div className="shell-sessions-top" data-tauri-drag-region>
@@ -73,12 +78,13 @@ export function SessionSidebar({
       </div>
       <h2 className="shell-sessions-head">Sessions</h2>
       <ul className="shell-sessions-list">
-        {rows.map((row) => (
+        {rows.map((row, i) => (
           <SessionSlot
             key={row.id}
             row={row}
             rows={rows}
             current={row.id === selected}
+            keys={numbered && i < 9 ? shortcutLabel(`Mod+${i + 1}`) : null}
             onSelect={onSelect}
             onClose={onClose}
             onCaret={onCaret}
@@ -102,13 +108,16 @@ interface SlotProps {
   row: SessionRow;
   rows: SessionRow[];
   current: boolean;
+  /** The key that brings this row to the front, shown while you hold
+   *  Mod, or null. */
+  keys: string | null;
   onSelect: (session: number) => void;
   onClose: (session: number) => void;
   onCaret: () => void;
 }
 
 /** One session's row. */
-function SessionSlot({ row, rows, current, onSelect, onClose, onCaret }: SlotProps) {
+function SessionSlot({ row, rows, current, keys, onSelect, onClose, onCaret }: SlotProps) {
   const label = sessionLabel(row, rows);
   const { glyph, tone } = rowLook(useSessionRow(row.id), row, current);
   return (
@@ -131,7 +140,9 @@ function SessionSlot({ row, rows, current, onSelect, onClose, onCaret }: SlotPro
         ) : (
           <span className="shell-sessions-name">{label.name}</span>
         )}
-        {glyph ? (
+        {keys ? (
+          <span className="shell-sessions-meta is-key">{keys}</span>
+        ) : glyph ? (
           <RowGlyphMark glyph={glyph} />
         ) : (
           label.meta && <span className="shell-sessions-meta">{label.meta}</span>

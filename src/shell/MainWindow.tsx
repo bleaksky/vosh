@@ -12,6 +12,7 @@ import { Terminal } from '../terminal/Terminal';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
+import { useMacroKeys } from '../input/useMacroKeys';
 import { Resizable } from '../terminal/Resizable';
 import { UpdateNotice } from './overlays/UpdateNotice';
 import { Toasts } from './overlays/Toasts';
@@ -144,6 +145,9 @@ function MainWindow() {
   }, [selected, opened]);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  // The selected session's macros, which the command line fires and the
+  // session keys ask after (Q11).
+  const macroKeys = useMacroKeys();
   // Puts the caret back on the command line.
   const focusInput = () => inputRef.current?.focus();
   // Write text the page draws itself (your typed echo, error notices) to
@@ -454,6 +458,8 @@ function MainWindow() {
   // The window shortcuts, the macOS menu bar and #help.
   const { runCommand, themesChanged } = useAppCommands({
     connection,
+    macroKeys,
+    closeSession: () => closing.closeSession(),
     closeWindow: closing.closeWindow,
     quit: closing.quit,
     splitOpen,
@@ -557,6 +563,7 @@ function MainWindow() {
     <Input
       ref={inputRef}
       enabled={connected}
+      macroKeys={macroKeys}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
       onSelectAllTerminal={() => termRef.current?.selectAll()}

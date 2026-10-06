@@ -35,7 +35,11 @@ fn the_board_shortcuts_are_all_there() {
     let expect = [
         ("settings", "Cmd+,"),
         ("connect", "Cmd+R"),
-        ("close-window", "Cmd+W"),
+        ("session-new", "Cmd+T"),
+        ("session-close", "Cmd+W"),
+        ("close-window", "Cmd+Shift+W"),
+        ("session-next", "Cmd+Shift+]"),
+        ("session-previous", "Cmd+Shift+["),
         ("copy", "Cmd+C"),
         ("find", "Cmd+F"),
         ("palette", "Cmd+K"),

@@ -14,10 +14,13 @@ import {
   resolveShortcut,
   setAppMenuState,
 } from '../lib/appMenu';
+import { canonicalKeyFromEvent } from '../automation/macroKeys';
+import type { MacroKeys } from '../input/useMacroKeys';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import type { PaneType } from '../panel/paneLayout';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
+import { getSelected, select, sessionAt, sessionStep } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
   getNativeScroll,
@@ -43,6 +46,10 @@ interface CommandInputs
     Pick<ScrollbackFind, 'findOpen' | 'openFind' | 'findToolbarRef'> {
   /** The session, for Connect and the menu bar. */
   connection: Connection;
+  /** The selected session's macros. One on a session key keeps the key. */
+  macroKeys: MacroKeys;
+  /** Close the selected session, asking first while it is connected. */
+  closeSession: () => void;
   /** Close the window, asking first while a session is connected. */
   closeWindow: () => void;
   /** Quit Vosh, asking first while two or more sessions are connected.
@@ -75,8 +82,15 @@ interface AppCommands {
   themesChanged: () => void;
 }
 
+/** Bring `session` to the front, unless it is there or missing. */
+function goTo(session: number | null): void {
+  if (session !== null && session !== getSelected()) void select(session);
+}
+
 export function useAppCommands({
   connection,
+  macroKeys,
+  closeSession,
   closeWindow,
   quit,
   splitOpen,
@@ -109,16 +123,24 @@ export function useAppCommands({
   // lib/appShortcuts.json, which the macOS menu bar reads too.
   //   Mod+K        command palette (toggles)
   //   Mod+F        find in scrollback (again refocuses the find field)
-  //   Mod+R        connect to the saved world. Ctrl+R never reloads the
-  //                page on Windows, even while connected.
+  //   Mod+R        connect the selected session. Ctrl+R never reloads
+  //                the page on Windows, even while connected.
   //   Mod+,        settings
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
   //   Mod+\        open or close the scrollback split
+  //   Mod+T        new session
+  //   Mod+W        close the session, or the window with one session
+  //   Mod+Shift+W  close the window
+  //   Mod+Shift+]  the next session, and Mod+Shift+[ the previous one
+  //   Mod+1 to 9   the session at that place in the list
   // A key this handler takes never reaches the menu bar, and the menu
   // bar sends its commands through runCommand below too, so each press
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
-  // layout still reaches them by the physical key.
+  // layout still reaches them by the physical key. A macro the selected
+  // session's profile binds to one of the session keys keeps the key
+  // (Sessions Q11): nothing here or in the menu bar takes it, and the
+  // command line fires the macro.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
   useEffect(() => {
@@ -126,15 +148,18 @@ export function useAppCommands({
     const onKey = (e: globalThis.KeyboardEvent) => {
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
-      const hit = resolveShortcut(shortcutKey(e), e.shiftKey);
+      const press = { key: shortcutKey(e), code: e.code, shift: e.shiftKey };
+      const hit = resolveShortcut(press, () => macroKeys.bound(canonicalKeyFromEvent(e)));
       if (!hit) return;
       e.preventDefault();
+      if (hit.kind === 'macro') return;
       e.stopPropagation();
-      if (hit.id) runCommandRef.current(hit.id, { repeat: e.repeat });
+      if (hit.kind === 'run') runCommandRef.current(hit.id, { repeat: e.repeat });
+      else if (hit.kind === 'goto' && !e.repeat) goTo(sessionAt(hit.place));
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
+  }, [macroKeys]);
 
   // `#help <words>` from the command line (src-tauri input::help_query).
   // A topic id or number opens that topic. Other words open Help on its
@@ -211,6 +236,15 @@ export function useAppCommands({
         return;
       case 'session-new':
         void openNewSession();
+        return;
+      case 'session-next':
+        goTo(sessionStep(1));
+        return;
+      case 'session-previous':
+        goTo(sessionStep(-1));
+        return;
+      case 'session-close':
+        closeSession();
         return;
       case 'close-window':
         closeWindow();

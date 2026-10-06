@@ -150,6 +150,20 @@ export function getOpened(): number[] {
   return store.get().opened;
 }
 
+/** The session `step` rows from the selected one, going round the ends
+ *  as otty's tabs do, or null while fewer than two are open. */
+export function sessionStep(step: 1 | -1): number | null {
+  const { rows, selected } = store.get();
+  if (rows.length < 2) return null;
+  const at = rows.findIndex((row) => row.id === selected);
+  return rows[(at + step + rows.length) % rows.length].id;
+}
+
+/** The session at `place` in the list, counting from 1, or null. */
+export function sessionAt(place: number): number | null {
+  return store.get().rows[place - 1]?.id ?? null;
+}
+
 function selectedRow(): SessionRow | null {
   const { rows, selected } = store.get();
   return rows.find((row) => row.id === selected) ?? null;

@@ -56,10 +56,11 @@ Variables set with `#var` live in session scope. They clear when the next connec
 Each session is one connection to a game, with its own terminal, command line and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, one row for each. With one session it hides by itself.
 
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
+- Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
 - Click `Hide sessions` at the top right of the sidebar to fold it away in this window.
 
-To open a session, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
+To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
 
 - `Host` and `Port` start from the world you last saved or dialed from a form. The caret waits in `Port`, so you can type the build port and keep the host.
 - `Profile` starts on a profile pinned to that host and port, then one that claims the host on any port, then the profile you were playing. It picks again as you change the address, until you choose one yourself, and the window takes the layout of the profile it shows.
@@ -92,9 +93,9 @@ A session that is not connected shows its name in grey. A row shows one glyph at
 
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
 
-To close a session, point at its row and click the cross that takes the place of the port, or choose `Close session` from the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
+To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
-Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you choose `Close window` in the Session menu or press `Cmd+W` on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
+Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
 
 On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected, and with one Vosh quits at once. A quit from the Dock or as you log out cannot ask.
 
@@ -821,13 +822,23 @@ Anywhere in the main window.
 
 - `Cmd+K` toggles the command palette.
 - `Cmd+F` opens the find bar, and pressed again puts the caret back in it.
-- `Cmd+R` connects to the saved world while you are not connected.
+- `Cmd+R` connects the session in front while it is not connected.
 - `Cmd+,` opens Settings.
 - `Cmd+/` opens Help.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 
-On macOS, `Cmd+W` closes the window in front and `Cmd+Q` quits Vosh. The main window asks before it closes while a session is connected, and `Cmd+Q` asks while two or more are.
+For your sessions, in the main window.
+
+- `Cmd+T` opens a new session.
+- `Cmd+1` to `Cmd+9` bring the session at that place in the sidebar to the front. Hold `Cmd` a moment and each row shows its key.
+- `Cmd+Shift+]` steps to the next session and `Cmd+Shift+[` to the one before, round from the last to the first. They use the bracket keys whatever your layout types on them.
+- `Cmd+W` closes the session in front, and asks first while it is connected. With one session it closes the window.
+- `Cmd+Shift+W` closes the window, and asks first while a session is connected.
+
+A macro on one of these keys keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
+
+On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh. `Cmd+Q` asks first while two or more sessions are connected.
 
 In the command line.
 

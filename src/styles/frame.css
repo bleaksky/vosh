@@ -494,6 +494,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* While you hold ⌘ the row's key takes the place of its meta and its
+   glyph, its right edge at otty's 209.5 (board 8). */
+.shell-sessions-meta.is-key {
+  margin-right: -9.5px;
+}
+
 /* A glyph takes the meta's place in a 16 square centered at x 195, as
    otty draws its badges (Q8, board 3). */
 .shell-sessions-glyph {

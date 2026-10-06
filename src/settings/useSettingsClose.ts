@@ -8,8 +8,8 @@ import {
 } from '../lib/pendingWrites';
 
 /** The Settings window's close handler, the one for every way it
- *  closes: the close button, Close window in the menu bar (Cmd+W),
- *  and the main window closing. It leaves the focused field, so a
+ *  closes: the close button, Close session (Cmd+W) and Close window
+ *  (Cmd+Shift+W) in the menu bar, and the main window closing. It leaves the focused field, so a
  *  number or color you typed saves, sends every write waiting on a
  *  pause, and then closes, or lets a page with unsaved changes ask
  *  first. It also answers the backend on quit with the same writes. */

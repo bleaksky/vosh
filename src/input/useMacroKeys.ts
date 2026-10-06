@@ -1,7 +1,9 @@
-// The keyboard macros the command line fires, kept current as you edit
-// them and as their groups turn on and off.
+// The keyboard macros of the selected session's profile, kept current as
+// you edit them, as their groups turn on and off, and as the selection
+// moves to a session on another profile. The command line fires them,
+// and the window's session keys ask whether a macro keeps the key.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   listMacros,
   listMacroGroups,
@@ -10,9 +12,17 @@ import {
   type GroupToggle,
   type Macro,
 } from '../ipc/automation';
+import { subscribeProfileSwitched } from '../ipc/profiles';
+
+export interface MacroKeys {
+  /** The command a canonical key sends, if a macro that is on binds it. */
+  command: (key: string) => string | undefined;
+  /** Whether a macro that is on binds the canonical key. */
+  bound: (key: string | null) => boolean;
+}
 
 /** The bound keys, each canonical key to the command it sends. */
-export function useMacroKeys() {
+export function useMacroKeys(): MacroKeys {
   // Keyboard macro bindings — keyed by canonical key string
   // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and
   // refreshed on every macros-changed broadcast. Macros turned off
@@ -60,31 +70,48 @@ export function useMacroKeys() {
         .catch(() => {});
     };
 
-    listMacros()
-      .then((list) => {
-        if (!cancelled) applyList(list);
-      })
-      .catch(() => {});
-    refreshGroups();
+    // Both lists name no profile, so they read the selected session's.
+    const refresh = () => {
+      listMacros()
+        .then((list) => {
+          if (!cancelled) applyList(list);
+        })
+        .catch(() => {});
+      refreshGroups();
+    };
+    refresh();
 
-    subscribeMacrosChanged((list) => {
-      if (!cancelled) {
-        applyList(list);
-        // A new or removed macro can change which groups exist;
-        // re-pull the group list so the disabled-set stays accurate.
-        refreshGroups();
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubs.push(fn);
-    });
+    const hear = (subscribe: Promise<() => void>) => {
+      void subscribe.then((fn) => {
+        if (cancelled) fn();
+        else unsubs.push(fn);
+      });
+    };
 
-    subscribeMacroGroupsChanged(() => {
-      if (!cancelled) refreshGroups();
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubs.push(fn);
-    });
+    hear(
+      subscribeMacrosChanged((list) => {
+        if (!cancelled) {
+          applyList(list);
+          // A new or removed macro can change which groups exist;
+          // re-pull the group list so the disabled-set stays accurate.
+          refreshGroups();
+        }
+      }),
+    );
+
+    hear(
+      subscribeMacroGroupsChanged(() => {
+        if (!cancelled) refreshGroups();
+      }),
+    );
+
+    // A selection that crosses profiles sends the profile in front as a
+    // switch, and the macros are that profile's.
+    hear(
+      subscribeProfileSwitched(() => {
+        if (!cancelled) refresh();
+      }),
+    );
 
     return () => {
       cancelled = true;
@@ -92,5 +119,11 @@ export function useMacroKeys() {
     };
   }, []);
 
-  return macroMapRef;
+  return useMemo(
+    () => ({
+      command: (key) => macroMapRef.current.get(key),
+      bound: (key) => key !== null && macroMapRef.current.has(key),
+    }),
+    [],
+  );
 }
