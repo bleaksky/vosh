@@ -37,6 +37,7 @@ const row = (id: number, patch: Partial<SessionRow>): SessionRow => ({
   tls: false,
   profile: 'default',
   connected: true,
+  since: null,
   selected: false,
   ...patch,
 });

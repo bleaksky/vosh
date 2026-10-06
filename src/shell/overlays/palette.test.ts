@@ -57,6 +57,7 @@ function sessionRow(id: number, character: string | null, port: number): Session
     tls: false,
     profile: 'Default',
     connected: true,
+    since: null,
     selected: id === 1,
   };
 }
