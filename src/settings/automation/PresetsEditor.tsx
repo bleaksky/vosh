@@ -7,7 +7,13 @@ import {
   storedPresetIds,
   type PresetToggle,
 } from '../../automation/automationRecords';
-import { PRESET_CATEGORIES, presetById, PRESETS, presetTriggers } from '../../automation/presets';
+import {
+  PRESET_CATEGORIES,
+  presetById,
+  presetMacros,
+  PRESETS,
+  presetTriggers,
+} from '../../automation/presets';
 import { presetsInstall, presetsRemove } from '../../ipc/automation';
 import { getUiConfig, setUiFields } from '../../ipc/uiConfig';
 import type { SetUiConfig } from '../pageTypes';
@@ -26,10 +32,10 @@ interface PresetsEditorProps {
   profileScoped: boolean;
 }
 
-/** The trigger presets, one toggle each under its category. Save
- *  installs the presets you turned on, removes the ones you turned off,
- *  and stores the list in enabled_presets, which launch reads to put
- *  the ones that are on back and take the rest out. */
+/** The presets, one toggle each under its category. Save installs the
+ *  triggers and macros of the presets you turned on, removes the ones you
+ *  turned off, and stores the list in enabled_presets, which launch reads
+ *  to put the ones that are on back and take the rest out. */
 export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: PresetsEditorProps) {
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
@@ -45,8 +51,10 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
       save: async (draft) => {
         const plan = presetSavePlan(draft);
         for (const id of plan.remove) await presetsRemove(id);
-        const install = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
-        if (install.length > 0) await presetsInstall(install, []);
+        const on = PRESETS.filter((p) => plan.install.includes(p.id));
+        const triggers = on.flatMap(presetTriggers);
+        const macros = on.flatMap(presetMacros);
+        if (triggers.length > 0 || macros.length > 0) await presetsInstall(triggers, macros);
         // Keep the ids this page has no preset for, such as the alert
         // presets, as the profile holds them now.
         const stored = (await getUiConfig()).enabled_presets;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRESETS } from './presets';
+import { defaultEnabledIds, PRESETS } from './presets';
 import { presetChanges } from './wizardPresets';
 
 const name = (id: string): string => {
@@ -28,11 +28,13 @@ describe('the presets each character gains or loses in the shared list', () => {
     });
   });
 
-  it('counts a profile that never saved a file as having every preset on', () => {
+  it('counts a profile that never saved a file as having the defaults on', () => {
     const prompt = presetChanges(plan)[1];
     expect(prompt.gains).toEqual([]);
     expect(prompt.loses).toEqual(
-      PRESETS.filter((p) => p.id !== 'healing_basics' && p.id !== 'herb_labels').map((p) => p.name),
+      defaultEnabledIds()
+        .filter((id) => id !== 'healing_basics' && id !== 'herb_labels')
+        .map(name),
     );
   });
 
@@ -42,6 +44,8 @@ describe('the presets each character gains or loses in the shared list', () => {
       shared_presets: [],
       profile_presets: [['none'], []],
     });
-    expect(changes).toEqual([{ profile: 'default', gains: PRESETS.map((p) => p.name), loses: [] }]);
+    expect(changes).toEqual([
+      { profile: 'default', gains: defaultEnabledIds().map(name), loses: [] },
+    ]);
   });
 });
