@@ -14,6 +14,7 @@ import {
   normalizeActions,
   normalizePatterns,
   type HighlightStyle,
+  type MatchMode,
   type NamedColor,
   type TriggerAction,
   type TriggerPattern,
@@ -248,6 +249,55 @@ export function withPatternSource(row: TriggerPattern, value: string): TriggerPa
   return isTextRow(row) ? { ...row, text: value } : { ...row, pattern: value };
 }
 
+/** The modes the Pattern row offers, in board 6's order. */
+export const MATCH_MODE_OPTIONS: readonly { value: MatchMode; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'starts_with', label: 'Starts with' },
+  { value: 'regex', label: 'Regex' },
+];
+
+/** What each mode does, the line under the Pattern label. */
+export const MATCH_MODE_DESCRIPTIONS: Readonly<Record<MatchMode, string>> = {
+  text: 'Matches a line that is exactly this text.',
+  starts_with: 'Matches any line that starts with this text.',
+  regex: 'A regular expression. Groups fill $1 and on.',
+};
+
+/** The mode the Pattern row shows: the main row's, or Regex when it has
+ *  none, as the store reads a row with no mode. */
+export function triggerMode(trigger: TriggerRecord): MatchMode {
+  return mainPattern(trigger).mode ?? 'regex';
+}
+
+/** A row read in another mode, keeping what you typed. A Regex row has
+ *  no mode or text on the wire. A Text or Starts with row takes what you
+ *  typed in `text`, and the store writes the regex it compiles to in
+ *  `pattern` when it saves. A row that was already Text or Starts with
+ *  keeps the regex the store sent, so moving between those two and back
+ *  reads as saved, and so does Regex to Text and back. */
+export function withPatternMode(row: TriggerPattern, mode: MatchMode): TriggerPattern {
+  const source = patternSource(row);
+  if (mode === 'regex') return { pattern: source, enabled: row.enabled };
+  return {
+    pattern: isTextRow(row) ? row.pattern : source,
+    enabled: row.enabled,
+    mode,
+    text: source,
+  };
+}
+
+/** Read every pattern in `mode`, More patterns included, since one
+ *  control covers them all. */
+export function withTriggerMode(trigger: TriggerRecord, mode: MatchMode): TriggerRecord {
+  const patterns = trigger.patterns.length > 0 ? trigger.patterns : [mainPattern(trigger)];
+  return { ...trigger, patterns: patterns.map((row) => withPatternMode(row, mode)) };
+}
+
+/** An empty pattern row in `mode`. */
+export function blankPattern(mode: MatchMode): TriggerPattern {
+  return withPatternMode({ pattern: '', enabled: true }, mode);
+}
+
 /** Set what you typed in the main pattern. */
 export function withMainPatternSource(trigger: TriggerRecord, value: string): TriggerRecord {
   return withMainPattern(trigger, withPatternSource(mainPattern(trigger), value));
@@ -324,11 +374,11 @@ export function triggerForSave(trigger: TriggerRecord): TriggerRecord {
   };
 }
 
-/** A new trigger: no name, one empty pattern, Style None. */
+/** A new trigger: no name, one empty Text pattern (Q11), Style None. */
 export function blankTrigger(): TriggerRecord {
   return {
     name: '',
-    patterns: [{ pattern: '', enabled: true }],
+    patterns: [blankPattern('text')],
     priority: 5,
     enabled: true,
     actions: [],
