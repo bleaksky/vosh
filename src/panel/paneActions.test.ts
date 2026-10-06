@@ -65,22 +65,31 @@ function lay(...panes: PaneType[]): void {
 describe('paneToSplitIn', () => {
   it('splits in the first built-in pane the panel does not show', () => {
     lay('map', 'affects');
-    expect(paneToSplitIn()).toEqual({ pane: 'group', props: {} });
+    expect(paneToSplitIn('map')).toEqual({ pane: 'group', props: {} });
   });
 
-  it('splits in another Chat once only Chat has room', () => {
+  it('splits in a pane the panel does not show before another Chat', () => {
+    state.on = true;
     lay('map', 'affects', 'group', 'chat');
-    expect(paneToSplitIn()).toEqual({ pane: 'chat', props: {} });
-  });
-
-  it('splits in a Lua pane once every built-in pane shows', () => {
-    lay('map', 'affects', 'group', 'chat', 'chat', 'chat', 'chat');
-    expect(paneToSplitIn()).toEqual({
+    expect(paneToSplitIn('map')).toEqual({
       pane: 'lua',
       props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
     });
+  });
+
+  it('splits in another Chat on a Chat pane', () => {
+    lay('map', 'affects', 'chat');
+    expect(paneToSplitIn('chat')).toEqual({ pane: 'chat', props: {} });
+  });
+
+  it('splits in another Chat once the panel shows every pane', () => {
     state.on = false;
-    expect(paneToSplitIn()).toBeNull();
+    lay('map', 'affects', 'group', 'chat');
+    expect(paneToSplitIn('map')).toEqual({ pane: 'chat', props: {} });
+    lay('map', 'affects', 'group', 'chat', 'chat', 'chat', 'chat');
+    expect(paneToSplitIn('map')).toBeNull();
+    expect(paneToSplitIn('chat')).toBeNull();
+    state.on = true;
   });
 });
 
