@@ -307,11 +307,11 @@ fn load_plugin(
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
     crate::script::refresh_vars(p, c);
-    let outcome = c.script.load_script(
-        Owner::Plugin(name.to_string()),
-        &plugin.chunk(name),
-        &plugin.code,
-    );
+    let owner = Owner::Plugin(name.to_string());
+    c.lua_output.note_load(&owner, crate::session::now_ms());
+    let outcome = c
+        .script
+        .load_script(owner, &plugin.chunk(name), &plugin.code);
     if outcome.failed {
         error!(name = %name, "plugin script error");
     } else {
