@@ -109,8 +109,17 @@ async function mount(listSessions: boolean) {
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   const onClose = vi.fn();
+  const onCloseSession = vi.fn();
   await act(async () => {
-    root.render(createElement(SessionMenu, { connection, anchor: null, listSessions, onClose }));
+    root.render(
+      createElement(SessionMenu, {
+        connection,
+        anchor: null,
+        listSessions,
+        onCloseSession,
+        onClose,
+      }),
+    );
   });
   cleanups.push(async () => {
     await act(async () => root.unmount());
@@ -118,7 +127,7 @@ async function mount(listSessions: boolean) {
   });
   const menu = findAll(doc.body, (el) => el.getAttribute('role') === 'menu')[0];
   const items = findAll(menu, (el) => el.getAttribute('role') === 'menuitem');
-  return { menu, items, onClose };
+  return { menu, items, onClose, onCloseSession };
 }
 
 const hasClass = (name: string) => (el: FakeElement) =>
@@ -159,6 +168,33 @@ describe('the session popover with the sidebar folded', () => {
     await act(async () => on(items[1]).onClick());
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(store.goTo).toHaveBeenCalledWith(2);
+  });
+
+  // The list takes the sidebar's place while it is folded, so each row
+  // closes its session as the sidebar's does, and nothing else is the
+  // only way to close a session behind without bringing the sidebar back.
+  it('gives every session a close button that closes it and not the one in front', async () => {
+    const { menu, onClose, onCloseSession } = await mount(true);
+    const closers = findAll(menu, hasClass('shell-menu-session-close'));
+    expect(closers.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'Close session',
+      'Close session',
+      'Close session',
+    ]);
+    await act(async () => on(closers[2]).onClick());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onCloseSession).toHaveBeenCalledWith(3);
+    expect(store.goTo).not.toHaveBeenCalled();
+  });
+
+  // A long list in a short window scrolls inside the popover, which
+  // stops 8 above the window's foot, so every session stays in reach.
+  it('keeps the list inside the window and lets it scroll', async () => {
+    const { menu } = await mount(true);
+    expect(menu.style.maxHeight).toBe('calc(100vh - 16px)');
+    expect(menu.getAttribute('class')).toBe('shell-menu is-listed');
+    const list = findAll(menu, hasClass('shell-menu-sessions'))[0];
+    expect(findAll(list, (el) => el.getAttribute('role') === 'menuitem')).toHaveLength(3);
   });
 
   it('lists no session while the sidebar shows', async () => {

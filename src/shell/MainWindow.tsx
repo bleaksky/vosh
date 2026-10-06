@@ -697,6 +697,7 @@ function MainWindow() {
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
+          onCloseSession={closing.closeSession}
         />
       }
       terminal={terminalAreaElement}

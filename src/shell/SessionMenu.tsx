@@ -8,7 +8,7 @@ import { worldName } from '../lib/knownWorlds';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { goTo, useSelected, useSessions } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
-import { CheckIcon } from '../ui/icons';
+import { CheckIcon, CloseIcon } from '../ui/icons';
 import { ConnectionForm } from './ConnectionForm';
 import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
@@ -32,7 +32,10 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 // at its top under SESSIONS, board 8. The selected one wears the check,
 // and each other one its port, any glyph its row would show and the key
 // that brings it to the front. A click brings that session to the
-// front.
+// front. The list takes the sidebar's place, so under the pointer each
+// row shows the close button in the place of its check, its glyph and
+// its key, which closes that session as the sidebar's does (Q13). A list
+// too long for the window scrolls, and the rows under it stay put.
 
 const MENU_WIDTH = 272;
 
@@ -51,6 +54,9 @@ interface Props {
   renameInRow?: (() => void) | undefined;
   /** List every session at the top, while the sidebar is folded. */
   listSessions?: boolean;
+  /** Close a session from the list, asking first while it is
+   *  connected. */
+  onCloseSession?: ((session: number) => void) | undefined;
   onClose: () => void;
 }
 
@@ -60,6 +66,7 @@ export function SessionMenu({
   request = { mode: 'menu' },
   renameInRow,
   listSessions = false,
+  onCloseSession,
   onClose,
 }: Props) {
   const [mode, setMode] = useState(request.mode);
@@ -131,20 +138,30 @@ export function SessionMenu({
   }
 
   return (
-    <ShellMenu anchor={anchor} align="center" width={MENU_WIDTH} label="Session" onClose={onClose}>
+    <ShellMenu
+      anchor={anchor}
+      align="center"
+      width={MENU_WIDTH}
+      label="Session"
+      listed={listSessions}
+      onClose={onClose}
+    >
       {listSessions && (
         <>
           <p className="shell-menu-head">Sessions</p>
-          {rows.map((row, i) => (
-            <SessionItem
-              key={row.id}
-              row={row}
-              rows={rows}
-              place={i + 1}
-              current={row.id === selected}
-              onSelect={() => run(() => goTo(row.id))}
-            />
-          ))}
+          <div className="shell-menu-sessions">
+            {rows.map((row, i) => (
+              <SessionItem
+                key={row.id}
+                row={row}
+                rows={rows}
+                place={i + 1}
+                current={row.id === selected}
+                onSelect={() => run(() => goTo(row.id))}
+                onCloseSession={() => run(() => onCloseSession?.(row.id))}
+              />
+            ))}
+          </div>
           <ShellMenuSeparator />
         </>
       )}
@@ -186,30 +203,45 @@ interface ItemProps {
   place: number;
   current: boolean;
   onSelect: () => void;
+  onCloseSession: () => void;
 }
 
 /** One session in the popover's list, as its row in the sidebar names
- *  it, with the port in quiet meta. */
-function SessionItem({ row, rows, place, current, onSelect }: ItemProps) {
+ *  it, with the port in quiet meta, and its close button beside it. */
+function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
   const label = sessionLabel(row, rows);
   const { glyph } = rowLook(useSessionRow(row.id), row, current);
   return (
-    <ShellMenuItem
-      current={current}
-      shortcut={current || place > 9 ? undefined : shortcutLabel(`Mod+${place}`)}
-      trailing={
-        current ? (
-          <CheckIcon className="pane-menu-check" />
-        ) : (
-          glyph && <RowGlyphMark glyph={glyph} />
-        )
-      }
-      onSelect={onSelect}
-    >
-      <span className="shell-menu-session">
-        <span className="shell-menu-session-name">{label.name}</span>
-        {label.meta && <span className="shell-menu-meta">{label.meta}</span>}
-      </span>
-    </ShellMenuItem>
+    <div className="shell-menu-session-slot">
+      <ShellMenuItem
+        current={current}
+        shortcut={current || place > 9 ? undefined : shortcutLabel(`Mod+${place}`)}
+        trailing={
+          current ? (
+            <CheckIcon className="pane-menu-check" />
+          ) : (
+            glyph && <RowGlyphMark glyph={glyph} />
+          )
+        }
+        onSelect={onSelect}
+      >
+        <span className="shell-menu-session">
+          <span className="shell-menu-session-name">{label.name}</span>
+          {label.meta && <span className="shell-menu-meta">{label.meta}</span>}
+        </span>
+      </ShellMenuItem>
+      {/* A sibling of the row, since a button holds no button. It shows
+        only under the pointer, so the arrow keys pass it by, and ⌘W
+        closes the session in front from the keyboard. */}
+      <button
+        type="button"
+        className="shell-menu-session-close"
+        aria-label="Close session"
+        tabIndex={-1}
+        onClick={onCloseSession}
+      >
+        <CloseIcon />
+      </button>
+    </div>
   );
 }

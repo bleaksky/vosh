@@ -54,6 +54,9 @@ interface Props {
   /** The sessions sidebar folded with two or more sessions open, so the
    *  session popover lists them. */
   listSessions?: boolean;
+  /** Close a session from that list, asking first while it is
+   *  connected. */
+  onCloseSession?: (session: number) => void;
 }
 
 export function TitleBand({
@@ -67,6 +70,7 @@ export function TitleBand({
   onMenuClosed,
   renameInRow,
   listSessions = false,
+  onCloseSession,
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
@@ -176,6 +180,7 @@ export function TitleBand({
           request={session.request}
           renameInRow={renameInRow}
           listSessions={listSessions}
+          onCloseSession={onCloseSession}
           onClose={closeMenu}
         />
       )}

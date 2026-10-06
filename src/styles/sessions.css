@@ -418,3 +418,71 @@
 .shell-menu-side .shell-sessions-glyph {
   margin: 0 -4px;
 }
+
+/* A list too long for the window scrolls with no bar, as the sidebar's
+   does, between SESSIONS and the rows under it, which stay put. It
+   keeps two rows in view in the shortest window. */
+.shell-menu.is-listed {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-menu.is-listed > * {
+  flex: none;
+}
+
+.shell-menu.is-listed > .shell-menu-sessions {
+  flex: 0 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.shell-menu-sessions::-webkit-scrollbar {
+  display: none;
+}
+
+/* Under the pointer a row shows its close button in the place of its
+   check, its glyph and its key, the sidebar's cross in the square the
+   check takes, and closes that session (Q13). */
+.shell-menu-session-slot {
+  position: relative;
+}
+
+.shell-menu-session-close {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tertiary);
+  visibility: hidden;
+}
+
+.shell-menu-session-close svg {
+  display: block;
+}
+
+.shell-menu-session-close:hover {
+  color: var(--secondary);
+}
+
+.shell-menu-session-slot:hover .shell-menu-session-close {
+  visibility: visible;
+}
+
+.shell-menu-session-slot:hover .shell-menu-item {
+  background: var(--menu-hi);
+}
+
+.shell-menu-session-slot:hover .shell-menu-side,
+.shell-menu-session-slot:hover .shell-menu-item > .shell-menu-kbd {
+  visibility: hidden;
+}
