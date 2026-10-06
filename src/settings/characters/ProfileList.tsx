@@ -16,6 +16,7 @@ import {
 import { useEscape } from '../../lib/escapeStack';
 import {
   copyName,
+  exportCharacters,
   keepsProfileName,
   movedSentence,
   newProfileClaim,
@@ -41,6 +42,7 @@ import {
 } from '../../ipc/profiles';
 import { errorText } from '../../lib/text';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
+import { ExportDialog } from './ExportDialog';
 import type { ImportFile } from './profileImport';
 
 // The profile list on the Characters board: one 38 px row per profile
@@ -49,7 +51,9 @@ import type { ImportFile } from './profileImport';
 // that profile. It never switches the live session. Each row has a
 // more menu (SPEC 7) that switches, renames, duplicates, exports, and
 // deletes, and a quiet line under the list says what the last action
-// did when that is not plain to see. Import… beside New profile reads a
+// did when that is not plain to see. Export to Downloads first asks
+// which characters the file names, when the profile has any. Import…
+// beside New profile reads a
 // Vosh profile export you pick (board 5 of the Scripts design), and the
 // page shows its sheet. A file that is no export reads as such on the
 // line under the list.
@@ -105,6 +109,7 @@ export function ProfileList({
   const [editing, setEditing] = useState<Editing | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<{ name: string; characters: string[] } | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
@@ -289,11 +294,19 @@ export function ProfileList({
     }
   };
 
-  const exportProfile = (name: string) =>
+  const saveExport = (name: string, characters: string[]) =>
     void run(async () => {
-      const saved = await profileExportFile(name);
+      const saved = await profileExportFile(name, characters);
       onStatus(`Vosh saved ${saved.file_name} in your Downloads folder.`);
     });
+
+  // A profile with characters on its world asks which ones the file
+  // names (Scripts Q10). One with none exports at once.
+  const exportProfile = (name: string) => {
+    const characters = exportCharacters(list.profiles.find((p) => p.name === name));
+    if (characters.length === 0) saveExport(name, []);
+    else setExporting({ name, characters });
+  };
 
   const deleteProfile = (name: string) => {
     setDeleting(null);
@@ -478,6 +491,18 @@ export function ProfileList({
             <span className={menuActive ? undefined : 'st-menu-danger'}>Delete…</span>
           </MenuItem>
         </MenuSurface>
+      )}
+
+      {exporting && (
+        <ExportDialog
+          name={exporting.name}
+          characters={exporting.characters}
+          onExport={(characters) => {
+            setExporting(null);
+            saveExport(exporting.name, characters);
+          }}
+          onCancel={() => setExporting(null)}
+        />
       )}
 
       {deleting && (
