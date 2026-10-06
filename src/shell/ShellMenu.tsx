@@ -190,44 +190,22 @@ interface ItemProps {
   children: ReactNode;
   /** Shortcut label drawn at the right, like ⌘R. */
   shortcut?: string | undefined;
-  /** Drawn at the right before the shortcut, like a check. */
-  trailing?: ReactNode;
-  /** The row names the thing in front, as the session popover's list
-   *  marks the selected session. */
-  current?: boolean;
   danger?: boolean;
   disabled?: boolean;
   onSelect: () => void;
 }
 
-export function ShellMenuItem({
-  children,
-  shortcut,
-  trailing,
-  current,
-  danger,
-  disabled,
-  onSelect,
-}: ItemProps) {
-  const kbd = shortcut && <kbd className="shell-menu-kbd">{shortcut}</kbd>;
+export function ShellMenuItem({ children, shortcut, danger, disabled, onSelect }: ItemProps) {
   return (
     <button
       type="button"
       role="menuitem"
       className={`shell-menu-item${danger ? ' is-danger' : ''}`}
-      aria-current={current ? 'true' : undefined}
       disabled={disabled}
       onClick={onSelect}
     >
       <span className="shell-menu-label">{children}</span>
-      {trailing ? (
-        <span className="shell-menu-side">
-          {trailing}
-          {kbd}
-        </span>
-      ) : (
-        kbd
-      )}
+      {shortcut && <kbd className="shell-menu-kbd">{shortcut}</kbd>}
     </button>
   );
 }
