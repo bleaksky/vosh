@@ -145,7 +145,7 @@ describe('the session popover with the sidebar folded', () => {
 
   it('lists every session under SESSIONS before the board 4 rows, as frame b8-narrow draws it', async () => {
     // A tell rang in Orla's session behind.
-    store.states.set(2, { alert: true });
+    store.states.set(2, { waiting: ['preset:alert_tells'] });
     const { menu, items } = await mount(true);
     expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
     expect(items.map((el) => el.textContent)).toEqual([

@@ -124,8 +124,8 @@ describe('the sessions sidebar', () => {
   });
 
   it('marks a row behind for new lines and alerts, with the dot in the meta place', () => {
-    states.set(1, { lines: true, alert: true });
-    states.set(2, { lines: true, alert: true });
+    states.set(1, { lines: true, waiting: ['preset:alert_tells'] });
+    states.set(2, { lines: true, waiting: ['preset:alert_tells'] });
     states.set(3, { lines: true, playing: true });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
     // The selected row shows neither.

@@ -61,7 +61,7 @@ const output = (session: number, text: string, id: number | null = 7) =>
   fire('session://output', { session, b64: btoa(text), ...(id === null ? {} : { id }) });
 
 /** An alert that rang in a session, as alert.rs sends it. */
-const alert = (session: number) =>
+const alert = (session: number, source = 'preset:alert_tells') =>
   fire('session://alert', {
     session,
     title: 'Tell from Maren',
@@ -70,9 +70,12 @@ const alert = (session: number) =>
     sound: null,
     banner: true,
     notice: false,
-    source: 'preset:alert_tells',
+    source,
     owner: null,
   });
+/** Something an alert would ring that rang nothing, as alert.rs sends
+ *  it. */
+const mark = (session: number, source: string) => fire('session://mark', { session, source });
 
 const connecting = (session: number, host = PLAY) =>
   fire('session://state', { session, kind: 'connecting', host, port: 1825, tls: false });
@@ -106,8 +109,8 @@ describe('the marks on a session row', () => {
   it('brighten the name of a session behind for a line from the game', async () => {
     const { rows } = await load();
     output(ORLA, 'A Blackwatch villager scurries about, taking care of business.\n\r');
-    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: true, alert: false });
-    expect(rows.getSessionRow(TOLLIVER)).toMatchObject({ lines: false, alert: false });
+    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: true, waiting: [] });
+    expect(rows.getSessionRow(TOLLIVER)).toMatchObject({ lines: false, waiting: [] });
   });
 
   it('never count a prompt alone or an echo of Vosh', async () => {
@@ -120,24 +123,30 @@ describe('the marks on a session row', () => {
   it('show the dot for an alert that rang in a session behind', async () => {
     const { rows, look } = await load();
     alert(ORLA);
-    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, alert: true });
+    expect(rows.getSessionRow(ORLA)).toMatchObject({
+      lines: false,
+      waiting: ['preset:alert_tells'],
+    });
     expect(look(row())).toEqual({ glyph: 'dot', tone: null });
   });
 
   it('show the dot for something an alert that is off would ring', async () => {
     const { rows, look } = await load();
-    fire('session://mark', { session: ORLA, source: 'preset:alert_tells' });
-    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, alert: true });
+    mark(ORLA, 'preset:alert_tells');
+    expect(rows.getSessionRow(ORLA)).toMatchObject({
+      lines: false,
+      waiting: ['preset:alert_tells'],
+    });
     expect(look(row())).toEqual({ glyph: 'dot', tone: null });
-    fire('session://mark', { session: TOLLIVER, source: 'preset:alert_tells' });
-    expect(rows.getSessionRow(TOLLIVER).alert).toBe(false);
+    mark(TOLLIVER, 'preset:alert_tells');
+    expect(rows.getSessionRow(TOLLIVER).waiting).toEqual([]);
   });
 
   it('never mark the selected session', async () => {
     const { rows } = await load();
     output(TOLLIVER, 'The Bank of Aabahran\n\r');
     alert(TOLLIVER);
-    expect(rows.getSessionRow(TOLLIVER)).toMatchObject({ lines: false, alert: false });
+    expect(rows.getSessionRow(TOLLIVER)).toMatchObject({ lines: false, waiting: [] });
   });
 
   it('clear as the session is selected, and stay clear while it shows', async () => {
@@ -146,7 +155,7 @@ describe('the marks on a session row', () => {
     alert(ORLA);
     expect(look(row())).toEqual({ glyph: 'dot', tone: 'new' });
     sessions.select(ORLA);
-    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, alert: false });
+    expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, waiting: [] });
     output(ORLA, '[Exits: south]\n\r');
     alert(ORLA);
     expect(look(row())).toEqual({ glyph: null, tone: null });
@@ -160,6 +169,105 @@ describe('the marks on a session row', () => {
     output(ORLA, 'The Bank of Aabahran\n\r');
     disconnected(ORLA, 'server closed connection');
     expect(rows.getSessionRow(ORLA).lines).toBe(true);
+  });
+});
+
+describe('what waits in a session row', () => {
+  it('counts each tell, and names what waits in plain words', async () => {
+    const { rows } = await load();
+    alert(ORLA);
+    mark(ORLA, 'preset:alert_tells');
+    expect(rows.getSessionRow(ORLA).waiting).toHaveLength(2);
+    expect(rows.waitingWords(rows.getSessionRow(ORLA).waiting)).toBe('2 tells');
+    mark(ORLA, 'preset:alert_attacked');
+    mark(ORLA, 'preset:alert_name');
+    expect(rows.waitingWords(rows.getSessionRow(ORLA).waiting)).toBe(
+      '2 tells, your name came up, a fight started',
+    );
+  });
+
+  it('counts low health once however often it falls', async () => {
+    const { rows } = await load();
+    mark(ORLA, 'preset:alert_attacked');
+    alert(ORLA, 'preset:alert_low_health');
+    mark(ORLA, 'preset:alert_low_health');
+    const { waiting } = rows.getSessionRow(ORLA);
+    expect(waiting).toEqual(['preset:alert_attacked', 'preset:alert_low_health']);
+    expect(rows.waitingWords(waiting)).toBe('A fight started, health is low');
+  });
+
+  it('never counts the connection, a trigger or Lua', async () => {
+    const { rows } = await load();
+    alert(ORLA, 'preset:alert_connection');
+    mark(ORLA, 'preset:alert_connection');
+    mark(ORLA, 'trigger:visitor');
+    alert(ORLA, 'lua:plugin:vitals_alert');
+    expect(rows.getSessionRow(ORLA).waiting).toEqual([]);
+    expect(rows.waitingWords([])).toBeNull();
+  });
+
+  it('clears as you select the session, and totals the others for the band', async () => {
+    const { sessions, rows } = await load();
+    const list = [row({ id: TOLLIVER }), row()];
+    mark(ORLA, 'preset:alert_tells');
+    mark(ORLA, 'preset:alert_attacked');
+    expect(rows.waitingElsewhere(list, TOLLIVER)).toBe(2);
+    expect(rows.waitingElsewhere(list, ORLA)).toBe(0);
+    sessions.select(ORLA);
+    expect(rows.getSessionRow(ORLA).waiting).toEqual([]);
+    mark(TOLLIVER, 'preset:alert_name');
+    expect(rows.waitingElsewhere(list, ORLA)).toBe(1);
+  });
+});
+
+describe('the link of a session row', () => {
+  it('keeps when the link dropped through a redial that stopped, until a connect', async () => {
+    const { rows } = await load();
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    connected(ORLA);
+    expect(rows.getSessionRow(ORLA).downAt).toBeNull();
+    disconnected(ORLA, 'server closed connection');
+    vi.spyOn(Date, 'now').mockReturnValue(5000);
+    redial(ORLA, { kind: 'dialing', try: 1, tries: 8 });
+    connecting(ORLA);
+    disconnected(ORLA, 'io error: Connection refused (os error 61)');
+    redial(ORLA, { kind: 'stopped', tries: 8 });
+    expect(rows.getSessionRow(ORLA).downAt).toBe(1000);
+    connecting(ORLA);
+    connected(ORLA);
+    expect(rows.getSessionRow(ORLA).downAt).toBeNull();
+    // Your Disconnect is no drop.
+    disconnected(ORLA, null);
+    expect(rows.getSessionRow(ORLA).downAt).toBeNull();
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the time a first dial failed', async () => {
+    const { rows } = await load();
+    vi.spyOn(Date, 'now').mockReturnValue(2000);
+    connecting(ORLA);
+    disconnected(ORLA, 'io error: Connection refused (os error 61)');
+    expect(rows.getSessionRow(ORLA).downAt).toBe(2000);
+    vi.restoreAllMocks();
+  });
+
+  it('carries the try a redial is on while it waits and dials', async () => {
+    const { rows } = await load();
+    const tried = () => {
+      const { try: on, tries } = rows.getSessionRow(ORLA);
+      return [on, tries];
+    };
+    redial(ORLA, { kind: 'waiting', try: 3, tries: 8, seconds: 12 });
+    expect(tried()).toEqual([3, 8]);
+    redial(ORLA, { kind: 'dialing', try: 3, tries: 8 });
+    expect(tried()).toEqual([3, 8]);
+    redial(ORLA, { kind: 'failed', try: 3, tries: 8, reason: 'connection refused' });
+    expect(tried()).toEqual([3, 8]);
+    redial(ORLA, { kind: 'reached', try: 4 });
+    expect(tried()).toEqual([null, null]);
+    redial(ORLA, { kind: 'waiting', try: 1, tries: 8, seconds: 3 });
+    redial(ORLA, { kind: 'cancelled' });
+    expect(tried()).toEqual([null, null]);
   });
 });
 
@@ -290,22 +398,27 @@ describe('which glyph a row shows', () => {
     reached: false,
     playing: false,
     lines: false,
-    alert: false,
+    waiting: [],
+    downAt: null,
+    try: null,
+    tries: null,
   } as const;
 
   it('puts the triangle first, then the hand, then the spinner, then the dot', async () => {
     const { rows } = await load();
     const glyph = (state: object, of = LOGIN, selected = false) =>
       rows.rowLook({ ...quiet, ...state }, of, selected).glyph;
-    expect(glyph({ link: 'failed', redialing: true, alert: true })).toBe('triangle');
-    expect(glyph({ link: 'live', redialing: true, alert: true })).toBe('hand');
-    expect(glyph({ link: 'dialing', alert: true })).toBe('spinner');
-    expect(glyph({ link: 'live', alert: true }, row())).toBe('dot');
+    expect(glyph({ link: 'failed', redialing: true, waiting: ['preset:alert_tells'] })).toBe(
+      'triangle',
+    );
+    expect(glyph({ link: 'live', redialing: true, waiting: ['preset:alert_tells'] })).toBe('hand');
+    expect(glyph({ link: 'dialing', waiting: ['preset:alert_tells'] })).toBe('spinner');
+    expect(glyph({ link: 'live', waiting: ['preset:alert_tells'] }, row())).toBe('dot');
   });
 
   it('never shows the dot or a tone on the selected row, and still shows its link', async () => {
     const { rows } = await load();
-    const marked = { ...quiet, lines: true, alert: true };
+    const marked = { ...quiet, lines: true, waiting: ['preset:alert_tells'] };
     expect(rows.rowLook(marked, row(), true)).toEqual({ glyph: null, tone: null });
     expect(rows.rowLook({ ...marked, link: 'dialing' }, row(), true)).toEqual({
       glyph: 'spinner',

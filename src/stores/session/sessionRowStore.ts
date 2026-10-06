@@ -23,11 +23,17 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 //
 // A session you are not looking at earns two marks (Q9). Its name
 // brightens once the game prints a line there, and the dot shows once
-// something for you happens there, the events the alert presets watch
-// whether or not their alerts are on, and any alert a trigger or Lua
-// raises. One that rings comes as session://alert, and one that rings
-// nothing as session://mark. Selecting the session clears both, and
-// the selected row never takes either.
+// something for you happens there. The row keeps each such thing as
+// what waits for you (S4 of the Sessions Sidebar review): a tell, your
+// name, a fight that starts on you and low health, the events four of
+// the alert presets watch whether or not their alerts are on. One that
+// rings comes as session://alert, and one that rings nothing as
+// session://mark, each with its source. Each tell, name and fight counts,
+// and low health counts once however often it falls, since it is a
+// state. The connection preset never counts, since a session in trouble
+// shows it in its glyph, and neither does an alert of a trigger or Lua.
+// Selecting the session clears both marks, and the selected row never
+// takes either.
 //
 // The link follows session://state and session://reconnect. Until an
 // event of the session names it, a row reads the link from the session
@@ -36,6 +42,9 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 // every try of a redial and a disconnect, and forgets it at a connect
 // you start, so a redial that reached the game shows the hand on a row
 // that still names its character.
+//
+// The row also keeps when its link went down, for how long ago it
+// dropped, and the try a redial is on out of how many.
 
 /** Where a session's link stands, as its events last said. `failed`
  *  needs you to connect again yourself. */
@@ -56,9 +65,20 @@ export interface SessionRowState {
   playing: boolean;
   /** The game printed a line since you last looked. */
   lines: boolean;
-  /** An alert rang since you last looked. */
-  alert: boolean;
+  /** The source of each thing that waits for you, such as
+   *  `preset:alert_tells`, in the order they came since you last
+   *  looked. */
+  waiting: readonly string[];
+  /** When a drop or a failed dial took the link down, by Date.now, kept
+   *  through a redial until a connect. */
+  downAt: number | null;
+  /** The try a redial is on and how many it has, while it waits, dials
+   *  or just failed one. */
+  try: number | null;
+  tries: number | null;
 }
+
+const NOTHING: readonly string[] = [];
 
 const QUIET: SessionRowState = {
   link: null,
@@ -66,7 +86,10 @@ const QUIET: SessionRowState = {
   reached: false,
   playing: false,
   lines: false,
-  alert: false,
+  waiting: NOTHING,
+  downAt: null,
+  try: null,
+  tries: null,
 };
 
 /** `now` with `changes` laid over it, or `now` itself when nothing in
@@ -84,13 +107,23 @@ function linked(now: SessionRowState, payload: StatePayload): SessionRowState {
     case 'connecting':
       return moved(now, { link: 'dialing', reached: false, playing: false });
     case 'connected':
-      return moved(now, { link: 'live', playing: false });
+      return moved(now, { link: 'live', playing: false, downAt: null });
     case 'disconnected': {
       const refused = !now.redialing && now.link === 'dialing' && !!payload.reason;
-      return moved(now, { link: refused ? 'failed' : 'down', reached: false, playing: false });
+      // A drop or a refusal gives a reason, and your Disconnect none.
+      const downAt = now.downAt ?? (payload.reason ? Date.now() : null);
+      return moved(now, {
+        link: refused ? 'failed' : 'down',
+        reached: false,
+        playing: false,
+        downAt,
+      });
     }
   }
 }
+
+/** A redial series that ended. */
+const ENDED = { redialing: false, try: null, tries: null } as const;
 
 /** The steps of a redial (Alerts Q13 and Sessions Q8). */
 function redialed(now: SessionRowState, payload: ReconnectPayload): SessionRowState {
@@ -98,16 +131,16 @@ function redialed(now: SessionRowState, payload: ReconnectPayload): SessionRowSt
     case 'waiting':
     case 'dialing':
     case 'failed':
-      return moved(now, { redialing: true });
+      return moved(now, { redialing: true, try: payload.try, tries: payload.tries });
     case 'reached':
-      return moved(now, { redialing: false, reached: true, link: 'live' });
+      return moved(now, { ...ENDED, reached: true, link: 'live' });
     case 'stopped':
-      return moved(now, { redialing: false, link: 'failed' });
+      return moved(now, { ...ENDED, link: 'failed' });
     case 'declined':
-      return moved(now, { redialing: false, link: payload.why === 'off' ? 'failed' : 'down' });
+      return moved(now, { ...ENDED, link: payload.why === 'off' ? 'failed' : 'down' });
     case 'cancelled':
       // A cancel can cut a try short as it dials, so no state follows.
-      return moved(now, { redialing: false, link: now.link === 'live' ? 'live' : 'down' });
+      return moved(now, { ...ENDED, link: now.link === 'live' ? 'live' : 'down' });
   }
 }
 
@@ -119,9 +152,23 @@ const shown = (session: number) => session === getSelected();
 /** Applies a change to the row of the session it names. */
 type Apply = (session: number, change: (now: SessionRowState) => SessionRowState) => void;
 
-/** Put the dot on the row of `session`, unless it shows. */
-function mark(apply: Apply, session: number): void {
-  if (!shown(session)) apply(session, (now) => moved(now, { alert: true }));
+const TELLS = 'preset:alert_tells';
+const NAME = 'preset:alert_name';
+const ATTACKED = 'preset:alert_attacked';
+const LOW_HEALTH = 'preset:alert_low_health';
+
+/** The sources that count as waiting for you. */
+const COUNTED = new Set([TELLS, NAME, ATTACKED, LOW_HEALTH]);
+
+/** Add what `source` says waits on the row of `session`, unless the
+ *  session shows or the source does not count. */
+function mark(apply: Apply, session: number, source: string): void {
+  if (shown(session) || !COUNTED.has(source)) return;
+  apply(session, (now) =>
+    source === LOW_HEALTH && now.waiting.includes(LOW_HEALTH)
+      ? now
+      : { ...now, waiting: [...now.waiting, source] },
+  );
 }
 
 /** Whether a line from the game would mark the session's row, so a
@@ -138,11 +185,11 @@ const store = createSessionStore<SessionRowState>({
     (apply) => onReconnect((payload, session) => apply(session, (now) => redialed(now, payload))),
     (apply) =>
       onGameLine(waitsForLines, (session) => apply(session, (now) => moved(now, { lines: true }))),
-    (apply) => onAlert((session) => mark(apply, session)),
-    (apply) => onMark((session) => mark(apply, session)),
+    (apply) => onAlert((session, source) => mark(apply, session, source)),
+    (apply) => onMark((session, source) => mark(apply, session, source)),
     (apply) =>
       subscribeSelected(() =>
-        apply(getSelected(), (now) => moved(now, { lines: false, alert: false })),
+        apply(getSelected(), (now) => moved(now, { lines: false, waiting: NOTHING })),
       ),
   ],
 });
@@ -159,6 +206,36 @@ const subscribeRows = (cb: () => void) => store.subscribeStates(() => cb());
 export function useSessionRow(session: number): SessionRowState {
   const get = () => getSessionRow(session);
   return useSyncExternalStore(subscribeRows, get, get);
+}
+
+/** How many of `source` wait in `waiting`. */
+const many = (waiting: readonly string[], source: string) =>
+  waiting.filter((heard) => heard === source).length;
+
+/** What waits for you in plain words, for the hover card, such as A
+ *  fight started, health is low. Null when nothing waits. */
+export function waitingWords(waiting: readonly string[]): string | null {
+  const tells = many(waiting, TELLS);
+  const names = many(waiting, NAME);
+  const fights = many(waiting, ATTACKED);
+  const words = [
+    tells === 1 ? 'a tell' : tells > 1 ? `${tells} tells` : null,
+    names === 1 ? 'your name came up' : names > 1 ? `your name came up ${names} times` : null,
+    fights === 1 ? 'a fight started' : fights > 1 ? `${fights} fights started` : null,
+    waiting.includes(LOW_HEALTH) ? 'health is low' : null,
+  ]
+    .filter((part) => part !== null)
+    .join(', ');
+  return words ? words[0].toUpperCase() + words.slice(1) : null;
+}
+
+/** How many things wait for you in every session of `rows` but the
+ *  selected one, for the session button in the title band. */
+export function waitingElsewhere(rows: readonly SessionRow[], selected: number): number {
+  return rows.reduce(
+    (sum, row) => (row.id === selected ? sum : sum + getSessionRow(row.id).waiting.length),
+    0,
+  );
 }
 
 /** The glyph a row shows at its right, in the meta's place. */
@@ -189,7 +266,7 @@ export function rowLook(state: SessionRowState, row: SessionRow, selected: boole
         ? 'hand'
         : busy
           ? 'spinner'
-          : state.alert && !selected
+          : state.waiting.length > 0 && !selected
             ? 'dot'
             : null;
   if (selected) return { glyph, tone: null };
