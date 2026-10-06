@@ -242,12 +242,16 @@ describe('the link of a session row', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps the time a first dial failed', async () => {
+  it('keeps the time a first dial failed, and that it never reached the game', async () => {
     const { rows } = await load();
     vi.spyOn(Date, 'now').mockReturnValue(2000);
     connecting(ORLA);
     disconnected(ORLA, 'io error: Connection refused (os error 61)');
-    expect(rows.getSessionRow(ORLA).downAt).toBe(2000);
+    expect(rows.getSessionRow(ORLA)).toMatchObject({ downAt: 2000, refused: true });
+    connecting(ORLA);
+    connected(ORLA);
+    disconnected(ORLA, 'server closed connection');
+    expect(rows.getSessionRow(ORLA).refused).toBe(false);
     vi.restoreAllMocks();
   });
 
@@ -401,6 +405,7 @@ describe('which mark a row shows', () => {
     lines: false,
     waiting: [],
     downAt: null,
+    refused: false,
     try: null,
     tries: null,
   } as const;
@@ -435,7 +440,13 @@ describe('which mark a row shows', () => {
         { mark: 'spinner' },
       ],
       ['dropped', { link: 'failed', downAt: 1000 }, row(), false, { mark: 'triangle' }],
-      ['could not connect', { link: 'failed' }, row(), false, { mark: 'triangle' }],
+      [
+        'could not connect',
+        { link: 'failed', downAt: 1000, refused: true },
+        row(),
+        false,
+        { mark: 'triangle' },
+      ],
       ['not connected', { link: 'down' }, row(), false, { mark: 'off', tone: 'off' }],
       [
         'not connected, from the list',

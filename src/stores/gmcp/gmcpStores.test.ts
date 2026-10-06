@@ -113,6 +113,25 @@ describe('a GMCP store with two sessions', () => {
     expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900 });
   });
 
+  it('reads the room, fight and vitals of a session behind for its row', async () => {
+    const s = await load();
+    const room = aabahranPacket('room-info.gmcp');
+    const fight = aabahranPacket('char-combat.gmcp');
+    const heard: number[] = [];
+    s.room.subscribeRoomOf((session) => heard.push(session));
+    gmcp(ORLA, room.package, room.data);
+    gmcp(ORLA, fight.package, fight.data);
+    vitals(ORLA, 162, 900);
+    expect(heard).toEqual([ORLA]);
+    expect(s.room.getRoomOf(ORLA)?.name).toBe('The Bank of Aabahran');
+    expect(s.combat.getCombatOf(ORLA)?.name).toBe('a Blackwatch guard');
+    expect(s.vitals.getVitalsOf(ORLA)).toMatchObject({ hp: 162, maxhp: 900, low: { hp: true } });
+    expect(s.room.getRoomOf(TOLLIVER)).toBeNull();
+    expect(s.combat.getCombatOf(TOLLIVER)).toBeNull();
+    expect(s.vitals.getVitalsOf(TOLLIVER)).toBeNull();
+    expect(s.room.getRoom().info).toBeNull();
+  });
+
   it('gives each session its own chat, room and game time', async () => {
     const s = await load();
     const tell = aabahranChatPacket('tell.gmcp');
