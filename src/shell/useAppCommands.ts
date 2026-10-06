@@ -20,7 +20,7 @@ import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import type { PaneType } from '../panel/paneLayout';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
-import { getSelected, select, sessionAt, sessionStep } from '../stores/session/sessionsStore';
+import { goTo, sessionAt, sessionStep } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
   getNativeScroll,
@@ -85,11 +85,6 @@ interface AppCommands {
   runCommand: (id: string, opts?: { repeat?: boolean }) => void;
   /** Another window changed the custom themes, which the menu bar lists. */
   themesChanged: () => void;
-}
-
-/** Bring `session` to the front, unless it is there or missing. */
-function goTo(session: number | null): void {
-  if (session !== null && session !== getSelected()) void select(session);
 }
 
 export function useAppCommands({
