@@ -31,7 +31,13 @@ The session button reports the connection through its status dot. The dot turns 
 - Scroll up or press `PageUp` to read output from before the drop. The terminal scrollback survives a disconnect, and nothing clears it unless you choose `Clear scrollback` yourself.
 - To stage commands while offline, type the first command, press `Shift+Enter` to stack more lines under it, and leave the block in the command line. After you reconnect, press `Enter` once and each line submits separately, in order.
 
-When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed. While a try waits, a notice at the bottom right counts down to it, and `Reconnect now`, `Cmd+R` or the `Connect to` row dials at once. `Cancel` or `Disconnect` ends the tries. Each profile reconnects until you turn off `Reconnect when the link drops` in Settings under General, then Connection. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
+When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed.
+
+While Vosh dials again, a notice at the bottom right shows how it goes for the session in front. It counts down to each try, such as `Reconnecting in 6s` with `Try 2 of 8`. Click `Reconnect now`, press `Cmd+R` on macOS or `Ctrl+R` elsewhere, or choose the `Connect to` row to dial at once. `Cancel` or `Disconnect` ends the tries. While a try dials, the notice reads `Connecting`. When all 8 fail, it reads `Vosh stopped after 8 tries`, and `Try again` dials the world once more. Through every try the status dot keeps its error ring.
+
+When the link drops and Vosh will not dial again, a notice reads `Vosh will not reconnect` and says why, such as `you quit`, `the game banned this account` or `another session took Orla`.
+
+To stop the redial for a profile, turn off `Reconnect when the link drops` in Settings under General, then Connection. A drop then shows only `Connection lost`. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
 
 Two things reset between connections. The chat pane empties when you choose `Disconnect` or connect to another world. A drop keeps it, so your tells are still there once Vosh reconnects. Session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
 
@@ -105,7 +111,7 @@ A glyph takes the place of the port while a session is not ready to play.
 
 A session that is not connected shows its name in grey. A row shows one glyph at a time, the triangle first, then the hand, then the spinner, then the dot.
 
-The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
+The tick sound plays only for the session in front, and the `Connected`, `Connection lost` and reconnect notices speak for it alone.
 
 Each session keeps these of its own.
 
@@ -125,7 +131,7 @@ Settings edits the profile of the session in front. With two or more sessions op
 
 When you bring a session on another profile to the front while a list under Automation holds unsaved changes, Settings stays on the profile you were editing. Its header keeps naming that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile Orla plays. Each change you make in Settings saves to the profile it was made on, whichever session is in front by the time it lands.
 
-Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
+Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. Its `Reconnect when the link drops` row belongs to the profile, so it reaches every session on it. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
 
 To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
@@ -868,7 +874,7 @@ The session button in the title band holds the connection controls. Its dot show
 - Choose `Edit connection…` to check the address of this session. The form holds `Host`, `Port`, and `Use TLS`, and the defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
 - Choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere.
 
-`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
+`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows. Its `Reconnect when the link drops` row turns the redial after a drop on or off for the profile of that session.
 
 Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you choose `Disconnect` or connect to another world, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
