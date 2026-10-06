@@ -1,5 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import { gamePromptToast, lostPartsToast } from './gamePromptToast';
+import { describe, expect, it, vi } from 'vitest';
+import { pushToast } from '../stores/toasts';
+import { gamePromptToast, lostPartsToast, startGamePromptToasts } from './gamePromptToast';
+
+type Handler = (event: { payload: unknown }) => void;
+const handlers = new Map<string, Set<Handler>>();
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (event: string, cb: Handler) => {
+    let set = handlers.get(event);
+    if (!set) handlers.set(event, (set = new Set()));
+    set.add(cb);
+    return () => set.delete(cb);
+  },
+  emit: async () => undefined,
+}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: async () => [] }));
+vi.mock('../stores/toasts', () => ({ pushToast: vi.fn() }));
+
+function fire(event: string, payload: unknown): void {
+  for (const cb of handlers.get(event) ?? []) cb({ payload });
+}
 
 describe('gamePromptToast', () => {
   it('names the codes your capture took', () => {
@@ -49,5 +69,18 @@ describe('lostPartsToast', () => {
     expect(
       lostPartsToast({ kind: 'gmcp', text: '[%h]', applied: false, lost: ['tank_hp'] }),
     ).toBeNull();
+  });
+});
+
+describe('the toasts for a new prompt', () => {
+  it('speak only for the session in front', async () => {
+    const stop = await startGamePromptToasts();
+    const seen = { kind: 'gmcp', text: '%h %m ', applied: true, lost: [] };
+    // Before the list comes, the first session is in front.
+    fire('session://game-prompt-seen', { session: 2, ...seen });
+    expect(pushToast).not.toHaveBeenCalled();
+    fire('session://game-prompt-seen', { session: 1, ...seen });
+    expect(pushToast).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

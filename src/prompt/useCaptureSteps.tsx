@@ -34,6 +34,8 @@ import { PointName, PointPick, type PointedLine } from './PromptPoint';
 
 /** What the steps read from the card and change in it. */
 interface StepsCard {
+  /** The session whose prompt the card works on. */
+  session: number;
   step: CardStep | null;
   setStep: (step: CardStep) => void;
   state: PromptState | null;
@@ -61,6 +63,7 @@ interface StepsCard {
  *  as it opens again for another profile, changeCodes and
  *  chooseCodeReader from More, and forget once you confirm Forget. */
 export function useCaptureSteps({
+  session,
   step,
   setStep,
   state,
@@ -143,7 +146,7 @@ export function useCaptureSteps({
     save(withCapture(config, next));
     setStep('start');
     if (first) {
-      void promptLineTriggers(next)
+      void promptLineTriggers(next, session)
         .then(setLineTriggers)
         .catch(() => setLineTriggers([]));
     }
@@ -187,7 +190,7 @@ export function useCaptureSteps({
   useEffect(() => {
     if (step !== 'codes-entry' || !noRow) return;
     let alive = true;
-    void promptCandidates()
+    void promptCandidates(session)
       .then((groups) => {
         const entries = groups.flatMap((g) => g.entries);
         const latest = entries.reduce<(typeof entries)[number] | null>(
@@ -200,7 +203,7 @@ export function useCaptureSteps({
     return () => {
       alive = false;
     };
-  }, [step, noRow, refresh]);
+  }, [step, noRow, refresh, session]);
   const screen = useMemo<ScreenAsk | null>(() => {
     if (step === 'point' || step === 'name') return pointShown;
     if (!noRow) return null;
@@ -242,6 +245,7 @@ export function useCaptureSteps({
         body = (
           <CodesEntry
             key="codes-entry"
+            session={session}
             initial={entryCodes}
             onRead={(next) => {
               setRequest(next);
@@ -258,6 +262,7 @@ export function useCaptureSteps({
       case 'codes':
         body = codes ? (
           <CodesRead
+            session={session}
             request={codes}
             sourceLine={codes.source === 'gmcp' ? codesSourceLine(game) : null}
             capture={config.capture}
@@ -284,6 +289,7 @@ export function useCaptureSteps({
       case 'point':
         body = (
           <PointPick
+            session={session}
             start={pickFrom}
             onRead={(line, group) => {
               setPointed(line);
@@ -297,6 +303,7 @@ export function useCaptureSteps({
       case 'name':
         body = pointed ? (
           <PointName
+            session={session}
             line={pointed}
             onUse={useNames}
             onPickAnother={() => {

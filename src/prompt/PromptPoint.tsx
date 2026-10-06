@@ -37,6 +37,8 @@ export interface PointedLine {
 }
 
 interface PointPickProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   /** The group to propose first. */
   start: number;
   onRead: (line: PointedLine, group: number) => void;
@@ -46,12 +48,12 @@ interface PointPickProps {
 
 /** B2: the line that came right before your commands most often, which
  *  Vosh proposes as your prompt. */
-export function PointPick({ start, onRead, onShow }: PointPickProps) {
+export function PointPick({ session, start, onRead, onShow }: PointPickProps) {
   const [groups, setGroups] = useState<PromptCandidateGroup[] | null>(null);
   const [at, setAt] = useState(start);
   useEffect(() => {
     let alive = true;
-    void promptCandidates()
+    void promptCandidates(session)
       .then((next) => {
         if (alive) setGroups(next);
       })
@@ -59,7 +61,7 @@ export function PointPick({ start, onRead, onShow }: PointPickProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [session]);
   const count = groups?.length ?? 0;
   const group = count > 0 ? groups![at % count] : null;
   const proposed = group?.entries[0]?.plain ?? null;
@@ -111,6 +113,8 @@ export function PointPick({ start, onRead, onShow }: PointPickProps) {
 }
 
 interface PointNameProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   /** The line you pointed at. */
   line: PointedLine;
   onUse: (report: PromptCompileReport) => void;
@@ -134,6 +138,7 @@ function charIndex(line: string, at: number): number {
 /** A2: the line with each number marked and a menu under each pair that
  *  names the value it reads. */
 export function PointName({
+  session,
   line,
   onUse,
   onPickAnother,
@@ -159,7 +164,7 @@ export function PointName({
 
   useEffect(() => {
     let alive = true;
-    void promptCaptureFromLine(shownId, names ?? undefined)
+    void promptCaptureFromLine(shownId, names ?? undefined, session)
       .then((next) => {
         if (alive) setReport(next);
       })
@@ -167,18 +172,21 @@ export function PointName({
     return () => {
       alive = false;
     };
-  }, [shownId, names]);
+  }, [shownId, names, session]);
 
   const shape = report?.ok ? report.shapes[0] : null;
   useEffect(() => {
     if (!shape || !report) return;
     let alive = true;
-    void promptCaptureCheck({
-      kind: 'regex',
-      lines: shape.lines,
-      settle: shape.settle,
-      names: report.names,
-    })
+    void promptCaptureCheck(
+      {
+        kind: 'regex',
+        lines: shape.lines,
+        settle: shape.settle,
+        names: report.names,
+      },
+      session,
+    )
       .then((next) => {
         if (!alive) return;
         setCheck(next);
@@ -190,7 +198,7 @@ export function PointName({
     };
     // The pattern decides the check, not the numbers' names.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shape?.lines.join('\n'), shape?.settle, report?.names, refresh]);
+  }, [shape?.lines.join('\n'), shape?.settle, report?.names, refresh, session]);
 
   const raw = shown.raw;
   const plain = shown.plain.split('\n').pop() ?? '';

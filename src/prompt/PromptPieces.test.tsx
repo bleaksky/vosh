@@ -496,6 +496,7 @@ describe('the picker', () => {
     };
     const html = renderToStaticMarkup(
       <PromptPicker
+        session={1}
         state={state}
         preview="now"
         env={NORD}
@@ -596,6 +597,7 @@ describe('the start list while your design follows the game', () => {
   ];
   const starts = (mirror: boolean, template: string) => (
     <Starts
+      session={1}
       mode="start"
       config={{
         draw: false,
@@ -646,6 +648,7 @@ describe('the card at rest', () => {
   ) =>
     renderToStaticMarkup(
       <Starts
+        session={1}
         mode="rest"
         config={{
           draw: true,

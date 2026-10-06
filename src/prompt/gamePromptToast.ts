@@ -1,4 +1,5 @@
 import { onGamePromptSeen, type GamePromptSeenPayload } from '../ipc/prompt';
+import { getSelected } from '../stores/session/sessionsStore';
 import { pushToast, type ToastInput } from '../stores/toasts';
 import { listJoin } from '../lib/text';
 
@@ -6,7 +7,8 @@ import { listJoin } from '../lib/text';
 // capture takes it, Vosh says so once with the codes it now reads. When
 // the new setting no longer shows a part your design reads and no
 // package sends it either, Vosh says that once too, and the card and
-// Settings ring that part (P14).
+// Settings ring that part (P14). Only the session in front, the selected
+// one, says so, since the toast names no session.
 
 /** The toast for one report, or null when the capture took nothing. */
 export function gamePromptToast(payload: GamePromptSeenPayload): ToastInput | null {
@@ -76,10 +78,11 @@ export function lostPartsToast(payload: GamePromptSeenPayload): ToastInput | nul
   };
 }
 
-/** Show the toasts for every setting your capture takes. Returns the
- *  function that stops listening. */
+/** Show the toasts for every setting the capture of the selected
+ *  session takes. Returns the function that stops listening. */
 export async function startGamePromptToasts(): Promise<() => void> {
-  return onGamePromptSeen((payload) => {
+  return onGamePromptSeen((payload, session) => {
+    if (session !== getSelected()) return;
     for (const toast of [gamePromptToast(payload), lostPartsToast(payload)]) {
       if (toast) pushToast(toast);
     }

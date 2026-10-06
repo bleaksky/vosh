@@ -1,10 +1,11 @@
-// Where your prompt shows, as the active profile's [prompt] table says,
-// and whether the profile reads a prompt at all. The Settings row, the
-// palette and the main window read it from prompt_show_get, and read it
-// again whenever something could have changed it: a command or a save
-// that changed the table, a profile switch, the game sending your
-// prompt settings, a change in whether Vosh reads your prompt, and a
-// connect or disconnect.
+// Where your prompt shows, as the [prompt] table of the selected
+// session's profile says, and whether it reads a prompt at all. The
+// Settings row, the palette and the main window read it from
+// prompt_show_get for the selected session, and read it again whenever
+// something could have changed it: a command or a save that changed the
+// table, a profile switch, the game sending your prompt settings, a
+// change in whether Vosh reads your prompt, a connect or disconnect, and
+// a selection. What a session behind hears changes nothing here.
 
 import { useEffect, useState } from 'react';
 import { subscribeProfileSwitched } from '../ipc/profiles';
@@ -17,11 +18,13 @@ import {
   type PromptShowState,
 } from '../ipc/prompt';
 import { onState } from '../ipc/session';
+import { getSelected, subscribeSelected } from '../stores/session/sessionsStore';
 
-/** Call `cb` on everything that can change where your prompt shows or
- *  whether the profile reads one. Returns the unsubscribe. */
+/** Call `cb` on everything that can change where the selected session's
+ *  prompt shows or whether its profile reads one. Returns the
+ *  unsubscribe. */
 export function subscribePromptShowChanges(cb: () => void): () => void {
-  const unlisteners: (() => void)[] = [];
+  const unlisteners: (() => void)[] = [subscribeSelected(cb)];
   let closed = false;
   const keep = (p: Promise<() => void>) => {
     void p.then((un) => {
@@ -29,26 +32,33 @@ export function subscribePromptShowChanges(cb: () => void): () => void {
       else unlisteners.push(un);
     });
   };
-  keep(subscribePromptConfigChanged(cb));
+  const shown = (session: number) => {
+    if (session === getSelected()) cb();
+  };
+  keep(subscribePromptConfigChanged(() => cb()));
   keep(subscribeProfileSwitched(() => cb()));
-  keep(onGamePromptSeen(() => cb()));
-  keep(onState(() => cb()));
-  keep(onPromptStatus(() => cb()));
+  keep(onGamePromptSeen((_payload, session) => shown(session)));
+  keep(onState((payload) => shown(payload.session)));
+  keep(onPromptStatus((_payload, session) => shown(session)));
   return () => {
     closed = true;
     for (const un of unlisteners) un();
   };
 }
 
-/** Where your prompt shows, or null until the first read lands. */
+/** Where the selected session's prompt shows, or null until the first
+ *  read lands. A read applies only when no newer one began, so the
+ *  answer for a session you left never replaces the one now selected. */
 export function usePromptShow(): PromptShowState | null {
   const [state, setState] = useState<PromptShowState | null>(null);
   useEffect(() => {
     let alive = true;
+    let reads = 0;
     const read = () => {
-      promptShowGet()
+      const mine = ++reads;
+      promptShowGet(getSelected())
         .then((next) => {
-          if (alive) setState(next);
+          if (alive && mine === reads) setState(next);
         })
         .catch(() => {});
     };
