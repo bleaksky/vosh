@@ -1,5 +1,3 @@
-import { useSyncExternalStore } from 'react';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
 import {
   DEFAULT_VITALS_OPTIONS,
   getUiConfig,
@@ -7,66 +5,31 @@ import {
   vitalsOptionsOf,
   type VitalsOptions,
 } from '../../ipc/uiConfig';
-import { createStore } from '../store';
+import { createConfigStore } from './configStore';
 
 // The active profile's vitals options for the panel footer and the
 // status line: Values, Meter, Warn before you run low, and Hide vitals
-// while your prompt is pinned from Settings, Layout, Vitals. Seeded from ui_get_config, kept live by
-// vosh://vitals-options-changed (a save from Settings, the broadcast
-// after a profile switch), and refetched on vosh://profile-switched in
-// case the switch lands without one. Density keeps its own store.
-
-const store = createStore<VitalsOptions>(DEFAULT_VITALS_OPTIONS);
-let started = false;
-// Bumped by every event. A config fetch applies only when no event
-// arrived after it started, so a slow fetch for the old profile cannot
-// overwrite the options the switch just delivered.
-let generation = 0;
+// while your prompt is pinned from Settings, Layout, Vitals. Density
+// keeps its own store.
 
 /** Keep the current snapshot when nothing in it moved, so the footer
  *  and the status line do not render again. */
-function put(next: VitalsOptions): void {
-  const prev = store.get();
-  if (
-    prev.values === next.values &&
-    prev.meter === next.meter &&
-    prev.warn_thirds === next.warn_thirds &&
-    prev.hide_when_pinned === next.hide_when_pinned
-  ) {
-    return;
-  }
-  store.set(next);
+function same(a: VitalsOptions, b: VitalsOptions): boolean {
+  return (
+    a.values === b.values &&
+    a.meter === b.meter &&
+    a.warn_thirds === b.warn_thirds &&
+    a.hide_when_pinned === b.hide_when_pinned
+  );
 }
 
-function refetch(): void {
-  const mine = ++generation;
-  getUiConfig()
-    .then((cfg) => {
-      if (mine === generation) put(vitalsOptionsOf(cfg));
-    })
-    .catch(() => undefined);
-}
+const store = createConfigStore<VitalsOptions>({
+  initial: DEFAULT_VITALS_OPTIONS,
+  read: () => getUiConfig().then(vitalsOptionsOf),
+  follow: subscribeVitalsOptionsChanged,
+  same,
+});
 
-export function startVitalsOptionsStore(): void {
-  if (started) return;
-  started = true;
-  refetch();
-  void subscribeVitalsOptionsChanged((options) => {
-    generation += 1;
-    put(options);
-  });
-  void subscribeProfileSwitched(() => refetch());
-}
-
-export function getVitalsOptions(): VitalsOptions {
-  return store.get();
-}
-
-export function subscribeVitalsOptions(cb: () => void): () => void {
-  startVitalsOptionsStore();
-  return store.subscribe(cb);
-}
-
-export function useVitalsOptions(): VitalsOptions {
-  return useSyncExternalStore(subscribeVitalsOptions, getVitalsOptions);
-}
+export const startVitalsOptionsStore = store.start;
+export const getVitalsOptions = store.get;
+export const useVitalsOptions = store.use;

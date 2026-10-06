@@ -17,18 +17,27 @@ interface ConfigStoreOptions<T> {
   read: () => Promise<T>;
   /** Hear each new value the backend or another window sends. */
   follow: (cb: (value: T) => void) => Promise<unknown>;
+  /** True when two values show the same, so the store keeps the
+   *  snapshot it has and nothing renders again. Without it a new
+   *  object always replaces the snapshot. */
+  same?: (a: T, b: T) => boolean;
 }
 
-export function createConfigStore<T>({ initial, read, follow }: ConfigStoreOptions<T>) {
+export function createConfigStore<T>({ initial, read, follow, same }: ConfigStoreOptions<T>) {
   const store = createStore<T>(initial);
   let started = false;
   let generation = 0;
+
+  function put(next: T): void {
+    if (same?.(store.get(), next)) return;
+    store.set(next);
+  }
 
   function reread(): void {
     const mine = ++generation;
     read()
       .then((value) => {
-        if (mine === generation) store.set(value);
+        if (mine === generation) put(value);
       })
       .catch(() => undefined);
   }
@@ -39,7 +48,7 @@ export function createConfigStore<T>({ initial, read, follow }: ConfigStoreOptio
     reread();
     void follow((value) => {
       generation += 1;
-      store.set(value);
+      put(value);
     });
     void subscribeProfileSwitched(() => reread());
   }
