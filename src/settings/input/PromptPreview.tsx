@@ -8,6 +8,7 @@ import { warnBoxes, warnedPieces } from '../../prompt/promptWarn';
 import { CARD_ROW_PX } from '../../lib/useCellWidth';
 import { CellLine } from '../../prompt/PromptCells';
 import { Segmented } from '../../ui';
+import { useShown } from '../shownProfile';
 
 // ---------------------------------------------------------------------
 // The preview
@@ -58,6 +59,8 @@ export function PreviewBlock({
   tick,
 }: PreviewBlockProps) {
   const [drawn, setDrawn] = useState<{ ansi: string; rings: Box[] } | null>(null);
+  // The session the Settings header names, whose values draw the design.
+  const session = useShown().session ?? undefined;
   useEffect(() => {
     let alive = true;
     const shown = preview === 'now' ? null : preview;
@@ -65,18 +68,21 @@ export function PreviewBlock({
     // draws it, so you see which part stays blank (P14). Only live
     // values leave a part blank.
     const ringed = live
-      ? promptDescribe(template, shown)
+      ? promptDescribe(template, shown, null, session)
           .then((d) => warnedPieces(d.pieces, d.tokens, catalog))
           .catch(() => new Set<number>())
       : Promise.resolve(new Set<number>());
     void ringed
       .then((warn) =>
-        promptRender({
-          template,
-          values: live ? 'live' : 'sample',
-          preview: shown,
-          placeholders: warn.size > 0,
-        }).then((rendered) => ({
+        promptRender(
+          {
+            template,
+            values: live ? 'live' : 'sample',
+            preview: shown,
+            placeholders: warn.size > 0,
+          },
+          session,
+        ).then((rendered) => ({
           ansi: rendered.ansi,
           rings: warnBoxes(rendered.spans, warn, {
             x: OUT_X,
@@ -95,7 +101,7 @@ export function PreviewBlock({
     return () => {
       alive = false;
     };
-  }, [template, catalog, live, preview, cellW, tick]);
+  }, [template, catalog, live, preview, cellW, tick, session]);
   const rows = useMemo(() => previewRows(drawn?.ansi ?? null), [drawn]);
   return (
     <PreviewView

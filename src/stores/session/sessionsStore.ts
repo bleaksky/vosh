@@ -176,6 +176,20 @@ export function subscribeSelected(cb: () => void): () => void {
   });
 }
 
+/** The profile the selected session plays, the one in front, or null
+ *  before a list names it. */
+export function profileInFront(): string | null {
+  return selectedRow()?.profile ?? null;
+}
+
+/** Whether a session plays `profile`, which keeps it open. True before
+ *  the first list, and for a profile left out, which names the selected
+ *  session's. */
+export function playsProfile(profile: string | undefined): boolean {
+  const { rows } = store.get();
+  return profile === undefined || rows.length === 0 || rows.some((row) => row.profile === profile);
+}
+
 /** Every other session that plays the profile `session` plays. They
  *  share its panel and its font, so the size of its pane. */
 export function othersOnProfile(session: number): number[] {

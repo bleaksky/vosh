@@ -1,10 +1,8 @@
-import { act, createElement } from 'react';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
+import { emit } from '@tauri-apps/api/event';
 import uiFields from '../../fixtures/ui-config/fields.json';
 import { AFFECTS_DISPLAY_FIELDS, setAffectsDisplay } from '../ipc/affects';
-import { UI_CONFIG_REPLACED } from '../ipc/events';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import {
   getUiConfig,
@@ -14,9 +12,8 @@ import {
   type UiFields,
 } from '../ipc/uiConfig';
 import { pendingWrites } from '../lib/pendingWrites';
-import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 import { applyThemePrefs, getThemePrefs, themePrefsOf } from '../theme/theme';
-import { queueSettingsChange, settingsSaveHolds, useSettingsAutoSave } from './useSettingsAutoSave';
+import { queueSettingsChange, settingsSaveHolds } from './useSettingsAutoSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -214,63 +211,81 @@ describe('what a Settings save holds', () => {
     expect(report.failed).toHaveBeenCalledTimes(1);
     expect(settingsSaveHolds(AFFECTS_DISPLAY_FIELDS)).toBe(false);
   });
+});
 
-  // The window drops the save waiting when the backend replaces the
-  // config, so this mounts the hook that hears the replace.
-  describe('on a replaced config', () => {
-    const doc = new FakeDocument();
-    let createRoot: typeof import('react-dom/client').createRoot;
+// Each save names the profile Settings showed as you made it, board 7
+// of the Sessions review. Tolliver plays Default and Orla plays Build,
+// with Orla's session selected in the main window.
+describe('a Settings save and its profile', () => {
+  const copy = normalizeUiConfig(opened);
+  const ROWS = [
+    {
+      id: 1,
+      name: null,
+      character: 'Tolliver',
+      host: 'play.theforsakenlands.com',
+      port: 1848,
+      tls: false,
+      profile: 'default',
+      connected: true,
+      selected: false,
+    },
+    {
+      id: 2,
+      name: null,
+      character: 'Orla',
+      host: 'play.theforsakenlands.com',
+      port: 1825,
+      tls: false,
+      profile: 'Build',
+      connected: true,
+      selected: true,
+    },
+  ];
 
-    beforeAll(async () => {
-      vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-      vi.stubGlobal('document', doc);
-      vi.stubGlobal('window', {
-        document: doc,
-        location: { protocol: 'about:' },
-        HTMLIFrameElement: class {},
-        addEventListener() {},
-        removeEventListener() {},
-      });
-      vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
-      vi.stubGlobal('Node', FakeNode);
-      vi.stubGlobal('Element', FakeElement);
-      vi.stubGlobal('HTMLElement', FakeElement);
-      // React DOM checks for a DOM once, when it loads.
-      ({ createRoot } = await import('react-dom/client'));
-    });
+  /** What each ui_set_fields wrote, and to which profile. */
+  async function sessionsBackend() {
+    const saves: [unknown, unknown][] = [];
+    vi.mocked(invoke).mockImplementation(((command: string, args?: Record<string, unknown>) => {
+      if (command === 'sessions_list') return Promise.resolve(ROWS);
+      if (command === 'ui_set_fields') saves.push([args?.profile, args?.fields]);
+      return Promise.resolve();
+    }) as typeof invoke);
+    const { startSessionsStore } = await import('../stores/session/sessionsStore');
+    startSessionsStore();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return saves;
+  }
 
-    afterAll(() => {
-      vi.unstubAllGlobals();
-    });
+  it('lands a waiting save on its own profile, apart from a later edit on another', async () => {
+    const saves = await sessionsBackend();
+    const report = { saved: vi.fn(), failed: vi.fn() };
+    // You change Default's font size, and Settings follows Orla to Build
+    // before the save goes.
+    queueSettingsChange(copy, { font_size: 15 }, 250, report, 'default');
+    queueSettingsChange(copy, { tick_count: 'down' }, 250, report, 'Build');
+    vi.mocked(emit).mockClear();
+    await pendingWrites.flushAll();
 
-    function Saver() {
-      useSettingsAutoSave(
-        () => {},
-        () => {},
-      );
-      return null;
-    }
+    expect(saves).toEqual([
+      ['default', [{ field: 'font_size', value: 15 }]],
+      ['Build', [{ field: 'tick_count', value: 'down' }]],
+    ]);
+    expect(report.saved).toHaveBeenCalledTimes(2);
+    // The main window shows Build, so only Build's save reaches it.
+    expect(vi.mocked(emit).mock.calls).toEqual([['vosh://tick-count-changed', 'down']]);
+  });
 
-    it('lets go of the fields the dropped save held', async () => {
-      let replace = () => {};
-      vi.mocked(listen).mockImplementationOnce((event, handler) => {
-        if (event === UI_CONFIG_REPLACED) {
-          replace = () => (handler as EventCallback<unknown>)({ event, id: 0, payload: null });
-        }
-        return Promise.resolve(() => {});
-      });
-      const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
-      await act(async () => root.render(createElement(Saver)));
-      vi.mocked(invoke).mockClear();
-      const report = { saved: vi.fn(), failed: vi.fn() };
-      queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
-      expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
-      replace();
-      expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(false);
-      await act(async () => root.unmount());
+  it('drops a waiting save whose profile no session plays any more', async () => {
+    const saves = await sessionsBackend();
+    const report = { saved: vi.fn(), failed: vi.fn() };
+    queueSettingsChange(copy, { theme: 'dracula' }, 250, report, 'Healer');
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
+    await pendingWrites.flushAll();
 
-      expect(invoke).not.toHaveBeenCalledWith('ui_set_fields', expect.anything());
-      expect(report.saved).not.toHaveBeenCalled();
-    });
+    expect(saves).toEqual([]);
+    expect(report.saved).not.toHaveBeenCalled();
+    expect(report.failed).not.toHaveBeenCalled();
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ import {
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { CommandBox } from '../../prompt/PromptCodes';
 import { Button, Field, IconButton, MoreIcon, Row } from '../../ui';
+import { useShown } from '../shownProfile';
 
 // ---------------------------------------------------------------------
 // Your game's prompt
@@ -113,13 +114,15 @@ function useCompiled(
 ): { report: PromptCompileReport | null; fresh: boolean } {
   const key = JSON.stringify([prompt, fprompt, typed]);
   const [held, setHeld] = useState<{ key: string; report: PromptCompileReport } | null>(null);
+  // The session the Settings header names, whose engine compiles.
+  const session = useShown().session ?? undefined;
   useEffect(() => {
     if (prompt.trim().length === 0) {
       setHeld(null);
       return;
     }
     let alive = true;
-    void promptCompile({ kind: 'aabahran', prompt, fprompt, typed })
+    void promptCompile({ kind: 'aabahran', prompt, fprompt, typed }, session)
       .then((report) => {
         if (alive) setHeld({ key, report });
       })
@@ -127,7 +130,7 @@ function useCompiled(
     return () => {
       alive = false;
     };
-  }, [key, prompt, fprompt, typed]);
+  }, [key, prompt, fprompt, typed, session]);
   if (prompt.trim().length === 0) return { report: null, fresh: true };
   return { report: held?.report ?? null, fresh: held?.key === key };
 }

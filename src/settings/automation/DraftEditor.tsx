@@ -32,9 +32,8 @@ import {
 } from '../../automation/automationList';
 import { automationSaveError } from '../../automation/automationRecords';
 import { scrollWithin } from '../../lib/scrollWithin';
-import { subscribeProfileSwitched } from '../../ipc/profiles';
-import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { Button } from '../../ui';
+import { getShownProfile, isShownHeld, subscribeShownMoves, useProfileHold } from '../shownProfile';
 import { ItemList, type PinnedEntry } from './ItemList';
 import { JsonPanel } from './JsonPanel';
 import { SaveBar, type SaveStatus } from './SaveBar';
@@ -70,20 +69,20 @@ interface DraftEditorProps<T> {
   warnNames?: ReadonlySet<string>;
   /** Why a row carries the warn ring, for a reader. */
   warnNote?: string;
-  /** The kind lives in the active profile. A profile switch then loads
-   *  the new profile's list even over unsaved changes, since saving
-   *  them would write one profile's items into another. */
-  profileScoped?: boolean;
 }
 
 const SAVED_MS = 2000;
 const JSON_PARSE_MS = 150;
 
 /** One kind's list, detail card, and save bar over a draft. The draft
- *  loads when the editor mounts. Save validates, writes it through the
- *  kind's API, and loads it again, so the page shows what the store
- *  kept. Discard puts the last load back, or the list as the store holds
- *  it now when it changed elsewhere while you edited. */
+ *  loads when the editor mounts, from the profile Settings shows. Save
+ *  validates, writes it through the kind's API to that profile, and
+ *  loads it again, so the page shows what the store kept. Discard puts
+ *  the last load back, or the list as the store holds it now when it
+ *  changed elsewhere while you edited. Unsaved changes hold the profile
+ *  (shownProfile.ts), so a selection that brings another profile to the
+ *  front waits for Save or Discard, and the list loads that profile's
+ *  once Settings moves. */
 export function DraftEditor<T>({
   spec,
   json,
@@ -93,7 +92,6 @@ export function DraftEditor<T>({
   pinned = null,
   pinnedSeq = 0,
   barExtra,
-  profileScoped = false,
   warnNames,
   warnNote,
 }: DraftEditorProps<T>) {
@@ -113,6 +111,8 @@ export function DraftEditor<T>({
   const jsonTimer = useRef<number | undefined>(undefined);
   /** A save is writing. Store changes wait for the load that ends it. */
   const savingRef = useRef(false);
+  /** Counts each load, so only the newest lands. */
+  const loadsRef = useRef(0);
   /** The store changed while the draft held unsaved edits, so the last
    *  load no longer matches it. */
   const staleRef = useRef(false);
@@ -146,10 +146,13 @@ export function DraftEditor<T>({
     return item ? spec.keyOf(item.value) : null;
   }, [spec]);
 
-  // Load and keep the selection on the same item by its natural key.
+  // Load `profile`'s list, the profile Settings shows unless named, and
+  // keep the selection on the same item by its natural key.
   const load = useCallback(
-    async (keepKey: string | null) => {
-      const values = await spec.load();
+    async (keepKey: string | null, profile: string | undefined = getShownProfile()) => {
+      const mine = ++loadsRef.current;
+      const values = await spec.load(profile);
+      if (mine !== loadsRef.current) return;
       const next = createDraft(values);
       staleRef.current = false;
       setDraft(next);
@@ -166,24 +169,29 @@ export function DraftEditor<T>({
 
   useEffect(() => {
     let cancelled = false;
-    spec
-      .load()
-      .then((values) => {
-        if (cancelled) return;
-        setDraft(createDraft(values));
-        if (spec.json) setJsonText(spec.json.toText(values));
-      })
-      .catch((e) => {
-        if (!cancelled) onError(automationSaveError(e));
-      });
+    load(null).catch((e) => {
+      if (!cancelled) onError(automationSaveError(e));
+    });
     return () => {
       cancelled = true;
     };
-  }, [spec, onError, setDraft]);
+  }, [load, onError]);
+
+  // Settings moved to another profile, so load its list. Unsaved
+  // changes held the profile until now, so the draft is clean.
+  useEffect(
+    () =>
+      subscribeShownMoves(() => {
+        void load(selectedKey()).catch((e) => onError(automationSaveError(e)));
+      }),
+    [load, selectedKey, onError],
+  );
 
   // The store changed outside the page, like #trigger in the main
   // window or a script. Follow it while the draft is clean. With unsaved
   // changes, keep them and say so. Save applies them over the new list.
+  // While Settings holds its profile the change is to the profile in
+  // front, another one.
   useEffect(() => {
     if (!spec.subscribe) return;
     let cancelled = false;
@@ -191,7 +199,7 @@ export function DraftEditor<T>({
     void spec
       .subscribe(() => {
         const d = draftRef.current;
-        if (cancelled || !d) return;
+        if (cancelled || !d || isShownHeld()) return;
         const action = storeChangeAction({ dirty: isDraftDirty(d), saving: savingRef.current });
         if (action === 'reload') {
           void load(selectedKey()).catch(() => {});
@@ -210,28 +218,6 @@ export function DraftEditor<T>({
       unsub?.();
     };
   }, [spec, load, selectedKey, onError]);
-
-  // A profile switch. A kind that lives in the profile loads the new
-  // profile's list and says so when that drops unsaved changes. A kind
-  // shared by every profile follows only while clean.
-  const scopedRef = useRef(profileScoped);
-  useEffect(() => {
-    scopedRef.current = profileScoped;
-  }, [profileScoped]);
-  useTauriEvent(subscribeProfileSwitched, () => {
-    const d = draftRef.current;
-    const dirty = d !== null && isDraftDirty(d);
-    if (dirty && !scopedRef.current) return;
-    void load(dirty ? null : selectedKey())
-      .then(() => {
-        if (dirty) {
-          onError(
-            `Vosh switched profiles and loaded that profile's ${spec.noun.many}, so your unsaved changes are gone.`,
-          );
-        }
-      })
-      .catch((e) => onError(automationSaveError(e)));
-  });
 
   const entryCache = useMemo(() => new WeakMap<object, Omit<ListEntry, 'uid'>>(), []);
   const entries = useMemo<ListEntry[]>(() => {
@@ -287,6 +273,7 @@ export function DraftEditor<T>({
 
   const pinnedDirty = pinned?.dirty ?? false;
   const dirty = count > 0 || pinnedDirty;
+  useProfileHold(dirty);
   const title = dirty
     ? discardTitle([
         count > 0 ? countPhrase(count, spec.noun) : '',
@@ -428,16 +415,19 @@ export function DraftEditor<T>({
     onError(null);
     setBusy(true);
     savingRef.current = true;
+    // The profile Settings shows, which the unsaved changes hold, so the
+    // save and the load after it reach it whatever the selection is now.
+    const profile = getShownProfile();
     // Each item the store took, for a Save that fails before the list
     // loads again.
     const writes: SavedWrite<T>[] = [];
     let reloaded = false;
     try {
       await saveListThenPinned({
-        list: isDraftDirty(d) ? () => spec.save(d, (write) => writes.push(write)) : null,
+        list: isDraftDirty(d) ? () => spec.save(d, (write) => writes.push(write), profile) : null,
         pinned: pinned?.dirty ? () => pinned.save() : null,
         reload: async () => {
-          await load(selectedKey());
+          await load(selectedKey(), profile);
           reloaded = true;
         },
       });

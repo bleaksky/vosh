@@ -9,21 +9,25 @@ export interface TickDraftFollow {
   reload: () => void;
   /** Take settings a #tick command or another window changed. */
   adopt: (config: TickConfig) => void;
-  /** Whether the card holds unsaved changes. */
-  isDirty: () => boolean;
+  /** Whether the card keeps what it shows: it holds unsaved changes, or
+   *  Settings holds another profile than the one in front. */
+  keeps: () => boolean;
 }
 
-/** Keep the Tick card on the live profile's tick settings. A profile
- *  switch, #profile load, #profile reset, or an import replaces the
- *  whole profile, so the card reads the new settings even over unsaved
- *  changes, since its Save sends every setting and would write the old
- *  profile's tick back. A change from elsewhere, like a #tick command
- *  or a save from another window, lands only while the card is clean. */
+/** Keep the Tick card on the tick settings of the profile in front. A
+ *  profile switch, #profile load, #profile reset, or an import replaces
+ *  the whole profile, and a change from elsewhere, like a #tick command
+ *  or a save from another window, changes the tick. The card reads or
+ *  takes either only while it keeps nothing, so unsaved changes stay
+ *  with the profile they were made on, which a login switch can replace
+ *  before Settings hears that it moved. */
 export async function followTickDraft(follow: TickDraftFollow): Promise<UnlistenFn> {
   const stops = await Promise.all([
-    subscribeUiConfigReplaced(() => follow.reload()),
+    subscribeUiConfigReplaced(() => {
+      if (!follow.keeps()) follow.reload();
+    }),
     subscribeTickConfigChanged((config) => {
-      if (!follow.isDirty()) follow.adopt(config);
+      if (!follow.keeps()) follow.adopt(config);
     }),
   ]);
   return () => {

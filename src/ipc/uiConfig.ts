@@ -345,9 +345,11 @@ export function normalizeGameTime(raw: unknown): GameTime {
 // store all call getUiConfig on first render. Sharing one
 // in-flight promise turns that into a single IPC round-trip. The cache
 // clears once resolved, so a later call (after a config change) still
-// re-fetches fresh — no staleness.
+// re-fetches fresh — no staleness. A read that names its profile, as
+// Settings does, goes alone.
 let uiConfigInFlight: Promise<UiConfig> | null = null;
-export function getUiConfig(): Promise<UiConfig> {
+export function getUiConfig(profile?: string | null): Promise<UiConfig> {
+  if (profile != null) return fetchUiConfig(profile);
   if (!uiConfigInFlight) {
     uiConfigInFlight = fetchUiConfig().finally(() => {
       uiConfigInFlight = null;
@@ -405,8 +407,10 @@ export interface RawUiConfig {
   affects_almost_gone_hours?: number;
 }
 
-export async function fetchUiConfig(): Promise<UiConfig> {
-  const raw = await invoke<RawUiConfig>('ui_get_config');
+/** A profile's UI config, the selected session's profile's when it
+ *  names none. */
+export async function fetchUiConfig(profile?: string | null): Promise<UiConfig> {
+  const raw = await invoke<RawUiConfig>('ui_get_config', { profile });
   const freed = freeBuiltinThemeIds(raw);
   const config = normalizeUiConfig(freed);
   // A custom theme moved off a built-in id is saved under its new id at
@@ -419,7 +423,7 @@ export async function fetchUiConfig(): Promise<UiConfig> {
       ...Object.fromEntries(THEME_PREFS_FIELDS.map((field) => [field, config[field]])),
     };
     try {
-      await setUiFields(moved);
+      await setUiFields(moved, profile);
     } catch (e) {
       console.error('[themes] saving the moved custom themes failed', e);
     }

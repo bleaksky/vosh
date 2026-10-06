@@ -16,6 +16,7 @@ import {
   saveTimerDraft,
   timerEntry,
   timerKey,
+  timerStore,
   validateTimers,
   type TimerRecord,
 } from '../../automation/automationRecords';
@@ -24,6 +25,7 @@ import { subscribeTimersChanged, timersList } from '../../ipc/automation';
 import { tickGetConfig, tickSetConfig, type TickConfig } from '../../ipc/tick';
 import { followTickDraft } from '../../automation/tickDraft';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
+import { getShownProfile, isShownHeld, subscribeShownMoves } from '../shownProfile';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
 import { GroupField, NumberField } from './fields';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
@@ -37,9 +39,9 @@ const TIMERS_SPEC: KindSpec<TimerRecord> = {
   deleteLabel: 'Delete timer',
   emptyDetail: 'Choose a timer to edit it.',
   emptyList: 'You have no timers yet.',
-  load: async () => (await timersList()).map(normalizeTimer),
+  load: async (profile) => (await timersList(profile)).map(normalizeTimer),
   // One call per timer, the way the old Timers tab saved cards.
-  save: (draft, written) => saveTimerDraft(draft, written),
+  save: (draft, written, profile) => saveTimerDraft(draft, written, timerStore(profile)),
   validate: validateTimers,
   entry: timerEntry,
   keyOf: timerKey,
@@ -63,7 +65,8 @@ interface TimersEditorProps {
   tickSeq: number;
 }
 
-const loadTick = async () => createDraft([normalizeTick(await tickGetConfig())]);
+const loadTick = async (profile: string | undefined) =>
+  createDraft([normalizeTick(await tickGetConfig(profile))]);
 
 /** Timers, with the Tick pinned above them. The tick keeps its own
  *  draft, and the save bar covers both. */
@@ -79,34 +82,44 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    const reload = () =>
-      loadTick()
+    // Only the newest read lands, so the tick of a profile Settings
+    // left never shows.
+    let reads = 0;
+    const reload = (profile: string | undefined) => {
+      const mine = ++reads;
+      return loadTick(profile)
         .then((next) => {
-          if (!cancelled) putTick(next);
+          if (!cancelled && mine === reads) putTick(next);
         })
         .catch((e) => {
-          if (!cancelled) onError(automationSaveError(e));
+          if (!cancelled && mine === reads) onError(automationSaveError(e));
         });
-    void reload();
-    // The tick lives in the profile, so a switch, a load, a reset, or an
-    // import reads the new one. A change from elsewhere lands while the
-    // tick is clean.
+    };
+    void reload(getShownProfile());
+    // The tick lives in the profile, so a switch, a load, a reset, an
+    // import, or Settings moving to another profile reads the new one. A
+    // replace speaks of the profile in front, which a login switch
+    // replaces before the session list says the session moved, so that
+    // read names no profile. A change from elsewhere lands while the tick
+    // is clean and Settings shows the profile in front.
     void followTickDraft({
-      reload: () => void reload(),
+      reload: () => void reload(undefined),
       adopt: (cfg) => {
         if (!cancelled) putTick(createDraft([normalizeTick(cfg)]));
       },
-      isDirty: () => {
+      keeps: () => {
         const current = tickRef.current;
-        return current !== null && isDraftDirty(current);
+        return (current !== null && isDraftDirty(current)) || isShownHeld();
       },
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
     });
+    const stopMoves = subscribeShownMoves((profile) => void reload(profile));
     return () => {
       cancelled = true;
       unsub?.();
+      stopMoves();
     };
   }, [onError]);
 
@@ -121,7 +134,7 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
           dirty: isDraftDirty(tick),
           phrase: 'the tick',
           save: async () => {
-            const saved = await tickSetConfig(normalizeTick(tickItem.value));
+            const saved = await tickSetConfig(normalizeTick(tickItem.value), getShownProfile());
             putTick(createDraft([normalizeTick(saved)]));
           },
           discard: () => {
@@ -150,7 +163,6 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
       onError={onError}
       pinned={pinned}
       pinnedSeq={tickSeq}
-      profileScoped
     />
   );
 }

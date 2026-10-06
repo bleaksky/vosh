@@ -6,6 +6,7 @@ import {
   type ImportFormat,
   type ImportSummary,
 } from '../../ipc/automation';
+import { getShownProfile } from '../shownProfile';
 import { MigrationWizard } from './MigrationWizard';
 import { Button, Disclosure, Row, Section, Select } from '../../ui';
 
@@ -64,7 +65,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
     setBusy(true);
     setSummary(null);
     try {
-      setSummary(await applyImport(format, text));
+      setSummary(await applyImport(format, text, getShownProfile()));
       onError(null);
     } catch (e) {
       onError(importErrorMessage(e, 'import'));

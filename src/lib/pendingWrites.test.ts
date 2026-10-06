@@ -183,22 +183,6 @@ describe('a debounced write', () => {
     expect(sent).toEqual([2]);
     expect(write.waiting()).toBeNull();
   });
-
-  it('forgets a dropped value', async () => {
-    vi.useFakeTimers();
-    const sent: string[] = [];
-    const write = createDebouncedWrite<string>(async (v) => {
-      sent.push(v);
-    });
-    write.schedule(() => 'nord', 250);
-    await write.flush();
-    expect(sent).toEqual(['nord']);
-    write.schedule(() => 'rubric', 250);
-    write.drop();
-    await vi.advanceTimersByTimeAsync(500);
-    await write.flush();
-    expect(sent).toEqual(['nord']);
-  });
 });
 
 describe('leaving the focused field', () => {

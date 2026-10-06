@@ -34,13 +34,13 @@ export function LoadoutsEditor({ onDirty, onError }: LoadoutsEditorProps) {
       filterLabel: 'Filter loadouts',
       emptyDetail: 'Choose a loadout to see its groups.',
       emptyList: 'You have no loadouts yet.',
-      load: async () => {
-        const state = await loadoutsGetState();
+      load: async (profile) => {
+        const state = await loadoutsGetState(profile);
         summaries.current = new Map(state.loadouts.map((l) => [l.name, l]));
         return loadoutToggles(state.loadouts, state.active);
       },
-      save: async (draft) => {
-        await loadoutsSetActive(activeLoadouts(draftValues(draft)));
+      save: async (draft, _written, profile) => {
+        await loadoutsSetActive(activeLoadouts(draftValues(draft)), profile);
       },
       entry: (t) => {
         const summary = summaries.current.get(t.name);

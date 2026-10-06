@@ -68,12 +68,18 @@ export interface KindSpec<T> {
   emptyDetail: string;
   /** `You have no triggers yet.` */
   emptyList: string;
-  load: () => Promise<T[]>;
-  /** Write the draft through the kind's API. A kind that writes one
-   *  call per item reports each call the store took to `written`, so a
-   *  Save that fails partway marks those items saved and the next Save
-   *  does not send them again. */
-  save: (draft: Draft<T>, written: (write: SavedWrite<T>) => void) => Promise<void>;
+  /** Read the list of `profile`, the profile Settings shows, or of the
+   *  selected session's profile while Settings knows none yet. */
+  load: (profile: string | undefined) => Promise<T[]>;
+  /** Write the draft to `profile` through the kind's API. A kind that
+   *  writes one call per item reports each call the store took to
+   *  `written`, so a Save that fails partway marks those items saved and
+   *  the next Save does not send them again. */
+  save: (
+    draft: Draft<T>,
+    written: (write: SavedWrite<T>) => void,
+    profile: string | undefined,
+  ) => Promise<void>;
   /** Why the draft cannot save yet, or null. */
   validate?: (values: T[]) => string | null;
   /** The list row for a value, less its uid. */
@@ -105,6 +111,4 @@ export interface EditorProps {
   onJson: (open: boolean) => void;
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
-  /** The kind lives in the active profile. See DraftEditor. */
-  profileScoped: boolean;
 }

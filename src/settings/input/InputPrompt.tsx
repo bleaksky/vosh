@@ -51,6 +51,7 @@ import { nativeSurfaceEnabled } from '../../terminal/terminalRenderer';
 import { PromptShowField } from './PromptShowRow';
 import { CodesBlock, FieldsBlock, LineRow, PointRow } from './PromptGame';
 import { PreviewBlock } from './PromptPreview';
+import { useShown } from '../shownProfile';
 import { Button, Row, Section, Toggle } from '../../ui';
 
 // Settings, Input, Prompt (section 7 step 12 of the prompt build spec,
@@ -60,10 +61,14 @@ import { Button, Row, Section, Toggle } from '../../ui';
 // saves to the profile's [prompt] table through the prompt commands, and
 // the section reads the table again whenever anything changes it: the
 // card, a command such as #prompt, the game sending your prompt setting,
-// a profile switch, or a connect.
+// a profile switch, or a connect. The prompt commands read a session's
+// prompt engine, so each names the session the Settings header names,
+// which plays the profile Settings shows.
 
 /** What the section reads to draw itself. */
 interface PromptData {
+  /** The session the calls name, undefined before the list names one. */
+  session: number | undefined;
   config: PromptConfig;
   show: PromptShowState | null;
   state: PromptState | null;
@@ -88,20 +93,22 @@ function usePromptData(): PromptData | null {
   const [check, setCheck] = useState<PromptCaptureCheck | null>(null);
   const [tick, setTick] = useState(0);
   const show = usePromptShow();
+  const shown = useShown();
+  const session = shown.session ?? undefined;
   const refresh = useCallback(() => setTick((n) => n + 1), []);
 
   useEffect(() => {
     let alive = true;
     void Promise.all([
-      promptConfigGet(),
-      promptStateGet().catch(() => null),
-      promptLastSeen().catch(() => null),
-      sessionIdentityGet().catch(() => null),
+      promptConfigGet(session),
+      promptStateGet(session).catch(() => null),
+      promptLastSeen(session).catch(() => null),
+      sessionIdentityGet(session).catch(() => null),
       profilesList().catch(() => null),
     ])
       .then(([table, now, last, who, list]) => {
         if (!alive) return;
-        const name = list?.active ?? who?.profile ?? 'default';
+        const name = shown.profile ?? list?.active ?? who?.profile ?? 'default';
         const entry = list?.profiles.find((p) => p.name === name);
         setConfig(table);
         setState(now);
@@ -114,7 +121,7 @@ function usePromptData(): PromptData | null {
     return () => {
       alive = false;
     };
-  }, [tick]);
+  }, [tick, session, shown.profile]);
 
   // How the capture matches your last prompts, counted again with each
   // read.
@@ -125,7 +132,7 @@ function usePromptData(): PromptData | null {
       return;
     }
     let alive = true;
-    void promptCaptureCheck(capture)
+    void promptCaptureCheck(capture, session)
       .then((next) => {
         if (alive) setCheck(next);
       })
@@ -135,7 +142,7 @@ function usePromptData(): PromptData | null {
     return () => {
       alive = false;
     };
-  }, [capture, tick]);
+  }, [capture, tick, session]);
 
   useTauriEvent(subscribePromptConfigChanged, refresh);
   useTauriEvent(subscribeProfileSwitched, refresh);
@@ -151,14 +158,17 @@ function usePromptData(): PromptData | null {
   }, [refresh]);
 
   if (!config) return null;
-  return { config, show, state, seen, identity, active, host, check, refresh, setConfig };
+  return { session, config, show, state, seen, identity, active, host, check, refresh, setConfig };
 }
 
-/** Save a change to the table as it stands now, so a change the card
- *  made a moment ago stays. */
-async function saveTable(change: (config: PromptConfig) => PromptConfig): Promise<PromptConfig> {
-  const next = change(await promptConfigGet());
-  await promptConfigSet(next);
+/** Save a change to the table of `session`'s profile as it stands now,
+ *  so a change the card made a moment ago stays. */
+async function saveTable(
+  change: (config: PromptConfig) => PromptConfig,
+  session: number | undefined,
+): Promise<PromptConfig> {
+  const next = change(await promptConfigGet(session));
+  await promptConfigSet(next, { session });
   return next;
 }
 
@@ -224,7 +234,7 @@ export function PromptSection({
   const save = (change: (config: PromptConfig) => PromptConfig) => {
     data.setConfig(change(config));
     onError(null);
-    void saveTable(change)
+    void saveTable(change, data.session)
       .then(data.setConfig)
       .catch((e: unknown) => {
         fail(e);

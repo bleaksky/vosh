@@ -19,15 +19,17 @@ export interface LoadoutsState {
   loadouts: LoadoutSummary[];
 }
 
-export async function loadoutsGetState(): Promise<LoadoutsState> {
-  return invoke('loadouts_get_state');
+/** Loadout mode and a profile's stack of active loadouts, the selected
+ *  session's profile's when it names none (Q22). */
+export async function loadoutsGetState(profile?: string | null): Promise<LoadoutsState> {
+  return invoke('loadouts_get_state', { profile });
 }
 
-// Replace the active-loadouts list. The backend recomputes every
+// Replace a profile's active-loadouts list. The backend recomputes every
 // store's disabled_groups, persists the loadout set, and emits
 // vosh://loadouts-changed so other consumers see the update.
-export async function loadoutsSetActive(active: string[]): Promise<void> {
-  return invoke('loadouts_set_active', { active });
+export async function loadoutsSetActive(active: string[], profile?: string | null): Promise<void> {
+  return invoke('loadouts_set_active', { active, profile });
 }
 
 export async function subscribeLoadoutsChanged(cb: () => void): Promise<UnlistenFn> {
