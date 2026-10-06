@@ -48,7 +48,8 @@ export function howLong(ms: number): string | null {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
 
-/** What the line says while the session is not playing, by its mark. */
+/** What the line says while the session is not playing, by its mark,
+ *  or nothing for a session that plays with no room heard yet. */
 function story(row: SessionRow, state: SessionRowState, now: number): string | null {
   switch (rowLook(state, row, false).mark) {
     case 'hand':
@@ -64,6 +65,10 @@ function story(row: SessionRow, state: SessionRowState, now: number): string | n
       return ago ? `Dropped ${ago} ago` : 'Dropped just now';
     }
     case 'live':
+      // Playing, before the first room this page heard, such as after
+      // the page loads again while the link stays up. The world reads
+      // only while the session is not connected.
+      return null;
     case 'off':
       return row.host === null ? null : worldName(row.host);
   }
