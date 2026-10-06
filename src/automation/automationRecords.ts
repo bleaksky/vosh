@@ -486,7 +486,7 @@ export async function installLaunchPresets(enabled: readonly string[]): Promise<
   const toInstall = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
   if (toInstall.length > 0) {
     try {
-      await presetsInstall(toInstall);
+      await presetsInstall(toInstall, []);
     } catch (e) {
       console.error('[presets] startup install failed:', e);
     }
