@@ -210,6 +210,27 @@ describe('the glyph of a session row', () => {
     expect(look()).toEqual({ glyph: 'spinner', tone: null });
   });
 
+  it('names the character it played through a redial, then shows the hand at the game', async () => {
+    const { look } = await load();
+    const { sessionLabel } = await import('../../lib/sessionLabel');
+    connected(ORLA);
+    gmcp(ORLA, 'Char.Status', { name: 'Orla' });
+    disconnected(ORLA, 'server closed connection');
+    redial(ORLA, { kind: 'waiting', try: 1, tries: 8, seconds: 3 });
+    redial(ORLA, { kind: 'dialing', try: 1, tries: 8 });
+    connecting(ORLA);
+    // The list keeps Orla on her row through every try, so two sessions
+    // that redial on one world read apart.
+    const kept = row({ connected: false });
+    expect(look(kept)).toEqual({ glyph: 'spinner', tone: null });
+    expect(sessionLabel(kept, [kept]).name).toBe('Orla');
+    connected(ORLA);
+    redial(ORLA, { kind: 'reached', try: 1 });
+    expect(look(row())).toEqual({ glyph: 'hand', tone: null });
+    gmcp(ORLA, 'Char.Status', { name: 'Orla' });
+    expect(look(row())).toEqual({ glyph: null, tone: null });
+  });
+
   it('shows the hand once a redial reached the game, on any world, until you play', async () => {
     const { look } = await load();
     const there = row({ character: null, host: 'mud.example.org' });

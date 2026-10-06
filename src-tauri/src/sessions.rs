@@ -95,9 +95,10 @@ impl SessionId {
 /// split with [`Connection`] is by lock, not by meaning. All the session
 /// state the line pipeline changes sits in its [`Connection`], under one
 /// std lock that lives as long as the session. Here sit the name you gave
-/// it, where it dials, which the row keeps once the connection ends, the
-/// host, port and character of the live connection, which a disconnect
-/// clears, the terminal size, the last affects and their fulls, beside
+/// it, where it dials and the character it played last, which the row
+/// keeps once the connection ends, the host, port and character of the
+/// live connection, which a disconnect clears, the terminal size, the
+/// last affects and their fulls, beside
 /// the task that runs its connection, its Lua timers, its scrollback and
 /// the count of what reached its terminal. It points at the profile it
 /// plays.
@@ -151,6 +152,13 @@ pub(crate) struct Session {
     /// connection. Cleared on connect and disconnect. The game resends
     /// Char.Status on every vitals update, and only a new name is a login.
     pub(crate) current_character: std::sync::Mutex<Option<String>>,
+    /// The character the session played last, which its row names once
+    /// the live connection has none: through a drop, every try of a
+    /// redial and a disconnect, so two sessions that redial on one world
+    /// still read apart (Sessions Q10, board 3). A login sets it, and a
+    /// connect you start clears it, since the row then names the world
+    /// until you log in. A leaf lock, held for a copy.
+    played: std::sync::Mutex<Option<String>>,
     /// The last Char.Affects list of the connection, for a window that
     /// opens between ticks. Cleared on connect and when the connection
     /// ends.
@@ -212,6 +220,7 @@ impl Session {
             window_size: std::sync::Mutex::new((80, 24)),
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
+            played: std::sync::Mutex::new(None),
             last_affects: AffectsSnapshot::default(),
             affect_full: AffectFull::default(),
             prompt_watch: AtomicBool::new(false),
@@ -291,6 +300,35 @@ impl Session {
             .clone()
     }
 
+    /// The character the session's row names: the one logged in on the
+    /// live connection, else the one it played last.
+    pub(crate) fn played(&self) -> Option<String> {
+        self.character().or_else(|| {
+            self.played
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        })
+    }
+
+    /// A login named `character`, which the row keeps until the next
+    /// connect you start.
+    pub(crate) fn note_played(&self, character: &str) {
+        *self
+            .played
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(character.to_string());
+    }
+
+    /// A connect you started, which plays no character until you log in,
+    /// so the row names the world it dials.
+    pub(crate) fn forget_played(&self) {
+        *self
+            .played
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
     /// Whether the session's connection runs. The loop marks its tick
     /// count in session as it starts and out as it ends, see
     /// [`crate::tick::TickRuntime::in_session`]. Takes the connection
@@ -300,12 +338,12 @@ impl Session {
     }
 
     /// What a line in another session or a banner calls this one, as its
-    /// row reads: the name you gave it, or the character logged in, or
-    /// else the world where it dials with the port, like `The Forsaken
-    /// Lands 1825`, which a drop and each failed redial keep. None while
-    /// it has no name and no place to dial.
+    /// row reads: the name you gave it, or the character it plays or
+    /// played last, or else the world where it dials with the port, like
+    /// `The Forsaken Lands 1825`. None while it has no name and no place
+    /// to dial.
     pub(crate) fn label(&self) -> Option<String> {
-        self.name().or_else(|| self.character()).or_else(|| {
+        self.name().or_else(|| self.played()).or_else(|| {
             let address = self
                 .address
                 .lock()
@@ -330,7 +368,7 @@ impl Session {
         SessionRow {
             id: self.id,
             name: self.name(),
-            character: self.character(),
+            character: self.played(),
             host: address.as_ref().map(|a| a.host.clone()),
             port: address.as_ref().map(|a| a.port),
             tls: address.is_some_and(|a| a.tls),
@@ -494,7 +532,7 @@ pub(crate) struct SessionRow {
     pub(crate) id: SessionId,
     /// The name you gave it.
     pub(crate) name: Option<String>,
-    /// The character logged in on its live connection.
+    /// The character it plays, or played last, see [`Session::played`].
     pub(crate) character: Option<String>,
     /// Where it dials, None before its first connect or address.
     pub(crate) host: Option<String>,
@@ -876,6 +914,27 @@ mod tests {
         session.rename(Some(" "));
         assert_eq!(session.name(), None);
         assert_eq!(session.label().as_deref(), Some("Builder"));
+    }
+
+    #[test]
+    fn a_row_names_the_character_it_played_until_a_connect_you_start() {
+        let session = on_defaults(SessionId(2));
+        *session.current_character.lock().unwrap() = Some("Tolliver".into());
+        session.note_played("Tolliver");
+        assert_eq!(session.row(false).character.as_deref(), Some("Tolliver"));
+        // A drop keeps the live character, and a try of a redial or a
+        // disconnect forgets it, where the row keeps it.
+        *session.current_character.lock().unwrap() = None;
+        assert_eq!(session.character(), None);
+        assert_eq!(session.row(false).character.as_deref(), Some("Tolliver"));
+        assert_eq!(session.label().as_deref(), Some("Tolliver"));
+        // A connect you start names the world until you log in.
+        session.forget_played();
+        assert_eq!(session.row(false).character, None);
+        // The live character wins over the one played before.
+        session.note_played("Tolliver");
+        *session.current_character.lock().unwrap() = Some("Orla".into());
+        assert_eq!(session.played().as_deref(), Some("Orla"));
     }
 
     #[test]

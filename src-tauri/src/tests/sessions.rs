@@ -983,12 +983,13 @@ async fn every_window_hears_a_row_follow_a_connect_a_login_a_switch_and_a_discon
         .expect("the switch");
     assert_eq!(heard_row(&h, h.first)["profile"], json!("Healer"));
 
-    // The row keeps where the session last connected.
+    // The row keeps where the session last connected, and the character
+    // it played, which its dim name reads (board 3).
     h.disconnect().await;
     let row = heard_row(&h, h.first);
     assert_eq!(
         (&row["connected"], &row["character"], &row["port"]),
-        (&json!(false), &serde_json::Value::Null, &json!(h.port))
+        (&json!(false), &json!("Tester"), &json!(h.port))
     );
     h.finish(grid).await;
 }
