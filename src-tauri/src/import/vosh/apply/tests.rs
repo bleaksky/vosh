@@ -305,14 +305,13 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
         .map(|t| t.name.as_str())
         .collect();
     assert_eq!(triggers.len(), 3, "{triggers:?}");
-    // Your macros join in the file's group.
-    let macros: Vec<&str> = saved_catalog
-        .macros
-        .iter()
-        .filter(|m| group(&m.group) && m.preset.is_none())
-        .map(|m| m.key.as_str())
-        .collect();
-    assert_eq!(macros, ["F1", "F2", "Numpad3"]);
+    // Your macros join in the file's group. Its preset macros stay out,
+    // since a launch installs the catalog's own.
+    assert_eq!(
+        names(&saved_catalog.macros, |m| &m.key),
+        ["F1", "F2", "Numpad3"]
+    );
+    assert!(saved_catalog.macros.iter().all(|m| group(&m.group)));
 
     // The new profile file holds none of them, and the live profile does.
     let file = saved(dir.path(), "Healer 2");
@@ -322,6 +321,62 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
     );
     assert_eq!(file.timers.len(), 1);
     assert!(state.selected_profile().await.aliases.get("heal").is_some());
+}
+
+#[tokio::test]
+async fn in_loadout_mode_your_macro_joins_beside_the_preset_macro_on_its_key() {
+    use crate::loadouts::catalog::load_global_catalog;
+    use crate::loadouts::presets::install_preset_macros;
+    let dir = tempfile::tempdir().unwrap();
+    let (app, state) = app_over(dir.path(), &["Maren"]).await;
+    loadout_mode(dir.path(), &state).await;
+    // You turned Numpad movement on, two of its macros for short.
+    let numpad = |key: &str, command: &str| Macro {
+        key: key.into(),
+        command: command.into(),
+        group: None,
+        enabled: true,
+        preset: Some("numpad_movement".into()),
+    };
+    install_preset_macros(
+        &mut *state.selected_profile().await,
+        vec![numpad("Numpad8", "n"), numpad("Numpad3", "d")],
+    )
+    .unwrap();
+
+    let result = import(&app, AddAs::New, "Healer 2", &[]).await.unwrap();
+    assert_eq!(
+        result.clashes,
+        [Clash {
+            kind: ClashKind::Alias,
+            name: "kk".into(),
+        }]
+    );
+    // Your Numpad3 joins and keeps the key, so the preset's d waits. The
+    // file's own preset macros stay out.
+    let saved_catalog = load_global_catalog(dir.path()).unwrap();
+    let rows: Vec<(&str, &str, bool, bool)> = saved_catalog
+        .macros
+        .iter()
+        .map(|m| {
+            (
+                m.key.as_str(),
+                m.command.as_str(),
+                m.enabled,
+                m.preset.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Numpad8", "n", true, true),
+            ("Numpad3", "d", false, true),
+            ("F1", "score", true, false),
+            ("F2", "flee", false, false),
+            ("Numpad3", "rec", true, false),
+        ]
+    );
 }
 
 #[tokio::test]

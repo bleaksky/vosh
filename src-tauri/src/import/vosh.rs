@@ -108,14 +108,16 @@ pub(crate) struct CatalogJoin {
     pub group: String,
     pub triggers: Vec<Trigger>,
     pub aliases: Vec<Alias>,
+    /// Your macros of the file. Its preset macros stay out, since a
+    /// launch installs the catalog's own from its `enabled_presets`.
     pub macros: Vec<Macro>,
     /// The file's items the catalog already has, which it keeps.
     pub clashes: Vec<Clash>,
 }
 
 /// An item of the file that the catalog already holds, a trigger or an
-/// alias by its name and a macro by its key. Yours stays and the file's
-/// is left out.
+/// alias by its name and a macro of yours by its key. Yours stays and
+/// the file's is left out.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Clash {
     pub kind: ClashKind,
@@ -310,10 +312,22 @@ fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> C
         |a| a.group = Some(group.to_string()),
         &mut clashes,
     );
+    // A launch installs the catalog's own preset macros from its
+    // enabled_presets, so the file's stay out. The file's macros meet only
+    // yours in the catalog. A preset macro there waits for one of yours on
+    // its key, so it is no clash, and a catalog with Numpad movement on
+    // lists none on its keys.
+    let yours = |macros: &[Macro]| -> Vec<Macro> {
+        macros
+            .iter()
+            .filter(|m| m.preset.is_none())
+            .cloned()
+            .collect()
+    };
     let macros = join(
         ClashKind::Macro,
-        &file.macros,
-        &catalog.macros,
+        &yours(&file.macros),
+        &yours(&catalog.macros),
         |m| &m.key,
         |m| m.group = Some(group.to_string()),
         &mut clashes,
@@ -632,10 +646,8 @@ mod tests {
         assert_eq!(join.group, "Healer profile (2)");
         assert_eq!(names(&join.triggers, |t| &t.name), ["tells", "room-items"]);
         assert_eq!(names(&join.aliases, |a| &a.name), ["heal"]);
-        assert_eq!(
-            names(&join.macros, |m| &m.key),
-            ["F1", "Numpad3", "Numpad8", "Numpad3"]
-        );
+        // The file's preset macros stay out.
+        assert_eq!(names(&join.macros, |m| &m.key), ["F1", "Numpad3"]);
         let groups: Vec<_> = join
             .triggers
             .iter()
@@ -643,7 +655,7 @@ mod tests {
             .chain(join.aliases.iter().map(|a| a.group.as_deref()))
             .chain(join.macros.iter().map(|m| m.group.as_deref()))
             .collect();
-        assert_eq!(groups, [Some("Healer profile (2)"); 7]);
+        assert_eq!(groups, [Some("Healer profile (2)"); 5]);
         // A clash keeps yours, by name and for a macro by key.
         let clash = |kind, name: &str| Clash {
             kind,
@@ -656,6 +668,50 @@ mod tests {
                 clash(ClashKind::Alias, "kk"),
                 clash(ClashKind::Macro, "F2"),
             ]
+        );
+    }
+
+    #[test]
+    fn in_loadout_mode_the_macros_of_the_file_meet_only_yours() {
+        // The catalog has your F2, and Numpad movement on, two of its
+        // macros for short.
+        let bind = |key: &str, command: &str, preset: Option<&str>| Macro {
+            key: key.into(),
+            command: command.into(),
+            group: None,
+            enabled: true,
+            preset: preset.map(String::from),
+        };
+        let numpad = Some("numpad_movement");
+        let catalog = GlobalCatalog {
+            macros: vec![
+                bind("F2", "rest", None),
+                bind("Numpad8", "n", numpad),
+                bind("Numpad3", "d", numpad),
+            ],
+            enabled_presets: Some(vec!["numpad_movement".into()]),
+            ..GlobalCatalog::default()
+        };
+        let join = plan(
+            "Healer profile.toml",
+            EXPORT,
+            &ScopeConfig::default(),
+            Some(&catalog),
+        )
+        .unwrap()
+        .catalog
+        .unwrap();
+        // Your Numpad3 joins beside the preset's d, and the file's own
+        // preset macros stay out, as a launch installs the catalog's.
+        assert_eq!(names(&join.macros, |m| &m.key), ["F1", "Numpad3"]);
+        assert!(join.macros.iter().all(|m| m.preset.is_none()));
+        // Only your F2 clashes. Each key of the preset used to as well.
+        assert_eq!(
+            join.clashes,
+            [Clash {
+                kind: ClashKind::Macro,
+                name: "F2".into(),
+            }]
         );
     }
 
