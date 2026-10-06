@@ -22,9 +22,9 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
 vi.mock('../toasts', () => ({ pushToast: vi.fn() }));
-const waiting = vi.hoisted(() => new Set<number>());
+const waiting = vi.hoisted(() => new Map<number, { host: string; port: number; tls: boolean }>());
 vi.mock('./reconnectStore', () => ({
-  reconnectOf: (session: number) => ({ kind: waiting.has(session) ? 'waiting' : 'none' }),
+  waitingTarget: (session: number) => waiting.get(session) ?? null,
 }));
 
 describe('the saved target', () => {
@@ -139,18 +139,30 @@ describe('connectOrRedial', () => {
   });
 
   it('dials the waiting try now, as Reconnect now does', async () => {
-    waiting.add(2);
+    waiting.set(2, target);
     vi.mocked(invoke).mockImplementation(() => Promise.resolve());
     await connectOrRedial(target, 2);
     expect(vi.mocked(invoke).mock.calls).toEqual([['session_reconnect_now', { session: 2 }]]);
   });
 
   it('connects as Connect does while no redial waits', async () => {
-    waiting.add(1);
+    waiting.set(1, target);
     vi.mocked(invoke).mockImplementation(() => Promise.resolve());
     await connectOrRedial(target, 2);
     expect(invoke).not.toHaveBeenCalledWith('session_reconnect_now', expect.anything());
     expect(invoke).toHaveBeenLastCalledWith('session_connect', { ...target, session: 2 });
+  });
+
+  it.each([
+    { host: 'localhost', port: 1848, tls: false },
+    { host: 'play.theforsakenlands.com', port: 1825, tls: false },
+    { host: 'play.theforsakenlands.com', port: 1848, tls: true },
+  ])('connects to another world while a redial waits, which ends it', async (other) => {
+    waiting.set(2, target);
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+    await connectOrRedial(other, 2);
+    expect(invoke).not.toHaveBeenCalledWith('session_reconnect_now', expect.anything());
+    expect(invoke).toHaveBeenLastCalledWith('session_connect', { ...other, session: 2 });
   });
 });
 

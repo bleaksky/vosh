@@ -36,14 +36,9 @@ const ORLA = 2;
 
 const redial = (session: number, payload: object) =>
   fire('session://reconnect', { session, ...payload });
-const connecting = (session: number) =>
-  fire('session://state', {
-    session,
-    kind: 'connecting',
-    host: 'play.theforsakenlands.com',
-    port: 1848,
-    tls: false,
-  });
+const WORLD = { host: 'play.theforsakenlands.com', port: 1848, tls: false };
+const connecting = (session: number, at = WORLD) =>
+  fire('session://state', { session, kind: 'connecting', ...at });
 const disconnected = (session: number, reason: string | null) =>
   fire('session://state', { session, kind: 'disconnected', reason });
 
@@ -130,5 +125,16 @@ describe('the reconnect store', () => {
     expect(r.reconnectOf(TOLLIVER)).toEqual({ kind: 'none' });
     connecting(TOLLIVER);
     expect(r.reconnectOf(ORLA)).toEqual({ kind: 'stopped', tries: 8 });
+  });
+
+  it('names where the waiting try dials, the address the drop left', async () => {
+    const r = await load();
+    expect(r.waitingTarget(TOLLIVER)).toBeNull();
+    connecting(TOLLIVER);
+    disconnected(TOLLIVER, 'server closed connection');
+    redial(TOLLIVER, { kind: 'waiting', try: 1, tries: 8, seconds: 5 });
+    expect(r.waitingTarget(TOLLIVER)).toEqual(WORLD);
+    redial(TOLLIVER, { kind: 'dialing', try: 1, tries: 8 });
+    expect(r.waitingTarget(TOLLIVER)).toBeNull();
   });
 });

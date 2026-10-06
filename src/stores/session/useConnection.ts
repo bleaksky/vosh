@@ -14,7 +14,7 @@ import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 import { useSessionConnection, type ConnectionStatus } from './connectionStore';
-import { reconnectOf } from './reconnectStore';
+import { waitingTarget } from './reconnectStore';
 import { getSelected, getSessions, useSelectedRow } from './sessionsStore';
 
 // The session the title band shows and the session menu drives, which
@@ -177,11 +177,18 @@ export async function connectTo(target: ConnectionTarget, session: number): Prom
   await connectSession(target.host, target.port, target.tls, session);
 }
 
-/** Connect `session` to `target`, or while a redial of it waits, dial
- *  that try now, as Reconnect now on the notice does. Cmd+R, the session
- *  menu's Connect to row and the palette reach it. */
+/** Connect `session` to `target`, or while a redial of it waits to dial
+ *  that same target, dial that try now, as Reconnect now on the notice
+ *  does. A connect to another world ends the series (board 7). Cmd+R,
+ *  the session menu's Connect to row and the palette reach it. */
 export async function connectOrRedial(target: ConnectionTarget, session: number): Promise<void> {
-  if (reconnectOf(session).kind === 'waiting') await reconnectNow(session);
+  const waits = waitingTarget(session);
+  const same =
+    waits !== null &&
+    waits.host === target.host &&
+    waits.port === target.port &&
+    waits.tls === target.tls;
+  if (same) await reconnectNow(session);
   else await connectTo(target, session);
 }
 
