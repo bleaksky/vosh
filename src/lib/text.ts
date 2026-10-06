@@ -9,6 +9,15 @@ export function listJoin(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
+/** Counts from two, as a sentence opens with them. */
+const COUNTS = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+/** How many, as a sentence opens with the count: `Two`, `Three`, and
+ *  past ten the number itself. */
+export function countWord(n: number): string {
+  return COUNTS[n - 2] ?? String(n);
+}
+
 /** A name's possessive, `Orla's`, and `Rhys's` for a name that ends in
  *  s as well, so every name reads the same way. */
 export function possessive(name: string): string {

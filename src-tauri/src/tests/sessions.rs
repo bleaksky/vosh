@@ -1010,7 +1010,7 @@ async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session
     assert_eq!(
         crate::profile::set::delete_profile(&h.state, DEFAULT_PROFILE_NAME).await,
         Err(
-            crate::profile::set::ProfileSetError::CannotDeleteActive(DEFAULT_PROFILE_NAME.into())
+            crate::profile::set::ProfileSetError::CannotDeletePlayed(DEFAULT_PROFILE_NAME.into())
                 .to_string()
         )
     );

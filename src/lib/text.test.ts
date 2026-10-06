@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorText, listJoin, possessive, quoted } from './text';
+import { countWord, errorText, listJoin, possessive, quoted } from './text';
 
 describe('listJoin', () => {
   it('reads nothing as an empty string and one item as itself', () => {
@@ -16,6 +16,14 @@ describe('listJoin', () => {
     expect(listJoin(['Tolliver', 'Maren', 'Orla', 'the tick'])).toBe(
       'Tolliver, Maren, Orla, and the tick',
     );
+  });
+});
+
+describe('countWord', () => {
+  it('writes two to ten in words and more in digits', () => {
+    expect(countWord(2)).toBe('Two');
+    expect(countWord(10)).toBe('Ten');
+    expect(countWord(11)).toBe('11');
   });
 });
 

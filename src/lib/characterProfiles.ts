@@ -1,12 +1,14 @@
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
+import type { SessionRow } from '../ipc/session';
 import { KNOWN_WORLDS, knownWorld, worldLabel, worldName } from './knownWorlds';
-import { listJoin } from './text';
+import { sessionLabel } from './sessionLabel';
+import { countWord, listJoin, possessive } from './text';
 
 // The words and choices Settings > Characters builds from the profile
-// index and the session: display names, the login toggle's character,
-// the World select, and the sentences the page reports. Pure, so the
-// page stays about layout.
+// index and the sessions: display names, the login toggle's character,
+// the World select, the profiles the sessions play, and the sentences
+// the page reports. Pure, so the page stays about layout.
 
 /** The reserved profile every install starts with. */
 export const DEFAULT_PROFILE = 'default';
@@ -150,6 +152,95 @@ export function profileWorld(entry: ProfileEntry): ProfileWorld | null {
   const port = entry.auto_match?.port ?? null;
   const own = knownWorld(host)?.port;
   return { world: worldName(host), port: own !== undefined && port !== own ? port : null };
+}
+
+// ---------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------
+
+/** The profiles the open sessions play, by board 7 of the Sessions
+ *  review. */
+export interface PlayedProfiles {
+  /** Every profile a session plays, which the list marks with a dot and
+   *  Delete refuses. */
+  all: ReadonlySet<string>;
+  /** The profile the selected session plays, which Switch to this
+   *  profile is dimmed for, since that session already plays it. */
+  selected: string;
+}
+
+/** The profiles `rows` play, and the one session `selected` plays.
+ *  Before the first session list both are `active`, the profile in use. */
+export function playedProfiles(
+  rows: readonly SessionRow[],
+  selected: number,
+  active: string,
+): PlayedProfiles {
+  const all = new Set(rows.flatMap((row) => (row.profile ? [row.profile] : [])));
+  if (all.size === 0) all.add(active);
+  return { all, selected: rows.find((row) => row.id === selected)?.profile ?? active };
+}
+
+/** The port a session's row shows beside its name, ` on 1825`, while
+ *  another open session goes by the same name, so the line tells the
+ *  two apart as the sidebar does. Empty otherwise. */
+function portApart(row: SessionRow, rows: readonly SessionRow[]): string {
+  const { who, meta } = sessionLabel(row, rows);
+  const same = rows.filter((r) => sessionLabel(r, rows).who === who);
+  return meta && same.length > 1 ? ` on ${meta}` : '';
+}
+
+/** A session as the line under the list names it on its own: `Tolliver's
+ *  session`, `a session on The Forsaken Lands 1825` at the login, or `a
+ *  new session` before it has a place. After the first profile a name
+ *  drops the word session, `Orla's`, as the line says it once. */
+function sessionPhrase(row: SessionRow, rows: readonly SessionRow[], first: boolean): string {
+  const { who, place } = sessionLabel(row, rows);
+  if (who) return `${possessive(who)}${first ? ' session' : ''}${portApart(row, rows)}`;
+  return place ? `a session on ${place}` : 'a new session';
+}
+
+/** A session among others on one profile: `Builder`, or `one on The
+ *  Forsaken Lands 1825` at the login. */
+function sessionInList(row: SessionRow, rows: readonly SessionRow[]): string {
+  const { who, place } = sessionLabel(row, rows);
+  if (who) return `${who}${portApart(row, rows)}`;
+  return place ? `one on ${place}` : 'a new one';
+}
+
+/** The line under the Characters list while two or more sessions are
+ *  open, naming the sessions on each profile they play in list order.
+ *  One session on each reads `Default plays in Tolliver's session, Build
+ *  in Orla's.`, and a profile two or more play reads `Default plays in
+ *  two sessions, Tolliver and Builder.`, a sentence for each profile.
+ *  Null with one session, where the dot says it all. */
+export function sessionsSentence(
+  profiles: readonly ProfileEntry[],
+  rows: readonly SessionRow[],
+): string | null {
+  if (rows.length < 2) return null;
+  const groups = profiles
+    .map((p) => ({
+      name: profileDisplayName(p.name),
+      on: rows.filter((r) => r.profile === p.name),
+    }))
+    .filter((group) => group.on.length > 0);
+  if (groups.length === 0) return null;
+  if (groups.every((group) => group.on.length === 1)) {
+    const clauses = groups.map(({ name, on }, i) =>
+      i === 0
+        ? `${name} plays in ${sessionPhrase(on[0], rows, true)}`
+        : `${name} in ${sessionPhrase(on[0], rows, false)}`,
+    );
+    return `${clauses.join(', ')}.`;
+  }
+  return groups
+    .map(({ name, on }) => {
+      if (on.length === 1) return `${name} plays in ${sessionPhrase(on[0], rows, true)}.`;
+      const count = countWord(on.length).toLowerCase();
+      return `${name} plays in ${count} sessions, ${listJoin(on.map((r) => sessionInList(r, rows)))}.`;
+    })
+    .join(' ');
 }
 
 // ---------------------------------------------------------------

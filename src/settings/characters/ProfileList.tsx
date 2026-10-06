@@ -20,8 +20,10 @@ import {
   movedSentence,
   newProfileClaim,
   newProfileName,
+  playedProfiles,
   profileDisplayName,
   profileWorld,
+  sessionsSentence,
   takenProfileName,
   takenSentence,
 } from '../../lib/characterProfiles';
@@ -34,15 +36,18 @@ import {
   profileSwitch,
   type ProfilesList,
 } from '../../ipc/profiles';
+import { useSelected, useSessions } from '../../stores/session/sessionsStore';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
 
 // The profile list on the Characters board: one 38 px row per profile
-// in index order, the profile in use marked by an accent dot, its world
-// as quiet meta, and New profile under it. Selecting a row only shows
-// that profile. It never switches the live session. Each row has a
-// more menu (SPEC 7) that switches, renames, duplicates, exports, and
-// deletes, and a quiet line under the list says what the last action
-// did when that is not plain to see.
+// in index order, every profile a session plays marked by an accent dot
+// (board 7 of the Sessions review), its world as quiet meta, and New
+// profile under it. Selecting a row only shows that profile. It never
+// switches a session. Each row has a more menu (SPEC 7) that switches
+// the selected session, renames, duplicates, exports, and deletes. A
+// quiet line under the list says what the last action did when that is
+// not plain to see, and otherwise, with two or more sessions open,
+// which sessions play each profile.
 
 interface Props {
   list: ProfilesList;
@@ -96,6 +101,9 @@ export function ProfileList({
   const listRef = useRef<HTMLUListElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
   const names = list.profiles.map((p) => p.name);
+  const sessions = useSessions();
+  const selectedSession = useSelected();
+  const played = playedProfiles(sessions, selectedSession, list.active);
 
   // A field or the dialog that held focus is gone, so focus would sit on
   // the page. Hand it to the row the action left you on, once the list
@@ -289,7 +297,11 @@ export function ProfileList({
   };
 
   const menuEntry = menu ? list.profiles.find((p) => p.name === menu.name) : undefined;
-  const menuActive = menu?.name === list.active;
+  // Switch dims only for the profile the selected session plays, since
+  // another session's profile stays open to it, and Delete refuses every
+  // profile a session plays.
+  const menuSelected = menu?.name === played.selected;
+  const menuPlayed = menu ? played.all.has(menu.name) : false;
   const deletingLabel = deleting ? profileDisplayName(deleting) : '';
 
   return (
@@ -298,7 +310,7 @@ export function ProfileList({
         {list.profiles.map((entry) => {
           const { name } = entry;
           const display = profileDisplayName(name);
-          const active = name === list.active;
+          const plays = played.all.has(name);
           const world = profileWorld(entry);
           const renaming = editing?.kind === 'rename' && editing.name === name;
           const open = menu?.name === name;
@@ -331,12 +343,12 @@ export function ProfileList({
                       onKeyDown={onRowKey}
                     >
                       <span
-                        className={cx('st-profile-dot', active && 'is-active')}
+                        className={cx('st-profile-dot', plays && 'is-active')}
                         aria-hidden="true"
                       />
                       <span className="st-profile-name">
                         {display}
-                        {active && <VisuallyHidden> (in use)</VisuallyHidden>}
+                        {plays && <VisuallyHidden> (in use)</VisuallyHidden>}
                       </span>
                       {world && (
                         <span className="st-profile-meta">
@@ -397,7 +409,7 @@ export function ProfileList({
       </Button>
 
       <p className="st-chars-status" role="status">
-        {status}
+        {status ?? sessionsSentence(list.profiles, sessions)}
       </p>
 
       {menu && menuEntry && (
@@ -409,8 +421,8 @@ export function ProfileList({
           onClose={closeMenu}
         >
           <MenuItem
-            disabled={menuActive}
-            onSelect={pick(() => void run(() => profileSwitch(menu.name)))}
+            disabled={menuSelected}
+            onSelect={pick(() => void run(() => profileSwitch(menu.name, selectedSession)))}
           >
             Switch to this profile
           </MenuItem>
@@ -422,8 +434,8 @@ export function ProfileList({
           </MenuItem>
           <MenuItem onSelect={pick(() => exportProfile(menu.name))}>Export to Downloads</MenuItem>
           <MenuSeparator />
-          <MenuItem disabled={menuActive} onSelect={pick(() => setDeleting(menu.name))}>
-            <span className={menuActive ? undefined : 'st-menu-danger'}>Delete…</span>
+          <MenuItem disabled={menuPlayed} onSelect={pick(() => setDeleting(menu.name))}>
+            <span className={menuPlayed ? undefined : 'st-menu-danger'}>Delete…</span>
           </MenuItem>
         </MenuSurface>
       )}
