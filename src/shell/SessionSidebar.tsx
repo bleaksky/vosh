@@ -49,12 +49,17 @@ import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 //
 // A right click opens the row's menu at the pointer, board 9: Rename
 // session…, Edit connection…, Disconnect while the session is
-// connected, and Close session. Rename session…, a double click on the
-// name, or Rename session… from anywhere else while the sidebar shows,
-// brings the session to the front and turns its name into a field in
-// place (Q7). Return or a click elsewhere keeps what you typed, Escape
-// leaves the row as it was, and a blank field clears the name, so the
-// row reads the character again.
+// connected, and Close session. Rename session… shows F2 beside it when
+// the row had the keyboard as the menu opened. A double click on the
+// name, Return or F2 on a row that has the keyboard, or Rename session…
+// from the row menu or anywhere else while the sidebar shows, brings
+// the session to the front and turns its name into a field in place
+// (Q7, S5 of the Sessions Sidebar review). Space still selects, and F2
+// never reaches the command line from a row. The field spans the name
+// and the right column, the mark stays, and line two says how to finish.
+// Return or a click elsewhere keeps what you typed, Escape leaves the
+// row as it was, and a blank field clears the name, so the row reads
+// the character again.
 //
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
@@ -125,9 +130,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     onMove,
   );
   // The session whose name is a field, and the row whose menu is open,
-  // with the pointer it opened at.
+  // with the pointer it opened at and whether the row had the keyboard.
   const [renaming, setRenaming] = useState<number | null>(null);
-  const [menu, setMenu] = useState<{ session: number; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    session: number;
+    x: number;
+    y: number;
+    keyed: boolean;
+  } | null>(null);
   const menuRow = menu && rows.find((row) => row.id === menu.session);
 
   // Every Rename session… acts on the session in front, so a row behind
@@ -218,7 +228,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             onSelect={onSelect}
             onClose={onClose}
             onCaret={onCaret}
-            onMenu={(x, y) => setMenu({ session: row.id, x, y })}
+            onMenu={(x, y, keyed) => setMenu({ session: row.id, x, y, keyed })}
             onRename={() => startRename(row.id)}
             onRenamed={(name, caret) => renamed(row.id, name, caret)}
           />
@@ -234,7 +244,10 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
       </ul>
       {menu && menuRow && (
         <ShellMenu at={menu} width={ROW_MENU_WIDTH} label="Session options" onClose={closeMenu}>
-          <ShellMenuItem onSelect={() => fromMenu(() => startRename(menuRow.id))}>
+          <ShellMenuItem
+            shortcut={menu.keyed ? 'F2' : undefined}
+            onSelect={() => fromMenu(() => startRename(menuRow.id))}
+          >
             Rename session…
           </ShellMenuItem>
           <ShellMenuItem
@@ -291,8 +304,9 @@ interface SlotProps {
   onSelect: (session: number) => void;
   onClose: (session: number) => void;
   onCaret: () => void;
-  /** Open the row's menu at the pointer. */
-  onMenu: (x: number, y: number) => void;
+  /** Open the row's menu at the pointer, and say whether the row had
+   *  the keyboard. */
+  onMenu: (x: number, y: number, keyed: boolean) => void;
   onRename: () => void;
   /** The name field closed, with the name to keep, or undefined to keep
    *  the row as it was. */
@@ -335,6 +349,7 @@ function SessionSlot({
             unnamed={sessionLabel({ ...row, name: null }, rows).name}
             onDone={onRenamed}
           />
+          <span className="shell-sessions-line is-hint">Return saves, Esc cancels</span>
         </div>
       </li>
     );
@@ -355,9 +370,16 @@ function SessionSlot({
           // Picking a session puts you back on its command line.
           onCaret();
         }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== 'F2') return;
+          if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onRename();
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
-          onMenu(e.clientX, e.clientY);
+          onMenu(e.clientX, e.clientY, e.currentTarget.matches(':focus-visible'));
         }}
       >
         <SessionMark mark={look.mark} />
