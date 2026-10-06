@@ -13,7 +13,7 @@ const LEDGER_LOW_EXIT = 25;
 // line. Char.Vitals is the base. Prompt vars that a trigger sets with
 // mud.set_prompt_var (hp, maxhp, mana, maxmana, move, maxmove) win
 // over it, so a prompt regex can drive the meters on a server without
-// GMCP. Lifted from the VitalsBar data effect.
+// GMCP.
 //
 // Under lamented tears Aabahran sends Char.Vitals as zeros with
 // `"hidden": true`. The snapshot is then hidden until a Char.Vitals
@@ -71,8 +71,7 @@ const MAX_OF: Record<VitalKey, keyof VitalValues> = {
 };
 const NOT_LOW: Record<VitalKey, boolean> = { hp: false, mana: false, move: false };
 
-/** Parse a Char.Vitals payload. Missing fields read as 0, the way the
- *  VitalsBar did. */
+/** Parse a Char.Vitals payload. Missing fields read as 0. */
 export function parseVitals(data: unknown): VitalValues {
   const d = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
   return {

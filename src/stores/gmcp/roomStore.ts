@@ -5,8 +5,9 @@ import { asNumber, asText } from '../store';
 // gives the name, vnum, area name, sector, climate region and exits.
 // Room.Chars lists the people you can see. Map.Tiles carries an `areas`
 // dict keyed by area VNUM plus the grid cell you stand on (`h`), whose
-// `ar` names your area vnum. RoomStrip looked the dict up by area NAME,
-// so the area color never resolved. resolveArea matches it properly.
+// `ar` names your area vnum. Room.Info names the area but sends no
+// vnum, so resolveArea finds it in the dict by your cell's vnum or by
+// the area name.
 //
 // Room.* arrives only when you move or look. The store keeps the last
 // room across a disconnect, the way the Map pane keeps the last map.
@@ -160,7 +161,7 @@ export interface PeopleGroup {
 }
 
 /** Fold people who share a name into one row with a count, in order of
- *  first appearance. Lifted from RoomStrip. */
+ *  first appearance. */
 export function groupPeople(people: readonly RoomPerson[]): PeopleGroup[] {
   const byName = new Map<string, PeopleGroup>();
   people.forEach((person, idx) => {

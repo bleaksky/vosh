@@ -8,11 +8,11 @@ import { asNumber, asText, isHiddenFlag } from '../store';
 // Your current affects from Char.Affects, one row per affect name.
 // Aabahran sends one entry per (affect, modifier) pair, resends the
 // whole list every tick, on each add or remove, and at login. Duration
-// is ticks left and -1 means permanent. Lifted from AffectsBar, which
-// held this in component state and went empty on every remount until
-// the next tick. A window that opens between ticks, Settings among
-// them, reads the last list the backend kept instead of waiting for the
-// next one.
+// is ticks left and -1 means permanent. The store keeps the list at
+// module scope, so a pane that remounts shows it at once instead of
+// going empty until the next tick. A window that opens between ticks,
+// Settings among them, reads the last list the backend kept instead of
+// waiting for the next one.
 //
 // Under lamented tears the list comes empty with `"hidden": true`. The
 // store is then hidden until a list without the flag arrives, so the
