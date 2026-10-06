@@ -22,7 +22,7 @@ export const KNOWN_WORLDS: readonly KnownWorld[] = [
 ];
 
 /** A host as Vosh compares it, trimmed, in lower case and without a
- *  closing dot. */
+ *  closing dot. Mirrors host_key in src-tauri/src/profile/worlds.rs. */
 export function hostKey(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
@@ -43,7 +43,8 @@ export function worldName(host: string): string {
 /** The world a host and port play, like `The Forsaken Lands` on its own
  *  port 1848 and `The Forsaken Lands 1825` on the build port. A known
  *  world adds a port that is not its own, so two ports of one game read
- *  apart. Any other host has no port of its own and shows as typed. */
+ *  apart. Any other host has no port of its own and shows as typed.
+ *  Mirrors world_label in src-tauri/src/profile/worlds.rs. */
 export function worldLabel(host: string, port: number): string {
   const world = knownWorld(host);
   if (!world) return host.trim();

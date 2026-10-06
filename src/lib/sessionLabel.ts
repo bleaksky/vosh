@@ -7,7 +7,9 @@ import { hostKey, knownWorld, worldLabel, worldName } from './knownWorlds';
 // else where it plays, else New session. Its port shows when it tells
 // the session apart: on a known world a port that is not the world's
 // own, and on any other host any port while another open session
-// shares that host.
+// shares that host. label_of in src-tauri/src/sessions.rs names it the
+// same way for a banner and the line another session prints, and both
+// run fixtures/session-labels/cases.json.
 
 /** What a session's label reads from its row. */
 export type LabelSource = Pick<SessionRow, 'id' | 'name' | 'character' | 'host' | 'port'>;

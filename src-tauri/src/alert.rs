@@ -162,7 +162,7 @@ pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, ale
         return;
     };
     let seen = focus::seen(&state, session.id);
-    let label = session.label();
+    let label = session.label(&state.other_sessions(session.id));
     let now = Instant::now();
     for alert in alerts {
         let Some(fate) = focus::fate(&alert.parts, seen) else {

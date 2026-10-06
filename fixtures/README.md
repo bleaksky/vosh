@@ -113,6 +113,11 @@ fixtures/
                Rust tests install. Hand written and synthetic, from the
                server's own format strings and area files. Its README says
                where each line comes from.
+  session-labels/ cases.json, what a session goes by, its name, its
+               character or the world where it dials with or without its
+               port, shared by sessionLabel on the page and label_of in
+               src-tauri/src/sessions.rs, so a banner names a session as
+               its row does. Hand written.
   terminal-rows/ cases.json, the rows the terminal keeps and the rows the
                game is told while your pinned prompt band borrows rows,
                shared by keptRows and gameSize on xterm and

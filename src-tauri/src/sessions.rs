@@ -35,6 +35,7 @@ use crate::logs::SharedScrollback;
 use crate::profile::live::Profile;
 use crate::profile::open::{OpenProfile, ProfileGuard};
 use crate::profile::set::SessionEntry;
+use crate::profile::worlds::{host_key, known_world, world_label};
 use crate::script::SharedTimers;
 use crate::session::connection::{Connection, SharedConnection};
 use crate::session::SessionHandle;
@@ -337,34 +338,39 @@ impl Session {
         self.connection.lock().tick.in_session
     }
 
+    /// Where the session dials, if anywhere yet.
+    fn address(&self) -> Option<Address> {
+        self.address
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     /// What a line in another session or a banner calls this one, as its
-    /// row reads: the name you gave it, or the character it plays or
-    /// played last, or else the world where it dials with the port, like
-    /// `The Forsaken Lands 1825`. None while it has no name and no place
-    /// to dial.
-    pub(crate) fn label(&self) -> Option<String> {
-        self.name().or_else(|| self.played()).or_else(|| {
-            let address = self
-                .address
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone()?;
-            Some(format!(
-                "{} {}",
-                crate::profile::worlds::world_name(&address.host),
-                address.port
-            ))
-        })
+    /// row reads among `others`, the other open sessions. See
+    /// [`label_of`].
+    pub(crate) fn label(&self, others: &[Arc<Session>]) -> Option<String> {
+        let address = self.address();
+        let at = address.as_ref().map(|a| (a.host.as_str(), a.port));
+        let own = address.as_ref().map(|a| host_key(&a.host));
+        let shares_host = own.is_some_and(|own| {
+            others
+                .iter()
+                .filter_map(|other| other.address())
+                .any(|other| host_key(&other.host) == own)
+        });
+        label_of(
+            self.name().as_deref(),
+            self.played().as_deref(),
+            at,
+            shares_host,
+        )
     }
 
     /// The session's row in the list the window shows. Takes the
     /// connection lock, so call it with no profile held.
     pub(crate) fn row(&self, selected: bool) -> SessionRow {
-        let address = self
-            .address
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
+        let address = self.address();
         SessionRow {
             id: self.id,
             name: self.name(),
@@ -509,6 +515,36 @@ pub(crate) fn emit_for<R: tauri::Runtime, T: Serialize>(
     if let Err(e) = app.emit(event, &named) {
         warn!(error = %e, event, "failed to emit a session event");
     }
+}
+
+/// What a session goes by, the name its row reads: the name you gave it,
+/// else its character, else where it dials, `at`. A known world shows a
+/// port that is not its own, like `The Forsaken Lands 1825`, and any
+/// other host shows its port only while another open session shares the
+/// host, `shares_host`. None with no name, character or place, where the
+/// row reads New session. The twin of `sessionLabel` in
+/// src/lib/sessionLabel.ts, held to it by
+/// fixtures/session-labels/cases.json.
+pub(crate) fn label_of(
+    name: Option<&str>,
+    character: Option<&str>,
+    at: Option<(&str, u16)>,
+    shares_host: bool,
+) -> Option<String> {
+    let who = [name, character]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|who| !who.is_empty());
+    if let Some(who) = who {
+        return Some(who.to_string());
+    }
+    let (host, port) = at?;
+    Some(if known_world(host).is_none() && shares_host {
+        format!("{} {port}", host.trim())
+    } else {
+        world_label(host, port)
+    })
 }
 
 /// Tell every window each session's row, in list order with the
@@ -798,10 +834,11 @@ mod tests {
     use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
     use tauri::{App, Listener};
 
-    use super::{Session, SessionId, SessionRow, NO_SUCH_SESSION};
+    use super::{label_of, Session, SessionId, SessionRow, NO_SUCH_SESSION};
     use crate::app::events;
     use crate::app::state::AppState;
     use crate::profile::live::Profile;
+    use crate::profile::worlds::host_key;
     use crate::session::{StatePayload, TargetPayload};
 
     /// A session `id` that plays the defaults.
@@ -899,21 +936,93 @@ mod tests {
     #[test]
     fn a_label_names_the_session_or_its_character_or_else_the_world_with_its_port() {
         let session = on_defaults(SessionId(2));
-        assert_eq!(session.label(), None);
-        *session.address.lock().unwrap() = Some(super::Address {
-            host: "play.theforsakenlands.com".into(),
-            port: 1825,
-            tls: true,
-        });
-        assert_eq!(session.label().as_deref(), Some("The Forsaken Lands 1825"));
+        assert_eq!(session.label(&[]), None);
+        let at = |host: &str, port| {
+            Some(super::Address {
+                host: host.into(),
+                port,
+                tls: false,
+            })
+        };
+        *session.address.lock().unwrap() = at("play.theforsakenlands.com", 1825);
+        assert_eq!(
+            session.label(&[]).as_deref(),
+            Some("The Forsaken Lands 1825")
+        );
+        *session.address.lock().unwrap() = at("play.theforsakenlands.com", 1848);
+        assert_eq!(session.label(&[]).as_deref(), Some("The Forsaken Lands"));
+        // Another host shows its port while another session shares it.
+        *session.address.lock().unwrap() = at("mud.example.org", 4000);
+        let other = Arc::new(on_defaults(SessionId(3)));
+        assert_eq!(
+            session.label(std::slice::from_ref(&other)).as_deref(),
+            Some("mud.example.org")
+        );
+        *other.address.lock().unwrap() = at("MUD.example.org.", 4001);
+        assert_eq!(
+            session.label(&[other]).as_deref(),
+            Some("mud.example.org 4000")
+        );
         *session.current_character.lock().unwrap() = Some("Builder".into());
-        assert_eq!(session.label().as_deref(), Some("Builder"));
+        assert_eq!(session.label(&[]).as_deref(), Some("Builder"));
         session.rename(Some("  Build port  "));
-        assert_eq!(session.label().as_deref(), Some("Build port"));
+        assert_eq!(session.label(&[]).as_deref(), Some("Build port"));
         // A blank name clears it, and the character shows again.
         session.rename(Some(" "));
         assert_eq!(session.name(), None);
-        assert_eq!(session.label().as_deref(), Some("Builder"));
+        assert_eq!(session.label(&[]).as_deref(), Some("Builder"));
+    }
+
+    /// fixtures/session-labels/cases.json, which `sessionLabel` in
+    /// src/lib/sessionLabel.ts runs too.
+    #[derive(serde::Deserialize)]
+    struct LabelCases {
+        cases: Vec<LabelCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct LabelCase {
+        name: String,
+        session: LabelRow,
+        others: Vec<Place>,
+        label: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct LabelRow {
+        name: Option<String>,
+        character: Option<String>,
+        host: Option<String>,
+        port: Option<u16>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Place {
+        host: Option<String>,
+    }
+
+    #[test]
+    fn a_label_reads_as_the_page_names_the_session() {
+        let text = include_str!("../../fixtures/session-labels/cases.json");
+        let cases: LabelCases = serde_json::from_str(text).expect("the label cases");
+        assert_ne!(cases.cases.len(), 0);
+        for case in cases.cases {
+            let row = &case.session;
+            let at = row.host.as_deref().zip(row.port);
+            let shares_host = row.host.as_deref().is_some_and(|own| {
+                case.others
+                    .iter()
+                    .filter_map(|other| other.host.as_deref())
+                    .any(|other| host_key(other) == host_key(own))
+            });
+            let label = label_of(
+                row.name.as_deref(),
+                row.character.as_deref(),
+                at,
+                shares_host,
+            );
+            assert_eq!(label, case.label, "{}", case.name);
+        }
     }
 
     #[test]
@@ -927,7 +1036,7 @@ mod tests {
         *session.current_character.lock().unwrap() = None;
         assert_eq!(session.character(), None);
         assert_eq!(session.row(false).character.as_deref(), Some("Tolliver"));
-        assert_eq!(session.label().as_deref(), Some("Tolliver"));
+        assert_eq!(session.label(&[]).as_deref(), Some("Tolliver"));
         // A connect you start names the world until you log in.
         session.forget_played();
         assert_eq!(session.row(false).character, None);

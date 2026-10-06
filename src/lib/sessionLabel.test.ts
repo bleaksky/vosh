@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import labelCases from '../../fixtures/session-labels/cases.json';
 import { sessionLabel, typedName, type LabelSource } from './sessionLabel';
 
 // Q7 of the Sessions review: a row reads the name you gave the session,
@@ -127,5 +128,19 @@ describe('typedName', () => {
   it('clears the name with a blank field', () => {
     expect(typedName('', 'Builder')).toBeNull();
     expect(typedName('   ', 'Builder')).toBeNull();
+  });
+});
+
+describe('the name a session goes by', () => {
+  // label_of in src-tauri/src/sessions.rs runs the same cases, so a
+  // banner and the line another session prints name a session as its
+  // row does.
+  it.each(labelCases.cases)('$name', ({ session: named, others, label }) => {
+    const row: LabelSource = { id: 1, ...named };
+    const rows = [
+      row,
+      ...others.map((place, i) => ({ id: i + 2, name: null, character: null, ...place })),
+    ];
+    expect(sessionLabel(row, rows).name).toBe(label ?? 'New session');
   });
 });
