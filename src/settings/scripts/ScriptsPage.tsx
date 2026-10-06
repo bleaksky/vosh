@@ -11,6 +11,7 @@ import {
 } from '../../ipc/scripts';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { errorText } from '../../lib/text';
+import { useSelected } from '../../stores/session/sessionsStore';
 import type { SettingsPageProps } from '../pageTypes';
 import { LuaConsole } from './LuaConsole';
 import { NewPluginDialog } from './NewPluginDialog';
@@ -20,15 +21,17 @@ import type { PluginSave } from './pluginState';
 
 // Settings > Scripts (Scripts and Panels, boards 1 to 4). Your plugins
 // as the selected session sees them, and the Console with every [lua]
-// line it printed. The page reads both as it opens and follows them
-// through the plugin and Lua output events, so its own state holds
-// them and no store does. A plugin opens on a page of its own inside
+// line it printed. The page reads both as it opens and again when you
+// select another session, and follows them through the plugin and Lua
+// output events, taking the lines of the selected session alone, so its
+// own state holds them and no store does. A plugin opens on a page of its own inside
 // the group, `scripts:<name>`, which takes its share of both.
 
 /** The lines the page keeps, as many as a session's Output ring. */
 const CONSOLE_LINES = 500;
 
 export function ScriptsPage({ target, onError, navigate, setLeaveGuard }: SettingsPageProps) {
+  const session = useSelected();
   const [plugins, setPlugins] = useState<PluginRow[] | null>(null);
   const [lines, setLines] = useState<LuaLine[]>([]);
   const [creating, setCreating] = useState(false);
@@ -36,24 +39,25 @@ export function ScriptsPage({ target, onError, navigate, setLeaveGuard }: Settin
   const [saves, setSaves] = useState<Readonly<Record<string, PluginSave>>>({});
 
   const readPlugins = useCallback(() => {
-    pluginsList()
+    pluginsList(session)
       .then(setPlugins)
       .catch((e: unknown) => onError(errorText(e)));
-  }, [onError]);
+  }, [session, onError]);
 
   useEffect(() => {
     readPlugins();
-    luaOutputGet()
+    luaOutputGet(session)
       .then(setLines)
       .catch((e: unknown) => onError(errorText(e)));
-  }, [readPlugins, onError]);
+  }, [readPlugins, session, onError]);
 
   useTauriEvent(subscribePluginsChanged, readPlugins);
   // A switch turns over the plugins of the session it changes.
   useTauriEvent(subscribeProfileSwitched, readPlugins);
-  useTauriEvent(subscribeLuaOutput, (payload) =>
-    setLines((prev) => [...prev, ...payload.lines].slice(-CONSOLE_LINES)),
-  );
+  useTauriEvent(subscribeLuaOutput, (payload) => {
+    if (payload.session !== session) return;
+    setLines((prev) => [...prev, ...payload.lines].slice(-CONSOLE_LINES));
+  });
 
   const open = (name: string) => navigate({ group: 'scripts', section: name });
 

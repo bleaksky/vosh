@@ -7,6 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { LUA_OUTPUT, PLUGINS_CHANGED } from './events';
+import { sessionOf } from './session';
 
 /** Why Vosh stopped a plugin: one call ran past 100 ms, one call used
  *  more than 32 MB, or your scripts held more than 128 MB. */
@@ -40,9 +41,10 @@ export interface PluginRow {
   misnamed: boolean;
 }
 
-/** Your plugins, sorted by name. */
-export async function pluginsList(): Promise<PluginRow[]> {
-  return invoke('plugins_list');
+/** Your plugins, sorted by name, as `session` sees them, or the
+ *  selected session when it names none. */
+export async function pluginsList(session?: number): Promise<PluginRow[]> {
+  return invoke('plugins_list', { session });
 }
 
 /** What manifest.toml in a plugin's folder says. */
@@ -180,10 +182,10 @@ export interface LuaLine {
   at?: { source: string; line: number };
 }
 
-/** The newest lines the selected session printed about Lua, oldest
- *  first. */
-export async function luaOutputGet(): Promise<LuaLine[]> {
-  return invoke('lua_output_get');
+/** The newest lines `session` printed about Lua, or the selected
+ *  session when it names none, oldest first. */
+export async function luaOutputGet(session?: number): Promise<LuaLine[]> {
+  return invoke('lua_output_get', { session });
 }
 
 /** Let go of the lines of `owner`, a tag like `plugin:vitals_alert`, in
@@ -210,7 +212,7 @@ export async function subscribeLuaOutput(
   cb: (payload: LuaOutputPayload) => void,
 ): Promise<UnlistenFn> {
   return listen<LuaOutputPayload>(LUA_OUTPUT, (event) => {
-    cb(event.payload);
+    cb({ ...event.payload, session: sessionOf(event.payload) });
   });
 }
 
