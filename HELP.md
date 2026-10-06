@@ -665,7 +665,7 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 - Open Settings and choose Characters. Your profiles list on the left, with a dot on each one a session plays and each one's world beside it. A profile on a port that is not the world's own shows the port too, as The Forsaken Lands 1825.
 - Click `New profile` under the list, type a name, and press `Enter`. Names take letters, numbers, spaces, hyphens, and underscores.
 - Select a profile to edit it. Selecting one never switches the session you are playing.
-- Pick its `World`, then turn on `Use this profile when you log in`. The row names your character once Vosh has seen you log in. Turning it on takes that character from any other profile on the same world, and Vosh says so under the list.
+- Pick its `World`, then turn on `Use this profile when you log in`. The row names your character once Vosh has seen you log in. Turning it on takes that character from any other profile on the same world, and Vosh says so under the list. On a port that is not the world's own, such as 1825, a profile that claims the character on the whole world keeps it on the world's own port instead, and the line under the list names each claim that moved.
 - Open a profile's more menu to `Switch to this profile`, or to choose `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
 - With two or more sessions open, the line under the list names the sessions on each profile.
 

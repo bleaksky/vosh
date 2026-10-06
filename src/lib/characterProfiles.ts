@@ -1,4 +1,4 @@
-import type { SessionIdentity } from '../ipc/characters';
+import type { LoginClaim, SessionIdentity } from '../ipc/characters';
 import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
 import type { SessionRow } from '../ipc/session';
 import { KNOWN_WORLDS, knownWorld, worldLabel, worldName } from './knownWorlds';
@@ -258,6 +258,43 @@ export function movedSentence(
   if (releasedFrom.length === 0) return null;
   const from = listJoin(releasedFrom.map(profileDisplayName));
   return `Vosh moved ${character} from ${from} to ${profileDisplayName(to)}.`;
+}
+
+/** What a pin did, by Q2 of the Sessions review: where the character
+ *  now plays each profile, then each pinned claim's new port and every
+ *  other character that moved with it, like `Tolliver plays Default on
+ *  1848 and Build on 1825. Default's claim now sits on 1848.` One toggle
+ *  pins every claim to the same port, the world's own. */
+function pinnedSentence(character: string, claim: LoginClaim, to: string): string | null {
+  const port = claim.entry.auto_match?.port;
+  if (claim.pinned.length === 0 || port == null) return null;
+  const pinnedTo = claim.pinned[0].port;
+  const pinnedNames = listJoin(claim.pinned.map((pin) => profileDisplayName(pin.profile)));
+  const sentences = [
+    `${character} plays ${pinnedNames} on ${pinnedTo} and ${profileDisplayName(to)} on ${port}.`,
+  ];
+  const self = character.trim().toLowerCase();
+  for (const pin of claim.pinned) {
+    const owner = possessive(profileDisplayName(pin.profile));
+    const others = pin.characters.filter((c) => c.trim().toLowerCase() !== self);
+    sentences.push(
+      others.length > 0
+        ? `${owner} claim now sits on ${pin.port}, and ${listJoin(others)} moved with it.`
+        : `${owner} claim now sits on ${pin.port}.`,
+    );
+  }
+  return sentences.join(' ');
+}
+
+/** What turning a login toggle on did to other profiles, the claims it
+ *  pinned and then the profiles it took the character from, for the
+ *  line under the list. Null when it did neither. */
+export function loginSentence(character: string, claim: LoginClaim, to: string): string | null {
+  const said = [
+    pinnedSentence(character, claim, to),
+    movedSentence(character, claim.released_from, to),
+  ].filter((s): s is string => s !== null);
+  return said.length > 0 ? said.join(' ') : null;
 }
 
 function taken(names: readonly string[]): Set<string> {

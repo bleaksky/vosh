@@ -51,18 +51,31 @@ export async function profileDetailGet(name: string): Promise<ProfileDetail> {
   };
 }
 
+/** A claim on the host alone that turning a login on pinned to its
+ *  world's own port, so it keeps the character there. Every character
+ *  it lists moved with it, since a profile holds one claim. */
+export interface PinnedClaim {
+  profile: string;
+  port: number;
+  characters: string[];
+}
+
 /** What turning a login toggle on or off did. */
 export interface LoginClaim {
   /** The profile as it now reads. */
   entry: ProfileEntry;
   /** Every profile the character was taken from, in index order. */
   released_from: string[];
+  /** Every claim pinned to its world's own port, in index order. */
+  pinned: PinnedClaim[];
 }
 
 /** Turn the login toggle on or off for `character`. On takes the
  *  character from every other profile on the same world, since a
- *  character belongs to one profile per world. Off keeps the world and
- *  the name. Never switches the live profile. */
+ *  character belongs to one profile per world. A claim on a known
+ *  world's other port first pins a claim on the host alone to the
+ *  world's own port, which keeps the character there. Off keeps the
+ *  world and the name. Never switches a session. */
 export async function profileSetLogin(
   name: string,
   character: string,

@@ -17,7 +17,7 @@ import { useEscape } from '../../lib/escapeStack';
 import {
   copyName,
   keepsProfileName,
-  movedSentence,
+  loginSentence,
   newProfileClaim,
   newProfileName,
   playedProfiles,
@@ -199,7 +199,7 @@ export function ProfileList({
       let sentence: string | null = null;
       if (character) {
         const result = await profileSetLogin(entry.name, character, true);
-        sentence = movedSentence(character, result.released_from, entry.name);
+        sentence = loginSentence(character, result, entry.name);
       }
       onStatus(sentence);
       onError(null);
