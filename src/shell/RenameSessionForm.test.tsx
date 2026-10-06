@@ -28,6 +28,7 @@ const tolliver: SessionRow = {
   tls: false,
   profile: 'Default',
   connected: true,
+  since: null,
   selected: true,
 };
 

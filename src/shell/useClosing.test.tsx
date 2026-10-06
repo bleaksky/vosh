@@ -68,6 +68,7 @@ function row(id: number, character: string, connected: boolean): SessionRow {
     tls: false,
     profile: 'default',
     connected,
+    since: null,
     selected: id === sessions.selected,
   };
 }

@@ -43,6 +43,9 @@ export interface SessionRow {
   /** The profile it plays, null only before launch loads one. */
   profile: string | null;
   connected: boolean;
+  /** When the live link reached the game, in Unix ms, for the time
+   *  online. Null while no link runs. */
+  since: number | null;
   selected: boolean;
 }
 
