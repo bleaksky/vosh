@@ -169,7 +169,7 @@ pub(crate) async fn hand_to_other_sessions<R: tauri::Runtime>(
         }
         players
     };
-    let line = replaced_line(session.label().as_deref(), how);
+    let line = replaced_line(session.label(&others).as_deref(), how);
     for other in &players {
         crate::output::emit_output(app, other, line.clone().into_bytes());
     }

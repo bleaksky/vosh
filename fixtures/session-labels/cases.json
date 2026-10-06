@@ -1,0 +1,17 @@
+{
+  "notes": "Hand written. What a session goes by, shared by sessionLabel in src/lib/sessionLabel.ts, whose name reads it, and label_of in src-tauri/src/sessions.rs, which a banner and the line another session prints read. session is the one named, with the name you gave it, the character it plays or played last, and where it dials. others are the other open sessions, by where each dials. label is what it goes by, null where Rust has no label and the page reads New session.",
+  "cases": [
+    { "name": "the name you gave it wins over its character", "session": { "name": "Builder", "character": "Tolliver", "host": "play.theforsakenlands.com", "port": 1825 }, "others": [], "label": "Builder" },
+    { "name": "a name keeps no outer spaces", "session": { "name": "  Build port  ", "character": null, "host": null, "port": null }, "others": [], "label": "Build port" },
+    { "name": "a blank name reads the character", "session": { "name": "  ", "character": "Tolliver", "host": "play.theforsakenlands.com", "port": 1848 }, "others": [], "label": "Tolliver" },
+    { "name": "the character on a port that is not the world's own keeps the port out of its name", "session": { "name": null, "character": "Orla", "host": "play.theforsakenlands.com", "port": 1825 }, "others": [], "label": "Orla" },
+    { "name": "a known world on its own port reads the world alone", "session": { "name": null, "character": null, "host": "play.theforsakenlands.com", "port": 1848 }, "others": [], "label": "The Forsaken Lands" },
+    { "name": "a known world on another port adds the port", "session": { "name": null, "character": null, "host": "play.theforsakenlands.com", "port": 1825 }, "others": [], "label": "The Forsaken Lands 1825" },
+    { "name": "a known world by any spelling of its domain", "session": { "name": null, "character": null, "host": " TheForsakenLands.com. ", "port": 1848 }, "others": [], "label": "The Forsaken Lands" },
+    { "name": "a known world shared with another session keeps its own port out", "session": { "name": null, "character": null, "host": "play.theforsakenlands.com", "port": 1848 }, "others": [{ "host": "play.theforsakenlands.com", "port": 1825 }], "label": "The Forsaken Lands" },
+    { "name": "another host alone reads as typed, with no port", "session": { "name": null, "character": null, "host": "  mud.example.org ", "port": 4000 }, "others": [{ "host": "play.theforsakenlands.com", "port": 1848 }], "label": "mud.example.org" },
+    { "name": "another host shared with another session adds the port", "session": { "name": null, "character": null, "host": "mud.example.org", "port": 4000 }, "others": [{ "host": "MUD.Example.org.", "port": 4001 }], "label": "mud.example.org 4000" },
+    { "name": "a session the others leave without a place reads its host alone", "session": { "name": null, "character": null, "host": "mud.example.org", "port": 4000 }, "others": [{ "host": null, "port": null }], "label": "mud.example.org" },
+    { "name": "no name, no character and no place", "session": { "name": null, "character": null, "host": null, "port": null }, "others": [], "label": null }
+  ]
+}

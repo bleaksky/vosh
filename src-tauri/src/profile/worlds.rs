@@ -20,10 +20,19 @@ pub(crate) const KNOWN_WORLDS: &[KnownWorld] = &[KnownWorld {
     port: 1848,
 }];
 
+/// A host as Vosh compares it, trimmed, in lower case and without a
+/// closing dot. Mirrors `hostKey` in src/lib/knownWorlds.ts.
+pub(crate) fn host_key(host: &str) -> String {
+    let lower = host.trim().to_ascii_lowercase();
+    match lower.strip_suffix('.') {
+        Some(clean) => clean.to_string(),
+        None => lower,
+    }
+}
+
 /// The known world a host belongs to, if any.
 pub(crate) fn known_world(host: &str) -> Option<&'static KnownWorld> {
-    let lower = host.trim().to_ascii_lowercase();
-    let clean = lower.strip_suffix('.').unwrap_or(&lower);
+    let clean = host_key(host);
     KNOWN_WORLDS.iter().find(|w| {
         clean == w.domain
             || clean
@@ -44,6 +53,19 @@ pub(crate) fn is_forsaken_lands(host: &str) -> bool {
 /// `worldName` in src/lib/knownWorlds.ts.
 pub(crate) fn world_name(host: &str) -> String {
     known_world(host).map_or_else(|| host.trim().to_string(), |w| w.name.to_string())
+}
+
+/// The world a host and port play, like `The Forsaken Lands` on its own
+/// port 1848 and `The Forsaken Lands 1825` on the build port. A known
+/// world adds a port that is not its own, so two ports of one game read
+/// apart. Any other host shows as typed. Mirrors `worldLabel` in
+/// src/lib/knownWorlds.ts.
+pub(crate) fn world_label(host: &str, port: u16) -> String {
+    match known_world(host) {
+        Some(world) if world.port == port => world.name.to_string(),
+        Some(world) => format!("{} {port}", world.name),
+        None => host.trim().to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +94,20 @@ mod tests {
         );
         let world = known_world("play.theforsakenlands.com").unwrap();
         assert_eq!(world.port, 1848);
+    }
+
+    #[test]
+    fn world_label_adds_a_port_that_is_not_the_world_own() {
+        assert_eq!(
+            world_label("play.theforsakenlands.com", 1848),
+            "The Forsaken Lands"
+        );
+        assert_eq!(
+            world_label("play.theforsakenlands.com", 1825),
+            "The Forsaken Lands 1825"
+        );
+        assert_eq!(world_label(" mud.example.org ", 4000), "mud.example.org");
+        assert_eq!(host_key(" MUD.Example.org. "), "mud.example.org");
     }
 
     #[test]
