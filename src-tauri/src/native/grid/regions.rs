@@ -185,7 +185,15 @@ impl TermGrid {
             }
             wrote = true;
         }
-        if wrote || out.hold.len() > self.pending_hold.len() {
+        if wrote {
+            self.pending_hold.clone_from(&out.hold);
+        } else if self.echo_held {
+            // The game's line ends come after your echo's own.
+            if !out.hold.is_empty() {
+                self.pending_hold.extend_from_slice(&out.hold);
+                self.echo_held = false;
+            }
+        } else if out.hold.len() > self.pending_hold.len() {
             self.pending_hold.clone_from(&out.hold);
         }
         if let Some(open) = out.pin_row {
@@ -201,10 +209,18 @@ impl TermGrid {
     /// region shows goes back to the live render first. Held line ends go
     /// out before it. Your echo's mark drops where its row already ends
     /// in `>`.
+    ///
+    /// While your prompt shows pinned, the line ends the text ends on wait
+    /// as held line ends do, so a reply that brings only a prompt leaves
+    /// the text on your echo's row, as the last line of any other reply
+    /// does. The grid knows it shows pinned by the line ends it holds
+    /// back or the row the pinned prompt left open, which only a pinned
+    /// prompt brings.
     pub(crate) fn local_write(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
+        let pinned = !self.pending_hold.is_empty() || self.pin_row;
         self.lift_tracks.clear();
         self.restore_first();
         self.write_hold();
@@ -217,7 +233,16 @@ impl TermGrid {
             std::borrow::Cow::Borrowed(bytes)
         };
         let bytes = self.without_mark(&bytes);
-        self.feed(bytes);
+        let at = if pinned {
+            line_ends_start(bytes)
+        } else {
+            bytes.len()
+        };
+        self.feed(&bytes[..at]);
+        if at < bytes.len() {
+            self.pending_hold = bytes[at..].to_vec();
+            self.echo_held = true;
+        }
     }
 
     /// Your echo `bytes` without the grey mark Mark your commands draws
@@ -271,6 +296,7 @@ impl TermGrid {
         if self.pending_hold.is_empty() {
             return;
         }
+        self.echo_held = false;
         let hold = std::mem::take(&mut self.pending_hold);
         self.region = None;
         self.feed(&hold);
@@ -785,4 +811,18 @@ pub(super) fn find_mark(bytes: &[u8]) -> Option<(usize, usize, Mark)> {
         from = at + 1;
     }
     None
+}
+
+/// Where the run of `\r` and `\n` that `bytes` ends on starts, when it
+/// holds a line end. `bytes.len()` when there is none.
+fn line_ends_start(bytes: &[u8]) -> usize {
+    let at = bytes
+        .iter()
+        .rposition(|&b| b != b'\r' && b != b'\n')
+        .map_or(0, |i| i + 1);
+    if bytes[at..].contains(&b'\n') {
+        at
+    } else {
+        bytes.len()
+    }
 }
