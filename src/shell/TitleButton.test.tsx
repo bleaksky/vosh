@@ -47,6 +47,7 @@ const connected = (session: number) => {
   fire('session://state', { session, kind: 'connecting', host: HOST, port: 1848, tls: false });
   fire('session://state', { session, kind: 'connected', host: HOST, port: 1848, tls: false });
 };
+const mark = (session: number, source: string) => fire('session://mark', { session, source });
 const login = (session: number, name: string) =>
   fire('session://gmcp/Char-Status', { session, data: { name } });
 
@@ -101,13 +102,18 @@ describe('the session button in the title band', () => {
   });
 
   /** Mount the button on useConnection, and read what it says. */
-  async function mount() {
+  async function mount(folded = false) {
     const { useConnection } = await import('../stores/session/useConnection');
     const { startStores } = await import('../stores');
     const { TitleButton } = await import('./TitleButton');
     function Band() {
       const connection = useConnection(() => undefined);
-      return createElement(TitleButton, { connection, open: false, onToggle: () => undefined });
+      return createElement(TitleButton, {
+        connection,
+        open: false,
+        folded,
+        onToggle: () => undefined,
+      });
     }
     startStores();
     await settle();
@@ -116,7 +122,9 @@ describe('the session button in the title band', () => {
     await act(async () => root.render(createElement(Band)));
     const label = () =>
       findAll(host, (el) => el.nodeName === 'BUTTON')[0]?.getAttribute('aria-label');
-    return { root, label };
+    const count = () =>
+      findAll(host, (el) => el.getAttribute('class') === 'shell-sessions-count')[0]?.textContent;
+    return { root, label, count };
   }
 
   it('leaves the band and the window title as they were when a session behind drops', async () => {
@@ -190,6 +198,46 @@ describe('the session button in the title band', () => {
     await act(async () => rows('Builder'));
     expect(band.label()).toBe('Builder, connected to The Forsaken Lands 1825');
     expect(titles.at(-1)).toBe('Builder on The Forsaken Lands 1825');
+    await act(async () => band.root.unmount());
+  });
+
+  // Board 05 of the Sessions Sidebar review: with the sidebar folded the
+  // button totals what waits on the sessions behind.
+  it('totals what waits behind while the sidebar is folded, but not the session in front or a connection in trouble', async () => {
+    const band = await mount(true);
+    await act(async () => {
+      select(TOLLIVER);
+      connected(TOLLIVER);
+      login(TOLLIVER, 'Tolliver');
+    });
+    expect(band.count()).toBeUndefined();
+    await act(async () => {
+      mark(ORLA, 'preset:alert_tells');
+      mark(ORLA, 'preset:alert_attacked');
+      mark(ORLA, 'preset:alert_connection');
+      mark(TOLLIVER, 'preset:alert_name');
+    });
+    expect(band.count()).toBe('2');
+    expect(band.label()).toBe(
+      'Tolliver, connected to The Forsaken Lands, 2 waiting on other sessions',
+    );
+
+    // Looking at Orla clears hers, and Tolliver now behind adds his.
+    await act(async () => select(ORLA));
+    expect(band.count()).toBeUndefined();
+    await act(async () => mark(TOLLIVER, 'preset:alert_name'));
+    expect(band.count()).toBe('1');
+    await act(async () => band.root.unmount());
+  });
+
+  it('shows no total while the sidebar shows', async () => {
+    const band = await mount(false);
+    await act(async () => {
+      select(TOLLIVER);
+      mark(ORLA, 'preset:alert_tells');
+    });
+    expect(band.count()).toBeUndefined();
+    expect(band.label()).toBe('Not connected');
     await act(async () => band.root.unmount());
   });
 });

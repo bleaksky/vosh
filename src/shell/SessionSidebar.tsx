@@ -4,7 +4,6 @@ import {
   useImperativeHandle,
   useRef,
   useState,
-  type ComponentType,
   type MouseEvent,
   type PointerEvent,
 } from 'react';
@@ -13,19 +12,13 @@ import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
-import {
-  MARK_WORDS,
-  rowLook,
-  useSessionRow,
-  type RowMark,
-} from '../stores/session/sessionRowStore';
-import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
+import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
+import { CloseIcon, PlusIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
-import type { RowGlyph } from './rowGlyph';
-import { useSessionLine, type SessionLine } from './sessionLine';
+import { SessionMark, SessionRowBody, WaitingCount } from './SessionRowBody';
 import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
 import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
@@ -288,15 +281,6 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   );
 });
 
-/** Each glyph of the session popover, with the words a screen reader
- *  says for it, from board 3 and Q8. */
-const GLYPHS: Record<RowGlyph, { icon: ComponentType; words: string }> = {
-  triangle: { icon: TriangleIcon, words: MARK_WORDS.triangle },
-  hand: { icon: HandIcon, words: MARK_WORDS.hand },
-  spinner: { icon: SpinnerIcon, words: MARK_WORDS.spinner },
-  dot: { icon: DotIcon, words: 'Something for you' },
-};
-
 interface SlotProps {
   row: SessionRow;
   rows: SessionRow[];
@@ -353,7 +337,6 @@ function SessionSlot({
 }: SlotProps) {
   const label = sessionLabel(row, rows);
   const look = rowLook(useSessionRow(row.id), row, current);
-  const line = useSessionLine(row);
   const facts = useCardFacts(row, rows);
   const described = `shell-sessions-card-${row.id}`;
   const rowClass = look.tone ? `shell-sessions-row is-${look.tone}` : 'shell-sessions-row';
@@ -377,7 +360,6 @@ function SessionSlot({
     );
   }
 
-  const port = label.split?.port ?? label.meta;
   return (
     <li
       className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'}
@@ -408,19 +390,19 @@ function SessionSlot({
           onMenu(e.clientX, e.clientY, e.currentTarget.matches(':focus-visible'));
         }}
       >
-        <SessionMark mark={look.mark} />
-        <span className="shell-sessions-name" onDoubleClick={onRename}>
-          <span className="shell-sessions-name-text">{label.split?.world ?? label.name}</span>
-          {port && <span className="shell-sessions-port">{port}</span>}
-        </span>
-        <span className="shell-sessions-end">
-          {keys ? (
-            <span className="shell-sessions-key">{keys}</span>
-          ) : (
-            look.count > 0 && !current && <WaitingCount count={look.count} />
-          )}
-        </span>
-        <SecondLine line={line} />
+        <SessionRowBody
+          row={row}
+          rows={rows}
+          mark={look.mark}
+          end={
+            keys ? (
+              <span className="shell-sessions-key">{keys}</span>
+            ) : (
+              look.count > 0 && !current && <WaitingCount count={look.count} />
+            )
+          }
+          onNameDoubleClick={onRename}
+        />
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
           only under the pointer, so Tab passes it by, and the Session
@@ -444,51 +426,6 @@ function SessionSlot({
       </span>
       {card?.side && <SessionCard facts={facts} slot={card.slot} side={card.side} />}
     </li>
-  );
-}
-
-/** The mark at the left of a row, in the words the title band uses. */
-function SessionMark({ mark }: { mark: RowMark }) {
-  return (
-    <span className={`shell-sessions-mark is-${mark}`} role="img" aria-label={MARK_WORDS[mark]}>
-      {mark === 'hand' ? (
-        <HandIcon />
-      ) : mark === 'spinner' ? (
-        <SpinnerIcon />
-      ) : mark === 'triangle' ? (
-        <TriangleIcon />
-      ) : (
-        <span className="shell-sessions-dot" />
-      )}
-    </span>
-  );
-}
-
-/** How many things wait for you on a row behind, up to 9+. */
-function WaitingCount({ count }: { count: number }) {
-  return (
-    <span className="shell-sessions-count" role="img" aria-label={`${count} waiting`}>
-      {count > 9 ? '9+' : count}
-    </span>
-  );
-}
-
-/** A row's second line, with the health at its right when it shows. */
-function SecondLine({ line }: { line: SessionLine }) {
-  const { who, text, health, low } = line;
-  return (
-    <>
-      <span className={health === null ? 'shell-sessions-line is-wide' : 'shell-sessions-line'}>
-        {who && <span className="shell-sessions-who">{who}</span>}
-        {who && text && ' · '}
-        {text}
-      </span>
-      {health !== null && (
-        <span className={low ? 'shell-sessions-health is-low' : 'shell-sessions-health'}>
-          {health}%
-        </span>
-      )}
-    </>
   );
 }
 
@@ -542,15 +479,5 @@ function NameField({ initial, unnamed, onDone }: NameFieldProps) {
       }}
       onBlur={() => finish(typedName(text, initial), false)}
     />
-  );
-}
-
-/** A row's glyph, which the session popover's list shows too. */
-export function RowGlyphMark({ glyph }: { glyph: RowGlyph }) {
-  const { icon: Icon, words } = GLYPHS[glyph];
-  return (
-    <span className={`shell-sessions-glyph is-${glyph}`} role="img" aria-label={words}>
-      <Icon />
-    </span>
   );
 }

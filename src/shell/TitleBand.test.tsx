@@ -15,6 +15,12 @@ import { TitleBand } from './TitleBand';
 // window controls on Windows and Linux. Windows and Linux have no menu
 // bar, so the gear is the button that shows you where Settings lives.
 
+// The session button totals what waits behind, from stores that listen.
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async () => () => undefined,
+  emit: async () => undefined,
+}));
+
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     setTitle: () => Promise.resolve(),

@@ -269,27 +269,9 @@ export function BookIcon(props: IconProps) {
   );
 }
 
-// The glyphs a session's row in the sessions sidebar shows at its right,
+// The marks a session's row in the sessions sidebar shows at its left,
 // after otty's badges (Sessions Q8, board 3). Each draws in a 16 square
 // in currentColor, so the row sets its tone.
-
-/** Something for you waits unseen: otty's unread dot, 8 across. */
-export function DotIcon({ size = 16, className }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      stroke="none"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <circle cx="8" cy="8" r="4" />
-    </svg>
-  );
-}
 
 /** Vosh dials or redials: otty's spinner, eight spokes in a 1.5 stroke
  *  fading round the circle from the one at 12 o clock. */

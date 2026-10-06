@@ -4,12 +4,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { SessionRow } from '../ipc/session';
 import type { SessionRowState } from '../stores/session/sessionRowStore';
 import type { Connection } from '../stores/session/useConnection';
+import type { SessionLine } from './sessionLine';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 
-// The session popover while the sidebar is folded, board 8. SESSIONS
-// heads a list of every session, the selected one with the check and
-// each other one with its port, any glyph and its key, and then the
-// board 4 rows. A click brings that session to the front.
+// The session popover while the sidebar is folded, board 8, with the
+// sidebar's two line rows of board 05 of the Sessions Sidebar review.
+// SESSIONS heads a list of every session, the selected one with the
+// check, one behind with what waits there and any other with its key,
+// and then the board 4 rows. A click brings that session to the front.
 
 const store = vi.hoisted(() => ({
   rows: [] as SessionRow[],
@@ -25,6 +27,28 @@ vi.mock('../stores/session/sessionsStore', async (actual) => ({
   useSelected: () => store.selected,
   goTo: store.goTo,
 }));
+
+/** The second line of each session, by id. A session it names nothing
+ *  for reads its faked row state with no GMCP. */
+const lines = vi.hoisted(() => new Map<number, SessionLine>());
+
+vi.mock('./sessionLine', async (actual) => {
+  const line = await actual<typeof import('./sessionLine')>();
+  const { getSessionRow } = await import('../stores/session/sessionRowStore');
+  return {
+    ...line,
+    useSessionLine: (row: SessionRow) =>
+      lines.get(row.id) ??
+      line.secondLine(
+        row,
+        { ...getSessionRow(row.id), ...store.states.get(row.id) },
+        null,
+        null,
+        null,
+        0,
+      ),
+  };
+});
 
 vi.mock('../stores/session/sessionRowStore', async (actual) => {
   const rows = await actual<typeof import('../stores/session/sessionRowStore')>();
@@ -100,6 +124,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
   store.goTo.mockClear();
   store.states.clear();
+  lines.clear();
 });
 
 afterAll(() => {
@@ -143,27 +168,37 @@ describe('the session popover with the sidebar folded', () => {
     row(3, { port: 1825, connected: false }),
   ];
 
-  it('lists every session under SESSIONS before the board 4 rows, as frame b8-narrow draws it', async () => {
-    // A tell rang in Orla's session behind.
-    store.states.set(2, { waiting: ['preset:alert_tells'] });
+  it('lists every session in the sidebar rows under SESSIONS before the board 4 rows, as frame 05 draws it', async () => {
+    // Orla fights behind, where a tell and the fight wait.
+    store.states.set(2, { link: 'live', waiting: ['preset:alert_tells', 'preset:alert_attacked'] });
+    lines.set(1, { who: null, text: 'Thickening Woods', health: 100, low: false });
+    lines.set(2, { who: null, text: 'Fighting a Blackwatch guard', health: 18, low: true });
     const { menu, items } = await mount(true);
     expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
     expect(items.map((el) => el.textContent)).toEqual([
-      'Tolliver',
-      'Orla1825⌘2',
-      'The Forsaken Lands 1825⌘3',
+      'TolliverThickening Woods100%',
+      'Orla18252Fighting a Blackwatch guard18%',
+      'The Forsaken Lands1825⌘3The Forsaken Lands',
       'Edit connection…',
       'Rename session…',
       'New session…⌘T',
       'Disconnect',
     ]);
-    // The selected session wears the check, and Orla the dot before her key.
+    // Every row wears its mark. The one in front wears the check, Orla
+    // the count of what waits there in place of her key.
+    const marks = items
+      .slice(0, 3)
+      .map((el) => findAll(el, hasClass('shell-sessions-mark'))[0]?.getAttribute('aria-label'));
+    expect(marks).toEqual(['Playing', 'Playing', 'Not connected']);
     expect(items[0].getAttribute('aria-current')).toBe('true');
     expect(findAll(items[0], hasClass('pane-menu-check'))).toHaveLength(1);
-    expect(findAll(items[1], hasClass('shell-menu-meta'))[0]?.textContent).toBe('1825');
-    const dot = findAll(items[1], hasClass('shell-sessions-glyph'))[0];
-    expect(dot?.getAttribute('aria-label')).toBe('Something for you');
-    expect(findAll(items[2], hasClass('shell-sessions-glyph'))).toHaveLength(0);
+    expect(findAll(items[1], hasClass('shell-sessions-port'))[0]?.textContent).toBe('1825');
+    const count = findAll(items[1], hasClass('shell-sessions-count'))[0];
+    expect(count?.getAttribute('aria-label')).toBe('2 waiting');
+    expect(findAll(items[1], hasClass('shell-sessions-health'))[0]?.getAttribute('class')).toBe(
+      'shell-sessions-health is-low',
+    );
+    expect(findAll(items[2], hasClass('shell-sessions-count'))).toHaveLength(0);
   });
 
   it('brings the session you pick to the front and closes', async () => {

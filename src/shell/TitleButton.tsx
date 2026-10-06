@@ -1,8 +1,10 @@
 import { forwardRef } from 'react';
 import { sessionLabel } from '../lib/sessionLabel';
+import { useWaitingElsewhere } from '../stores/session/sessionRowStore';
 import { useSelected, useSessions } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import { ChevronDownIcon } from '../ui/icons';
+import { WaitingCount } from './SessionRowBody';
 import { useWindowTitle, windowTitle } from './windowTitle';
 
 // The session control centered in the title band (SPEC 1 and G2): a
@@ -11,17 +13,24 @@ import { useWindowTitle, windowTitle } from './windowTitle';
 // a chevron. No chrome at rest. It opens the session menu. The world
 // takes its port when the port is not the world's own, as the session's
 // row does (sessionLabel.ts), so Orla reads The Forsaken Lands 1825.
+// While the sessions sidebar is folded, the count of what waits on the
+// other sessions follows the chevron in the rows' accent pill (S7 of the
+// Sessions Sidebar review), and goes once you have looked at each. A
+// session in trouble adds nothing, since its mark says so.
 
 interface Props {
   connection: Connection;
   open: boolean;
+  /** The sessions sidebar is folded, so the button totals what waits on
+   *  the other sessions. */
+  folded: boolean;
   onToggle: () => void;
 }
 
 type DotKind = 'connected' | 'connecting' | 'idle' | 'error';
 
 export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleButton(
-  { connection, open, onToggle },
+  { connection, open, folded, onToggle },
   ref,
 ) {
   const { status, character, world } = connection;
@@ -39,6 +48,8 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
     rows,
   );
   const where = place ?? world;
+  const elsewhere = useWaitingElsewhere(rows, selected);
+  const waiting = folded ? elsewhere : 0;
   useWindowTitle(windowTitle(status, who, where));
   let dot: DotKind;
   let primary: string;
@@ -75,7 +86,7 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
       className={`shell-title-button${open ? ' is-open' : ''}`}
       aria-haspopup="menu"
       aria-expanded={open}
-      aria-label={label}
+      aria-label={waiting > 0 ? `${label}, ${waiting} waiting on other sessions` : label}
       title={status.kind === 'error' ? status.message : undefined}
       onClick={onToggle}
     >
@@ -85,6 +96,7 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
       <span className="shell-title-chevron">
         <ChevronDownIcon size={12} />
       </span>
+      {waiting > 0 && <WaitingCount count={waiting} />}
     </button>
   );
 });

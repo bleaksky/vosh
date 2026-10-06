@@ -245,6 +245,12 @@ export function waitingElsewhere(rows: readonly SessionRow[], selected: number):
   );
 }
 
+/** `waitingElsewhere`, kept current as the rows change. */
+export function useWaitingElsewhere(rows: readonly SessionRow[], selected: number): number {
+  const get = () => waitingElsewhere(rows, selected);
+  return useSyncExternalStore(subscribeRows, get, get);
+}
+
 /** The status mark at the left of a row. */
 export type RowMark = 'live' | 'off' | 'hand' | 'spinner' | 'triangle';
 
