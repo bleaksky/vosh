@@ -940,6 +940,22 @@ describe('the help on Lua', () => {
     expect(text).not.toContain('`plugins/<slug>/`');
   });
 
+  it('installs, exports and removes a plugin from the Scripts list', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`Install…` takes a `.zip` a friend shared, and you can drop a plugin folder or a `.zip` on the Scripts list instead.',
+    );
+    expect(text).toContain('An install starts off for every profile.');
+    expect(text).toContain(
+      '`Export to Downloads` saves the plugin as a `.zip` in your Downloads folder for you to share',
+    );
+    expect(text).toContain('`Reload` reads the plugin from its folder again');
+    expect(text).toContain('`Show in Finder` opens its folder.');
+    expect(text).toContain(
+      '`Remove…` asks first, then deletes the plugin folder and turns the plugin off in every profile.',
+    );
+  });
+
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
     if (!found) throw new Error('no Lua topic');
@@ -951,6 +967,8 @@ describe('the help on Lua', () => {
       'Each script and each plugin',
       'Loads from `#script load`',
       'Press a plugin under Scripts',
+      'Each plugin row has a menu',
+      '`Install…` takes',
       'Each plugin runs',
       'Every Lua error',
       'Lua runs between',
