@@ -34,6 +34,7 @@ import {
 } from '../lib/settingsNav';
 import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
 import { revealSettingsAnchor } from './revealAnchor';
+import { ShownSession } from './ShownSession';
 import { Sidebar } from './Sidebar';
 import { useSettingsClose } from './useSettingsClose';
 import { settingsSaveHolds } from './useSettingsAutoSave';
@@ -49,7 +50,9 @@ import { AppearancePage } from './appearance/AppearancePage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
 // with search and the six group nav, and a content column with the
-// breadcrumb in the 32 px band over the group's page. On macOS the
+// breadcrumb in the 32 px band over the group's page. With two or more
+// sessions open, the band names the session and the profile Settings
+// edits at its right (ShownSession.tsx). On macOS the
 // native traffic lights sit over the sidebar. Windows and Linux draw
 // minimize, maximize, and close at the right of the band.
 //
@@ -323,6 +326,7 @@ export function SettingsWindow() {
               {subpage ?? settingsGroupLabel(group)}
             </h1>
           </div>
+          <ShownSession />
           {!mac && <WindowControls />}
         </header>
         <div ref={contentRef} className="st-content" data-scroll={selfScroll ? 'self' : undefined}>
