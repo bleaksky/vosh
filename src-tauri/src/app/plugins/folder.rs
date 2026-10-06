@@ -294,6 +294,32 @@ fn write_manifest(dir: &Path, manifest: PluginManifest) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_page_holds_plugin_names_to_the_same_rule() {
+        // New plugin checks a name as you type it with pluginNameOk in
+        // src/settings/scripts/pluginName.ts.
+        let page = include_str!("../../../../src/settings/scripts/pluginName.ts");
+        let rule = regex::Regex::new(r"return /(\^[^/]*\$)/\.test\(name\);")
+            .unwrap()
+            .captures(page)
+            .expect("pluginName.ts tests a name against one pattern");
+        let page_rule = regex::Regex::new(&rule[1]).unwrap();
+        for name in [
+            "wait_full",
+            "Wait_Full9",
+            "_",
+            "",
+            "weather-pane",
+            "old pane",
+            "../x",
+            "a/b",
+            "caf\u{e9}",
+            "x.lua",
+        ] {
+            assert_eq!(plugin_name_ok(name), page_rule.is_match(name), "{name:?}");
+        }
+    }
+
     use super::*;
 
     /// The two files board 2 of the Scripts design shows New plugin
