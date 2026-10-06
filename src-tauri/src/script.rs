@@ -290,9 +290,9 @@ pub(crate) fn apply_actions(
             Action::RemovePluginAlias { plugin, name } => {
                 c.plugin_aliases.remove(&plugin, &name);
             }
-            // The plugin turned off, stopped or loaded again, and its
-            // alerts end with its aliases.
-            Action::DropPluginAliases(plugin) => {
+            // The plugin turned off, stopped or loaded again, so its
+            // aliases and its alerts end.
+            Action::DropPlugin(plugin) => {
                 c.plugin_aliases.remove_plugin(&plugin);
                 result.ended.push(vosh_script::Owner::Plugin(plugin).tag());
             }

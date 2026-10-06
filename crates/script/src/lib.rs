@@ -465,10 +465,8 @@ impl ScriptEngine {
         };
         if let Owner::Plugin(name) = owner {
             self.envs.set(name, env);
-            // The aliases the run made follow, in place of the old ones.
-            outcome
-                .actions
-                .push(Action::DropPluginAliases(name.clone()));
+            // What the run made follows, in place of the old.
+            outcome.actions.push(Action::DropPlugin(name.clone()));
         }
         outcome.append(self.finish(owner, &Site::Entry, called));
         (outcome, true)
@@ -490,7 +488,7 @@ impl ScriptEngine {
         let mut actions = self.release(&owned);
         if let Owner::Plugin(name) = owner {
             self.envs.set(name, None);
-            actions.push(Action::DropPluginAliases(name.clone()));
+            actions.push(Action::DropPlugin(name.clone()));
         }
         ScriptOutcome {
             actions,
@@ -850,7 +848,7 @@ impl ScriptEngine {
         let mut actions = self.release(&ids);
         if let Owner::Plugin(name) = owner {
             self.envs.set(name, None);
-            actions.push(Action::DropPluginAliases(name.clone()));
+            actions.push(Action::DropPlugin(name.clone()));
         }
         actions
     }
@@ -2128,7 +2126,7 @@ mod tests {
         assert_eq!(
             loaded.actions,
             vec![
-                Action::DropPluginAliases("watch".into()),
+                Action::DropPlugin("watch".into()),
                 Action::Alert {
                     owner: watch.clone(),
                     title: "Health low".into(),
@@ -2164,7 +2162,7 @@ mod tests {
         assert_eq!(
             loaded.actions,
             vec![
-                Action::DropPluginAliases("healer".into()),
+                Action::DropPlugin("healer".into()),
                 Action::SetPluginAlias {
                     plugin: "healer".into(),
                     name: "hl".into(),
@@ -2186,7 +2184,7 @@ mod tests {
         assert_eq!(failed.actions.len(), 1);
         assert_eq!(
             e.unload(&healer).unwrap().actions,
-            vec![Action::DropPluginAliases("healer".into())]
+            vec![Action::DropPlugin("healer".into())]
         );
         // Your own Lua and a loose script make aliases you keep.
         let typed = e.eval("mud.alias('hl', 'cast heal')", "=#lua").unwrap();
