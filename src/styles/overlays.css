@@ -690,10 +690,12 @@
    child of its grid. An absolutely placed grid child takes its grid
    area as the containing block, so pinning the stack to the terminal
    cell keeps it 16 inside the terminal column's corner, clear of the
-   panel and above the input band as that band grows. Both lines are
-   explicit, since an auto end line would fall back to the whole grid. */
+   panel and above the input band as that band grows. The terminal is
+   the second column, after the sessions sidebar's, which is 0 wide
+   while the sidebar is gone. Both lines are explicit, since an auto end
+   line would fall back to the whole grid. */
 .shell > .ov-toasts {
-  grid-column: 1 / 2;
+  grid-column: 2 / 3;
   grid-row: 2 / 3;
 }
 
@@ -782,7 +784,7 @@
    clear of the panel's vitals. MainWindow mounts it just before the toasts, and
    while it is up the stack rises by the card's 44 plus an 8 gap. */
 .shell > .ov-update {
-  grid-column: 1 / 2;
+  grid-column: 2 / 3;
   grid-row: 2 / 3;
 }
 
