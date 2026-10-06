@@ -21,7 +21,7 @@ import {
   newProfileClaim,
   newProfileName,
   profileDisplayName,
-  profileWorldName,
+  profileWorld,
   takenProfileName,
   takenSentence,
 } from '../../lib/characterProfiles';
@@ -299,7 +299,7 @@ export function ProfileList({
           const { name } = entry;
           const display = profileDisplayName(name);
           const active = name === list.active;
-          const world = profileWorldName(entry);
+          const world = profileWorld(entry);
           const renaming = editing?.kind === 'rename' && editing.name === name;
           const open = menu?.name === name;
           return (
@@ -338,7 +338,12 @@ export function ProfileList({
                         {display}
                         {active && <VisuallyHidden> (in use)</VisuallyHidden>}
                       </span>
-                      {world && <span className="st-profile-meta">{world}</span>}
+                      {world && (
+                        <span className="st-profile-meta">
+                          <span className="st-profile-world">{world.world}</span>
+                          {world.port}
+                        </span>
+                      )}
                     </button>
                     <IconButton
                       className="st-profile-more"

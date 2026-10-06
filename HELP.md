@@ -662,7 +662,7 @@ Each change applies at once and saves. Under General, `Font and size` in Keep th
 
 A profile carries its own aliases, triggers, macros, and variables, its tracked affects, and its panes. Vosh picks the right profile when you connect and again when you log in. Manage profiles in Settings under Characters.
 
-- Open Settings and choose Characters. Your profiles list on the left, with a dot on the one in use and each one's world beside it.
+- Open Settings and choose Characters. Your profiles list on the left, with a dot on the one in use and each one's world beside it. A profile on a port that is not the world's own shows the port too, as The Forsaken Lands 1825.
 - Click `New profile` under the list, type a name, and press `Enter`. Names take letters, numbers, spaces, hyphens, and underscores.
 - Select a profile to edit it. Selecting one never switches the session you are playing.
 - Pick its `World`, then turn on `Use this profile when you log in`. The row names your character once Vosh has seen you log in. Turning it on takes that character from any other profile on the same world, and Vosh says so under the list.

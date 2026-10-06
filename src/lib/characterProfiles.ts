@@ -1,6 +1,6 @@
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileAutoMatch, ProfileEntry } from '../ipc/profiles';
-import { KNOWN_WORLDS, knownWorld, worldName } from './knownWorlds';
+import { KNOWN_WORLDS, knownWorld, worldLabel, worldName } from './knownWorlds';
 import { listJoin } from './text';
 
 // The words and choices Settings > Characters builds from the profile
@@ -89,7 +89,9 @@ export interface WorldSource {
 }
 
 /** The World select's choices: every known world, then every other
- *  host a source names in the order first seen, then No world. */
+ *  host a source names in the order first seen, then No world. A known
+ *  world on a port not its own reads as its row does, `The Forsaken
+ *  Lands 1825`, and any other host with its port. */
 export function worldOptions(sources: readonly WorldSource[]): WorldOption[] {
   const out: WorldOption[] = KNOWN_WORLDS.map((w) => ({
     value: `world:${w.domain}`,
@@ -104,7 +106,9 @@ export function worldOptions(sources: readonly WorldSource[]): WorldOption[] {
     seen.add(value);
     const host = (source.host ?? '').trim().replace(/\.$/, '');
     const port = source.port ?? null;
-    out.push({ value, label: port === null ? host : `${host}:${port}`, host, port });
+    let label = port === null ? host : `${host}:${port}`;
+    if (knownWorld(host) && port !== null) label = worldLabel(host, port);
+    out.push({ value, label, host, port });
   }
   out.push({ value: NO_WORLD, label: 'No world', host: null, port: null });
   return out;
@@ -126,11 +130,26 @@ export function worldSources(
   return out;
 }
 
-/** The world meta a profile row shows, like `The Forsaken Lands`, or
- *  null when the profile has no world. */
-export function profileWorldName(entry: ProfileEntry): string | null {
+/** The world meta a profile row shows, in two parts so a tight row
+ *  ends the world in an ellipsis and keeps the port. */
+export interface ProfileWorld {
+  /** Like `The Forsaken Lands`. */
+  world: string;
+  /** A known world's port when it is not the world's own, like 1825 on
+   *  the build port, else null. */
+  port: number | null;
+}
+
+/** The world meta a profile row shows, `The Forsaken Lands` on the
+ *  world's own port and `The Forsaken Lands 1825` on another, by Q7 of
+ *  the Sessions review. Any other host shows as typed. Null when the
+ *  profile has no world. */
+export function profileWorld(entry: ProfileEntry): ProfileWorld | null {
   const host = entry.auto_match?.host?.trim();
-  return host ? worldName(host) : null;
+  if (!host) return null;
+  const port = entry.auto_match?.port ?? null;
+  const own = knownWorld(host)?.port;
+  return { world: worldName(host), port: own !== undefined && port !== own ? port : null };
 }
 
 // ---------------------------------------------------------------
