@@ -44,7 +44,7 @@ mod split_drag;
 use device::GpuState;
 use pointer::{hover_url, load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
 pub(crate) use report::report_scroll;
-use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
+use report::{forget_game_size, grid_and_game_rows, report_scroll_if_changed, report_sizes};
 
 // The installed surface: the platform's window/view handles plus the GPU
 // state. Platform handles are raw pointers, but every access is funnelled
@@ -136,10 +136,12 @@ pub(crate) fn request_redraw() {
 }
 
 /// Another session's grid shows. The pointer lets go of what it held on
-/// the grid that showed before, and a frame draws the new one. Takes no
-/// lock but the pointer's state, so the session map may be held.
+/// the grid that showed before, and a frame draws the new one and tells
+/// its session the game's size. Takes no lock but the pointer's state, so
+/// the session map may be held.
 pub(crate) fn grid_shown() {
     pointer::let_go();
+    forget_game_size();
     request_redraw();
 }
 
