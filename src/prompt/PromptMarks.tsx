@@ -17,6 +17,7 @@ import type { PromptOpenRow, PromptShowState } from '../ipc/prompt';
 import { type PromptPiece } from '../ipc/promptDesign';
 import { onOutput } from '../ipc/terminal';
 import { getPinnedBand } from '../stores/session/pinnedPromptStore';
+import { getSelected } from '../stores/session/sessionsStore';
 import { setPromptReach } from '../stores/session/promptReachStore';
 import { shownColumns } from '../terminal/sgrCells';
 import type { PromptCardHost } from './PromptCard';
@@ -271,10 +272,14 @@ export function PromptMarks({
     let timer = 0;
     let stop: (() => void) | null = null;
     let alive = true;
-    void onOutput(() => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => run(), 60);
-    }).then((fn) => (alive ? (stop = fn) : fn()));
+    // Only the terminal of the session in front moves the line.
+    void onOutput(
+      (session) => session === getSelected(),
+      () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => run(), 60);
+      },
+    ).then((fn) => (alive ? (stop = fn) : fn()));
     return () => {
       alive = false;
       window.clearTimeout(timer);

@@ -1,8 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { decodeOutputPayload, terminalLocalWrite } from './terminal';
+import { decodeOutputPayload, onOutput, terminalLocalWrite, type SessionOutput } from './terminal';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+
+/** The output listener the page last added, as the event bus calls it. */
+const bus = vi.hoisted(() => ({ hear: null as ((event: { payload: unknown }) => void) | null }));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (_event: string, cb: (event: { payload: unknown }) => void) => {
+    bus.hear = cb;
+    return Promise.resolve(() => {});
+  },
+}));
+
+describe('hearing the writes to a session terminal', () => {
+  it('decodes only the writes the listener takes', async () => {
+    const heard: [string, number][] = [];
+    const atob = vi.spyOn(globalThis, 'atob');
+    await onOutput(
+      (session) => session === 2,
+      (out: SessionOutput, session) => heard.push([new TextDecoder().decode(out.bytes), session]),
+    );
+    bus.hear?.({ payload: { session: 1, b64: btoa('The Bank of Aabahran\r\n') } });
+    expect(atob).not.toHaveBeenCalled();
+    bus.hear?.({ payload: { session: 2, b64: btoa('[Exits: south]\r\n') } });
+    expect(heard).toEqual([['[Exits: south]\r\n', 2]]);
+    atob.mockRestore();
+  });
+});
 
 describe('a session output payload', () => {
   const b64 = (text: string) => btoa(text);
