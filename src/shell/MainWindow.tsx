@@ -400,6 +400,7 @@ function MainWindow() {
   // labels track live state.
   const paletteDeps = (): PaletteDeps => ({
     connected,
+    redialing: connection.redialing,
     host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
     worldName: connection.world,
     panelOpen,

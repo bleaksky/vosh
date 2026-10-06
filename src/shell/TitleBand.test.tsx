@@ -63,6 +63,7 @@ vi.mock('./ShellMenu', async (actual) => ({
 const connection: Connection = {
   status: { kind: 'idle' },
   live: false,
+  redialing: false,
   target: { host: 'play.theforsakenlands.com', port: 1848, tls: false },
   world: 'Aabahran',
   character: null,

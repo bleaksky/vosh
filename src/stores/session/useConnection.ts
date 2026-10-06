@@ -14,7 +14,7 @@ import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 import { useSessionConnection, type ConnectionStatus } from './connectionStore';
-import { waitingTarget } from './reconnectStore';
+import { useReconnect, waitingTarget } from './reconnectStore';
 import { getSelected, getSessions, useSelectedRow } from './sessionsStore';
 
 // The session the title band shows and the session menu drives, which
@@ -205,6 +205,8 @@ export interface Connection {
   status: ConnectionStatus;
   /** Connecting or connected. */
   live: boolean;
+  /** A redial waits or dials after a drop, so Disconnect can end it. */
+  redialing: boolean;
   /** Where Connect dials the selected session next, its own target or
    *  else the saved world. */
   target: ConnectionTarget;
@@ -232,6 +234,8 @@ export function useConnection(onError: (message: string, session: number) => voi
   const [target, saveTarget] = useSessionTarget();
   const { status, character } = useSessionConnection();
   const live = status.kind === 'connecting' || status.kind === 'connected';
+  const redial = useReconnect().kind;
+  const redialing = redial === 'waiting' || redial === 'dialing';
 
   // The actions read the newest values through refs, so they never
   // dial a stale target.
@@ -274,5 +278,16 @@ export function useConnection(onError: (message: string, session: number) => voi
     status.kind === 'connected' || status.kind === 'connecting' ? status.host : target.host,
   );
 
-  return { status, live, target, world, character, connect, connectNew, disconnect, saveTarget };
+  return {
+    status,
+    live,
+    redialing,
+    target,
+    world,
+    character,
+    connect,
+    connectNew,
+    disconnect,
+    saveTarget,
+  };
 }
