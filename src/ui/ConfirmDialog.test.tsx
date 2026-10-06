@@ -72,4 +72,22 @@ describe('ConfirmDialog', () => {
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
+
+  it('names its cancel button when you pass a label', () => {
+    const html = renderToStaticMarkup(
+      <ConfirmDialog
+        title="Let Vosh post banners?"
+        body="Vosh posts banners only for the alerts you turn on. macOS asks you next."
+        confirmLabel="Continue"
+        cancelLabel="Not now"
+        tone="primary"
+        onConfirm={none}
+        onCancel={none}
+      />,
+    );
+    expect(buttons(html)).toEqual([
+      { cls: 'ov-button', off: false, label: 'Not now' },
+      { cls: 'ov-button is-primary', off: false, label: 'Continue' },
+    ]);
+  });
 });
