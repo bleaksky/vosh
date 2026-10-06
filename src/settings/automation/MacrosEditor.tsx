@@ -65,19 +65,20 @@ export function MacrosEditor(props: EditorProps) {
 
 /** Each of your macros whose key a preset macro wants, by its row name,
  *  with what its ring and its card say. Read from the store, so a key
- *  you move shows once you save. Rust holds the preset macro on that key
- *  off (hold_taken_keys in src-tauri/src/loadouts/presets.rs). */
+ *  you move shows once you save. */
 function useKeptKeyNotes(): ReadonlyMap<string, string> {
   const macros = useMacroList();
   return useMemo(() => keptKeyNotes(macros), [macros]);
 }
 
 function keptKeyNotes(macros: readonly Macro[]): ReadonlyMap<string, string> {
-  const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
   const notes = new Map<string, string>();
   for (const m of macros) {
-    const preset = m.preset ? presetById(m.preset) : undefined;
-    if (!preset || !yours.has(m.key)) continue;
+    // Rust stores a preset macro off exactly while a macro of yours keeps
+    // its key (hold_taken_keys in src-tauri/src/loadouts/presets.rs), so
+    // the held ones name the keys yours keep.
+    const preset = m.preset && m.enabled === false ? presetById(m.preset) : undefined;
+    if (!preset) continue;
     const key = labelForKey(m.key);
     notes.set(
       key,
