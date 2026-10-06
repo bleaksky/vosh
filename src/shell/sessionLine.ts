@@ -119,16 +119,21 @@ function subscribeClock(cb: () => void): () => void {
 
 /** The time now by Date.now, which moves once a minute. */
 export function useMinuteClock(): number {
-  return useSyncExternalStore(subscribeClock, () => clock);
+  const get = () => clock;
+  return useSyncExternalStore(subscribeClock, get, get);
 }
+
+/** A getter as both the snapshot and the server snapshot, so a row
+ *  renders to markup too. */
+const both = <T>(get: () => T): [() => T, () => T] => [get, get];
 
 /** The second line of `row`, which follows its session as it plays. */
 export function useSessionLine(row: SessionRow): SessionLine {
   const id = row.id;
   const state = useSessionRow(id);
-  const room = useSyncExternalStore(subscribeRoomOf, () => getRoomOf(id));
-  const combat = useSyncExternalStore(subscribeCombatOf, () => getCombatOf(id));
-  const vitals = useSyncExternalStore(subscribeVitalsOf, () => getVitalsOf(id));
+  const room = useSyncExternalStore(subscribeRoomOf, ...both(() => getRoomOf(id)));
+  const combat = useSyncExternalStore(subscribeCombatOf, ...both(() => getCombatOf(id)));
+  const vitals = useSyncExternalStore(subscribeVitalsOf, ...both(() => getVitalsOf(id)));
   const now = useMinuteClock();
   return useMemo(
     () => secondLine(row, state, room, combat, vitals, now),

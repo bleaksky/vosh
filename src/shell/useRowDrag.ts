@@ -19,8 +19,9 @@ import {
 // the row, so every row lets the pointer through while one is lifted
 // and none lights under it.
 
-/** The rows' pitch, a 36 pill in a 38 slot (board 2). */
-export const ROW_PITCH = 38;
+/** The rows' pitch, a 44 pill in a 46 slot (S1 of the Sessions Sidebar
+ *  review). */
+export const ROW_PITCH = 46;
 /** How far a press moves before its row lifts. */
 const LIFT_AFTER = 4;
 /** The band at the list's top and bottom edges that scrolls it, half a
