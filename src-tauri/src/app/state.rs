@@ -192,17 +192,23 @@ impl AppState {
     }
 
     /// The profile a Settings command edits: the open profile `profile`
-    /// names, or the selected session's when it names none. A name no
-    /// session plays is an error, in a sentence. It finds the profile in
-    /// the session map, so take it before any other lock. A command that
-    /// takes the loadouts before the profile finds it here first.
+    /// names, or the selected session's when it names none. It finds the
+    /// profile in the session map, so take it before any other lock. A
+    /// command that takes the loadouts before the profile finds it here
+    /// first.
+    ///
+    /// A name no session plays is an error, in a sentence. Settings names
+    /// only a profile it showed, so the profile closed as its last session
+    /// left it, such as a login that moved that session to the profile
+    /// that claims its character, while a page held unsaved edits. The
+    /// sentence says the change did not save.
     pub(crate) fn edited_profile(&self, profile: Option<String>) -> Result<EditedProfile, String> {
         match profile {
             None => Ok(EditedProfile::Selected(self.selected_session())),
             Some(name) => self
                 .open_profile(&name)
                 .map(EditedProfile::Named)
-                .ok_or_else(|| format!("No session plays the profile {name}.")),
+                .ok_or_else(|| profile_closed(&name)),
         }
     }
 
@@ -365,6 +371,15 @@ impl AppState {
     }
 }
 
+/// What a Settings command says when the profile it names closed before
+/// it could save, see [`AppState::edited_profile`].
+fn profile_closed(name: &str) -> String {
+    format!(
+        "{} closed before Vosh could save this change.",
+        crate::profile::set::display_name(name)
+    )
+}
+
 /// The profile a Settings command edits, as the session map found it
 /// before the command took any other lock, see
 /// [`AppState::edited_profile`].
@@ -430,3 +445,22 @@ pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles 
 /// The error a command that needs the app data folder returns when launch
 /// could not resolve it.
 pub(crate) const NO_APP_DATA: &str = "Vosh could not find its data folder at launch.";
+
+#[cfg(test)]
+mod tests {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+
+    #[test]
+    fn a_profile_that_closed_reads_by_the_name_settings_shows() {
+        let state = super::AppState::default();
+        let closed = |name: &str| state.edited_profile(Some(name.into())).err();
+        assert_eq!(
+            closed(DEFAULT_PROFILE_NAME).as_deref(),
+            Some("Default closed before Vosh could save this change.")
+        );
+        assert_eq!(
+            closed("Build").as_deref(),
+            Some("Build closed before Vosh could save this change.")
+        );
+    }
+}
