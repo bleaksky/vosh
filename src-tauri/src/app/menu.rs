@@ -6,9 +6,9 @@
 //! Vosh commands reach the main window as `vosh://app-menu` with the
 //! palette entry id as the payload, and shell/useAppCommands.ts runs them
 //! through the same dispatcher as the keyboard shortcuts. The page owns
-//! the truth for every check mark and label: it pushes a [`MenuState`]
-//! snapshot through the `menu_set_state` command whenever one changes,
-//! and the menu only mirrors it.
+//! the truth for every check mark, label and dimmed row: it pushes a
+//! [`MenuState`] snapshot through the `menu_set_state` command whenever
+//! one changes, and the menu only mirrors it.
 //!
 //! Windows and Linux get no menu bar. Tauri would attach an app menu to
 //! every frameless window there, so the builder only installs this one
@@ -33,6 +33,10 @@ pub(crate) struct MenuState {
     pub(crate) themes: Vec<MenuTheme>,
     /// The theme in use now.
     pub(crate) theme: String,
+    /// How many sessions are open.
+    pub(crate) sessions: usize,
+    /// The sessions sidebar shows in the main window.
+    pub(crate) sessions_shown: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -63,6 +67,39 @@ pub(crate) use mac::{apply_state, build, on_event, system_copy};
 /// keydown handler share, so they cannot drift apart.
 #[cfg(target_os = "macos")]
 const SHORTCUTS_JSON: &str = include_str!("../../../src/lib/appShortcuts.json");
+
+/// A row of the Session menu after Connect to, which comes and goes.
+#[cfg(target_os = "macos")]
+#[derive(Debug, PartialEq, Eq)]
+enum SessionRow {
+    /// A command row, by its palette id and its words.
+    Item(&'static str, &'static str),
+    Separator,
+}
+
+/// The Session menu after Connect to, in the order board 4 of the
+/// Sessions review draws it. Disconnect follows on its own while a
+/// session is connected.
+#[cfg(target_os = "macos")]
+const SESSION_ROWS: [SessionRow; 9] = [
+    SessionRow::Item("session-edit", "Edit connection…"),
+    SessionRow::Separator,
+    SessionRow::Item("session-new", "New session…"),
+    SessionRow::Item("session-next", "Next session"),
+    SessionRow::Item("session-previous", "Previous session"),
+    SessionRow::Separator,
+    SessionRow::Item("session-close", "Close session"),
+    SessionRow::Item("close-window", "Close window"),
+    SessionRow::Item("profile-save", "Save profile"),
+];
+
+/// Whether the rows that move between sessions take a click: Next
+/// session, Previous session and Show sessions. One session has nowhere
+/// to step and no sidebar, so they show dimmed (Sessions Q12).
+#[cfg(target_os = "macos")]
+fn between_sessions(state: &MenuState) -> bool {
+    state.sessions >= 2
+}
 
 /// Pane rows in View, in the panel's order.
 #[cfg(target_os = "macos")]
@@ -173,7 +210,11 @@ fn route(id: &str) -> Route {
 /// Ids of the rows that carry a check mark.
 #[cfg(target_os = "macos")]
 fn is_check_id(id: &str) -> bool {
-    id == "panel" || id == "split" || id.starts_with("pane-") || id.starts_with("theme-")
+    id == "panel"
+        || id == "split"
+        || id == "sessions-sidebar"
+        || id.starts_with("pane-")
+        || id.starts_with("theme-")
 }
 
 /// The first Session row while you are not connected.

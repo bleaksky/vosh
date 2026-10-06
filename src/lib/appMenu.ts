@@ -186,6 +186,11 @@ export interface MenuState {
   panes: MenuPaneState[];
   themes: MenuThemeState[];
   theme: string;
+  /** How many sessions are open. Next session, Previous session and
+   *  Show sessions show dimmed with one. */
+  sessions: number;
+  /** The sessions sidebar shows, checked in View. */
+  sessionsShown: boolean;
 }
 
 export interface MenuStateInput {
@@ -201,6 +206,8 @@ export interface MenuStateInput {
   /** Every theme in gallery order. */
   themes: readonly MenuThemeState[];
   theme: string;
+  sessions: number;
+  sessionsShown: boolean;
 }
 
 /** The menu's view of the window, the same checks the palette shows. */
@@ -222,6 +229,8 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     }),
     themes: input.themes.map(({ id, label, custom }) => ({ id, label, custom })),
     theme: input.theme,
+    sessions: input.sessions,
+    sessionsShown: input.sessionsShown,
   };
 }
 
