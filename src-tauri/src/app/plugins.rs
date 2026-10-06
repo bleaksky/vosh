@@ -371,28 +371,7 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
     if let Some(app_data) = state.app_data.get() {
         note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
     }
-    let crate::session::effects::Collected {
-        bytes,
-        echoes,
-        walk,
-    } = crate::session::effects::collect_script_result(app, session, apply).await;
-    crate::output::echo_lines(app, session, &echoes);
-    if bytes.is_empty() && walk.is_none() {
-        return;
-    }
-    // A login switches profiles inside the session task, and a
-    // disconnect holds the session lock while it waits for that task to
-    // end. So the bytes and a #walk go from a task of their own and the
-    // switch never waits on the lock.
-    let session = Arc::clone(session);
-    tokio::spawn(async move {
-        let delivered = session.slot.lock().await.as_ref().is_some_and(|handle| {
-            (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
-        });
-        if !delivered {
-            info!("plugin output at a profile switch has no game to go to");
-        }
-    });
+    crate::session::effects::deliver_detached(app, session, apply).await;
 }
 
 /// Find the plugins in `plugins_dir` and load each one the profile turns

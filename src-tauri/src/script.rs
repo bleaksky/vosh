@@ -3,7 +3,10 @@
 //! Lua callbacks return [`vosh_script::Action`] values; this module
 //! applies them to the profile (vars, aliases, triggers), forwards
 //! send/echo to the session, and tracks pending one-shot timers so the
-//! session loop can fire them at the right time.
+//! session loop can fire them at the right time. Every `[lua]` line it
+//! prints joins the session's Output ring in [`output`].
+
+pub(crate) mod output;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -13,8 +16,9 @@ use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::Scope;
 use vosh_automation::StopKey;
-use vosh_script::{Action, Owner, ScriptOutcome};
+use vosh_script::{Action, Owner, Place, ScriptOutcome};
 
+use self::output::{LuaKind, LuaLine};
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
 use crate::profile::live::Profile;
@@ -76,6 +80,28 @@ pub(crate) fn run_alias_body(
     let owner = Owner::Alias(call.source.clone());
     let outcome = c.script.run_body(&owner, &call.body, &call.captures);
     apply_actions(profile, c, outcome)
+}
+
+/// Run `code` from the console on the Scripts page in the session of
+/// `c`: inside the plugin `plugin`, or else in the global environment as
+/// a `#lua` line runs. The line you typed joins the Output ring first,
+/// so what it prints follows it.
+pub(crate) fn run_console(
+    profile: &mut Profile,
+    c: &mut Connection,
+    code: &str,
+    plugin: Option<&str>,
+) -> ApplyResult {
+    let owner = plugin.map_or(Owner::Typed, |name| Owner::Plugin(name.to_string()));
+    let mut result = ApplyResult::default();
+    result.keep_lua_lines(c, &owner, LuaKind::Input, code, None);
+    refresh_vars(profile, c);
+    let outcome = match plugin {
+        Some(name) => c.script.eval_in_plugin(name, code),
+        None => c.script.eval(code, "=#lua"),
+    };
+    result.append(apply_actions(profile, c, outcome));
+    result
 }
 
 /// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
@@ -149,6 +175,9 @@ pub(crate) struct ApplyResult {
     /// The Lua owners whose alerts end, each a plugin that turned off,
     /// stopped or loaded again, see [`crate::alert::end_owner`].
     pub ended: Vec<String>,
+    /// The lines this apply added to the session's Output ring, which
+    /// the Scripts page hears on `session://lua-output`.
+    pub lua_lines: Vec<LuaLine>,
 }
 
 impl ApplyResult {
@@ -170,6 +199,24 @@ impl ApplyResult {
         }
         self.alerts.extend(later.alerts);
         self.ended.extend(later.ended);
+        self.lua_lines.extend(later.lua_lines);
+    }
+
+    /// Keep the lines `text` prints under the `[lua]` tag about the Lua
+    /// of `owner` in the Output ring of `c`, and among the lines this
+    /// result tells the page.
+    fn keep_lua_lines(
+        &mut self,
+        c: &mut Connection,
+        owner: &Owner,
+        kind: LuaKind,
+        text: &str,
+        at: Option<&Place>,
+    ) {
+        for line in LuaLine::lines(owner, kind, text, at, crate::session::now_ms()) {
+            c.lua_output.push(line.clone());
+            self.lua_lines.push(line);
+        }
     }
 
     /// This result, whose Lua ran under `open` while the step held it.
@@ -204,13 +251,19 @@ pub(crate) fn apply_actions(
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
+            Action::Log { owner, text } => {
+                result.echoes.extend(lua_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Print, &text, None);
+            }
             // A note, such as how long a stopped plugin stays off, reads
             // plain, as a print does.
-            Action::Log { text, .. } | Action::Note { text, .. } => {
+            Action::Note { owner, text } => {
                 result.echoes.extend(lua_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Note, &text, None);
             }
-            Action::Error { text, .. } => {
+            Action::Error { owner, text, at } => {
                 result.echoes.extend(lua_error_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Error, &text, at.as_ref());
             }
             Action::SetAlias { name, expansion } => {
                 define_alias(profile, name, expansion);

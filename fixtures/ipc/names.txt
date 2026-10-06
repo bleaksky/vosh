@@ -22,6 +22,9 @@ command loadouts_set_active(active)
 command logs_export(sessionId, withAnsi)
 command logs_list_sessions(limit, hideLocal?)
 command logs_search_page(pattern, caseSensitive, maxResults, sessionId?, beforeLineId?, hideLocal, withTotal)
+command lua_output_clear(owner?, session?)
+command lua_output_get(session?)
+command lua_run(code, plugin?, session?)
 command macros_delete(key)
 command macros_groups_list()
 command macros_list()
@@ -138,6 +141,7 @@ event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
+event session://lua-output app unheard
 event session://output app heard
 event session://prompt-gag-without-reader app heard
 event session://prompt-state app heard

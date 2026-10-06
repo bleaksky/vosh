@@ -515,7 +515,8 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     Ok(SessionHandle { tx_outgoing, task })
 }
 
-fn now_ms() -> i64 {
+/// The wall clock, in milliseconds since the Unix epoch.
+pub(crate) fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
