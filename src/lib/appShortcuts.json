@@ -1,6 +1,7 @@
 {
   "settings": "Mod+,",
   "connect": "Mod+R",
+  "session-new": "Mod+T",
   "close-window": "Mod+W",
   "copy": "Mod+C",
   "find": "Mod+F",

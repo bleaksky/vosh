@@ -72,11 +72,20 @@ export function ShellMenu({
 
   useEscape(true, onClose);
 
+  // The surface follows its button. The button moves with the window,
+  // and with the column it sits over when the panel or the sessions
+  // sidebar comes or goes, as a New session form's profile pick can do.
   useLayoutEffect(() => {
     const place = () => setPos(placeUnder(anchor, align, width));
     place();
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    const slot = anchor?.parentElement;
+    const watch = slot && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+    if (slot) watch?.observe(slot);
+    return () => {
+      window.removeEventListener('resize', place);
+      watch?.disconnect();
+    };
   }, [anchor, align, width]);
 
   useEffect(() => {
@@ -90,10 +99,11 @@ export function ShellMenu({
   }, [anchor]);
 
   // Focus the first command, or the first field of a form, so the
-  // keyboard lands inside the surface it just opened.
+  // keyboard lands inside the surface it just opened. A form that put
+  // the caret in a field of its own keeps it there.
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || el.contains(document.activeElement)) return;
     const first = el.querySelector<HTMLElement>(
       kind === 'menu' ? ITEM_SELECTOR : 'input, select, button',
     );

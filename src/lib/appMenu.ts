@@ -20,10 +20,25 @@ export type AppShortcutId = keyof typeof SHORTCUTS;
 /** Every command with a shortcut, as a palette spec like `Mod+K`. */
 export const APP_SHORTCUTS: Readonly<Record<AppShortcutId, string>> = SHORTCUTS;
 
-/** Opens the session popover under the title, in a given mode. */
+/** Opens the session popover under the title, on what a request names. */
 export const SESSION_MENU_EVENT = 'vosh:session-menu';
 
-export type SessionMenuMode = 'menu' | 'edit' | 'new';
+/** A session New session… opened for its form: the session, the one
+ *  selected before it, which Cancel goes back to, the profile in front
+ *  then, which the form's pick falls back to, and the profile it plays. */
+export interface OpenedSession {
+  id: number;
+  previous: number;
+  front: string;
+  profile: string;
+}
+
+/** What the session popover opens on: its list, the Edit connection
+ *  form, or the New session form of a session New session… opened. */
+export type SessionMenuRequest =
+  | { mode: 'menu' }
+  | { mode: 'edit' }
+  | { mode: 'new'; opened: OpenedSession };
 
 // The shortcuts the main window binds in its own keydown handler. Copy
 // and Close window belong to the menu and the fields.
@@ -176,7 +191,10 @@ export function pageHasSelection(doc: SelectionSource = document): boolean {
   return !!selection && !selection.isCollapsed && selection.toString().length > 0;
 }
 
-/** Open the session popover in `mode`, from the menu bar. */
-export function requestSessionMenu(mode: SessionMenuMode): void {
-  window.dispatchEvent(new CustomEvent<SessionMenuMode>(SESSION_MENU_EVENT, { detail: mode }));
+/** Open the session popover on what `request` names, from the menu bar
+ *  and New session…. */
+export function requestSessionMenu(request: SessionMenuRequest): void {
+  window.dispatchEvent(
+    new CustomEvent<SessionMenuRequest>(SESSION_MENU_EVENT, { detail: request }),
+  );
 }

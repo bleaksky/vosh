@@ -94,6 +94,9 @@ export interface PaletteDeps {
   openSettings?: () => void;
   openSettingsTab: (tab: string) => void;
   connect: () => void;
+  /** Open a session on its New session form. The row appears when the
+   *  shell passes it. */
+  newSession?: () => void;
   disconnect: () => void;
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
@@ -313,6 +316,17 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     });
   }
 
+  if (deps.newSession) {
+    entries.push({
+      id: 'session-new',
+      section: 'session',
+      title: 'New session…',
+      keywords: 'open connection tab',
+      keys: APP_SHORTCUTS['session-new'],
+      searchOnly: true,
+      run: deps.newSession,
+    });
+  }
   entries.push({
     id: 'profile-save',
     section: 'session',

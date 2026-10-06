@@ -57,6 +57,19 @@ export async function selectSession(session: number): Promise<void> {
   await invoke('session_select', { session });
 }
 
+/** Open a session after the others, with nothing connected, playing
+ *  `profile`, and answer its id. Its Lua engine starts on the profile
+ *  as it opens. */
+export async function openSession(profile: string): Promise<number> {
+  return invoke('session_open', { profile });
+}
+
+/** Close a session, ending its connection. A selected session hands the
+ *  selection on. */
+export async function closeSession(session: number): Promise<void> {
+  await invoke('session_close', { session });
+}
+
 /** Hear every session's row after a step that changed what one shows. */
 export async function onSessionsChanged(cb: (rows: SessionRow[]) => void): Promise<UnlistenFn> {
   return listen<SessionRow[]>(SESSIONS_CHANGED, (event) => {

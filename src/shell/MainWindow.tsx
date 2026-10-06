@@ -19,6 +19,7 @@ import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
+import { openNewSession } from './newSession';
 import { SessionSidebar } from './SessionSidebar';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
@@ -52,7 +53,6 @@ import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { openSettingsTab } from '../lib/settingsLink';
-import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
@@ -431,6 +431,7 @@ function MainWindow() {
     openSettings: openSettingsWindow,
     openSettingsTab,
     connect: () => void connection.connect(),
+    newSession: () => void openNewSession(),
     disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
@@ -714,7 +715,7 @@ function MainWindow() {
             rows={sessions}
             selected={selected}
             onSelect={select}
-            onNewSession={() => requestSessionMenu('new')}
+            onNewSession={() => void openNewSession()}
             onHide={() => setSessionsHidden(true)}
             onCaret={focusInput}
           />
