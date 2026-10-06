@@ -199,6 +199,8 @@ describe('buildMenuState', () => {
       { id: 'mine', label: 'Nord (custom)', custom: true },
     ],
     theme: 'nord',
+    sessions: 1,
+    sessionsShown: false,
     ...over,
   });
 
@@ -238,6 +240,14 @@ describe('buildMenuState', () => {
     ]);
   });
 
+  it('carries how many sessions are open and whether the sidebar shows', () => {
+    expect(buildMenuState(input())).toMatchObject({ sessions: 1, sessionsShown: false });
+    expect(buildMenuState(input({ sessions: 3, sessionsShown: true }))).toMatchObject({
+      sessions: 3,
+      sessionsShown: true,
+    });
+  });
+
   it('sends no world name when there is none to show', () => {
     expect(buildMenuState(input({ worldName: '  ' })).worldName).toBeNull();
     expect(buildMenuState(input({ worldName: null })).worldName).toBeNull();
@@ -260,6 +270,8 @@ describe('setAppMenuState', () => {
       staffOffered: false,
       themes: [],
       theme: 'nord',
+      sessions: 1,
+      sessionsShown: false,
     });
     setAppMenuState(state);
     setAppMenuState({ ...state });

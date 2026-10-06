@@ -65,6 +65,11 @@ interface CommandInputs
   panelOpen: boolean;
   /** The panes the panel tree holds. */
   shownPanes: readonly PaneType[];
+  /** How many sessions are open, and whether the sidebar shows them. */
+  sessionCount: number;
+  sessionsShown: boolean;
+  /** Hide the sessions sidebar in this window, or show it again. */
+  toggleSessions: () => void;
   /** The live pane and the history pane, whose selection Copy takes. */
   termRef: RefObject<TerminalHandle>;
   historyTermRef: RefObject<TerminalHandle>;
@@ -104,6 +109,9 @@ export function useAppCommands({
   focusInput,
   panelOpen,
   shownPanes,
+  sessionCount,
+  sessionsShown,
+  toggleSessions,
   termRef,
   historyTermRef,
   writeLive,
@@ -246,6 +254,9 @@ export function useAppCommands({
       case 'session-close':
         closeSession();
         return;
+      case 'sessions-sidebar':
+        toggleSessions();
+        return;
       case 'close-window':
         closeWindow();
         return;
@@ -306,6 +317,8 @@ export function useAppCommands({
           custom,
         })),
         theme: getCurrentThemeId(),
+        sessions: sessionCount,
+        sessionsShown,
       }),
     );
   }, [
@@ -317,6 +330,8 @@ export function useAppCommands({
     shownPanes,
     staffOffered,
     themeTick,
+    sessionCount,
+    sessionsShown,
   ]);
 
   return {

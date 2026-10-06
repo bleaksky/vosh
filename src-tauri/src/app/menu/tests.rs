@@ -58,6 +58,60 @@ fn specs_map_mod_to_cmd() {
     assert_eq!(spec_to_accelerator("Mod+Shift+L"), "Cmd+Shift+L");
     assert_eq!(spec_to_accelerator("Mod+\\"), "Cmd+\\");
     assert_eq!(spec_to_accelerator("Mod++"), "Cmd++");
+    assert_eq!(spec_to_accelerator("Mod+Shift+]"), "Cmd+Shift+]");
+    assert_eq!(spec_to_accelerator("Mod+Shift+["), "Cmd+Shift+[");
+}
+
+#[test]
+fn the_step_keys_bind_the_bracket_keys() {
+    // The menu shows them as the board draws them, Shift Cmd ] and Shift
+    // Cmd [, on the bracket keys.
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    let shift_cmd = Some(Modifiers::SHIFT | Modifiers::SUPER);
+    for (id, code) in [
+        ("session-next", Code::BracketRight),
+        ("session-previous", Code::BracketLeft),
+    ] {
+        let parsed = Accelerator::from_str(accelerator(id).unwrap()).unwrap();
+        assert_eq!(parsed, Accelerator::new(shift_cmd, code), "{id}");
+    }
+}
+
+#[test]
+fn the_session_menu_follows_board_4() {
+    let rows: Vec<String> = SESSION_ROWS
+        .iter()
+        .map(|row| match row {
+            SessionRow::Item(id, text) => match accelerator(id) {
+                Some(keys) => format!("{text} {keys}"),
+                None => (*text).to_string(),
+            },
+            SessionRow::Separator => "-".to_string(),
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            "Edit connection…",
+            "-",
+            "New session… Cmd+T",
+            "Next session Cmd+Shift+]",
+            "Previous session Cmd+Shift+[",
+            "-",
+            "Close session Cmd+W",
+            "Close window Cmd+Shift+W",
+            "Save profile",
+        ]
+    );
+}
+
+#[test]
+fn the_session_rows_dim_with_one_session() {
+    let mut state = menu_state();
+    for (open, enabled) in [(0, false), (1, false), (2, true), (9, true)] {
+        state.sessions = open;
+        assert_eq!(between_sessions(&state), enabled, "{open} sessions");
+    }
 }
 
 #[test]
@@ -101,14 +155,33 @@ fn routes_follow_the_board() {
     assert_eq!(route("connect"), Route::Main { raise: true });
     assert_eq!(route("panel"), Route::Main { raise: true });
     assert_eq!(route("theme-nord"), Route::Main { raise: false });
+    // A step or the sidebar from Settings brings the main window up.
+    assert_eq!(route("session-next"), Route::Main { raise: true });
+    assert_eq!(route("session-previous"), Route::Main { raise: true });
+    assert_eq!(route("sessions-sidebar"), Route::Main { raise: true });
 }
 
 #[test]
 fn check_rows_are_the_toggles_and_themes() {
-    for id in ["panel", "split", "pane-map", "pane-imm", "theme-nord"] {
+    for id in [
+        "sessions-sidebar",
+        "panel",
+        "split",
+        "pane-map",
+        "pane-imm",
+        "theme-nord",
+    ] {
         assert!(is_check_id(id), "{id}");
     }
-    for id in ["connect", "palette", "panel-reset", "copy", "theme"] {
+    for id in [
+        "connect",
+        "palette",
+        "panel-reset",
+        "copy",
+        "theme",
+        "session-next",
+        "session-previous",
+    ] {
         assert!(!is_check_id(id), "{id}");
     }
 }
@@ -147,9 +220,9 @@ fn custom_themes_follow_a_separator() {
     );
 }
 
-#[test]
-fn staff_queues_waits_for_the_offer() {
-    let mut state = MenuState {
+/// A snapshot with one session, connected, and Staff queues not offered.
+fn menu_state() -> MenuState {
+    MenuState {
         connected: true,
         world_name: None,
         panel_open: true,
@@ -161,7 +234,14 @@ fn staff_queues_waits_for_the_offer() {
         }],
         themes: Vec::new(),
         theme: "nord".to_string(),
-    };
+        sessions: 1,
+        sessions_shown: false,
+    }
+}
+
+#[test]
+fn staff_queues_waits_for_the_offer() {
+    let mut state = menu_state();
     assert!(!staff_listed(&state));
     state.panes[0].offered = true;
     assert!(staff_listed(&state));
@@ -176,7 +256,9 @@ fn state_reads_camel_case() {
         "splitOpen": false,
         "panes": [{ "pane": "map", "visible": true, "offered": true }],
         "themes": [{ "id": "nord", "label": "Nord", "custom": false }],
-        "theme": "nord"
+        "theme": "nord",
+        "sessions": 2,
+        "sessionsShown": true
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
     assert!(state.connected);
@@ -184,4 +266,6 @@ fn state_reads_camel_case() {
     assert!(state.panel_open);
     assert_eq!(state.panes[0].pane, "map");
     assert_eq!(state.themes[0].label, "Nord");
+    assert_eq!(state.sessions, 2);
+    assert!(state.sessions_shown);
 }

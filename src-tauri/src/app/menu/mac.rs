@@ -8,8 +8,9 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tracing::warn;
 
 use super::{
-    accelerator, connect_label, is_check_id, quit_asks, route, staff_listed, theme_rows, MenuState,
-    MenuTheme, Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
+    accelerator, between_sessions, connect_label, is_check_id, quit_asks, route, staff_listed,
+    theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
+    SESSION_ROWS,
 };
 use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
 use crate::app::state::SharedState;
@@ -22,9 +23,12 @@ const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 pub(super) struct MenuHandles {
     session: Submenu<Wry>,
     connect: MenuItem<Wry>,
+    /// Next session and Previous session.
+    steps: Vec<MenuItem<Wry>>,
     disconnect_sep: PredefinedMenuItem<Wry>,
     disconnect: MenuItem<Wry>,
     view: Submenu<Wry>,
+    sessions: CheckMenuItem<Wry>,
     panel: CheckMenuItem<Wry>,
     split: CheckMenuItem<Wry>,
     panes: Vec<(&'static str, CheckMenuItem<Wry>)>,
@@ -85,24 +89,25 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
-    // Session starts as you launch: not connected. The page sends
-    // the world name and the connection state at once.
+    // Session starts as you launch: not connected, with one session. The
+    // page sends the world name, the connection state and the sessions
+    // at once.
     let connect = item("connect", &connect_label(None))?;
-    let session = Submenu::with_items(
-        app,
-        "Session",
-        true,
-        &[
-            &connect,
-            &item("session-edit", "Edit connection…")?,
-            &sep()?,
-            &item("session-new", "New session…")?,
-            &sep()?,
-            &item("session-close", "Close session")?,
-            &item("close-window", "Close window")?,
-            &item("profile-save", "Save profile")?,
-        ],
-    )?;
+    let session = Submenu::with_items(app, "Session", true, &[&connect])?;
+    let mut steps = Vec::new();
+    for row in &SESSION_ROWS {
+        match row {
+            SessionRow::Item(id, text) => {
+                let row = item(id, text)?;
+                session.append(&row)?;
+                if *id == "session-next" || *id == "session-previous" {
+                    row.set_enabled(false)?;
+                    steps.push(row);
+                }
+            }
+            SessionRow::Separator => session.append(&sep()?)?,
+        }
+    }
     let disconnect_sep = sep()?;
     let disconnect = item("disconnect", "Disconnect")?;
 
@@ -125,6 +130,8 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
+    let sessions = check("sessions-sidebar", "Show sessions")?;
+    sessions.set_enabled(false)?;
     let panel = check("panel", "Show panel")?;
     let split = check("split", "Split terminal")?;
     let mut panes = Vec::with_capacity(PANE_ROWS.len());
@@ -144,6 +151,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let fullscreen = PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?;
     view_items.push(&search);
     view_items.push(&sep_a);
+    view_items.push(&sessions);
     view_items.push(&panel);
     view_items.push(&split);
     view_items.push(&sep_b);
@@ -186,9 +194,11 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     app.manage(MenuHandles {
         session,
         connect,
+        steps,
         disconnect_sep,
         disconnect,
         view,
+        sessions,
         panel,
         split,
         panes,
@@ -320,6 +330,15 @@ pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
         applied.connected = state.connected;
     }
 
+    let between = between_sessions(state);
+    for row in &h.steps {
+        log_err(row.set_enabled(between), "step row");
+    }
+    log_err(h.sessions.set_enabled(between), "sessions row");
+    log_err(
+        h.sessions.set_checked(state.sessions_shown),
+        "sessions check",
+    );
     log_err(h.panel.set_checked(state.panel_open), "panel check");
     log_err(h.split.set_checked(state.split_open), "split check");
     for (pane, row) in &h.panes {
@@ -400,6 +419,7 @@ fn revert_check(app: &AppHandle, id: &str) {
         }
     };
     match id {
+        "sessions-sidebar" => flip(&h.sessions),
         "panel" => flip(&h.panel),
         "split" => flip(&h.split),
         _ => {
