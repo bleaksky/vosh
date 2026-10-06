@@ -1,8 +1,8 @@
 //! The commands for Settings > Characters. The page reads any profile
 //! through them, active or not, turns a character's login on or off,
-//! points a profile at a world and saves a profile's settings to your
-//! Downloads folder. Settings and the prompt card also ask who is
-//! logged in.
+//! points a profile at a world, saves a profile's settings to your
+//! Downloads folder and reads a profile export you pick to import.
+//! Settings and the prompt card also ask who is logged in.
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
@@ -10,6 +10,7 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
+use crate::import::vosh::{preview, ImportPreview};
 use crate::profile::inactive::{export_path, export_text, profile_detail, ProfileDetail};
 use crate::profile::login_match::LoginClaim;
 use crate::profile::set::{display_name, ProfileEntry};
@@ -112,6 +113,19 @@ pub(crate) async fn profile_export_file(
             .unwrap_or_default(),
         path: path.display().to_string(),
     })
+}
+
+/// Read `text`, the file you picked as `file_name`, as a Vosh profile
+/// export, and say what it holds and where it would go. Changes nothing.
+/// See [`preview`].
+#[tauri::command]
+pub(crate) async fn profile_import_read(
+    state: State<'_, SharedState>,
+    file_name: String,
+    text: String,
+) -> Result<ImportPreview, String> {
+    let set = state.loaded_profile_set().await?;
+    preview(&set, &file_name, &text)
 }
 
 /// Who is logged in on the session: the connection, the character once

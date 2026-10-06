@@ -299,6 +299,15 @@ impl UiConfig {
     }
 }
 
+/// The pane types under `node` in tree order, which reads each split top
+/// to bottom or left to right.
+pub(crate) fn leaf_panes(node: &PaneNode) -> Vec<String> {
+    if let Some(pane) = &node.pane {
+        return vec![pane.clone()];
+    }
+    node.children.iter().flat_map(leaf_panes).collect()
+}
+
 #[allow(clippy::cast_precision_loss)]
 fn count_as_f64(n: usize) -> f64 {
     n as f64
@@ -521,14 +530,6 @@ pub(crate) mod tests {
                 align: align.map(str::to_string),
             })
             .collect()
-    }
-
-    /// Pane types in reading order, for asserting tree shape.
-    fn leaf_panes(node: &PaneNode) -> Vec<String> {
-        if let Some(pane) = &node.pane {
-            return vec![pane.clone()];
-        }
-        node.children.iter().flat_map(leaf_panes).collect()
     }
 
     fn close(a: f64, b: f64) -> bool {

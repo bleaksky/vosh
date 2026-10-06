@@ -5,12 +5,12 @@
 //! does not know, so this build and every older one read an export as
 //! the profile it holds.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::profile::login_match::AutoMatch;
 
 /// The table. Each key is left out while it says nothing.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct VoshExport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
@@ -23,6 +23,11 @@ pub(crate) struct VoshExport {
 #[derive(Serialize)]
 struct Written<'a> {
     vosh_export: &'a VoshExport,
+}
+
+#[derive(Deserialize)]
+struct Read {
+    vosh_export: Option<VoshExport>,
 }
 
 impl VoshExport {
@@ -53,6 +58,12 @@ impl VoshExport {
         let table = toml::to_string_pretty(&Written { vosh_export: self })?;
         Ok(format!("{profile}\n{table}"))
     }
+}
+
+/// The table in `text`, or None when the file has none. Fails when `text`
+/// is not TOML or its table is not one Vosh writes.
+pub(crate) fn read(text: &str) -> Result<Option<VoshExport>, toml::de::Error> {
+    Ok(toml::from_str::<Read>(text)?.vosh_export)
 }
 
 #[cfg(test)]
@@ -101,5 +112,14 @@ mod tests {
         let profile = ProfileConfig::default().to_toml().unwrap();
         let text = VoshExport::default().write(&profile).unwrap();
         assert_eq!(text, format!("{profile}\n[vosh_export]\n"));
+        assert_eq!(read(&text).unwrap(), Some(VoshExport::default()));
+    }
+
+    #[test]
+    fn a_file_without_the_table_reads_as_none() {
+        let profile = ProfileConfig::default().to_toml().unwrap();
+        assert_eq!(read(&profile).unwrap(), None);
+        assert!(read("not = [toml").is_err());
+        assert!(read("[vosh_export]\nport = \"west\"\n").is_err());
     }
 }

@@ -598,6 +598,7 @@ mod tests {
             characters: vec!["Orla".into()],
         };
         assert_eq!(text, table.write(&profile).unwrap());
+        assert_eq!(crate::profile::export::read(&text).unwrap(), Some(table));
 
         // With no world, the table names nothing, not even what you ticked.
         let text = export_text(&state, "Test-Prompt", &ticked).await.unwrap();
