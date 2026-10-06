@@ -14,24 +14,25 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 // What each session's row in the sessions sidebar says beyond its name,
 // board 3 of the Sessions review.
 //
-// A row shows one glyph in the meta's place, the most urgent first
-// (Q8). The triangle when the first dial fails, or when the link
-// dropped and Vosh does not dial again. The hand while the game waits
-// for your login. The spinner while Vosh dials, and through every try
-// of a redial. The dot for an alert. A session that is not connected
-// shows none, and its name dims.
+// Every row shows one status mark, the selected one too, the most
+// urgent first (Q8, and S2 of the Sessions Sidebar review). The
+// triangle when the first dial fails, or when the link dropped and Vosh
+// does not dial again. The hand while the game waits for your login.
+// The spinner while Vosh dials, and through every try of a redial. The
+// green dot while it plays, and the ring while it is not connected,
+// when its name dims too.
 //
 // A session you are not looking at earns two marks (Q9). Its name
-// brightens once the game prints a line there, and the dot shows once
+// brightens once the game prints a line there, and a count shows once
 // something for you happens there. The row keeps each such thing as
-// what waits for you (S4 of the Sessions Sidebar review): a tell, your
+// what waits for you (S4): a tell, your
 // name, a fight that starts on you and low health, the events four of
 // the alert presets watch whether or not their alerts are on. One that
 // rings comes as session://alert, and one that rings nothing as
 // session://mark, each with its source. Each tell, name and fight counts,
 // and low health counts once however often it falls, since it is a
 // state. The connection preset never counts, since a session in trouble
-// shows it in its glyph, and neither does an alert of a trigger or Lua.
+// shows it in its mark, and neither does an alert of a trigger or Lua.
 // Selecting the session clears both marks, and the selected row never
 // takes either.
 //
@@ -238,38 +239,50 @@ export function waitingElsewhere(rows: readonly SessionRow[], selected: number):
   );
 }
 
-/** The glyph a row shows at its right, in the meta's place. */
-export type RowGlyph = 'triangle' | 'hand' | 'spinner' | 'dot';
+/** The status mark at the left of a row. */
+export type RowMark = 'live' | 'off' | 'hand' | 'spinner' | 'triangle';
+
+/** What a screen reader says for each mark, in the title band's words,
+ *  where the triangle means connect again yourself. */
+export const MARK_WORDS: Record<RowMark, string> = {
+  live: 'Playing',
+  off: 'Not connected',
+  hand: 'Logging in',
+  spinner: 'Connecting',
+  triangle: 'Connect again',
+};
 
 export interface RowLook {
-  glyph: RowGlyph | null;
+  mark: RowMark;
+  /** How many things wait for you there. */
+  count: number;
   /** The name brightens for new lines, and dims while the session is
    *  not connected. */
   tone: 'new' | 'off' | null;
 }
 
-/** How the row of `row` draws `state`. One glyph, the most urgent: the
- *  triangle, then the hand, then the spinner, then the dot. The hand
- *  shows on a world Vosh knows sends Char.Status, or after a redial
- *  reached any world, since nothing else says when you logged in. The
- *  selected row shows no mark, since you are looking at it. */
+/** How the row of `row` draws `state`. One mark, the most urgent: the
+ *  triangle, then the hand, then the spinner, then the dot or the ring.
+ *  The hand shows on a world Vosh knows sends Char.Status, or after a
+ *  redial reached any world, since nothing else says when you logged
+ *  in. The selected row takes no tone, since you are looking at it. */
 export function rowLook(state: SessionRowState, row: SessionRow, selected: boolean): RowLook {
   const link = state.link ?? (row.connected ? 'live' : 'down');
   const busy = state.redialing || link === 'dialing';
   const knows = state.reached || (row.host !== null && knownWorld(row.host) !== undefined);
   const login =
     link === 'live' && !state.playing && (state.reached || row.character === null) && knows;
-  const glyph: RowGlyph | null =
+  const mark: RowMark =
     link === 'failed'
       ? 'triangle'
       : login
         ? 'hand'
         : busy
           ? 'spinner'
-          : state.waiting.length > 0 && !selected
-            ? 'dot'
-            : null;
-  if (selected) return { glyph, tone: null };
-  const tone = link === 'down' && !busy ? 'off' : state.lines ? 'new' : null;
-  return { glyph, tone };
+          : link === 'live'
+            ? 'live'
+            : 'off';
+  const count = state.waiting.length;
+  if (selected) return { mark, count, tone: null };
+  return { mark, count, tone: mark === 'off' ? 'off' : state.lines ? 'new' : null };
 }

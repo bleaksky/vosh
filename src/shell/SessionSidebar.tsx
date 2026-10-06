@@ -13,10 +13,11 @@ import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
-import { rowLook, useSessionRow, type RowGlyph } from '../stores/session/sessionRowStore';
+import { MARK_WORDS, rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { rowGlyph, type RowGlyph } from './rowGlyph';
 import { useModHeld } from './useModHeld';
 import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 
@@ -249,11 +250,11 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
 });
 
 /** Each glyph, with the words a screen reader says for it, from board
- *  3 and Q8, where the triangle means connect again yourself. */
+ *  3 and Q8. */
 const GLYPHS: Record<RowGlyph, { icon: ComponentType; words: string }> = {
-  triangle: { icon: TriangleIcon, words: 'Connect again' },
-  hand: { icon: HandIcon, words: 'Logging in' },
-  spinner: { icon: SpinnerIcon, words: 'Connecting' },
+  triangle: { icon: TriangleIcon, words: MARK_WORDS.triangle },
+  hand: { icon: HandIcon, words: MARK_WORDS.hand },
+  spinner: { icon: SpinnerIcon, words: MARK_WORDS.spinner },
   dot: { icon: DotIcon, words: 'Something for you' },
 };
 
@@ -304,8 +305,9 @@ function SessionSlot({
   onRenamed,
 }: SlotProps) {
   const label = sessionLabel(row, rows);
-  const { glyph, tone } = rowLook(useSessionRow(row.id), row, current);
-  const look = tone ? `shell-sessions-row is-${tone}` : 'shell-sessions-row';
+  const look = rowLook(useSessionRow(row.id), row, current);
+  const glyph = rowGlyph(look, current);
+  const rowClass = look.tone ? `shell-sessions-row is-${look.tone}` : 'shell-sessions-row';
   const meta = keys ? (
     <span className="shell-sessions-meta is-key">{keys}</span>
   ) : glyph ? (
@@ -320,7 +322,7 @@ function SessionSlot({
   if (renaming) {
     return (
       <li className="shell-sessions-slot" style={moved}>
-        <div className={`${look} is-edit`} aria-current={current ? 'true' : undefined}>
+        <div className={`${rowClass} is-edit`} aria-current={current ? 'true' : undefined}>
           <NameField
             initial={label.name}
             unnamed={sessionLabel({ ...row, name: null }, rows).name}
@@ -336,7 +338,7 @@ function SessionSlot({
     <li className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'} style={moved}>
       <button
         type="button"
-        className={look}
+        className={rowClass}
         aria-current={current ? 'true' : undefined}
         title={label.tooltip ?? undefined}
         onPointerDown={onPress}
