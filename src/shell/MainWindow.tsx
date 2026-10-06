@@ -74,6 +74,7 @@ import { nextCardRequest, type CardRequest, type CardRequestView } from '../prom
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
 import { useAppCommands } from './useAppCommands';
+import { useClosing } from './useClosing';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 import { useScrollbackSplit } from './useScrollbackSplit';
@@ -411,6 +412,10 @@ function MainWindow() {
 
   const { status, live: connected } = connection;
 
+  // Closing a session or this window, and the question either asks
+  // while a session is connected.
+  const closing = useClosing();
+
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
   const paletteDeps = (): PaletteDeps => ({
@@ -432,6 +437,7 @@ function MainWindow() {
     openSettingsTab,
     connect: () => void connection.connect(),
     newSession: () => void openNewSession(),
+    closeSession: () => closing.closeSession(),
     disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
@@ -446,25 +452,25 @@ function MainWindow() {
   });
 
   // The window shortcuts, the macOS menu bar and #help.
-  const { runCommand, confirmClose, setConfirmClose, closeMainWindow, themesChanged } =
-    useAppCommands({
-      connection,
-      splitOpen,
-      toggleSplit,
-      findOpen,
-      openFind,
-      findToolbarRef,
-      paletteOpen,
-      setPaletteOpen,
-      togglePanel: () => togglePanelKeepingCaret(focusInput),
-      focusInput,
-      panelOpen,
-      shownPanes,
-      termRef,
-      historyTermRef,
-      writeLive,
-      paletteDeps,
-    });
+  const { runCommand, themesChanged } = useAppCommands({
+    connection,
+    closeWindow: closing.closeWindow,
+    splitOpen,
+    toggleSplit,
+    findOpen,
+    openFind,
+    findToolbarRef,
+    paletteOpen,
+    setPaletteOpen,
+    togglePanel: () => togglePanelKeepingCaret(focusInput),
+    focusInput,
+    panelOpen,
+    shownPanes,
+    termRef,
+    historyTermRef,
+    writeLive,
+    paletteDeps,
+  });
 
   // The fonts, the sizes and the terminal settings, read at launch and
   // kept up with every Settings change and profile switch. The menu bar
@@ -716,6 +722,7 @@ function MainWindow() {
             selected={selected}
             onSelect={select}
             onNewSession={() => void openNewSession()}
+            onClose={closing.closeSession}
             onHide={() => setSessionsHidden(true)}
             onCaret={focusInput}
           />
@@ -772,16 +779,13 @@ function MainWindow() {
         />
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}
-      {confirmClose && (
+      {closing.asking && (
         <ConfirmDialog
-          title="Close this window?"
-          body={`You are connected to ${connection.world}. Closing this window ends your session and quits Vosh.`}
-          confirmLabel="Close window"
-          onConfirm={() => {
-            setConfirmClose(false);
-            closeMainWindow();
-          }}
-          onCancel={() => setConfirmClose(false)}
+          title={closing.asking.title}
+          body={closing.asking.body}
+          confirmLabel={closing.asking.confirm}
+          onConfirm={closing.asking.onConfirm}
+          onCancel={closing.cancel}
         />
       )}
     </AppShell>

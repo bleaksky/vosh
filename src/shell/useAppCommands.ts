@@ -3,7 +3,6 @@
 // command line opens Help, and the menu bar mirrors this window.
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { menuCopy, openHelpWindow, openSettingsWindow, subscribeHelpOpen } from '../ipc/windows';
 import {
@@ -42,8 +41,10 @@ interface CommandInputs
   extends
     Pick<ScrollbackSplit, 'splitOpen' | 'toggleSplit'>,
     Pick<ScrollbackFind, 'findOpen' | 'openFind' | 'findToolbarRef'> {
-  /** The session, for Connect, Close window and the menu bar. */
+  /** The session, for Connect and the menu bar. */
   connection: Connection;
+  /** Close the window, asking first while a session is connected. */
+  closeWindow: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   /** Shows or hides the panel, and puts the caret back on the command
@@ -67,16 +68,13 @@ interface CommandInputs
 interface AppCommands {
   /** Run a command by its palette id. */
   runCommand: (id: string, opts?: { repeat?: boolean }) => void;
-  /** Close window waits on your answer. */
-  confirmClose: boolean;
-  setConfirmClose: (open: boolean) => void;
-  closeMainWindow: () => void;
   /** Another window changed the custom themes, which the menu bar lists. */
   themesChanged: () => void;
 }
 
 export function useAppCommands({
   connection,
+  closeWindow,
   splitOpen,
   toggleSplit,
   findOpen,
@@ -93,9 +91,6 @@ export function useAppCommands({
   writeLive,
   paletteDeps,
 }: CommandInputs): AppCommands {
-  // Close window (⌘W on macOS) while a session is live asks first,
-  // since closing the main window ends the session and quits Vosh.
-  const [confirmClose, setConfirmClose] = useState(false);
   // What the macOS menu bar mirrors beyond the panel and the session: a
   // tick for every theme apply or custom theme change, whether the MUD
   // offers staff queues, and whether the native grid is scrolled back.
@@ -157,12 +152,6 @@ export function useAppCommands({
     (id: string) => runCommandRef.current(id),
   );
 
-  const closeMainWindow = () => {
-    getCurrentWindow()
-      .close()
-      .catch((e: unknown) => console.error('[main] closing the window failed', e));
-  };
-
   // Edit, then Copy, in the menu bar. With no selection of the page's
   // own, the terminal selection wins, the same as Cmd+C in the command
   // line and Copy in the terminal menu. Otherwise the system copies the
@@ -220,8 +209,7 @@ export function useAppCommands({
         void openNewSession();
         return;
       case 'close-window':
-        if (live) setConfirmClose(true);
-        else closeMainWindow();
+        closeWindow();
         return;
       case 'copy':
         copyFromMenu();
@@ -292,9 +280,6 @@ export function useAppCommands({
 
   return {
     runCommand,
-    confirmClose,
-    setConfirmClose,
-    closeMainWindow,
     themesChanged: () => setThemeTick((n) => n + 1),
   };
 }

@@ -42,6 +42,12 @@ const store = createGmcpStore<SessionConnection>({
 export const startConnectionStore = store.start;
 export const useSessionConnection = store.use;
 
+/** Whether `session` dials or plays, as this window last heard. */
+export function sessionLive(session: number): boolean {
+  const { kind } = store.stateOf(session).status;
+  return kind === 'connecting' || kind === 'connected';
+}
+
 /** Mark `session` with an error its connect or a send met. */
 export function noteConnectionError(session: number, message: string): void {
   store.apply(session, (now) => ({ ...now, status: { kind: 'error', message } }));
