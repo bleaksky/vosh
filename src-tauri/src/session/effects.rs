@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 use tokio::time::Instant;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::app::events::{self, broadcast_list_changes, ListChanges, ListRevisions};
 use crate::app::state::{AppState, SharedState};
@@ -19,6 +19,7 @@ use crate::input::{self, LineFrom};
 use crate::output::emit_output;
 use crate::profile::live::Profile;
 use crate::profile::shared::SharedLayer;
+use crate::script::output::LuaOutputPayload;
 use crate::script::ApplyResult;
 use crate::sessions::Session;
 use crate::tick::TickStep;
@@ -193,9 +194,10 @@ impl InputBudget {
 /// Perform the IO and timer bookkeeping a script result asks for. Every
 /// path that runs Lua applies its result here: the game's lines and
 /// GMCP, Lua timers, the lines you type, a Settings timer, the tick
-/// command, and a plugin load. Sends and echoes flow to `io`, timers
-/// register with the shared list, values a script gave your prompt reach
-/// the windows, and `mud.input` lines are run through the input pipeline
+/// command, a plugin load and the Scripts console. Sends and echoes flow
+/// to `io`, the `[lua]` lines reach the Scripts page, timers register
+/// with the shared list, values a script gave your prompt reach the
+/// windows, and `mud.input` lines are run through the input pipeline
 /// so they pick up aliases and slash commands too, with all their own Lua
 /// asks for applied in turn.
 pub(super) async fn apply_script_result<R: tauri::Runtime>(
@@ -239,6 +241,11 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             }
             walking = released.walk.take();
             apply.append(released);
+        }
+        // The Scripts page shows the `[lua]` lines in its Output.
+        if !apply.lua_lines.is_empty() {
+            let lines = std::mem::take(&mut apply.lua_lines);
+            session.emit(app, events::LUA_OUTPUT, &LuaOutputPayload { lines });
         }
         if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
             // New timers go in before the cancels run, so a timer that
@@ -349,6 +356,40 @@ pub(crate) async fn collect_script_result<R: tauri::Runtime>(
         warn!(error = %e, "applying a script result failed");
     }
     collected
+}
+
+/// Deliver what Lua that ran outside the session loop asks for, `apply`,
+/// as at a profile switch or from the Scripts console: its lines print
+/// in the terminal of `session`, and what it sends goes to the game from
+/// a task of its own when the session runs a connection. A typed line
+/// delivers its own way, since it says so when no game listens.
+pub(crate) async fn deliver_detached<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Arc<Session>,
+    apply: ApplyResult,
+) {
+    let Collected {
+        bytes,
+        echoes,
+        walk,
+    } = collect_script_result(app, session, apply).await;
+    crate::output::echo_lines(app, session, &echoes);
+    if bytes.is_empty() && walk.is_none() {
+        return;
+    }
+    // A login switches profiles inside the session task, and a
+    // disconnect holds the session lock while it waits for that task to
+    // end. So the bytes and a #walk go from a task of their own, and
+    // neither a switch nor the console waits on the lock.
+    let session = Arc::clone(session);
+    tokio::spawn(async move {
+        let delivered = session.slot.lock().await.as_ref().is_some_and(|handle| {
+            (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
+        });
+        if !delivered {
+            info!("Lua output outside the session loop has no game to go to");
+        }
+    });
 }
 
 /// Echo lines outside a trigger's own line, each on its own row with a

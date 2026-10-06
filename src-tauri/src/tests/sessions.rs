@@ -14,7 +14,9 @@ use vosh_prompt::testkit::mud::{PROMPT, PROMPT_ALL};
 use vosh_prompt::testkit::{Build, Options};
 
 use super::fake_mud::harness::{codes, codes_of, FakeServer, Harness};
+use crate::app::events::LUA_OUTPUT;
 use crate::profile::set::DEFAULT_PROFILE_NAME;
+use crate::script::output::LuaKind;
 use crate::sessions::SessionId;
 
 /// What clients sent `server`, as text.
@@ -51,14 +53,21 @@ const HELPER: &str = "\
 /// profile both play. The first session loads it at launch and the second
 /// as it opens, each into its own engine.
 async fn two_sessions_with_a_plugin() -> (Harness, SessionId, SessionId) {
+    two_sessions_with_plugin("helper", HELPER).await
+}
+
+/// [`two_sessions_on_two_games`] with the plugin `name`, whose entry
+/// script is `body`, on in the profile both play, as
+/// [`two_sessions_with_a_plugin`] has [`HELPER`].
+async fn two_sessions_with_plugin(name: &str, body: &str) -> (Harness, SessionId, SessionId) {
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
         .app_data
         .set(h.dir.path().to_path_buf())
         .expect("the app data folder");
     let plugins = crate::disk::paths::plugins_dir(h.dir.path());
-    write_plugin(&plugins, "helper", HELPER);
-    h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
+    write_plugin(&plugins, name, body);
+    h.state.selected_profile().await.plugins.enabled = vec![name.into()];
     let first = h.state.selected_session();
     crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
     log_in_two_sessions(h).await
@@ -1841,4 +1850,114 @@ async fn a_shared_theme_set_in_the_first_session_survives_a_save_from_the_second
             "{loadouts}"
         );
     }
+}
+
+/// A plugin with a global of its own that prints a line at the end of
+/// `spam 1`.
+const TELLER: &str = "\
+    greeting = 'from the plugin'\n\
+    mud.trigger('end', 'Line 1 of 1 of the spam', function() print('The spam ended.') end)";
+
+/// The Output ring of `session`, as the Scripts page reads it, each line
+/// as its owner, kind and text.
+async fn output_of(h: &Harness, session: SessionId) -> Vec<(String, LuaKind, String)> {
+    crate::ipc::scripts::lua_output_get(h.app.state(), Some(session))
+        .await
+        .expect("the ring")
+        .into_iter()
+        .map(|line| (line.owner, line.kind, line.text))
+        .collect()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_session_keeps_the_lua_lines_of_its_own_plugins() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_plugin("teller", TELLER).await;
+    h.type_in(one, "spam 1").await;
+    h.until("the plugin to print in the first session", |h| {
+        shows(h, one, "[lua] The spam ended.")
+    })
+    .await;
+
+    let printed = (
+        "plugin:teller".to_string(),
+        LuaKind::Print,
+        "The spam ended.".to_string(),
+    );
+    assert_eq!(output_of(&h, one).await, [printed]);
+    let leftover = &output_of(&h, two).await;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // The page hears the line from the first session alone.
+    let heard = h.events_of(one, LUA_OUTPUT);
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0]["lines"][0]["text"], "The spam ended.");
+    let leftover = &h.events_of(two, LUA_OUTPUT);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert!(!shows(&h, two, "The spam ended."));
+
+    // Clearing the plugin's lines clears them in that session.
+    crate::ipc::scripts::lua_output_clear(h.app.state(), Some("plugin:teller".into()), Some(one))
+        .await
+        .expect("the clear");
+    let leftover = &output_of(&h, one).await;
+    assert!(leftover.is_empty(), "{leftover:?}");
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_console_runs_inside_a_plugin_or_in_the_global_environment() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_plugin("teller", TELLER).await;
+    let run = |code: &str, plugin: Option<&str>, session| {
+        crate::ipc::scripts::lua_run(
+            h.app.handle().clone(),
+            h.app.state(),
+            code.to_string(),
+            plugin.map(str::to_string),
+            Some(session),
+        )
+    };
+    run("greeting = 'typed in the first'", None, one)
+        .await
+        .expect("the run");
+    run("print(greeting)", Some("teller"), one)
+        .await
+        .expect("the run");
+    run("print(greeting)", None, one).await.expect("the run");
+    run("print(greeting)", None, two).await.expect("the run");
+
+    let line = |owner: &str, kind, text: &str| (owner.to_string(), kind, text.to_string());
+    assert_eq!(
+        output_of(&h, one).await,
+        [
+            line("#lua", LuaKind::Input, "greeting = 'typed in the first'"),
+            line("plugin:teller", LuaKind::Input, "print(greeting)"),
+            line("plugin:teller", LuaKind::Print, "from the plugin"),
+            line("#lua", LuaKind::Input, "print(greeting)"),
+            line("#lua", LuaKind::Print, "typed in the first"),
+        ]
+    );
+    // The second session has a global environment of its own.
+    assert_eq!(
+        output_of(&h, two).await,
+        [
+            line("#lua", LuaKind::Input, "print(greeting)"),
+            line("#lua", LuaKind::Print, "nil"),
+        ]
+    );
+    // What it prints shows in the terminal too, and the line you typed
+    // does not.
+    h.until("the plugin's answer in the first terminal", |h| {
+        shows(h, one, "[lua] from the plugin") && shows(h, one, "[lua] typed in the first")
+    })
+    .await;
+    assert!(!shows(&h, one, "print(greeting)"));
+    assert!(!shows(&h, two, "from the plugin"));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
 }

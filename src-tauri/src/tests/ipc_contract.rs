@@ -163,6 +163,11 @@ const UNHEARD: &[Unheard] = &[
               R18 (Alerts Q19).",
     },
     Unheard {
+        name: "session://lua-output",
+        why: "The Lua lines a step printed. The Scripts page of track B item \
+              B1 shows them in its Output and its Console.",
+    },
+    Unheard {
         name: "session://reconnect",
         why: "Where a redial stands. The reconnect notice of the page half \
               hears it, after R18 (Alerts Q18).",

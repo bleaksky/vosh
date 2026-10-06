@@ -3,16 +3,17 @@
 //! quick keys and the characters in the room, which the commands share,
 //! the room look and the end of a fight, which the loop follows line by
 //! line, the tick's count and the prompt engine, which both read, and the
-//! session's variables, its Lua engine, with the aliases its plugins make
-//! and the macro recorder, and the key its Lua stops go under. The split
-//! with [`Session`](crate::sessions::Session) is by lock, not by meaning.
-//! The engine, the variables, the recorder and the plugin aliases belong
-//! to the session and outlive each connection, and they sit here because
-//! a line changes them together with the rest, beside the profile. The
-//! session keeps who it is and the facts leaf locks guard. Each session
-//! holds its [`Connection`] behind [`SharedConnection`], and the session
-//! loop holds a handle to it, so a command reads it straight from the
-//! session and never asks the loop.
+//! session's variables, its Lua engine, with the aliases its plugins make,
+//! the ring of its `[lua]` lines and the macro recorder, and the key its
+//! Lua stops go under. The split with
+//! [`Session`](crate::sessions::Session) is by lock, not by meaning. The
+//! engine, the variables, the recorder, the ring and the plugin aliases
+//! belong to the session and outlive each connection, and they sit here
+//! because a line changes them together with the rest, beside the
+//! profile. The session keeps who it is and the facts leaf locks guard.
+//! Each session holds its [`Connection`] behind [`SharedConnection`], and
+//! the session loop holds a handle to it, so a command reads it straight
+//! from the session and never asks the loop.
 //!
 //! Its lock comes after the session map, the profile lock and the profile
 //! set, never before them. The session slot comes before it, since
@@ -110,6 +111,11 @@ pub(crate) struct Connection {
     /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
     /// connection ends.
     pub(crate) link: super::reconnect::LinkWatch,
+    /// The newest `[lua]` lines the session printed and the lines you
+    /// typed in the Scripts console, which the Scripts page shows. A
+    /// disconnect keeps them, so the lines plugins print at launch and
+    /// before a connect stay.
+    pub(crate) lua_output: crate::script::output::LuaOutput,
 }
 
 impl Connection {

@@ -11,6 +11,7 @@ pub(crate) mod native_surface;
 pub(crate) mod panes;
 pub(crate) mod profiles;
 pub(crate) mod prompt;
+pub(crate) mod scripts;
 pub(crate) mod session;
 pub(crate) mod terminal;
 pub(crate) mod tick;
@@ -158,5 +159,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::import_apply,
         windows::menu_set_state,
         windows::menu_copy,
+        scripts::lua_output_get,
+        scripts::lua_output_clear,
+        scripts::lua_run,
     ]
 }

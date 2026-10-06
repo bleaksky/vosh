@@ -131,6 +131,12 @@ pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
 /// [`crate::session::reconnect::ReconnectPayload`]. The reconnect notice
 /// of the page half hears it. No page listener hears it yet.
 pub(crate) const RECONNECT: &str = "session://reconnect";
+/// The `[lua]` lines a step added to the session's Output ring, and the
+/// lines you typed in the Scripts console. The payload is a
+/// [`crate::script::output::LuaOutputPayload`]. The Scripts page in
+/// Settings shows them in Output and the Console. No page listener hears
+/// it yet.
+pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 
 // The lists.
 
