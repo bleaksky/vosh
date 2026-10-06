@@ -1,10 +1,22 @@
-/* One Window stylesheets, loaded after the legacy styles.css so the
-   tokens and the new component sheets win ties with it. Add each new
-   sheet under src/styles/ here, after the tokens. */
+/* The one stylesheet entry. main.tsx imports only this sheet. The
+   sheets load in cascade order, so a sheet wins a tie with every sheet
+   above it, and a rule moves to another sheet only where no rule it
+   ties with changes order. The comment on each import names the class
+   prefixes its sheet holds. */
 
-@import './tokens.css';
-@import './overlays.css';
-@import './panel.css';
-@import './settings.css';
-@import './prompt.css';
-@import './help.css';
+@import '@fontsource-variable/inter'; /* Inter, for html and body and the migration wizard until D23, bundled so the app never fetches a font */
+@import './fonts.css'; /* the bundled mono faces, no classes */
+@import './base.css'; /* the reset, html and body, and the scrollbars, no classes */
+@import './tokens.css'; /* the One Window tokens, no classes */
+@import './terminal.css'; /* terminal-, scrollback-, resizable- */
+@import './input.css'; /* input-, caret-, paste- */
+@import './migration.css'; /* settings-app, settings-btn, migration- */
+@import './overlays.css'; /* ov- */
+@import './panel.css'; /* pane-, panel- */
+@import './affects.css'; /* pane-affect, pane-countdown, pane-chip, pane-sr */
+@import './map.css'; /* server-view, map-, pane-map- */
+@import './controls.css'; /* the st- controls and their --st- fills */
+@import './settings.css'; /* st- */
+@import './prompt.css'; /* prompt-, pc- */
+@import './help.css'; /* hp- */
+@import './frame.css'; /* shell, shell- */

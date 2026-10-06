@@ -1398,13 +1398,14 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     .await;
     h.type_line("tick").await;
     h.until("a third tick", |h| passes(h) == 3).await;
-    // The windows heard each change, the last one the fulls now.
-    let heard = h.events(crate::app::events::AFFECT_FULL_CHANGED);
+    // The windows heard each change from the first session, the last
+    // one the fulls now.
+    let heard = h.events_of(h.first, crate::app::events::AFFECT_FULL_CHANGED);
     assert_eq!(
         heard,
         [
-            serde_json::json!({ "armor": 44, "bless": 6 }),
-            serde_json::json!({ "armor": 48, "bless": 6 }),
+            serde_json::json!({ "data": { "armor": 44, "bless": 6 } }),
+            serde_json::json!({ "data": { "armor": 48, "bless": 6 } }),
         ]
     );
 
@@ -1636,9 +1637,10 @@ async fn with_no_design_of_your_own_vosh_draws_your_prompt_as_the_game_does() {
 }
 
 /// The session sends each GMCP package on the event
-/// `fixtures/ipc/gmcp-events.json` names for it. `onGmcpPackage` on the
-/// page builds its listen from the same file in session.test.ts, so a
-/// change to the encoding on one side alone fails one of the two.
+/// `fixtures/ipc/gmcp-events.json` names for it, as `{session, data}`.
+/// `onGmcpPackage` on the page builds its listen from the same file in
+/// src/ipc/session.test.ts and hands its listener the data, so a change
+/// to the encoding on one side alone fails one of the two.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
@@ -1652,11 +1654,15 @@ async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
         .map(|case| case["event"].as_str().expect("an event").to_string())
         .collect();
     let h = Harness::new(Options::new(Build::New)).await;
-    let heard = Arc::new(StdMutex::new(std::collections::BTreeSet::new()));
+    let heard = Arc::new(StdMutex::new(std::collections::BTreeMap::new()));
     for event in &events {
         let (heard, name) = (heard.clone(), event.clone());
-        h.app.listen_any(event.clone(), move |_| {
-            heard.lock().expect("the events").insert(name.clone());
+        h.app.listen_any(event.clone(), move |e| {
+            let payload: Json = serde_json::from_str(e.payload()).expect("a JSON payload");
+            heard
+                .lock()
+                .expect("the events")
+                .insert(name.clone(), payload);
         });
     }
     h.connect().await;
@@ -1664,6 +1670,9 @@ async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
         heard.lock().expect("the events").len() == events.len()
     })
     .await;
+    let vitals = heard.lock().expect("the events")["session://gmcp/Char-Vitals"].clone();
+    assert_eq!(vitals["session"], serde_json::json!(h.first), "{vitals}");
+    assert!(vitals["data"].is_object(), "{vitals}");
     h.finish(grid).await;
 }
 
@@ -1764,7 +1773,7 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
     h.until("the value Lua gave your prompt", |h| {
         h.events("session://prompt-vars")
             .iter()
-            .any(|vars| vars["lua_mark"] == "on")
+            .any(|vars| vars["data"]["lua_mark"] == "on")
     })
     .await;
 
@@ -1867,7 +1876,7 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     h.until("the value the plugin gave your prompt", |h| {
         h.events("session://prompt-vars")
             .iter()
-            .any(|vars| vars["plugin_mark"] == "on")
+            .any(|vars| vars["data"]["plugin_mark"] == "on")
     })
     .await;
 
@@ -2303,7 +2312,7 @@ async fn target_goblin_and_mark_your_prompt(h: &Harness) {
     h.until("the value Lua gave your prompt", |h| {
         h.events("session://prompt-vars")
             .iter()
-            .any(|vars| vars["lua_mark"] == "on")
+            .any(|vars| vars["data"]["lua_mark"] == "on")
     })
     .await;
 }
@@ -2369,7 +2378,7 @@ async fn a_profile_switch_while_connected_keeps_your_target_prompt_and_tick() {
         h.events("session://prompt-vars").len() > vars
     })
     .await;
-    let values = &h.events("session://prompt-vars")[vars];
+    let values = &h.events("session://prompt-vars")[vars]["data"];
     assert!(values.get("lua_mark").is_none(), "{values}");
 
     // The tick counts on from where it was, on and synced as before.
@@ -2461,7 +2470,7 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
         h.events("session://prompt-vars").len() > vars
     })
     .await;
-    let values = &h.events("session://prompt-vars")[vars];
+    let values = &h.events("session://prompt-vars")[vars]["data"];
     assert!(values.get("lua_mark").is_none(), "{values}");
 
     // The target you set offline stays, and the room list is gone.

@@ -15,7 +15,7 @@
 //!   them, so a form or a conceal names you by a short description. The
 //!   last Group.Info says who else is in it.
 //! - Low health: the low latch rising, under 20 percent and clear again
-//!   at 25, the twin of `nextLow` in src/lib/stores/vitalsStore.ts, held
+//!   at 25, the twin of `nextLow` in src/stores/gmcp/vitalsStore.ts, held
 //!   to it by fixtures/alerts/low-latch.json. It never rings while the
 //!   game hides your vitals.
 //! - Connection: the session itself, at a drop while you play, when a

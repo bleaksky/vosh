@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { THEME_PAINT_KEY, type ThemePaint } from './lib/themePaint';
+import { THEME_PAINT_KEY, type ThemePaint } from './theme/themePaint';
 import mainSource from './main.tsx?raw';
 import prepaintSource from './prepaint.ts?raw';
 
@@ -12,9 +12,9 @@ vi.mock('react-dom/client', () => {
   const createRoot = () => ({ render });
   return { default: { createRoot }, createRoot };
 });
-vi.mock('./App', () => ({ default: () => null }));
-vi.mock('./SettingsApp', () => ({ SettingsApp: () => null }));
-vi.mock('./HelpApp', () => ({ HelpApp: () => null }));
+vi.mock('./shell/MainWindow', () => ({ default: () => null }));
+vi.mock('./settings/SettingsWindow', () => ({ SettingsWindow: () => null }));
+vi.mock('./help/HelpWindow', () => ({ HelpWindow: () => null }));
 
 const paint: ThemePaint = {
   v: 1,

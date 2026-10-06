@@ -876,7 +876,7 @@ fn the_newest_band_reaches_past_its_glyphs_for_the_card() {
 }
 
 /// fixtures/prompt-bands/cases.json, which layoutBands and widenNewest
-/// in src/lib/promptBands.ts run too.
+/// in src/terminal/xterm/liftBands.ts run too.
 #[derive(serde::Deserialize)]
 struct BandCases {
     constants: BandConstants,

@@ -13,7 +13,7 @@ use crate::profile::set::ProfileSet;
 
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
-/// src/lib/automationRecords.ts, and a test here reads that line.
+/// src/automation/automationRecords.ts, and a test here reads that line.
 pub(crate) const PRESETS_OFF: &str = "none";
 
 /// The presets an empty `ui.enabled_presets` list turns on, which are the
@@ -21,7 +21,7 @@ pub(crate) const PRESETS_OFF: &str = "none";
 /// is frozen. A preset added later starts off, and an empty list, the
 /// value every profile holds until you change a preset, keeps the meaning
 /// it had when it was saved. Mirrors `PRESETS_ON_BY_DEFAULT` in
-/// src/lib/presets.ts, and a test here reads that list.
+/// src/automation/presets.ts, and a test here reads that list.
 pub(crate) const PRESETS_ON_BY_DEFAULT: &[&str] = &[
     "healing_basics",
     "defensive_combat",
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn the_defaults_are_the_list_the_page_holds() {
-        let library = include_str!("../../../src/lib/presets.ts");
+        let library = include_str!("../../../src/automation/presets.ts");
         let list = regex::Regex::new(
             r"export const PRESETS_ON_BY_DEFAULT: readonly string\[\] = \[([^\]]*)\];",
         )
@@ -476,14 +476,14 @@ mod tests {
     fn presets_off_is_the_marker_the_page_stores() {
         // Settings stores PRESETS_OFF_MARKER when you turn every preset
         // off, and launch reads it back here as PRESETS_OFF.
-        let records = include_str!("../../../src/lib/automationRecords.ts");
+        let records = include_str!("../../../src/automation/automationRecords.ts");
         let marker = regex::Regex::new(r"export const PRESETS_OFF_MARKER = '([^']*)';")
             .unwrap()
             .captures(records)
             .expect("automationRecords.ts declares PRESETS_OFF_MARKER");
         assert_eq!(&marker[1], PRESETS_OFF);
         // No preset may take the marker as its id.
-        let library = include_str!("../../../src/lib/presets.ts");
+        let library = include_str!("../../../src/automation/presets.ts");
         assert!(!library.contains(&format!("id: '{PRESETS_OFF}'")));
     }
 

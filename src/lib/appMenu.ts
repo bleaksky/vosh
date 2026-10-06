@@ -1,14 +1,15 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { menuSetState, subscribeAppMenu } from '../ipc/windows';
 import SHORTCUTS from './appShortcuts.json';
-import { PANE_TYPES, type PaneType } from './paneLayout';
+import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
 
 // The page side of the macOS menu bar (src-tauri/src/app/menu.rs). A
 // menu command reaches the main window as `vosh://app-menu` with the
-// palette entry id, and App runs it through the same dispatcher as its
-// keyboard shortcuts, so a command behaves the same from the menu, the
-// keyboard, and the palette. The main window sends the menu a snapshot
-// of its state whenever the snapshot changes, and the menu mirrors it.
+// palette entry id, and shell/useAppCommands.ts runs it through the same
+// dispatcher as the keyboard shortcuts, so a command behaves the same
+// from the menu, the keyboard, and the palette. The main window sends
+// the menu a snapshot of its state whenever the snapshot changes, and
+// the menu mirrors it.
 //
 // The shortcut specs live in appShortcuts.json, which the Rust menu
 // reads too, so the menu, the palette keycaps, and the keydown handler
@@ -18,12 +19,6 @@ export type AppShortcutId = keyof typeof SHORTCUTS;
 
 /** Every command with a shortcut, as a palette spec like `Mod+K`. */
 export const APP_SHORTCUTS: Readonly<Record<AppShortcutId, string>> = SHORTCUTS;
-
-/** Menu commands arrive on this event, in the main window. */
-export const APP_MENU_EVENT = 'vosh://app-menu';
-
-/** Find, chosen while Settings is in front, arrives in Settings here. */
-export const SETTINGS_FIND_EVENT = 'vosh://settings-find';
 
 /** Opens the session popover under the title, in a given mode. */
 export const SESSION_MENU_EVENT = 'vosh:session-menu';
@@ -139,7 +134,7 @@ export function setAppMenuState(state: MenuState): void {
   const json = JSON.stringify(state);
   if (json === lastSent) return;
   lastSent = json;
-  invoke('menu_set_state', { state }).catch((e: unknown) => {
+  menuSetState(state).catch((e: unknown) => {
     // Send the next snapshot even when it matches this one.
     lastSent = null;
     console.error('[menu] menu_set_state failed', e);
@@ -153,8 +148,8 @@ export function resetAppMenuState(): void {
 
 /** Hear menu commands. Main window only. */
 export function listenAppMenu(cb: (id: string) => void): Promise<UnlistenFn> {
-  return listen<unknown>(APP_MENU_EVENT, (event) => {
-    if (typeof event.payload === 'string') cb(event.payload);
+  return subscribeAppMenu((id) => {
+    if (typeof id === 'string') cb(id);
   });
 }
 
@@ -179,14 +174,6 @@ export function pageHasSelection(doc: SelectionSource = document): boolean {
   }
   const selection = doc.getSelection();
   return !!selection && !selection.isCollapsed && selection.toString().length > 0;
-}
-
-/** Edit, then Copy, with the native grid. With `terminal` a grid
- *  selection wins. Otherwise the system copies the page's own. */
-export function menuCopy(terminal: boolean): void {
-  invoke('menu_copy', { terminal }).catch((e: unknown) => {
-    console.error('[menu] menu_copy failed', e);
-  });
 }
 
 /** Open the session popover in `mode`, from the menu bar. */

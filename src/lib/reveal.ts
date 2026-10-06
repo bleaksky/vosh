@@ -3,14 +3,14 @@
 // Every Vosh window starts hidden and shows itself after it applies the
 // theme from the UI config. Showing it right after the apply can beat
 // WebKit's repaint, and the first frame on screen is then the one from
-// before the apply. The startup paint (lib/themePaint) usually has the
+// before the apply. The startup paint (theme/themePaint) usually has the
 // theme on screen before React renders, and then the window can show at
 // once. When it does not, from a first launch with no cache or a theme
 // that changed some other way, the window waits for a frame with the
 // theme to go out. WKWebView may run no animation frames in a hidden
 // window, so a short timer backs the frames up.
 
-import { paintMatchesBoot } from './theme';
+import { paintMatchesBoot } from '../theme/theme';
 
 /** The longest a window waits for a frame with the new theme. */
 export const REPAINT_WAIT_MS = 100;

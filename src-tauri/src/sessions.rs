@@ -434,6 +434,25 @@ impl Session {
     ) {
         emit_for(app, self.id, event, payload);
     }
+
+    /// Send `event` with `data` and the session's id beside it,
+    /// `{session, data}`. A GMCP packet, the prompt values and the
+    /// affect fulls go this way, since a `session` field among their own
+    /// keys would read as one more package field, value or affect.
+    pub(crate) fn emit_data<R: tauri::Runtime, T: Serialize>(
+        &self,
+        app: &AppHandle<R>,
+        event: &str,
+        data: &T,
+    ) {
+        let payload = Data {
+            session: self.id,
+            data,
+        };
+        if let Err(e) = app.emit(event, &payload) {
+            warn!(error = %e, event, "failed to emit a session event");
+        }
+    }
 }
 
 /// Send `event` with `payload` for the session `session`, as
@@ -474,6 +493,13 @@ struct Named<'a, T> {
     session: SessionId,
     #[serde(flatten)]
     payload: &'a T,
+}
+
+/// A session event's data beside the session that sent it.
+#[derive(Serialize)]
+struct Data<'a, T> {
+    session: SessionId,
+    data: &'a T,
 }
 
 /// The sessions in the order the window lists them, the one selected,
@@ -767,6 +793,23 @@ mod tests {
         assert_eq!(
             *targets.lock().unwrap(),
             [json!({"session": 7, "name": "goblin", "room_idx": 2, "quick_keys": []})]
+        );
+    }
+
+    #[test]
+    fn emit_data_names_the_session_beside_a_map_or_null_it_leaves_whole() {
+        let app = app();
+        let vars = hear(&app, events::PROMPT_VARS);
+        let session = on_defaults(SessionId(7));
+        let map = json!({"hp": "800", "session": "?"});
+        session.emit_data(app.handle(), events::PROMPT_VARS, &map);
+        session.emit_data(app.handle(), events::PROMPT_VARS, &Value::Null);
+        assert_eq!(
+            *vars.lock().unwrap(),
+            [
+                json!({"session": 7, "data": {"hp": "800", "session": "?"}}),
+                json!({"session": 7, "data": null}),
+            ]
         );
     }
 

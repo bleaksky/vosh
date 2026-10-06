@@ -6,7 +6,7 @@
 //! lines come from fixtures/room-colors, each one the way the Aabahran
 //! server prints it, with its Room.Chars and Room.Items packets first
 //! where the server sends them. The preset's triggers come from
-//! preset.json, which presets.test.ts holds to src/lib/presets.ts.
+//! preset.json, which presets.test.ts holds to src/automation/presets.ts.
 
 use super::*;
 

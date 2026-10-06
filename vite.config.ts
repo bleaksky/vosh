@@ -48,23 +48,11 @@ export default defineConfig(async () => ({
   // of the tests are not this checkout's tests.
   test: {
     exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
-    // Vitest hands back CSS as an empty string. The status line and
-    // vitals footer tests read frame.css and panel.css as text to check
-    // the rule behind a class, the prompt band tests read prompt.css, the
-    // prompt.css token test reads the stylesheets that define tokens, the
-    // help article test reads help.css, and the panel font test reads
-    // every sheet, src/styles.css with the map's glyph rules included.
+    // Vitest hands back CSS as an empty string unless a pattern here
+    // matches it. Tests read the sheets under src/styles as text, so
+    // this one pattern returns every sheet whole, a new one included.
     css: {
-      include: [
-        /src\/styles\.css/,
-        /frame\.css/,
-        /panel\.css/,
-        /prompt\.css/,
-        /tokens\.css/,
-        /settings\.css/,
-        /overlays\.css/,
-        /help\.css/,
-      ],
+      include: [/src\/styles\//],
     },
   },
   clearScreen: false,

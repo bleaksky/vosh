@@ -1,0 +1,579 @@
+import { act, createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { SETTINGS_GOTO_TAB } from '../ipc/events';
+import { pushEscape } from '../lib/escapeStack';
+import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
+import { SETTINGS_MENU } from './settingsMenu';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+import { TerminalMenu } from './TerminalMenu';
+
+// What the menu sends out: the Tauri commands it invokes, the events it
+// emits, and when it asks to close, in one log so the order shows.
+const calls = vi.hoisted(() => ({ log: [] as string[] }));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn((cmd: string) => {
+    calls.log.push(`invoke ${cmd}`);
+    return Promise.resolve();
+  }),
+}));
+vi.mock('@tauri-apps/api/event', () => ({
+  emit: vi.fn((event: string, payload: unknown) => {
+    calls.log.push(`emit ${event} ${String(payload)}`);
+    return Promise.resolve();
+  }),
+  listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
+
+// The menu asks storage which renderer draws the terminal, and Settings
+// links leave their target there for a cold open. The xterm renderer
+// draws here, so Clear scrollback shows.
+const store = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => void store.set(key, String(value)),
+  removeItem: (key: string) => void store.delete(key),
+});
+store.set('vosh.nativesurface', '0');
+
+const props = {
+  termRef: { current: null },
+  inputRef: { current: null },
+  onOpenFind: () => {},
+  onCustomizePrompt: () => {},
+};
+
+describe('the terminal menu', () => {
+  const labels = (html: string) =>
+    [...html.matchAll(/class="ov-menu-label">([^<]*)</g)].map((m) => m[1]);
+
+  it('offers Customize prompt… first, apart from the rest, on any row (P1)', () => {
+    const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+    expect(labels(html).slice(0, 2)).toEqual(['Customize prompt…', 'Copy']);
+    // A separator stands between it and Copy.
+    const first = html.indexOf('Customize prompt…');
+    const sep = html.indexOf('role="separator"');
+    expect(sep).toBeGreaterThan(first);
+    expect(sep).toBeLessThan(html.indexOf('>Copy<'));
+  });
+
+  it('offers Settings apart after Find, with Clear scrollback still last', () => {
+    const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+    expect(labels(html)).toEqual([
+      'Customize prompt…',
+      'Copy',
+      'Paste',
+      'Select all',
+      'Find in scrollback…',
+      'Settings',
+      'Clear scrollback',
+    ]);
+    // Settings sits in a group of its own, says it opens a menu, and
+    // shows a chevron where the other rows show a shortcut.
+    const groups = html.split('class="ov-menu-group"').slice(1);
+    const settings = groups.find((g) => g.includes('>Settings<')) ?? '';
+    expect(labels(settings)).toEqual(['Settings']);
+    expect(settings).toContain('aria-haspopup="menu"');
+    expect(settings).toContain('aria-expanded="false"');
+    expect(settings).toContain('pane-menu-chevron');
+    expect(settings).not.toContain('ov-menu-keys');
+  });
+});
+
+// ── The Settings list, mounted ──────────────────────────────────────
+// React DOM mounts the menu on a stand in DOM (src/test/fakeDom.ts),
+// with the real menu surface the pane menus use. The stand in learns
+// here the few calls the menu and its surface make beyond what React
+// DOM needs: the size and box of a menu and a row, contains, closest
+// for the menu surface mark, and the selector the surface finds its
+// rows with.
+
+const ITEM_SELECTOR = ':scope > li > [role="menuitem"]:not([aria-disabled="true"])';
+
+// A 1280 by 800 window. The terminal menu is 232 by 274 and the
+// Settings list 160 by 368.
+const VW = 1280;
+const VH = 800;
+const MENU = { w: 232, h: 274 };
+const LIST = { w: 160, h: 368 };
+
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+const boxes = new Map<FakeElement, Box>();
+
+/** The menu surface `start` sits in, or null. */
+function surfaceAround(start: FakeNode | null): FakeElement | null {
+  for (let n = start; n; n = n.parentNode) {
+    if (n instanceof FakeElement && n.hasAttribute('data-menu-surface')) return n;
+  }
+  return null;
+}
+
+/** The rows of a menu surface you can move to, as ITEM_SELECTOR finds
+ *  them. */
+function menuRows(menu: FakeElement): FakeElement[] {
+  return menu.childNodes
+    .filter((li): li is FakeElement => li instanceof FakeElement && li.nodeName === 'LI')
+    .flatMap((li) => li.childNodes)
+    .filter(
+      (b): b is FakeElement =>
+        b instanceof FakeElement &&
+        b.getAttribute('role') === 'menuitem' &&
+        b.getAttribute('aria-disabled') !== 'true',
+    );
+}
+
+function teachTheDom() {
+  const node = FakeNode.prototype as unknown as Record<string, unknown>;
+  node.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+    for (let n = other; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  };
+  const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  el.getBoundingClientRect = function (this: FakeElement): Box {
+    return boxes.get(this) ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  };
+  el.closest = function (this: FakeElement, selector: string): FakeElement | null {
+    if (selector !== '[data-menu-surface]') throw new Error(`no closest for ${selector}`);
+    return surfaceAround(this);
+  };
+  el.querySelectorAll = function (this: FakeElement, selector: string): FakeElement[] {
+    if (selector !== ITEM_SELECTOR) throw new Error(`no querySelectorAll for ${selector}`);
+    return menuRows(this);
+  };
+  el.querySelector = function (this: FakeElement, selector: string): FakeElement | null {
+    if (selector !== ITEM_SELECTOR) throw new Error(`no querySelector for ${selector}`);
+    return menuRows(this)[0] ?? null;
+  };
+  const size = (pick: (s: { w: number; h: number }) => number) => ({
+    configurable: true,
+    get(this: FakeElement) {
+      return pick(this.nodeName === 'MENU' ? LIST : MENU);
+    },
+  });
+  Object.defineProperty(
+    FakeElement.prototype,
+    'offsetWidth',
+    size((s) => s.w),
+  );
+  Object.defineProperty(
+    FakeElement.prototype,
+    'offsetHeight',
+    size((s) => s.h),
+  );
+}
+
+type Handler = (e?: unknown) => void;
+const windowListeners = new Map<string, Handler>();
+const documentListeners = new Map<string, Set<Handler>>();
+const doc = new FakeDocument();
+let createRoot: typeof import('react-dom/client').createRoot;
+
+/** The handlers React keeps on an element. This DOM sends no events. */
+function on(el: FakeElement): Record<string, Handler> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, Handler>>)[key];
+}
+
+const keyEvent = (key: string) => ({
+  key,
+  isComposing: false,
+  target: doc.activeElement,
+  preventDefault() {},
+  stopPropagation() {},
+});
+
+/** The one element under `root` that `match` finds. */
+function only(root: FakeNode, what: string, match: (el: FakeElement) => boolean): FakeElement {
+  const found = findAll(root, match);
+  if (found.length !== 1) throw new Error(`found ${found.length} of ${what}`);
+  return found[0];
+}
+
+const isRow = (label: string) => (el: FakeElement) =>
+  el.getAttribute('role') === 'menuitem' && el.textContent.startsWith(label);
+
+interface Mounted {
+  /** The terminal menu. */
+  menu: FakeElement;
+  row: (label: string) => FakeElement;
+  /** The Settings list, or null while it is shut. */
+  list: () => FakeElement | null;
+  /** A row of the Settings list. */
+  listRow: (label: string) => FakeElement;
+  /** Press a key in the terminal menu. */
+  key: (key: string) => Promise<void>;
+  /** Press a key in the Settings list. */
+  listKey: (key: string) => Promise<void>;
+  /** Press Esc, which goes to the surface opened last. */
+  escape: () => Promise<void>;
+  onClose: ReturnType<typeof vi.fn>;
+}
+
+const cleanups: (() => Promise<void> | void)[] = [];
+
+async function mount(x = 100, y = 100): Promise<Mounted> {
+  calls.log.length = 0;
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const onClose = vi.fn(() => void calls.log.push('close'));
+  // The main window puts the menu on the escape stack while it is open.
+  const unescape = pushEscape(onClose);
+  await act(async () => {
+    root.render(createElement(TerminalMenu, { x, y, ...props, onClose }));
+  });
+  cleanups.push(async () => {
+    unescape();
+    await act(async () => root.unmount());
+    doc.body.removeChild(container);
+  });
+  const menu = only(container, 'the menu', (el) => el.getAttribute('aria-label') === 'Terminal');
+  const list = () =>
+    findAll(
+      doc.body,
+      (el) => el.nodeName === 'MENU' && el.getAttribute('aria-label') === 'Settings',
+    )[0] ?? null;
+  const run = async (fn: () => void) => {
+    await act(async () => fn());
+  };
+  return {
+    menu,
+    row: (label) => only(menu, label, isRow(label)),
+    list,
+    listRow: (label) => {
+      const shown = list();
+      if (!shown) throw new Error('the Settings list is shut');
+      return only(shown, label, isRow(label));
+    },
+    key: (k) => run(() => on(menu).onKeyDown(keyEvent(k))),
+    listKey: (k) => {
+      const shown = list();
+      if (!shown) throw new Error('the Settings list is shut');
+      return run(() => on(shown).onKeyDown(keyEvent(k)));
+    },
+    escape: () => {
+      const stack = windowListeners.get('keydown');
+      if (!stack) throw new Error('the escape stack is not listening');
+      return run(() => stack(keyEvent('Escape')));
+    },
+    onClose,
+  };
+}
+
+/** Arrow down from nothing lit to the Settings row. */
+async function downToSettings(m: Mounted) {
+  for (let i = 0; i < 6; i++) await m.key('ArrowDown');
+}
+
+const lit = (el: FakeElement) => (el.getAttribute('class') ?? '').split(' ').includes('is-active');
+
+describe('the Settings list in the terminal menu', () => {
+  beforeAll(async () => {
+    teachTheDom();
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    Object.assign(doc, {
+      addEventListener: (type: string, fn: Handler) => {
+        const set = documentListeners.get(type) ?? new Set<Handler>();
+        set.add(fn);
+        documentListeners.set(type, set);
+      },
+      removeEventListener: (type: string, fn: Handler) => documentListeners.get(type)?.delete(fn),
+    });
+    doc.documentElement.dataset.platform = 'macos';
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      innerWidth: VW,
+      innerHeight: VH,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener: (type: string, fn: Handler) => void windowListeners.set(type, fn),
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+    vi.stubGlobal('Node', FakeNode);
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    // React DOM checks for a DOM once, when it loads.
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+    boxes.clear();
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('opens from the keyboard on its first row and steps back out with ArrowLeft', async () => {
+    const m = await mount();
+    expect(doc.activeElement).toBe(m.menu);
+    await downToSettings(m);
+    const settings = m.row('Settings');
+    expect(lit(settings)).toBe(true);
+    expect(m.list()).toBeNull();
+
+    await m.key('ArrowRight');
+    expect(m.list()).not.toBeNull();
+    expect(settings.getAttribute('aria-expanded')).toBe('true');
+    expect(settings.getAttribute('aria-controls')).toBe(m.list()?.getAttribute('id'));
+    expect(doc.activeElement).toBe(m.listRow('Triggers'));
+
+    await m.listKey('ArrowDown');
+    expect(doc.activeElement).toBe(m.listRow('Aliases'));
+    await m.listKey('End');
+    expect(doc.activeElement).toBe(m.listRow('Help'));
+
+    await m.listKey('ArrowLeft');
+    expect(m.list()).toBeNull();
+    expect(doc.activeElement).toBe(m.menu);
+    expect(lit(settings)).toBe(true);
+    expect(settings.getAttribute('aria-expanded')).toBe('false');
+    expect(m.onClose).not.toHaveBeenCalled();
+  });
+
+  it('opens on Enter and Space too, and ArrowLeft in the menu shuts it', async () => {
+    const m = await mount();
+    await downToSettings(m);
+    for (const k of ['Enter', ' ']) {
+      await m.key(k);
+      expect(m.list(), k).not.toBeNull();
+      expect(doc.activeElement, k).toBe(m.listRow('Triggers'));
+      await m.listKey('ArrowLeft');
+      expect(m.list(), k).toBeNull();
+    }
+    // Opened by pointing, the list leaves focus in the menu, where
+    // ArrowLeft shuts it.
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    expect(m.list()).not.toBeNull();
+    await m.key('ArrowLeft');
+    expect(m.list()).toBeNull();
+    expect(m.onClose).not.toHaveBeenCalled();
+  });
+
+  it('opens on no other row', async () => {
+    const m = await mount();
+    for (let i = 0; i < 7; i++) {
+      await m.key('ArrowDown');
+      if (lit(m.row('Settings'))) continue;
+      await m.key('ArrowRight');
+      expect(m.list()).toBeNull();
+    }
+  });
+
+  it('closes one level per Esc, the list and then the menu', async () => {
+    const m = await mount();
+    await downToSettings(m);
+    await m.key('ArrowRight');
+    await m.escape();
+    expect(m.list()).toBeNull();
+    expect(doc.activeElement).toBe(m.menu);
+    expect(lit(m.row('Settings'))).toBe(true);
+    expect(m.onClose).not.toHaveBeenCalled();
+    await m.escape();
+    expect(m.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes one level per Esc pressed in the menu itself', async () => {
+    const m = await mount();
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    await m.key('Escape');
+    expect(m.list()).toBeNull();
+    expect(m.onClose).not.toHaveBeenCalled();
+    await m.key('Escape');
+    expect(m.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens when you point at Settings, leaving focus in the menu', async () => {
+    const m = await mount();
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    expect(m.list()).not.toBeNull();
+    expect(doc.activeElement).toBe(m.menu);
+    // ArrowRight then moves focus into the list already open.
+    await m.key('ArrowRight');
+    expect(doc.activeElement).toBe(m.listRow('Triggers'));
+    // Pointing at another row shuts it and gives the menu focus back.
+    await act(async () => on(m.row('Find in scrollback…')).onPointerMove());
+    expect(m.list()).toBeNull();
+    expect(doc.activeElement).toBe(m.menu);
+    expect(lit(m.row('Find in scrollback…'))).toBe(true);
+    // So do the arrow keys leaving Settings.
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    await m.key('ArrowDown');
+    expect(m.list()).toBeNull();
+    expect(lit(m.row('Clear scrollback'))).toBe(true);
+  });
+
+  it('keeps Settings lit while the pointer is in its list', async () => {
+    const m = await mount();
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => on(m.menu).onPointerLeave());
+    expect(lit(m.row('Settings'))).toBe(true);
+  });
+
+  it('keeps Settings the row the keys act on once the pointer leaves the menu', async () => {
+    const m = await mount();
+    // The pointer opens the list, then stops in the gap or the list
+    // padding, or moves past the list, without landing on a list row.
+    const pointAndLeave = async () => {
+      await act(async () => on(m.row('Settings')).onPointerMove());
+      await act(async () => on(m.menu).onPointerLeave());
+      expect(m.list()).not.toBeNull();
+      expect(lit(m.row('Settings'))).toBe(true);
+      expect(doc.activeElement).toBe(m.menu);
+    };
+
+    // ArrowRight, Enter and Space move into the list on its first row.
+    for (const k of ['ArrowRight', 'Enter', ' ']) {
+      await pointAndLeave();
+      await m.key(k);
+      expect(doc.activeElement, k).toBe(m.listRow('Triggers'));
+      await m.listKey('ArrowLeft');
+      expect(m.list(), k).toBeNull();
+    }
+    expect(m.onClose).not.toHaveBeenCalled();
+
+    // ArrowDown goes on to the row after Settings, not back to the top.
+    await pointAndLeave();
+    await m.key('ArrowDown');
+    expect(m.list()).toBeNull();
+    expect(lit(m.row('Clear scrollback'))).toBe(true);
+    expect(lit(m.row('Settings'))).toBe(false);
+
+    // With the list shut, leaving the menu still clears the highlight.
+    await act(async () => on(m.menu).onPointerLeave());
+    expect(lit(m.row('Clear scrollback'))).toBe(false);
+  });
+
+  it('counts a press in the list as inside the menu', async () => {
+    const m = await mount();
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    const press = (target: FakeNode) =>
+      act(async () => {
+        for (const fn of documentListeners.get('pointerdown') ?? []) fn({ target });
+      });
+    await press(m.listRow('Macros'));
+    await press(m.list() as FakeElement);
+    expect(m.onClose).not.toHaveBeenCalled();
+    await press(doc.body);
+    expect(m.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws each row of the list, split in three', async () => {
+    const m = await mount();
+    await act(async () => on(m.row('Settings')).onPointerMove());
+    const list = m.list() as FakeElement;
+    const shown = list.childNodes
+      .filter((li): li is FakeElement => li instanceof FakeElement)
+      .map((li) => (li.getAttribute('role') === 'separator' ? '---' : li.textContent));
+    expect(shown).toEqual([
+      'Triggers',
+      'Aliases',
+      'Macros',
+      'Timers',
+      '---',
+      'General',
+      'Appearance',
+      'Layout',
+      'Input',
+      'Automation',
+      'Characters',
+      '---',
+      // Help shows its shortcut, ⌘/ on macOS.
+      'Help⌘/',
+    ]);
+  });
+
+  it('clears the scrollback through the backend, and xterm clears its own buffer', async () => {
+    const m = await mount();
+    calls.log.length = 0;
+    await act(async () => on(m.row('Clear scrollback')).onClick());
+    expect(calls.log).toEqual(['close', 'invoke scrollback_clear']);
+  });
+
+  it('closes the menu, then opens Settings on each row, or Help', async () => {
+    for (const row of SETTINGS_MENU.flat()) {
+      const m = await mount();
+      await act(async () => on(m.row('Settings')).onPointerMove());
+      store.delete(SETTINGS_PENDING_KEY);
+      calls.log.length = 0;
+      await act(async () => on(m.listRow(row.label)).onClick());
+      if (row.link === null) {
+        expect(calls.log, row.label).toEqual(['close', 'invoke open_help_window']);
+        expect(store.has(SETTINGS_PENDING_KEY), row.label).toBe(false);
+      } else {
+        // The same path the palette takes: a target for a cold open,
+        // the goto event for a window already up, then the window.
+        expect(calls.log, row.label).toEqual([
+          'close',
+          `emit ${SETTINGS_GOTO_TAB} ${row.link}`,
+          'invoke open_settings_window',
+        ]);
+        expect(store.get(SETTINGS_PENDING_KEY), row.label).toBe(row.link);
+      }
+    }
+  });
+
+  describe('where the list opens', () => {
+    /** Open the list from a menu at `x`, `y`, with the Settings row 6
+     *  in and 6 rows down, and return where the list sits. */
+    async function listAt(x: number, y: number) {
+      const m = await mount(x, y);
+      const left = Number.parseFloat(String(m.menu.style.left));
+      const top = Number.parseFloat(String(m.menu.style.top));
+      boxes.set(m.menu, { left, top, right: left + MENU.w, bottom: top + MENU.h });
+      const rowTop = top + 6 + 5 * 30 + 4 * 13;
+      boxes.set(m.row('Settings'), {
+        left: left + 6,
+        top: rowTop,
+        right: left + MENU.w - 6,
+        bottom: rowTop + 30,
+      });
+      await downToSettings(m);
+      await m.key('ArrowRight');
+      const list = m.list() as FakeElement;
+      return {
+        menu: { left, top },
+        rowTop,
+        list: {
+          left: Number.parseFloat(String(list.style.left)),
+          top: Number.parseFloat(String(list.style.top)),
+        },
+      };
+    }
+
+    it('opens right of the menu, its first row level with Settings', async () => {
+      const { menu, rowTop, list } = await listAt(100, 100);
+      expect(list).toEqual({ left: menu.left + MENU.w + 4, top: rowTop - 6 });
+    });
+
+    it('opens left of the menu at the right edge', async () => {
+      // The list has no room right of a menu at 1000.
+      const { menu, list } = await listAt(1000, 100);
+      expect(menu.left).toBe(1000);
+      expect(list.left).toBe(menu.left - 4 - LIST.w);
+    });
+
+    it('rises from Settings at the bottom edge', async () => {
+      // The menu itself clamps to 8 above the bottom edge.
+      const { menu, rowTop, list } = await listAt(100, 700);
+      expect(menu.top).toBe(VH - 8 - MENU.h);
+      expect(list.top).toBe(rowTop + 30 + 6 - LIST.h);
+    });
+
+    it('opens left and up in the bottom right corner', async () => {
+      const { menu, rowTop, list } = await listAt(1200, 760);
+      expect(menu).toEqual({ left: VW - 8 - MENU.w, top: VH - 8 - MENU.h });
+      expect(list).toEqual({ left: menu.left - 4 - LIST.w, top: rowTop + 30 + 6 - LIST.h });
+    });
+  });
+});

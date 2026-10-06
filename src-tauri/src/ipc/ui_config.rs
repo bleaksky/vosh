@@ -1,7 +1,8 @@
-//! The commands behind the Settings config. Settings reads and saves
-//! the whole UI config through them and lists the system fonts for the
-//! font picker. The main window's palette saves a theme pick, and the
-//! chat pane's menu its channel colors, without the rest of the config.
+//! The commands behind the Settings config. Settings reads the UI config
+//! through them, saves only the fields it names, and lists the system
+//! fonts for the font picker. The main window's palette saves a theme
+//! pick, and the chat pane's menu its channel colors, without the rest of
+//! the config.
 
 use std::sync::Arc;
 
@@ -13,10 +14,8 @@ use crate::app::system_fonts::FontEntry;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::profile::open::OpenProfile;
 
-/// The Settings payload. Every field falls back to the default a fresh
-/// profile has, so a page that leaves one out still saves (D12).
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(default)]
+/// The UI config as `ui_get_config` hands it to the page.
+#[derive(serde::Serialize)]
 pub(crate) struct UiConfigPayload {
     pub theme: String,
     pub follow_system_appearance: bool,
@@ -36,7 +35,6 @@ pub(crate) struct UiConfigPayload {
     pub theme_terminal_colors: Option<bool>,
     pub bright_bold: bool,
     /// None until you choose.
-    #[serde(default)]
     pub blink_text: Option<bool>,
     pub fit_game_colors: bool,
     /// `typical`, `deuteranopia`, `protanopia` or `tritanopia`.
@@ -65,23 +63,8 @@ pub(crate) struct UiConfigPayload {
     pub affects_style: String,
     pub affects_marker: String,
     pub affects_tint: bool,
-    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_running_out_hours")]
     pub affects_running_out_hours: u32,
-    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
     pub affects_almost_gone_hours: u32,
-    /// The [`AppState::ui_config_generation`] this copy was read at. Never
-    /// reaches disk. A save without one (a config that never came from
-    /// the backend) applies.
-    ///
-    /// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub generation: Option<u64>,
-}
-
-impl Default for UiConfigPayload {
-    fn default() -> Self {
-        Self::from_ui(&crate::profile::ui::UiConfig::default())
-    }
 }
 
 impl UiConfigPayload {
@@ -132,178 +115,180 @@ impl UiConfigPayload {
             affects_tint: ui.affects_tint,
             affects_running_out_hours: ui.affects_running_out_hours,
             affects_almost_gone_hours: ui.affects_almost_gone_hours,
-            generation: None,
         }
-    }
-
-    /// Write every field onto the live UI config, normalizing as it
-    /// goes. `ui_set_config` calls this, and each Settings tab saves the
-    /// whole snapshot, so a field left out here would reset on the next
-    /// save from any tab. `dock_layout` stays out on purpose, since only
-    /// the conversion from the old dock to panes reads it. So do the old
-    /// `vitals`, `moons_position` and `side_panels_fill_height`, which
-    /// nothing reads and every save writes back as loaded (D12, D14).
-    pub(crate) fn apply_to(self, ui: &mut crate::profile::ui::UiConfig) {
-        let UiConfigPayload {
-            theme,
-            follow_system_appearance,
-            light_theme,
-            dark_theme,
-            auto_update,
-            font_family,
-            font_size,
-            terminal_line_height,
-            panel_font,
-            panel_font_size,
-            tracked_affects,
-            enabled_presets,
-            keep_last_command,
-            theme_terminal_colors,
-            bright_bold,
-            blink_text,
-            fit_game_colors,
-            color_vision,
-            readable_highlights,
-            collapse_repeats,
-            collapse_fight_lines,
-            collapse_attack_lines,
-            terminal_base_ansi,
-            custom_themes,
-            split_divider_color,
-            input_echo_color,
-            echo_macros,
-            input_echo_caret,
-            paste_line_delay_ms,
-            spellcheck_prompt,
-            input_cursor_style,
-            vitals_density,
-            vitals_values,
-            vitals_meter,
-            vitals_warn_thirds,
-            vitals_hide_when_pinned,
-            chip_style,
-            tick_count,
-            game_time,
-            affects_style,
-            affects_marker,
-            affects_tint,
-            affects_running_out_hours,
-            affects_almost_gone_hours,
-            generation: _,
-        } = self;
-        ui.theme = theme;
-        ui.follow_system_appearance = follow_system_appearance;
-        ui.light_theme = crate::profile::ui::coerce_light_theme(light_theme);
-        ui.dark_theme = crate::profile::ui::normalize_dark_theme(dark_theme);
-        ui.auto_update = auto_update;
-        ui.font_family = font_family;
-        ui.font_size = crate::profile::ui::coerce_font_size(font_size);
-        ui.terminal_line_height =
-            crate::profile::ui::coerce_terminal_line_height(terminal_line_height);
-        ui.panel_font = crate::profile::ui::normalize_panel_font(panel_font);
-        ui.panel_font_size = crate::profile::ui::coerce_panel_font_size(panel_font_size);
-        ui.tracked_affects = crate::profile::ui::normalize_tracked_affects(tracked_affects);
-        ui.enabled_presets = crate::profile::ui::normalize_enabled_presets(enabled_presets);
-        ui.keep_last_command = keep_last_command;
-        ui.theme_terminal_colors = theme_terminal_colors;
-        ui.bright_bold = bright_bold;
-        ui.blink_text = blink_text;
-        ui.fit_game_colors = fit_game_colors;
-        ui.color_vision = crate::profile::ui::coerce_color_vision(color_vision);
-        ui.readable_highlights = readable_highlights;
-        ui.collapse_repeats = collapse_repeats;
-        ui.collapse_fight_lines = collapse_fight_lines;
-        ui.collapse_attack_lines = collapse_attack_lines;
-        ui.terminal_base_ansi = terminal_base_ansi;
-        ui.custom_themes = custom_themes;
-        ui.split_divider_color = crate::profile::ui::normalize_optional_color(split_divider_color);
-        ui.input_echo_color = crate::profile::ui::normalize_optional_color(input_echo_color);
-        ui.echo_macros = echo_macros;
-        ui.input_echo_caret = input_echo_caret;
-        ui.paste_line_delay_ms =
-            crate::profile::ui::coerce_paste_line_delay_ms(paste_line_delay_ms);
-        ui.spellcheck_prompt = spellcheck_prompt;
-        ui.input_cursor_style = crate::profile::ui::coerce_input_cursor_style(input_cursor_style);
-        ui.vitals_density = crate::profile::ui::coerce_vitals_density(vitals_density);
-        ui.vitals_values = crate::profile::ui::coerce_vitals_values(vitals_values);
-        ui.vitals_meter = crate::profile::ui::coerce_vitals_meter(vitals_meter);
-        ui.vitals_warn_thirds = vitals_warn_thirds;
-        ui.vitals_hide_when_pinned = vitals_hide_when_pinned;
-        ui.chip_style = crate::profile::ui::coerce_chip_style(chip_style);
-        ui.tick_count = crate::profile::ui::coerce_tick_count(tick_count);
-        ui.game_time = crate::profile::ui::coerce_game_time(game_time);
-        ui.affects_style = crate::profile::ui::coerce_affects_style(affects_style);
-        ui.affects_marker = crate::profile::ui::coerce_affects_marker(affects_marker);
-        ui.affects_tint = affects_tint;
-        (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
-            crate::profile::ui::coerce_affects_thresholds(
-                affects_running_out_hours,
-                affects_almost_gone_hours,
-            );
     }
 }
 
-/// The live UI config and the [`AppState::ui_config_generation`] it was
-/// read at.
-///
-/// [`AppState::ui_config_generation`]: crate::app::state::AppState::ui_config_generation
+/// The live UI config. Your prompt is not in it. The prompt section
+/// reads and writes the `[prompt]` table through the prompt commands, and
+/// `[ui]` keeps only a copy of its switch and design for an older build.
 #[tauri::command]
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
     let p = state.selected_session().lock_profile().await;
-    Ok(ui_config_of(&p, state.ui_config_generation()))
+    Ok(UiConfigPayload::from_ui(&p.ui))
 }
 
-/// What `ui_get_config` hands the webview for the live profile `p`, read
-/// at `generation`. Your prompt is not in it: the prompt section reads and
-/// writes the `[prompt]` table through the prompt commands, and `[ui]`
-/// keeps only a copy of its switch and design for an older build.
-fn ui_config_of(p: &crate::profile::live::Profile, generation: u64) -> UiConfigPayload {
-    let mut payload = UiConfigPayload::from_ui(&p.ui);
-    payload.generation = Some(generation);
-    payload
+/// One field of the UI config with its new value, as the page sends it,
+/// `{"field": <name>, "value": ...}`. Each variant is the setter for the
+/// field of [`UiConfigPayload`] it names, in the payload's order.
+/// `tracked_affects` saves through `tracked_affects_set` instead.
+#[derive(serde::Deserialize)]
+#[serde(tag = "field", content = "value", rename_all = "snake_case")]
+pub(crate) enum UiField {
+    Theme(String),
+    FollowSystemAppearance(bool),
+    LightTheme(String),
+    DarkTheme(String),
+    AutoUpdate(bool),
+    FontFamily(String),
+    FontSize(u32),
+    TerminalLineHeight(String),
+    PanelFont(String),
+    PanelFontSize(u32),
+    EnabledPresets(Vec<String>),
+    KeepLastCommand(bool),
+    ThemeTerminalColors(Option<bool>),
+    BrightBold(bool),
+    BlinkText(Option<bool>),
+    FitGameColors(bool),
+    ColorVision(String),
+    ReadableHighlights(bool),
+    CollapseRepeats(bool),
+    CollapseFightLines(bool),
+    CollapseAttackLines(bool),
+    TerminalBaseAnsi(Option<Vec<String>>),
+    CustomThemes(Vec<crate::profile::ui::CustomTheme>),
+    SplitDividerColor(Option<String>),
+    InputEchoColor(Option<String>),
+    EchoMacros(bool),
+    InputEchoCaret(bool),
+    PasteLineDelayMs(u32),
+    SpellcheckPrompt(bool),
+    InputCursorStyle(String),
+    VitalsDensity(String),
+    VitalsValues(String),
+    VitalsMeter(String),
+    VitalsWarnThirds(bool),
+    VitalsHideWhenPinned(bool),
+    ChipStyle(String),
+    TickCount(String),
+    GameTime(String),
+    AffectsStyle(String),
+    AffectsMarker(String),
+    AffectsTint(bool),
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_running_out_hours")]
+    AffectsRunningOutHours(u32),
+    #[serde(deserialize_with = "crate::profile::ui::deserialize_affects_almost_gone_hours")]
+    AffectsAlmostGoneHours(u32),
 }
 
-/// Save the whole UI config. A copy read before the live config was last
-/// replaced is refused and returns false, and the caller reads the
-/// config again.
+/// Save the fields a page names and leave every other one as it is, so
+/// two windows that each change a field keep both changes. With no
+/// profile it writes the selected session's. It sends no event, since
+/// the page that saved tells the windows.
 #[tauri::command]
-pub(crate) async fn ui_set_config(
+pub(crate) async fn ui_set_fields(
     state: State<'_, SharedState>,
-    config: UiConfigPayload,
-) -> Result<bool, String> {
+    fields: Vec<UiField>,
+    profile: Option<String>,
+) -> Result<(), String> {
+    set_fields(state.inner(), fields, profile).await
+}
+
+/// Write `fields` onto the profile named `profile`, which a session must
+/// play, or onto the selected session's when it names none, and save it.
+async fn set_fields(
+    state: &SharedState,
+    fields: Vec<UiField>,
+    profile: Option<String>,
+) -> Result<(), String> {
     let open = {
-        let mut p = state.selected_session().lock_profile().await;
-        if !apply_ui_config(&mut p.ui, config, state.ui_config_generation()) {
-            return Ok(false);
-        }
+        let mut p = match profile {
+            None => state.selected_session().lock_profile().await,
+            Some(name) => {
+                state
+                    .open_profile(&name)
+                    .ok_or_else(|| format!("No session plays the profile {name}."))?
+                    .lock()
+                    .await
+            }
+        };
+        apply_fields(&mut p.ui, fields);
         p.open().clone()
     };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&shared, &open).await;
-    Ok(true)
+    persist_profile(state, &open).await;
+    Ok(())
 }
 
-/// Write a whole config save onto `ui`, unless it was read at a
-/// generation other than `current`. Returns whether it applied.
-fn apply_ui_config(
-    ui: &mut crate::profile::ui::UiConfig,
-    config: UiConfigPayload,
-    current: u64,
-) -> bool {
-    if config.generation.is_some_and(|g| g != current) {
-        return false;
+/// Write each field onto `ui` through its coercer. The affects
+/// thresholds are held in order once every field is in, so the order of
+/// the fields never matters.
+fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
+    use crate::profile::ui as cfg;
+    for field in fields {
+        match field {
+            UiField::Theme(v) => ui.theme = v,
+            UiField::FollowSystemAppearance(v) => ui.follow_system_appearance = v,
+            UiField::LightTheme(v) => ui.light_theme = cfg::coerce_light_theme(v),
+            UiField::DarkTheme(v) => ui.dark_theme = cfg::normalize_dark_theme(v),
+            UiField::AutoUpdate(v) => ui.auto_update = v,
+            UiField::FontFamily(v) => ui.font_family = v,
+            UiField::FontSize(v) => ui.font_size = cfg::coerce_font_size(v),
+            UiField::TerminalLineHeight(v) => {
+                ui.terminal_line_height = cfg::coerce_terminal_line_height(v);
+            }
+            UiField::PanelFont(v) => ui.panel_font = cfg::normalize_panel_font(v),
+            UiField::PanelFontSize(v) => ui.panel_font_size = cfg::coerce_panel_font_size(v),
+            UiField::EnabledPresets(v) => ui.enabled_presets = cfg::normalize_enabled_presets(v),
+            UiField::KeepLastCommand(v) => ui.keep_last_command = v,
+            UiField::ThemeTerminalColors(v) => ui.theme_terminal_colors = v,
+            UiField::BrightBold(v) => ui.bright_bold = v,
+            UiField::BlinkText(v) => ui.blink_text = v,
+            UiField::FitGameColors(v) => ui.fit_game_colors = v,
+            UiField::ColorVision(v) => ui.color_vision = cfg::coerce_color_vision(v),
+            UiField::ReadableHighlights(v) => ui.readable_highlights = v,
+            UiField::CollapseRepeats(v) => ui.collapse_repeats = v,
+            UiField::CollapseFightLines(v) => ui.collapse_fight_lines = v,
+            UiField::CollapseAttackLines(v) => ui.collapse_attack_lines = v,
+            UiField::TerminalBaseAnsi(v) => ui.terminal_base_ansi = v,
+            UiField::CustomThemes(v) => ui.custom_themes = v,
+            UiField::SplitDividerColor(v) => {
+                ui.split_divider_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputEchoColor(v) => ui.input_echo_color = cfg::normalize_optional_color(v),
+            UiField::EchoMacros(v) => ui.echo_macros = v,
+            UiField::InputEchoCaret(v) => ui.input_echo_caret = v,
+            UiField::PasteLineDelayMs(v) => {
+                ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
+            }
+            UiField::SpellcheckPrompt(v) => ui.spellcheck_prompt = v,
+            UiField::InputCursorStyle(v) => {
+                ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
+            }
+            UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
+            UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
+            UiField::VitalsMeter(v) => ui.vitals_meter = cfg::coerce_vitals_meter(v),
+            UiField::VitalsWarnThirds(v) => ui.vitals_warn_thirds = v,
+            UiField::VitalsHideWhenPinned(v) => ui.vitals_hide_when_pinned = v,
+            UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
+            UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
+            UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
+            UiField::AffectsStyle(v) => ui.affects_style = cfg::coerce_affects_style(v),
+            UiField::AffectsMarker(v) => ui.affects_marker = cfg::coerce_affects_marker(v),
+            UiField::AffectsTint(v) => ui.affects_tint = v,
+            UiField::AffectsRunningOutHours(v) => ui.affects_running_out_hours = v,
+            UiField::AffectsAlmostGoneHours(v) => ui.affects_almost_gone_hours = v,
+        }
     }
-    config.apply_to(ui);
-    true
+    (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =
+        cfg::coerce_affects_thresholds(ui.affects_running_out_hours, ui.affects_almost_gone_hours);
 }
 
 /// Replace the active profile's theme choice without touching the rest
-/// of the UI config. The main window's palette picks a theme while the
-/// Settings window may hold its own full snapshot, so a whole config
-/// write from one would overwrite the other's newer fields. The caller
-/// applies and broadcasts the theme itself. While follow system
+/// of the UI config, for the main window's palette. The caller applies
+/// and broadcasts the theme itself. While follow system
 /// appearance is on, a pick fills the light or dark slot instead, so the
 /// caller also sends the pair.
 #[tauri::command]
@@ -485,21 +470,104 @@ mod tests {
     use crate::profile::ui::UiConfig;
     use crate::prompt::tests::prompt_profile;
 
-    /// Send `ui` the way Settings does: out through `ui_get_config`,
-    /// across the JSON bridge, and back through `ui_set_config` onto a
-    /// fresh config.
+    /// The setter for the field `key` with `value`, as the page sends it.
+    fn setter(key: &str, value: &serde_json::Value) -> super::UiField {
+        serde_json::from_value(serde_json::json!({ "field": key, "value": value })).unwrap()
+    }
+
+    /// Send `ui` out through `ui_get_config`, across the JSON bridge, and
+    /// back onto a fresh config with every field through its setter in
+    /// `ui_set_fields`. The tracked affects have a setter of their own.
     fn through_payload(ui: &UiConfig) -> UiConfig {
-        let json = serde_json::to_string(&UiConfigPayload::from_ui(ui)).unwrap();
-        let payload: UiConfigPayload = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_value(UiConfigPayload::from_ui(ui)).unwrap();
+        let fields = json
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(key, _)| *key != "tracked_affects")
+            .map(|(key, value)| setter(key, value))
+            .collect();
         let mut out = UiConfig::default();
-        payload.apply_to(&mut out);
+        super::apply_fields(&mut out, fields);
         out
     }
 
     #[test]
+    fn each_setter_writes_its_field_alone_and_two_windows_keep_both() {
+        // One value for each field ui_set_fields takes, none of them the
+        // default. src/ipc/uiConfig.test.ts reads the same file.
+        let text = include_str!("../../../fixtures/ui-config/fields.json");
+        let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
+        let values = fixture["fields"].as_object().unwrap();
+        let sent = |ui: &UiConfig| serde_json::to_value(UiConfigPayload::from_ui(ui)).unwrap();
+        let defaults = sent(&UiConfig::default());
+        // A field the payload gains without a setter fails here.
+        let keys: Vec<&String> = defaults
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|key| *key != "tracked_affects")
+            .collect();
+        let names: Vec<&String> = values.keys().collect();
+        assert_eq!(names, keys);
+        for (at, f) in names.iter().enumerate() {
+            let mut ui = UiConfig::default();
+            super::apply_fields(&mut ui, vec![setter(f, &values[*f])]);
+            let mut want = defaults.clone();
+            want[*f] = values[*f].clone();
+            assert_eq!(sent(&ui), want, "{f} alone");
+            // Another window writes the next field onto the same profile.
+            let g = names[(at + 1) % names.len()];
+            super::apply_fields(&mut ui, vec![setter(g, &values[g])]);
+            want[g] = values[g].clone();
+            assert_eq!(sent(&ui), want, "{f}, then {g}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_profile_takes_the_fields_and_the_selected_one_keeps_its_own() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+
+        // Every file a save writes lands in the profile set's folder.
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        let orla_file = set.profile_path("Orla");
+        let state: SharedState = Arc::new(AppState::default());
+        state.set_profiles(set).await;
+        let orla = state.add_open_profile("Orla", Profile::default());
+        state.open_session(orla.clone());
+        let game_time = || vec![setter("game_time", &"12h".into())];
+
+        super::set_fields(&state, game_time(), Some("Orla".into()))
+            .await
+            .unwrap();
+        assert_eq!(orla.lock().await.ui.game_time, "12h");
+        assert_eq!(state.selected_profile().await.ui.game_time, "24h");
+        let saved = ProfileConfig::from_toml(&std::fs::read_to_string(&orla_file).unwrap());
+        assert_eq!(saved.unwrap().ui.game_time, "12h");
+
+        // No profile named writes the selected session's.
+        let tick_count = vec![setter("tick_count", &"down".into())];
+        super::set_fields(&state, tick_count, None).await.unwrap();
+        assert_eq!(state.selected_profile().await.ui.tick_count, "down");
+        assert_eq!(orla.lock().await.ui.tick_count, "up");
+
+        assert_eq!(
+            super::set_fields(&state, game_time(), Some("Maren".into())).await,
+            Err("No session plays the profile Maren.".to_string())
+        );
+    }
+
+    #[test]
     fn ui_defaults_match_the_ones_the_page_fills() {
-        // normalizeUiConfig in src/lib/session.ts reads the same file and
-        // fills a missing field with each of these values.
+        // normalizeUiConfig in src/ipc/uiConfig.ts fills a missing field
+        // with each of these values, and src/ipc/uiConfig.test.ts reads
+        // the same file to hold it there.
         let text = include_str!("../../../fixtures/ui-config/defaults.json");
         let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
         let passed: Vec<&str> = fixture["passed_through"]
@@ -540,85 +608,14 @@ mod tests {
         }
     }
 
-    /// A whole config save read at `generation`, holding `ui`.
-    fn save_of(ui: &UiConfig, generation: Option<u64>) -> UiConfigPayload {
-        let mut payload = UiConfigPayload::from_ui(ui);
-        payload.generation = generation;
-        payload
-    }
-
-    #[test]
-    fn a_save_read_before_a_replace_leaves_the_new_profile_alone() {
-        // The loaded profile counts up with the value alone.
-        let mut live = UiConfig {
-            tick_count: "up".into(),
-            chip_style: "value_only".into(),
-            ..UiConfig::default()
-        };
-        // Settings read the old profile at generation 3, and you moved
-        // the font size after #profile load took it to 4.
-        let old = UiConfig {
-            tick_count: "down".into(),
-            chip_style: "icon_value".into(),
-            font_size: 16,
-            ..UiConfig::default()
-        };
-        assert!(!super::apply_ui_config(
-            &mut live,
-            save_of(&old, Some(3)),
-            4
-        ));
-        assert_eq!(live.tick_count, "up");
-        assert_eq!(live.chip_style, "value_only");
-        assert_eq!(live.font_size, UiConfig::default().font_size);
-    }
-
-    #[test]
-    fn a_save_read_since_the_last_replace_applies() {
-        let mut live = UiConfig::default();
-        let edited = UiConfig {
-            font_size: 16,
-            tick_count: "up".into(),
-            ..UiConfig::default()
-        };
-        assert!(super::apply_ui_config(
-            &mut live,
-            save_of(&edited, Some(4)),
-            4
-        ));
-        assert_eq!(live.font_size, 16);
-        assert_eq!(live.tick_count, "up");
-        // A config that never came from the backend carries none.
-        let mut live = UiConfig::default();
-        assert!(super::apply_ui_config(&mut live, save_of(&edited, None), 4));
-        assert_eq!(live.font_size, 16);
-    }
-
-    #[test]
-    fn a_settings_payload_that_leaves_fields_out_still_reads() {
-        let mut json = serde_json::to_value(UiConfigPayload::default()).unwrap();
-        let fields = json.as_object_mut().unwrap();
-        fields.remove("font_size");
-        fields.remove("theme");
-        fields.insert("font_family".into(), "Iosevka".into());
-        let payload: UiConfigPayload = serde_json::from_value(json).unwrap();
-        let defaults = crate::profile::ui::UiConfig::default();
-        assert_eq!(payload.font_family, "Iosevka");
-        assert_eq!(payload.font_size, defaults.font_size);
-        assert_eq!(payload.theme, defaults.theme);
-        let empty: UiConfigPayload = serde_json::from_str("{}").unwrap();
-        assert_eq!(empty.font_size, defaults.font_size);
-    }
-
     #[test]
     fn the_settings_payload_carries_nothing_of_your_prompt() {
         let (p, _) = prompt_profile();
-        let json = serde_json::to_value(super::ui_config_of(&p, 5)).unwrap();
+        let json = serde_json::to_value(UiConfigPayload::from_ui(&p.ui)).unwrap();
         let keys = json.as_object().unwrap();
         for key in ["prompt_template_enabled", "prompt_template", "prompt_show"] {
             assert!(!keys.contains_key(key), "{key} reaches Settings");
         }
-        assert_eq!(json["generation"], 5);
     }
 
     #[test]
@@ -628,21 +625,8 @@ mod tests {
         config.show = vosh_prompt::PromptShow::Pinned;
         crate::prompt::take_config(&mut p, &mut c, config);
         let table = p.prompt.clone();
-        let mut save = super::ui_config_of(&p, 4);
-        save.font_size = 16;
-        assert!(super::apply_ui_config(&mut p.ui, save, 4));
+        super::apply_fields(&mut p.ui, vec![setter("font_size", &16.into())]);
         assert_eq!(p.ui.font_size, 16);
-        assert_eq!(p.prompt, table);
-
-        // A window from before the prompt section still sends the three
-        // fields. They are read past and change nothing.
-        let mut json = serde_json::to_value(super::ui_config_of(&p, 4)).unwrap();
-        let fields = json.as_object_mut().unwrap();
-        fields.insert("prompt_template_enabled".into(), false.into());
-        fields.insert("prompt_template".into(), "stale".into());
-        fields.insert("prompt_show".into(), "text".into());
-        let old: UiConfigPayload = serde_json::from_value(json).unwrap();
-        assert!(super::apply_ui_config(&mut p.ui, old, 4));
         assert_eq!(p.prompt, table);
 
         // The file keeps the table, and [ui] its copy of the switch and
@@ -654,13 +638,24 @@ mod tests {
     }
 
     #[test]
-    fn the_generation_travels_with_the_config_but_stays_optional() {
-        let json = serde_json::to_value(save_of(&UiConfig::default(), Some(7))).unwrap();
-        assert_eq!(json["generation"], serde_json::json!(7));
-        let json = serde_json::to_value(save_of(&UiConfig::default(), None)).unwrap();
-        assert!(json.get("generation").is_none());
-        let back: UiConfigPayload = serde_json::from_value(json).unwrap();
-        assert_eq!(back.generation, None);
+    fn an_unknown_field_name_refuses_the_whole_save() {
+        // Your prompt saves through the prompt commands, the tracked
+        // affects through tracked_affects_set and the chat colors through
+        // the pane menu, so none of them is a field here.
+        for key in [
+            "prompt_template_enabled",
+            "prompt_template",
+            "prompt_show",
+            "tracked_affects",
+            "chat_colors",
+        ] {
+            let fields = serde_json::json!([
+                { "field": "font_size", "value": 16 },
+                { "field": key, "value": null },
+            ]);
+            let read = serde_json::from_value::<Vec<super::UiField>>(fields);
+            assert!(read.is_err(), "{key}");
+        }
     }
 
     #[test]
@@ -708,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    fn the_panel_font_round_trips_and_a_page_without_it_keeps_as_designed() {
+    fn the_panel_font_round_trips() {
         let mut ui = UiConfig::default();
         assert_eq!(through_payload(&ui).panel_font, "");
         for pick in ["terminal", "system", "\"Iosevka\", Menlo, monospace"] {
@@ -719,17 +714,10 @@ mod tests {
         assert_eq!(through_payload(&ui).panel_font, "system");
         ui.panel_font = " Terminal ".into();
         assert_eq!(through_payload(&ui).panel_font, "terminal");
-        // A page from before the row sends no panel font, which reads as
-        // As designed.
-        let payload: UiConfigPayload = serde_json::from_str("{\"font_size\": 16}").unwrap();
-        let mut out = UiConfig::default();
-        payload.apply_to(&mut out);
-        assert_eq!(out.panel_font, "");
-        assert_eq!(out.font_size, 16);
     }
 
     #[test]
-    fn the_panel_size_round_trips_and_a_page_without_it_keeps_12() {
+    fn the_panel_size_round_trips() {
         let mut ui = UiConfig::default();
         assert_eq!(through_payload(&ui).panel_font_size, 12);
         for pick in [0, 11, 16] {
@@ -738,13 +726,6 @@ mod tests {
         }
         ui.panel_font_size = 200;
         assert_eq!(through_payload(&ui).panel_font_size, 64);
-        // A page from before the row sends no panel size, which reads as
-        // 12, the size the panes drew at, and never as the terminal size.
-        let payload: UiConfigPayload = serde_json::from_str("{\"font_size\": 16}").unwrap();
-        let mut out = UiConfig::default();
-        payload.apply_to(&mut out);
-        assert_eq!(out.panel_font_size, 12);
-        assert_eq!(out.font_size, 16);
     }
 
     #[test]
@@ -875,19 +856,6 @@ mod tests {
         let back = through_payload(&ui);
         assert!(!back.collapse_fight_lines);
         assert!(back.collapse_attack_lines);
-        // A page from before the two choices saves without them, and the
-        // profile takes their defaults.
-        let payload: UiConfigPayload =
-            serde_json::from_str(r#"{"collapse_repeats":true}"#).unwrap();
-        let mut out = UiConfig {
-            collapse_fight_lines: false,
-            collapse_attack_lines: true,
-            ..UiConfig::default()
-        };
-        payload.apply_to(&mut out);
-        assert!(out.collapse_repeats);
-        assert!(out.collapse_fight_lines);
-        assert!(!out.collapse_attack_lines);
     }
 
     #[test]
@@ -993,39 +961,42 @@ mod tests {
         assert_eq!(saved.affects_almost_gone_hours, 99);
     }
 
-    #[test]
-    fn a_page_that_sends_odd_affects_thresholds_still_saves() {
-        let read = |json: &str| {
-            let payload: UiConfigPayload = serde_json::from_str(json).unwrap();
-            let mut ui = UiConfig::default();
-            payload.apply_to(&mut ui);
-            (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
-        };
-        assert_eq!(read("{}"), (2, 1));
-        assert_eq!(
-            read(r#"{"affects_running_out_hours": 4.6, "affects_almost_gone_hours": -3}"#),
-            (5, 0)
-        );
-        assert_eq!(
-            read(r#"{"affects_running_out_hours": "6", "affects_almost_gone_hours": null}"#),
-            (6, 1)
-        );
+    /// The affects thresholds after `fields` land on the defaults.
+    fn thresholds_after(fields: Vec<super::UiField>) -> (u32, u32) {
+        let mut ui = UiConfig::default();
+        super::apply_fields(&mut ui, fields);
+        (ui.affects_running_out_hours, ui.affects_almost_gone_hours)
     }
 
     #[test]
-    fn chat_colors_stay_with_each_character_and_out_of_the_whole_config_save() {
+    fn a_page_that_sends_odd_affects_thresholds_still_saves() {
+        let read = |running_out: serde_json::Value, almost_gone: serde_json::Value| {
+            thresholds_after(vec![
+                setter("affects_running_out_hours", &running_out),
+                setter("affects_almost_gone_hours", &almost_gone),
+            ])
+        };
+        assert_eq!(thresholds_after(Vec::new()), (2, 1));
+        assert_eq!(read(4.6.into(), (-3).into()), (5, 0));
+        assert_eq!(read("6".into(), serde_json::Value::Null), (6, 1));
+    }
+
+    #[test]
+    fn the_affects_thresholds_end_the_same_in_either_order() {
+        let running_out = || setter("affects_running_out_hours", &5.into());
+        let almost_gone = || setter("affects_almost_gone_hours", &4.into());
+        assert_eq!(thresholds_after(vec![running_out(), almost_gone()]), (5, 4));
+        assert_eq!(thresholds_after(vec![almost_gone(), running_out()]), (5, 4));
+    }
+
+    #[test]
+    fn the_config_settings_reads_carries_no_chat_colors() {
+        // Only the pane menu reads and writes them, through its own
+        // commands.
         let mut ui = UiConfig::default();
         ui.chat_colors.insert("say".into(), "brightBlue".into());
-        // A whole config save from Settings carries no chat colors, so it
-        // never writes an old copy back over a pick from the pane menu.
         let json = serde_json::to_value(UiConfigPayload::from_ui(&ui)).unwrap();
         assert!(json.get("chat_colors").is_none());
-        let mut live = ui.clone();
-        UiConfigPayload::from_ui(&UiConfig::default()).apply_to(&mut live);
-        assert_eq!(
-            live.chat_colors.get("say").map(String::as_str),
-            Some("brightBlue")
-        );
     }
 
     #[test]

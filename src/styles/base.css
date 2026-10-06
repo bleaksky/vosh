@@ -1,0 +1,66 @@
+/* The base. The box-sizing reset, html and body in Inter, and thin
+   scrollbars in the theme's colors on every platform. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  color: var(--text);
+  /* Inter draws only text outside every window root, until D23
+     retires it with the migration wizard. Each window root sets
+     --font-ui, and the terminal and the panes set their own faces. The
+     13 px holds whatever terminal size you pick. */
+  font-family: var(--font-chrome);
+  font-size: 13px;
+}
+
+body {
+  overflow: hidden;
+}
+
+/* Global scrollbar theming. WebView2 (Windows) and WebKitGTK (Linux)
+   default to chunky system scrollbars in stark white, which clash
+   with the dark chrome and overlap any absolutely-positioned overlay
+   that ignores their gutter. WebKit (macOS) uses overlay scrollbars
+   that hide when idle so the theming there is mostly about hover
+   color. The thumb picks up the theme border so it reads as part of
+   the same surface. */
+* {
+  /* Firefox / spec form. WebKit ignores this; WebView2 supports it
+     since edge 121. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sep);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tertiary);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

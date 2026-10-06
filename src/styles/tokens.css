@@ -1,8 +1,8 @@
-/* One Window design tokens. src/lib/theme.ts writes the color tokens
-   on :root at runtime from lib/chrome's derivation of the active
+/* One Window design tokens. src/theme/theme.ts writes the color tokens
+   on :root at runtime from theme/chrome's derivation of the active
    terminal theme. The values below are Obsidian Ember's, the fallback
    theme a config without a theme key reads, and a test in
-   lib/chrome.test.ts holds them to that derivation. They paint only
+   theme/chrome.test.ts holds them to that derivation. They paint only
    until the startup paint or the config brings your theme. A new
    install starts on Triad, and its window stays hidden until the
    config paints Triad, for half a second at most. Every new component
@@ -35,14 +35,29 @@
   --menu-hi: rgba(255, 255, 255, 0.081);
   --key-ring: rgba(255, 255, 255, 0.138);
   --edge: rgba(255, 255, 255, 0.121);
+  /* theme.ts also writes this one as rgba, since the map canvas reads
+     it and a canvas fill cannot parse color-mix in every webview. */
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  /* The split scrollback divider. Layout's split divider color writes
+     yours over it. */
+  --split-divider: var(--tertiary);
+  /* The terminal ground. theme.ts writes the theme's xterm background
+     over it. */
+  --xterm-bg: var(--bg);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
     sans-serif;
+  /* The terminal face and size. The windows write yours over them. */
+  --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+  --app-font-size: 14px;
   --font-mud: var(--app-font-family);
+  /* The bundled monospace face, for the glyph map and the scroll depth
+     indicator. */
+  --font-mono: 'JetBrainsMono Bundled', Menlo, 'SF Mono', monospace;
   /* The panes and the status line, one name for each face they were
      designed in. Under Panel text Font As designed, the default, the
-     main window writes no --panel-font-family (src/lib/panelFont.ts)
+     main window writes no --panel-font-family (src/panel/panelFont.ts)
      and each keeps its own: --font-panel the system face for the
      headers, labels, counts, rows, the vitals and the status line,
      --font-panel-game the terminal face for the game text, the affects,
@@ -69,6 +84,14 @@
      does (frame.css). */
   --status-line: round(28px * var(--panel-text-px, 12) / 12, 1px);
   --panel-w: 300px;
+
+  /* Inter and the wizard's shadow. Only html and body in base.css and
+     the migration wizard read them, until D23 retires both. New chrome
+     takes --font-ui, and a new floating surface --shadow-float. */
+  --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --float:
+    0 18px 44px -14px rgba(0, 0, 0, 0.6), 0 6px 18px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
@@ -90,32 +113,4 @@
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.14);
   --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.22);
   --mark-tint: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-/* Legacy aliases. styles.css and every component built before the One
-   Window shell read the --c-* names, so each maps to its nearest token
-   until those components move to the new names. */
-:root {
-  --c-surface: var(--bg);
-  --c-surface-deep: var(--panel);
-  --c-surface-pane: var(--panel);
-  --c-surface-emphasis: var(--selrow);
-  --c-text-strong: var(--text);
-  --c-text: var(--text);
-  --c-text-muted: var(--secondary);
-  --c-text-faint: var(--tertiary);
-  --c-text-dim: var(--tertiary);
-  --c-border-soft: var(--divider);
-  --c-border: var(--divider);
-  --c-border-strong: var(--sep);
-  --c-border-hover: var(--sep);
-  --c-accent: var(--accent);
-  /* theme.ts also writes this one as rgba, since the map canvas reads
-     it and a canvas fill cannot parse color-mix in every webview. */
-  --c-accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
-  /* Referenced by styles.css and CodeEditor but never defined before. */
-  --c-muted: var(--secondary);
-  --c-muted-red: var(--danger);
-  --c-bg: var(--bg);
-  --xterm-bg: var(--bg);
 }

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { pendingWritesFlushed, subscribeFlushPendingWrites } from '../ipc/windows';
 
 // Writes a window holds back for a moment, and the one place that sends
 // them all at once. Settings saves a change after a short pause, the
@@ -60,14 +60,15 @@ export function createPendingWrites(): PendingWrites {
 /** This window's writers. */
 export const pendingWrites = createPendingWrites();
 
-/** One value sent after a pause, the latest one winning, like the
- *  Settings autosave. Flush sends the waiting value at once. */
+/** One value sent after a pause, like the Settings autosave, which
+ *  merges each edit into the save waiting. Flush sends the waiting value
+ *  at once. */
 export interface DebouncedWrite<T> {
-  /** Send `value` after `delayMs`, in place of any value waiting. */
-  schedule: (value: T, delayMs: number) => void;
-  /** Change the value waiting, if there is one. */
-  patch: (fn: (value: T) => T) => void;
-  hasPending: () => boolean;
+  /** Send the value `next` makes of the one waiting, or of null when
+   *  none waits, after `delayMs`. */
+  schedule: (next: (waiting: T | null) => T, delayMs: number) => void;
+  /** The value waiting, or null when none waits. */
+  waiting: () => T | null;
   /** Send the waiting value now. Resolves once `send` has. */
   flush: () => Promise<void>;
   /** Forget the waiting value. */
@@ -90,15 +91,12 @@ export function createDebouncedWrite<T>(send: (value: T) => Promise<void>): Debo
     if (next) await send(next.value);
   };
   return {
-    schedule(value, delayMs) {
+    schedule(next, delayMs) {
       stopTimer();
-      waiting = { value };
+      waiting = { value: next(waiting ? waiting.value : null) };
       timer = setTimeout(() => void flush(), delayMs);
     },
-    patch(fn) {
-      if (waiting) waiting = { value: fn(waiting.value) };
-    },
-    hasPending: () => waiting !== null,
+    waiting: () => (waiting ? waiting.value : null),
     flush,
     drop() {
       stopTimer();
@@ -195,25 +193,19 @@ export async function runCloseRequest(steps: {
 
 // ── Quit ────────────────────────────────────────────────────────────
 
-/** The event the backend sends each window when you quit, with a round
- *  number, and the command a window answers with once it has sent what
- *  it held. */
-export const FLUSH_REQUEST_EVENT = 'vosh://flush-pending-writes';
-const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
-
 /** Send what this window holds when the backend asks on quit, then tell
  *  the backend, which waits a short time for every window before it
  *  writes the profile and exits. The backend asks each window once a
  *  round, so every request gets an answer. */
 export function listenForQuitFlush(options: { commitFocus?: boolean } = {}): Promise<UnlistenFn> {
-  return listen<unknown>(FLUSH_REQUEST_EVENT, () => {
+  return subscribeFlushPendingWrites(() => {
     void answerQuitFlush(options.commitFocus === true);
   });
 }
 
 async function answerQuitFlush(commitFocus: boolean): Promise<void> {
   await sendPendingWrites({ commitFocus });
-  await invoke(FLUSH_DONE_COMMAND).catch((e: unknown) =>
+  await pendingWritesFlushed().catch((e: unknown) =>
     console.error('[writes] telling the backend failed', e),
   );
 }

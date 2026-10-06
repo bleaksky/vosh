@@ -43,7 +43,8 @@ fixtures/
              test in src-tauri holds it to the sources, and
              VOSH_WRITE_IPC_NAMES=1 writes it again. gmcp-events.json,
              the event each GMCP package goes out on, read by a fake MUD
-             test in src-tauri and by session.test.ts on the page.
+             test in src-tauri and by src/ipc/session.test.ts on the
+             page.
              aliases_export.json is the reply to aliases_export plus a
              final newline. A test in src-tauri/src/ipc/automation.rs
              holds it to that command byte for byte, and the palette and
@@ -121,6 +122,10 @@ fixtures/
   ui-config/ defaults.json, the UI config Rust sends for a profile that
              sets nothing, which normalizeUiConfig on the page fills in
              for a field that arrives missing. Hand written.
+             fields.json, one value that is not the default for each field
+             ui_set_fields takes, read by the setter tests in
+             src-tauri/src/ipc/ui_config.rs and src/ipc/uiConfig.test.ts.
+             Hand written.
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
              TypeScript WordWrapper, so both renderers break lines alike.
 ```

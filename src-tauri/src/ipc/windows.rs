@@ -18,14 +18,14 @@ pub(crate) fn launch_notices_take(state: State<'_, SharedState>) -> Vec<String> 
 }
 
 /// Open (or focus, if already open) the standalone settings window,
-/// where the React entry renders `SettingsApp`.
+/// where the React entry renders `SettingsWindow`.
 #[tauri::command]
 pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     open_aux_window(&app, &SETTINGS_WINDOW)
 }
 
 /// Open (or focus, if already open) the Help window, where the React
-/// entry renders `HelpApp`. The page that asked leaves the topic or the
+/// entry renders `HelpWindow`. The page that asked leaves the topic or the
 /// search it should land on (src/lib/helpLink.ts).
 #[tauri::command]
 pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
