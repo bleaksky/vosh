@@ -67,7 +67,7 @@ pub(crate) mod walk;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -396,7 +396,8 @@ pub(crate) async fn dial<R: tauri::Runtime>(
 
 /// End the connection `session` runs, if any, and the series of redials
 /// it waits on, and forget the connection and its character. Every
-/// window hears that no connection is live.
+/// window hears that no connection is live, and the rows without the
+/// character.
 pub(crate) async fn disconnect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -420,6 +421,7 @@ pub(crate) async fn disconnect<R: tauri::Runtime>(
         *g = None;
     }
     crate::session::identity::broadcast_session_identity(app, state, session).await;
+    crate::sessions::broadcast_sessions(app, state);
 }
 
 /// Open a connection, install a parser plus negotiator, and spin up the IO
@@ -530,8 +532,14 @@ pub(crate) struct GagWithoutReaderPayload {
     pub trigger: String,
 }
 
+/// Tell the page where the connection of `session` stands, and every
+/// window the rows, since a connect that starts or ends changes what the
+/// session's row shows. Call it with no profile or connection held.
 fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, payload: StatePayload) {
     session.emit(app, events::STATE, &payload);
+    if let Some(state) = app.try_state::<SharedState>() {
+        crate::sessions::broadcast_sessions(app, &state);
+    }
 }
 
 fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, password: bool) {

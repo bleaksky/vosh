@@ -167,7 +167,7 @@ async fn walk_gmcp<R: tauri::Runtime>(
 /// A name the session already saw does nothing. A new one is a login:
 /// it becomes the current character, its affect fulls load, the profile
 /// that claims it on this connection becomes the active one, with a
-/// note on the terminal, and the session identity goes out.
+/// note on the terminal, and the session identity and the rows go out.
 async fn character_named<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -196,6 +196,7 @@ async fn character_named<R: tauri::Runtime>(
     crate::affects::full::character_known(app, state, session, character);
     auto_switch_for_character(app, state, session, character).await;
     crate::session::identity::broadcast_session_identity(app, state, session).await;
+    crate::sessions::broadcast_sessions(app, state);
     // Another session that played the character here loses it to this
     // one, so its link closes as expected.
     super::reconnect::took_character(app, state, session, character).await;

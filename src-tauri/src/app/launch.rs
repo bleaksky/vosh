@@ -328,7 +328,9 @@ pub(crate) async fn open_restored<R: tauri::Runtime>(
 /// Select the session `id` names, and show its grid in the place of the
 /// grid that showed. A session launch restored opens its profile and
 /// reads its scrollback the first time, see [`open_restored`], and
-/// profiles.toml then keeps it as the selected one.
+/// profiles.toml then keeps it as the selected one. Every window hears
+/// the rows with the new selection, the one a banner click makes among
+/// them.
 pub(crate) async fn select_session<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -339,6 +341,7 @@ pub(crate) async fn select_session<R: tauri::Runtime>(
     let opened = open_restored(app, state, &selected).await;
     let _persist_guard = PERSIST_LOCK.lock().await;
     crate::profile::set::save_sessions(state).await;
+    crate::sessions::broadcast_sessions(app, state);
     opened
 }
 
@@ -589,7 +592,7 @@ mod tests {
         let two = session_open(app.handle().clone(), app.state(), Some("Ranger".into()))
             .await
             .expect("a second session");
-        session_rename(app.state(), two, Some("Alt".into()))
+        session_rename(app.handle().clone(), app.state(), two, Some("Alt".into()))
             .await
             .expect("the rename");
 

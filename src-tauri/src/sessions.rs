@@ -5,17 +5,18 @@
 //! selected, and launch puts the sessions profiles.toml lists in its
 //! place. A command that names no session acts on the selected one.
 //!
-//! The map's lock comes after a session's slot and the save lock, and
-//! ahead of every other lock of the app. A step takes it only to find,
-//! add or remove a session or an open profile or to read or change the
-//! selection, and no holder awaits. A holder takes no other lock but leaf
-//! locks, a session's profile pointer and an open profile's name, and one
-//! more: a change of selection shows the grid of the session it selects,
-//! which takes the native grid map and then the pointer's state, and
-//! neither of those holders ever takes the session map. No step takes it
-//! while it holds the loadouts, a profile, the profile set or a
-//! connection, so each step resolves its session before it takes any of
-//! them.
+//! The map's lock comes after a session's slot, the save lock and the
+//! turn [`broadcast_sessions`] holds while it reads the rows and sends
+//! them, and ahead of every other lock of the app. A step takes it only
+//! to find, add or remove a session or an open profile or to read or
+//! change the selection, and no holder awaits. A holder takes no other
+//! lock but leaf locks, a session's profile pointer and an open profile's
+//! name, and one more: a change of selection shows the grid of the
+//! session it selects, which takes the native grid map and then the
+//! pointer's state, and neither of those holders ever takes the session
+//! map. No step takes it while it holds the loadouts, a profile, the
+//! profile set or a connection, so each step resolves its session before
+//! it takes any of them.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ use vosh_automation::StopKey;
 
 use crate::affects::full::AffectFull;
 use crate::affects::snapshot::AffectsSnapshot;
+use crate::app::events::{broadcast, SESSIONS_CHANGED};
+use crate::app::state::AppState;
 use crate::logs::SharedScrollback;
 use crate::profile::live::Profile;
 use crate::profile::open::{OpenProfile, ProfileGuard};
@@ -467,6 +470,21 @@ pub(crate) fn emit_for<R: tauri::Runtime, T: Serialize>(
     if let Err(e) = app.emit(event, &named) {
         warn!(error = %e, event, "failed to emit a session event");
     }
+}
+
+/// Tell every window each session's row, in list order with the
+/// selected one marked, after a step that changed what a row shows. It
+/// reads the rows, which take each session's connection lock, so call it
+/// with no profile or connection held.
+pub(crate) fn broadcast_sessions<R: tauri::Runtime>(app: &AppHandle<R>, state: &AppState) {
+    // Two steps that broadcast at once could each read the rows and send
+    // them in the other order, which would leave every window on the
+    // older rows. One broadcast at a time sends the newest rows last.
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = TURN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    broadcast(app, SESSIONS_CHANGED, &state.session_rows());
 }
 
 /// One session as the window lists it.

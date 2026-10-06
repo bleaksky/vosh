@@ -4,7 +4,9 @@
 //! through them, sends the lines you type, plain or masked, stops a walk
 //! on Esc, tells the game the size of the terminal, and reads the target
 //! you track. Each acts on the session it names, or on the selected
-//! session when it names none.
+//! session when it names none. Every window hears the rows again after a
+//! step that changes what one shows, see
+//! [`crate::sessions::broadcast_sessions`].
 
 use tauri::{AppHandle, State};
 
@@ -14,7 +16,7 @@ use crate::input;
 use crate::output;
 use crate::profile::set::save_sessions;
 use crate::session::TargetPayload;
-use crate::sessions::{SessionId, SessionRow};
+use crate::sessions::{broadcast_sessions, SessionId, SessionRow};
 
 /// Open a session after the others, with nothing connected, and return
 /// its id. It plays `profile`, which it joins when another session plays
@@ -39,6 +41,7 @@ pub(crate) async fn session_open<R: tauri::Runtime>(
         };
         let session = state.open_session(open);
         save_sessions(state.inner()).await;
+        broadcast_sessions(&app, state.inner());
         session
     };
     crate::app::launch::start_on_profile(&app, state.inner(), &session).await;
@@ -102,6 +105,7 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     #[cfg(any(native_surface, test))]
     crate::native::grid::forget(closed.id);
     save_sessions(state.inner()).await;
+    broadcast_sessions(&app, state.inner());
     Ok(())
 }
 
@@ -110,7 +114,8 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
 /// no name, or a blank one, the session reads its character again.
 /// profiles.toml keeps the name for the next launch.
 #[tauri::command]
-pub(crate) async fn session_rename(
+pub(crate) async fn session_rename<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     session: SessionId,
     name: Option<String>,
@@ -118,6 +123,7 @@ pub(crate) async fn session_rename(
     state.session(Some(session))?.rename(name.as_deref());
     let _persist_guard = PERSIST_LOCK.lock().await;
     save_sessions(state.inner()).await;
+    broadcast_sessions(&app, state.inner());
     Ok(())
 }
 
@@ -313,18 +319,88 @@ pub(crate) async fn target_get(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use tauri::test::{mock_builder, mock_context, noop_assets};
-    use tauri::Manager;
+    use serde_json::{json, Value};
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+    use tauri::{App, Listener, Manager};
 
     use crate::app::state::{AppState, SharedState};
+    use crate::sessions::SessionId;
+
+    /// A mock app that holds a fresh state.
+    fn app() -> App<MockRuntime> {
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        app
+    }
+
+    /// Every list of rows the app sends from now on.
+    fn hear_rows(app: &App<MockRuntime>) -> Arc<Mutex<Vec<Value>>> {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let keep = heard.clone();
+        app.listen_any(crate::app::events::SESSIONS_CHANGED, move |e| {
+            let rows = serde_json::from_str(e.payload()).expect("a JSON payload");
+            keep.lock().expect("the rows").push(rows);
+        });
+        heard
+    }
+
+    /// The id, name and selection of each row the app sent last, and how
+    /// many lists it sent so far.
+    fn last_rows(heard: &Mutex<Vec<Value>>) -> (Value, usize) {
+        let heard = heard.lock().expect("the rows");
+        let last = heard.last().and_then(Value::as_array).map(|rows| {
+            rows.iter()
+                .map(|row| json!([row["id"], row["name"], row["selected"]]))
+                .collect()
+        });
+        (last.unwrap_or_default(), heard.len())
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn every_window_hears_the_rows_after_each_change_to_the_list() {
+        // A selection shows the session's grid, which other tests read.
+        let _grid = crate::native::grid::lock_shared_grid_for_test();
+        let app = app();
+        let heard = hear_rows(&app);
+        let one = app.state::<SharedState>().selected_session().id;
+        let mut sent = 0;
+        // Each step sends the rows as they then stand.
+        let mut after = |rows: Value| {
+            let (last, count) = last_rows(&heard);
+            assert!(count > sent, "no rows went out");
+            sent = count;
+            assert_eq!(last, rows);
+        };
+
+        let two = super::session_open(app.handle().clone(), app.state(), None)
+            .await
+            .unwrap();
+        after(json!([[one, null, true], [two, null, false]]));
+        super::session_select(app.handle().clone(), app.state(), two)
+            .await
+            .unwrap();
+        after(json!([[one, null, false], [two, null, true]]));
+        super::session_rename(app.handle().clone(), app.state(), two, Some("Alt".into()))
+            .await
+            .unwrap();
+        after(json!([[one, null, false], [two, "Alt", true]]));
+        super::session_close(app.handle().clone(), app.state(), two)
+            .await
+            .unwrap();
+        after(json!([[one, null, true]]));
+        // A step that fails changes no row and sends none.
+        let gone = super::session_select(app.handle().clone(), app.state(), SessionId::numbered(9));
+        assert!(gone.await.is_err());
+        assert_eq!(last_rows(&heard).1, sent);
+    }
 
     #[tokio::test]
     async fn your_target_answers_while_the_profile_is_busy() {
-        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
-        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let app = app();
         let state: SharedState = app.state::<SharedState>().inner().clone();
         let session = state.selected_session();
         session.connection.lock().target.name = Some("goblin".into());
@@ -356,8 +432,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_new_session_takes_the_prompt_table_of_the_profile_it_plays() {
-        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
-        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let app = app();
         let state: SharedState = app.state::<SharedState>().inner().clone();
         {
             let mut p = state.selected_profile().await;

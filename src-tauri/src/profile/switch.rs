@@ -310,6 +310,8 @@ pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
     broadcast_profile_ui(app, state).await;
 
     broadcast(app, PROFILE_SWITCHED, &name);
+    // The session's row names the profile it now plays.
+    crate::sessions::broadcast_sessions(app, state);
 
     // What the plugins this profile turned on and the others asked for
     // as the switch made it live.

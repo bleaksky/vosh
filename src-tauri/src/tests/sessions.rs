@@ -886,7 +886,12 @@ async fn profiles_toml_keeps_the_sessions_while_they_say_more_than_the_active_pr
     let index = h.dir.path().join("profiles.toml");
     let alone = std::fs::read_to_string(&index).expect("the index");
     let rename = |session, name: Option<&str>| {
-        crate::ipc::session::session_rename(h.app.state(), session, name.map(str::to_string))
+        crate::ipc::session::session_rename(
+            h.app.handle().clone(),
+            h.app.state(),
+            session,
+            name.map(str::to_string),
+        )
     };
     // One session with no name says nothing the active profile does not.
     rename(h.first, None).await.expect("the rename");
@@ -939,6 +944,52 @@ async fn profiles_toml_keeps_the_sessions_while_they_say_more_than_the_active_pr
         .expect("the second session closes");
     assert_eq!(std::fs::read_to_string(&index).expect("the index"), alone);
 
+    h.finish(grid).await;
+}
+
+/// The row of `session` in the rows every window heard last.
+fn heard_row(h: &Harness, session: SessionId) -> serde_json::Value {
+    let lists = h.events(crate::app::events::SESSIONS_CHANGED);
+    let rows = lists.last().and_then(serde_json::Value::as_array);
+    rows.and_then(|rows| rows.iter().find(|row| row["id"] == json!(session)))
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn every_window_hears_a_row_follow_a_connect_a_login_a_switch_and_a_disconnect() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until("the login on the row", |h| {
+        let row = heard_row(h, h.first);
+        row["connected"] == json!(true) && row["character"] == json!("Tester")
+    })
+    .await;
+    let row = heard_row(&h, h.first);
+    assert_eq!(
+        (&row["host"], &row["port"], &row["profile"]),
+        (
+            &json!("127.0.0.1"),
+            &json!(h.port),
+            &json!(DEFAULT_PROFILE_NAME)
+        )
+    );
+
+    let session = h.state.selected_session();
+    crate::profile::switch::apply_profile_switch(h.app.handle(), &h.state, &session, "Healer")
+        .await
+        .expect("the switch");
+    assert_eq!(heard_row(&h, h.first)["profile"], json!("Healer"));
+
+    // The row keeps where the session last connected.
+    h.disconnect().await;
+    let row = heard_row(&h, h.first);
+    assert_eq!(
+        (&row["connected"], &row["character"], &row["port"]),
+        (&json!(false), &serde_json::Value::Null, &json!(h.port))
+    );
     h.finish(grid).await;
 }
 
