@@ -169,5 +169,9 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         scripts::plugin_set_enabled,
         scripts::plugin_reload,
         scripts::plugin_reveal,
+        scripts::plugin_install_check,
+        scripts::plugin_install,
+        scripts::plugin_export,
+        scripts::plugin_remove,
     ]
 }
