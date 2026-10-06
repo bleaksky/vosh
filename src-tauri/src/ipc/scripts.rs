@@ -6,7 +6,7 @@
 //! as its session sees it then.
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tracing::warn;
 use vosh_script::{Owner, StopReason};
 
@@ -318,11 +318,11 @@ pub(crate) async fn plugin_export<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<String, String> {
-    let downloads = app
-        .path()
-        .download_dir()
-        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
-    let path = archive::export(&plugins_dir_of(&state)?, &name, &downloads)?;
+    let path = archive::export(
+        &plugins_dir_of(&state)?,
+        &name,
+        &super::downloads_dir(&app)?,
+    )?;
     Ok(path
         .file_name()
         .map(|file| file.to_string_lossy().into_owned())

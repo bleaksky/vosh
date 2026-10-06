@@ -20,6 +20,17 @@ pub(crate) mod updater;
 pub(crate) mod windows;
 pub(crate) mod wizard;
 
+/// Your Downloads folder, where Export to Downloads saves a profile or a
+/// plugin, or the sentence a command returns when the system names none.
+pub(crate) fn downloads_dir<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    app.path()
+        .download_dir()
+        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())
+}
+
 /// Every command the page can invoke, routed by its function name. The
 /// IPC contract test reads this list, so a command the page calls and
 /// this list leaves out fails a test, not the app.

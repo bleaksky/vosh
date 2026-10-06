@@ -320,19 +320,7 @@ pub(crate) async fn export_text(
 /// or `Ilsabet profile (2).toml` and on when that file is there, so an
 /// export never replaces a file you already have.
 pub(crate) fn export_path(dir: &Path, name: &str) -> PathBuf {
-    let stem = format!("{} profile", display_name(name));
-    let first = dir.join(format!("{stem}.toml"));
-    if !first.exists() {
-        return first;
-    }
-    let mut n = 2u32;
-    loop {
-        let path = dir.join(format!("{stem} ({n}).toml"));
-        if !path.exists() {
-            return path;
-        }
-        n += 1;
-    }
+    crate::disk::paths::export_path(dir, &format!("{} profile", display_name(name)), "toml")
 }
 
 #[cfg(test)]
