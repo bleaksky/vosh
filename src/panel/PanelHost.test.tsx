@@ -27,6 +27,8 @@ vi.mock('./panelLayoutStore', () => ({
   setPaneTree: vi.fn(),
 }));
 vi.mock('./usePaneMins', () => ({ usePaneMins: () => ({}) }));
+// A Lua pane's body reads the session stores, which LuaPane.test covers.
+vi.mock('./lua/LuaPane', () => ({ LuaPane: () => null }));
 vi.mock('./VitalsFooter', async () => {
   const { useContext } = await import('react');
   const { PaneTextSizeContext } = await import('./paneTextSize');

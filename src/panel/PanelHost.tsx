@@ -22,6 +22,7 @@ import { AffectsPane } from './affects/AffectsPane';
 import { ChatPane } from './chat/ChatPane';
 import { GroupPane } from './group/GroupPane';
 import { ImmPane } from './imm/ImmPane';
+import { LuaPane } from './lua/LuaPane';
 import { MapPane } from './map/MapPane';
 import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
@@ -140,7 +141,7 @@ export function PanelHost({
               }}
             >
               <PaneLeafContext.Provider value={leaf}>
-                {isPaneType(leaf.pane) ? PANES[leaf.pane]() : null}
+                {isPaneType(leaf.pane) ? PANES[leaf.pane]() : <LuaPane />}
               </PaneLeafContext.Provider>
             </section>
           ))}

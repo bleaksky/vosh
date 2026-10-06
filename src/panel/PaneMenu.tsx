@@ -22,7 +22,7 @@ import { useAffectsDisplay } from '../stores/config/affectsDisplayStore';
 import { useChatColors } from '../stores/config/chatColorsStore';
 import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
-import { paneRef, splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
+import { LUA_PANE, paneRef, splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
@@ -50,7 +50,9 @@ import { PANE_LABELS, offeredPaneTypes, paneLabel } from './paneTypes';
 // no marker. The hours are numbers, typed in Settings and never picked
 // in a menu. The Chat pane adds Channel colors, a submenu of the eleven
 // channels the game sends, each opening Default and the theme's 16 ANSI
-// colors with a check on the current pick, then Reset all. A pick saves
+// colors with a check on the current pick, then Reset all. A Lua pane
+// adds Edit with its plugin's name, which opens that plugin under
+// Scripts in Settings (Scripts and Panels board 10). A pick saves
 // alone for the profile and the pane follows at once. Closing a pane
 // loses nothing, so it carries no destructive color. A split the panel
 // has no room for, with every pane at its minimum at your panel size,
@@ -348,6 +350,22 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           <>
             <MenuSeparator />
             {submenuRow('colors', false)}
+          </>
+        )}
+        {leaf.pane === LUA_PANE && leaf.props.plugin && (
+          <>
+            <MenuSeparator />
+            <MenuItem
+              onHover={closeSub}
+              onFocus={closeSub}
+              onSelect={run(() =>
+                openSettingsTab(
+                  formatSettingsTarget({ group: 'scripts', section: leaf.props.plugin }),
+                ),
+              )}
+            >
+              {`Edit ${leaf.props.plugin} in Scripts…`}
+            </MenuItem>
           </>
         )}
         <MenuSeparator />

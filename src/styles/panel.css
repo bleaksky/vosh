@@ -416,6 +416,33 @@
   color: var(--danger-text);
 }
 
+/* ── Lua panes ───────────────────────────────────────────────────── */
+
+/* A line a plugin draws, in the game face like chat, its colors on the
+   spans LuaPane sets. A long line wraps. */
+.pane-lua-line {
+  min-height: var(--mud-row);
+  padding: round(3px * var(--mud-scale), 1px) 12px round(3px * var(--mud-scale), 1px) 18px;
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--text);
+}
+
+/* A rule between blocks, the hairline of the Affects pane. */
+.pane-lua-rule {
+  height: 1px;
+  margin: round(4px * var(--mud-scale), 1px) 12px round(4px * var(--mud-scale), 1px) 18px;
+  background: var(--divider);
+}
+
+/* Close pane under the note of a plugin you removed. */
+.pane-lua-close {
+  padding: 6px 12px 0 18px;
+}
+
 /* ── Chat ────────────────────────────────────────────────────────── */
 
 /* Bottom anchored: the log's top margin soaks up the free space until
