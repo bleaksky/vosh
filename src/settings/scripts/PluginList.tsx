@@ -14,6 +14,7 @@ import { errorText } from '../../lib/text';
 import { Button, Card, IconButton, MoreIcon, PlusIcon, Section, Toggle } from '../../ui';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import type { MenuCloseReason, MenuPlacement } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 import { InstallDialog } from './InstallDialog';
 import { PluginMenu } from './PluginMenu';
 import { droppedPackage, zipPackage } from './pluginPackage';
@@ -144,11 +145,7 @@ export function PluginList({ plugins, onPlugins, onError, onChanged, onNew, onOp
   };
 
   const openMenu = (name: string, button: HTMLButtonElement | null, point?: MenuPlacement) => {
-    let at = point;
-    if (!at && button) {
-      const r = button.getBoundingClientRect();
-      at = { x: r.left, y: r.bottom + 4, flipX: r.right, flipY: r.top - 4 };
-    }
+    const at = point ?? (button && menuBelow(button.getBoundingClientRect()));
     if (at) setMenu({ name, at, anchor: button });
   };
 
