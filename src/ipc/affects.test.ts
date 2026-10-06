@@ -12,7 +12,7 @@ import {
   setAffectsDisplay,
 } from './affects';
 import { normalizeUiConfig, setUiFields, type RawUiConfig, type UiFields } from './uiConfig';
-import { broadcastUiConfigChanges } from './uiConfigSave';
+import { broadcastUiConfigChanges } from './uiConfigBroadcast';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

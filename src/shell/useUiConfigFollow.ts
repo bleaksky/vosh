@@ -25,7 +25,7 @@ import {
   type TerminalLineHeight,
   type UiConfig,
 } from '../ipc/uiConfig';
-import { followReplacedUiConfig } from '../ipc/uiConfigSave';
+import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { resolveBlinkText, useReduceMotion } from '../lib/blink';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';

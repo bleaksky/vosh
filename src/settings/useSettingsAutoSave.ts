@@ -7,7 +7,7 @@ import {
   type UiConfig,
   type UiFields,
 } from '../ipc/uiConfig';
-import { broadcastUiConfigChanges } from '../ipc/uiConfigSave';
+import { broadcastUiConfigChanges } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { applyThemePrefs, getThemePrefs } from '../theme/theme';
 import type { SetUiConfig } from './pageTypes';

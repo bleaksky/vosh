@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
-import { followReplacedUiConfig } from '../ipc/uiConfigSave';
+import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeHelpFind, subscribeHelpGoto } from '../ipc/windows';
 import {
