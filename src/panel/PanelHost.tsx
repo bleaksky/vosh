@@ -29,6 +29,7 @@ import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { paneLabel } from './paneTypes';
+import { chatFilterLabel, chatFilterOf, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
 
@@ -124,6 +125,13 @@ export function PanelHost({
     [root, box.w, box.h, mins, textSize],
   );
   const leaves = geometry ? [...geometry.leaves].sort((a, b) => domOrder(a.leaf, b.leaf)) : [];
+  // With two or more Chat panes, each one's label names its filter, as
+  // Chat, tell, so a screen reader tells them apart.
+  const chatsNamed = chatLeaves(root).length > 1;
+  const sectionLabel = (leaf: PaneLeaf) =>
+    chatsNamed && leaf.pane === 'chat'
+      ? `${paneLabel(leaf)}, ${chatFilterLabel(chatFilterOf(leaf))}`
+      : paneLabel(leaf);
 
   return (
     <PaneTextSizeContext.Provider value={textSize}>
@@ -133,7 +141,7 @@ export function PanelHost({
             <section
               key={leafKey(leaf)}
               className={`pane pane-${leaf.pane}`}
-              aria-label={paneLabel(leaf)}
+              aria-label={sectionLabel(leaf)}
               style={{
                 left: rect.x,
                 top: rect.y,
