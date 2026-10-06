@@ -31,6 +31,10 @@ pub(crate) struct PluginRow {
     pub(crate) on: bool,
     /// Why Vosh stopped it in the session, while it holds it off.
     pub(crate) stopped: Option<PluginStop>,
+    /// Its name breaks the rule New plugin shows, which only a folder
+    /// you named by hand can do. It loads all the same, and the page
+    /// cannot open it but can turn it off.
+    pub(crate) misnamed: bool,
 }
 
 /// Why Vosh stopped a plugin, as the stop lines of the Scripts design
@@ -58,7 +62,8 @@ impl From<StopReason> for PluginStop {
 
 /// The plugins in your plugins folder as `session` sees them, sorted by
 /// name. A folder whose name breaks the rule New plugin shows, which only
-/// a hand edit makes, still loads at launch, but the list leaves it out.
+/// a hand edit makes, still loads at launch, so the list shows it too,
+/// as one the page cannot open.
 async fn plugin_rows(state: &SharedState, session: &Session) -> Result<Vec<PluginRow>, String> {
     let plugins_dir = plugins_dir_of(state)?;
     // The manager is held alone, and lets go before the profile locks.
@@ -75,12 +80,12 @@ async fn plugin_rows(state: &SharedState, session: &Session) -> Result<Vec<Plugi
     let c = session.connection.lock();
     Ok(manifests
         .into_iter()
-        .filter(|manifest| plugin_name_ok(&manifest.name))
         .map(|manifest| {
             let owner = Owner::Plugin(manifest.name.clone());
             PluginRow {
                 on: enabled.contains(&manifest.name),
                 stopped: c.script.stop_reason(&owner).map(PluginStop::from),
+                misnamed: !plugin_name_ok(&manifest.name),
                 name: manifest.name,
                 version: manifest.version,
                 author: manifest.author,
@@ -160,7 +165,8 @@ pub(crate) async fn plugin_save<R: tauri::Runtime>(
 
 /// Turn the plugin `name` on or off in the profile `session` plays, which
 /// loads or unloads it in every session on that profile, and save the
-/// profile.
+/// profile. Off takes any name, so a plugin whose folder you named by hand
+/// can always be turned off.
 #[tauri::command]
 pub(crate) async fn plugin_set_enabled<R: tauri::Runtime>(
     app: AppHandle<R>,

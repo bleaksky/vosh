@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use vosh_script::{Action, Owner, ScriptOutcome};
 
-use super::folder::{self, plugin_name_ok, NAME_RULE};
+use super::folder;
 use super::{
     follow_profile_plugins, left_off, load_plugin, plugin_off, plugins_dir_of, read_plugin,
 };
@@ -32,7 +32,10 @@ use crate::sessions::Session;
 /// list, and the others keep their order. Every session on the profile
 /// then follows the list, as a switch does, so the plugin loads or
 /// unloads in each, and each gets what its own load asks for. A plugin
-/// Vosh stopped in a session stays off there, on or not.
+/// Vosh stopped in a session stays off there, on or not. Only a name
+/// that keeps the rule turns on. Any name turns off, since it only
+/// leaves the list, so a plugin whose folder you named by hand, which
+/// launch loads all the same, never runs on beyond your reach.
 pub(crate) async fn set_enabled<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -43,8 +46,6 @@ pub(crate) async fn set_enabled<R: tauri::Runtime>(
     let plugins_dir = plugins_dir_of(state)?;
     if on {
         folder::existing(&plugins_dir, name)?;
-    } else if !plugin_name_ok(name) {
-        return Err(NAME_RULE.to_string());
     }
     let sessions = state.all_sessions();
     let (open, results) = {

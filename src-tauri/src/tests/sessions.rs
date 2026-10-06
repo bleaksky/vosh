@@ -2165,6 +2165,48 @@ async fn turning_a_plugin_off_takes_back_its_triggers_timers_and_aliases() {
     h.finish(grid).await;
 }
 
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plugin_folder_named_by_hand_shows_on_the_list_and_turns_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, plugins) = harness_with_plugins().await;
+    // Made by hand, as Help once told you to, with a hyphen New plugin
+    // refuses. Launch loads it all the same.
+    write_plugin(&plugins, "weather-pane", KEEPER);
+    h.state.selected_profile().await.plugins.enabled = vec!["weather-pane".into()];
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
+    let one = h.first;
+    assert_eq!(plugins_of(&h, one), ["weather-pane"]);
+
+    let row = plugin_row(&h, "weather-pane", one).await;
+    assert!(row.on && row.misnamed, "{row:?}");
+    let rows = switch_plugin(&h, "weather-pane", false, one).await;
+    let row = rows
+        .iter()
+        .find(|row| row.name == "weather-pane")
+        .expect("its row");
+    assert!(!row.on, "{row:?}");
+    assert_eq!(registered(&h, one).await, (Vec::new(), 0, Vec::new()));
+    let leftover = &plugins_of(&h, one);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // It turns on again only once its folder keeps the rule.
+    let refused = crate::ipc::scripts::plugin_set_enabled(
+        h.app.handle().clone(),
+        h.app.state(),
+        "weather-pane".into(),
+        true,
+        Some(one),
+    )
+    .await;
+    assert_eq!(
+        refused,
+        Err(crate::app::plugins::folder::NAME_RULE.to_string())
+    );
+
+    h.finish(grid).await;
+}
+
 /// `wait_full` as the Scripts design writes it, which never returns
 /// while you are hurt.
 const WAIT_FULL: &str = "-- wait_full
