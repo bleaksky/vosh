@@ -14,6 +14,11 @@ import { SessionSidebar } from './SessionSidebar';
  *  nothing for reads quiet. */
 const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
 
+/** Whether you hold ⌘, faked. */
+const mod = vi.hoisted(() => ({ held: false }));
+
+vi.mock('./useModHeld', () => ({ useModHeld: () => mod.held }));
+
 vi.mock('../stores/session/sessionRowStore', async (actual) => {
   const store = await actual<typeof import('../stores/session/sessionRowStore')>();
   return {
@@ -57,7 +62,11 @@ function draw(rows: SessionRow[], selected: number): string {
 const buttons = (html: string) =>
   html.match(/<button[^>]*class="shell-sessions-row[^"]*"[^]*?<\/button>/g) ?? [];
 
-afterEach(() => states.clear());
+afterEach(() => {
+  states.clear();
+  mod.held = false;
+  vi.unstubAllGlobals();
+});
 
 describe('the sessions sidebar', () => {
   const rows = [
@@ -143,5 +152,41 @@ describe('the sessions sidebar', () => {
     expect(off).toContain('class="shell-sessions-row is-off"');
     expect(off).toContain('<span class="shell-sessions-meta">1825</span>');
     expect(off).not.toContain('shell-sessions-glyph');
+  });
+
+  it('numbers the first nine rows while you hold ⌘, in place of the meta and the glyph', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh' });
+    const many = [
+      row(1, { character: 'Tolliver' }),
+      row(2, { character: 'Orla', port: 1825 }),
+      ...Array.from({ length: 8 }, (_, i) => row(i + 3, { port: i % 2 ? 1825 : 1848 })),
+    ];
+    states.set(4, { link: 'failed' });
+    const quiet = buttons(draw(many, 1));
+    expect(quiet.join('')).not.toContain('is-key');
+    mod.held = true;
+    const numbered = buttons(draw(many, 1));
+    numbered.slice(0, 9).forEach((button, i) => {
+      expect(button).toMatch(
+        new RegExp(`</span><span class="shell-sessions-meta is-key">⌘${i + 1}</span></button>$`),
+      );
+      expect(button).not.toContain('shell-sessions-glyph');
+    });
+    // Orla's port and the failed row's triangle give way to the number.
+    expect(quiet[1]).toContain('<span class="shell-sessions-meta">1825</span>');
+    expect(numbered[1]).not.toContain('<span class="shell-sessions-meta">1825</span>');
+    expect(quiet[3]).toContain('shell-sessions-glyph is-triangle');
+    // The tenth row has no key and keeps its port.
+    expect(numbered[9]).not.toContain('is-key');
+    expect(numbered[9]).toContain(
+      '<span class="shell-sessions-world">The Forsaken Lands</span>1825',
+    );
+  });
+
+  it('names the key with Ctrl on Windows and Linux', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' });
+    mod.held = true;
+    const [tolliver] = buttons(draw(rows, 1));
+    expect(tolliver).toContain('<span class="shell-sessions-meta is-key">Ctrl+1</span>');
   });
 });

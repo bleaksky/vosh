@@ -205,6 +205,35 @@ describe('sessionsStore', () => {
     expect(store.othersOnProfile(9)).toEqual([]);
   });
 
+  it('steps round the ends of the list, as otty does', async () => {
+    const maren = row(3, 'Maren', 1848);
+    commands.set('sessions_list', () => [TOLLIVER, ORLA, maren]);
+    const store = await load();
+    expect(store.sessionStep(1)).toBe(2);
+    expect(store.sessionStep(-1)).toBe(3);
+    fire('vosh://sessions-changed', [
+      { ...TOLLIVER, selected: false },
+      ORLA,
+      { ...maren, selected: true },
+    ]);
+    expect(store.sessionStep(1)).toBe(1);
+    expect(store.sessionStep(-1)).toBe(2);
+  });
+
+  it('steps nowhere with one session', async () => {
+    commands.set('sessions_list', () => [TOLLIVER]);
+    const store = await load();
+    expect(store.sessionStep(1)).toBeNull();
+    expect(store.sessionStep(-1)).toBeNull();
+  });
+
+  it('finds a session by its place in the list, from 1', async () => {
+    const store = await load();
+    expect(store.sessionAt(1)).toBe(1);
+    expect(store.sessionAt(2)).toBe(2);
+    expect(store.sessionAt(3)).toBeNull();
+  });
+
   it('tells a selection listener only when the selection moves', async () => {
     const store = await load();
     const moved = vi.fn();

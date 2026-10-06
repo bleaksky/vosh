@@ -7,6 +7,7 @@ import {
   pageHasSelection,
   resetAppMenuState,
   resolveShortcut,
+  sessionKeyOfMacro,
   setAppMenuState,
   type MenuStateInput,
 } from './appMenu';
@@ -21,27 +22,122 @@ vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ setTheme: () => Promise.resolve() }),
 }));
 
+/** A press as a US layout types it: the key, then the physical key. */
+const press = (key: string, code: string, shift = false) => ({ key, code, shift });
+const letter = (key: string, shift = false) => press(key, `Key${key.toUpperCase()}`, shift);
+
 describe('resolveShortcut', () => {
   it('maps each window shortcut to its command', () => {
-    expect(resolveShortcut('k', false)).toEqual({ id: 'palette' });
-    expect(resolveShortcut('f', false)).toEqual({ id: 'find' });
-    expect(resolveShortcut('r', false)).toEqual({ id: 'connect' });
-    expect(resolveShortcut(',', false)).toEqual({ id: 'settings' });
-    expect(resolveShortcut('/', false)).toEqual({ id: 'help' });
-    expect(resolveShortcut('\\', false)).toEqual({ id: 'split' });
-    expect(resolveShortcut('l', true)).toEqual({ id: 'panel' });
+    const run = (id: string) => ({ kind: 'run', id });
+    expect(resolveShortcut(letter('k'))).toEqual(run('palette'));
+    expect(resolveShortcut(letter('f'))).toEqual(run('find'));
+    expect(resolveShortcut(letter('r'))).toEqual(run('connect'));
+    expect(resolveShortcut(press(',', 'Comma'))).toEqual(run('settings'));
+    expect(resolveShortcut(press('/', 'Slash'))).toEqual(run('help'));
+    expect(resolveShortcut(press('\\', 'Backslash'))).toEqual(run('split'));
+    expect(resolveShortcut(letter('l', true))).toEqual(run('panel'));
+  });
+
+  it('maps the session keys, with Close window on Shift', () => {
+    const run = (id: string) => ({ kind: 'run', id });
+    expect(resolveShortcut(letter('t'))).toEqual(run('session-new'));
+    expect(resolveShortcut(letter('w'))).toEqual(run('session-close'));
+    expect(resolveShortcut(letter('w', true))).toEqual(run('close-window'));
+  });
+
+  it('steps on the physical bracket keys, where Shift with ] types }', () => {
+    expect(resolveShortcut(press('}', 'BracketRight', true))).toEqual({
+      kind: 'run',
+      id: 'session-next',
+    });
+    expect(resolveShortcut(press('{', 'BracketLeft', true))).toEqual({
+      kind: 'run',
+      id: 'session-previous',
+    });
+    // A layout that types ] on another key steps from the bracket keys
+    // alone, and the bracket keys step only with Shift.
+    expect(resolveShortcut(press(']', 'Digit9', true))).toBeNull();
+    expect(resolveShortcut(press(']', 'BracketRight'))).toBeNull();
+  });
+
+  it('goes to a session by its place from the digits 1 to 9', () => {
+    for (let place = 1; place <= 9; place += 1) {
+      expect(resolveShortcut(press(String(place), `Digit${place}`))).toEqual({
+        kind: 'goto',
+        place,
+      });
+    }
+    // The key a layout types on the digit row does not matter, as on
+    // AZERTY, where the 1 key types &.
+    expect(resolveShortcut(press('&', 'Digit1'))).toEqual({ kind: 'goto', place: 1 });
+    expect(resolveShortcut(press('0', 'Digit0'))).toBeNull();
+    expect(resolveShortcut(press('!', 'Digit1', true))).toBeNull();
+    expect(resolveShortcut(press('1', 'Numpad1'))).toBeNull();
+  });
+
+  it('leaves a session key to a macro the profile binds to it', () => {
+    const bound = () => true;
+    expect(resolveShortcut(press('1', 'Digit1'), bound)).toEqual({ kind: 'macro' });
+    expect(resolveShortcut(letter('t'), bound)).toEqual({ kind: 'macro' });
+    expect(resolveShortcut(letter('w'), bound)).toEqual({ kind: 'macro' });
+    expect(resolveShortcut(letter('w', true), bound)).toEqual({ kind: 'macro' });
+    expect(resolveShortcut(press('}', 'BracketRight', true), bound)).toEqual({ kind: 'macro' });
+    // Every other app key wins over a macro, as before.
+    expect(resolveShortcut(letter('k'), bound)).toEqual({ kind: 'run', id: 'palette' });
+    expect(resolveShortcut(letter('r'), bound)).toEqual({ kind: 'run', id: 'connect' });
+  });
+
+  it('asks after a macro only for a session key', () => {
+    const bound = vi.fn(() => false);
+    resolveShortcut(letter('k'), bound);
+    resolveShortcut(letter('c'), bound);
+    expect(bound).not.toHaveBeenCalled();
+    resolveShortcut(press('2', 'Digit2'), bound);
+    expect(bound).toHaveBeenCalledTimes(1);
   });
 
   it('takes Shift+R without running anything, so the page never reloads', () => {
-    expect(resolveShortcut('r', true)).toEqual({ id: null });
+    expect(resolveShortcut(letter('r', true))).toEqual({ kind: 'take' });
   });
 
   it('leaves other keys to the page and the menu bar', () => {
-    expect(resolveShortcut('l', false)).toBeNull();
-    expect(resolveShortcut('k', true)).toBeNull();
-    // Copy and Close window belong to the fields and the menu bar.
-    expect(resolveShortcut('c', false)).toBeNull();
-    expect(resolveShortcut('w', false)).toBeNull();
+    expect(resolveShortcut(letter('l'))).toBeNull();
+    expect(resolveShortcut(letter('k', true))).toBeNull();
+    // Copy belongs to the fields and the menu bar.
+    expect(resolveShortcut(letter('c'))).toBeNull();
+    expect(resolveShortcut(letter('t', true))).toBeNull();
+  });
+});
+
+describe('sessionKeyOfMacro', () => {
+  it('finds the session key a macro key shares on macOS', () => {
+    expect(sessionKeyOfMacro('Meta+1', true)).toEqual({ kind: 'goto', place: 1 });
+    expect(sessionKeyOfMacro('Meta+9', true)).toEqual({ kind: 'goto', place: 9 });
+    expect(sessionKeyOfMacro('Meta+T', true)).toEqual({ kind: 'run', id: 'session-new' });
+    expect(sessionKeyOfMacro('Meta+W', true)).toEqual({ kind: 'run', id: 'session-close' });
+    expect(sessionKeyOfMacro('Shift+Meta+W', true)).toEqual({ kind: 'run', id: 'close-window' });
+    // Shift with ] types } on a US layout, and either reads as the key.
+    expect(sessionKeyOfMacro('Shift+Meta+}', true)).toEqual({ kind: 'run', id: 'session-next' });
+    expect(sessionKeyOfMacro('Shift+Meta+]', true)).toEqual({ kind: 'run', id: 'session-next' });
+    expect(sessionKeyOfMacro('Shift+Meta+{', true)).toEqual({
+      kind: 'run',
+      id: 'session-previous',
+    });
+    // Ctrl belongs to your macros on macOS, and no app key takes it.
+    expect(sessionKeyOfMacro('Ctrl+1', true)).toBeNull();
+    expect(sessionKeyOfMacro('Meta+0', true)).toBeNull();
+    expect(sessionKeyOfMacro('Meta+K', true)).toBeNull();
+    expect(sessionKeyOfMacro('F1', true)).toBeNull();
+  });
+
+  it('reads Ctrl on Windows and Linux', () => {
+    expect(sessionKeyOfMacro('Ctrl+2', false)).toEqual({ kind: 'goto', place: 2 });
+    expect(sessionKeyOfMacro('Ctrl+Shift+W', false)).toEqual({ kind: 'run', id: 'close-window' });
+    expect(sessionKeyOfMacro('Ctrl+Shift+[', false)).toEqual({
+      kind: 'run',
+      id: 'session-previous',
+    });
+    expect(sessionKeyOfMacro('Meta+1', false)).toBeNull();
   });
 });
 

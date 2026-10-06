@@ -24,7 +24,7 @@ import {
 import { useCaret } from './useCaret';
 import { useCommandHistory } from './useCommandHistory';
 import { useInputPreferences } from './useInputPreferences';
-import { useMacroKeys } from './useMacroKeys';
+import type { MacroKeys } from './useMacroKeys';
 import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
@@ -41,6 +41,8 @@ export interface InputHandle {
 
 interface Props {
   enabled: boolean;
+  /** The selected session's macros, which keys fire here. */
+  macroKeys: MacroKeys;
   /** A send to `session` failed. */
   onError?: (message: string, session: number) => void;
   /** Text the command line writes into the terminal of `session`, the
@@ -99,6 +101,7 @@ function looksLikeChat(line: string): boolean {
 export const Input = forwardRef<InputHandle, Props>(function Input(
   {
     enabled,
+    macroKeys,
     onError,
     onLocalEcho,
     onScrollTerminal,
@@ -203,8 +206,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     echoMacrosRef,
     echoCaretRef,
   } = useInputPreferences();
-
-  const macroMapRef = useMacroKeys();
 
   useImperativeHandle(
     ref,
@@ -366,11 +367,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // regardless of any other handler. allowPlainPrintable matches
     // what the Settings capture path uses, so a binding to a bare
     // character (e.g. "\") fires here too. The lookup is gated by
-    // macroMapRef.current.get(canonical), so unbound printable keys
+    // macroKeys.command(canonical), so unbound printable keys
     // still fall through to normal typing.
     const canonical = canonicalKeyFromEvent(event, { allowPlainPrintable: true });
     if (canonical) {
-      const command = macroMapRef.current.get(canonical);
+      const command = macroKeys.command(canonical);
       if (command) {
         event.preventDefault();
         // Echo the macro's command like typed input (same color, same
