@@ -62,7 +62,7 @@ impl From<StopReason> for PluginStop {
 async fn plugin_rows(state: &SharedState, session: &Session) -> Result<Vec<PluginRow>, String> {
     let plugins_dir = plugins_dir_of(state)?;
     // The manager is held alone, and lets go before the profile locks.
-    let records = {
+    let manifests = {
         let mut manager = state.plugins.lock().await;
         manager.set_plugins_dir(plugins_dir);
         manager.discover().map_err(|e| {
@@ -73,11 +73,10 @@ async fn plugin_rows(state: &SharedState, session: &Session) -> Result<Vec<Plugi
     };
     let enabled = session.lock_profile().await.plugins.enabled.clone();
     let c = session.connection.lock();
-    Ok(records
+    Ok(manifests
         .into_iter()
-        .filter(|record| plugin_name_ok(&record.manifest.name))
-        .map(|record| {
-            let manifest = record.manifest;
+        .filter(|manifest| plugin_name_ok(&manifest.name))
+        .map(|manifest| {
             let owner = Owner::Plugin(manifest.name.clone());
             PluginRow {
                 on: enabled.contains(&manifest.name),

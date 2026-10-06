@@ -356,8 +356,8 @@ impl ProfileConfig {
         // `hand_to_connection` hands the prompt engine.
         profile.prompt = self.prompt_config();
 
-        // Plugin enabled-set is persisted; the actual load happens in the
-        // PluginManager wired into AppState.
+        // The list of plugins the profile turns on. They load from it in
+        // src-tauri/src/app/plugins.rs.
         profile.plugins = PluginsPersist {
             enabled: self.plugins.enabled.clone(),
         };

@@ -69,7 +69,7 @@ async fn two_sessions_with_plugin(name: &str, body: &str) -> (Harness, SessionId
     write_plugin(&plugins, name, body);
     h.state.selected_profile().await.plugins.enabled = vec![name.into()];
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     log_in_two_sessions(h).await
 }
 
@@ -1035,7 +1035,7 @@ async fn what_lua_sets_on_a_login_packet_saves_the_profile_the_login_leaves() {
     );
     h.state.selected_profile().await.plugins.enabled = vec!["greeter".into()];
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     // The second session keeps Default open, so the switch does not save
     // it as it leaves.
     let (one, two) = (h.first, h.open_session().await);
@@ -1110,7 +1110,7 @@ async fn a_login_moves_its_own_session_and_a_login_in_the_other_joins_that_profi
         p.vars.set("camp", "Ford");
     }
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     let (one, two) = (h.first, h.open_session().await);
     let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
 
@@ -2090,7 +2090,7 @@ async fn a_plugin_turned_on_in_one_session_loads_in_every_session_on_its_profile
     write_plugin(&plugins, "keeper", KEEPER);
     h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     let (one, two) = (h.first, h.open_session().await);
     let three = open_session_on(&h, "Healer").await;
 
