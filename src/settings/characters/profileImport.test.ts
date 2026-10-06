@@ -154,6 +154,65 @@ describe('the line under the list once the import is done', () => {
     );
   });
 
+  it('says the catalog kept your own item where the file had one of the same name or key', () => {
+    const spam = { kind: 'trigger', name: 'spam' } as const;
+    const kk = { kind: 'alias', name: 'kk' } as const;
+    const f2 = { kind: 'macro', name: 'F2' } as const;
+    expect(
+      importedSentence(
+        FILE,
+        'new',
+        result({ catalog_group: 'Healer profile', clashes: [spam, kk, f2] }),
+        [],
+      ),
+    ).toBe(
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had the trigger spam, the alias kk, and the macro F2, so Vosh kept yours.',
+    );
+    // Two of a kind share it, and a file that held only clashes joined
+    // nothing.
+    expect(
+      importedSentence(
+        FILE,
+        'new',
+        result({ clashes: [spam, { kind: 'trigger', name: 'tells' }] }),
+        ['Orla'],
+      ),
+    ).toBe(
+      'Vosh added Healer 2 from Healer profile.toml. You already had the triggers spam and tells, so Vosh kept yours.',
+    );
+    // A Replace says so before the profile keeps its world.
+    expect(
+      importedSentence(
+        FILE,
+        'replace',
+        result({ name: 'Healer', catalog_group: 'Healer profile', clashes: [f2] }),
+        [],
+      ),
+    ).toBe(
+      'Vosh replaced Healer with Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had the macro F2, so Vosh kept yours. Healer keeps its world and characters.',
+    );
+  });
+
+  it('counts the clashes once there are more than three', () => {
+    const triggers = ['spam', 'tells', 'fog', 'comms'].map((name) => ({
+      kind: 'trigger' as const,
+      name,
+    }));
+    expect(
+      importedSentence(
+        FILE,
+        'new',
+        result({
+          catalog_group: 'Healer profile',
+          clashes: [...triggers, { kind: 'macro', name: 'F2' }],
+        }),
+        ['Orla'],
+      ),
+    ).toBe(
+      'Vosh added Healer 2 from Healer profile.toml. Its triggers, aliases and macros joined the catalog in the group Healer profile. You already had 4 of its triggers and 1 of its macros, so Vosh kept yours.',
+    );
+  });
+
   it('keeps the login out of a kept character when the new profile took another', () => {
     expect(
       importedSentence(

@@ -113,6 +113,31 @@ function byProfile<T extends { character: string; profile: string }>(
   return [...groups];
 }
 
+/** The kinds of item a clash names, in the order Rust lists them. */
+const CLASH_KINDS = ['trigger', 'alias', 'macro'] as const;
+const CLASH_PLURALS = { trigger: 'triggers', alias: 'aliases', macro: 'macros' } as const;
+
+/** How many clashes the line names before it counts them instead, so a
+ *  file you import twice never reads as a list of everything in it. */
+const NAMED_CLASHES = 3;
+
+/** The sentence that says the catalog kept your own item wherever the
+ *  file had one of the same name, or a macro on the same key (Q26). */
+function clashSentence(clashes: ImportResult['clashes']): string {
+  const kinds = CLASH_KINDS.map((kind) => ({
+    kind,
+    names: clashes.filter((c) => c.kind === kind).map((c) => c.name),
+  })).filter(({ names }) => names.length > 0);
+  const parts =
+    clashes.length <= NAMED_CLASHES
+      ? kinds.map(
+          ({ kind, names }) =>
+            `the ${names.length === 1 ? kind : CLASH_PLURALS[kind]} ${listJoin(names)}`,
+        )
+      : kinds.map(({ kind, names }) => `${names.length} of its ${CLASH_PLURALS[kind]}`);
+  return `You already had ${listJoin(parts)}, so Vosh kept yours.`;
+}
+
 /** The line under the list once an import of `fileName` is done.
  *  `logins` are the characters you left on, so a new profile that took
  *  none starts with its login off. */
@@ -133,6 +158,7 @@ export function importedSentence(
       `Its triggers, aliases and macros joined the catalog in the group ${result.catalog_group}.`,
     );
   }
+  if (result.clashes.length > 0) parts.push(clashSentence(result.clashes));
   if (addAs === 'replace') {
     parts.push(`${name} keeps its world and characters.`);
     return parts.join(' ');
