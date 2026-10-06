@@ -19,6 +19,7 @@ mod hook;
 mod library;
 mod limits;
 mod owner;
+mod pane;
 mod pattern;
 mod report;
 mod state;
@@ -36,7 +37,7 @@ use mlua::{Function, Lua, Table, Value};
 use regex::Regex;
 use thiserror::Error;
 
-pub use actions::{Action, Place};
+pub use actions::{Action, PaneBlock, Place};
 use budget::{Budget, Event};
 use env::Envs;
 pub use limits::StopReason;
@@ -129,6 +130,8 @@ struct Called {
     dropped: bool,
     /// The call queued more text than one call may.
     text_dropped: bool,
+    /// The call gave a pane more blocks than one pane shows.
+    blocks_dropped: bool,
 }
 
 /// What became of one handler in an event.
@@ -739,12 +742,11 @@ impl ScriptEngine {
         let took = began.elapsed();
         let memory_error = matches!(&result, Err(err) if limits::is_memory_error(err));
         let stop = self.limits.end(&self.lua, memory_error);
-        let (dropped, text_dropped) = match self.state.cell.lock() {
-            Ok(mut s) => s
-                .call
-                .take()
-                .map_or((false, false), |call| (call.dropped, call.text_dropped)),
-            Err(_) => (false, false),
+        let (dropped, text_dropped, blocks_dropped) = match self.state.cell.lock() {
+            Ok(mut s) => s.call.take().map_or((false, false, false), |call| {
+                (call.dropped, call.text_dropped, call.blocks_dropped)
+            }),
+            Err(_) => (false, false, false),
         };
         Called {
             start,
@@ -753,6 +755,7 @@ impl ScriptEngine {
             error: result.err(),
             dropped,
             text_dropped,
+            blocks_dropped,
         }
     }
 
@@ -790,6 +793,13 @@ impl ScriptEngine {
             outcome.actions.push(Action::Error {
                 owner: owner.clone(),
                 text: report::text_cap_line(owner, site),
+                at: None,
+            });
+        }
+        if called.blocks_dropped {
+            outcome.actions.push(Action::Error {
+                owner: owner.clone(),
+                text: report::pane_cap_line(owner, site),
                 at: None,
             });
         }

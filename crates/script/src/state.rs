@@ -29,6 +29,8 @@ pub(crate) struct CallInfo {
     /// It queued a piece of text past its size limit, or more than
     /// [`CALL_BYTES`] in all.
     pub(crate) text_dropped: bool,
+    /// It gave a pane more than [`crate::limits::PANE_BLOCKS`] blocks.
+    pub(crate) blocks_dropped: bool,
 }
 
 impl CallInfo {
@@ -39,6 +41,7 @@ impl CallInfo {
             bytes: 0,
             dropped: false,
             text_dropped: false,
+            blocks_dropped: false,
         }
     }
 }
@@ -101,6 +104,14 @@ impl StateInner {
     pub(crate) fn drop_long_text(&mut self) {
         if let Some(call) = self.call.as_mut() {
             call.text_dropped = true;
+        }
+    }
+
+    /// Note that the call running now gave a pane more than
+    /// [`crate::limits::PANE_BLOCKS`] blocks, which Vosh dropped past the cap.
+    pub(crate) fn drop_blocks(&mut self) {
+        if let Some(call) = self.call.as_mut() {
+            call.blocks_dropped = true;
         }
     }
 
