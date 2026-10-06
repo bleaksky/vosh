@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsDensity, type VitalsOptions } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import panelCss from '../styles/panel.css?raw';
@@ -36,13 +36,6 @@ const GUARD: CombatOpponent = {
   tank: null,
 };
 
-const DEFAULTS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
-};
-
 function draw(
   options: Partial<VitalsOptions> = {},
   {
@@ -63,7 +56,7 @@ function draw(
       combat={combat}
       density={density}
       fit={fit}
-      options={{ ...DEFAULTS, ...options }}
+      options={{ ...DEFAULT_VITALS_OPTIONS, ...options }}
     />,
   );
 }
@@ -121,7 +114,7 @@ describe('VitalsBlock', () => {
           combat={combat}
           density="rows"
           fit="rows"
-          options={DEFAULTS}
+          options={DEFAULT_VITALS_OPTIONS}
           opponentOnly
         />,
       );
@@ -308,7 +301,7 @@ describe('VitalsBlock', () => {
             combat={null}
             density="rows"
             fit="rows"
-            options={{ ...DEFAULTS, meter }}
+            options={{ ...DEFAULT_VITALS_OPTIONS, meter }}
           />
         </PaneTextSizeContext.Provider>,
       );

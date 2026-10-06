@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import type { CombatHealth } from '../panel/vitalsView';
 import frameCss from '../styles/frame.css?raw';
@@ -47,12 +47,6 @@ const HIDDEN: Vitals = {
   hidden: true,
 };
 const GUARD: CombatHealth = { name: 'Blackwatch Guard', hp_pct: 38 };
-const DEFAULTS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
-};
 
 function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOptions> = {}) {
   return renderToStaticMarkup(
@@ -62,7 +56,7 @@ function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOpt
       target="Blackwatch Guard"
       combat={GUARD}
       {...props}
-      options={{ ...DEFAULTS, ...options }}
+      options={{ ...DEFAULT_VITALS_OPTIONS, ...options }}
     />,
   );
 }

@@ -44,7 +44,6 @@ import {
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
   UI_CONFIG_REPLACED,
-  VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
 import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
@@ -135,15 +134,29 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
   return value === 'bar' || value === 'none' ? value : 'line';
 }
 
-/** The vitals styles the gallery adds to Rows and One line, which stay
- *  in vitals_density. Null draws the density. */
-export const VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
+/** The six styles of the gallery, in its order. Rows and One line are
+ *  the two densities, and vitals_style holds the other four. */
+export const VITALS_STYLES = ['rows', 'line', 'ledger', 'gauges', 'pips', 'text'] as const;
 
 export type VitalsStyle = (typeof VITALS_STYLES)[number];
 
-/** Coerce an unknown vitals style back to null. */
-export function normalizeVitalsStyle(value: unknown): VitalsStyle | null {
-  return VITALS_STYLES.find((style) => style === value) ?? null;
+/** The styles vitals_style saves. Rows and One line stay in
+ *  vitals_density, so a build without styles still reads your look. */
+const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
+
+export type SavedVitalsStyle = (typeof SAVED_VITALS_STYLES)[number];
+
+/** Coerce an unknown saved style back to null, which draws the
+ *  density. */
+export function normalizeVitalsStyle(value: unknown): SavedVitalsStyle | null {
+  return SAVED_VITALS_STYLES.find((style) => style === value) ?? null;
+}
+
+/** The style your vitals draw in, the one you picked or else your
+ *  density, so a player who never picks sees today's look (Vitals
+ *  Styles Q12). */
+export function shownStyle(config: Pick<UiConfig, 'vitals_style' | 'vitals_density'>): VitalsStyle {
+  return config.vitals_style ?? config.vitals_density;
 }
 
 /** Where your vitals show, under the panel's panes or in the status
@@ -226,11 +239,18 @@ export function normalizeVitalsTextPrevious(value: unknown): string[] {
   return kept;
 }
 
-/** The vitals rows that join Density under Layout, Vitals, as one
- *  event payload. The panel footer reads the first three, and the panel
- *  reads the last to drop the footer. The status line reads the values
- *  and the warning, never the meter. */
+/** Every vitals choice the footer, the status line and the menu draw
+ *  from, as one event payload, so a pick moves them together. The
+ *  status line reads the values and the warning, never the meter. Your
+ *  vitals text comes on its own event, rendered (src/ipc/vitals.ts). */
 export interface VitalsOptions {
+  /** The style shown, your pick or else your density. */
+  style: VitalsStyle;
+  place: VitalsPlace;
+  order: Vital[];
+  off: VitalOff[];
+  opponent: VitalsOpponent;
+  colors: VitalsColors;
   values: VitalsValues;
   meter: VitalsMeter;
   /** Warn under two thirds and turn danger under one third, like the
@@ -240,21 +260,53 @@ export interface VitalsOptions {
   hide_when_pinned: boolean;
 }
 
-export const DEFAULT_VITALS_OPTIONS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
+/** What Reset to default under Customize vitals puts back. Every vital
+ *  on in today's order with Default colors, your opponent on top,
+ *  Current and max, Line, and the warning off. Your style, where your
+ *  vitals show and Hide vitals while your prompt is pinned stay as they
+ *  are. */
+export const DEFAULT_VITALS_CUSTOM: Pick<
+  UiConfig,
+  | 'vitals_order'
+  | 'vitals_off'
+  | 'vitals_colors'
+  | 'vitals_opponent'
+  | 'vitals_values'
+  | 'vitals_meter'
+  | 'vitals_warn_thirds'
+> = {
+  vitals_order: [...VITALS],
+  vitals_off: [],
+  vitals_colors: {},
+  vitals_opponent: 'top',
+  vitals_values: 'current-max',
+  vitals_meter: 'line',
+  vitals_warn_thirds: false,
 };
 
+/** The fields of the config VitalsOptions reads. */
+type VitalsFields =
+  | 'vitals_style'
+  | 'vitals_density'
+  | 'vitals_place'
+  | 'vitals_order'
+  | 'vitals_off'
+  | 'vitals_opponent'
+  | 'vitals_colors'
+  | 'vitals_values'
+  | 'vitals_meter'
+  | 'vitals_warn_thirds'
+  | 'vitals_hide_when_pinned';
+
 /** The vitals options a config holds. */
-export function vitalsOptionsOf(
-  config: Pick<
-    UiConfig,
-    'vitals_values' | 'vitals_meter' | 'vitals_warn_thirds' | 'vitals_hide_when_pinned'
-  >,
-): VitalsOptions {
+export function vitalsOptionsOf(config: Pick<UiConfig, VitalsFields>): VitalsOptions {
   return {
+    style: shownStyle(config),
+    place: config.vitals_place,
+    order: config.vitals_order,
+    off: config.vitals_off,
+    opponent: config.vitals_opponent,
+    colors: config.vitals_colors,
     values: config.vitals_values,
     meter: config.vitals_meter,
     warn_thirds: config.vitals_warn_thirds,
@@ -262,11 +314,25 @@ export function vitalsOptionsOf(
   };
 }
 
+export const DEFAULT_VITALS_OPTIONS: VitalsOptions = vitalsOptionsOf({
+  ...DEFAULT_VITALS_CUSTOM,
+  vitals_style: null,
+  vitals_density: 'rows',
+  vitals_place: 'panel',
+  vitals_hide_when_pinned: true,
+});
+
 /** Read vitals options off the bus, filling anything missing or
  *  unknown with the defaults. */
 export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
+    style: VITALS_STYLES.find((style) => style === o.style) ?? 'rows',
+    place: normalizeVitalsPlace(o.place),
+    order: normalizeVitalsOrder(o.order),
+    off: normalizeVitalsOff(o.off),
+    opponent: normalizeVitalsOpponent(o.opponent),
+    colors: normalizeVitalsColors(o.colors),
     values: normalizeVitalsValues(o.values),
     meter: normalizeVitalsMeter(o.meter),
     warn_thirds: o.warn_thirds === true,
@@ -380,7 +446,7 @@ export interface UiConfig {
   vitals_hide_when_pinned: boolean;
   /** The style you picked from the gallery, or null for Rows and One
    *  line, which vitals_density holds. */
-  vitals_style: VitalsStyle | null;
+  vitals_style: SavedVitalsStyle | null;
   /** Where your vitals show, one of VITALS_PLACES. */
   vitals_place: VitalsPlace;
   /** The order every style draws your vitals in. */
@@ -731,16 +797,6 @@ export async function subscribeTerminalLineHeightChanged(
   });
 }
 
-/** Hear a new vitals density saved from Settings, or the one a
- *  profile switch brings. */
-export async function subscribeVitalsDensityChanged(
-  cb: (value: VitalsDensity) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_DENSITY_CHANGED, (event) => {
-    cb(normalizeVitalsDensity(event.payload));
-  });
-}
-
 /** The chat pane's channel colors for the live profile, as the backend
  *  holds them. chatColors.ts normalizeChatColors reads the table. */
 export async function getChatColorsTable(): Promise<unknown> {
@@ -768,8 +824,9 @@ export async function subscribeChatColorsChanged(
   });
 }
 
-/** Hear new vitals options (Values, Meter, Warn before you run low)
- *  saved from Settings, or the ones a profile switch brings. */
+/** Hear new vitals options, your style and every choice under Layout,
+ *  Vitals, saved from Settings or the menu, or the ones a profile
+ *  switch brings. */
 export async function subscribeVitalsOptionsChanged(
   cb: (value: VitalsOptions) => void,
 ): Promise<UnlistenFn> {

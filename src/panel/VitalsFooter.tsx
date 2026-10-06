@@ -10,7 +10,6 @@ import {
 import { readPanelFace, usePanelFaceVersion } from './panelFace';
 import type { VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
-import { useVitalsDensity } from '../stores/config/vitalsDensityStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals, type VitalKey } from '../stores/gmcp/vitalsStore';
 import {
@@ -74,8 +73,9 @@ function shownRows(vitals: Vitals) {
 export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean } = {}) {
   const vitals = useVitals();
   const combat = useCombat();
-  const density = useVitalsDensity();
   const options = useVitalsOptions();
+  // The footer draws One line, and Rows for every other style.
+  const density: VitalsDensity = options.style === 'line' ? 'line' : 'rows';
   const sectionRef = useRef<HTMLElement | null>(null);
   const width = useFooterWidth(sectionRef, density === 'line');
   const { size } = usePaneText();

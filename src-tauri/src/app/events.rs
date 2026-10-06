@@ -165,8 +165,8 @@ pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 /// Your vitals text, drawn for the footer or the status line that
 /// watches it through `vitals_text_watch`. The payload is a
 /// [`vosh_prompt::vitals::VitalsText`], the rows at the live values and
-/// at full values with which of them read a fight. No page listener
-/// hears it yet.
+/// at full values with which of them read a fight. `onVitalsText`
+/// hears it.
 pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
 
 // The lists.

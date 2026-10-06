@@ -32,7 +32,6 @@ import {
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
   TRACKED_AFFECTS_CHANGED,
-  VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
 } from './events';
 import {
@@ -151,7 +150,8 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     config.input_cursor_style,
     before?.input_cursor_style,
   );
-  await emitChanged(VITALS_DENSITY_CHANGED, config.vitals_density, before?.vitals_density);
+  // Your style and every vitals choice go out as one, so a pick moves
+  // the footer, the status line and the menu together.
   await emitChanged(
     VITALS_OPTIONS_CHANGED,
     vitalsOptionsOf(config),
