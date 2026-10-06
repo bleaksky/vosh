@@ -75,6 +75,14 @@ pub(crate) struct UiConfigPayload {
     pub vitals_text: String,
     /// At most two earlier texts, newest first.
     pub vitals_text_previous: Vec<String>,
+    /// The style your 0.7 vitals grew into, `text`, `gauges`, `pips`,
+    /// `line` or `rows`, which the gallery marks Yours in 0.7. Left out
+    /// when they give no clue. Read only, nothing saves it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vitals_legacy_style: Option<&'static str>,
+    /// Your 0.7 template in today's codes, while it was on. Read only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vitals_legacy_text: Option<String>,
     pub chip_style: String,
     pub tick_count: String,
     pub game_time: String,
@@ -133,6 +141,8 @@ impl UiConfigPayload {
             vitals_colors: ui.vitals_colors.clone(),
             vitals_text: ui.vitals_text.clone(),
             vitals_text_previous: ui.vitals_text_previous.clone(),
+            vitals_legacy_style: ui.vitals.legacy_style(),
+            vitals_legacy_text: ui.vitals.legacy_text(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
             game_time: ui.game_time.clone(),
@@ -513,6 +523,15 @@ mod tests {
     use crate::profile::ui::UiConfig;
     use crate::prompt::tests::prompt_profile;
 
+    /// The payload fields with no setter in `ui_set_fields`. The tracked
+    /// affects have a setter of their own, and the 0.7 vitals are read
+    /// only.
+    const READ_ONLY: [&str; 3] = [
+        "tracked_affects",
+        "vitals_legacy_style",
+        "vitals_legacy_text",
+    ];
+
     /// The setter for the field `key` with `value`, as the page sends it.
     fn setter(key: &str, value: &serde_json::Value) -> super::UiField {
         serde_json::from_value(serde_json::json!({ "field": key, "value": value })).unwrap()
@@ -527,7 +546,7 @@ mod tests {
             .as_object()
             .unwrap()
             .iter()
-            .filter(|(key, _)| *key != "tracked_affects")
+            .filter(|(key, _)| !READ_ONLY.contains(&key.as_str()))
             .map(|(key, value)| setter(key, value))
             .collect();
         let mut out = UiConfig::default();
@@ -549,7 +568,7 @@ mod tests {
             .as_object()
             .unwrap()
             .keys()
-            .filter(|key| *key != "tracked_affects")
+            .filter(|key| !READ_ONLY.contains(&key.as_str()))
             .collect();
         let names: Vec<&String> = values.keys().collect();
         assert_eq!(names, keys);
@@ -691,6 +710,49 @@ mod tests {
             ui.blink_text = Some(choice);
             assert_eq!(through_payload(&ui).blink_text, Some(choice));
         }
+    }
+
+    #[test]
+    fn your_0_7_vitals_mark_the_style_they_grew_into() {
+        let sent = |toml: &str| {
+            let ui = ProfileConfig::from_toml(toml).unwrap().ui;
+            let json = serde_json::to_value(UiConfigPayload::from_ui(&ui)).unwrap();
+            (
+                json.get("vitals_legacy_style").cloned(),
+                json.get("vitals_legacy_text").cloned(),
+            )
+        };
+        // Layout gauges with a template on, so 0.7 drew the template.
+        let full = include_str!("../../../fixtures/config/profile.full.toml");
+        assert_eq!(
+            sent(full),
+            (
+                Some("text".into()),
+                Some("%hp/%maxhp %mana/%maxmn %move/%maxmv".into())
+            )
+        );
+        // Every profile saved layout ember, which gives no mark.
+        let default = include_str!("../../../fixtures/config/profile.default.toml");
+        assert_eq!(sent(default), (None, None));
+
+        for (layout, style) in [
+            ("gauges", Some("gauges")),
+            ("pips", Some("pips")),
+            ("strip", Some("line")),
+            ("inline", Some("line")),
+            ("stacked", Some("rows")),
+            ("ember", None),
+            ("sparkle", None),
+        ] {
+            let toml = format!("[ui.vitals]\nlayout = \"{layout}\"\n");
+            assert_eq!(sent(&toml), (style.map(Into::into), None), "{layout}");
+        }
+        // The shipped template, on, at a bar width of its own.
+        let toml = "[ui.vitals]\ntemplate_enabled = true\nbar_width = 12\ntemplate = \"%bar_hp %pct_mn\"\n";
+        assert_eq!(
+            sent(toml),
+            (Some("text".into()), Some("%{hp:bar:12} %pct_mana%%".into()))
+        );
     }
 
     #[test]
