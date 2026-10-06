@@ -129,6 +129,12 @@ describe('profileLines', () => {
     expect(lines([DEFAULT, HEALER], rows, 'Healer', 1825)).toEqual({ hint: null, warn: null });
   });
 
+  it('leaves the note out on the build port, where the game keeps other player files', () => {
+    const builder = row(1, { character: 'Orla', host: PLAY, port: 1825, connected: true });
+    const rows = [builder, row(NEW, { profile: 'Healer' })];
+    expect(lines([DEFAULT, HEALER], rows, 'Healer', 1825)).toEqual({ hint: null, warn: null });
+  });
+
   it('leaves the note out for another port, a session not connected, or a world Vosh does not know', () => {
     const away = { ...TOLLIVER, connected: false };
     expect(lines([DEFAULT, HEALER], [away, row(NEW)], 'Healer', 1848).warn).toBeNull();

@@ -37,8 +37,10 @@ export function pickProfile(
 
 /** What the form says under its Profile row. `hint` names a profile
  *  another session plays, else a pin to this host and port. `warn` names
- *  another session already connected to this world, a note and never a
- *  refusal (Q3). */
+ *  another session already connected to the world's own port, where you
+ *  play, when the form dials that port too. A note, never a refusal
+ *  (Q3). The build port keeps its own player files, so it never shows
+ *  the note. */
 export interface ProfileLines {
   hint: string | null;
   warn: string | null;
@@ -116,15 +118,16 @@ export function profileLines(
     hint = `${name} is pinned to ${place}.`;
   }
   const world = knownWorld(host);
-  const connected = world
-    ? rows.filter(
-        (row) =>
-          row.id !== session &&
-          row.connected &&
-          row.host !== null &&
-          row.port === port &&
-          knownWorld(row.host)?.domain === world.domain,
-      )
-    : [];
+  const connected =
+    world && port === world.port
+      ? rows.filter(
+          (row) =>
+            row.id !== session &&
+            row.connected &&
+            row.host !== null &&
+            row.port === port &&
+            knownWorld(row.host)?.domain === world.domain,
+        )
+      : [];
   return { hint, warn: connected.length > 0 ? multiLine(connected, rows) : null };
 }
