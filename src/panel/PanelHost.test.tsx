@@ -27,8 +27,10 @@ vi.mock('./panelLayoutStore', () => ({
   setPaneTree: vi.fn(),
 }));
 vi.mock('./usePaneMins', () => ({ usePaneMins: () => ({}) }));
-// A Lua pane's body reads the session stores, which LuaPane.test covers.
+// A Lua pane's body reads the session stores, which LuaPane.test covers,
+// and a Chat pane's reads the live theme.
 vi.mock('./lua/LuaPane', () => ({ LuaPane: () => null }));
+vi.mock('./chat/ChatPane', () => ({ ChatPane: () => null }));
 vi.mock('./VitalsFooter', async () => {
   const { useContext } = await import('react');
   const { PaneTextSizeContext } = await import('./paneTextSize');
@@ -109,5 +111,18 @@ describe('PanelHost', () => {
       (m) => m[1],
     );
     expect(labels).toEqual(['Tides', 'Weather']);
+  });
+
+  it('draws one section per Chat pane', () => {
+    // Server rendering never checks keys, so leafKey's own test in
+    // paneLayout.test.ts covers the two keys.
+    options = DEFAULT_VITALS_OPTIONS;
+    const chat = (id: string) => ({ id, pane: 'chat', props: {} });
+    layout = sanitizeLayout({
+      root: { split: 'column', children: [chat('chat'), chat('chat-2')] },
+    });
+    const html = renderToStaticMarkup(<PanelHost promptShow={null} />);
+    layout = null;
+    expect(html.match(/class="pane pane-chat"/g)).toHaveLength(2);
   });
 });

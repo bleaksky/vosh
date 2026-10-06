@@ -4,10 +4,12 @@ import {
   addPane,
   allPanes,
   closePane,
+  countPanes,
   defaultLayout,
   findNode,
   isLeaf,
   leafIdFor,
+  leafKey,
   paneKey,
   paneRef,
   replacePane,
@@ -16,6 +18,7 @@ import {
   setWeights,
   splitPane,
   type PaneLayout,
+  type PaneLeaf,
   type PaneNode,
   type PaneRef,
   type PaneSplit,
@@ -376,6 +379,62 @@ describe('Lua panes', () => {
         '{"id":"chat","pane":"chat","weight":0.1125,"props":{}},' +
         '{"id":"map-2","pane":"map","weight":0.3249,"props":{}}]}',
     );
+  });
+});
+
+describe('Chat panes', () => {
+  const chat = paneRef('chat');
+  const withChat = () => deepFreeze(addPane(root(), chat));
+
+  it('add another under a Chat, up to four', () => {
+    const two = addPane(withChat(), chat);
+    expect(allPanes(two)).toEqual(['map', 'affects', 'chat', 'chat']);
+    expect(findNode(two, 'chat-2')).toMatchObject({ pane: 'chat', props: {} });
+    const four = addPane(addPane(two, chat), chat);
+    expect(countPanes(four, chat)).toBe(4);
+    expect(addPane(four, chat)).toBe(four);
+  });
+
+  it('split in beside a Chat and leave the first in place', () => {
+    const tree = withChat();
+    const next = splitPane(tree, 'affects', 'row', chat);
+    expect(findNode(next, 'chat')).toEqual(findNode(tree, 'chat'));
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', expect.any(Number)],
+        {
+          row: [
+            ['affects', 0.5],
+            ['chat', 0.5],
+          ],
+        },
+        ['chat', expect.any(Number)],
+      ],
+    });
+    expect(leafIdFor(next, chat)).toBe('chat-2');
+    expect(splitPane(next, 'chat', 'column', chat)).not.toBe(next);
+  });
+
+  it('show here instead of Map and keep the other Chat', () => {
+    const tree = withChat();
+    const next = replacePane(tree, 'map', chat);
+    expect(allPanes(next)).toEqual(['chat', 'affects', 'chat']);
+    expect(findNode(next, 'chat')).toEqual(findNode(tree, 'chat'));
+    expect(replacePane(next, 'chat', chat)).toBe(next);
+  });
+
+  it('stop at four from a split or show here instead', () => {
+    let four = withChat();
+    for (let i = 0; i < 3; i += 1) four = addPane(four, chat);
+    expect(splitPane(four, 'map', 'row', chat)).toBe(four);
+    expect(replacePane(four, 'map', chat)).toBe(four);
+  });
+
+  it('key each box on its leaf, and every other pane on its type', () => {
+    const two = addPane(withChat(), chat);
+    expect(leafKey(findNode(two, 'chat') as PaneLeaf)).toBe('chat#chat');
+    expect(leafKey(findNode(two, 'chat-2') as PaneLeaf)).toBe('chat#chat-2');
+    expect(leafKey(findNode(two, 'map') as PaneLeaf)).toBe('map');
   });
 });
 
