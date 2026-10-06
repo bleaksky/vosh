@@ -906,6 +906,21 @@ describe('the help on Lua', () => {
     );
   });
 
+  it('turns plugins on under Scripts and runs Lua in its Console', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain('Open Settings and choose Scripts to see your plugins.');
+    expect(text).toContain(
+      'The switch on each row turns a plugin on or off for the profile you play, and the plugin starts or stops at once.',
+    );
+    expect(text).toContain('A plugin Vosh stopped reads `Stopped` there.');
+    expect(text).toContain(
+      'The Console under Scripts in Settings shows the same lines, each with its time, and runs the Lua you type in its field the way `#lua` does.',
+    );
+    // You no longer edit the profile file to turn a plugin on (Q29).
+    expect(text).not.toContain('while Vosh is closed');
+    expect(text).not.toContain('`[plugins]`');
+  });
+
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
     if (!found) throw new Error('no Lua topic');
