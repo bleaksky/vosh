@@ -412,8 +412,8 @@ function MainWindow() {
 
   const { status, live: connected } = connection;
 
-  // Closing a session or this window, and the question either asks
-  // while a session is connected.
+  // Closing a session, this window or the app, and the question each
+  // asks while sessions are connected.
   const closing = useClosing();
 
   // Everything the palette can reach, rebuilt fresh at each open so
@@ -455,6 +455,7 @@ function MainWindow() {
   const { runCommand, themesChanged } = useAppCommands({
     connection,
     closeWindow: closing.closeWindow,
+    quit: closing.quit,
     splitOpen,
     toggleSplit,
     findOpen,

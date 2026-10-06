@@ -72,6 +72,16 @@ fn quit_goes_through_the_exit_request_on_the_system_shortcut() {
 }
 
 #[test]
+fn quit_asks_only_while_two_or_more_sessions_are_connected() {
+    // None or one connected quits at once, as Quit did before sessions.
+    assert!(!quit_asks(0));
+    assert!(!quit_asks(1));
+    // Two or more raise the main window, which asks first.
+    assert!(quit_asks(2));
+    assert!(quit_asks(3));
+}
+
+#[test]
 fn routes_follow_the_board() {
     assert_eq!(route("settings"), Route::OpenSettings);
     // Help opens its own window from wherever you are, so the main

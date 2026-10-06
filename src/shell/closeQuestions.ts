@@ -3,10 +3,10 @@ import { worldName } from '../lib/knownWorlds';
 import { sessionLabel, type LabelSource } from '../lib/sessionLabel';
 import { listJoin, possessive } from '../lib/text';
 
-// The words Vosh asks with before it closes a session or the main
-// window, by Q13 and board 6 of the Sessions review. Close session asks
-// while its session is connected, and Close window while any session
-// is. A session goes by its label, the name you gave it or else its
+// The words Vosh asks with before it closes a session, the main window
+// or the app, by Q13 and board 6 of the Sessions review. Close session
+// asks while its session is connected, Close window while any session
+// is, and Quit while two or more are. A session goes by its label, the name you gave it or else its
 // character, with the world and the port where its row shows the port.
 // With two or more sessions open, a question names each connected
 // session and leaves the others out. Board 6 words two, and three or
@@ -107,4 +107,16 @@ export function closeWindowQuestion(rows: readonly CloseRow[]): CloseQuestion | 
   return ask(
     `${connectedSentence(live, rows)} Closing this window ends ${allOf(live.length)} and quits Vosh.`,
   );
+}
+
+/** What Quit asks while two or more sessions are connected, or null
+ *  with fewer, which quits at once as Quit did before sessions. */
+export function quitQuestion(rows: readonly CloseRow[]): CloseQuestion | null {
+  const live = rows.filter((row) => row.connected);
+  if (live.length < 2) return null;
+  return {
+    title: 'Quit Vosh?',
+    body: `${connectedSentence(live, rows)} Quitting ends ${allOf(live.length)}.`,
+    confirm: 'Quit',
+  };
 }

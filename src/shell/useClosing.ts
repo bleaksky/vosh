@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { closeSession as closeSessionCall, type SessionRow } from '../ipc/session';
+import { appQuit } from '../ipc/windows';
 import { errorText } from '../lib/text';
 import { sessionLive } from '../stores/session/connectionStore';
 import { getSelected, getSessions, select } from '../stores/session/sessionsStore';
 import { pushToast } from '../stores/toasts';
-import { closeSessionQuestion, closeWindowQuestion, type CloseQuestion } from './closeQuestions';
+import {
+  closeSessionQuestion,
+  closeWindowQuestion,
+  quitQuestion,
+  type CloseQuestion,
+} from './closeQuestions';
 
-// Closing a session and the main window, by Q13 of the Sessions review.
-// Close session asks while its session is connected and closes at once
-// otherwise, and Close window asks while any session is connected. Each
-// question names the sessions as closeQuestions words them, and the main
-// window draws it. Closing the last session closes the window.
+// Closing a session, the main window and the app, by Q13 of the Sessions
+// review. Close session asks while its session is connected and closes
+// at once otherwise, Close window asks while any session is connected,
+// and Quit while two or more are. On macOS the menu bar's Quit hands the
+// question here only then, and quits at once otherwise. Each question
+// names the sessions as closeQuestions words them, and the main window
+// draws it. Closing the last session closes the window.
 //
 // The red light on macOS and the close button on Windows and Linux reach
 // the window's close request, which the window always holds and answers
@@ -32,6 +40,9 @@ export interface Closing {
   /** Close a session, the selected one when none is named. */
   closeSession: (session?: number) => void;
   closeWindow: () => void;
+  /** Quit Vosh, asking first while two or more sessions are
+   *  connected. */
+  quit: () => void;
 }
 
 /** Every open session, connected while the app says so or while this
@@ -126,5 +137,10 @@ export function useClosing(): Closing {
     });
   };
 
-  return { asking, cancel: () => setAsking(null), closeSession, closeWindow };
+  const quit = () =>
+    ask(quitQuestion(closeRows()), () => {
+      appQuit().catch((e: unknown) => console.error('[main] quitting failed', e));
+    });
+
+  return { asking, cancel: () => setAsking(null), closeSession, closeWindow, quit };
 }

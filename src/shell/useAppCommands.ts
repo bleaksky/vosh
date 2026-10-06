@@ -45,6 +45,9 @@ interface CommandInputs
   connection: Connection;
   /** Close the window, asking first while a session is connected. */
   closeWindow: () => void;
+  /** Quit Vosh, asking first while two or more sessions are connected.
+   *  The macOS menu bar sends it only then. */
+  quit: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   /** Shows or hides the panel, and puts the caret back on the command
@@ -75,6 +78,7 @@ interface AppCommands {
 export function useAppCommands({
   connection,
   closeWindow,
+  quit,
   splitOpen,
   toggleSplit,
   findOpen,
@@ -210,6 +214,9 @@ export function useAppCommands({
         return;
       case 'close-window':
         closeWindow();
+        return;
+      case 'quit':
+        quit();
         return;
       case 'copy':
         copyFromMenu();
