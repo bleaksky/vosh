@@ -401,6 +401,7 @@ fn a_group_switch_tells_every_window_once() {
                 GroupList::Macros,
                 "combat".into(),
                 enabled,
+                None,
             )
         };
         // Settings follows the switch, and the command line its keys.

@@ -381,9 +381,19 @@ impl ListRevisions {
     /// engine on `c` holds, which the profile keeps a copy of.
     pub(crate) fn of(profile: &Profile, c: &Connection) -> Self {
         Self {
+            prompt: c.prompt.revision(),
+            ..Self::of_lists(profile)
+        }
+    }
+
+    /// The revisions of `profile`'s lists alone, for a Settings step that
+    /// never changes the prompt table. It reads no session's connection,
+    /// so it serves a profile whichever sessions play it.
+    pub(crate) fn of_lists(profile: &Profile) -> Self {
+        Self {
             triggers: profile.triggers.revision(),
             aliases: profile.aliases.revision(),
-            prompt: c.prompt.revision(),
+            prompt: 0,
             macro_groups: profile.macro_group_toggles,
             groups: profile.group_toggles,
         }

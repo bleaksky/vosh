@@ -1321,6 +1321,7 @@ async fn a_new_interval_from_settings_reaches_both_counts() {
             interval_secs: 45,
             ..config
         },
+        None,
     )
     .await
     .expect("the settings apply");
@@ -2227,5 +2228,113 @@ async fn who_is_logged_in_goes_out_for_the_selected_session_and_again_on_a_selec
     assert_eq!(got, [(SESSION_IDENTITY_CHANGED, serde_json::Value::Null)]);
 
     h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+/// The names of the triggers the profile file at `file` holds.
+fn saved_triggers(file: &std::path::Path) -> Vec<String> {
+    crate::profile::file::ProfileConfig::load(file)
+        .map(|config| config.triggers.into_iter().map(|t| t.name).collect())
+        .unwrap_or_default()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_trigger_list_that_names_build_saves_build_and_tells_no_window_while_default_shows() {
+    use crate::app::events::TRIGGERS_CHANGED;
+    use crate::ipc::automation::triggers_import;
+    use vosh_automation::trigger::{Trigger, TriggerAction, TriggerStore};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    let two = open_session_on(&h, "Build").await;
+    assert_eq!(h.state.selected_session().id, h.first);
+    let mut list = TriggerStore::default();
+    list.set(Trigger::new(
+        "spam",
+        "Line 1 of 1 of the spam",
+        TriggerAction::Gag,
+    ))
+    .expect("the trigger");
+    let json = list.export_json().expect("the list");
+    let default_before = h.state.selected_profile().await.triggers.list();
+    let healer_file = h.profile_file("Healer").await;
+    let healer_before = std::fs::read_to_string(&healer_file).ok();
+    let heard = hear(&h, &[TRIGGERS_CHANGED]);
+
+    let import = |profile: &str| {
+        let profile = Some(profile.to_string());
+        triggers_import(h.app.handle().clone(), h.app.state(), json.clone(), profile)
+    };
+    assert_eq!(import("Build").await, Ok(1));
+    let build = h.state.session(Some(two)).expect("the Build session");
+    let names: Vec<String> = {
+        let p = build.lock_profile().await;
+        p.triggers.list().into_iter().map(|t| t.name).collect()
+    };
+    assert_eq!(names, ["spam"]);
+    assert_eq!(saved_triggers(&h.profile_file("Build").await), ["spam"]);
+    assert_eq!(
+        h.state.selected_profile().await.triggers.list(),
+        default_before
+    );
+    let got = take(&heard);
+    assert!(got.is_empty(), "{got:?}");
+
+    // Healer is a profile no session plays, so nothing changes.
+    assert_eq!(
+        import("Healer").await,
+        Err("No session plays the profile Healer.".to_string())
+    );
+    assert_eq!(std::fs::read_to_string(&healer_file).ok(), healer_before);
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tick_settings_that_name_build_reach_every_count_on_build_alone() {
+    use crate::app::events::TICK_CONFIG_CHANGED;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    let one = h.first;
+    log_in(&h, one, 0, "Tolliver").await;
+    let two = open_session_on(&h, "Build").await;
+    log_in(&h, two, 1, "Orla").await;
+    // Maren, whom no profile claims, plays Build beside Orla.
+    h.servers[1].options.lock().expect("the options").name = "Maren".into();
+    let three = open_session_on(&h, "Build").await;
+    log_in(&h, three, 1, "Maren").await;
+    assert_eq!(plays(&h, three).as_deref(), Some("Build"));
+    assert_eq!(h.state.selected_session().id, one);
+    for session in [one, two, three] {
+        assert!(last_tick(&h, session).is_some(), "{session} counts");
+    }
+    let heard = hear(&h, &[TICK_CONFIG_CHANGED]);
+
+    let build = h.state.open_profile("Build").expect("Build is open");
+    let config = build.lock().await.tick.config.clone();
+    let saved = crate::ipc::tick::tick_set_config(
+        h.app.handle().clone(),
+        h.app.state(),
+        crate::tick::TickConfig {
+            enabled: false,
+            ..config
+        },
+        Some("Build".into()),
+    )
+    .await
+    .expect("the settings apply");
+    assert!(!saved.enabled);
+    // Both counts on Build stop, and Tolliver's on Default runs on.
+    assert_eq!(last_tick(&h, two), None);
+    assert_eq!(last_tick(&h, three), None);
+    assert!(last_tick(&h, one).is_some());
+    assert!(h.state.selected_profile().await.tick.config.enabled);
+    let file = h.profile_file("Build").await;
+    assert_eq!(saved_tick(&file).map(|tick| tick.enabled), Some(false));
+    let got = take(&heard);
+    assert!(got.is_empty(), "{got:?}");
+
+    h.disconnect_session(two).await;
+    h.disconnect_session(three).await;
     h.finish(grid).await;
 }
