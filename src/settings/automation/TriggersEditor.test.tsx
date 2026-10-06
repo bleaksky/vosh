@@ -3,25 +3,42 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TriggerRecord } from '../../ipc/automation';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
-// The trigger card's Pattern row, board 6: the mode beside the label,
-// the line under it that says what the mode does, and the field under
-// both. This mounts the card on one trigger and drives it through the
-// handlers React keeps on each element, since this DOM sends no events.
+// The trigger card's Pattern row, board 6 of the Scripts review: the
+// mode beside the label, the line under it that says what the mode does,
+// and the field under both. Then its Alert row, board 1 of the Alerts
+// review. This mounts the card on one trigger, or the whole editor over
+// a fake store, and drives it through the handlers React keeps on each
+// element, since this DOM sends no events.
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
   emit: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn((cmd: string, args?: { json?: string }) => Promise.resolve(answer(cmd, args))),
+}));
+
 // CodeMirror needs a real DOM, and Advanced holds the Lua script row.
 vi.mock('../../ui/CodeEditor', () => ({ CodeEditor: () => null }));
 vi.mock('../../stores/session/promptGagStore', () => ({
   usePromptGags: () => new Set<string>(),
 }));
 
+/** The trigger list triggers_export answers with and triggers_import
+ *  writes, as JSON. */
+let stored = '[]';
+
+function answer(cmd: string, args?: { json?: string }): unknown {
+  if (cmd === 'triggers_export') return stored;
+  if (cmd === 'triggers_import') stored = args?.json ?? stored;
+  if (cmd === 'groups_list') return [];
+  return undefined;
+}
+
 const doc = new FakeDocument();
 let createRoot: typeof import('react-dom/client').createRoot;
 let TriggerDetail: typeof import('./TriggersEditor').TriggerDetail;
+let TriggersEditor: typeof import('./TriggersEditor').TriggersEditor;
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -36,8 +53,13 @@ beforeAll(async () => {
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
   vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  vi.stubGlobal('localStorage', {
+    getItem: () => null,
+    setItem: () => undefined,
+    removeItem: () => undefined,
+  });
   ({ createRoot } = await import('react-dom/client'));
-  ({ TriggerDetail } = await import('./TriggersEditor'));
+  ({ TriggerDetail, TriggersEditor } = await import('./TriggersEditor'));
 });
 
 type Handler = (e?: unknown) => void;
@@ -52,12 +74,16 @@ function on(el: FakeElement): Record<string, Handler> {
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const clean of cleanups.splice(0)) await clean();
+  delete doc.documentElement.dataset.platform;
 });
 
 /** A trigger with one pattern row, as the store sends it. */
 function trigger(patch: Partial<TriggerRecord>): TriggerRecord {
   return { name: 'fog', patterns: [], priority: 5, enabled: true, actions: [], ...patch };
 }
+
+/** An alert table with nothing on, as Rust reads an empty one. */
+const QUIET = { banner: false, background: true, words: false };
 
 const FOG = trigger({
   patterns: [{ pattern: '', enabled: true, mode: 'text', text: 'A thick fog rolls in' }],
@@ -99,6 +125,7 @@ async function mount(start: TriggerRecord) {
   return {
     /** The trigger as the card last wrote it. */
     value: () => current,
+    parts: () => alertParts(container),
     modes,
     pressed: () => modes().find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent,
     field,
@@ -167,5 +194,133 @@ describe('the trigger Pattern row', () => {
     await card.click('Regex');
     await card.click('Add pattern');
     expect(card.value().patterns[2]).toEqual({ pattern: '', enabled: true });
+  });
+});
+
+/** The visitor of board 1, with no alert yet. */
+const VISITOR = trigger({
+  name: 'visitor',
+  patterns: [{ pattern: '^(\\w+) walks in\\.$', enabled: true }],
+});
+
+/** Each part of the Alert row by its label, with `+` before a pressed
+ *  one and ` (off)` after a disabled one. A part whose check does not
+ *  match whether it is pressed fails the test. */
+function alertParts(root: FakeElement) {
+  const group = findAll(root, (el) => el.getAttribute('aria-label') === 'Alert with')[0];
+  if (!group) throw new Error('no Alert row');
+  return findAll(group, (el) => el.nodeName === 'BUTTON').map((b) => {
+    const pressed = b.getAttribute('aria-pressed') === 'true';
+    const check = b.childNodes[0] instanceof FakeElement && b.childNodes[0].nodeName === 'SVG';
+    if (pressed !== check)
+      throw new Error(`${b.textContent} is pressed ${pressed}, check ${check}`);
+    return `${pressed ? '+' : ''}${b.textContent}${b.hasAttribute('disabled') ? ' (off)' : ''}`;
+  });
+}
+
+/** The whole Triggers editor over the store, with nothing selected. */
+async function mountEditor(list: TriggerRecord[]) {
+  stored = JSON.stringify(list);
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  await act(async () => {
+    root.render(
+      <TriggersEditor
+        json={false}
+        onJson={() => {}}
+        onDirty={() => {}}
+        onError={() => {}}
+        profileScoped={false}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  cleanups.push(async () => {
+    await act(async () => root.unmount());
+    doc.body.removeChild(container);
+  });
+  const click = (el: FakeElement | undefined) =>
+    act(async () => {
+      if (!el) throw new Error('nothing to click');
+      on(el).onClick({ currentTarget: el, preventDefault() {} });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const button = (text: string) =>
+    findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === text)[0];
+  return {
+    pick: (name: string) =>
+      click(
+        findAll(
+          container,
+          (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+        )[0],
+      ),
+    click: (text: string) => click(button(text)),
+    parts: () => alertParts(container),
+    status: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-savebar-status')[0]?.textContent,
+  };
+}
+
+describe('the trigger Alert row', () => {
+  it('presses Banner on, marks Unsaved changes, and saves the alert', async () => {
+    const editor = await mountEditor([VISITOR]);
+    await editor.pick('visitor');
+    expect(editor.parts()).toEqual(['Banner', 'Sound', 'Bounce']);
+    expect(editor.status()).toBe('');
+
+    await editor.click('Banner');
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+    expect(editor.status()).toBe('Unsaved changes');
+
+    await editor.click('Save');
+    const [saved] = JSON.parse(stored) as TriggerRecord[];
+    expect(saved.alert).toEqual({ banner: true, background: true, words: false });
+  });
+
+  it('presses each part on its own, and releasing every one removes the table', async () => {
+    const card = await mount(VISITOR);
+    await card.click('Sound');
+    await card.click('Bounce');
+    expect(card.value().alert).toEqual({
+      banner: false,
+      sound: 'chime',
+      attention: 'once',
+      background: true,
+      words: false,
+    });
+    await card.click('Banner');
+    expect(card.value().alert?.banner).toBe(true);
+
+    await card.click('Banner');
+    await card.click('Sound');
+    await card.click('Bounce');
+    expect('alert' in card.value()).toBe(false);
+  });
+
+  it('keeps the table after its last part is released while it shows the words', async () => {
+    const card = await mount({
+      ...VISITOR,
+      alert: { banner: true, sound: 'bell', attention: 'until', background: true, words: true },
+    });
+    await card.click('Banner');
+    await card.click('Sound');
+    await card.click('Bounce');
+    expect(card.value().alert).toEqual({ banner: false, background: true, words: true });
+  });
+
+  it('shows the row of a preset trigger turned off', async () => {
+    const card = await mount({ ...FOG, preset: 'room_colors', alert: { ...QUIET, banner: true } });
+    expect(card.parts()).toEqual(['+Banner (off)', 'Sound (off)', 'Bounce (off)']);
+  });
+
+  it('names Bounce for what it does on Windows and Linux', async () => {
+    doc.documentElement.dataset.platform = 'windows';
+    expect((await mount(VISITOR)).parts()).toEqual(['Banner', 'Sound', 'Flash']);
+    doc.documentElement.dataset.platform = 'linux';
+    expect((await mount(VISITOR)).parts()).toEqual(['Banner', 'Sound', 'Mark']);
+    doc.documentElement.dataset.platform = 'macos';
+    expect((await mount(VISITOR)).parts()).toEqual(['Banner', 'Sound', 'Bounce']);
   });
 });

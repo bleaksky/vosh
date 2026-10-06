@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { alertOrNone, withAlertPart } from '../../automation/alertParts';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
@@ -58,6 +59,7 @@ import {
   type SelectOption,
 } from '../../ui';
 import { usePromptGags } from '../../stores/session/promptGagStore';
+import { AlertRow } from './AlertRows';
 import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -221,12 +223,25 @@ export function TriggerDetail({
           onChange={(command) => setActions((a) => withEffect(a, 'send', command))}
         />
       </Row>
+      <AlertRow
+        alert={t.alert}
+        disabled={locked}
+        onPress={(part, on) =>
+          update((v) => {
+            const next = { ...v };
+            const alert = alertOrNone(withAlertPart(v.alert, part, on));
+            if (alert) next.alert = alert;
+            else delete next.alert;
+            return next;
+          })
+        }
+      />
       <Row label="Enabled">
         <Toggle checked={t.enabled} disabled={locked} onChange={(enabled) => set({ enabled })} />
       </Row>
       <Disclosure
         label="Advanced"
-        description="Set priority, match prompts, send to a pane, or run Lua."
+        description="Set priority, match prompts, send to a pane, run Lua, or tune alerts."
         expanded={advanced}
         aria-controls={advancedId}
         onClick={() => setAdvanced((open) => !open)}
