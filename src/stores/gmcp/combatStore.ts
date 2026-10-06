@@ -5,8 +5,9 @@ import { asNumber, asText, isHiddenFlag } from '../store';
 // The opponent you are fighting, from Char.Combat. Aabahran sends
 // `{target, condition, hp_pct}` on each prompt in a fight and `{}` when
 // the fight ends. This is the server's view of the fight, separate
-// from the client target in targetStore. Lifted from useCombat, which
-// held it per mount.
+// from the client target in targetStore. Every pane reads one copy at
+// module scope, so a pane that mounts mid fight shows the opponent at
+// once.
 //
 // Whenever the text battle line would not print (under lamented tears,
 // blind, against mirror image, or with the target in another room) the

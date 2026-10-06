@@ -4,9 +4,9 @@ import { createGmcpStore } from './gmcpStore';
 // Game time and the moons for the status line. Aabahran sends
 // World.Time `{hour, day, month, year, sunlight, sky}` at login and on
 // each weather tick, and World.Moons only at login and when a phase
-// changes, so a per mount copy (useWorldTime, the StatusBar moons) went
-// blank for hours after a remount. Aabahran sends no minute. The field
-// fills in for servers that do.
+// changes, so the store keeps both at module scope, where a status
+// line that remounts finds them instead of going blank for hours.
+// Aabahran sends no minute. The field fills in for servers that do.
 
 export interface WorldTime {
   /** 0..23. */
