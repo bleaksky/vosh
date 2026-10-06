@@ -592,6 +592,18 @@
   color: var(--tertiary);
 }
 
+/* A toast with a button is a card like the update notice: the button
+   sits 8 inside the card, its radius 8 concentric with the card's 16,
+   and 8 after the message. */
+.ov-toast.has-action {
+  padding: 8px 8px 8px 12px;
+}
+
+.ov-toast.has-action > .ov-button {
+  flex: none;
+  margin-left: 8px;
+}
+
 /* Prompt codes in a toast read in the terminal's face (P14). */
 .ov-toast-meta.is-mono {
   font-family: var(--font-mud);
