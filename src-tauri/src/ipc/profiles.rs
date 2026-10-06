@@ -139,19 +139,29 @@ pub(crate) async fn profile_set_scope(
 /// Given a connect target, find the first profile whose `auto_match`
 /// claims it. Returns the profile name or null. The frontend calls
 /// this right before invoking `session_connect` so a matching
-/// profile can be switched to ahead of the connection.
+/// profile can be switched to ahead of the connection. With
+/// `any_character`, a claim that names characters counts as if one of
+/// them logged in, which the New session form asks before anyone logs in
+/// (Sessions Q2), see [`ProfileSet::resolve_before_login`].
+///
+/// [`ProfileSet::resolve_before_login`]: crate::profile::set::ProfileSet::resolve_before_login
 #[tauri::command]
 pub(crate) async fn profile_resolve_match(
     state: State<'_, SharedState>,
     host: String,
     port: u16,
     character: Option<String>,
+    any_character: Option<bool>,
 ) -> Result<Option<String>, String> {
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Ok(None);
     };
-    Ok(set.resolve_match(&host, port, character.as_deref()))
+    Ok(if any_character == Some(true) {
+        set.resolve_before_login(&host, port)
+    } else {
+        set.resolve_match(&host, port, character.as_deref())
+    })
 }
 
 /// Switch the session to the profile `name`.

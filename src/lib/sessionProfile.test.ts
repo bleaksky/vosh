@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileEntry } from '../ipc/profiles';
 import type { SessionRow } from '../ipc/session';
-import { pickProfile, profileLines, showsProfileRow } from './sessionProfile';
+import { profileLines, showsProfileRow } from './sessionProfile';
 
-// The Profile row of the New session form, board 4. The pick prefers a
-// profile pinned to the host and port, then one that claims the host on
-// any port, then the profile in front, and the line under the row says
-// why, or names the other session that plays it, or notes another
-// session already connected to this world.
+// The Profile row of the New session form, board 4. The line under the
+// row says why the pick shows, or names the other session that plays
+// it, or notes another session already connected to the world's own
+// port. Rust makes the pick itself, and the tests of
+// resolve_before_login in src-tauri/src/profile/login_match.rs hold it.
 
 const PLAY = 'play.theforsakenlands.com';
 
@@ -40,29 +40,6 @@ function row(id: number, fields: Partial<SessionRow> = {}): SessionRow {
 /** Tolliver plays Default on the world port. Session 2 is the new one. */
 const TOLLIVER = row(1, { character: 'Tolliver', host: PLAY, port: 1848, connected: true });
 const NEW = 2;
-
-describe('pickProfile', () => {
-  it('starts on a profile pinned to the host and port, characters and all', () => {
-    expect(pickProfile([DEFAULT, BUILD, HEALER], PLAY, 1825, 'default')).toBe('Build');
-    expect(pickProfile([HEALER, DEFAULT], 'PLAY.theforsakenlands.com', 1848, 'Healer')).toBe(
-      'default',
-    );
-  });
-
-  it('then takes a profile that claims the host on any port', () => {
-    expect(pickProfile([DEFAULT, HEALER], PLAY, 1825, 'default')).toBe('Healer');
-  });
-
-  it('then keeps the profile in front', () => {
-    expect(pickProfile([DEFAULT], PLAY, 1825, 'default')).toBe('default');
-    expect(pickProfile([DEFAULT, BUILD], 'mud.example.org', 4000, 'Build')).toBe('Build');
-  });
-
-  it('passes over a claim whose login is off', () => {
-    const off = profile('Build', { host: PLAY, port: 1825, enabled: false });
-    expect(pickProfile([DEFAULT, off], PLAY, 1825, 'default')).toBe('default');
-  });
-});
 
 describe('showsProfileRow', () => {
   it('shows with more than one profile', () => {

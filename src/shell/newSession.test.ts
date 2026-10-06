@@ -59,7 +59,7 @@ beforeEach(() => {
   });
   sessions.rows = [row(1, 'default')];
   sessions.selected = 1;
-  vi.mocked(invoke).mockImplementation((cmd: string) => {
+  vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
     if (cmd === 'profiles_list') {
       return Promise.resolve({
         active: 'default',
@@ -68,6 +68,12 @@ beforeEach(() => {
           { name: 'Build', auto_match: { host: PLAY, port: 1825, characters: ['Orla'] } },
         ],
       });
+    }
+    if (cmd === 'profile_resolve_match') {
+      // Rust's pick before login, for the claims the list above holds.
+      const { host, port } = args as { host: string; port: number };
+      if (host !== PLAY) return Promise.resolve(null);
+      return Promise.resolve(port === 1825 ? 'Build' : 'default');
     }
     if (cmd === 'session_open') {
       sessions.rows = [...sessions.rows, { ...row(2, 'Build'), character: null, host: null }];
@@ -92,6 +98,7 @@ describe('openNewSession', () => {
     const calls = vi.mocked(invoke).mock.calls.map(([cmd, args]) => [cmd, args]);
     expect(calls).toEqual([
       ['profiles_list', undefined],
+      ['profile_resolve_match', { host: PLAY, port: 1825, character: null, anyCharacter: true }],
       ['session_open', { profile: 'Build' }],
       ['session_select', { session: 2 }],
     ]);
