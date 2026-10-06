@@ -1,7 +1,6 @@
-import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden, type HiddenState } from './hiddenStore';
-import { asNumber, asText, createStore, isHiddenFlag } from '../store';
+import { asNumber, asText, isHiddenFlag } from '../store';
 
 // The opponent you are fighting, from Char.Combat. Aabahran sends
 // `{target, condition, hp_pct}` on each prompt in a fight and `{}` when
@@ -107,43 +106,23 @@ export function withHidden(
   return next;
 }
 
-const store = createStore<CombatOpponent | null>(null);
-// The last fight as Char.Combat sent it, before the hidden state.
-let sent: CombatOpponent | null = null;
-let started = false;
+// The state is the last fight as Char.Combat sent it, and the panes read
+// it with the hidden state laid over it.
+const store = createGmcpStore<CombatOpponent | null>({
+  state: null,
+  packages: { 'Char.Combat': (_, data) => parseCombat(data) },
+  events: [(apply) => subscribeHidden(() => apply((sent) => sent))],
+  view: (sent, last) => {
+    const next = withHidden(sent, getHidden());
+    // Char.Combat rides every prompt, so keep what the panes read when
+    // it repeats.
+    return last !== undefined && sameOpponent(last, next) ? last : next;
+  },
+});
 
-function publish(): void {
-  const next = withHidden(sent, getHidden());
-  // Char.Combat rides every prompt, so skip the ones that repeat.
-  if (!sameOpponent(store.get(), next)) store.set(next);
-}
-
-export function startCombatStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Char.Combat', (data) => {
-    sent = parseCombat(data);
-    publish();
-  });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      sent = null;
-      store.set(null);
-    }
-  });
-  subscribeHidden(publish);
-}
-
-export function getCombat(): CombatOpponent | null {
-  return store.get();
-}
-
-export function subscribeCombat(cb: () => void): () => void {
-  startCombatStore();
-  return store.subscribe(cb);
-}
+export const startCombatStore = store.start;
+export const getCombat = store.get;
+export const subscribeCombat = store.subscribe;
 
 /** The opponent you are fighting, or null out of combat. */
-export function useCombat(): CombatOpponent | null {
-  return useSyncExternalStore(subscribeCombat, getCombat);
-}
+export const useCombat = store.use;

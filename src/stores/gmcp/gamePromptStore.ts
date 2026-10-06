@@ -1,6 +1,4 @@
-import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../../ipc/session';
-import { createStore } from '../store';
+import { createGmcpStore } from './gmcpStore';
 
 // Your prompt settings in the game, from Char.Prompt. Aabahran sends
 // `{enabled, prompt, fprompt}` at login and whenever you change or show
@@ -45,45 +43,38 @@ export function parseGamePrompt(data: unknown): GamePrompt | null {
   };
 }
 
-const store = createStore<GamePromptSeen | null>(null);
-let started = false;
-// No Char.Prompt has come since this window heard you connect. It starts
-// false, so a window that loads while you play never calls a packet the
-// login one.
-let awaitingLogin = false;
-
-export function startGamePromptStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Char.Prompt', (data) => {
-    const next = parseGamePrompt(data);
-    if (!next) return;
-    store.set({ ...next, receivedAt: Date.now(), atLogin: awaitingLogin });
-    awaitingLogin = false;
-  });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      store.set(null);
-      awaitingLogin = false;
-    } else {
-      // The session says it is connecting before it reads anything, so
-      // the next packet is the one the game sends at login.
-      awaitingLogin = true;
-    }
-  });
+interface GamePromptState {
+  seen: GamePromptSeen | null;
+  /** No Char.Prompt has come since this window heard you connect. It
+   *  starts false, so a window that loads while you play never calls a
+   *  packet the login one. */
+  awaitingLogin: boolean;
 }
 
-export function getGamePrompt(): GamePromptSeen | null {
-  return store.get();
-}
+const store = createGmcpStore<GamePromptState, GamePromptSeen | null>({
+  state: { seen: null, awaitingLogin: false },
+  packages: {
+    'Char.Prompt': (state, data) => {
+      const next = parseGamePrompt(data);
+      if (!next) return state;
+      return {
+        seen: { ...next, receivedAt: Date.now(), atLogin: state.awaitingLogin },
+        awaitingLogin: false,
+      };
+    },
+  },
+  // The session says it is connecting before it reads anything, so the
+  // next packet is the one the game sends at login.
+  connection: (state, payload) =>
+    payload.kind === 'disconnected'
+      ? { seen: null, awaitingLogin: false }
+      : { ...state, awaitingLogin: true },
+  view: (state) => state.seen,
+});
 
-export function subscribeGamePrompt(cb: () => void): () => void {
-  startGamePromptStore();
-  return store.subscribe(cb);
-}
+export const startGamePromptStore = store.start;
+export const getGamePrompt = store.get;
 
 /** Your prompt settings in the game with when they came, or null until it
  *  sends them. */
-export function useGamePrompt(): GamePromptSeen | null {
-  return useSyncExternalStore(subscribeGamePrompt, getGamePrompt);
-}
+export const useGamePrompt = store.use;

@@ -7,8 +7,10 @@ import { createStore } from '../store';
 // so a later change can keep one for each session in its place. Every
 // input moves that value only through a change, a function that takes
 // the state and returns the next one, or the same state when nothing
-// moved. Each change then publishes through createStore, which skips a
-// state that did not change. start runs once and registers every
+// moved. After each change the store publishes what the panes read
+// through createStore, which skips a value that did not change. That is
+// the state, or a view of it that hands back what the panes read when
+// nothing they read moved. start runs once and registers every
 // listener before it returns. subscribe starts the store too, and get
 // does not.
 //
@@ -22,7 +24,7 @@ import { createStore } from '../store';
 
 type Change<S> = (state: S) => S;
 
-interface GmcpStoreSpec<S> {
+interface GmcpStoreSpec<S, V> {
   /** The state before anything is heard. */
   state: S;
   /** The change each package's data makes, by package name. */
@@ -38,16 +40,23 @@ interface GmcpStoreSpec<S> {
    *  session. `ask` reads it and `take` is the change its answer
    *  makes. */
   snapshot?: { ask: () => Promise<unknown>; take: (state: S, data: unknown) => S };
+  /** What the panes read, from the state and from what they read now,
+   *  which is undefined for the first view. It runs after every change,
+   *  one that keeps the state too, so a view that reads another store
+   *  can follow it. Without it the panes read the state. */
+  view?: (state: S, last?: V) => V;
 }
 
-export function createGmcpStore<S>({
+export function createGmcpStore<S, V = S>({
   state: initial,
   packages = {},
   connection,
   events = [],
   snapshot,
-}: GmcpStoreSpec<S>) {
-  const store = createStore<S>(initial);
+  view = (state) => state as unknown as V,
+}: GmcpStoreSpec<S, V>) {
+  let current = initial;
+  const store = createStore<V>(view(current));
   const connectionChange =
     connection ??
     ((state: S, payload: StatePayload) => (payload.kind === 'disconnected' ? initial : state));
@@ -55,7 +64,8 @@ export function createGmcpStore<S>({
   let generation = 0;
 
   function apply(change: Change<S>): void {
-    store.set(change(store.get()));
+    current = change(current);
+    store.set(view(current, store.get()));
   }
 
   /** Apply a change a packet or an event brought, and count it. */
@@ -94,7 +104,7 @@ export function createGmcpStore<S>({
     return store.subscribe(cb);
   }
 
-  function use(): S {
+  function use(): V {
     return useSyncExternalStore(subscribe, store.get);
   }
 
