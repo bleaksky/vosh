@@ -137,8 +137,17 @@ enum Route {
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },
     /// Quit through the exit request, so the windows send their pending
-    /// writes first.
+    /// writes first. With two or more sessions connected the main window
+    /// asks first, see [`quit_asks`].
     Quit,
+}
+
+/// Whether Quit hands the main window the question before it quits, by
+/// how many sessions are connected. Two or more ask, so one keeps the
+/// Quit it had before sessions (Sessions Q13).
+#[cfg(target_os = "macos")]
+const fn quit_asks(connected: usize) -> bool {
+    connected >= 2
 }
 
 /// The shortcut for Quit Vosh, the one the system Quit row uses.

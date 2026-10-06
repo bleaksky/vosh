@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { closeSessionQuestion, closeWindowQuestion, type CloseRow } from './closeQuestions';
+import {
+  closeSessionQuestion,
+  closeWindowQuestion,
+  quitQuestion,
+  type CloseRow,
+} from './closeQuestions';
 
 // Q13 and board 6 of the Sessions review. Close session asks while its
-// session is connected and names it as its row does, and Close window
-// asks while any session is connected.
+// session is connected and names it as its row does, Close window asks
+// while any session is connected, and Quit while two or more are.
 
 const PLAY = 'play.theforsakenlands.com';
 
@@ -105,6 +110,29 @@ describe('closeWindowQuestion', () => {
     const many = Array.from({ length: 11 }, (_, i) => row(i + 1, { character: 'Tolliver' }));
     expect(closeWindowQuestion(many)?.body).toMatch(
       /^11 sessions are connected, .* Closing this window ends all 11 and quits Vosh\.$/,
+    );
+  });
+});
+
+describe('quitQuestion', () => {
+  it('asks in board 6 words while two sessions are connected', () => {
+    expect(quitQuestion([tolliver, orla])).toEqual({
+      title: 'Quit Vosh?',
+      body: 'Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825. Quitting ends both.',
+      confirm: 'Quit',
+    });
+  });
+
+  it('quits at once with one session connected, as before sessions', () => {
+    expect(quitQuestion([tolliver])).toBeNull();
+    expect(quitQuestion([tolliver, { ...orla, connected: false }])).toBeNull();
+    expect(quitQuestion([])).toBeNull();
+  });
+
+  it('ends all three', () => {
+    const maren = row(3, { character: 'Maren' });
+    expect(quitQuestion([tolliver, maren, orla])?.body).toBe(
+      'Three sessions are connected, Tolliver on The Forsaken Lands, Maren on The Forsaken Lands, and Orla on The Forsaken Lands 1825. Quitting ends all three.',
     );
   });
 });

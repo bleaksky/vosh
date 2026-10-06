@@ -96,6 +96,8 @@ To close a session, point at its row and click the cross that takes the place of
 
 Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you choose `Close window` in the Session menu or press `Cmd+W` on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
 
+On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected, and with one Vosh quits at once. A quit from the Dock or as you log out cannot ask.
+
 ## Play
 
 ### 2.1 Send commands
@@ -824,6 +826,8 @@ Anywhere in the main window.
 - `Cmd+/` opens Help.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
+
+On macOS, `Cmd+W` closes the window in front and `Cmd+Q` quits Vosh. The main window asks before it closes while a session is connected, and `Cmd+Q` asks while two or more are.
 
 In the command line.
 

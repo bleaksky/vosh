@@ -8,10 +8,11 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tracing::warn;
 
 use super::{
-    accelerator, connect_label, is_check_id, route, staff_listed, theme_rows, MenuState, MenuTheme,
-    Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
+    accelerator, connect_label, is_check_id, quit_asks, route, staff_listed, theme_rows, MenuState,
+    MenuTheme, Route, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
 };
 use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
+use crate::app::state::SharedState;
 use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
 
 const COPYRIGHT: &str = "Copyright © 2026 James Wright";
@@ -232,7 +233,21 @@ pub(crate) fn on_event(app: &AppHandle, event: MenuEvent) {
                 }
             });
         }
-        Route::Quit => app.exit(0),
+        Route::Quit => {
+            let app = app.clone();
+            // Off the main thread, since each session's count takes its
+            // connection lock. A quit from the Dock or at log out never
+            // comes here and cannot ask (app/exit.rs).
+            tauri::async_runtime::spawn(async move {
+                let main = app.get_webview_window("main").is_some();
+                if main && quit_asks(connected_sessions(&app)) {
+                    raise_main(&app);
+                    emit_main(&app, "quit");
+                } else {
+                    app.exit(0);
+                }
+            });
+        }
         Route::CloseFront => {
             if is_front(app, "settings") {
                 if let Some(settings) = app.get_webview_window("settings") {
@@ -406,6 +421,17 @@ fn is_front(app: &AppHandle, label: &str) -> bool {
     app.get_webview_window(label)
         .and_then(|w| w.is_focused().ok())
         .unwrap_or(false)
+}
+
+/// How many sessions are connected.
+fn connected_sessions(app: &AppHandle) -> usize {
+    app.try_state::<SharedState>().map_or(0, |state| {
+        state
+            .all_sessions()
+            .iter()
+            .filter(|session| session.connected())
+            .count()
+    })
 }
 
 /// Bring the main window forward, out of the Dock if minimized.
