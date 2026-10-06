@@ -98,6 +98,13 @@ describe('searchSettingsRows', () => {
     expect(labels('walk keys')).toEqual(['Presets']);
   });
 
+  it('finds Triggers by the parts of an alert', () => {
+    expect(labels('bounce')).toEqual(['Triggers']);
+    expect(labels('flash')).toContain('Triggers');
+    expect(labels('alert banner')).toEqual(['Triggers']);
+    expect(labels('notification')).toEqual(['Triggers']);
+  });
+
   it('shows loadouts only in loadout mode', () => {
     expect(labels('loadouts')).not.toContain('Loadouts');
     expect(labels('loadouts', { pathB: true, mac: true })).toContain('Loadouts');

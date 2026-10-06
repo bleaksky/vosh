@@ -397,7 +397,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Automation, from the approved board.
   {
     label: 'Triggers',
-    keywords: 'trigger pattern highlight gag replace route wash regex text starts with match mode',
+    keywords:
+      'trigger pattern highlight gag replace route wash regex text starts with match mode alert banner notification sound bounce flash',
     target: at('automation', 'triggers'),
   },
   {

@@ -120,6 +120,20 @@
   box-shadow: var(--st-seg-ring);
 }
 
+/* A group whose segments press on and off on their own, like the Alert
+   row. A pressed one leads with the check in the accent, pulled 3 px
+   into its padding, as board 1 of the Alerts review draws it. */
+.st-seg.is-multi .st-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.st-seg.is-multi .st-seg-item[aria-pressed='true'] svg {
+  color: var(--accent);
+  margin-left: -3px;
+}
+
 .st-select {
   position: relative;
   display: block;
