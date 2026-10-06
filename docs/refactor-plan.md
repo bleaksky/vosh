@@ -41,7 +41,7 @@ The R1 section below names d2239d7. That is the same work before it moved onto `
 
 Stage B. On October 2 you approved R7 to R13 as one stage, with new features frozen until the safe stopping point after R13.
 
-Stage C. On October 4 you approved R15 to R20 as one stage, and all six are done. The page half of R14b comes right after R20 and builds on the structure the stage leaves, and the Rust half of alerts and auto reconnect runs beside it on `feat/alerts-rust`. The notes at the head of 4.6 hold for every phase in it.
+Stage C. On October 4 you approved R15 to R20 as one stage, and all six are done. The page half of R14b comes right after R20 and builds on the structure the stage leaves. The Rust half of alerts and auto reconnect, Harbor Dark, Iceberg Dark and Color vision landed on `one-window` while the stage ran, and the merge of stage C into `one-window` puts them in the stage's structure. Color vision saves through its own field of `ui_set_fields`, and `src/theme/gameChannels.ts` holds the game's channel colors. The notes at the head of 4.6 hold for every phase in it.
 
 Features that landed before stage B. These landed on `one-window` after R6, in the old structure, so Parts 1 to 3 do not list them. Each phase places the ones in its files into the target structure when it reaches them.
 
