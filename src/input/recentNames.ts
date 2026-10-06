@@ -2,7 +2,8 @@
 // output, used as a Tab-completion source so the user can complete
 // names that are not currently in Room.Chars (people on the who
 // list, folks who just spoke in a comm channel, players the user
-// just considered, etc.).
+// just considered, etc.). Each session keeps its own, so Tab offers
+// the names its own game showed.
 //
 // The scrape is intentionally broad: any word that starts with an
 // uppercase letter and is 4+ chars passes through. False positives
@@ -63,15 +64,17 @@ const STOPLIST = new Set([
   'Doing',
 ]);
 
-// name -> last-seen timestamp (ms)
-const seen = new Map<string, number>();
+// session -> name -> last-seen timestamp (ms)
+const sessions = new Map<number, Map<string, number>>();
 
-/** Scrape capitalized name-like tokens from `text` and bump their
- *  last-seen timestamp. Call this from anywhere that sees MUD output
- *  text (the Terminal output subscription, the chat panel, etc.).
- *  Idempotent and cheap. */
-export function ingestRecentNames(text: string): void {
+/** Scrape capitalized name-like tokens from `text`, which `session`
+ *  printed, and bump their last-seen timestamp. Call this from anywhere
+ *  that sees MUD output text (the Terminal output subscription, the chat
+ *  panel, etc.). Idempotent and cheap. */
+export function ingestRecentNames(text: string, session: number): void {
   if (!text) return;
+  let seen = sessions.get(session);
+  if (!seen) sessions.set(session, (seen = new Map()));
   const now = Date.now();
   TOKEN_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -80,23 +83,23 @@ export function ingestRecentNames(text: string): void {
     if (STOPLIST.has(name)) continue;
     seen.set(name, now);
   }
-  if (seen.size > MAX_ENTRIES) pruneOldestPastCap(now);
+  if (seen.size > MAX_ENTRIES) pruneOldestPastCap(seen, now);
 }
 
-/** Names seen in the last MAX_AGE_MS, ordered most-recent first.
- *  Used by Tab completion in useTabCompletion.ts as a source after the
- *  typed-history words and the live Room.Chars list. */
-export function recentNames(): string[] {
+/** Names `session` printed in the last MAX_AGE_MS, ordered most-recent
+ *  first. Used by Tab completion in useTabCompletion.ts as a source after
+ *  the typed-history words and the live Room.Chars list. */
+export function recentNames(session: number): string[] {
   const now = Date.now();
   const fresh: { name: string; ts: number }[] = [];
-  for (const [name, ts] of seen) {
+  for (const [name, ts] of sessions.get(session) ?? []) {
     if (now - ts <= MAX_AGE_MS) fresh.push({ name, ts });
   }
   fresh.sort((a, b) => b.ts - a.ts);
   return fresh.map((e) => e.name);
 }
 
-function pruneOldestPastCap(now: number): void {
+function pruneOldestPastCap(seen: Map<string, number>, now: number): void {
   // Prune by age first.
   for (const [name, ts] of seen) {
     if (now - ts > MAX_AGE_MS) seen.delete(name);

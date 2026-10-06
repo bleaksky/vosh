@@ -540,15 +540,15 @@ function MainWindow() {
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
-      onLocalEcho={(text) => {
-        writeLive(text);
+      onLocalEcho={(text, session) => {
+        writeTo(session, text);
         // Mirror to the split history pane so typed lines appear
         // there too. Without this, scrolling up in split view
         // shows server output but none of your own commands. The
         // history Terminal is lazy-mounted and may be null between
         // splitOpen=true and onReady; the optional chain absorbs
-        // that gap.
-        historyTermRef.current?.write(text);
+        // that gap. It shows the selected session's history.
+        if (session === getSelected()) historyTermRef.current?.write(text);
       }}
       onScrollTerminal={pageSplit}
       onExitSplit={exitSplit}

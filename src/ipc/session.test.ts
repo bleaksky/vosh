@@ -34,9 +34,19 @@ describe('sending a line', () => {
 
   it('stops a walk on Esc with a call of its own, which sends the game nothing', async () => {
     vi.mocked(invoke).mockClear();
-    await stopWalk();
+    await stopWalk(2);
     expect(vi.mocked(invoke)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_walk_stop');
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_walk_stop', { session: 2 });
+  });
+
+  it('names the session the line was typed in', async () => {
+    vi.mocked(invoke).mockClear();
+    await sendInput('look', 2);
+    await sendMaskedInput(SECRET, 2);
+    expect(vi.mocked(invoke).mock.calls).toEqual([
+      ['session_send_input', { line: 'look', session: 2 }],
+      ['session_send_masked', { line: SECRET, session: 2 }],
+    ]);
   });
 });
 
