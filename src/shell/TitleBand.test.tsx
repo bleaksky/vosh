@@ -401,7 +401,8 @@ const row = (name: string, on: boolean, stopped: PluginRow['stopped'] = null): P
   misnamed: false,
 });
 
-/** A panel that shows Affects and Chat, so Map and Group are left. */
+/** A panel that shows Affects and Chat, so Map, Group and a second
+ *  Chat are left. */
 const tree = (...extra: PaneSplit['children']): PaneSplit => ({
   id: 'root',
   split: 'column',
@@ -417,6 +418,9 @@ const allShown = (): PaneSplit =>
   tree(
     { id: 'map', pane: 'map', weight: 1, props: {} },
     { id: 'group', pane: 'group', weight: 1, props: {} },
+    { id: 'chat-2', pane: 'chat', weight: 1, props: {} },
+    { id: 'chat-3', pane: 'chat', weight: 1, props: {} },
+    { id: 'chat-4', pane: 'chat', weight: 1, props: {} },
   );
 
 describe('Add a pane', () => {
@@ -491,6 +495,7 @@ describe('Add a pane', () => {
     expect((await open(tree())).lines).toEqual([
       'Map',
       'Group',
+      'Chat',
       '---',
       'Weather | weather_pane',
       'Worth | worth_pane',
@@ -499,11 +504,23 @@ describe('Add a pane', () => {
 
   it('lists a Lua pane only while its plugin is on and running', async () => {
     holdPanes(false);
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', '---', 'Worth | worth_pane']);
+    expect((await open(tree())).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat',
+      '---',
+      'Worth | worth_pane',
+    ]);
     lua.rows = [row('weather_pane', true, 'time'), row('worth_pane', true)];
-    expect((await open(tree())).lines).toEqual(['Map', 'Group', '---', 'Worth | worth_pane']);
+    expect((await open(tree())).lines).toEqual([
+      'Map',
+      'Group',
+      'Chat',
+      '---',
+      'Worth | worth_pane',
+    ]);
     lua.rows = null;
-    expect((await open(tree())).lines).toEqual(['Map', 'Group']);
+    expect((await open(tree())).lines).toEqual(['Map', 'Group', 'Chat']);
   });
 
   it('drops a Lua pane once the panel shows it', async () => {
@@ -517,6 +534,7 @@ describe('Add a pane', () => {
     expect((await open(tree(weather))).lines).toEqual([
       'Map',
       'Group',
+      'Chat',
       '---',
       'Worth | worth_pane',
     ]);

@@ -50,8 +50,13 @@ describe('paneToSplitIn', () => {
     expect(paneToSplitIn()).toEqual({ pane: 'group', props: {} });
   });
 
-  it('splits in a Lua pane once every built-in pane shows', () => {
+  it('splits in another Chat once only Chat has room', () => {
     lay('map', 'affects', 'group', 'chat');
+    expect(paneToSplitIn()).toEqual({ pane: 'chat', props: {} });
+  });
+
+  it('splits in a Lua pane once every built-in pane shows', () => {
+    lay('map', 'affects', 'group', 'chat', 'chat', 'chat', 'chat');
     expect(paneToSplitIn()).toEqual({
       pane: 'lua',
       props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },

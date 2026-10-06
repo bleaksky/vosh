@@ -6,7 +6,10 @@ import {
   LUA_PANE,
   PANE_TYPES,
   allPanes,
+  countPanes,
+  paneCap,
   paneKey,
+  paneRef,
   type PaneLeaf,
   type PaneRef,
   type PaneSplit,
@@ -40,10 +43,17 @@ export function offeredPaneTypes(): PaneType[] {
   return PANE_TYPES.filter((t) => t !== 'imm' || staff);
 }
 
-/** Offered pane types the tree does not show yet, in menu order. */
+// Whether the tree has room for another pane of type `t`: one it does
+// not show yet, or another Chat while fewer than four show.
+function hasRoomFor(tree: PaneSplit | null, t: PaneType): boolean {
+  const ref = paneRef(t);
+  return tree === null || countPanes(tree, ref) < paneCap(ref);
+}
+
+/** Offered pane types the tree has room for, in menu order: each one
+ *  it does not show yet, and Chat while fewer than four show. */
 export function paneTypesToAdd(tree: PaneSplit | null): PaneType[] {
-  const shown = new Set(tree ? allPanes(tree) : []);
-  return offeredPaneTypes().filter((t) => !shown.has(t));
+  return offeredPaneTypes().filter((t) => hasRoomFor(tree, t));
 }
 
 /** A Lua pane the menus offer: the plugin that draws it, its id, and
@@ -95,11 +105,14 @@ export interface PanesToShowInstead {
 }
 
 /** The offered panes other than `leaf`, built-in and then Lua, in menu
- *  order. A pane shown elsewhere moves here. */
-export function panesToShowInstead(leaf: PaneLeaf): PanesToShowInstead {
+ *  order. A pane the tree holds once moves here from where it shows,
+ *  and Chat joins the Chat panes shown while fewer than four show. */
+export function panesToShowInstead(leaf: PaneLeaf, tree: PaneSplit | null): PanesToShowInstead {
   const key = paneKey(leaf);
   return {
-    builtIns: offeredPaneTypes().filter((t) => t !== leaf.pane),
+    builtIns: offeredPaneTypes().filter(
+      (t) => t !== leaf.pane && (t !== 'chat' || hasRoomFor(tree, t)),
+    ),
     lua: offeredLuaPanes()
       .map(luaPaneRef)
       .filter((ref) => paneKey(ref) !== key),
