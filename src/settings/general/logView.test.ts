@@ -13,7 +13,7 @@ import {
   markMatches,
   matchRanges,
   parseLogLine,
-  savedSessionsText,
+  savedLogsText,
 } from './logView';
 import { findTheme } from '../../theme/themes';
 
@@ -22,15 +22,12 @@ const at = (month: number, day: number, hour: number, minute: number, year = 202
   new Date(year, month - 1, day, hour, minute).getTime();
 const NOW = at(9, 29, 5, 40);
 
-describe('savedSessionsText', () => {
-  it('counts sessions and lines on this computer', () => {
-    expect(savedSessionsText(447, 708350, 'Mac')).toBe(
-      '447 sessions and 708,350 lines on this Mac.',
-    );
-    expect(savedSessionsText(1, 1, 'PC')).toBe('1 session and 1 line on this PC.');
-    expect(savedSessionsText(0, 0, 'computer')).toBe(
-      'Vosh has not saved a session on this computer yet.',
-    );
+describe('savedLogsText', () => {
+  it('counts logs and lines on this computer', () => {
+    expect(savedLogsText(447, 708350, 'Mac')).toBe('447 logs and 708,350 lines on this Mac.');
+    expect(savedLogsText(1, 1, 'PC')).toBe('1 log and 1 line on this PC.');
+    expect(savedLogsText(0, 0, 'Mac')).toBe('Vosh has not saved a log on this Mac yet.');
+    expect(savedLogsText(0, 0, 'computer')).toBe('Vosh has not saved a log on this computer yet.');
   });
 });
 

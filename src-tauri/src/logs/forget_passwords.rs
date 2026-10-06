@@ -128,11 +128,13 @@ pub(crate) fn message(outcome: &Outcome) -> String {
                 .to_string()
         }
         Outcome::Found(found) if found.count() == 0 => NONE.to_string(),
+        // The store calls one logged connection a session, but session
+        // means a tab now, so the line counts logs as Settings does (Q21).
         Outcome::Found(found) => format!(
             "Vosh found {} where you sent a password, across {}. \
              Type #logs forget-passwords now to blank {}.",
             count(found.count(), "line", "lines"),
-            count(found.sessions(), "session", "sessions"),
+            count(found.sessions(), "log", "logs"),
             if found.count() == 1 { "it" } else { "them" },
         ),
         Outcome::Blanked(done) if done.lines == 0 && !done.resumed => NONE.to_string(),
@@ -209,7 +211,7 @@ mod tests {
         };
         assert_eq!(
             message(&Outcome::Found(found)),
-            "Vosh found 5 lines where you sent a password, across 3 sessions. \
+            "Vosh found 5 lines where you sent a password, across 3 logs. \
                  Type #logs forget-passwords now to blank them."
         );
         let one = PasswordLines {
@@ -218,7 +220,7 @@ mod tests {
         };
         assert_eq!(
             message(&Outcome::Found(one)),
-            "Vosh found 1 line where you sent a password, across 1 session. \
+            "Vosh found 1 line where you sent a password, across 1 log. \
                  Type #logs forget-passwords now to blank it."
         );
     }
@@ -281,7 +283,7 @@ mod tests {
         };
         assert_eq!(
             message(&Outcome::Found(both)),
-            "Vosh found 1 line where you sent a password, across 1 session. \
+            "Vosh found 1 line where you sent a password, across 1 log. \
                  Type #logs forget-passwords now to blank it."
         );
 
