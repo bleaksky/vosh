@@ -1185,3 +1185,91 @@ describe('the help on Color vision', () => {
     expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
   });
 });
+
+// Sessions Q5, Q22, Q24 to Q26, Q28, Q30 and Q31. What each session keeps
+// apart and what the sessions on one profile share, in topic 1.4 and in
+// each topic that described one session.
+describe('the help on what each session keeps and what its profile shares', () => {
+  it('lists in 1.4 what a session keeps and what its profile shares', () => {
+    const text = body('get-connected.sessions');
+    expect(text).toContain('Each session keeps these of its own.');
+    expect(text).toContain(
+      '- Its Lua, with the plugins its profile turns on, the scripts you load with `#script load` and the aliases its plugins make. When Vosh stops the Lua of a trigger or an alias, it stays off in that session alone.',
+    );
+    expect(text).toContain(
+      'The sessions on one profile share everything the profile holds, its aliases, triggers, macros and timers, its groups, its profile variables, its tick settings, its prompt design, its loadouts and its panes.',
+    );
+    expect(text).toContain('`#tick reset` restarts the count of its own session alone.');
+    expect(text).toContain(
+      'When you open Vosh again, your sessions come back in their order with their names, none of them connected',
+    );
+  });
+
+  it('says what a profile load or reset reaches and what the other sessions print', () => {
+    expect(body('get-connected.profile-save')).toContain(
+      'Both reach every session that plays the profile, and each of the others prints a line that names the session you typed it in, such as `Tolliver loaded this profile from its file.`',
+    );
+    expect(body('reference.slash-commands')).toContain(
+      'a load or a reset reaches every session on the profile',
+    );
+  });
+
+  it('says the tick settings belong to the profile and each count to its session', () => {
+    const text = body('tick.tick-timer');
+    expect(text).toContain(
+      'While another session on the profile is connected, a new connection keeps the switch as that session has it.',
+    );
+    expect(text).toContain(
+      'Each session keeps its own count, and `#tick reset` restarts only the count of the session you type it in.',
+    );
+    expect(body('tick.track-target')).toContain(
+      'Each session keeps its own target and its own quick keys.',
+    );
+  });
+
+  it('says where variables, groups, the recorder and the Lua stops live', () => {
+    expect(body('automate.variables')).toContain(
+      '`#unvar` takes the name out of both scopes, so the profile value goes for every session on the profile.',
+    );
+    expect(body('automate.first-alias')).toContain(
+      'A group is on or off for its whole profile, so the switch and `#group` reach every session that plays the profile.',
+    );
+    expect(body('automate.macros')).toContain('It captures the commands you type in its session');
+    expect(body('automate.lua-scripts')).toContain(
+      'Each stays off only in the session where Vosh stopped it, and every other session on the profile keeps running it.',
+    );
+  });
+
+  it('says each profile keeps its loadouts and each session its scrollback file', () => {
+    expect(body('characters-and-data.loadouts')).toContain(
+      'Which loadouts are on belongs to the profile.',
+    );
+    expect(body('fix-it.data-on-disk')).toContain(
+      'each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.',
+    );
+    expect(body('characters-and-data.profiles')).toContain(
+      "`Default plays in Tolliver's session, Build in Orla's.`",
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    for (const id of [
+      'get-connected.profile-save',
+      'get-connected.sessions',
+      'automate.first-alias',
+      'automate.variables',
+      'automate.macros',
+      'automate.lua-scripts',
+      'tick.tick-timer',
+      'tick.track-target',
+      'characters-and-data.profiles',
+      'characters-and-data.loadouts',
+      'fix-it.data-on-disk',
+      'reference.slash-commands',
+    ]) {
+      const topic = HELP_TOPICS.find((t) => t.id === id);
+      if (!topic) throw new Error(`no help topic ${id}`);
+      expect(helpMd, id).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
+    }
+  });
+});

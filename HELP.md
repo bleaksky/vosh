@@ -39,17 +39,17 @@ Two things reset on a disconnect. The chat pane buffer empties the moment the se
 
 ### 1.3 Save your profile
 
-`#profile save` writes the current client state to the active profile file, and the profile loads again on startup with no extra step. The file is a TOML snapshot under `~/Library/Application Support/com.aabahran.vosh`.
+`#profile save` writes the current client state to the file of the profile your session plays, and the profile loads again on startup with no extra step. The file is a TOML snapshot under `~/Library/Application Support/com.aabahran.vosh`.
 
 - Set up the client state you want to keep. Aliases, triggers, macros, variables, and tick settings all count.
-- Type `#profile save` in the command line. Vosh writes the snapshot to the active profile TOML.
+- Type `#profile save` in the command line. Vosh writes the snapshot to that profile's TOML.
 - Or choose `Save profile` in the Session menu of the macOS menu bar or in the `Cmd+K` palette. It sends the same command.
 
 The snapshot covers connection defaults, aliases, profile variables, triggers, tick configuration, macros, ui settings, enabled plugins, and the groups you disabled.
 
 Variables set with `#var` live in session scope. They clear when the next connection opens and never reach the file. A lasting value belongs in the `profile_vars` table of your profile file at `profiles/<name>.toml` in the app data folder. Edit it there while Vosh is closed, or set the value from Lua with `mud.set_profile_var`.
 
-`#profile load` pulls the saved file back into the live session. In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.
+`#profile load` pulls the saved file back into the profile, and `#profile reset` puts the profile back to its defaults. Both reach every session that plays the profile, and each of the others prints a line that names the session you typed it in, such as `Tolliver loaded this profile from its file.` In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.
 
 ### 1.4 Play in more than one session
 
@@ -106,6 +106,20 @@ A glyph takes the place of the port while a session is not ready to play.
 A session that is not connected shows its name in grey. A row shows one glyph at a time, the triangle first, then the hand, then the spinner, then the dot.
 
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
+
+Each session keeps these of its own.
+
+- Its terminal and scrollback, its command line with its history and what you left typed in it, and the world it dials.
+- Its target, its quick keys and the count of its tick.
+- Its session variables, set with `#var`.
+- Its recorder, so `#record` takes only the commands you type there.
+- Its Lua, with the plugins its profile turns on, the scripts you load with `#script load` and the aliases its plugins make. When Vosh stops the Lua of a trigger or an alias, it stays off in that session alone.
+
+The sessions on one profile share everything the profile holds, its aliases, triggers, macros and timers, its groups, its profile variables, its tick settings, its prompt design, its loadouts and its panes. A change from any of them reaches the others at once and saves once. So `#group combat off` turns that group off in every session on the profile, and so does its switch in Settings. Each `#tick` command that changes a setting reaches them all, while `#tick reset` restarts the count of its own session alone. `#profile load` and `#profile reset` reach them all too, and each of the others prints a line that names the session you typed it in.
+
+When you log in as a character another profile claims, the session moves to that profile and the other sessions stay where they are. If a session already plays that profile, the two share it from then on.
+
+When you open Vosh again, your sessions come back in their order with their names, none of them connected, and the one you left in front is in front again. A session opens its profile and its Lua the first time you bring it to the front, and its terminal shows the lines it kept.
 
 Settings edits the profile of the session in front. With two or more sessions open, its header names that session at the right, then the profile it plays in grey, such as `Orla` and `Build`. When another session plays the same profile, the header adds it, such as `Also in Tolliver`, since an edit reaches both.
 
@@ -289,7 +303,7 @@ Give related aliases a shared name in `Group` to turn them on and off together, 
 
 Triggers, Aliases, Macros, and Timers each list your items under a heading for every group, and Presets under a heading for each category. The items with no group sit at the top under no heading. Click a heading to fold its group away, and click it again to open it. The chevron turns down while the group is open, and a folded heading counts the items it holds. With a heading in focus, `ArrowLeft` folds it and `ArrowRight` opens it, and `ArrowUp` and `ArrowDown` move through the headings and items as one list. Each list remembers the groups you fold. Type in the filter and every folded group with a match opens until you clear it. Pick an item from the matches and its group stays open.
 
-The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`. It acts as you flip it, with no `Save`, and a group you just named gets its switch once you save it. `Tab` from a heading reaches its switch, and `Space` flips it. A timer takes a `Group` too, and a timer in a group that is off waits, then starts a whole interval once the group comes back on. In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros. Its switch waits, and a note under the heading names the loadouts that decide it, or says every loadout is off. `#group` still turns such a group, and the note then says when the loadouts turn it back.
+The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`. A group is on or off for its whole profile, so the switch and `#group` reach every session that plays the profile. It acts as you flip it, with no `Save`, and a group you just named gets its switch once you save it. `Tab` from a heading reaches its switch, and `Space` flips it. A timer takes a `Group` too, and a timer in a group that is off waits, then starts a whole interval once the group comes back on. In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros. Its switch waits, and a note under the heading names the loadouts that decide it, or says every loadout is off. `#group` still turns such a group, and the note then says when the loadouts turn it back.
 
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
 
@@ -361,7 +375,7 @@ Variables store values you reference in commands as `$name`. Set them from the c
 
 Interpolation runs on the line you type, before alias expansion, and Vosh does not interpolate alias output again. Put variables in the line you type, or resolve them in a Lua script body instead.
 
-`#var` writes session scope, which clears when the next connection opens, so a session value never survives into a new session. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name.
+`#var` writes session scope, which clears when the next connection opens, so a session value never survives into a new session. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name. Each session keeps its own session variables, and the sessions on one profile share its profile variables. `#unvar` takes the name out of both scopes, so the profile value goes for every session on the profile.
 
 Vosh also fills session variables on its own. GMCP binds `hp`, `maxhp`, `char_name`, `room_name`, `target_name`, and more, and setting a target with `tar` mirrors it into `$target`.
 
@@ -386,7 +400,7 @@ Turn on `Show the commands your macros send` under Input, then Command line, to 
 
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
-`#record` builds something different. It captures the commands you type and saves them as an alias you invoke by name, not by key. Use Automation, then Macros when you want a key, `#record` when you want a word.
+`#record` builds something different. It captures the commands you type in its session and saves them as an alias you invoke by name, not by key. The alias joins the profile, so every session on the profile has it. Use Automation, then Macros when you want a key, `#record` when you want a word.
 
 ### 3.7 Use slash commands
 
@@ -429,13 +443,13 @@ Scripts talk to Vosh through the global `mud` table. `mud.send(text)` goes strai
 
 Each script and each plugin owns the triggers, GMCP handlers, and timers it registers, those its callbacks register later included. Loading it again, with `#script reload` or `#script load`, takes all of them back once it runs without an error, so nothing doubles and a trigger you deleted from the file goes. A load with an error keeps what the script had. Variables it set and groups it turned on or off stay. Two scripts may each have a trigger of the same name. A new `mud.on_gmcp` handler runs at once on the last packet of its package, so it sees your `Char.Status` without waiting for your next login. A new `Comm.Channel` handler waits for the next message instead, since each chat packet is one message and not a state.
 
-Loads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads at launch. When you switch profiles, the plugins the next profile lists turn on and the others turn off as you play, and one both profiles list keeps running.
+Loads from `#script load` last until you close the session or quit Vosh, and only that session runs them. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. To turn a plugin on, add its name to `enabled` under `[plugins]` in your profile file while Vosh is closed, like `enabled = ["vitals_alert"]`. Every plugin on that list loads in each session that plays the profile, as the session opens it. When you switch profiles, the plugins the next profile lists turn on and the others turn off as you play, and one both profiles list keeps running. A switch in one session changes the plugins of that session alone.
 
-Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other, and it reads the standard libraries such as `string` and `table` but cannot change them. It starts from fresh globals each time it loads, and a line it hands `mud.input` runs no `#` command but `#echo`. An alias a plugin makes lasts while the plugin runs, and Vosh never saves it. It takes the place of your own alias of that name until the plugin turns off, and turning a plugin off takes back its aliases with all else it registered. Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals, and an alias they make is one you keep. They reach the globals of a plugin through `plugins.<name>`, a view you can read but not change, like `plugins.helpers.rescue("Orla")` to call a function the plugin helpers defines.
+Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other, and it reads the standard libraries such as `string` and `table` but cannot change them. It starts from fresh globals each time it loads, and a line it hands `mud.input` runs no `#` command but `#echo`. An alias a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It takes the place of your own alias of that name until the plugin turns off, and turning a plugin off takes back its aliases with all else it registered. Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals in each session, and an alias they make is one you keep, which every session on the profile runs. They reach the globals of a plugin through `plugins.<name>`, a view you can read but not change, like `plugins.helpers.rescue("Orla")` to call a function the plugin helpers defines.
 
-Every Lua error and every `print` shows in the terminal after a gray `[lua]` tag. An error names its place, like `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads at launch shows once you connect or type a line.
+Every Lua error and every `print` shows in the terminal of its session after a gray `[lua]` tag. An error names its place, like `combat.lua:3:` for line 3 of `combat.lua`, and shows in red. What a plugin prints as it loads in a session shows once you connect or type a line there.
 
-Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop. The time limit reaches inside string patterns and the `table` functions too, so a pattern that backtracks over a long line stops like a loop. A stopped call sends nothing it queued, and a red `[lua]` line says what Vosh stopped. A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh. Each plugin and each script from `#script load` also gets 100 ms in all for one game line, one packet, the last packets its new handlers get, or one round of timers that fall due together. Once it has used them, Vosh skips the rest of its triggers and handlers for that line or packet, holds the rest of its timers a quarter second, and says so in a red `[lua]` line. One call may queue 100 actions, such as sends and echoes, and Vosh drops the rest with a line that says so. A line to send holds 1 KB at most, an echo 64 KB, and one call 256 KB of text in all. Vosh runs 100 `mud.input` lines at most for one game line, packet, timer, or line you type, those their own Lua asks for included.
+Lua runs between the lines the game sends, so Vosh keeps each call short. It stops a call that runs past 100 ms, uses 32 MB more than it began with, or takes your scripts past 128 MB in all, and `pcall` cannot catch the stop. The time limit reaches inside string patterns and the `table` functions too, so a pattern that backtracks over a long line stops like a loop. A stopped call sends nothing it queued, and a red `[lua]` line says what Vosh stopped. A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh. Each stays off only in the session where Vosh stopped it, and every other session on the profile keeps running it. Each plugin and each script from `#script load` also gets 100 ms in all for one game line, one packet, the last packets its new handlers get, or one round of timers that fall due together. Once it has used them, Vosh skips the rest of its triggers and handlers for that line or packet, holds the rest of its timers a quarter second, and says so in a red `[lua]` line. One call may queue 100 actions, such as sends and echoes, and Vosh drops the rest with a line that says so. A line to send holds 1 KB at most, an echo 64 KB, and one call 256 KB of text in all. Vosh runs 100 `mud.input` lines at most for one game line, packet, timer, or line you type, those their own Lua asks for included.
 
 The sandbox strips file, process, and environment access. `require`, `io`, `os.execute`, `os.getenv`, and `os.setlocale` are gone, and Vosh refuses a `__gc` method, which runs where Vosh cannot stop it. `#script load` reads only from the `scripts` folder. `mud.input` cannot run `#script load`, `#script reload`, `#import-tintin`, or `#profile`, which run only when you type them, and it cannot set a quick key or the tick command to a `#` command.
 
@@ -565,7 +579,7 @@ The choice saves in the `[prompt]` table of your profile as `show`. An older ver
 
 The tick timer shows the game's tick in the status line under the command line, with the game time and the moons beside it. The game's own tick decides when it fires. Vosh knows the game ticked when the game hour moves, which Aabahran advances once a tick, or when a line matches your `Reset on` pattern. When the tick lands, the count restarts, the sound plays, and your `Send each tick` command goes out, once per tick. Configure it in Settings under Automation, then Timers, where `Tick` sits at the top of the list, and click `Save` to apply your changes.
 
-- Turn on `Enabled`. Every connection starts the tick, and switching characters keeps it running until you turn it off. `Play a sound` under `Advanced` plays a sound when the tick lands.
+- Turn on `Enabled`. Every connection starts the tick, and switching characters keeps it running until you turn it off. While another session on the profile is connected, a new connection keeps the switch as that session has it. `Play a sound` under `Advanced` plays a sound when the tick lands.
 - Set `Every` in seconds, anywhere from 1 to 3600. It is how long you expect a tick to take. Aabahran picks each tick between 25 and 35 seconds, so once the game ticks, the timer waits for the game instead of firing at `Every`.
 - Put a command in `Send each tick` to send it on every tick. Leave it blank for none.
 - Give `Reset on` a regex. A line that matches is the tick. A signal within 2 seconds of a tick counts as that tick, so a matching line and the game hour moving together fire once.
@@ -575,6 +589,8 @@ The tick timer shows the game's tick in the status line under the command line, 
 - Pick which way the tick counts in Settings under Layout, then Status line, in the Tick counts row. `Up` shows the seconds since the last tick and keeps counting past `Every` while the game runs late, like `31s`. `Down` shows the seconds left until the tick, from `Every` right after one down to `1s` in its last second, and waits at `0s` when the game runs late. `Down past 0` counts down the same way and keeps counting below zero until the tick lands. An early tick restarts either count at once.
 - Pick how the status line shows the tick, the time, and the moons in the Tick and time row at the top of the card. `Value` shows each value alone, like `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a ring before the tick. Counting up it fills clockwise as the seconds pass, closes when the tick is due, and stays closed while the game runs late. Counting down it shows the time left and empties clockwise toward the top, and only the faint ring shows while the game runs late. Before the time it draws the sun on its path over the horizon. The sun rises on the left, stands highest at midday, and sets on the right, and after dark it drops under the horizon as an open dot.
 - Pick the clock the game time reads on in the Game time row under Tick and time. `24 hour` reads like `18:00`, and `12 hour` reads like `6:00 PM`, with `12:00 AM` at midnight and `12:00 PM` at noon. Each character keeps its own.
+
+The tick settings belong to the profile, so what you set here reaches every session on it, and so does each `#tick` command that changes a setting. Each session keeps its own count, and `#tick reset` restarts only the count of the session you type it in. `Send each tick` goes out in every session on its own count, and the sound plays only for the session in front.
 
 The game time takes a tint from your theme for the part of the day. Each moon in the sky shows as a small icon of its phase in its own color. Each moon takes the color the game gives its name from your theme, so Lysenties draws in the theme's bright white, Nercuros in its bright cyan, and Dyphrities in its red. On a light theme the icons are ink on paper, like a printed calendar, with the dark part filled in, so a new moon is a solid disc and a full moon an open ring. Hover a moon to read its name and phase, like `Nercuros, nearly full and still growing`. During an eclipse, the triad, or a near alignment, one word in the warn color follows the moons. A dormant moon stays hidden, and the moons leave the line while you are not connected.
 
@@ -589,7 +605,7 @@ Set a target with `tar` and Vosh keeps it in the status line. Quick keys pair a 
 - Set a quick key with `#qkey <name> <verb>`, like `#qkey gg backstab`. Then type `gg` as the first word of a command and Vosh sends `backstab` and your target. Vosh skips its own echo, because the backend echoes the expansion instead.
 - Type `#qkeys` to list them and `#qkey clear <name>` to clear one.
 
-Setting a target with `tar` also fills `$target`, so `cast dispel $target` aims at your current mark. Quick keys live in the running session. They reset to the stock `gg`, `xx`, `zz`, and `tt` slots on restart, so set your verbs again with `#qkey` after each launch.
+Setting a target with `tar` also fills `$target`, so `cast dispel $target` aims at your current mark. Each session keeps its own target and its own quick keys. A new session starts from the stock `gg`, `xx`, `zz`, and `tt` slots, and every session goes back to them on restart, so set your verbs again with `#qkey` after each launch.
 
 ## Make it yours
 
@@ -667,7 +683,7 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 - Select a profile to edit it. Selecting one never switches the session you are playing.
 - Pick its `World`, then turn on `Use this profile when you log in`. The row names your character once Vosh has seen you log in. Turning it on takes that character from any other profile on the same world, and Vosh says so under the list. On a port that is not the world's own, such as 1825, a profile that claims the character on the whole world keeps it on the world's own port instead, and the line under the list names each claim that moved.
 - Open a profile's more menu to `Switch to this profile`, or to choose `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`. `Switch to this profile` moves the session in front to that profile.
-- With two or more sessions open, the line under the list names the sessions on each profile.
+- With two or more sessions open, the line under the list names the sessions on each profile, such as `Default plays in Tolliver's session, Build in Orla's.`
 
 `Duplicate…` copies a profile's whole setup but leaves its world and login behind. You cannot delete a profile a session plays, so switch that session to another profile or close it first.
 
@@ -675,7 +691,7 @@ Settings edits the profile of the session in front and follows you to another se
 
 Some settings can stay the same for every character. Under General, Keep the same for every character holds `Theme`, `Font and size`, `Keep last command`, and `Check for updates`. With a switch on, every character shares one value. Turn it off and each character keeps its own.
 
-From the command line, `#profile save` and `#profile load` write and reload the active profile's file on demand.
+From the command line, `#profile save` and `#profile load` write and reload the file of the profile your session plays, on demand.
 
 Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt, turns the trigger off, and tells you once at launch. Profiles that draw nothing then show the game's prompt. On The Forsaken Lands the moved pattern switches to your prompt codes the first time the game shows them, when you log in or when you type `prompt`. From then on Vosh follows each prompt you set in the game and keeps your design and the draw switch as they are. When a color code runs into a code in that prompt, or when the pattern fills a value under a name no prompt code fills, such as `health`, the pattern stays and `#prompt` says why. A pattern you set with `#prompt {regex}` never switches. An older version of Vosh shows the game's prompt in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.
 
@@ -693,6 +709,8 @@ The catalog keeps your folder names where it can. Each alias, trigger, and macro
 A trigger two characters had in different versions keeps each version, and the second one takes a name that adds its characters, such as `greet (Healer)`. An alias or a macro keeps the one version you pick in the wizard, since its name is what you type or press. Triggers keep the order each character had them in, since every trigger that matches a line fires in that order. Where two characters had the same triggers in different orders, one of them gets its own copy of a trigger, named the same way.
 
 Click `Turn all off`, then `Save`, to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.
+
+Which loadouts are on belongs to the profile. While your sessions play one profile, a change in Loadouts reaches every profile that has not made its own choice. Once sessions play two or more profiles, a change there holds for the profile of the session in front alone, and the other profiles keep the loadouts they have on.
 
 When no active loadout declares any enabled groups, the loadouts impose nothing and each group stays on or off as you left it, unless you keep the catalog dormant. While they impose, and while the catalog is dormant, the switch on each catalog group in Automation waits, with a note that names the loadouts that decide it or says every loadout is off. Timers stay with each profile, so no loadout turns a timer group on or off.
 
@@ -790,13 +808,13 @@ Vosh keeps all of its data in one app data folder named `com.aabahran.vosh`.
 
 Inside that folder.
 
-- `profiles.toml` indexes your profiles and names the active one.
+- `profiles.toml` indexes your profiles and names the active one. Once you open a second session or name one, it also lists your sessions in order, each with its name, its world and the profile it plays, so they come back at your next launch.
 - `profiles/<name>.toml` holds each profile snapshot with connection defaults, aliases, variables, triggers, timers, tick config, and macros. In loadout mode the aliases, triggers, and macros live in `catalog.toml` instead, and the profile file keeps the rest.
 - `profiles/legacy/` holds a copy of each profile file as it was when the loadouts migration ran.
 - `global.toml` holds cross profile UI preferences.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
-- `scrollback.txt` persists the last 10,000 terminal lines across restarts.
+- `scrollback.txt` keeps the last 10,000 terminal lines of the first session you opened across restarts, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.
 - `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
 - `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.
@@ -814,21 +832,21 @@ This is every slash command Vosh understands today.
 
 - `#help` prints the command summary, and `#help <words>` opens Help on those words.
 - `#alias <name> <expansion>` defines, `#unalias <name>` removes, `#aliases` lists.
-- `#var <name> [value]` sets or shows a session variable, `#unvar <name>` removes it from both scopes, `#vars` lists.
+- `#var <name> [value]` sets or shows a variable of this session, `#unvar <name>` removes it from this session and from the profile, `#vars` lists.
 - `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.
 - `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt, `#prompt {regex}` reads it with a pattern, `#prompt` says how Vosh reads it, and `#unprompt` stops reading it.
 - `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the game's own prompt.
 - `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.
 - `#prompt default` puts Vosh's default design in place of the design in this profile and keeps yours as an earlier design.
-- `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off, `#group <name>` shows state, `#groups` lists.
-- `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.
+- `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off for every session on the profile, `#group <name>` shows state, `#groups` lists.
+- `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer. `#tick reset` restarts the count of this session, and each command that changes a setting changes it for every session on the profile.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
 - `#script load <name>` loads a Lua file, `#script reload` reads every loaded script again and runs it, `#scripts` lists them.
 - `#lua <code>` evaluates Lua inline.
-- `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot. In loadout mode all three become notices.
+- `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot, and a load or a reset reaches every session on the profile. In loadout mode all three become notices.
 - `#import-tintin <path>` imports TinTin++ aliases and variables.
 - `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.
-- `#record <name>` starts recording, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
+- `#record <name>` starts recording what you type in this session, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
 - `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.
 - `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.
 - `#walk <steps>` walks a string of directions like `3n2e` one room at a time, `#walk` says how many steps are left, and `#walk stop` stops the walk.
