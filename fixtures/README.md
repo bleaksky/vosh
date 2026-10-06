@@ -58,6 +58,11 @@ fixtures/
              pages open, for src/components/settings/settingsAnchors.test.tsx.
              Change either only in a commit tied to a numbered bug or a
              lettered decision.
+  macros/    kept-keys.json, macros stores with the six macros of the
+             Numpad movement preset and the keys your macros keep from
+             it, shared by hold_taken_keys in src-tauri and
+             keysYourMacrosKeep on the page. The Macros page tests mount
+             its first case. Hand written.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
