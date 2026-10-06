@@ -37,15 +37,14 @@ function renderList(props: Partial<ItemListProps> & Pick<ItemListProps, 'section
   );
 }
 
-function render(warnNames?: ReadonlySet<string>, warnNote?: string): string {
+function render(warnNotes?: ReadonlyMap<string, string>): string {
   return renderList({
     sections: buildSections([
       entry('a', 'my-capture', true),
       entry('b', 'off-capture', false),
       entry('c', 'flee', true),
     ]),
-    warnNames,
-    ...(warnNote ? { warnNote } : {}),
+    warnNotes,
   });
 }
 
@@ -57,7 +56,12 @@ function rowClass(html: string, uid: string): string | null {
 
 describe('the warn ring in the Automation list', () => {
   it('rings a named row only while it is on', () => {
-    const html = render(new Set(['my-capture', 'off-capture']));
+    const html = render(
+      new Map([
+        ['my-capture', HIDES_PROMPT_NOTE],
+        ['off-capture', HIDES_PROMPT_NOTE],
+      ]),
+    );
     expect(rowClass(html, 'a')).toBe('st-auto-row is-warn');
     expect(rowClass(html, 'b')).toBe('st-auto-row');
     expect(rowClass(html, 'c')).toBe('st-auto-row');
@@ -69,7 +73,7 @@ describe('the warn ring in the Automation list', () => {
   });
 
   it('tells a reader why a ringed row carries it, as its description', () => {
-    const html = render(new Set(['my-capture']), HIDES_PROMPT_NOTE);
+    const html = render(new Map([['my-capture', HIDES_PROMPT_NOTE]]));
     const row = /<button[^>]*data-uid="a"[^>]*>/.exec(html)?.[0] ?? '';
     const described = /aria-describedby="([^"]+)"/.exec(row)?.[1];
     expect(described).toBeTruthy();
@@ -77,6 +81,22 @@ describe('the warn ring in the Automation list', () => {
     // A row with no ring has no description.
     const flee = /<button[^>]*data-uid="c"[^>]*>/.exec(html)?.[0] ?? '';
     expect(flee).not.toContain('aria-describedby');
+  });
+
+  it('gives each ringed row its own note', () => {
+    const html = render(
+      new Map([
+        ['my-capture', 'First note.'],
+        ['flee', 'Second note.'],
+      ]),
+    );
+    const noteOf = (uid: string) => {
+      const row = new RegExp(`<button[^>]*data-uid="${uid}"[^>]*>`).exec(html)?.[0] ?? '';
+      const id = /aria-describedby="([^"]+)"/.exec(row)?.[1] ?? '';
+      return new RegExp(`id="${id}"[^>]*>([^<]*)<`).exec(html)?.[1];
+    };
+    expect(noteOf('a')).toBe('First note.');
+    expect(noteOf('c')).toBe('Second note.');
   });
 
   it('says why a trigger carries it in plain sentences', () => {
