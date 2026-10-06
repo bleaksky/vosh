@@ -89,9 +89,10 @@ const IMPORT_MIGRATION_PENDING: &str =
 /// happened.
 ///
 /// New writes a profile named `name` with the world of the export and
-/// each of its characters no profile has, login on. A character another
-/// profile has stays there, unless `logins` names it, and then it moves
-/// to the new profile. With no character the login starts off.
+/// each character of it that you left on in `logins`, login on. One no
+/// profile has joins the list, and one another profile has moves to the
+/// new profile. A character you turned off stays where it is, off the
+/// new list. With no character the login starts off.
 ///
 /// Replace lays the file over your profile `name`. A profile no session
 /// plays has its file rewritten. One a session plays takes the file in
@@ -243,11 +244,12 @@ async fn write(
 }
 
 /// Add the profile `name` from `file` to `set`, with the world of
-/// `claim` and each of its characters no profile has, login on. A
-/// character another profile has stays there unless `logins` names it,
-/// and then the login toggle takes it from that profile. With no
-/// character the login starts off, so an empty claim never takes every
-/// login on the world.
+/// `claim` and each of its characters `logins` names, login on. One no
+/// profile has joins the list, and one another profile has moves there
+/// through the login toggle, which takes it from that profile. A
+/// character `logins` leaves out stays off the list, and stays with the
+/// profile that has it. With no character the login starts off, so an
+/// empty claim never takes every login on the world.
 fn add_new(
     set: &mut ProfileSet,
     name: &str,
@@ -256,6 +258,12 @@ fn add_new(
     logins: &[String],
     result: &mut ImportResult,
 ) -> Result<(), String> {
+    // The sheet names the characters you left on, in any case.
+    let on = |character: &str| {
+        logins
+            .iter()
+            .any(|login| login.trim().eq_ignore_ascii_case(character))
+    };
     let mut claimed: Vec<(String, String)> = Vec::new();
     let claim = claim.map(|mut am| {
         let host = am.host.clone().unwrap_or_default();
@@ -265,7 +273,7 @@ fn add_new(
                     claimed.push((character.clone(), profile.to_string()));
                     false
                 }
-                None => true,
+                None => on(character),
             });
         am.enabled = !am.characters.is_empty();
         am
@@ -275,10 +283,7 @@ fn add_new(
         .map_err(|e| e.to_string())?;
     result.name.clone_from(&entry.name);
     for (character, profile) in claimed {
-        if !logins
-            .iter()
-            .any(|on| on.trim().eq_ignore_ascii_case(&character))
-        {
+        if !on(&character) {
             result.kept_with.push(KeptCharacter { character, profile });
             continue;
         }

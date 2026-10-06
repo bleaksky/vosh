@@ -131,8 +131,9 @@ pub(crate) async fn profile_import_read(
 
 /// Import `text`, the Vosh profile export you picked as `file_name`, as a
 /// new profile named `name` or over your profile `name`, and say what
-/// happened. `logins` names each character another profile has that you
-/// turned on, which moves to the new profile. See [`apply_import`].
+/// happened. `logins` names each character of the file you left on,
+/// which the new profile takes, from another profile if one has it. See
+/// [`apply_import`].
 #[tauri::command]
 pub(crate) async fn profile_import_apply<R: tauri::Runtime>(
     app: AppHandle<R>,
