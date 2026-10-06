@@ -76,7 +76,7 @@ To open a session, press `Cmd+T`, choose `New session…` from the session butto
 
 The line under `Profile` tells you why it shows. `Build is pinned to The Forsaken Lands 1825.` names the pin. When another session plays the same profile, the line names that session, such as `Tolliver's session plays Default too. An edit in either reaches both.` Two sessions on one profile share its aliases, triggers and settings, and an edit in either saves once. Each keeps its own connection, command history and Lua.
 
-While another session is connected to the same world and port, a note quotes the game, such as `Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` Vosh still connects when you click `Connect`, and the game decides what happens next.
+While another session is connected to the world's own port, such as `1848` for The Forsaken Lands, and you dial that port too, a note quotes the game, such as `Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` The build port, `1825`, never shows it. Vosh still connects when you click `Connect`, and the game decides what happens next.
 
 Each row names its session by the first of these it has.
 

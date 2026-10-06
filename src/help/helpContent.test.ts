@@ -648,7 +648,10 @@ describe('the help on the one window', () => {
       "`Tolliver's session plays Default too. An edit in either reaches both.`",
     );
     expect(text).toContain(
-      '`Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` Vosh still connects',
+      "While another session is connected to the world's own port, such as `1848` for The Forsaken Lands, and you dial that port too",
+    );
+    expect(text).toContain(
+      '`Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` The build port, `1825`, never shows it.',
     );
     expect(text).toContain(
       'Click `Cancel` or press `Escape` to close the new row. Vosh writes nothing.',
