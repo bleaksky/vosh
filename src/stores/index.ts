@@ -20,7 +20,6 @@ import { startTargetStore } from './session/targetStore';
 import { startTickCountStore } from './config/tickCountStore';
 import { startTickStore } from './session/tickStore';
 import { startTrackedAffectsStore } from './config/trackedAffectsStore';
-import { startVitalsDensityStore } from './config/vitalsDensityStore';
 import { startVitalsOptionsStore } from './config/vitalsOptionsStore';
 import { startVitalsStore } from './gmcp/vitalsStore';
 import { startWorldStore } from './gmcp/worldStore';
@@ -45,7 +44,6 @@ export function startStores(): void {
   startGroupStore();
   startImmStore();
   startVitalsStore();
-  startVitalsDensityStore();
   startVitalsOptionsStore();
   startAffectsStore();
   startAffectsDisplayStore();

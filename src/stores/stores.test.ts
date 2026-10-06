@@ -803,27 +803,58 @@ describe('stores on the event bus', () => {
   it('follow the vitals options Settings saves and each profile keeps', async () => {
     commands.set('ui_get_config', {
       tracked_affects: [],
+      vitals_density: 'line',
       vitals_values: 'percent',
       vitals_meter: 'bar',
     });
     const s = await load();
     expect(s.vitalsOptions.getVitalsOptions()).toEqual({
+      style: 'line',
+      place: 'panel',
+      order: ['hp', 'mana', 'move'],
+      off: [],
+      opponent: 'top',
+      colors: {},
       values: 'percent',
       meter: 'bar',
       warn_thirds: false,
       hide_when_pinned: true,
     });
-    const sent = { values: 'current', meter: 'none', warn_thirds: true, hide_when_pinned: false };
+    const sent = {
+      style: 'gauges',
+      place: 'status',
+      order: ['move', 'hp', 'mana'],
+      off: ['mana'],
+      opponent: 'bottom',
+      colors: { mana: 12 },
+      values: 'current',
+      meter: 'none',
+      warn_thirds: true,
+      hide_when_pinned: false,
+    };
     fire('vosh://vitals-options-changed', sent);
     const heard = s.vitalsOptions.getVitalsOptions();
     expect(heard).toEqual(sent);
     // The same options again keep the snapshot, so nothing renders.
-    fire('vosh://vitals-options-changed', { ...sent });
+    fire('vosh://vitals-options-changed', structuredClone(sent));
     expect(s.vitalsOptions.getVitalsOptions()).toBe(heard);
-    commands.set('ui_get_config', { tracked_affects: [], vitals_warn_thirds: true });
+    // A new color is a new snapshot.
+    fire('vosh://vitals-options-changed', { ...sent, colors: { mana: 4 } });
+    expect(s.vitalsOptions.getVitalsOptions().colors).toEqual({ mana: 4 });
+    commands.set('ui_get_config', {
+      tracked_affects: [],
+      vitals_style: 'pips',
+      vitals_warn_thirds: true,
+    });
     fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.vitalsOptions.getVitalsOptions()).toEqual({
+      style: 'pips',
+      place: 'panel',
+      order: ['hp', 'mana', 'move'],
+      off: [],
+      opponent: 'top',
+      colors: {},
       values: 'current-max',
       meter: 'line',
       warn_thirds: true,
