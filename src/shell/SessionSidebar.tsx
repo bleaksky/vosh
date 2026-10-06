@@ -13,26 +13,39 @@ import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
-import { MARK_WORDS, rowLook, useSessionRow } from '../stores/session/sessionRowStore';
+import {
+  MARK_WORDS,
+  rowLook,
+  useSessionRow,
+  type RowMark,
+} from '../stores/session/sessionRowStore';
 import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
-import { rowGlyph, type RowGlyph } from './rowGlyph';
+import type { RowGlyph } from './rowGlyph';
+import { useSessionLine, type SessionLine } from './sessionLine';
 import { useModHeld } from './useModHeld';
 import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 
 // The sessions sidebar on the left of the main window, board 2 of the
-// Sessions review, drawn to otty's measures (Q17). MainWindow shows it
-// while two or more sessions are open and you have not hidden it in this
-// window. Its top 32 drags the window and holds the lights on macOS, with
-// New session and Hide sessions at its right. SESSIONS heads the list,
-// and each row reads the session as sessionLabel names it, the selected
-// one a filled pill. A row's glyph takes the meta's place while it shows,
-// and its name takes the tone the row store gives it (board 3). A click
-// selects. Under the pointer a row shows its close button in the place
-// of the meta or the glyph, which closes its session (Q13). While you
-// hold ⌘ (Ctrl elsewhere), the first nine rows show the key that brings
-// each to the front in that place instead, as otty does (board 8).
+// Sessions review, drawn to otty's measures (Q17), with the two line
+// rows of the Sessions Sidebar review. MainWindow shows it while two or
+// more sessions are open and you have not hidden it in this window. Its
+// top 32 drags the window and holds the lights on macOS, with New
+// session and Hide sessions at its right. SESSIONS heads the list with
+// how many are open (S8).
+//
+// Each row is two lines (S1). Line one starts with the row's status
+// mark (S2), then the session as sessionLabel names it with the port in
+// quiet meta, and ends in a right column. Line two says what the
+// session is doing, from useSessionLine, with your health at its right
+// (S3). The selected row is a filled pill, and the name takes the tone
+// the row store gives it. The right column holds the count of what
+// waits for you on a row behind (S4). While you hold ⌘ (Ctrl
+// elsewhere), the first nine rows show the key that brings each to the
+// front there instead, as otty does (board 8). Under the pointer a row
+// shows its close button in that place, which closes its session (Q13,
+// S6). A click selects.
 //
 // A right click opens the row's menu at the pointer, board 9: Rename
 // session…, Edit connection…, Disconnect while the session is
@@ -181,7 +194,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         </div>
       </div>
       <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
-        Sessions
+        Sessions<span className="shell-sessions-total">{rows.length}</span>
       </h2>
       <ul
         ref={list}
@@ -249,8 +262,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   );
 });
 
-/** Each glyph, with the words a screen reader says for it, from board
- *  3 and Q8. */
+/** Each glyph of the session popover, with the words a screen reader
+ *  says for it, from board 3 and Q8. */
 const GLYPHS: Record<RowGlyph, { icon: ComponentType; words: string }> = {
   triangle: { icon: TriangleIcon, words: MARK_WORDS.triangle },
   hand: { icon: HandIcon, words: MARK_WORDS.hand },
@@ -306,15 +319,8 @@ function SessionSlot({
 }: SlotProps) {
   const label = sessionLabel(row, rows);
   const look = rowLook(useSessionRow(row.id), row, current);
-  const glyph = rowGlyph(look, current);
+  const line = useSessionLine(row);
   const rowClass = look.tone ? `shell-sessions-row is-${look.tone}` : 'shell-sessions-row';
-  const meta = keys ? (
-    <span className="shell-sessions-meta is-key">{keys}</span>
-  ) : glyph ? (
-    <RowGlyphMark glyph={glyph} />
-  ) : (
-    label.meta && <span className="shell-sessions-meta">{label.meta}</span>
-  );
   const moved = offset ? { transform: `translateY(${offset}px)` } : undefined;
 
   // A field cannot sit inside a button, so the row is a plain box while
@@ -323,17 +329,18 @@ function SessionSlot({
     return (
       <li className="shell-sessions-slot" style={moved}>
         <div className={`${rowClass} is-edit`} aria-current={current ? 'true' : undefined}>
+          <SessionMark mark={look.mark} />
           <NameField
             initial={label.name}
             unnamed={sessionLabel({ ...row, name: null }, rows).name}
             onDone={onRenamed}
           />
-          {meta}
         </div>
       </li>
     );
   }
 
+  const port = label.split?.port ?? label.meta;
   return (
     <li className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'} style={moved}>
       <button
@@ -353,17 +360,19 @@ function SessionSlot({
           onMenu(e.clientX, e.clientY);
         }}
       >
-        {label.split ? (
-          <span className="shell-sessions-name is-world" onDoubleClick={onRename}>
-            <span className="shell-sessions-world">{label.split.world}</span>
-            {label.split.port}
-          </span>
-        ) : (
-          <span className="shell-sessions-name" onDoubleClick={onRename}>
-            {label.name}
-          </span>
-        )}
-        {meta}
+        <SessionMark mark={look.mark} />
+        <span className="shell-sessions-name" onDoubleClick={onRename}>
+          <span className="shell-sessions-name-text">{label.split?.world ?? label.name}</span>
+          {port && <span className="shell-sessions-port">{port}</span>}
+        </span>
+        <span className="shell-sessions-end">
+          {keys ? (
+            <span className="shell-sessions-key">{keys}</span>
+          ) : (
+            look.count > 0 && !current && <WaitingCount count={look.count} />
+          )}
+        </span>
+        <SecondLine line={line} />
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
           only under the pointer, so Tab passes it by, and the Session
@@ -383,6 +392,51 @@ function SessionSlot({
         <CloseIcon />
       </button>
     </li>
+  );
+}
+
+/** The mark at the left of a row, in the words the title band uses. */
+function SessionMark({ mark }: { mark: RowMark }) {
+  return (
+    <span className={`shell-sessions-mark is-${mark}`} role="img" aria-label={MARK_WORDS[mark]}>
+      {mark === 'hand' ? (
+        <HandIcon />
+      ) : mark === 'spinner' ? (
+        <SpinnerIcon />
+      ) : mark === 'triangle' ? (
+        <TriangleIcon />
+      ) : (
+        <span className="shell-sessions-dot" />
+      )}
+    </span>
+  );
+}
+
+/** How many things wait for you on a row behind, up to 9+. */
+function WaitingCount({ count }: { count: number }) {
+  return (
+    <span className="shell-sessions-count" role="img" aria-label={`${count} waiting`}>
+      {count > 9 ? '9+' : count}
+    </span>
+  );
+}
+
+/** A row's second line, with the health at its right when it shows. */
+function SecondLine({ line }: { line: SessionLine }) {
+  const { who, text, health, low } = line;
+  return (
+    <>
+      <span className={health === null ? 'shell-sessions-line is-wide' : 'shell-sessions-line'}>
+        {who && <span className="shell-sessions-who">{who}</span>}
+        {who && text && ' · '}
+        {text}
+      </span>
+      {health !== null && (
+        <span className={low ? 'shell-sessions-health is-low' : 'shell-sessions-health'}>
+          {health}%
+        </span>
+      )}
+    </>
   );
 }
 
