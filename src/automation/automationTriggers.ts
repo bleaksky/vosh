@@ -5,6 +5,7 @@
 // lists. An edit changes the action it names in place and leaves the
 // rest of the list, and its order, as it was.
 
+import { normalizeAlert } from './alertParts';
 import { saveDraftOnto, type Draft } from './automationDraft';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
@@ -338,8 +339,9 @@ export const HIGHLIGHT_COLORS: readonly { value: NamedColor; label: string }[] =
 });
 
 /** A stored trigger as the editor holds it: every field present in one
- *  shape, a blank group left out, and color codes in send and replace
- *  templates shown as `{red}` tokens. */
+ *  shape, a blank group left out, color codes in send and replace
+ *  templates shown as `{red}` tokens, and the alert table read as Rust
+ *  reads it. */
 export function normalizeTrigger(raw: unknown): TriggerRecord {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out: TriggerRecord = {
@@ -357,10 +359,8 @@ export function normalizeTrigger(raw: unknown): TriggerRecord {
   if (r.target === 'prompt' || r.target === 'room' || r.target === 'room_target') {
     out.target = r.target;
   }
-  // The alert table rides along as it came, until the Alert row lands.
-  if (r.alert && typeof r.alert === 'object' && !Array.isArray(r.alert)) {
-    out.alert = r.alert as Record<string, unknown>;
-  }
+  const alert = normalizeAlert(r.alert);
+  if (alert) out.alert = alert;
   return out;
 }
 

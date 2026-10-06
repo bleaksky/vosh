@@ -81,9 +81,28 @@ export interface TriggerRecord {
    *  backend's default). */
   target?: TriggerTarget;
   /** The alert the trigger rings when it matches, in a table of its own
-   *  beside the actions (Alerts Q6). The page keeps it as it came until
-   *  the Alert row lands, so a Save never drops it. */
-  alert?: Record<string, unknown> | null;
+   *  beside the actions (Alerts Q6). Left out while the trigger rings
+   *  none. */
+  alert?: AlertParts;
+}
+
+/** What an alert does when it rings. Each part turns on and off on its
+ *  own. Mirrors `AlertParts` in crates/automation/src/alert.rs, which a
+ *  trigger, an alert preset and mud.alert share. */
+export interface AlertParts {
+  /** Post a system banner, a toast on Windows. */
+  banner: boolean;
+  /** The tone the main window plays, one of ALERT_TONES in
+   *  src/stores/session/alertTones.ts. Left out, none plays. */
+  sound?: string;
+  /** Bounce the Dock icon once or until you come back, flash the
+   *  taskbar on Windows, or set the urgency hint on Linux. Left out,
+   *  the alert asks for none. */
+  attention?: 'once' | 'until';
+  /** Ring only while you are not looking at the session. */
+  background: boolean;
+  /** The banner shows the words of the line, and not the title alone. */
+  words: boolean;
 }
 
 export type TriggerTarget = 'line' | 'prompt' | 'room' | 'room_target';

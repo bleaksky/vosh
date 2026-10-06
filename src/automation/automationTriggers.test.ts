@@ -555,7 +555,14 @@ describe('saving triggers', () => {
   });
 
   it('keeps the alert table of every trigger through a save', async () => {
-    const alert = { banner: true, sound: 'chime', attention: 'once' };
+    // Every key, as triggers_export sends the table.
+    const alert = {
+      banner: true,
+      sound: 'chime',
+      attention: 'once',
+      background: true,
+      words: false,
+    } as const;
     const store = fakeStore([{ ...trigger('rest', 'sleep'), alert }, trigger('flee', 'flee')]);
     let draft = createDraft(await loadTriggers(store.api));
     expect(draft.items[0].value.alert).toEqual(alert);
