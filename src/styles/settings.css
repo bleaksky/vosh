@@ -288,6 +288,47 @@
   outline-offset: 2px;
 }
 
+/* The session and the profile Settings edits, right of the breadcrumb
+   on the title button's measures, while two or more sessions are open
+   (board 7 of the Sessions review). A press on it drags the window like
+   the rest of the band. */
+.st-who {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.st-who .shell-dot {
+  margin-right: 6px;
+}
+
+.st-who-name,
+.st-who-profile {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.st-who-profile {
+  margin-left: 6px;
+  color: var(--tertiary);
+}
+
+/* Another session on the same profile, after a hairline (board 9). */
+.st-who-also {
+  margin-left: 8px;
+  padding-left: 8px;
+  box-shadow: inset 1px 0 0 var(--divider);
+}
+
 .st-window-controls {
   display: flex;
   align-items: center;

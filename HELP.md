@@ -107,6 +107,8 @@ A session that is not connected shows its name in grey. A row shows one glyph at
 
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
 
+Settings edits the profile of the session in front. With two or more sessions open, its header names that session at the right, then the profile it plays in grey, such as `Orla` and `Build`. When another session plays the same profile, the header adds it, such as `Also in Tolliver`, since an edit reaches both.
+
 To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
 Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
