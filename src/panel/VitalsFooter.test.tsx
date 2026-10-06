@@ -364,6 +364,35 @@ describe('VitalsBlock', () => {
     }
   });
 
+  it('colors the label and the meter of a vital you gave a color, never its number', () => {
+    for (const [density, fit] of [
+      ['rows', 'rows'],
+      ['line', 'labels'],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        <VitalsBlock
+          vitals={FIGHT}
+          combat={GUARD}
+          density={density}
+          fit={fit}
+          options={DEFAULT_VITALS_OPTIONS}
+          inks={{ mana: '#8cc2d8' }}
+        />,
+      );
+      expect(html.match(/panel-vitals-swatch/g)).toHaveLength(1);
+      expect(html).toMatch(/panel-vitals-swatch" style="--vital-ink:#8cc2d8"><div[^>]*>[^]*?Mana/);
+    }
+    expect(rule('.panel-vitals-swatch .panel-vitals-label')).toContain('color: var(--vital-ink)');
+    expect(rule('.panel-vitals-swatch .panel-vitals-fill')).toContain(
+      'background: var(--vital-ink)',
+    );
+    // Low and warn come after, so they still turn the meter.
+    expect(panelCss.indexOf('.panel-vitals-swatch .panel-vitals-fill {')).toBeLessThan(
+      panelCss.indexOf('.panel-vitals-row-low .panel-vitals-fill {'),
+    );
+    expect(panelCss).not.toMatch(/\.panel-vitals-swatch \.panel-vitals-value/);
+  });
+
   it('sets the hidden tone in panel.css after the warn and combat tones', () => {
     const hidden = rule('.panel-vitals-row-hidden .panel-vitals-value');
     expect(hidden).toContain('color: var(--tertiary)');

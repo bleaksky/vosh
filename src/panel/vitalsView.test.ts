@@ -10,11 +10,14 @@ import {
   thirdsTone,
   vitalsFooterHeight,
   vitalsGeometry,
+  vitalInks,
   vitalsOn,
   vitalTone,
   widestVital,
 } from './vitalsView';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
+import { contrast, parseHex } from '../theme/color';
+import { findTheme, themeTokens } from '../theme/themes';
 
 // The VitalsOptions board's fight: Health 186 / 1020, Mana 344 / 800,
 // Moves 870 / 930, and Blackwatch Guard at 38%.
@@ -255,5 +258,32 @@ describe('opponentHealth', () => {
       hidden: true,
     });
     expect(opponentHealth({ hp_pct: 54, condition: 'awful', hidden: true }).value).toBe('?');
+  });
+});
+
+describe('vitalInks', () => {
+  const kanso = findTheme('kanso-zen');
+  const rubric = findTheme('rubric');
+
+  it('colors only the vitals you picked a slot for', () => {
+    const inks = vitalInks({ mana: 12 }, kanso.xterm, themeTokens(kanso));
+    expect(Object.keys(inks)).toEqual(['mana']);
+  });
+
+  it('keeps a slot that already reads at 3:1 on the panel', () => {
+    // Bright blue on Kanso Zen, #8cc2d8 on the board.
+    const ground = themeTokens(kanso);
+    expect(vitalInks({ mana: 12 }, kanso.xterm, ground).mana).toBe(kanso.xterm.brightBlue);
+  });
+
+  it('lifts every slot to 3:1 on the panel, dark and light', () => {
+    for (const theme of [kanso, rubric]) {
+      const ground = themeTokens(theme);
+      const panel = parseHex(ground.panel)!;
+      for (let slot = 0; slot < 16; slot++) {
+        const ink = parseHex(vitalInks({ hp: slot }, theme.xterm, ground).hp!)!;
+        expect(contrast(ink, panel), `${theme.id} ${slot}`).toBeGreaterThanOrEqual(2.99);
+      }
+    }
   });
 });
