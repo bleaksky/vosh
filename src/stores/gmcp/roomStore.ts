@@ -289,3 +289,7 @@ const store = createSessionStore<RoomStoreState, RoomState>({
 export const startRoomStore = store.start;
 export const getRoom = store.get;
 export const useRoom = store.use;
+/** The room of the session `session` names, as the panes read it. */
+export const getRoomOf = (session: number): RoomInfo | null => store.stateOf(session).info;
+/** Hear each change to a session's room, with that session. */
+export const subscribeRoomOf = store.subscribeStates;

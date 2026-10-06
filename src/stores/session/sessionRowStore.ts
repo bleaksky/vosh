@@ -45,7 +45,8 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 // that still names its character.
 //
 // The row also keeps when its link went down, for how long ago it
-// dropped, and the try a redial is on out of how many.
+// dropped, whether the first dial of a connect never reached the game,
+// and the try a redial is on out of how many.
 
 /** Where a session's link stands, as its events last said. `failed`
  *  needs you to connect again yourself. */
@@ -73,6 +74,9 @@ export interface SessionRowState {
   /** When a drop or a failed dial took the link down, by Date.now, kept
    *  through a redial until a connect. */
   downAt: number | null;
+  /** The link went down at the first dial of a connect, which never
+   *  reached the game, rather than as a link dropped. */
+  refused: boolean;
   /** The try a redial is on and how many it has, while it waits, dials
    *  or just failed one. */
   try: number | null;
@@ -89,6 +93,7 @@ const QUIET: SessionRowState = {
   lines: false,
   waiting: NOTHING,
   downAt: null,
+  refused: false,
   try: null,
   tries: null,
 };
@@ -118,6 +123,7 @@ function linked(now: SessionRowState, payload: StatePayload): SessionRowState {
         reached: false,
         playing: false,
         downAt,
+        refused,
       });
     }
   }

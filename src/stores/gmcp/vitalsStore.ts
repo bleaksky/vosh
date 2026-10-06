@@ -267,3 +267,7 @@ const store = createSessionStore<VitalsState, Vitals | null>({
 export const startVitalsStore = store.start;
 export const getVitals = store.get;
 export const useVitals = store.use;
+/** The vitals of the session `session` names, as the panes read them. */
+export const getVitalsOf = (session: number): Vitals | null => store.stateOf(session).shown;
+/** Hear each change to a session's vitals, with that session. */
+export const subscribeVitalsOf = store.subscribeStates;
