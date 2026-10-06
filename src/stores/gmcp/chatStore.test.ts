@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranChatFixtureNames, aabahranChatPacket } from '../../test/aabahranGmcp';
 import { getChatLines, parseCommChannel, parseRoutedLine, type ChatLine } from './chatStore';
 import type { RoutedPayload } from '../../ipc/session';
@@ -210,5 +210,55 @@ describe('the chat store', () => {
     expect(getChatLines().map((l) => [l.pane, l.direction, l.speaker, l.text])).toEqual([
       ['tell', 'sent', 'Tolliver', 'omw'],
     ]);
+  });
+});
+
+describe('the chat store through a redial', () => {
+  /** The handler the store gave `listen` for `event`. */
+  function heard(event: string): (payload: unknown) => void {
+    const call = vi.mocked(listen).mock.calls.find(([name]) => name === event);
+    if (!call) throw new Error(`the store never listened for ${event}`);
+    const handler = call[1] as unknown as (event: { payload: unknown }) => void;
+    return (payload) => handler({ payload });
+  }
+  const state = (payload: Record<string, unknown>) => heard('session://state')(payload);
+  const tell = () => {
+    const { data } = aabahranChatPacket('tell.gmcp');
+    heard('session://gmcp/Comm-Channel')({ data });
+  };
+  const dial = (host: string, port = 1848) => state({ kind: 'connecting', host, port, tls: false });
+  const speakers = () => getChatLines().map((l) => l.speaker);
+
+  beforeEach(() => {
+    getChatLines();
+    state({ kind: 'disconnected', reason: null });
+    dial('play.theforsakenlands.com');
+    tell();
+  });
+
+  it('keeps the lines through a drop', () => {
+    state({ kind: 'disconnected', reason: 'server closed connection' });
+    expect(speakers()).toEqual(['Tolliver']);
+  });
+
+  it('empties the lines at your Disconnect', () => {
+    state({ kind: 'disconnected', reason: null });
+    expect(getChatLines()).toEqual([]);
+  });
+
+  it('keeps the lines through a dial to the same world', () => {
+    state({ kind: 'disconnected', reason: 'server closed connection' });
+    dial('play.theforsakenlands.com');
+    state({ kind: 'connected', host: 'play.theforsakenlands.com', port: 1848, tls: false });
+    expect(speakers()).toEqual(['Tolliver']);
+  });
+
+  it('empties the lines at a dial to another world', () => {
+    state({ kind: 'disconnected', reason: 'server closed connection' });
+    dial('play.theforsakenlands.com', 1825);
+    expect(getChatLines()).toEqual([]);
+    tell();
+    dial('mud.example.org', 1825);
+    expect(getChatLines()).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { onRouted, type RoutedPayload } from '../../ipc/session';
+import { onRouted, type RoutedPayload, type StatePayload } from '../../ipc/session';
 import { createSessionStore } from '../sessionStore';
 
 /** Which way a tell went. Aabahran marks a tell you receive
@@ -112,23 +112,59 @@ function append(lines: ChatLine[], line: ChatLine | null): ChatLine[] {
   return lines.length >= MAX_LINES ? [...lines.slice(1), line] : [...lines, line];
 }
 
+/** Where a session's chat lines came from, as its connection dialed. */
+interface World {
+  host: string;
+  port: number;
+}
+
+/** A session's chat lines and the world they came from, null until the
+ *  page sees the session dial. */
+interface ChatState {
+  lines: ChatLine[];
+  world: World | null;
+}
+
+const EMPTY: ChatState = { lines: [], world: null };
+
+/** The state with `line` added. */
+function addLine(state: ChatState, line: ChatLine | null): ChatState {
+  const lines = append(state.lines, line);
+  return lines === state.lines ? state : { ...state, lines };
+}
+
+/** The state after a change in the connection. Your Disconnect, which
+ *  carries no reason, empties the lines, and so does a dial to another
+ *  world. A drop keeps them, so the tells you got stay through every
+ *  try of a redial. Lines heard before the page saw the session dial
+ *  stay through its next dial, since their world is unknown. */
+function onConnection(state: ChatState, payload: StatePayload): ChatState {
+  if (payload.kind === 'disconnected') return payload.reason === null ? EMPTY : state;
+  const { host, port } = payload;
+  const { world } = state;
+  if (world?.host === host && world.port === port) return state;
+  const elsewhere = payload.kind === 'connecting' && world !== null;
+  return { lines: elsewhere ? [] : state.lines, world: { host, port } };
+}
+
 // The most recent MAX_LINES chat lines of each session, from the channel
 // packages and the lines triggers route. ChatPane reads the selected
 // session's here, so closing and reopening the pane keeps the history.
-// Only the session's own disconnect clears them, since a new connection
-// makes the old chat irrelevant.
-const store = createSessionStore<ChatLine[]>({
-  state: [],
+// A session's lines go with its slot when it closes.
+const store = createSessionStore<ChatState, ChatLine[]>({
+  state: EMPTY,
   packages: {
-    'Comm.Channel': (lines, data) => append(lines, parseCommChannel(data)),
-    'Comm.Channel.Text': (lines, data) => append(lines, parseCommChannel(data)),
+    'Comm.Channel': (state, data) => addLine(state, parseCommChannel(data)),
+    'Comm.Channel.Text': (state, data) => addLine(state, parseCommChannel(data)),
   },
+  connection: onConnection,
   events: [
     (apply) =>
       onRouted((payload, session) =>
-        apply(session, (lines) => append(lines, parseRoutedLine(payload))),
+        apply(session, (state) => addLine(state, parseRoutedLine(payload))),
       ),
   ],
+  view: (state) => state.lines,
 });
 
 export const startChatStore = store.start;
