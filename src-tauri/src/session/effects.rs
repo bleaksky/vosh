@@ -1,8 +1,8 @@
 //! The one Lua effects applier. Every path that runs Lua hands what it
 //! asks for to [`apply_script_result`], which sends its bytes, echoes its
 //! lines, hands a `#walk` to the walker, keeps its timers, shows its
-//! prompt values and runs its `mud.input` lines through the input
-//! pipeline. Every line runs through the pipeline here, typed or from a
+//! prompt values and its plugins' panes, and runs its `mud.input` lines
+//! through the input pipeline. Every line runs through the pipeline here, typed or from a
 //! Settings timer, the tick or `mud.input`, and says what it changed
 //! outside the terminal text.
 
@@ -55,6 +55,24 @@ impl OutputSink<'_> {
             OutputSink::Direct => emit_prompt_vars(app, session, true).await,
         }
     }
+
+    /// A plugin of `session` changed its panes. A read sends what changed
+    /// once after its output, and anything else sends it now.
+    fn lua_panes<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session) {
+        match self {
+            OutputSink::Batch(batch) => batch.lua_panes = true,
+            OutputSink::Direct => emit_lua_panes(app, session),
+        }
+    }
+}
+
+/// Send what the plugins of `session` changed in their panes since the
+/// last send, on `session://lua-panes`.
+pub(super) fn emit_lua_panes<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
+    let changes = session.connection.lock().lua_panes.take_changes();
+    if let Some(changes) = changes {
+        session.emit(app, events::LUA_PANES, &changes);
+    }
 }
 
 /// Where the bytes, echo lines and `#walk` a script result asks for go.
@@ -102,6 +120,13 @@ impl ScriptIo<'_, '_> {
         match self {
             ScriptIo::Session(_, sink, _) => sink.prompt_vars(app, session).await,
             ScriptIo::Collect { .. } => emit_prompt_vars(app, session, true).await,
+        }
+    }
+
+    fn lua_panes<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, session: &Session) {
+        match self {
+            ScriptIo::Session(_, sink, _) => sink.lua_panes(app, session),
+            ScriptIo::Collect { .. } => emit_lua_panes(app, session),
         }
     }
 
@@ -268,6 +293,9 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
         }
         if apply.prompt_vars_changed {
             io.prompt_vars(app, session).await;
+        }
+        if std::mem::take(&mut apply.panes_changed) {
+            io.lua_panes(app, session);
         }
         for owner in std::mem::take(&mut apply.ended) {
             crate::alert::end_owner(app, session, &owner);

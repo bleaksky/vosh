@@ -25,6 +25,9 @@ pub(super) struct ReadBatch {
     /// A prompt var changed or a prompt was read, so the prompt vars go
     /// out after the output even when they read the same.
     pub(super) prompt_vars: bool,
+    /// A plugin changed its panes, so what changed goes out once after
+    /// the output.
+    pub(super) lua_panes: bool,
     /// Vosh read your prompt in this read, so the prompt state goes out
     /// after it while the card watches.
     pub(super) prompt: bool,
@@ -51,6 +54,7 @@ impl ReadBatch {
             out: Output::new(closed),
             log: Vec::new(),
             prompt_vars: false,
+            lua_panes: false,
             prompt: false,
             gag_without_reader: Vec::new(),
             character: None,

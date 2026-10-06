@@ -24,6 +24,7 @@ command logs_list_sessions(limit, hideLocal?)
 command logs_search_page(pattern, caseSensitive, maxResults, sessionId?, beforeLineId?, hideLocal, withTotal)
 command lua_output_clear(owner?, session?)
 command lua_output_get(session?)
+command lua_panes_get(session?)
 command lua_run(code, plugin?, session?)
 command macros_delete(key, profile?)
 command macros_groups_list(profile?)
@@ -157,6 +158,7 @@ event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
 event session://lua-output app heard
+event session://lua-panes app unheard
 event session://mark app heard
 event session://output app heard
 event session://prompt-gag-without-reader app heard

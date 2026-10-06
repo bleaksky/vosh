@@ -350,9 +350,9 @@ async fn end_read<R: tauri::Runtime>(
 
 /// Send what one socket read gathered: its output, the triggers that hid
 /// a prompt with nothing to draw in its place, then the prompt vars when
-/// a prompt was read or they changed, and the hidden state when it
-/// changed. Once per read, so the packets of one pulse never show the
-/// panes a state between them. Its frame and its log rows wait in
+/// a prompt was read or they changed, what the plugins changed in their
+/// panes, and the hidden state when it changed. Once per read, so the
+/// packets of one pulse never show the panes a state between them. Its frame and its log rows wait in
 /// `settle` for the end of the burst of reads. `seen_output` becomes the
 /// output count after this read's output. Returns when a clock piece in
 /// your design next shows another second, which the lock this takes
@@ -366,6 +366,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         mut out,
         log,
         prompt_vars,
+        lua_panes,
         prompt,
         gag_without_reader,
         character,
@@ -374,12 +375,13 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (open, vars, hidden, prompt_seen, status, prompt_state, clock, rings) = {
+    let (open, vars, panes, hidden, prompt_seen, status, prompt_state, clock, rings) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         let vars = c.prompt.take_prompt_vars(prompt_vars);
+        let panes = lua_panes.then(|| c.lua_panes.take_changes()).flatten();
         let hidden = c.prompt.vars.take_hidden_change();
         // Low health follows what the vitals panes read once the read's
         // packets and prompt values landed, whether its alert is on or
@@ -399,6 +401,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         (
             p.open().clone(),
             vars,
+            panes,
             hidden,
             c.prompt.take_seen(),
             c.prompt.take_status_change(),
@@ -427,6 +430,9 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     }
     if let Some(vars) = vars {
         send_prompt_vars(app, session, &vars);
+    }
+    if let Some(panes) = panes {
+        session.emit(app, events::LUA_PANES, &panes);
     }
     if let Some(hidden) = hidden {
         session.emit(app, events::HIDDEN, &hidden);
