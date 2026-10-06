@@ -375,8 +375,12 @@
 }
 
 /* SESSIONS in the caps label style at x 20, its line centered at y 49,
-   so the first row's slot starts at 59. */
+   so the first row's slot starts at 59. It stays put over the list, and
+   once a row has passed under it a --divider hairline draws along its
+   foot (board 8). */
 .shell-sessions-head {
+  position: relative;
+  z-index: 1;
   flex: none;
   height: 27px;
   margin: 0;
@@ -389,15 +393,27 @@
   white-space: nowrap;
 }
 
+.shell-sessions-head.is-scrolled {
+  box-shadow: 0 1px 0 var(--divider);
+}
+
 /* The list stops 1 px short of the line, so the pill runs 8 to 212 and
-   clears it, as otty's does. */
+   clears it, as otty's does. It scrolls with no bar, as the frame draws
+   it, since a bar would take its width from the rows on Windows and
+   Linux. The hairline and the cut row say there is more. */
 .shell-sessions-list {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   margin: 0 1px 0 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.shell-sessions-list::-webkit-scrollbar {
+  display: none;
 }
 
 /* Rows on a 38 pitch, the pill 36 high and inset 8 with Vosh's row
@@ -551,6 +567,48 @@
 .shell-sessions-slot:hover .shell-sessions-meta,
 .shell-sessions-slot:hover .shell-sessions-glyph {
   visibility: hidden;
+}
+
+/* A row in the air follows the pointer on the floating ground, its name
+   in the text tone, over the rows it passes. The other rows let the
+   pointer through, so none lights under it, and part to make room
+   (board 8). */
+.shell-sessions-list.is-dragging .shell-sessions-row,
+.shell-sessions-list.is-dragging .shell-sessions-close {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shell-sessions-list.is-dragging .shell-sessions-slot {
+    transition: transform 0.15s ease;
+  }
+
+  .shell-sessions-list.is-dragging .shell-sessions-slot.is-lifted {
+    transition: none;
+  }
+}
+
+.shell-sessions-slot.is-lifted {
+  z-index: 2;
+}
+
+.shell-sessions-slot.is-lifted .shell-sessions-row {
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+}
+
+/* Where the row in the air lands, a 2 px accent line across the slot it
+   takes. */
+.shell-sessions-drop {
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 /* While you rename a session the row has no close button, so its meta

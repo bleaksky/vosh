@@ -62,6 +62,7 @@ import { noteConnectionError } from '../stores/session/connectionStore';
 import {
   getSelected,
   goTo,
+  move,
   othersOnProfile,
   rename,
   select,
@@ -765,6 +766,7 @@ function MainWindow() {
             onDisconnect={(session) =>
               void disconnectSession(session).catch((e: unknown) => handleError(String(e), session))
             }
+            onMove={(session, to) => void move(session, to)}
           />
         ) : null
       }

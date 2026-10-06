@@ -195,6 +195,34 @@ describe('sessionsStore', () => {
     }
   });
 
+  it('moves a session at once and then tells the app', async () => {
+    commands.set('sessions_list', () => [TOLLIVER, ORLA, row(3, 'Maren', 1848)]);
+    const store = await load();
+    commands.set('session_move', () => null);
+    void store.move(3, 1);
+    expect(store.getSessions().map((r) => r.id)).toEqual([1, 3, 2]);
+    // ⌘2 reaches the row in its new place.
+    expect(store.sessionAt(2)).toBe(3);
+    expect(calls.at(-1)).toEqual(['session_move', { session: 3, to: 1 }]);
+  });
+
+  it('reads the list again and says so when the app refuses a move', async () => {
+    const store = await load();
+    const { getToasts } = await import('../toasts');
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    try {
+      commands.set('session_move', () => {
+        throw new Error('No session 2.');
+      });
+      await store.move(2, 0);
+      await settle();
+      expect(store.getSessions().map((r) => r.id)).toEqual([1, 2]);
+      expect(getToasts().at(-1)).toMatchObject({ kind: 'error', message: 'No session 2.' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('opens the session the first list selects, and each selection the app finished', async () => {
     let finish: (value: null) => void = () => undefined;
     commands.set(

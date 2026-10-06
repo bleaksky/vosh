@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import {
   FIRST_SESSION,
   listSessions,
+  moveSession,
   onSessionSelected,
   onSessionsChanged,
   renameSession,
@@ -21,10 +22,11 @@ import { pushToast } from '../toasts';
 // store reads the list again then.
 //
 // Until the first list comes, the selected session is the one the app
-// starts with. A read applies only when no list came and no selection
-// or rename was made here after it began, so its answer never puts back
-// older rows or another selection. A rename shows here at once, as a
-// selection does, and the list the app sends after it carries the name.
+// starts with. A read applies only when no list came and no selection,
+// rename or move was made here after it began, so its answer never puts
+// back older rows or another selection. A rename or a move shows here at
+// once, as a selection does, and the list the app sends after it carries
+// the name or the order.
 //
 // The store also keeps the sessions this window opened, which the main
 // window gives a terminal each. That is the session the first list
@@ -45,7 +47,8 @@ const store = createStore<Sessions>({ rows: [], selected: FIRST_SESSION, opened:
 let started = false;
 /** Whether a list came yet. */
 let listed = false;
-/** Counts each list heard and each selection and rename made here. */
+/** Counts each list heard and each selection, rename and move made
+ *  here. */
 let generation = 0;
 
 /** Take the rows of a list and the selection it marks. */
@@ -123,6 +126,25 @@ export function rename(id: number, name: string | null): Promise<void> {
   return renameSession(id, name).catch((e: unknown) => {
     read();
     pushToast({ kind: 'error', message: errorText(e) || 'Vosh could not rename the session.' });
+  });
+}
+
+/** Move `id` to the place `to` among the other rows, as a drag of its
+ *  row does. Every view here shows the new order at once, so ⌘1 to ⌘9
+ *  follow it, and the app keeps it after and sends the rows. A move the
+ *  app refuses reads the list again and says so. */
+export function move(id: number, to: number): Promise<void> {
+  generation += 1;
+  const now = store.get();
+  const moved = now.rows.find((row) => row.id === id);
+  if (moved) {
+    const rows = now.rows.filter((row) => row !== moved);
+    rows.splice(Math.min(to, rows.length), 0, moved);
+    store.set({ ...now, rows });
+  }
+  return moveSession(id, to).catch((e: unknown) => {
+    read();
+    pushToast({ kind: 'error', message: errorText(e) || 'Vosh could not move the session.' });
   });
 }
 

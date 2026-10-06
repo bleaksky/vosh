@@ -78,6 +78,13 @@ export async function renameSession(session: number, name: string | null): Promi
   await invoke('session_rename', { session, name });
 }
 
+/** Move a session to the place `to` among the other rows, counting from
+ *  0, as a drag of its row does. The app keeps the order for the next
+ *  launch and sends every window the rows. */
+export async function moveSession(session: number, to: number): Promise<void> {
+  await invoke('session_move', { session, to });
+}
+
 /** Hear every session's row after a step that changed what one shows. */
 export async function onSessionsChanged(cb: (rows: SessionRow[]) => void): Promise<UnlistenFn> {
   return listen<SessionRow[]>(SESSIONS_CHANGED, (event) => {

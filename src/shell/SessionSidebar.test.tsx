@@ -59,6 +59,7 @@ function draw(rows: SessionRow[], selected: number): string {
       onRename={() => undefined}
       onEditConnection={() => undefined}
       onDisconnect={() => undefined}
+      onMove={() => undefined}
     />,
   );
 }
@@ -215,7 +216,7 @@ function only(root: FakeNode, what: string, match: (el: FakeElement) => boolean)
 const hasClass = (name: string) => (el: FakeElement) =>
   (el.getAttribute('class') ?? '').split(' ').includes(name);
 
-describe('renaming a session in its row', () => {
+describe('renaming and moving a session in its row', () => {
   const doc = new FakeDocument();
   /** The escape stack's keydown listener, which the window holds. */
   const windowListeners = new Map<string, Handler>();
@@ -243,6 +244,9 @@ describe('renaming a session in its row', () => {
     // the caret and its first row. The fake DOM holds none of that.
     const el = FakeElement.prototype as unknown as Record<string, unknown>;
     el.select = () => undefined;
+    // The list scrolls, and a dragged row asks for frames.
+    el.scrollTop = 0;
+    vi.stubGlobal('requestAnimationFrame', () => 0);
     el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
       for (let n = other; n; n = n.parentNode) if (n === this) return true;
       return false;
@@ -270,6 +274,7 @@ describe('renaming a session in its row', () => {
       onRename: vi.fn(),
       onEditConnection: vi.fn(),
       onDisconnect: vi.fn(),
+      onMove: vi.fn(),
     };
     await act(async () => {
       root.render(
@@ -465,5 +470,65 @@ describe('renaming a session in its row', () => {
       'Edit connection…',
       'Close session',
     ]);
+  });
+
+  it('draws a hairline under SESSIONS once a row has passed under it', async () => {
+    const m = await mount();
+    const head = only(m.container, 'the header', hasClass('shell-sessions-head'));
+    const list = only(m.container, 'the list', hasClass('shell-sessions-list'));
+    expect(head.getAttribute('class')).toBe('shell-sessions-head');
+    await m.run(() => on(list).onScroll({ currentTarget: { scrollTop: 38 } }));
+    expect(head.getAttribute('class')).toBe('shell-sessions-head is-scrolled');
+    await m.run(() => on(list).onScroll({ currentTarget: { scrollTop: 0 } }));
+    expect(head.getAttribute('class')).toBe('shell-sessions-head');
+  });
+
+  it('lifts a row you drag, parts the others, and moves it where you let go', async () => {
+    const m = await mount([rows[0], { ...rows[1], character: 'Orla' }, row(3, { port: 1825 })]);
+    const pointer = (type: string, clientY?: number) =>
+      m.run(() => windowListeners.get(type)?.({ clientY }));
+    const third = findAll(m.container, hasClass('shell-sessions-row'))[2];
+    await m.run(() => on(third).onPointerDown({ button: 0, clientY: 154 }));
+    // A press that moves less than 4 px lifts nothing.
+    await pointer('pointermove', 151);
+    expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
+
+    // 31 up, as frame b8-drag draws it: the row sits at 46, Orla parts
+    // to the third place, and the line marks the second.
+    await pointer('pointermove', 123);
+    const list = only(m.container, 'the list', hasClass('shell-sessions-list'));
+    expect(list.getAttribute('class')).toBe('shell-sessions-list is-dragging');
+    const slots = findAll(m.container, hasClass('shell-sessions-slot'));
+    expect(slots[2].getAttribute('class')).toBe('shell-sessions-slot is-lifted');
+    expect(slots[2].style.transform).toBe('translateY(-31px)');
+    expect(slots[1].style.transform).toBe('translateY(38px)');
+    expect(slots[0].style.transform).toBeUndefined();
+    const line = only(m.container, 'the line', hasClass('shell-sessions-drop'));
+    expect(line.style.top).toBe('38px');
+
+    // Letting go moves the session, and the click it ends in, which comes
+    // in the same task, selects nothing.
+    await m.run(() => {
+      windowListeners.get('pointerup')?.({});
+      on(third).onClick({ currentTarget: third });
+    });
+    expect(m.calls.onMove).toHaveBeenCalledWith(3, 1);
+    expect(m.calls.onSelect).not.toHaveBeenCalled();
+    expect(findAll(m.container, hasClass('shell-sessions-drop'))).toHaveLength(0);
+    expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
+  });
+
+  it('keeps a press that never moves a click, and a row let go in its place where it was', async () => {
+    const m = await mount();
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
+    await m.run(() => windowListeners.get('pointerup')?.({}));
+    await m.run(() => on(second).onClick({ currentTarget: second }));
+    expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+
+    await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
+    await m.run(() => windowListeners.get('pointermove')?.({ clientY: 126 }));
+    await m.run(() => windowListeners.get('pointerup')?.({}));
+    expect(m.calls.onMove).not.toHaveBeenCalled();
   });
 });
