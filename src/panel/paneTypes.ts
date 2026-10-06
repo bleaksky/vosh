@@ -1,8 +1,13 @@
+import type { PluginRow } from '../ipc/scripts';
 import { getImmState } from '../stores/gmcp/immStore';
+import { getLuaPanes, type LuaPanes } from '../stores/session/luaPanesStore';
+import { getPluginRows } from '../stores/session/pluginRowsStore';
 import {
   LUA_PANE,
   PANE_TYPES,
   allPanes,
+  paneKey,
+  type PaneLeaf,
   type PaneRef,
   type PaneSplit,
   type PaneType,
@@ -39,4 +44,64 @@ export function offeredPaneTypes(): PaneType[] {
 export function paneTypesToAdd(tree: PaneSplit | null): PaneType[] {
   const shown = new Set(tree ? allPanes(tree) : []);
   return offeredPaneTypes().filter((t) => !shown.has(t));
+}
+
+/** A Lua pane the menus offer: the plugin that draws it, its id, and
+ *  the title it shows now. */
+export interface LuaPaneOffer {
+  plugin: string;
+  id: string;
+  title: string;
+}
+
+/** The reference that places `offer` in the tree. Its props keep the
+ *  title, so the pane can name itself while its plugin is not running. */
+export function luaPaneRef({ plugin, id, title }: LuaPaneOffer): PaneRef {
+  return { pane: LUA_PANE, props: { plugin, id, title } };
+}
+
+/** Lua panes the session in front offers, in title order: each pane
+ *  its plugins draw while the plugin is on and Vosh has not stopped it.
+ *  Reads the stores unless handed what they hold. */
+export function offeredLuaPanes(
+  panes: LuaPanes = getLuaPanes(),
+  rows: PluginRow[] | null = getPluginRows(),
+): LuaPaneOffer[] {
+  const running = new Set((rows ?? []).filter((r) => r.on && !r.stopped).map((r) => r.name));
+  return [...panes.values()]
+    .filter((p) => running.has(p.plugin))
+    .map(({ plugin, id, title }) => ({ plugin, id, title }))
+    .sort(
+      (a, b) =>
+        paneLabel(luaPaneRef(a)).localeCompare(paneLabel(luaPaneRef(b))) ||
+        a.plugin.localeCompare(b.plugin) ||
+        a.id.localeCompare(b.id),
+    );
+}
+
+/** Offered Lua panes the tree does not show yet, in menu order. */
+export function luaPanesToAdd(
+  tree: PaneSplit | null,
+  offered: LuaPaneOffer[] = offeredLuaPanes(),
+): LuaPaneOffer[] {
+  const shown = new Set(tree ? allPanes(tree) : []);
+  return offered.filter((o) => !shown.has(paneKey(luaPaneRef(o))));
+}
+
+/** What Show here instead offers in place of a pane. */
+export interface PanesToShowInstead {
+  builtIns: PaneType[];
+  lua: PaneRef[];
+}
+
+/** The offered panes other than `leaf`, built-in and then Lua, in menu
+ *  order. A pane shown elsewhere moves here. */
+export function panesToShowInstead(leaf: PaneLeaf): PanesToShowInstead {
+  const key = paneKey(leaf);
+  return {
+    builtIns: offeredPaneTypes().filter((t) => t !== leaf.pane),
+    lua: offeredLuaPanes()
+      .map(luaPaneRef)
+      .filter((ref) => paneKey(ref) !== key),
+  };
 }

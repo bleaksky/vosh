@@ -23,7 +23,7 @@ import {
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneType, togglePane } from '../panel/paneActions';
+import { addPaneAtBottom, togglePane } from '../panel/paneActions';
 import {
   promptConfigGet,
   promptConfigSet,
@@ -697,7 +697,7 @@ function MainWindow() {
           onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           onOpenSettings={() => runCommand('settings')}
           paneTree={panelLayout?.root ?? null}
-          onAddPane={addPaneType}
+          onAddPane={addPaneAtBottom}
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}

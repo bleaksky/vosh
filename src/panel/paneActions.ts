@@ -16,7 +16,7 @@ import {
   type SplitDir,
 } from './paneLayout';
 import { getPanelLayout, setPaneTree, updatePanelLayout } from './panelLayoutStore';
-import { paneTypesToAdd } from './paneTypes';
+import { luaPaneRef, luaPanesToAdd, paneTypesToAdd } from './paneTypes';
 
 // What a pane's header and menu, the palette and the title band can do
 // to the panel. Each action reads the store's current tree when it
@@ -30,10 +30,14 @@ export function usePaneLeaf(): PaneLeaf | null {
   return useContext(PaneLeafContext);
 }
 
-/** The pane a split adds: the first one the panel does not show. */
+/** The pane a split adds: the first one Add a pane lists, a built-in
+ *  pane first and then a Lua pane. */
 export function paneToSplitIn(): PaneRef | null {
-  const pane = paneTypesToAdd(getPanelLayout()?.root ?? null)[0];
-  return pane === undefined ? null : paneRef(pane);
+  const tree = getPanelLayout()?.root ?? null;
+  const pane = paneTypesToAdd(tree)[0];
+  if (pane !== undefined) return paneRef(pane);
+  const lua = luaPanesToAdd(tree)[0];
+  return lua === undefined ? null : luaPaneRef(lua);
 }
 
 export function splitHere(id: string, dir: SplitDir): void {
@@ -66,8 +70,8 @@ export function togglePane(pane: PaneType): void {
 }
 
 /** Add a pane from the title band, at the bottom of the panel. */
-export function addPaneType(pane: PaneType): void {
-  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, paneRef(pane)) }));
+export function addPaneAtBottom(ref: PaneRef): void {
+  updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, ref) }));
 }
 
 /** Merge `patch` into the props of leaf `id`. An empty string value
