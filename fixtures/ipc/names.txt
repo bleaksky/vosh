@@ -149,6 +149,7 @@ command ui_set_fields(fields, profile?)
 command ui_set_theme(theme, lightTheme?, darkTheme?, profile?)
 command updater_check()
 command updater_install_and_relaunch()
+command vitals_snapshot_get(session?)
 command window_backdrop_set(background?, appearance?)
 event session://alert app heard
 event session://alerts-ended app unheard
