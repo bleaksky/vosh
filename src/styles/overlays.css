@@ -662,6 +662,24 @@
   color: var(--secondary);
 }
 
+/* A switch in a confirm card, like each character Export to Downloads
+   can name: the name on the left and the switch at the right, 32 high,
+   the first 12 under the body copy. */
+.ov-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+}
+
+.ov-confirm-body + .ov-switch-row {
+  margin-top: 12px;
+}
+
 /* Buttons (SPEC 4): 28 tall, radius 8, 13 medium. The default is the
    secondary look, a ring and no fill. Danger keeps the ring and takes
    the danger text. */

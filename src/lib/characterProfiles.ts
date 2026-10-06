@@ -126,6 +126,14 @@ export function worldSources(
   return out;
 }
 
+/** The characters an export of `entry` can name: those it has on its
+ *  world. A profile with no world has none, since a character logs in
+ *  only on a world. */
+export function exportCharacters(entry: ProfileEntry | undefined): string[] {
+  if (!hasWorld(entry?.auto_match)) return [];
+  return (entry?.auto_match?.characters ?? []).map((c) => c.trim()).filter((c) => c !== '');
+}
+
 /** The world meta a profile row shows, like `The Forsaken Lands`, or
  *  null when the profile has no world. */
 export function profileWorldName(entry: ProfileEntry): string | null {
