@@ -70,6 +70,17 @@ pub const DEFAULT_DESIGN: &str = concat!(
     " ",
 );
 
+/// Vosh's vitals text, the one the Text vitals style starts from and
+/// Reset to default puts back (board 5 of the Vitals Styles review). In
+/// a fight a row comes first with your opponent and its health on the
+/// right. Then your health, mana and moves, each current over max.
+pub const DEFAULT_VITALS_TEXT: &str = concat!(
+    "%{if:fight}%opponent%{right}%c_yellow%{opponent_hp:pct}%%%c_default%nl%{end}",
+    "%{c:hp:game}%hp%c_gray/%{maxhp}hp%c_default ",
+    "%mana%c_gray/%{maxmana}mn%c_default ",
+    "%move%c_gray/%{maxmove}mv%c_default",
+);
+
 /// At a glance, Vosh's default from 2026-09-30 until James asked for the
 /// mockup's band. In a fight its top row named your opponent with a
 /// gauge, the percent and the game's condition words, then the tank in a
@@ -579,6 +590,32 @@ where
 mod tests {
     use super::*;
     use crate::testkit::designs::JAMES;
+
+    #[test]
+    fn the_vitals_text_draws_your_vitals_and_your_opponent_in_a_fight() {
+        use crate::render::{render_str, RenderOptions};
+        use crate::values::overrides::{Overridden, Overrides, Preview};
+        use crate::values::Samples;
+
+        let now = chrono::NaiveDate::from_ymd_opt(2026, 10, 5)
+            .unwrap()
+            .and_hms_opt(21, 40, 0)
+            .unwrap();
+        let samples = Samples { now };
+        let draw = |over: &Overrides| {
+            let values = Overridden::new(&samples, over, now);
+            render_str(DEFAULT_VITALS_TEXT, &values, RenderOptions::default()).plain
+        };
+        let calm = Overrides {
+            values: [("fight".to_string(), false.into())].into(),
+            lament: false,
+        };
+        assert_eq!(draw(&calm), "1020/1020hp 800/800mn 930/930mv");
+        assert_eq!(
+            draw(&Preview::Fight.overrides(&samples)),
+            "Blackwatch Guard 60%\n1020/1020hp 800/800mn 930/930mv"
+        );
+    }
 
     #[test]
     fn a_default_table_reads_from_nothing() {
