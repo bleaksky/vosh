@@ -485,6 +485,10 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     }
     let _ = stream.flush().await;
 
+    // The row counts the time online from here, which a redial that
+    // reaches the game starts again.
+    let since = u64::try_from(now_ms()).unwrap_or_default();
+    session.set_since(Some(since));
     emit_state(
         &app,
         session,

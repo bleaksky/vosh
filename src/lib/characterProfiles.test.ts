@@ -277,6 +277,7 @@ const session = (id: number, patch: Partial<SessionRow>): SessionRow => ({
   tls: false,
   profile: 'default',
   connected: true,
+  since: null,
   selected: id === 1,
   ...patch,
 });

@@ -8,17 +8,17 @@ import { dropPlace, liftTravel, partShift, ROW_PITCH } from './useRowDrag';
 describe('dragging a session row', () => {
   it('lands on the slot the row is over, as frame b8-drag draws it', () => {
     // The Forsaken Lands 1825 lifts from the third place, 31 up, so its
-    // pill sits at 46 and the line marks the second place.
+    // middle is over the second slot and the line marks that place.
     expect(dropPlace(2, -31, 3)).toBe(1);
     expect(partShift(0, 2, 1)).toBe(0);
     expect(partShift(1, 2, 1)).toBe(ROW_PITCH);
   });
 
   it('stays in its place until its middle passes into the next slot', () => {
-    expect(dropPlace(1, 18, 4)).toBe(1);
-    expect(dropPlace(1, 20, 4)).toBe(2);
-    expect(dropPlace(1, -20, 4)).toBe(0);
-    expect(dropPlace(1, -18, 4)).toBe(1);
+    expect(dropPlace(1, 22, 4)).toBe(1);
+    expect(dropPlace(1, 24, 4)).toBe(2);
+    expect(dropPlace(1, -24, 4)).toBe(0);
+    expect(dropPlace(1, -22, 4)).toBe(1);
   });
 
   it('lands on the first or the last place past the ends of the list', () => {

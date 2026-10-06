@@ -32,6 +32,7 @@ function row(id: number, fields: Partial<SessionRow> = {}): SessionRow {
     tls: false,
     profile: 'default',
     connected: false,
+    since: null,
     selected: false,
     ...fields,
   };

@@ -117,6 +117,7 @@ export function TitleBand({
           ref={sessionRef}
           connection={connection}
           open={menu === 'session'}
+          folded={listSessions}
           onToggle={() => toggleMenu('session')}
         />
       </div>

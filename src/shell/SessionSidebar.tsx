@@ -4,7 +4,6 @@ import {
   useImperativeHandle,
   useRef,
   useState,
-  type ComponentType,
   type MouseEvent,
   type PointerEvent,
 } from 'react';
@@ -13,34 +12,52 @@ import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
-import { rowLook, useSessionRow, type RowGlyph } from '../stores/session/sessionRowStore';
-import { CloseIcon, DotIcon, HandIcon, PlusIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
+import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
+import { CloseIcon, PlusIcon } from '../ui/icons';
 import { SidebarIcon } from './icons';
+import { cardWords, useCardFacts } from './cardFacts';
+import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { SessionMark, SessionRowBody, WaitingCount } from './SessionRowBody';
+import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
 import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 
 // The sessions sidebar on the left of the main window, board 2 of the
-// Sessions review, drawn to otty's measures (Q17). MainWindow shows it
-// while two or more sessions are open and you have not hidden it in this
-// window. Its top 32 drags the window and holds the lights on macOS, with
-// New session and Hide sessions at its right. SESSIONS heads the list,
-// and each row reads the session as sessionLabel names it, the selected
-// one a filled pill. A row's glyph takes the meta's place while it shows,
-// and its name takes the tone the row store gives it (board 3). A click
-// selects. Under the pointer a row shows its close button in the place
-// of the meta or the glyph, which closes its session (Q13). While you
-// hold ⌘ (Ctrl elsewhere), the first nine rows show the key that brings
-// each to the front in that place instead, as otty does (board 8).
+// Sessions review, drawn to otty's measures (Q17), with the two line
+// rows of the Sessions Sidebar review. MainWindow shows it while two or
+// more sessions are open and you have not hidden it in this window. Its
+// top 32 drags the window and holds the lights on macOS, with New
+// session and Hide sessions at its right. SESSIONS heads the list with
+// how many are open (S8).
+//
+// Each row is two lines (S1). Line one starts with the row's status
+// mark (S2), then the session as sessionLabel names it with the port in
+// quiet meta, and ends in a right column. Line two says what the
+// session is doing, from useSessionLine, with your health at its right
+// (S3). The selected row is a filled pill, and the name takes the tone
+// the row store gives it. The right column holds the count of what
+// waits for you on a row behind (S4). While you hold ⌘ (Ctrl
+// elsewhere), the first nine rows show the key that brings each to the
+// front there instead, as otty does (board 8). Under the pointer a row
+// shows its close button in that place, which closes its session (Q13,
+// S6). Rest the pointer on a row and SessionCard opens beside it with
+// the rest of the session, which a screen reader hears as the row's
+// description. A click selects.
 //
 // A right click opens the row's menu at the pointer, board 9: Rename
 // session…, Edit connection…, Disconnect while the session is
-// connected, and Close session. Rename session…, a double click on the
-// name, or Rename session… from anywhere else while the sidebar shows,
-// brings the session to the front and turns its name into a field in
-// place (Q7). Return or a click elsewhere keeps what you typed, Escape
-// leaves the row as it was, and a blank field clears the name, so the
-// row reads the character again.
+// connected, and Close session. Rename session… shows F2 beside it when
+// the row had the keyboard as the menu opened. A double click on the
+// name, Return or F2 on a row that has the keyboard, or Rename session…
+// from the row menu or anywhere else while the sidebar shows, brings
+// the session to the front and turns its name into a field in place
+// (Q7, S5 of the Sessions Sidebar review). Space still selects, and F2
+// never reaches the command line from a row. The field spans the name
+// and the right column, the mark stays, and line two says how to finish.
+// Return or a click elsewhere keeps what you typed, Escape leaves the
+// row as it was, and a blank field clears the name, so the row reads
+// the character again.
 //
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
@@ -102,6 +119,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   ref,
 ) {
   const numbered = useModHeld();
+  const [side, setSide] = useState<HTMLElement | null>(null);
   const list = useRef<HTMLUListElement | null>(null);
   // Whether a row has passed under SESSIONS, which draws its hairline.
   const [scrolled, setScrolled] = useState(false);
@@ -110,10 +128,16 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     rows.map((row) => row.id),
     onMove,
   );
+  const card = useHoverCard(drag !== null);
   // The session whose name is a field, and the row whose menu is open,
-  // with the pointer it opened at.
+  // with the pointer it opened at and whether the row had the keyboard.
   const [renaming, setRenaming] = useState<number | null>(null);
-  const [menu, setMenu] = useState<{ session: number; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    session: number;
+    x: number;
+    y: number;
+    keyed: boolean;
+  } | null>(null);
   const menuRow = menu && rows.find((row) => row.id === menu.session);
 
   // Every Rename session… acts on the session in front, so a row behind
@@ -154,7 +178,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   };
 
   return (
-    <aside className="shell-sessions st-controls" aria-label="Sessions">
+    <aside ref={setSide} className="shell-sessions st-controls" aria-label="Sessions">
       <div className="shell-sessions-top" data-tauri-drag-region>
         <div className="shell-sessions-actions">
           <button
@@ -180,12 +204,16 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         </div>
       </div>
       <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
-        Sessions
+        Sessions<span className="shell-sessions-total">{rows.length}</span>
       </h2>
       <ul
         ref={list}
         className={drag ? 'shell-sessions-list is-dragging' : 'shell-sessions-list'}
-        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
+        onScroll={(e) => {
+          setScrolled(e.currentTarget.scrollTop > 0);
+          card.leave();
+        }}
+        onPointerLeave={card.leave}
       >
         {rows.map((row, i) => (
           <SessionSlot
@@ -200,11 +228,13 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
               drag ? (drag.session === row.id ? drag.dy : partShift(i, drag.from, drag.to)) : 0
             }
             onPress={(e) => press(e, row.id)}
+            onRest={(slot) => card.rest(row.id, slot)}
+            card={card.shown?.session === row.id ? { slot: card.shown.slot, side } : null}
             dropped={dropped}
             onSelect={onSelect}
             onClose={onClose}
             onCaret={onCaret}
-            onMenu={(x, y) => setMenu({ session: row.id, x, y })}
+            onMenu={(x, y, keyed) => setMenu({ session: row.id, x, y, keyed })}
             onRename={() => startRename(row.id)}
             onRenamed={(name, caret) => renamed(row.id, name, caret)}
           />
@@ -220,7 +250,10 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
       </ul>
       {menu && menuRow && (
         <ShellMenu at={menu} width={ROW_MENU_WIDTH} label="Session options" onClose={closeMenu}>
-          <ShellMenuItem onSelect={() => fromMenu(() => startRename(menuRow.id))}>
+          <ShellMenuItem
+            shortcut={menu.keyed ? 'F2' : undefined}
+            onSelect={() => fromMenu(() => startRename(menuRow.id))}
+          >
             Rename session…
           </ShellMenuItem>
           <ShellMenuItem
@@ -248,15 +281,6 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
   );
 });
 
-/** Each glyph, with the words a screen reader says for it, from board
- *  3 and Q8, where the triangle means connect again yourself. */
-const GLYPHS: Record<RowGlyph, { icon: ComponentType; words: string }> = {
-  triangle: { icon: TriangleIcon, words: 'Connect again' },
-  hand: { icon: HandIcon, words: 'Logging in' },
-  spinner: { icon: SpinnerIcon, words: 'Connecting' },
-  dot: { icon: DotIcon, words: 'Something for you' },
-};
-
 interface SlotProps {
   row: SessionRow;
   rows: SessionRow[];
@@ -272,13 +296,19 @@ interface SlotProps {
   offset: number;
   /** A press that may lift the row. */
   onPress: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** The pointer moved on the row's slot. */
+  onRest: (slot: HTMLElement) => void;
+  /** Where the row's card shows while it does, level with its slot and
+   *  right of the sidebar, else null. */
+  card: { slot: HTMLElement; side: HTMLElement | null } | null;
   /** Whether the click under way ends a drag, and selects nothing. */
   dropped: () => boolean;
   onSelect: (session: number) => void;
   onClose: (session: number) => void;
   onCaret: () => void;
-  /** Open the row's menu at the pointer. */
-  onMenu: (x: number, y: number) => void;
+  /** Open the row's menu at the pointer, and say whether the row had
+   *  the keyboard. */
+  onMenu: (x: number, y: number, keyed: boolean) => void;
   onRename: () => void;
   /** The name field closed, with the name to keep, or undefined to keep
    *  the row as it was. */
@@ -295,6 +325,8 @@ function SessionSlot({
   lifted,
   offset,
   onPress,
+  onRest,
+  card,
   dropped,
   onSelect,
   onClose,
@@ -304,15 +336,10 @@ function SessionSlot({
   onRenamed,
 }: SlotProps) {
   const label = sessionLabel(row, rows);
-  const { glyph, tone } = rowLook(useSessionRow(row.id), row, current);
-  const look = tone ? `shell-sessions-row is-${tone}` : 'shell-sessions-row';
-  const meta = keys ? (
-    <span className="shell-sessions-meta is-key">{keys}</span>
-  ) : glyph ? (
-    <RowGlyphMark glyph={glyph} />
-  ) : (
-    label.meta && <span className="shell-sessions-meta">{label.meta}</span>
-  );
+  const look = rowLook(useSessionRow(row.id), row, current);
+  const facts = useCardFacts(row, rows);
+  const described = `shell-sessions-card-${row.id}`;
+  const rowClass = look.tone ? `shell-sessions-row is-${look.tone}` : 'shell-sessions-row';
   const moved = offset ? { transform: `translateY(${offset}px)` } : undefined;
 
   // A field cannot sit inside a button, so the row is a plain box while
@@ -320,25 +347,30 @@ function SessionSlot({
   if (renaming) {
     return (
       <li className="shell-sessions-slot" style={moved}>
-        <div className={`${look} is-edit`} aria-current={current ? 'true' : undefined}>
+        <div className={`${rowClass} is-edit`} aria-current={current ? 'true' : undefined}>
+          <SessionMark mark={look.mark} />
           <NameField
             initial={label.name}
             unnamed={sessionLabel({ ...row, name: null }, rows).name}
             onDone={onRenamed}
           />
-          {meta}
+          <span className="shell-sessions-line is-hint">Return saves, Esc cancels</span>
         </div>
       </li>
     );
   }
 
   return (
-    <li className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'} style={moved}>
+    <li
+      className={lifted ? 'shell-sessions-slot is-lifted' : 'shell-sessions-slot'}
+      style={moved}
+      onPointerMove={(e) => onRest(e.currentTarget)}
+    >
       <button
         type="button"
-        className={look}
+        className={rowClass}
         aria-current={current ? 'true' : undefined}
-        title={label.tooltip ?? undefined}
+        aria-describedby={described}
         onPointerDown={onPress}
         onClick={() => {
           if (dropped()) return;
@@ -346,22 +378,31 @@ function SessionSlot({
           // Picking a session puts you back on its command line.
           onCaret();
         }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== 'F2') return;
+          if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onRename();
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
-          onMenu(e.clientX, e.clientY);
+          onMenu(e.clientX, e.clientY, e.currentTarget.matches(':focus-visible'));
         }}
       >
-        {label.split ? (
-          <span className="shell-sessions-name is-world" onDoubleClick={onRename}>
-            <span className="shell-sessions-world">{label.split.world}</span>
-            {label.split.port}
-          </span>
-        ) : (
-          <span className="shell-sessions-name" onDoubleClick={onRename}>
-            {label.name}
-          </span>
-        )}
-        {meta}
+        <SessionRowBody
+          row={row}
+          rows={rows}
+          mark={look.mark}
+          end={
+            keys ? (
+              <span className="shell-sessions-key">{keys}</span>
+            ) : (
+              look.count > 0 && !current && <WaitingCount count={look.count} />
+            )
+          }
+          onNameDoubleClick={onRename}
+        />
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
           only under the pointer, so Tab passes it by, and the Session
@@ -380,6 +421,10 @@ function SessionSlot({
       >
         <CloseIcon />
       </button>
+      <span id={described} hidden>
+        {cardWords(facts)}
+      </span>
+      {card?.side && <SessionCard facts={facts} slot={card.slot} side={card.side} />}
     </li>
   );
 }
@@ -434,15 +479,5 @@ function NameField({ initial, unnamed, onDone }: NameFieldProps) {
       }}
       onBlur={() => finish(typedName(text, initial), false)}
     />
-  );
-}
-
-/** A row's glyph, which the session popover's list shows too. */
-export function RowGlyphMark({ glyph }: { glyph: RowGlyph }) {
-  const { icon: Icon, words } = GLYPHS[glyph];
-  return (
-    <span className={`shell-sessions-glyph is-${glyph}`} role="img" aria-label={words}>
-      <Icon />
-    </span>
   );
 }

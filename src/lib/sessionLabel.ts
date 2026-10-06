@@ -27,9 +27,6 @@ export interface SessionLabel {
   /** A name that is the place with its port, in its two parts, so a
    *  tight row ends the world in an ellipsis and keeps the port. */
   split: { world: string; port: string } | null;
-  /** What pointing at the session says, like `Tolliver on The Forsaken
-   *  Lands 1825`, the character even when you named the session. */
-  tooltip: string | null;
 }
 
 /** Whether another open session plays on `session`'s host. */
@@ -65,8 +62,7 @@ export function typedName(text: string, reads: string): string | null | undefine
 
 /** The label of `session` among the open sessions in `rows`. */
 export function sessionLabel(session: LabelSource, rows: readonly LabelSource[]): SessionLabel {
-  const character = session.character?.trim() || null;
-  const who = session.name?.trim() || character;
+  const who = session.name?.trim() || session.character?.trim() || null;
   const at = placeOf(session, rows);
   const place = at && (at.port ? `${at.world} ${at.port}` : at.world);
   const port = at?.port ?? null;
@@ -76,6 +72,5 @@ export function sessionLabel(session: LabelSource, rows: readonly LabelSource[])
     place,
     meta: who && port,
     split: !who && at && port ? { world: at.world, port } : null,
-    tooltip: character && place ? `${character} on ${place}` : (place ?? character),
   };
 }

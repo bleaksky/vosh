@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
-import { sessionLabel } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
@@ -14,7 +13,7 @@ import { ConnectionForm } from './ConnectionForm';
 import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
-import { RowGlyphMark } from './SessionSidebar';
+import { SessionRowBody, WaitingCount } from './SessionRowBody';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button, by board 4 of the
@@ -30,13 +29,14 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 //
 // While the sidebar is folded with two or more sessions open, in a
 // narrow window or after Hide sessions, the popover lists every session
-// at its top under SESSIONS, board 8. The selected one wears the check,
-// and each other one its port, any glyph its row would show and the key
-// that brings it to the front. A click brings that session to the
-// front. The list takes the sidebar's place, so under the pointer each
-// row shows the close button in the place of its check, its glyph and
-// its key, which closes that session as the sidebar's does (Q13). A list
-// too long for the window scrolls, and the rows under it stay put.
+// at its top under SESSIONS, board 8, in the sidebar's two line rows
+// (S7 of the Sessions Sidebar review, board 05). The selected one wears
+// the check in the right column, a session behind the count of what
+// waits there, and any other one the key that brings it to the front. A
+// click brings that session to the front. The list takes the sidebar's
+// place, so under the pointer each row shows the close button in the
+// right column, which closes that session as the sidebar's does (Q13). A
+// list too long for the window scrolls, and the rows under it stay put.
 
 const MENU_WIDTH = 272;
 
@@ -184,7 +184,9 @@ export function SessionMenu({
       <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
       </ShellMenuItem>
-      <ShellMenuSeparator />
+      {/* Board 05 draws no line here while the list sits above, so
+        five rows fit whole at 720 by 450. */}
+      {!listSessions && <ShellMenuSeparator />}
       <ShellMenuItem
         shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
         onSelect={() => run(openNewSession)}
@@ -213,30 +215,28 @@ interface ItemProps {
   onCloseSession: () => void;
 }
 
-/** One session in the popover's list, as its row in the sidebar names
- *  it, with the port in quiet meta, and its close button beside it. */
+/** One session in the popover's list, as its row in the sidebar draws
+ *  it, 44 high on the menu's recipe, with its close button beside it. */
 function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
-  const label = sessionLabel(row, rows);
-  const { glyph } = rowLook(useSessionRow(row.id), row, current);
+  const look = rowLook(useSessionRow(row.id), row, current);
+  const end = current ? (
+    <CheckIcon className="pane-menu-check" />
+  ) : look.count > 0 ? (
+    <WaitingCount count={look.count} />
+  ) : (
+    place <= 9 && <kbd className="shell-menu-kbd">{shortcutLabel(`Mod+${place}`)}</kbd>
+  );
   return (
     <div className="shell-menu-session-slot">
-      <ShellMenuItem
-        current={current}
-        shortcut={current || place > 9 ? undefined : shortcutLabel(`Mod+${place}`)}
-        trailing={
-          current ? (
-            <CheckIcon className="pane-menu-check" />
-          ) : (
-            glyph && <RowGlyphMark glyph={glyph} />
-          )
-        }
-        onSelect={onSelect}
+      <button
+        type="button"
+        role="menuitem"
+        className="shell-menu-session"
+        aria-current={current ? 'true' : undefined}
+        onClick={onSelect}
       >
-        <span className="shell-menu-session">
-          <span className="shell-menu-session-name">{label.name}</span>
-          {label.meta && <span className="shell-menu-meta">{label.meta}</span>}
-        </span>
-      </ShellMenuItem>
+        <SessionRowBody row={row} rows={rows} mark={look.mark} end={end} />
+      </button>
       {/* A sibling of the row, since a button holds no button. It shows
         only under the pointer, so the arrow keys pass it by, and ⌘W
         closes the session in front from the keyboard. */}

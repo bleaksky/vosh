@@ -477,6 +477,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     capture_pending_line(&conn.app, &conn.session, &log_sink, &mut conn.accumulator).await;
 
     conn.session.connection.lock().tick.end_session();
+    conn.session.set_since(None);
 
     log_sink.close().await;
 

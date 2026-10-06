@@ -3,14 +3,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRow } from '../ipc/session';
 import type { SessionRowState } from '../stores/session/sessionRowStore';
+import sessionsCss from '../styles/sessions.css?raw';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+import type { SessionLine } from './sessionLine';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 
-// The sessions sidebar of boards 2 and 3. Each row reads its session as
-// sessionLabel names it, the selected one marked current, a port that is
-// not the world port in quiet meta, and a row with neither a name nor a
-// character named by its world with the port kept apart. A row takes the
-// look the row store gives it, faked here for each session.
+// The sessions sidebar of boards 2 and 3 of the Sessions review, with
+// the two line rows of the Sessions Sidebar review. Each row reads its
+// session as sessionLabel names it, the selected one marked current, a
+// port that is not the world port in quiet meta, and a row with neither
+// a name nor a character named by its world with the port kept apart.
+// A row takes the look the row store gives it and the second line
+// useSessionLine gives it, each faked here for each session.
 
 /** What the row store says of each session, by id. A session it names
  *  nothing for reads quiet. */
@@ -20,6 +24,35 @@ const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
 const mod = vi.hoisted(() => ({ held: false }));
 
 vi.mock('./useModHeld', () => ({ useModHeld: () => mod.held }));
+
+/** The second line of each session, by id. A session it names nothing
+ *  for reads its faked row state with no GMCP. */
+const lines = vi.hoisted(() => new Map<number, SessionLine>());
+
+vi.mock('./sessionLine', async (actual) => {
+  const line = await actual<typeof import('./sessionLine')>();
+  const { getSessionRow } = await import('../stores/session/sessionRowStore');
+  return {
+    ...line,
+    useSessionView: (session: number) => ({
+      state: { ...getSessionRow(session), ...states.get(session) },
+      room: null,
+      combat: null,
+      vitals: null,
+      now: 0,
+    }),
+    useSessionLine: (row: SessionRow) =>
+      lines.get(row.id) ??
+      line.secondLine(
+        row,
+        { ...getSessionRow(row.id), ...states.get(row.id) },
+        null,
+        null,
+        null,
+        0,
+      ),
+  };
+});
 
 vi.mock('../stores/session/sessionRowStore', async (actual) => {
   const store = await actual<typeof import('../stores/session/sessionRowStore')>();
@@ -41,6 +74,7 @@ function row(id: number, fields: Partial<SessionRow>): SessionRow {
     tls: false,
     profile: 'Default',
     connected: true,
+    since: null,
     selected: false,
     ...fields,
   };
@@ -70,6 +104,7 @@ const buttons = (html: string) =>
 
 afterEach(() => {
   states.clear();
+  lines.clear();
   mod.held = false;
   vi.unstubAllGlobals();
 });
@@ -81,27 +116,41 @@ describe('the sessions sidebar', () => {
     row(3, { port: 1825 }),
   ];
 
-  it('holds New session and Hide sessions over the SESSIONS header', () => {
+  it('holds New session and Hide sessions over SESSIONS and its count', () => {
     const html = draw(rows, 1);
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
     expect(html).toContain('aria-label="New session"');
     expect(html).toContain('aria-label="Hide sessions"');
-    expect(html).toContain('<h2 class="shell-sessions-head">Sessions</h2>');
+    expect(html).toContain(
+      '<h2 class="shell-sessions-head">Sessions<span class="shell-sessions-total">3</span></h2>',
+    );
+  });
+
+  it('reads Sessions 5 with five open, as board 01 draws it', () => {
+    const five = [...rows, row(4, { name: 'Errands' }), row(5, { port: 1825, connected: false })];
+    expect(draw(five, 1)).toContain('Sessions<span class="shell-sessions-total">5</span></h2>');
   });
 
   it('lists every session in order, the selected one current', () => {
-    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    const html = draw(rows, 1);
+    const [tolliver, orla, build] = buttons(html);
     expect(tolliver).toContain('aria-current="true"');
-    expect(tolliver).toContain('title="Tolliver on The Forsaken Lands"');
-    expect(tolliver).toContain('<span class="shell-sessions-name">Tolliver</span>');
-    expect(tolliver).not.toContain('shell-sessions-meta');
+    // The card's words describe the row, which keeps no tooltip.
+    expect(tolliver).toContain('aria-describedby="shell-sessions-card-1"');
+    expect(tolliver).not.toContain('title=');
+    expect(html).toContain(
+      '<span id="shell-sessions-card-1" hidden="">The Forsaken Lands, profile Default. Double click the name to rename.</span>',
+    );
+    expect(tolliver).toContain(
+      '<span class="shell-sessions-name"><span class="shell-sessions-name-text">Tolliver</span></span>',
+    );
     expect(orla).not.toContain('aria-current');
     expect(orla).toContain(
-      '<span class="shell-sessions-name">Orla</span><span class="shell-sessions-meta">1825</span>',
+      '<span class="shell-sessions-name-text">Orla</span><span class="shell-sessions-port">1825</span>',
     );
     expect(build).toContain(
-      '<span class="shell-sessions-name is-world"><span class="shell-sessions-world">The Forsaken Lands</span>1825</span>',
+      '<span class="shell-sessions-name-text">The Forsaken Lands</span><span class="shell-sessions-port">1825</span>',
     );
   });
 
@@ -111,9 +160,20 @@ describe('the sessions sidebar', () => {
     expect(slots).toHaveLength(3);
     for (const slot of slots) {
       expect(slot).toMatch(
-        /<\/button><button type="button" class="shell-sessions-close" aria-label="Close session" tabindex="-1"><svg[^]*<\/button><\/li>$/,
+        /<\/button><button type="button" class="shell-sessions-close" aria-label="Close session" tabindex="-1"><svg[^]*<\/button><span id="shell-sessions-card-\d" hidden="">[^<]*<\/span><\/li>$/,
       );
     }
+  });
+
+  it('shows the close button in the place of the count under the pointer', () => {
+    const rule = (selector: string) =>
+      sessionsCss.match(new RegExp(`\\n${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`))?.[1];
+    expect(rule('.shell-sessions-slot:hover .shell-sessions-end')).toMatch(/visibility: hidden;/);
+    expect(rule('.shell-sessions-slot:hover .shell-sessions-close')).toMatch(
+      /visibility: visible;/,
+    );
+    // On line one, its right edge where the count ends.
+    expect(rule('.shell-sessions-close')).toMatch(/top: 7px;\s+right: 18px;/);
   });
 
   it('marks the session the selection moves to', () => {
@@ -122,25 +182,50 @@ describe('the sessions sidebar', () => {
     expect(orla).toContain('aria-current="true"');
   });
 
-  it('marks a row behind for new lines and alerts, with the dot in the meta place', () => {
-    states.set(1, { lines: true, alert: true });
-    states.set(2, { lines: true, alert: true });
-    states.set(3, { lines: true, playing: true });
+  it('draws line two with the health at its right, in the danger tone while low', () => {
+    lines.set(1, { who: null, text: 'Thickening Woods', health: 100, low: false });
+    lines.set(2, { who: null, text: 'Fighting a Blackwatch guard', health: 18, low: true });
+    lines.set(3, { who: 'Orla', text: 'The Bank of Aabahran', health: null, low: false });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
-    // The selected row shows neither.
-    expect(tolliver).toContain('class="shell-sessions-row"');
-    expect(tolliver).not.toContain('shell-sessions-glyph');
-    expect(orla).toContain('class="shell-sessions-row is-new"');
-    expect(orla).toContain(
-      '<span class="shell-sessions-name">Orla</span><span class="shell-sessions-glyph is-dot" role="img" aria-label="Something for you"><svg',
+    expect(tolliver).toMatch(
+      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health">100%<\/span><\/button>$/,
     );
-    expect(orla).not.toContain('shell-sessions-meta');
-    expect(build).toContain('class="shell-sessions-row is-new"');
-    expect(build).not.toContain('shell-sessions-glyph');
+    expect(orla).toContain(
+      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low">18%</span>',
+    );
+    // With no health the line takes the right column too, and a session
+    // you named starts it with its character.
+    expect(build).toMatch(
+      /<span class="shell-sessions-line is-wide"><span class="shell-sessions-who">Orla<\/span> · The Bank of Aabahran<\/span><\/button>$/,
+    );
   });
 
-  it('shows the link of each session as a glyph, and dims one not connected', () => {
-    const glyphs = [
+  it('counts what waits on a row behind in the pill, and brightens it for new lines', () => {
+    states.set(1, { lines: true, waiting: ['preset:alert_tells'] });
+    states.set(2, { lines: true, waiting: ['preset:alert_attacked', 'preset:alert_low_health'] });
+    states.set(3, { lines: true, playing: true });
+    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    // The selected row shows neither, whatever its store says.
+    expect(tolliver).toContain('class="shell-sessions-row"');
+    expect(tolliver).toContain('<span class="shell-sessions-end"></span>');
+    expect(orla).toContain('class="shell-sessions-row is-new"');
+    expect(orla).toContain(
+      '<span class="shell-sessions-end"><span class="shell-sessions-count" role="img" aria-label="2 waiting">2</span></span>',
+    );
+    expect(build).toContain('class="shell-sessions-row is-new"');
+    expect(build).not.toContain('shell-sessions-count');
+  });
+
+  it('stops the count at 9+, and says the whole of it', () => {
+    states.set(2, { waiting: Array.from({ length: 12 }, () => 'preset:alert_tells') });
+    states.set(3, { waiting: Array.from({ length: 9 }, () => 'preset:alert_tells') });
+    const [, orla, build] = buttons(draw(rows, 1));
+    expect(orla).toContain('aria-label="12 waiting">9+</span>');
+    expect(build).toContain('aria-label="9 waiting">9</span>');
+  });
+
+  it('starts every row with its status mark, the selected one too, and dims one not connected', () => {
+    const marked = [
       row(1, { character: 'Tolliver' }),
       row(2, { port: 1825 }),
       row(3, {}),
@@ -149,51 +234,50 @@ describe('the sessions sidebar', () => {
     ];
     states.set(3, { link: 'dialing' });
     states.set(4, { link: 'failed' });
-    const [, login, dialing, failed, off] = buttons(draw(glyphs, 1));
-    const glyph = (kind: string, words: string) =>
-      `<span class="shell-sessions-glyph is-${kind}" role="img" aria-label="${words}"><svg`;
-    expect(login).toContain('1825</span>' + glyph('hand', 'Logging in'));
-    expect(dialing).toContain(glyph('spinner', 'Connecting'));
-    expect(failed).toContain(glyph('triangle', 'Connect again'));
+    const [live, login, dialing, failed, off] = buttons(draw(marked, 1));
+    const mark = (kind: string, words: string) =>
+      `"><span class="shell-sessions-mark is-${kind}" role="img" aria-label="${words}">`;
+    expect(live).toContain(mark('live', 'Playing') + '<span class="shell-sessions-dot"></span>');
+    expect(login).toContain(mark('hand', 'Logging in') + '<svg');
+    expect(dialing).toContain(mark('spinner', 'Connecting') + '<svg');
+    expect(failed).toContain(mark('triangle', 'Connect again') + '<svg');
     expect(off).toContain('class="shell-sessions-row is-off"');
-    expect(off).toContain('<span class="shell-sessions-meta">1825</span>');
-    expect(off).not.toContain('shell-sessions-glyph');
+    expect(off).toContain(
+      mark('off', 'Not connected') + '<span class="shell-sessions-dot"></span>',
+    );
+    expect(off).toContain('<span class="shell-sessions-port">1825</span>');
   });
 
-  it('numbers the first nine rows while you hold ⌘, in place of the meta and the glyph', () => {
+  it('numbers the first nine rows while you hold ⌘, in the place of the count', () => {
     vi.stubGlobal('navigator', { userAgent: 'Macintosh' });
     const many = [
       row(1, { character: 'Tolliver' }),
       row(2, { character: 'Orla', port: 1825 }),
       ...Array.from({ length: 8 }, (_, i) => row(i + 3, { port: i % 2 ? 1825 : 1848 })),
     ];
-    states.set(4, { link: 'failed' });
+    states.set(2, { waiting: ['preset:alert_tells'] });
     const quiet = buttons(draw(many, 1));
-    expect(quiet.join('')).not.toContain('is-key');
+    expect(quiet.join('')).not.toContain('shell-sessions-key');
+    expect(quiet[1]).toContain('shell-sessions-count');
     mod.held = true;
     const numbered = buttons(draw(many, 1));
     numbered.slice(0, 9).forEach((button, i) => {
-      expect(button).toMatch(
-        new RegExp(`</span><span class="shell-sessions-meta is-key">⌘${i + 1}</span></button>$`),
+      expect(button).toContain(
+        `<span class="shell-sessions-end"><span class="shell-sessions-key">⌘${i + 1}</span></span>`,
       );
-      expect(button).not.toContain('shell-sessions-glyph');
     });
-    // Orla's port and the failed row's triangle give way to the number.
-    expect(quiet[1]).toContain('<span class="shell-sessions-meta">1825</span>');
-    expect(numbered[1]).not.toContain('<span class="shell-sessions-meta">1825</span>');
-    expect(quiet[3]).toContain('shell-sessions-glyph is-triangle');
-    // The tenth row has no key and keeps its port.
-    expect(numbered[9]).not.toContain('is-key');
-    expect(numbered[9]).toContain(
-      '<span class="shell-sessions-world">The Forsaken Lands</span>1825',
-    );
+    // Orla's count gives way to her key, and her port stays.
+    expect(numbered[1]).not.toContain('shell-sessions-count');
+    expect(numbered[1]).toContain('<span class="shell-sessions-port">1825</span>');
+    // The tenth row has no key.
+    expect(numbered[9]).toContain('<span class="shell-sessions-end"></span>');
   });
 
   it('names the key with Ctrl on Windows and Linux', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' });
     mod.held = true;
     const [tolliver] = buttons(draw(rows, 1));
-    expect(tolliver).toContain('<span class="shell-sessions-meta is-key">Ctrl+1</span>');
+    expect(tolliver).toContain('<span class="shell-sessions-key">Ctrl+1</span>');
   });
 });
 
@@ -219,7 +303,11 @@ const hasClass = (name: string) => (el: FakeElement) =>
 describe('renaming and moving a session in its row', () => {
   const doc = new FakeDocument();
   /** The escape stack's keydown listener, which the window holds. */
-  const windowListeners = new Map<string, Handler>();
+  const windowListeners = new Map<string, Handler[]>();
+  /** Hand `e` to every listener the window holds for `type`. */
+  const fire = (type: string, e: unknown) => {
+    for (const fn of windowListeners.get(type) ?? []) fn(e);
+  };
   const rows = [row(1, { character: 'Tolliver' }), row(2, { character: 'Tolliver', port: 1825 })];
   let createRoot: typeof import('react-dom/client').createRoot;
   const cleanups: (() => Promise<void>)[] = [];
@@ -233,8 +321,13 @@ describe('renaming and moving a session in its row', () => {
       innerHeight: 800,
       location: { protocol: 'about:' },
       HTMLIFrameElement: class {},
-      addEventListener: (type: string, fn: Handler) => void windowListeners.set(type, fn),
-      removeEventListener() {},
+      addEventListener: (type: string, fn: Handler) =>
+        void windowListeners.set(type, [...(windowListeners.get(type) ?? []), fn]),
+      removeEventListener: (type: string, fn: Handler) =>
+        void windowListeners.set(
+          type,
+          (windowListeners.get(type) ?? []).filter((had) => had !== fn),
+        ),
     });
     vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: '' });
     vi.stubGlobal('Node', FakeNode);
@@ -250,6 +343,10 @@ describe('renaming and moving a session in its row', () => {
     el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
       for (let n = other; n; n = n.parentNode) if (n === this) return true;
       return false;
+    };
+    // Only a row the keyboard reached matches :focus-visible.
+    el.matches = function (this: FakeElement, selector: string): boolean {
+      return selector === ':focus-visible' && doc.activeElement === this;
     };
     el.querySelector = function (this: FakeElement): FakeElement | null {
       return findAll(this, (child) => child.getAttribute('role') === 'menuitem')[0] ?? null;
@@ -311,7 +408,7 @@ describe('renaming and moving a session in its row', () => {
         ),
       escape: () =>
         run(() =>
-          windowListeners.get('keydown')?.({
+          fire('keydown', {
             key: 'Escape',
             isComposing: false,
             target: field(),
@@ -332,9 +429,9 @@ describe('renaming and moving a session in its row', () => {
     expect(field?.value).toBe('Tolliver');
     expect(field?.getAttribute('placeholder')).toBe('Tolliver');
     expect(doc.activeElement).toBe(field);
-    // The meta stays beside it, and the row has no close button then.
+    // The mark stays beside it, and the row has no close button then.
     const slots = findAll(m.container, hasClass('shell-sessions-slot'));
-    expect(slots[1].textContent).toBe('1825');
+    expect(findAll(slots[1], hasClass('shell-sessions-mark'))).toHaveLength(1);
     expect(findAll(slots[1], hasClass('shell-sessions-close'))).toHaveLength(0);
   });
 
@@ -396,6 +493,79 @@ describe('renaming and moving a session in its row', () => {
     expect(m.field()?.value).toBe('Tolliver');
   });
 
+  /** Press `key` on the second row, and say whether it stopped there. */
+  const press = async (m: Awaited<ReturnType<typeof mount>>, key: string) => {
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    let stopped = false;
+    await m.run(() =>
+      on(second).onKeyDown({
+        key,
+        nativeEvent: { isComposing: false },
+        preventDefault() {},
+        stopPropagation: () => (stopped = true),
+      }),
+    );
+    return stopped;
+  };
+
+  it('opens the field from Return or F2 on a row with the keyboard, as board 04 says', async () => {
+    for (const key of ['Enter', 'F2']) {
+      const m = await mount();
+      expect(await press(m, key)).toBe(true);
+      expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+      expect(m.field()?.value).toBe('Tolliver');
+      await m.escape();
+      for (const cleanup of cleanups.splice(0)) await cleanup();
+    }
+  });
+
+  it('leaves Space and other keys to the row', async () => {
+    const m = await mount();
+    expect(await press(m, ' ')).toBe(false);
+    expect(await press(m, 'a')).toBe(false);
+    expect(m.field()).toBeNull();
+  });
+
+  it('says how to finish on line two while the field is open, and keeps the mark', async () => {
+    const m = await mount();
+    await m.rename(2);
+    const slot = findAll(m.container, hasClass('shell-sessions-slot'))[1];
+    const hint = only(slot, 'the hint', hasClass('is-hint'));
+    expect(hint.getAttribute('class')).toBe('shell-sessions-line is-hint');
+    expect(hint.textContent).toBe('Return saves, Esc cancels');
+    expect(findAll(slot, hasClass('shell-sessions-mark'))).toHaveLength(1);
+    expect(findAll(slot, hasClass('shell-sessions-count'))).toHaveLength(0);
+  });
+
+  it('shows F2 beside Rename session… only when the row had the keyboard', async () => {
+    const m = await mount();
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    const open = () =>
+      m.run(() =>
+        on(second).onContextMenu({
+          clientX: 146,
+          clientY: 120,
+          preventDefault() {},
+          currentTarget: second,
+        }),
+      );
+    const rename = () =>
+      only(
+        doc.body,
+        'Rename session…',
+        (el) =>
+          el.getAttribute('role') === 'menuitem' &&
+          (el.textContent ?? '').startsWith('Rename session…'),
+      );
+    await open();
+    expect(rename().textContent).toBe('Rename session…');
+    await m.escape();
+    await m.run(() => second.focus());
+    await open();
+    expect(rename().textContent).toBe('Rename session…F2');
+    expect(findAll(rename(), hasClass('shell-menu-kbd'))[0]?.textContent).toBe('F2');
+  });
+
   it('opens the row menu at the pointer on a right click, as board 9 draws it', async () => {
     const m = await mount();
     const buttons = findAll(m.container, hasClass('shell-sessions-row'));
@@ -405,6 +575,7 @@ describe('renaming and moving a session in its row', () => {
         clientX: 146,
         clientY: 120,
         preventDefault: () => (prevented = true),
+        currentTarget: buttons[1],
       }),
     );
     expect(prevented).toBe(true);
@@ -435,6 +606,7 @@ describe('renaming and moving a session in its row', () => {
           clientX: 146,
           clientY: 120,
           preventDefault() {},
+          currentTarget: findAll(m.container, hasClass('shell-sessions-row'))[1],
         }),
       );
     const item = (label: string) =>
@@ -462,6 +634,7 @@ describe('renaming and moving a session in its row', () => {
         clientX: 146,
         clientY: 120,
         preventDefault() {},
+        currentTarget: findAll(m.container, hasClass('shell-sessions-row'))[1],
       }),
     );
     const items = findAll(doc.body, (el) => el.getAttribute('role') === 'menuitem');
@@ -477,7 +650,7 @@ describe('renaming and moving a session in its row', () => {
     const head = only(m.container, 'the header', hasClass('shell-sessions-head'));
     const list = only(m.container, 'the list', hasClass('shell-sessions-list'));
     expect(head.getAttribute('class')).toBe('shell-sessions-head');
-    await m.run(() => on(list).onScroll({ currentTarget: { scrollTop: 38 } }));
+    await m.run(() => on(list).onScroll({ currentTarget: { scrollTop: 46 } }));
     expect(head.getAttribute('class')).toBe('shell-sessions-head is-scrolled');
     await m.run(() => on(list).onScroll({ currentTarget: { scrollTop: 0 } }));
     expect(head.getAttribute('class')).toBe('shell-sessions-head');
@@ -485,31 +658,30 @@ describe('renaming and moving a session in its row', () => {
 
   it('lifts a row you drag, parts the others, and moves it where you let go', async () => {
     const m = await mount([rows[0], { ...rows[1], character: 'Orla' }, row(3, { port: 1825 })]);
-    const pointer = (type: string, clientY?: number) =>
-      m.run(() => windowListeners.get(type)?.({ clientY }));
+    const pointer = (type: string, clientY?: number) => m.run(() => fire(type, { clientY }));
     const third = findAll(m.container, hasClass('shell-sessions-row'))[2];
     await m.run(() => on(third).onPointerDown({ button: 0, clientY: 154 }));
     // A press that moves less than 4 px lifts nothing.
     await pointer('pointermove', 151);
     expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
 
-    // 31 up, as frame b8-drag draws it: the row sits at 46, Orla parts
-    // to the third place, and the line marks the second.
+    // 31 up, as frame b8-drag draws it: Orla parts to the third place,
+    // and the line marks the second.
     await pointer('pointermove', 123);
     const list = only(m.container, 'the list', hasClass('shell-sessions-list'));
     expect(list.getAttribute('class')).toBe('shell-sessions-list is-dragging');
     const slots = findAll(m.container, hasClass('shell-sessions-slot'));
     expect(slots[2].getAttribute('class')).toBe('shell-sessions-slot is-lifted');
     expect(slots[2].style.transform).toBe('translateY(-31px)');
-    expect(slots[1].style.transform).toBe('translateY(38px)');
+    expect(slots[1].style.transform).toBe('translateY(46px)');
     expect(slots[0].style.transform).toBeUndefined();
     const line = only(m.container, 'the line', hasClass('shell-sessions-drop'));
-    expect(line.style.top).toBe('38px');
+    expect(line.style.top).toBe('46px');
 
     // Letting go moves the session, and the click it ends in, which comes
     // in the same task, selects nothing.
     await m.run(() => {
-      windowListeners.get('pointerup')?.({});
+      fire('pointerup', {});
       on(third).onClick({ currentTarget: third });
     });
     expect(m.calls.onMove).toHaveBeenCalledWith(3, 1);
@@ -522,13 +694,13 @@ describe('renaming and moving a session in its row', () => {
     const m = await mount();
     const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
     await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
-    await m.run(() => windowListeners.get('pointerup')?.({}));
+    await m.run(() => fire('pointerup', {}));
     await m.run(() => on(second).onClick({ currentTarget: second }));
     expect(m.calls.onSelect).toHaveBeenCalledWith(2);
 
     await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
-    await m.run(() => windowListeners.get('pointermove')?.({ clientY: 126 }));
-    await m.run(() => windowListeners.get('pointerup')?.({}));
+    await m.run(() => fire('pointermove', { clientY: 126 }));
+    await m.run(() => fire('pointerup', {}));
     expect(m.calls.onMove).not.toHaveBeenCalled();
   });
 });
