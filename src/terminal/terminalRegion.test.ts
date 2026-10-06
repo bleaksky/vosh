@@ -374,6 +374,31 @@ describe('RegionWriter held line ends', () => {
     }
   });
 
+  it('leaves the text on your echo of a blank line as on the last line of a reply', async () => {
+    // The game answers a blank line with a line end and the prompt, and
+    // a command with its lines, a line end and the prompt.
+    const after = async (line: string, reply: string) => {
+      const { term, writer } = setup();
+      writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
+      writer.local(`${ECHO_CARET}${line}\r\n`);
+      writer.output({ text: reply, hold: '\r\n\r\n'.slice(reply ? 0 : 2), pinRow: true });
+      await parsed(writer);
+      const rows = screen(term);
+      const waiting = [rows, cursor(term)[0] - (rows.length - 1)] as const;
+      writer.output({ text: 'tell' });
+      await parsed(writer);
+      return [...waiting, screen(term)] as const;
+    };
+    const [look, lookBelow, lookThen] = await after('look', 'The Bank of Aabahran');
+    const [blank, blankBelow, blankThen] = await after('', '');
+    expect(look).toEqual(['room', '', '\u203a look', 'The Bank of Aabahran']);
+    expect(blank).toEqual(['room', '', '\u203a ']);
+    expect(lookBelow).toBe(0);
+    expect(blankBelow).toBe(0);
+    expect(lookThen.slice(look.length)).toEqual(['', 'tell']);
+    expect(blankThen.slice(blank.length)).toEqual(['', 'tell']);
+  });
+
   it('keeps the longer hold through an output that writes nothing', async () => {
     const { term, writer } = setup();
     writer.output({ text: 'room', hold: '\r\n\r\n' });
