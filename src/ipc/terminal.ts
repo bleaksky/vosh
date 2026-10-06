@@ -118,9 +118,15 @@ export async function onOutput(
  *  newest output of the prompt stage xterm took before the text while
  *  xterm shows, and null while the native grid shows, which names its
  *  own. The session can hear of your echo after the reply to your line,
- *  and the prompt that came after the echo stays open. */
-export async function terminalLocalWrite(text: string, after: number | null): Promise<void> {
-  await invoke('terminal_local_write', { text, after });
+ *  and the prompt that came after the echo stays open. `session` names
+ *  the session whose grid takes it, the selected one when it names
+ *  none. */
+export async function terminalLocalWrite(
+  text: string,
+  after: number | null,
+  session?: number,
+): Promise<void> {
+  await invoke('terminal_local_write', { text, after, session });
 }
 
 /** You started or stopped selecting text or reading back in xterm. While

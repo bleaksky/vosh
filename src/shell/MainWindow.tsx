@@ -46,7 +46,9 @@ import { openSettingsTab } from '../lib/settingsLink';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
-import { useConnection, type ConnectionStatus } from '../stores/session/useConnection';
+import { noteConnectionError } from '../stores/session/connectionStore';
+import { getSelected } from '../stores/session/sessionsStore';
+import { useConnection } from '../stores/session/useConnection';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
@@ -74,7 +76,6 @@ function togglePanelKeepingCaret(focusInput: () => void): void {
 }
 
 function MainWindow() {
-  const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   // The panel's open state, width, and pane tree, per profile. The
   // panel's layout store is the one copy in this window. The title
   // band and the palette show, hide, and size the panel through it,
@@ -116,15 +117,25 @@ function MainWindow() {
     const term = termRef.current;
     term?.write(text);
     const after = nativeSurfaceEnabled() ? null : (term?.outputTaken() ?? 0);
-    void terminalLocalWrite(text, after).catch(() => {});
+    void terminalLocalWrite(text, after, getSelected()).catch(() => {});
   };
-  const handleError = (message: string) => {
-    setStatus({ kind: 'error', message });
-    writeLive(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
+  // Write text into the terminal of `session`. The selected session's
+  // shows it now. A session behind takes it in its own grid through
+  // terminal_local_write, which closes its open row too, and shows it on
+  // its selection.
+  const writeTo = (session: number, text: string) => {
+    if (session === getSelected()) writeLive(text);
+    else void terminalLocalWrite(text, null, session).catch(() => {});
   };
-  // The session for the title band, the session menu, the palette, and
-  // Cmd+R.
-  const connection = useConnection(status, handleError);
+  // An action failed, a connect, a send or a disconnect. The session it
+  // was for shows the error in its title band and its terminal.
+  const handleError = (message: string, session = getSelected()) => {
+    noteConnectionError(session, message);
+    writeTo(session, `\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
+  };
+  // The selected session for the title band, the session menu, the
+  // palette, and Cmd+R.
+  const connection = useConnection(handleError);
   // Direct ref on the terminal-area wrapper so we can attach a
   // non-passive wheel listener. JSX onWheel is passive in some
   // React versions and silently no-ops preventDefault, which would
@@ -361,7 +372,7 @@ function MainWindow() {
     startStores();
   }, []);
 
-  const connected = status.kind === 'connected' || status.kind === 'connecting';
+  const { status, live: connected } = connection;
 
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
@@ -383,7 +394,7 @@ function MainWindow() {
     openSettings: openSettingsWindow,
     openSettingsTab,
     connect: () => void connection.connect(),
-    disconnect: () => void disconnectSession(),
+    disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
     openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
@@ -459,34 +470,39 @@ function MainWindow() {
     showMigrationApplied(writeLive);
   });
 
+  // The connection store keeps where each session stands. Here the
+  // window says so: the toasts speak for the selected session only, and
+  // a session behind shows its drop on its row.
   useTauriEvent(onState, (payload: StatePayload) => {
+    const shown = payload.session === getSelected();
     if (payload.kind === 'disconnected') {
-      setStatus({ kind: 'idle' });
       // A reason means the link dropped out from under us; a clean
-      // user-initiated disconnect carries none and stays quiet.
+      // user-initiated disconnect carries none and stays quiet. The
+      // reason goes into the terminal of the session that dropped.
       if (payload.reason) {
         if (termRef.current) {
-          writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
+          writeTo(payload.session, `\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
         }
-        pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
+        if (shown) pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
       }
-    } else {
-      setStatus(payload);
-      // Push the current terminal size on every (re)connect so the
-      // negotiator advertises the live cols × rows via NAWS as soon
-      // as the server asks. MUDs that honor NAWS wrap at this width
-      // server-side, which is the right answer to word wrap.
-      if (payload.kind === 'connected') {
+    } else if (payload.kind === 'connected') {
+      if (shown) {
         pushToast({
           kind: 'success',
           message: 'Connected',
           meta: `${payload.host}:${payload.port}`,
         });
-        const handle = termRef.current;
-        if (handle) {
-          const { cols, rows } = handle.windowSize();
-          void setWindowSize(cols, rows).catch(() => {});
-        }
+      }
+      // Push the current terminal size on every (re)connect so the
+      // negotiator advertises the live cols × rows via NAWS as soon
+      // as the server asks. MUDs that honor NAWS wrap at this width
+      // server-side, which is the right answer to word wrap. Every
+      // session plays in this one window, so a session behind takes
+      // the same size.
+      const handle = termRef.current;
+      if (handle) {
+        const { cols, rows } = handle.windowSize();
+        void setWindowSize(cols, rows, payload.session).catch(() => {});
       }
     }
   });

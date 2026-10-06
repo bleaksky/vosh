@@ -104,21 +104,21 @@ describe('connectTo', () => {
     vi.mocked(pushToast).mockClear();
   });
 
-  it('shows a switch that failed as a toast and connects under the live profile', async () => {
+  it('shows a switch that failed as a toast and connects the session under its profile', async () => {
     backend(() => Promise.reject(HEALER_UNREADABLE));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    await connectTo(target);
+    await connectTo(target, 2);
     warn.mockRestore();
     expect(pushToast).toHaveBeenCalledWith({ kind: 'error', message: HEALER_UNREADABLE });
-    expect(invoke).toHaveBeenLastCalledWith('session_connect', target);
+    expect(invoke).toHaveBeenLastCalledWith('session_connect', { ...target, session: 2 });
   });
 
-  it('switches quietly when the switch works', async () => {
+  it('switches the session it connects quietly when the switch works', async () => {
     backend(() => Promise.resolve());
-    await connectTo(target);
-    expect(invoke).toHaveBeenCalledWith('profile_switch', { name: 'Healer' });
+    await connectTo(target, 2);
+    expect(invoke).toHaveBeenCalledWith('profile_switch', { name: 'Healer', session: 2 });
     expect(pushToast).not.toHaveBeenCalled();
-    expect(invoke).toHaveBeenLastCalledWith('session_connect', target);
+    expect(invoke).toHaveBeenLastCalledWith('session_connect', { ...target, session: 2 });
   });
 });
 

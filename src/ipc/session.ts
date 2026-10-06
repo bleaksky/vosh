@@ -85,12 +85,20 @@ export interface ConnectionTarget {
   tls: boolean;
 }
 
-export async function connectSession(host: string, port: number, tls: boolean): Promise<void> {
-  await invoke('session_connect', { host, port, tls });
+/** Dial `host` in a session, the selected one when it names none. */
+export async function connectSession(
+  host: string,
+  port: number,
+  tls: boolean,
+  session?: number,
+): Promise<void> {
+  await invoke('session_connect', { host, port, tls, session });
 }
 
-export async function disconnectSession(): Promise<void> {
-  await invoke('session_disconnect');
+/** End a session's connection, the selected one's when it names
+ *  none. */
+export async function disconnectSession(session?: number): Promise<void> {
+  await invoke('session_disconnect', { session });
 }
 
 /** Tell every window, this one included, the Connect target you saved. */
@@ -112,8 +120,8 @@ export function subscribeConnectionTargetChanged(
  *  then re-wrap their output at the new column count, which is what
  *  word-wrap actually looks like: server-side wrapping at word
  *  boundaries instead of mid-character. No-op when not connected. */
-export async function setWindowSize(cols: number, rows: number): Promise<void> {
-  await invoke('session_set_window_size', { cols, rows });
+export async function setWindowSize(cols: number, rows: number, session?: number): Promise<void> {
+  await invoke('session_set_window_size', { cols, rows, session });
 }
 
 /// Run a typed input line through the backend pipeline. Variables, aliases,

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { ConnectionStatus } from '../stores/session/useConnection';
+import type { ConnectionStatus } from '../stores/session/connectionStore';
 
 /** The window title for a session. The window hides its title, but the
  *  macOS Window menu and Mission Control still list it, as do taskbars

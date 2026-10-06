@@ -7,6 +7,7 @@ import { startAffectsStore } from './gmcp/affectsStore';
 import { startChatColorsStore } from './config/chatColorsStore';
 import { startChipStyleStore } from './config/chipStyleStore';
 import { startCombatStore } from './gmcp/combatStore';
+import { startConnectionStore } from './session/connectionStore';
 import { startGameTimeStore } from './config/gameTimeStore';
 import { startGamePromptStore } from './gmcp/gamePromptStore';
 import { startHiddenStore } from './gmcp/hiddenStore';
@@ -33,6 +34,7 @@ export function startStores(): void {
   // The sessions first, so every store that shows the selected one
   // finds the list on its way.
   startSessionsStore();
+  startConnectionStore();
   // Then the hidden state, so every store that ORs it in finds it
   // listening.
   startHiddenStore();

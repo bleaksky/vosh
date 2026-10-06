@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ConnectionStatus } from '../stores/session/useConnection';
+import type { ConnectionStatus } from '../stores/session/connectionStore';
 import { windowTitle } from './windowTitle';
 
 const live: ConnectionStatus = {
