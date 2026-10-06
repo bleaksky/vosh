@@ -567,7 +567,7 @@ Each default draws the panel you already know, so nothing changes until you pick
 
 Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. When the target you set is the one you are fighting, its health follows its name in yellow.
 
-When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health, and the status line drops the health of your target.
+When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health or sends none, and the status line drops the health of your target.
 
 ### 4.5 Watch your group and affects
 

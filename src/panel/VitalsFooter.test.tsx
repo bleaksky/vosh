@@ -284,6 +284,86 @@ describe('VitalsBlock', () => {
     );
   });
 
+  it('reads the guard as ? when Char.Combat sends neither a percent nor a condition', () => {
+    // char-combat-withheld.gmcp, the target alone with no flag.
+    const withheld: CombatOpponent = { ...GUARD, hp_pct: null };
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({}, { density, fit: 'labels', combat: withheld });
+      expect(values(html)[0]).toEqual({ value: '?', tone: 'hidden' });
+      expect(fills(html)).toBe(3);
+    }
+    // A condition with no percent still reads as the game words it.
+    expect(values(draw({}, { combat: { ...withheld, condition: 'awful' } }))[0]).toEqual({
+      value: 'awful',
+      tone: 'combat',
+    });
+  });
+
+  it('draws your vitals in your order without the ones you turned off', () => {
+    const html = draw({ order: ['move', 'hp', 'mana'], off: ['mana'] }, { combat: null });
+    expect(values(html).map((v) => v.value)).toEqual(['870 / 930', '186 / 1020']);
+    // Two rows hold two rows' height, with no empty band under them.
+    expect(html).toContain('--vitals-min-height:76px');
+    const line = draw(
+      { order: ['move', 'hp', 'mana'], off: ['mana'] },
+      { density: 'line', fit: 'labels', combat: null },
+    );
+    expect(values(line).map((v) => v.value)).toEqual(['870 / 930', '186 / 1020']);
+  });
+
+  it('holds the height of the vitals the game sends a max for', () => {
+    const html = draw({}, { vitals: { ...FIGHT, maxmana: 0, mana: 0 }, combat: null });
+    expect(values(html).map((v) => v.value)).toEqual(['186 / 1020', '870 / 930']);
+    expect(html).toContain('--vitals-min-height:76px');
+    // While it waits it holds every vital you left on.
+    expect(draw({ off: ['move'] }, { vitals: null, combat: null })).toContain(
+      '--vitals-min-height:76px',
+    );
+  });
+
+  it('puts your opponent at the bottom when you ask', () => {
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({ opponent: 'bottom' }, { density, fit: 'labels' });
+      expect(values(html).map((v) => v.value)).toEqual([
+        '186 / 1020',
+        '344 / 800',
+        '870 / 930',
+        '38%',
+      ]);
+    }
+  });
+
+  it('drops your opponent when its switch is off', () => {
+    expect(values(draw({ off: ['opponent'] })).map((v) => v.value)).toEqual([
+      '186 / 1020',
+      '344 / 800',
+      '870 / 930',
+    ]);
+    const only = renderToStaticMarkup(
+      <VitalsBlock
+        vitals={FIGHT}
+        combat={GUARD}
+        density="rows"
+        fit="rows"
+        options={{ ...DEFAULT_VITALS_OPTIONS, off: ['opponent'] }}
+        opponentOnly
+      />,
+    );
+    expect(only).toBe('');
+  });
+
+  it('keeps only your opponent with all three off, and nothing out of a fight', () => {
+    const off: VitalsOptions['off'] = ['hp', 'mana', 'move'];
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({ off }, { density, fit: 'labels' });
+      expect(values(html)).toEqual([{ value: '38%', tone: 'combat' }]);
+      expect(html).toContain('aria-label="Opponent"');
+      expect(html).toContain('--vitals-min-height:48px');
+      expect(draw({ off }, { density, combat: null })).toBe('');
+      expect(draw({ off }, { density, vitals: null, combat: null })).toBe('');
+    }
+  });
+
   it('sets the hidden tone in panel.css after the warn and combat tones', () => {
     const hidden = rule('.panel-vitals-row-hidden .panel-vitals-value');
     expect(hidden).toContain('color: var(--tertiary)');

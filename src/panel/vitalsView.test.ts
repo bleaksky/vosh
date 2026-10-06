@@ -3,14 +3,18 @@ import {
   formatVital,
   hiddenVital,
   meterFill,
+  opponentHealth,
   panelShowsVitals,
+  shownVitals,
   targetHealthPercent,
   thirdsTone,
   vitalsFooterHeight,
   vitalsGeometry,
+  vitalsOn,
   vitalTone,
   widestVital,
 } from './vitalsView';
+import type { Vitals } from '../stores/gmcp/vitalsStore';
 
 // The VitalsOptions board's fight: Health 186 / 1020, Mana 344 / 800,
 // Moves 870 / 930, and Blackwatch Guard at 38%.
@@ -200,5 +204,56 @@ describe('panelShowsVitals', () => {
     expect(panelShowsVitals({ ...pinned, capture: false }, true)).toBe(true);
     // Prompts off in the game: the band only says so, with no vitals.
     expect(panelShowsVitals({ ...pinned, promptsOff: true }, true)).toBe(true);
+  });
+});
+
+describe('shownVitals', () => {
+  const vitals: Vitals = {
+    hp: 186,
+    maxhp: 1020,
+    mana: 0,
+    maxmana: 0,
+    move: 870,
+    maxmove: 930,
+    low: { hp: true, mana: false, move: false },
+    hidden: false,
+  };
+
+  it('keeps your order without the vitals you turned off', () => {
+    expect(vitalsOn(['move', 'hp', 'mana'], ['mana', 'opponent'])).toEqual(['move', 'hp']);
+    expect(vitalsOn(['hp', 'mana', 'move'], [])).toEqual(['hp', 'mana', 'move']);
+  });
+
+  it('drops Mana and Moves while the game sends no max for them', () => {
+    expect(shownVitals(vitals, ['move', 'mana', 'hp'])).toEqual(['move', 'hp']);
+    expect(shownVitals({ ...vitals, maxhp: 0 }, ['hp'])).toEqual(['hp']);
+  });
+
+  it('keeps every vital you left on while the game hides them', () => {
+    expect(shownVitals({ ...vitals, maxhp: 0, maxmove: 0, hidden: true }, ['mana', 'hp'])).toEqual([
+      'mana',
+      'hp',
+    ]);
+  });
+});
+
+describe('opponentHealth', () => {
+  it('reads the percent, else the condition, else ?', () => {
+    expect(opponentHealth({ hp_pct: 54, condition: 'quite a few wounds', hidden: false })).toEqual({
+      value: '54%',
+      pct: 54,
+      hidden: false,
+    });
+    expect(opponentHealth({ hp_pct: null, condition: 'awful', hidden: false })).toEqual({
+      value: 'awful',
+      pct: null,
+      hidden: false,
+    });
+    expect(opponentHealth({ hp_pct: null, condition: null, hidden: false })).toEqual({
+      value: '?',
+      pct: null,
+      hidden: true,
+    });
+    expect(opponentHealth({ hp_pct: 54, condition: 'awful', hidden: true }).value).toBe('?');
   });
 });
