@@ -39,6 +39,7 @@ import {
 } from '../../ipc/automation';
 import {
   Card,
+  CardNote,
   ChipButton,
   CloseIcon,
   Disclosure,
@@ -52,7 +53,7 @@ import {
   type SelectOption,
 } from '../../ui';
 import { usePromptGags } from '../../stores/session/promptGagStore';
-import { CardNote, CodeRow, GroupField, NumberField } from './fields';
+import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
 
@@ -151,12 +152,7 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
 
   return (
     <Card className="st-auto-card">
-      {hidesPrompt && (
-        <p className="st-auto-cardnote is-warn">
-          <span className="st-auto-warndot" aria-hidden="true" />
-          <span>{HIDES_PROMPT_NOTE}</span>
-        </p>
-      )}
+      {hidesPrompt && <CardNote tone="warn">{HIDES_PROMPT_NOTE}</CardNote>}
       {locked && (
         <CardNote>
           This trigger comes from a preset, so only its group changes here. Turn the preset off

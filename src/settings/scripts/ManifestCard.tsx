@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { pluginReveal, type PluginManifest } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
-import { Button, Card, Field, FieldArea, Row, Select } from '../../ui';
+import { Button, Card, CardNote, Field, FieldArea, Row, Select } from '../../ui';
 import { revealLabel } from './pluginState';
 
 // The Manifest tab of a plugin's page (board 1). The fields Vosh keeps
@@ -41,7 +41,7 @@ export function ManifestCard({ name, manifest, files, folder, onChange, onEntry,
   };
   return (
     <Card className="st-auto-card">
-      <p className="st-auto-cardnote">{MANIFEST_NOTE}</p>
+      <CardNote>{MANIFEST_NOTE}</CardNote>
       <Row label="Name" description="The folder has the same name.">
         <span className="st-auto-value st-auto-mono">{name}</span>
       </Row>

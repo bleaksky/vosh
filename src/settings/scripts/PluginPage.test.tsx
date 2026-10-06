@@ -463,10 +463,7 @@ describe('Runs first', () => {
 describe('a stopped plugin', () => {
   it('says why over a shorter editor and marks the line the stop names', async () => {
     const m = await mount({ group: 'scripts', section: 'wait_full' });
-    const note = findAll(
-      m.container,
-      (el) => el.getAttribute('class') === 'st-auto-cardnote is-warn',
-    );
+    const note = findAll(m.container, (el) => el.getAttribute('class') === 'st-card-note is-warn');
     expect(note[0].textContent).toBe(
       'Vosh stopped wait_full because one call ran past 100 ms. It stays off until you save it or restart Vosh.',
     );
@@ -478,7 +475,7 @@ describe('a stopped plugin', () => {
   it('marks nothing and draws no note once it runs again', async () => {
     const m = await mount({ group: 'scripts', section: 'vitals_alert' });
     expect(
-      findAll(m.container, (el) => el.getAttribute('class') === 'st-auto-cardnote is-warn'),
+      findAll(m.container, (el) => el.getAttribute('class') === 'st-card-note is-warn'),
     ).toEqual([]);
     // The error at line 22 came before the reload that fixed it.
     expect(editor().marks).toEqual([]);

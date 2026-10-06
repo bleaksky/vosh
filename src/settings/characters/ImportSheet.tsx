@@ -8,7 +8,7 @@ import {
   takenSentence,
 } from '../../lib/characterProfiles';
 import { errorText } from '../../lib/text';
-import { Button, Field, Row, Section, Segmented, Select, Toggle } from '../../ui';
+import { Button, CardNote, Field, Row, Section, Segmented, Select, Toggle } from '../../ui';
 import {
   claimNote,
   importedSentence,
@@ -125,12 +125,7 @@ export function ImportSheet({ file, profiles, fallback, onImported, onCancel, on
       </Section>
 
       <Section title="In this file">
-        {preview.runs_lua.length > 0 && (
-          <p className="st-auto-cardnote is-warn">
-            <span className="st-auto-warndot" aria-hidden="true" />
-            <span>{LUA_WARNING}</span>
-          </p>
-        )}
+        {preview.runs_lua.length > 0 && <CardNote tone="warn">{LUA_WARNING}</CardNote>}
         <dl className="st-import-grid">
           {summary.map((row) => (
             <div key={row.label} className={row.wide ? 'st-import-row is-wide' : 'st-import-row'}>
@@ -162,10 +157,9 @@ export function ImportSheet({ file, profiles, fallback, onImported, onCancel, on
                 />
               </Row>
               {character.claimed_by !== null && (
-                <p className="st-auto-cardnote is-warn">
-                  <span className="st-auto-warndot" aria-hidden="true" />
-                  <span>{claimNote(character.name, character.claimed_by, profiles)}</span>
-                </p>
+                <CardNote tone="warn">
+                  {claimNote(character.name, character.claimed_by, profiles)}
+                </CardNote>
               )}
             </Fragment>
           ))}
