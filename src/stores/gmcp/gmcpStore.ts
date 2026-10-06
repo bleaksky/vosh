@@ -43,9 +43,11 @@ interface GmcpStoreSpec<S, V> {
    *  makes. */
   snapshot?: { ask: () => Promise<unknown>; take: (state: S, data: unknown) => S };
   /** What the panes read, from the state and from what they read now,
-   *  which is undefined for the first view. It runs after every change,
-   *  one that keeps the state too, so a view that reads another store
-   *  can follow it. Without it the panes read the state. */
+   *  which is undefined for the first view. It reads what they read now
+   *  only to hand it back when nothing in it moved, so the state holds
+   *  all the store knows. It runs after every change, one that keeps the
+   *  state too, so a view that reads another store can follow it.
+   *  Without it the panes read the state. */
   view?: (state: S, last?: V) => V;
 }
 
