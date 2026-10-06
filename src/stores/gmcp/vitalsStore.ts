@@ -1,8 +1,7 @@
-import { useSyncExternalStore } from 'react';
 import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
-import { asNumber, createStore, isHiddenFlag } from '../store';
+import { asNumber, isHiddenFlag } from '../store';
 
 /** Below this percent a vital enters the low state. */
 const LEDGER_LOW_ENTER = 20;
@@ -187,66 +186,66 @@ export function nextVitals(
   return { ...values, low, hidden };
 }
 
-const store = createStore<Vitals | null>(null);
-let gmcp: VitalsPacket | null = null;
-let promptVars: PromptVarsPayload = {};
-let held: PromptVarsPayload = {};
-let started = false;
+interface VitalsState {
+  /** The last Char.Vitals. */
+  packet: VitalsPacket | null;
+  /** The prompt vars now. */
+  vars: PromptVarsPayload;
+  /** The vital prompt vars held back since the game hid your vitals. */
+  held: PromptVarsPayload;
+  /** The backend works out that the game hides your vitals. */
+  hiddenByBackend: boolean;
+}
+
+/** Nothing heard yet, hidden as the backend says now. */
+function empty(): VitalsState {
+  return { packet: null, vars: {}, held: {}, hiddenByBackend: getHidden().vitals };
+}
 
 /** True while the game hides your vitals, by the packet's own flag or
  *  by what the backend worked out. */
-function hiddenNow(): boolean {
-  return gmcp?.hidden === true || getHidden().vitals;
+function hiddenNow(packet: VitalsPacket | null): boolean {
+  return packet?.hidden === true || getHidden().vitals;
 }
 
-function publish(): void {
+const store = createGmcpStore<VitalsState, Vitals | null>({
+  state: empty,
+  packages: {
+    'Char.Vitals': (state, data) => {
+      const packet = parseVitalsPacket(data);
+      return hiddenNow(packet)
+        ? { ...state, packet, held: holdPromptVitals(state.vars) }
+        : { ...state, packet };
+    },
+  },
+  events: [
+    (apply) =>
+      onPromptVars((payload) =>
+        apply((state) => {
+          const vars = payload && typeof payload === 'object' ? payload : {};
+          const held = hiddenNow(state.packet)
+            ? holdPromptVitals(vars)
+            : releasePromptVitals(state.held, vars);
+          return { ...state, vars, held };
+        }),
+      ),
+    (apply) =>
+      subscribeHidden(() =>
+        apply((state) => {
+          const hiddenByBackend = getHidden().vitals;
+          if (hiddenByBackend === state.hiddenByBackend) return state;
+          const held = hiddenByBackend ? holdPromptVitals(state.vars) : state.held;
+          return { ...state, hiddenByBackend, held };
+        }),
+      ),
+  ],
   // Hidden vitals stand alone. Prompt vars and GMCP never fill them in.
-  const next = hiddenNow()
-    ? nextVitals(store.get(), ZERO, true)
-    : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, withoutHeld(promptVars, held)));
-  store.set(next);
-}
+  view: ({ packet, vars, held }, last = null) =>
+    hiddenNow(packet)
+      ? nextVitals(last, ZERO, true)
+      : nextVitals(last, mergeVitals(packet?.values ?? null, withoutHeld(vars, held))),
+});
 
-export function startVitalsStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Char.Vitals', (data) => {
-    gmcp = parseVitalsPacket(data);
-    if (hiddenNow()) held = holdPromptVitals(promptVars);
-    publish();
-  });
-  void onPromptVars((payload) => {
-    promptVars = payload && typeof payload === 'object' ? payload : {};
-    held = hiddenNow() ? holdPromptVitals(promptVars) : releasePromptVitals(held, promptVars);
-    publish();
-  });
-  let hiddenByBackend = getHidden().vitals;
-  subscribeHidden(() => {
-    const now = getHidden().vitals;
-    if (now === hiddenByBackend) return;
-    hiddenByBackend = now;
-    if (now) held = holdPromptVitals(promptVars);
-    publish();
-  });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      gmcp = null;
-      promptVars = {};
-      held = {};
-      store.set(null);
-    }
-  });
-}
-
-export function getVitals(): Vitals | null {
-  return store.get();
-}
-
-export function subscribeVitals(cb: () => void): () => void {
-  startVitalsStore();
-  return store.subscribe(cb);
-}
-
-export function useVitals(): Vitals | null {
-  return useSyncExternalStore(subscribeVitals, getVitals);
-}
+export const startVitalsStore = store.start;
+export const getVitals = store.get;
+export const useVitals = store.use;
