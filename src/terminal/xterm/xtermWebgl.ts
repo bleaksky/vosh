@@ -2,10 +2,20 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import type { Terminal } from '@xterm/xterm';
 import type { XtermBlink } from './xtermBlink';
 
-/** Draws `term` with xterm's WebGL renderer when it can, and tells `blink`
- *  while WebGL draws. `quiet` is the history pane, which keeps the DOM
- *  renderer. */
-export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { dispose(): void } {
+/** xterm's WebGL renderer for one pane. Only the pane that shows holds
+ *  it (Q6 of the Sessions review): `load` gives it the renderer as it
+ *  shows, after its first fit, and `release` hands it back to xterm's DOM
+ *  renderer as it hides. A window keeps a terminal for each session it
+ *  opened, and WebView2 allows about 16 live GL contexts. */
+export interface XtermWebgl {
+  load(): void;
+  release(): void;
+}
+
+/** Draws `term` with xterm's WebGL renderer while it shows, when it can,
+ *  and tells `blink` while WebGL draws. `quiet` is the history pane,
+ *  which keeps the DOM renderer. */
+export function xtermWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): XtermWebgl {
   // WebGL is on by default: the GPU renderer is far smoother for
   // scroll and burst output than xterm's DOM renderer. The webgl2
   // probe below still falls back to DOM when the WebView can't
@@ -20,7 +30,12 @@ export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { 
   // pane (quiet) always stays on the DOM renderer so the
   // split-scrollback overlay paints reliably.
   const enableWebgl = !quiet && lsVal !== '0';
-  if (enableWebgl) {
+  if (!enableWebgl) {
+    console.log('[vosh] webgl off — re-enable with localStorage.removeItem("vosh.webgl")');
+  }
+
+  const load = () => {
+    if (!enableWebgl || webglAddon) return;
     // Probe webgl2 in a throwaway canvas first. If the WebView
     // can't allocate a context, the addon would load and fire
     // onContextLoss at once, a renderer swap that can leave the pane
@@ -64,7 +79,7 @@ export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { 
         } catch (err) {
           console.warn('[vosh] webgl dispose after context loss failed', err);
         }
-        webglAddon = null;
+        if (webglAddon === addon) webglAddon = null;
         blink.setWebgl(false);
         // Force the DOM renderer to paint the visible rows once the
         // swap settles. The buffer is untouched by the renderer
@@ -86,8 +101,23 @@ export function loadWebgl(term: Terminal, blink: XtermBlink, quiet: boolean): { 
       console.log('[vosh] webgl renderer failed, staying on DOM', err);
       webglAddon = null;
     }
-  } else {
-    console.log('[vosh] webgl off — re-enable with localStorage.removeItem("vosh.webgl")');
-  }
-  return { dispose: () => webglAddon?.dispose() };
+  };
+
+  const release = () => {
+    const addon = webglAddon;
+    if (!addon) return;
+    webglAddon = null;
+    blink.setWebgl(false);
+    // WebglAddon's dispose reads `_terminal._core._store._isDisposed`
+    // and throws when xterm has already torn down its core, as it has
+    // when the pane unmounts. The renderer still releases its GL
+    // resources before the throw, so there is nothing more to do.
+    try {
+      addon.dispose();
+    } catch {
+      // intentional swallow, see above
+    }
+  };
+
+  return { load, release };
 }

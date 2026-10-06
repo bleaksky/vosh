@@ -21,21 +21,46 @@ import { createStore } from '../store';
 // starts with. A read applies only when no list came and no selection
 // was made here after it began, so its answer never puts back older
 // rows or another selection.
+//
+// The store also keeps the sessions this window opened, which the main
+// window gives a terminal each. That is the session the first list
+// selects, which launch started, and each session whose selection the
+// app finished since, the one a banner click makes among them. A
+// session launch restored reads its scrollback only as its first
+// selection finishes (Q16), so its terminal waits for that. A session
+// leaves the list as it closes.
 
 interface Sessions {
   rows: SessionRow[];
   selected: number;
+  /** The sessions this window opened, in the order it opened them. */
+  opened: number[];
 }
 
-const store = createStore<Sessions>({ rows: [], selected: FIRST_SESSION });
+const store = createStore<Sessions>({ rows: [], selected: FIRST_SESSION, opened: [] });
 let started = false;
+/** Whether a list came yet. */
+let listed = false;
 /** Counts each list heard and each selection made here. */
 let generation = 0;
 
 /** Take the rows of a list and the selection it marks. */
 function take(rows: SessionRow[]): void {
-  const selected = rows.find((row) => row.selected)?.id ?? store.get().selected;
-  store.set({ rows, selected });
+  const now = store.get();
+  const selected = rows.find((row) => row.selected)?.id ?? now.selected;
+  const kept = (listed ? now.opened : [selected]).filter((id) => rows.some((row) => row.id === id));
+  listed = true;
+  const opened =
+    kept.length === now.opened.length && kept.every((id, i) => id === now.opened[i])
+      ? now.opened
+      : kept;
+  store.set({ rows, selected, opened });
+}
+
+/** The app finished selecting `id`, so this window may open it. */
+function opens(id: number): void {
+  const now = store.get();
+  if (!now.opened.includes(id)) store.set({ ...now, opened: [...now.opened, id] });
 }
 
 /** Read the list again. */
@@ -58,7 +83,10 @@ export function startSessionsStore(): void {
       generation += 1;
       take(rows);
     }),
-    onSessionSelected(() => read()),
+    onSessionSelected((session) => {
+      opens(session);
+      read();
+    }),
   ];
   // Every listener is in first, so a list that lands meanwhile is either
   // in the answer or newer than it.
@@ -68,12 +96,16 @@ export function startSessionsStore(): void {
 }
 
 /** Select a session. Every view here shows it at once, and the app
- *  hears it after. A selection the app refuses reads the list again. */
+ *  hears it after. The window opens it once the app finished. A
+ *  selection the app refuses reads the list again. */
 export function select(id: number): void {
   generation += 1;
   const now = store.get();
   if (now.selected !== id) store.set({ ...now, selected: id });
-  selectSession(id).catch(() => read());
+  selectSession(id).then(
+    () => opens(id),
+    () => read(),
+  );
 }
 
 /** The selected session's id. */
@@ -104,6 +136,20 @@ export function subscribeSelected(cb: () => void): () => void {
   });
 }
 
+/** Every other session that plays the profile `session` plays. They
+ *  share its panel and its font, so the size of its pane. */
+export function othersOnProfile(session: number): number[] {
+  const { rows } = store.get();
+  const profile = rows.find((row) => row.id === session)?.profile;
+  if (profile == null) return [];
+  return rows.filter((row) => row.id !== session && row.profile === profile).map((row) => row.id);
+}
+
+/** The sessions this window opened, in the order it opened them. */
+export function getOpened(): number[] {
+  return store.get().opened;
+}
+
 function selectedRow(): SessionRow | null {
   const { rows, selected } = store.get();
   return rows.find((row) => row.id === selected) ?? null;
@@ -122,4 +168,10 @@ export function useSelected(): number {
 /** The selected session's row, or null until a list names it. */
 export function useSelectedRow(): SessionRow | null {
   return useSyncExternalStore(subscribeSessions, selectedRow);
+}
+
+/** The sessions this window opened, in the order it opened them. Empty
+ *  until the first list comes. */
+export function useOpened(): number[] {
+  return useSyncExternalStore(subscribeSessions, getOpened);
 }

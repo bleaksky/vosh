@@ -48,14 +48,16 @@ export function nativeSurfaceWheel(deltaY: number): Promise<void> {
   return invoke('native_surface_wheel', { deltaY });
 }
 
-/** Copy the grid's selection to the clipboard. */
-export function nativeSurfaceCopy(): Promise<void> {
-  return invoke('native_surface_copy');
+/** Copy the selection in a session's grid to the clipboard, the
+ *  selected session's when it names none. */
+export function nativeSurfaceCopy(session?: number): Promise<void> {
+  return invoke('native_surface_copy', { session });
 }
 
-/** Select everything in the grid, scrollback included. */
-export function nativeSurfaceSelectAll(): Promise<void> {
-  return invoke('native_surface_select_all');
+/** Select everything in a session's grid, scrollback included, the
+ *  selected session's when it names none. */
+export function nativeSurfaceSelectAll(session?: number): Promise<void> {
+  return invoke('native_surface_select_all', { session });
 }
 
 /** The ground, text and selection colors and the 16 ANSI colors. */
@@ -89,9 +91,10 @@ export function nativeSurfaceSetTokens(tokens: {
   return invoke('native_surface_set_tokens', { ...tokens });
 }
 
-/** Whether the grid draws a band under each lifted prompt. */
-export function nativeSurfaceSetPromptBands(on: boolean): Promise<void> {
-  return invoke('native_surface_set_prompt_bands', { on });
+/** Whether a session's grid draws a band under each lifted prompt, the
+ *  selected session's when it names none. */
+export function nativeSurfaceSetPromptBands(on: boolean, session?: number): Promise<void> {
+  return invoke('native_surface_set_prompt_bands', { on, session });
 }
 
 /** How far the band under the open row reaches past its last glyph, in
@@ -120,21 +123,26 @@ export function nativeSurfaceSetCellMetrics(metrics: {
   return invoke('native_surface_set_cell_metrics', { ...metrics });
 }
 
-/** Search the grid and step to the next or previous match. Resolves to
- *  `[current, total]`, counted from 1, and `[0, 0]` with no match. */
-export function nativeSurfaceFind(search: {
-  query: string;
-  regex: boolean;
-  caseSensitive: boolean;
-  wholeWord: boolean;
-  forward: boolean;
-}): Promise<[number, number]> {
-  return invoke('native_surface_find', { ...search });
+/** Search a session's grid and step to the next or previous match, the
+ *  selected session's when it names none. Resolves to `[current, total]`,
+ *  counted from 1, and `[0, 0]` with no match. */
+export function nativeSurfaceFind(
+  search: {
+    query: string;
+    regex: boolean;
+    caseSensitive: boolean;
+    wholeWord: boolean;
+    forward: boolean;
+  },
+  session?: number,
+): Promise<[number, number]> {
+  return invoke('native_surface_find', { ...search, session });
 }
 
-/** Clear the search highlight. */
-export function nativeSurfaceFindClear(): Promise<void> {
-  return invoke('native_surface_find_clear');
+/** Clear the search highlight in a session's grid, the selected
+ *  session's when it names none. */
+export function nativeSurfaceFindClear(session?: number): Promise<void> {
+  return invoke('native_surface_find_clear', { session });
 }
 
 /** The CSS font list xterm draws with and its size, for the grid's atlas. */
@@ -142,12 +150,14 @@ export function nativeSurfaceSetFont(font: { family: string; size: number }): Pr
   return invoke('native_surface_set_font', { ...font });
 }
 
-/** Scroll the grid from the keyboard. Toggle opens or closes the split
- *  the way a middle click does. */
+/** Scroll a session's grid from the keyboard, the selected session's
+ *  when it names none. Toggle opens or closes the split the way a middle
+ *  click does. */
 export function nativeSurfaceScroll(
   kind: 'pageup' | 'pagedown' | 'bottom' | 'toggle',
+  session?: number,
 ): Promise<void> {
-  return invoke('native_surface_scroll', { kind });
+  return invoke('native_surface_scroll', { kind, session });
 }
 
 /** The grid's size changed, as `[cols, rows]`. */

@@ -13,6 +13,7 @@ import {
   onNativeGridSize,
 } from '../ipc/nativeSurface';
 import { setWindowSize } from '../ipc/session';
+import { othersOnProfile } from '../stores/session/sessionsStore';
 import { loadScrollback, onOutput, terminalLocalWrite } from '../ipc/terminal';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { findTheme, onCustomThemesChanged } from '../theme/themes';
@@ -30,12 +31,12 @@ import { RegionWriter } from './terminalRegion';
 import { remeasureWhenLoaded } from './terminalFont';
 import { nativeSurfaceEnabled } from './terminalRenderer';
 import { BandLayer, LiftTracker, markLifted } from './xterm/liftBands';
-import { GameSizeReport, keepTail } from './terminalRows';
+import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalRows';
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
 import { XtermBlink } from './xterm/xtermBlink';
-import { loadWebgl } from './xterm/xtermWebgl';
+import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
 import { PaneSizer } from './paneSizer';
 import { terminalHandle, type TerminalHandle } from './terminalHandle';
@@ -61,6 +62,16 @@ function reportTheme(themeId: string, themeTerminalColors: boolean): void {
 }
 
 interface Props {
+  /** The session whose terminal this is. It hears that session's output
+   *  only and names that session on every call. The host keys each pane
+   *  by its session, so a pane keeps the one it mounted with. */
+  session: number;
+  /** Whether the pane shows, as the selected session's live pane does.
+   *  The host keeps the live pane of each session it opened mounted and
+   *  hides the others with display none, where xterm stops drawing. A
+   *  hidden pane goes on taking its session's output, holds no WebGL
+   *  context, and sizes, reports and copies nothing. */
+  shown?: boolean;
   onReady?: (handle: TerminalHandle) => void;
   fontFamily: string;
   fontSize: number;
@@ -81,7 +92,7 @@ interface Props {
   /// initial viewport position; doing the same work inside onReady is
   /// too early — the terminal has no content at that point and any
   /// scrollPages call is a no-op that the next write would override.
-  onScrollbackLoaded?: () => void;
+  onScrollbackLoaded?: (() => void) | undefined;
   /// Fires on every viewport change. `back` is the number of lines
   /// above the live tail the viewport is currently showing (0 when
   /// anchored to the tail). `max` is the total scrollback above (the
@@ -137,6 +148,8 @@ function themeFor(themeId: string, tinted: boolean, clear: boolean) {
 }
 
 export function Terminal({
+  session,
+  shown = true,
   onReady,
   fontFamily,
   fontSize,
@@ -164,6 +177,12 @@ export function Terminal({
   onCellSizeRef.current = onCellSize;
   const liftedRef = useRef(lifted);
   liftedRef.current = lifted;
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  // What the pane does as it shows or hides, which the setup effect
+  // sets, and whether it shows as far as the effect below applied.
+  const showingRef = useRef<{ show(): void; hide(): void } | null>(null);
+  const appliedShownRef = useRef(shown);
   // The rows lent to the pinned band, and whether the grid keeps to the
   // bottom of its pane, which the layout effect below keeps and applies
   // before the page paints.
@@ -193,9 +212,12 @@ export function Terminal({
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
-  // Whether this pane draws bands now: your prompt shows lifted and
-  // xterm draws the terminal.
-  const liftsHere = useCallback(() => liftedRef.current && bandsRef.current !== null, []);
+  // Whether this pane draws bands now: your prompt shows lifted, xterm
+  // draws the terminal and the pane shows.
+  const liftsHere = useCallback(
+    () => liftedRef.current && bandsRef.current !== null && shownRef.current,
+    [],
+  );
 
   // The lift state the pane last applied, so the default never touches
   // xterm's options.
@@ -208,8 +230,10 @@ export function Terminal({
     appliedLiftRef.current = on;
     term.options.allowTransparency = on;
     term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
+    // The area is every pane's, so the pane that shows marks it, and a
+    // pane that hides leaves the mark to the one that shows next.
     const area = containerRef.current?.closest('.terminal-area');
-    if (area) markLifted(area, on);
+    if (area && shownRef.current) markLifted(area, on);
     bandsRef.current?.setEnabled(on);
   };
 
@@ -297,6 +321,7 @@ export function Terminal({
       lent: () => lentRef.current,
       anchor: () => anchorRef.current,
       quiet: () => quietRef.current,
+      shown: () => shownRef.current,
       onCellSize: () => onCellSizeRef.current,
     });
     paneSizerRef.current = paneSizer;
@@ -306,9 +331,11 @@ export function Terminal({
     // glyph atlas — load it after one fit so the host has nonzero
     // dimensions. It loads here, not on a later frame, since a renderer
     // swap in the same frame as a scheduled fit() leaves
-    // `_renderer.value` undefined and syncScrollArea throws.
+    // `_renderer.value` undefined and syncScrollArea throws. A pane that
+    // mounts hidden loads it when it shows, after the fit there.
     paneSizer.safeFit();
-    const webgl = loadWebgl(term, blink, quietRef.current);
+    const webgl = xtermWebgl(term, blink, quietRef.current);
+    if (shownRef.current) webgl.load();
     requestAnimationFrame(paneSizer.safeFit);
     setTimeout(paneSizer.safeFit, 50);
     setTimeout(paneSizer.safeFit, 200);
@@ -322,6 +349,26 @@ export function Terminal({
       () => paneSizer.nativeSpare,
     );
 
+    // The game hears the size of the pane through NAWS, and wraps its
+    // lines server-side at the column count it hears, which is what
+    // well-behaved word wrap looks like, with no client preprocessing and
+    // no latency. The pane that shows tells its own session, and the other
+    // sessions on its profile hear the same size, since they share the
+    // panel and the font. A session on another profile hears its size as
+    // its pane shows. A row the pinned band borrows or gives back sends
+    // nothing, since the game is told the rows the pane holds with the
+    // lent ones (src/terminal/terminalRows.ts).
+    const gameSizes = new GameSizeReport();
+    const tellSize = (size: WindowSize, sessions: number[]) => {
+      for (const to of sessions) {
+        void setWindowSize(size.cols, size.rows, to).catch(() => {
+          // Not connected, or session torn down. Either is fine; the
+          // initial NAWS handshake on the next connect will send the
+          // current size anyway.
+        });
+      }
+    };
+
     let unsubOutput: (() => void) | undefined;
     // The native surface is the size authority while it owns the pane. It
     // emits its grid size; size hidden xterm to match so a dropdown swap
@@ -332,6 +379,12 @@ export function Terminal({
     if (!quietRef.current && nativeSurfaceEnabled()) {
       void onNativeGridSize(([cols, rows]) => {
         if (cols > 0 && rows > 0) writer.resize(cols, rows);
+        // A frame tells the session whose grid shows its size. The other
+        // sessions on its profile share the pane, so they hear it here.
+        if (cols > 0 && rows > 0 && shownRef.current) {
+          const size = gameSizes.next(cols, rows, lentRef.current);
+          if (size) tellSize(size, othersOnProfile(session));
+        }
       }).then((un) => {
         unsubGridSize = un;
       });
@@ -398,7 +451,7 @@ export function Terminal({
           keepTail(term);
           done();
         };
-        loadScrollback(false)
+        loadScrollback(false, session)
           .then(({ bytes }) => {
             if (bytes.length === 0) return settle();
             writer.local(localDecoder.decode(bytes));
@@ -417,7 +470,7 @@ export function Terminal({
 
     // The live pane seeds the native grid with the persisted scrollback so
     // it has the same history as xterm; the quiet history pane must not.
-    loadScrollback(!quietRef.current && nativeSurfaceEnabled())
+    loadScrollback(!quietRef.current && nativeSurfaceEnabled(), session)
       .then(({ bytes, seededNative }) => {
         // A copy the native grid hides takes none of it.
         const toXterm = mirror.mirrors();
@@ -434,7 +487,7 @@ export function Terminal({
             // seeded the grid: after a reload the grid already holds the
             // history and its first banner, and another would stack.
             if (seededNative) {
-              void terminalLocalWrite(banner, null).catch(() => {});
+              void terminalLocalWrite(banner, null, session).catch(() => {});
             }
           }
         }
@@ -501,7 +554,9 @@ export function Terminal({
         });
       }
     });
-    onOutput((out) => {
+    onOutput((out, from) => {
+      // Each pane writes its own session's output only.
+      if (from !== session) return;
       if (out.id !== undefined && out.id > outputTaken) outputTaken = out.id;
       // A copy the native grid hides writes nothing. It only decodes
       // the text for the recent names cache below.
@@ -548,30 +603,26 @@ export function Terminal({
     });
 
     // Push the live terminal size to the backend so the telnet
-    // negotiator can advertise it via NAWS. The MUD wraps server-side
-    // at the advertised column count, which is what well-behaved
-    // word wrap looks like — no client preprocessing, no latency.
-    // Debounce so a rapid resize animation only fires one IPC at the
-    // settled size. Only the primary (non-quiet) terminal pushes,
+    // negotiator can advertise it via NAWS (see tellSize above). Debounce
+    // so a rapid resize animation only fires one IPC at the settled
+    // size. Only the primary (non-quiet) terminal that shows pushes,
     // since the history pane in the split view shares the same width.
-    // A row the pinned band borrows or gives back sends nothing, since
-    // the game is told the rows the pane holds with the lent ones
-    // (src/terminal/terminalRows.ts).
+    // When the native surface owns the terminal it advertises its own
+    // (larger) grid size as NAWS, and the grid size listener above tells
+    // the other sessions, so xterm must not fight it with the
+    // webview-font column count.
     let naws_timer: ReturnType<typeof setTimeout> | null = null;
-    const gameSizes = new GameSizeReport();
+    // Set as the pane shows, so the next push tells its own session its
+    // size even when it held. The pane of another session spoke for the
+    // window meanwhile.
+    let tellOwn = false;
     const pushSize = () => {
-      if (quietRef.current) return;
-      // When the native surface owns the terminal it advertises its own
-      // (larger) grid size as NAWS; xterm must not fight it with the
-      // webview-font column count.
-      if (nativeSurfaceEnabled()) return;
-      const size = gameSizes.next(term.cols, term.rows, lentRef.current);
-      if (!size) return;
-      void setWindowSize(size.cols, size.rows).catch(() => {
-        // Not connected, or session torn down. Either is fine; the
-        // initial NAWS handshake on the next connect will send the
-        // current size anyway.
-      });
+      if (quietRef.current || !shownRef.current || nativeSurfaceEnabled()) return;
+      const lent = lentRef.current;
+      const size = gameSizes.next(term.cols, term.rows, lent);
+      if (size) tellSize(size, [session, ...othersOnProfile(session)]);
+      else if (tellOwn) tellSize(gameSize(term.cols, term.rows, lent), [session]);
+      tellOwn = false;
     };
     const scheduleSizePush = () => {
       if (naws_timer) clearTimeout(naws_timer);
@@ -597,8 +648,28 @@ export function Terminal({
       region: () => writer.region(),
       quiet: () => quietRef.current,
       lent: () => lentRef.current,
+      session,
     });
     onReadyRef.current?.(handle);
+
+    // A pane that shows again lifts your prompts again, fits the pane as
+    // it is now, takes WebGL back after that fit, as it does as it
+    // mounts, and tells its session its size. One that hides lets WebGL
+    // go, so only the pane that shows holds a GL context, and draws no
+    // bands.
+    showingRef.current = {
+      show: () => {
+        applyLift(term);
+        paneSizer.show();
+        webgl.load();
+        tellOwn = true;
+        scheduleSizePush();
+      },
+      hide: () => {
+        webgl.release();
+        applyLift(term);
+      },
+    };
 
     // Auto-clear selection when it scrolls off the viewport.
     // xterm's canvas renderer paints the selection overlay at the
@@ -626,12 +697,16 @@ export function Terminal({
     // select text here, or while the live pane is off its newest rows.
     const selectionPart = quietRef.current ? 'historySelection' : 'liveSelection';
     const readerSelection = term.onSelectionChange(() =>
-      noteReader(selectionPart, term.hasSelection()),
+      noteReader(selectionPart, term.hasSelection(), session),
     );
     const readerBack = quietRef.current
       ? null
       : term.onScroll(() =>
-          noteReader('liveBack', term.buffer.active.viewportY !== term.buffer.active.baseY),
+          noteReader(
+            'liveBack',
+            term.buffer.active.viewportY !== term.buffer.active.baseY,
+            session,
+          ),
         );
 
     // Ctrl/Cmd + C or X copies the xterm selection. The keystroke
@@ -640,8 +715,10 @@ export function Terminal({
     // clicking back into the terminal), so a keydown listener
     // attached to xterm alone never fires. Listen at the window
     // instead, and defer to the focused element's native copy/cut
-    // when it actually has its own selection.
+    // when it actually has its own selection. A hidden pane keeps its
+    // selection for when it shows, and copies nothing meanwhile.
     const onCopyKey = (event: KeyboardEvent) => {
+      if (!shownRef.current) return;
       const key = event.key.toLowerCase();
       if (key !== 'c' && key !== 'x') return;
       // Accept any combination of Ctrl or Cmd (without Alt), with or
@@ -687,30 +764,30 @@ export function Terminal({
       readerSelection.dispose();
       readerBack?.dispose();
       // A pane that goes takes its selection and its place with it.
-      noteReader(selectionPart, false);
-      if (readerBack) noteReader('liveBack', false);
+      noteReader(selectionPart, false, session);
+      if (readerBack) noteReader('liveBack', false, session);
       searchAddon.dispose();
-      // WebglAddon's dispose reads `_terminal._core._store._isDisposed`
-      // and throws when xterm has already torn down its core. The
-      // history pane mounts/unmounts on split open/close so this fires
-      // routinely. The renderer still releases its GL resources before
-      // the throw, so the silent swallow is safe — there's nothing
-      // useful for us to do here and printing pollutes the console
-      // every time the split toggles.
-      try {
-        webgl.dispose();
-      } catch {
-        // intentional swallow — see comment above
-      }
+      webgl.release();
       term.dispose();
       termRef.current = null;
       paneSizerRef.current = null;
+      showingRef.current = null;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
     // later font changes re-apply via the effect below without disposing
     // the xterm instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The pane shows or hides as a selection moves, before the page
+  // paints, so it never shows a frame at the size it had. The setup
+  // effect applied the state the pane mounted with.
+  useLayoutEffect(() => {
+    if (appliedShownRef.current === shown) return;
+    appliedShownRef.current = shown;
+    if (shown) showingRef.current?.show();
+    else showingRef.current?.hide();
+  }, [shown]);
 
   // A new count of rows lent to the pinned band applies before the page
   // paints, in the same commit that grows or shrinks the band, so the
@@ -829,7 +906,7 @@ export function Terminal({
   });
 
   return (
-    <div ref={sizingRef} className="terminal-sizer">
+    <div ref={sizingRef} className="terminal-sizer" hidden={!shown}>
       <div
         ref={containerRef}
         className="terminal-host"

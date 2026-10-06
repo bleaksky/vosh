@@ -12,6 +12,8 @@ import type { FindOptions, TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 
 interface SplitPanes {
+  /** The selected session, which hears that you read back. */
+  session: number;
   /** The live pane. */
   termRef: RefObject<TerminalHandle>;
   /** The history pane, while the split shows. */
@@ -49,6 +51,7 @@ export interface ScrollbackSplit {
 }
 
 export function useScrollbackSplit({
+  session,
   termRef,
   historyTermRef,
   terminalAreaRef,
@@ -97,8 +100,8 @@ export function useScrollbackSplit({
     if (!splitOpen) setHistoryScrollPos(null);
     splitOpenRef.current = splitOpen;
     // Reading back in the split leaves your prompt's clock as it is.
-    noteReader('split', splitOpen);
-  }, [splitOpen]);
+    noteReader('split', splitOpen, session);
+  }, [splitOpen, session]);
 
   // Reset history readiness whenever the split closes. The next time
   // the split opens, the history Terminal remounts and the

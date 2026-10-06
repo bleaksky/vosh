@@ -8,6 +8,12 @@ import { keptRows, nativeBottomBounds, spareAbove } from './terminalRows';
 // the pane less the rows the pinned band borrows, and the native grid
 // hears of the pane's bounds and xterm's cell. The pane's layout, the
 // window and a drag on the split all reach it.
+//
+// The window keeps a pane for each session it opened, and only the
+// selected session's shows. A hidden pane has no size, so it neither fits
+// nor reports anything until it shows again, and then it fits and
+// reports afresh, since the pane that showed meanwhile spoke for the
+// window.
 
 /** What the sizer reads from the pane it sizes. The getters read the
  *  pane's props as they stand when the sizer asks. */
@@ -26,6 +32,8 @@ export interface SizedPane {
   anchor(): boolean;
   /** Whether this is the split's history pane. */
   quiet(): boolean;
+  /** Whether the pane shows, as the selected session's does. */
+  shown(): boolean;
   onCellSize(): ((size: { width: number; height: number; cols: number }) => void) | undefined;
 }
 
@@ -53,6 +61,7 @@ export class PaneSizer {
   private observer: ResizeObserver | null = null;
   private rafPoll = 0;
   private intervalPoll: ReturnType<typeof setInterval> | undefined;
+  private showSettle: ReturnType<typeof setTimeout> | undefined;
 
   constructor(pane: SizedPane) {
     this.pane = pane;
@@ -72,7 +81,7 @@ export class PaneSizer {
   // links follow. Under the native surface the bounds carry it instead.
   placeGrid(): void {
     const { term, sizer, host } = this.pane;
-    if (!sizer) return;
+    if (!sizer || !this.pane.shown()) return;
     let top = 0;
     const cell = term.dimensions?.css?.cell?.height;
     if (this.pane.anchor() && !this.pane.quiet() && !nativeSurfaceEnabled() && cell) {
@@ -89,6 +98,7 @@ export class PaneSizer {
   // Fit xterm to its pane, less the rows the pinned band borrows. The
   // FitAddon only proposes the size, so the lent rows come off here.
   fitKept(): void {
+    if (!this.pane.shown()) return;
     const dims = this.pane.fit.proposeDimensions();
     if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
     this.pane.resize(dims.cols, keptRows(dims.rows, this.pane.lent()));
@@ -110,7 +120,7 @@ export class PaneSizer {
 
   private reportNativeBounds(): void {
     const { term, sizer } = this.pane;
-    if (!this.nativeSurfaceOn || !sizer) return;
+    if (!this.nativeSurfaceOn || !sizer || !this.pane.shown()) return;
     const r = sizer.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const lent = this.pane.lent();
@@ -142,7 +152,7 @@ export class PaneSizer {
   // glyph box by it and centers the box in the cell, so the box height
   // rides along and the surface puts its baseline where xterm's is.
   reportCellMetrics(): void {
-    if (!this.nativeSurfaceOn) return;
+    if (!this.nativeSurfaceOn || !this.pane.shown()) return;
     const device = this.pane.term.dimensions?.device;
     const cell = device?.cell;
     if (!device || !cell?.width || !cell?.height) return;
@@ -164,7 +174,7 @@ export class PaneSizer {
   // (reportCellMetrics above), and xterm draws its own.
   reportCellSize(): void {
     const onCellSize = this.pane.onCellSize();
-    if (!onCellSize) return;
+    if (!onCellSize || !this.pane.shown()) return;
     const { term } = this.pane;
     const cell = term.dimensions?.device?.cell;
     if (!cell?.width || !cell?.height) return;
@@ -185,7 +195,7 @@ export class PaneSizer {
   // layout passes leave that computed height stale.
   private readonly sync = (): void => {
     const { sizer, host } = this.pane;
-    if (!sizer) return;
+    if (!sizer || !this.pane.shown()) return;
     this.reportNativeBounds();
     this.reportCellMetrics();
     this.reportCellSize();
@@ -224,7 +234,7 @@ export class PaneSizer {
   // reads as jitter on the divider.
   private readonly onResizeProgress = (): void => {
     const { sizer, host } = this.pane;
-    if (!sizer) return;
+    if (!sizer || !this.pane.shown()) return;
     const rect = sizer.getBoundingClientRect();
     const w = Math.floor(rect.width);
     const h = Math.floor(rect.height);
@@ -281,10 +291,26 @@ export class PaneSizer {
     this.reportCellSize();
   }
 
+  /** The pane shows again. It forgets what it last reported and fits
+   *  and reports the pane as it is now. A pane that mounted hidden has no
+   *  cell yet, which xterm measures once the pane shows, so it fits and
+   *  reports once more after that. */
+  show(): void {
+    this.lastW = 0;
+    this.lastH = 0;
+    this.lastNativeBounds = '';
+    this.lastCellMetrics = '';
+    this.lastCellSize = '';
+    this.sync();
+    if (this.showSettle) clearTimeout(this.showSettle);
+    this.showSettle = setTimeout(() => this.refitCell(), 50);
+  }
+
   /** Stop following the pane. */
   stop(): void {
     if (this.rafPoll) cancelAnimationFrame(this.rafPoll);
     if (this.intervalPoll) clearInterval(this.intervalPoll);
+    if (this.showSettle) clearTimeout(this.showSettle);
     this.observer?.disconnect();
     window.removeEventListener('resize', this.sync);
     window.removeEventListener('vosh:resize-progress', this.onResizeProgress);
