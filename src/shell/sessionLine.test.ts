@@ -115,6 +115,17 @@ describe('the second line of a session row', () => {
     expect(secondLine(row({ name: 'Orla' }), PLAYING, BANK, null, null, NOW).who).toBeNull();
   });
 
+  it('names no world for a session that plays before a room comes', () => {
+    // A page that loads again while the link stays up has heard no room
+    // and no event, so the row reads the list.
+    expect(secondLine(row(), state(), null, null, health(1020, 1020), NOW)).toEqual({
+      who: null,
+      text: null,
+      health: 100,
+      low: false,
+    });
+  });
+
   it('says what happened while the session does not play', () => {
     const text = (fields: Partial<SessionRowState>, of = row()) =>
       secondLine(of, state(fields), BANK, null, health(846, 900), NOW);
