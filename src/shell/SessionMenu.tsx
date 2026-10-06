@@ -7,6 +7,7 @@ import type { Connection } from '../stores/session/useConnection';
 import { ConnectionForm } from './ConnectionForm';
 import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
+import { RenameSessionForm } from './RenameSessionForm';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 // The session popover under the title button, by board 4 of the
@@ -14,10 +15,11 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 // Disconnect, Edit connection, Rename session, and New session. Edit
 // connection swaps the list for a host, port and TLS form in the same
 // popover. Rename session turns the selected row's name into a field
-// while the sessions sidebar shows (board 9). New session opens a
-// session and comes back on that session's own form. Disconnect is
-// destructive, so it sits last in the danger tone and is never the row
-// focus lands on.
+// while the sessions sidebar shows (board 9), and swaps in a form with
+// one Name field while it does not, as with one session. New session
+// opens a session and comes back on that session's own form. Disconnect
+// is destructive, so it sits last in the danger tone and is never the
+// row focus lands on.
 
 const MENU_WIDTH = 272;
 
@@ -26,8 +28,10 @@ interface Props {
   anchor: HTMLElement | null;
   /** What the popover opens on. The macOS menu bar's Edit connection
    *  opens it on its form, and Cancel there closes it instead of
-   *  stepping back to a list you never saw. New session… opens it on
-   *  the form of the session it opened. */
+   *  stepping back to a list you never saw. Rename session… from the
+   *  menu bar or the palette with no sidebar does the same with its
+   *  form. New session… opens it on the form of the session it
+   *  opened. */
   request?: SessionMenuRequest;
   /** Turn the selected session's name into a field in its row, while
    *  the sessions sidebar shows. */
@@ -65,6 +69,25 @@ export function SessionMenu({
     );
   }
 
+  // Cancel steps back to the list the form came from, or closes a form
+  // the popover opened on.
+  const cancel = () => (request.mode === 'menu' ? setMode('menu') : onClose());
+
+  if (mode === 'rename') {
+    return (
+      <ShellMenu
+        anchor={anchor}
+        align="center"
+        width={MENU_WIDTH}
+        label="Rename session"
+        kind="dialog"
+        onClose={onClose}
+      >
+        <RenameSessionForm onCancel={cancel} onClose={onClose} />
+      </ShellMenu>
+    );
+  }
+
   if (mode === 'edit') {
     return (
       <ShellMenu
@@ -79,7 +102,7 @@ export function SessionMenu({
           title="Edit connection"
           submitLabel="Save"
           initial={target}
-          onCancel={() => (request.mode === 'menu' ? setMode('menu') : onClose())}
+          onCancel={cancel}
           onSubmit={(next) => {
             connection.saveTarget(next);
             onClose();
@@ -100,9 +123,9 @@ export function SessionMenu({
         </ShellMenuItem>
       )}
       <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
-      {renameInRow && (
-        <ShellMenuItem onSelect={() => run(renameInRow)}>Rename session…</ShellMenuItem>
-      )}
+      <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
+        Rename session…
+      </ShellMenuItem>
       <ShellMenuSeparator />
       <ShellMenuItem
         shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}

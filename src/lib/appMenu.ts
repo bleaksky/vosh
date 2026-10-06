@@ -34,10 +34,12 @@ export interface OpenedSession {
 }
 
 /** What the session popover opens on: its list, the Edit connection
- *  form, or the New session form of a session New session… opened. */
+ *  form, the Rename session form, or the New session form of a session
+ *  New session… opened. */
 export type SessionMenuRequest =
   | { mode: 'menu' }
   | { mode: 'edit' }
+  | { mode: 'rename' }
   | { mode: 'new'; opened: OpenedSession };
 
 // The shortcuts the main window binds in its own keydown handler. Copy
