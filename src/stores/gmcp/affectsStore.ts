@@ -121,15 +121,17 @@ export function getAffects(): CurrentAffect[] | null {
 }
 
 /** True while the game hides your affects, by the packet's own flag
- *  or by what the backend worked out. */
+ *  or by what the backend worked out. Both read the selected session,
+ *  the list from this store and the flags from the hidden store. */
 export function getAffectsHidden(): boolean {
   return store.get().hidden || getHidden().affects;
 }
 
-/** Hear the list and the hidden state the backend works out. The
- *  hidden store joins here and not as one of the store's events, since
- *  each event the store hears counts against its snapshot, and a report
- *  that lands while it asks would throw away the list the backend kept. */
+/** Hear the list and the hidden state the backend works out, each for
+ *  the selected session, and each again on a selection. The hidden
+ *  store joins here and not as one of the store's events, since each
+ *  event the store hears counts against its snapshot, and a report that
+ *  lands while it asks would throw away the list the backend kept. */
 function subscribe(cb: () => void): () => void {
   const lists = store.subscribe(cb);
   const hidden = subscribeHidden(cb);

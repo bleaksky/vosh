@@ -25,6 +25,10 @@ import {
 // once and registers every listener before it returns. subscribe starts
 // the store too, and get does not.
 //
+// Another store can read one session's state with stateOf and hear each
+// change that moves it with subscribeStates, as the stores that lay the
+// hidden flags over their own read the flags of the same session.
+//
 // A store with a snapshot asks the backend for the last value it kept
 // for a session the first time that session is selected, once every
 // listener is in, so a value that lands meanwhile is either in the
@@ -58,14 +62,14 @@ interface GmcpStoreSpec<S, V> {
    *  shows mid session. `ask` reads it for a session and `take` is the
    *  change its answer makes. */
   snapshot?: { ask: (session: number) => Promise<unknown>; take: (state: S, data: unknown) => S };
-  /** What the panes read, from the selected session's state and from
-   *  what they read now, which is undefined for the first view. It reads
-   *  what they read now only to hand it back when nothing in it moved, so
-   *  the state holds all the store knows. It runs after every change to
-   *  the selected session, one that keeps the state too, so a view that
-   *  reads another store can follow it. Without it the panes read the
-   *  state. */
-  view?: (state: S, last?: V) => V;
+  /** What the panes read, from the selected session's state, from what
+   *  they read now, which is undefined for the first view, and from that
+   *  session's id. It reads what they read now only to hand it back when
+   *  nothing in it moved, so the state holds all the store knows. It runs
+   *  after every change to the selected session, one that keeps the state
+   *  too, so a view that reads another store can follow it. Without it
+   *  the panes read the state. */
+  view?: (state: S, last: V | undefined, session: number) => V;
 }
 
 /** One session's state, with what its snapshot needs. */
@@ -87,7 +91,10 @@ export function createGmcpStore<S, V = S>({
 }: GmcpStoreSpec<S, V>) {
   const fresh = typeof initial === 'function' ? (initial as (session: number) => S) : () => initial;
   const slots = new Map<number, Slot<S>>();
-  const store = createStore<V>(view(fresh(getSelected())));
+  const first = getSelected();
+  const store = createStore<V>(view(fresh(first), undefined, first));
+  /** Who hears each change that moves a session's state. */
+  const moved = new Set<(session: number) => void>();
   const connectionChange =
     connection ??
     ((state: S, payload: StatePayload) =>
@@ -109,12 +116,15 @@ export function createGmcpStore<S, V = S>({
 
   /** Publish what the panes read of the selected session. */
   function publish(): void {
-    store.set(view(slot(getSelected()).state, store.get()));
+    const session = getSelected();
+    store.set(view(slot(session).state, store.get(), session));
   }
 
   function apply(session: number, change: Change<S>): void {
     const held = slot(session);
-    held.state = change(held.state);
+    const before = held.state;
+    held.state = change(before);
+    if (held.state !== before) for (const cb of moved) cb(session);
     if (session === getSelected()) publish();
   }
 
@@ -193,5 +203,20 @@ export function createGmcpStore<S, V = S>({
     return useSyncExternalStore(subscribe, store.get);
   }
 
-  return { start, get: store.get, subscribe, use };
+  /** The state of the session `session` names, as it starts when
+   *  nothing named it yet. */
+  function stateOf(session: number): S {
+    return slots.get(session)?.state ?? fresh(session);
+  }
+
+  /** Hear each change that moves a session's state, with that session. */
+  function subscribeStates(cb: (session: number) => void): () => void {
+    start();
+    moved.add(cb);
+    return () => {
+      moved.delete(cb);
+    };
+  }
+
+  return { start, get: store.get, subscribe, use, stateOf, subscribeStates };
 }

@@ -1,7 +1,6 @@
 import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
 import { createGmcpStore } from './gmcpStore';
-import { getHidden, subscribeHidden } from './hiddenStore';
-import { getSelected } from '../session/sessionsStore';
+import { getHiddenOf, subscribeHiddenOf } from './hiddenStore';
 import { asNumber, isHiddenFlag } from '../store';
 
 /** Below this percent a vital enters the low state. */
@@ -194,8 +193,8 @@ interface VitalsState {
   /** The vital prompt vars held back since the game hid your vitals. */
   held: PromptVarsPayload;
   /** The backend works out that the game hides your vitals. The store
-   *  keeps its own copy of hiddenStore's `vitals`, since the change that
-   *  turns it on holds back the prompt vars. */
+   *  keeps its own copy of the session's `vitals` in hiddenStore, since
+   *  the change that turns it on holds back the prompt vars. */
   hiddenByBackend: boolean;
   /** What the panes read. Each change works it out from the one before,
    *  so the low latch of each vital stays with the rest of the state. */
@@ -218,28 +217,29 @@ function show(state: VitalsState): VitalsState {
   return shown === last ? state : { ...state, shown };
 }
 
-/** Nothing heard yet, hidden as the backend says now. `last` is what
- *  the panes read before, which they keep when the empty state shows
- *  the same. */
-function empty(last: Vitals | null = null): VitalsState {
+/** Nothing heard yet from a session, hidden as the backend says now.
+ *  `last` is what the session's panes read before, which they keep when
+ *  the empty state shows the same. */
+function empty(session: number, last: Vitals | null = null): VitalsState {
   return show({
     packet: null,
     vars: {},
     held: {},
-    hiddenByBackend: getHidden().vitals,
+    hiddenByBackend: getHiddenOf(session).vitals,
     shown: last,
   });
 }
 
 const store = createGmcpStore<VitalsState, Vitals | null>({
-  state: () => empty(),
+  state: (session) => empty(session),
   packages: {
     'Char.Vitals': (state, data) => {
       const next = { ...state, packet: parseVitalsPacket(data) };
       return show(hiddenNow(next) ? { ...next, held: holdPromptVitals(state.vars) } : next);
     },
   },
-  connection: (state, { kind }) => (kind === 'disconnected' ? empty(state.shown) : state),
+  connection: (state, { kind, session }) =>
+    kind === 'disconnected' ? empty(session, state.shown) : state,
   events: [
     (apply) =>
       onPromptVars((payload, session) =>
@@ -252,9 +252,9 @@ const store = createGmcpStore<VitalsState, Vitals | null>({
         }),
       ),
     (apply) =>
-      subscribeHidden(() =>
-        apply(getSelected(), (state) => {
-          const hiddenByBackend = getHidden().vitals;
+      subscribeHiddenOf((session) =>
+        apply(session, (state) => {
+          const hiddenByBackend = getHiddenOf(session).vitals;
           if (hiddenByBackend === state.hiddenByBackend) return state;
           const held = hiddenByBackend ? holdPromptVitals(state.vars) : state.held;
           return show({ ...state, hiddenByBackend, held });

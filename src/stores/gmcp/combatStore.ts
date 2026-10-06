@@ -1,6 +1,5 @@
 import { createGmcpStore } from './gmcpStore';
-import { getHidden, subscribeHidden, type HiddenState } from './hiddenStore';
-import { getSelected } from '../session/sessionsStore';
+import { getHiddenOf, subscribeHiddenOf, type HiddenState } from './hiddenStore';
 import { asNumber, asText, isHiddenFlag } from '../store';
 
 // The opponent you are fighting, from Char.Combat. Aabahran sends
@@ -113,11 +112,11 @@ export function withHidden(
 const store = createGmcpStore<CombatOpponent | null>({
   state: null,
   packages: { 'Char.Combat': (_, data) => parseCombat(data) },
-  // The view reads the hidden store, so each report it makes runs the
-  // view again.
-  events: [(apply) => subscribeHidden(() => apply(getSelected(), (sent) => sent))],
-  view: (sent, last) => {
-    const next = withHidden(sent, getHidden());
+  // The view reads the session's flags in the hidden store, so each
+  // report that moves them runs the view again.
+  events: [(apply) => subscribeHiddenOf((session) => apply(session, (sent) => sent))],
+  view: (sent, last, session) => {
+    const next = withHidden(sent, getHiddenOf(session));
     // Char.Combat rides every prompt, so keep what the panes read when
     // it repeats.
     return last !== undefined && sameOpponent(last, next) ? last : next;
