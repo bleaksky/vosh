@@ -1,10 +1,11 @@
 /* The sessions sidebar of the Sessions review, inside the first column
    of the frame that frame.css lays out: the header, the rows and their
-   glyphs, the drag, the name field, the card beside a row, the spinner
+   marks, the drag, the name field, the card beside a row, the spinner
    and the line you drag to resize it. Then the session popover's list
-   of sessions, which takes the sidebar's place while it is folded. Loads last, after
-   frame.css. Every rule sits under a shell-sessions- class, or a
-   shell-menu- class only that list uses. */
+   of sessions, which takes the sidebar's place while it is folded, and
+   the total the session button shows then. Loads last, after frame.css.
+   Every rule sits under a shell-sessions- class, or a shell-menu- class
+   only that list uses. */
 
 /* Board 2 of the Sessions review, on otty's measures (otty-measure.md).
    220 of rows on the panel ground, then a 1 px --sep line at x 220,
@@ -527,37 +528,10 @@
   color: var(--tertiary);
 }
 
-/* The session popover's glyphs, its mark while something needs you or
-   the accent dot while something waits, in a 16 square. */
-.shell-sessions-glyph {
-  display: flex;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--tertiary);
-}
-
-.shell-sessions-glyph svg {
-  display: block;
-}
-
-.shell-sessions-glyph.is-dot {
-  color: var(--accent);
-}
-
-.shell-sessions-glyph.is-hand {
-  color: var(--warn);
-}
-
-.shell-sessions-glyph.is-triangle {
-  color: var(--danger);
-}
-
 /* The spinner turns a spoke at a time, as otty's does, and holds still
    for reduced motion. */
 @media (prefers-reduced-motion: no-preference) {
-  .shell-sessions-mark.is-spinner svg,
-  .shell-sessions-glyph.is-spinner svg {
+  .shell-sessions-mark.is-spinner svg {
     animation: shell-spinner 0.8s steps(8) infinite;
   }
 }
@@ -598,9 +572,7 @@
 }
 
 /* The session popover's list of sessions while the sidebar is folded
-   (board 8). SESSIONS in the palette's caps style heads it. Each row
-   reads its session as the sidebar's row does, the port in quiet meta,
-   and at its right the check or the row's glyph before its key. */
+   (board 8). SESSIONS in the palette's caps style heads it. */
 .shell-menu-head {
   margin: 0;
   padding: 7px 12px 3px;
@@ -612,30 +584,42 @@
   white-space: nowrap;
 }
 
+/* Each row takes the sidebar's two lines on the menu's recipe, 44 high
+   inside the menu's 6, its mark 10 in and its right column 12 in (S7,
+   board 05). The name keeps the text tone and line two the tertiary
+   one, the row in front too, which the check marks. */
 .shell-menu-session {
-  display: flex;
-  align-items: baseline;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-rows: 18px 16px;
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 5px 12px 5px 10px;
+  border: 0;
+  border-radius: var(--r-row);
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
 }
 
-.shell-menu-session-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.shell-menu-session:focus-visible,
+.shell-menu-session-slot:hover .shell-menu-session {
+  background: var(--menu-hi);
+  outline: none;
 }
 
-.shell-menu-meta {
-  flex: none;
-  margin-left: 6px;
-  font-size: 11px;
-  line-height: 14px;
-  color: var(--tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The glyph takes 8 of the row, the width of the dot it draws most. */
-.shell-menu-side .shell-sessions-glyph {
-  margin: 0 -4px;
+.shell-menu-session .shell-sessions-end .pane-menu-check {
+  margin: 0 -4px 0 0;
 }
 
 /* A list too long for the window scrolls with no bar, as the sidebar's
@@ -661,17 +645,16 @@
   display: none;
 }
 
-/* Under the pointer a row shows its close button in the place of its
-   check, its glyph and its key, the sidebar's cross in the square the
-   check takes, and closes that session (Q13). */
+/* Under the pointer a row shows its close button in its right column,
+   the sidebar's cross on line one, and closes that session (Q13). */
 .shell-menu-session-slot {
   position: relative;
 }
 
 .shell-menu-session-close {
   position: absolute;
-  top: 7px;
-  right: 8px;
+  top: 6px;
+  right: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -697,11 +680,13 @@
   visibility: visible;
 }
 
-.shell-menu-session-slot:hover .shell-menu-item {
-  background: var(--menu-hi);
+.shell-menu-session-slot:hover .shell-sessions-end {
+  visibility: hidden;
 }
 
-.shell-menu-session-slot:hover .shell-menu-side,
-.shell-menu-session-slot:hover .shell-menu-item > .shell-menu-kbd {
-  visibility: hidden;
+/* The total of what waits on the other sessions sits 8 after the
+   session button's chevron while the sidebar is folded (S7). */
+.shell-title-button .shell-sessions-count {
+  flex: none;
+  margin-left: 8px;
 }
