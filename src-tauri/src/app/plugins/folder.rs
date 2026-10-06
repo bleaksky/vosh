@@ -114,22 +114,40 @@ pub(crate) struct PluginFolder {
 
 /// Read the plugin `name` in `plugins_dir` as it stands, with the checks
 /// a load makes: the manifest names the folder, and the file it runs
-/// first sits inside it.
-pub(crate) fn read(plugins_dir: &Path, name: &str) -> Result<PluginFolder, String> {
+/// first sits inside it. With `file`, one of its Lua files, the code is
+/// that file's, for a new pick under Runs first, which the editor then
+/// shows. Save writes the code to the file Runs first names, so without
+/// it the code of the old file would land in the new one.
+pub(crate) fn read(
+    plugins_dir: &Path,
+    name: &str,
+    file: Option<&str>,
+) -> Result<PluginFolder, String> {
     let dir = existing(plugins_dir, name)?;
-    let plugin = read_plugin(plugins_dir, name).map_err(|e| {
+    let could_not = |e: &dyn std::fmt::Display| {
         warn!(plugin = %name, error = %e, "could not read a plugin");
         format!("Vosh could not read plugin {name}.")
-    })?;
+    };
+    let plugin = read_plugin(plugins_dir, name).map_err(|e| could_not(&e))?;
     let mut files = Vec::new();
-    lua_files(&dir, "", &mut files).map_err(|e| {
-        warn!(plugin = %name, error = %e, "could not list a plugin's files");
-        format!("Vosh could not read plugin {name}.")
-    })?;
+    lua_files(&dir, "", &mut files).map_err(|e| could_not(&e))?;
     files.sort();
+    let code = match file {
+        None => plugin.code,
+        // Only a regular Lua file the walk found, so no link and no
+        // path leads out of the folder.
+        Some(file) if files.iter().any(|found| found == file) => {
+            std::fs::read_to_string(dir.join(file)).map_err(|e| could_not(&e))?
+        }
+        Some(_) => {
+            return Err(format!(
+                "Pick a file inside the {name} folder for Runs first."
+            ))
+        }
+    };
     Ok(PluginFolder {
         manifest: plugin.manifest,
-        code: plugin.code,
+        code,
         files,
         folder: format!("plugins/{name}"),
     })
@@ -271,7 +289,7 @@ entry = \"main.lua\"
         ] {
             assert_eq!(create(&plugins, name), Err(NAME_RULE.to_string()), "{name}");
             assert_eq!(
-                read(&plugins, name).map(|_| ()),
+                read(&plugins, name, None).map(|_| ()),
                 Err(NAME_RULE.to_string()),
                 "{name}"
             );
@@ -297,7 +315,7 @@ entry = \"main.lua\"
         // Nor does the other case find it, on a disk that ignores case or
         // not, so no save writes a manifest unlike its folder.
         let none = Err("You have no plugin named Wait_Full.".to_string());
-        assert_eq!(read(&plugins, "Wait_Full").map(|_| ()), none);
+        assert_eq!(read(&plugins, "Wait_Full", None).map(|_| ()), none);
         assert_eq!(save(&plugins, "Wait_Full", manifest("main.lua"), ""), none);
         assert_eq!(
             std::fs::read_to_string(plugins.join("wait_full").join("manifest.toml")).unwrap(),
@@ -335,7 +353,7 @@ entry = \"main.lua\"
             "mud.send('rest')\n",
         )
         .unwrap();
-        let folder = read(&plugins, "wait_full").unwrap();
+        let folder = read(&plugins, "wait_full", None).unwrap();
         assert_eq!(folder.manifest.name, "wait_full");
         assert_eq!(folder.manifest.version, "0.2.0");
         assert_eq!(folder.manifest.author, "Orla");
@@ -359,7 +377,7 @@ entry = \"main.lua\"
         std::fs::write(tmp.path().join("outside.lua"), "").unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink(tmp.path().join("outside.lua"), dir.join("link.lua")).unwrap();
-        let folder = read(&plugins, "weather_pane").unwrap();
+        let folder = read(&plugins, "weather_pane", None).unwrap();
         assert_eq!(folder.files, ["lib/draw.lua", "main.lua"]);
         // Runs first may name the file in the folder below.
         save(
@@ -369,7 +387,43 @@ entry = \"main.lua\"
             "-- draw\n",
         )
         .unwrap();
-        assert_eq!(read(&plugins, "weather_pane").unwrap().code, "-- draw\n");
+        assert_eq!(
+            read(&plugins, "weather_pane", None).unwrap().code,
+            "-- draw\n"
+        );
+    }
+
+    #[test]
+    fn read_hands_back_the_code_of_a_file_runs_first_may_pick() {
+        let (tmp, plugins) = plugins();
+        create(&plugins, "weather_pane").unwrap();
+        let dir = plugins.join("weather_pane");
+        std::fs::create_dir(dir.join("lib")).unwrap();
+        std::fs::write(dir.join("lib").join("draw.lua"), "-- draw\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "").unwrap();
+        std::fs::write(tmp.path().join("outside.lua"), "-- yours\n").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(tmp.path().join("outside.lua"), dir.join("link.lua")).unwrap();
+        let folder = read(&plugins, "weather_pane", Some("lib/draw.lua")).unwrap();
+        assert_eq!(folder.code, "-- draw\n");
+        // The manifest still names the file the plugin runs first now.
+        assert_eq!(folder.manifest.entry, "main.lua");
+        let outside = Err("Pick a file inside the weather_pane folder for Runs first.".to_string());
+        let absolute = tmp.path().join("outside.lua");
+        for file in [
+            "../outside.lua",
+            absolute.to_str().unwrap(),
+            "notes.txt",
+            "link.lua",
+            "lib",
+            "",
+        ] {
+            assert_eq!(
+                read(&plugins, "weather_pane", Some(file)).map(|f| f.code),
+                outside,
+                "{file}"
+            );
+        }
     }
 
     #[test]
@@ -425,7 +479,7 @@ entry = \"main.lua\"
         std::fs::create_dir_all(&plugins).unwrap();
         let none = Err("You have no plugin named wait_full.".to_string());
         assert_eq!(save(&plugins, "wait_full", manifest("main.lua"), ""), none);
-        assert_eq!(read(&plugins, "wait_full").map(|_| ()), none);
+        assert_eq!(read(&plugins, "wait_full", None).map(|_| ()), none);
         let leftover = &names_in(&plugins);
         assert!(leftover.is_empty(), "{leftover:?}");
     }

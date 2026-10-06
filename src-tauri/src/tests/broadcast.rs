@@ -430,7 +430,7 @@ fn every_change_to_the_plugins_tells_every_window_once() {
             .unwrap();
         listening.finish("plugin_create", &mut heard, &mut want);
 
-        let manifest = scripts::plugin_read(app.state(), name())
+        let manifest = scripts::plugin_read(app.state(), name(), None)
             .await
             .unwrap()
             .manifest;

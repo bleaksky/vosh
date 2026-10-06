@@ -114,13 +114,15 @@ pub(crate) async fn plugins_list(
 }
 
 /// The plugin `name` as its folder holds it: the manifest, the code of
-/// the file it runs first, and every Lua file in the folder.
+/// the file it runs first, or of `file` when Runs first picks another,
+/// and every Lua file in the folder.
 #[tauri::command]
 pub(crate) async fn plugin_read(
     state: State<'_, SharedState>,
     name: String,
+    file: Option<String>,
 ) -> Result<PluginFolder, String> {
-    folder::read(&plugins_dir_of(&state)?, &name)
+    folder::read(&plugins_dir_of(&state)?, &name, file.as_deref())
 }
 
 /// Make the plugin `name` with the two files New plugin writes, turn it
