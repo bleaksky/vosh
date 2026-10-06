@@ -133,9 +133,9 @@ pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
 pub(crate) const RECONNECT: &str = "session://reconnect";
 /// The `[lua]` lines a step added to the session's Output ring, and the
 /// lines you typed in the Scripts console. The payload is a
-/// [`crate::script::output::LuaOutputPayload`]. The Scripts page in
-/// Settings shows them in Output and the Console. No page listener hears
-/// it yet.
+/// [`crate::script::output::LuaOutputPayload`]. `subscribeLuaOutput`
+/// hears it, and the Scripts page in Settings shows the lines in its
+/// Console.
 pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 
 // The lists.
@@ -175,8 +175,8 @@ pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 /// Sent to every window when the plugins changed: the Scripts page made
 /// one, saved one, turned one on or off in a profile or loaded one again,
 /// a profile switch turned a session's plugins over, or Vosh stopped one
-/// in a session. The payload is null. The Scripts page in Settings reads
-/// the list again. No page listener hears it yet.
+/// in a session. The payload is null. `subscribePluginsChanged` hears
+/// it, and the Scripts page in Settings reads the list again.
 pub(crate) const PLUGINS_CHANGED: &str = "vosh://plugins-changed";
 
 // Profiles.

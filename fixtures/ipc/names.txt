@@ -148,7 +148,7 @@ event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
-event session://lua-output app unheard
+event session://lua-output app heard
 event session://output app heard
 event session://prompt-gag-without-reader app heard
 event session://prompt-state app heard
@@ -194,7 +194,7 @@ event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
-event vosh://plugins-changed app unheard
+event vosh://plugins-changed app heard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard
 event vosh://profiles-changed app heard

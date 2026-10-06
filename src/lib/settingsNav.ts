@@ -2,7 +2,8 @@
 // so localStorage, the goto event, and palette Recent ids need no
 // migration. The grammar is `group`, `group:section`, and
 // `group:section#anchor`, with `group#anchor` when no section applies.
-// For example `automation:macros` or `characters:Ilsabet#tracked`.
+// For example `automation:macros`, `characters:Ilsabet#tracked` or
+// `scripts:vitals_alert`.
 // Every tab id the old Settings window used still resolves.
 
 export type SettingsGroup =
@@ -11,15 +12,17 @@ export type SettingsGroup =
   | 'layout'
   | 'input'
   | 'automation'
+  | 'scripts'
   | 'characters';
 
-/** The six groups in nav order, with their visible names. */
+/** The seven groups in nav order, with their visible names. */
 export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'layout', label: 'Layout' },
   { id: 'input', label: 'Input' },
   { id: 'automation', label: 'Automation' },
+  { id: 'scripts', label: 'Scripts' },
   { id: 'characters', label: 'Characters' },
 ];
 
@@ -34,7 +37,8 @@ export function isSettingsGroup(value: string): value is SettingsGroup {
 /** A place in Settings. What `section` means depends on the group.
  *  In Automation it is the kind (`triggers`, `timers`, `loadouts`).
  *  In Characters it is a profile name, and no section means the active
- *  profile. Everywhere else it is a section id the page scrolls to.
+ *  profile. In Scripts it is a plugin name, which opens that plugin's
+ *  page. Everywhere else it is a section id the page scrolls to.
  *  `anchor` is a row or block inside that. */
 export interface SettingsTarget {
   group: SettingsGroup;
@@ -42,9 +46,17 @@ export interface SettingsTarget {
   anchor?: string;
 }
 
-// Groups whose section names a kind or a profile rather than a place
-// to scroll to.
-const SECTION_IS_STATE: ReadonlySet<SettingsGroup> = new Set(['automation', 'characters']);
+// Groups whose section names a kind, a profile or a plugin rather than
+// a place to scroll to.
+const SECTION_IS_STATE: ReadonlySet<SettingsGroup> = new Set([
+  'automation',
+  'scripts',
+  'characters',
+]);
+
+// Groups whose section is a name you gave, a profile or a plugin, so it
+// keeps its case. Every other section is an id.
+const SECTION_KEEPS_CASE: ReadonlySet<SettingsGroup> = new Set(['scripts', 'characters']);
 
 // Pages that open inside a group, by the section that names them, with
 // the title the breadcrumb adds. The group stays active in the nav.
@@ -56,9 +68,11 @@ const SETTINGS_SUBPAGES: Readonly<
 
 /** The title of the page inside a group that `target` opens, like
  *  `Session logs` for `general:logs`, or null for the group's own
- *  page. */
+ *  page. A plugin opens its own page under Scripts, titled by its name,
+ *  like `vitals_alert` for `scripts:vitals_alert`. */
 export function settingsSubpage(target: SettingsTarget): string | null {
   if (!target.section) return null;
+  if (target.group === 'scripts') return target.section;
   return SETTINGS_SUBPAGES[target.group]?.[target.section] ?? null;
 }
 
@@ -105,8 +119,7 @@ export function resolveSettingsTarget(raw: string): SettingsTarget {
   if (!isSettingsGroup(group)) return { group: 'general' };
 
   const target: SettingsTarget = { group };
-  // A profile name keeps its case. Every other section is an id.
-  const section = group === 'characters' ? rawSection : rawSection.toLowerCase();
+  const section = SECTION_KEEPS_CASE.has(group) ? rawSection : rawSection.toLowerCase();
   if (section) target.section = section;
   if (anchor) target.anchor = anchor.toLowerCase();
   const moved = MOVED_ANCHORS[formatSettingsTarget(target)];

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatSettingsTarget,
   resolveSettingsTarget,
+  settingsGroupLabel,
   settingsScrollIds,
   settingsSubpage,
   SETTINGS_GROUPS,
@@ -29,7 +30,7 @@ describe('resolveSettingsTarget', () => {
     for (const [raw, target] of cases) expect(resolveSettingsTarget(raw)).toEqual(target);
   });
 
-  it('reads a bare group in every one of the six', () => {
+  it('reads a bare group in every one of the seven', () => {
     for (const { id } of SETTINGS_GROUPS) expect(resolveSettingsTarget(id)).toEqual({ group: id });
   });
 
@@ -116,6 +117,32 @@ describe('settingsSubpage', () => {
     expect(settingsSubpage({ group: 'general' })).toBeNull();
     expect(settingsSubpage({ group: 'general', section: 'updates' })).toBeNull();
     expect(settingsSubpage({ group: 'automation', section: 'logs' })).toBeNull();
+  });
+});
+
+describe('a plugin page under Scripts', () => {
+  it('keeps the case of the plugin name and titles the page with it', () => {
+    const target = resolveSettingsTarget('scripts:Vitals_Alert');
+    expect(target).toEqual({ group: 'scripts', section: 'Vitals_Alert' });
+    expect(settingsSubpage(target)).toBe('Vitals_Alert');
+    expect(formatSettingsTarget(target)).toBe('scripts:Vitals_Alert');
+    expect(resolveSettingsTarget('Scripts:wait_full#Output')).toEqual({
+      group: 'scripts',
+      section: 'wait_full',
+      anchor: 'output',
+    });
+  });
+
+  it('leads the crumb back to the list, which is no page of its own', () => {
+    // The crumb names the group and links to it bare.
+    expect(settingsGroupLabel('scripts')).toBe('Scripts');
+    expect(settingsSubpage({ group: 'scripts' })).toBeNull();
+    expect(formatSettingsTarget({ group: 'scripts' })).toBe('scripts');
+  });
+
+  it('never scrolls to the plugin', () => {
+    expect(settingsScrollIds({ group: 'scripts', section: 'vitals_alert' })).toEqual([]);
+    expect(settingsScrollIds({ group: 'scripts', anchor: 'console' })).toEqual(['console']);
   });
 });
 

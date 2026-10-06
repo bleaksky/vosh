@@ -206,6 +206,9 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
       return scene.prompt.seen ?? null;
     case 'session_identity_get':
       return scene.prompt.identity ?? null;
+    case 'plugins_list':
+    case 'lua_output_get':
+      return [];
     default:
       return undefined;
   }
@@ -260,21 +263,24 @@ beforeAll(async () => {
   // React DOM checks for a DOM once, when it loads, so it and the pages
   // load now.
   ({ createRoot } = await import('react-dom/client'));
-  const [general, appearance, layout, input, automation, characters, paneMenu] = await Promise.all([
-    import('./general/GeneralPage'),
-    import('./appearance/AppearancePage'),
-    import('./layout/LayoutPage'),
-    import('./input/InputPage'),
-    import('./automation/AutomationPage'),
-    import('./characters/CharactersPage'),
-    import('../panel/PaneMenu'),
-  ]);
+  const [general, appearance, layout, input, automation, scripts, characters, paneMenu] =
+    await Promise.all([
+      import('./general/GeneralPage'),
+      import('./appearance/AppearancePage'),
+      import('./layout/LayoutPage'),
+      import('./input/InputPage'),
+      import('./automation/AutomationPage'),
+      import('./scripts/ScriptsPage'),
+      import('./characters/CharactersPage'),
+      import('../panel/PaneMenu'),
+    ]);
   PAGES = {
     general: general.GeneralPage,
     appearance: appearance.AppearancePage,
     layout: layout.LayoutPage,
     input: input.InputPage,
     automation: automation.AutomationPage,
+    scripts: scripts.ScriptsPage,
     characters: characters.CharactersPage,
   };
   PaneMenu = paneMenu.PaneMenu;

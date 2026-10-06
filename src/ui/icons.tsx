@@ -96,6 +96,15 @@ export function BoltIcon(props: IconProps) {
   );
 }
 
+/** Angle brackets around a slash: Scripts. */
+export function CodeIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.25 4.75L2 8l3.25 3.25M10.75 4.75L14 8l-3.25 3.25M9.25 3l-2.5 10" />
+    </Glyph>
+  );
+}
+
 export function UserIcon(props: IconProps) {
   return (
     <Glyph {...props}>
