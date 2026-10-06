@@ -322,6 +322,10 @@ describe('renaming and moving a session in its row', () => {
       for (let n = other; n; n = n.parentNode) if (n === this) return true;
       return false;
     };
+    // Only a row the keyboard reached matches :focus-visible.
+    el.matches = function (this: FakeElement, selector: string): boolean {
+      return selector === ':focus-visible' && doc.activeElement === this;
+    };
     el.querySelector = function (this: FakeElement): FakeElement | null {
       return findAll(this, (child) => child.getAttribute('role') === 'menuitem')[0] ?? null;
     };
@@ -467,6 +471,79 @@ describe('renaming and moving a session in its row', () => {
     expect(m.field()?.value).toBe('Tolliver');
   });
 
+  /** Press `key` on the second row, and say whether it stopped there. */
+  const press = async (m: Awaited<ReturnType<typeof mount>>, key: string) => {
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    let stopped = false;
+    await m.run(() =>
+      on(second).onKeyDown({
+        key,
+        nativeEvent: { isComposing: false },
+        preventDefault() {},
+        stopPropagation: () => (stopped = true),
+      }),
+    );
+    return stopped;
+  };
+
+  it('opens the field from Return or F2 on a row with the keyboard, as board 04 says', async () => {
+    for (const key of ['Enter', 'F2']) {
+      const m = await mount();
+      expect(await press(m, key)).toBe(true);
+      expect(m.calls.onSelect).toHaveBeenCalledWith(2);
+      expect(m.field()?.value).toBe('Tolliver');
+      await m.escape();
+      for (const cleanup of cleanups.splice(0)) await cleanup();
+    }
+  });
+
+  it('leaves Space and other keys to the row', async () => {
+    const m = await mount();
+    expect(await press(m, ' ')).toBe(false);
+    expect(await press(m, 'a')).toBe(false);
+    expect(m.field()).toBeNull();
+  });
+
+  it('says how to finish on line two while the field is open, and keeps the mark', async () => {
+    const m = await mount();
+    await m.rename(2);
+    const slot = findAll(m.container, hasClass('shell-sessions-slot'))[1];
+    const hint = only(slot, 'the hint', hasClass('is-hint'));
+    expect(hint.getAttribute('class')).toBe('shell-sessions-line is-hint');
+    expect(hint.textContent).toBe('Return saves, Esc cancels');
+    expect(findAll(slot, hasClass('shell-sessions-mark'))).toHaveLength(1);
+    expect(findAll(slot, hasClass('shell-sessions-count'))).toHaveLength(0);
+  });
+
+  it('shows F2 beside Rename session… only when the row had the keyboard', async () => {
+    const m = await mount();
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    const open = () =>
+      m.run(() =>
+        on(second).onContextMenu({
+          clientX: 146,
+          clientY: 120,
+          preventDefault() {},
+          currentTarget: second,
+        }),
+      );
+    const rename = () =>
+      only(
+        doc.body,
+        'Rename session…',
+        (el) =>
+          el.getAttribute('role') === 'menuitem' &&
+          (el.textContent ?? '').startsWith('Rename session…'),
+      );
+    await open();
+    expect(rename().textContent).toBe('Rename session…');
+    await m.escape();
+    await m.run(() => second.focus());
+    await open();
+    expect(rename().textContent).toBe('Rename session…F2');
+    expect(findAll(rename(), hasClass('shell-menu-kbd'))[0]?.textContent).toBe('F2');
+  });
+
   it('opens the row menu at the pointer on a right click, as board 9 draws it', async () => {
     const m = await mount();
     const buttons = findAll(m.container, hasClass('shell-sessions-row'));
@@ -476,6 +553,7 @@ describe('renaming and moving a session in its row', () => {
         clientX: 146,
         clientY: 120,
         preventDefault: () => (prevented = true),
+        currentTarget: buttons[1],
       }),
     );
     expect(prevented).toBe(true);
@@ -506,6 +584,7 @@ describe('renaming and moving a session in its row', () => {
           clientX: 146,
           clientY: 120,
           preventDefault() {},
+          currentTarget: findAll(m.container, hasClass('shell-sessions-row'))[1],
         }),
       );
     const item = (label: string) =>
@@ -533,6 +612,7 @@ describe('renaming and moving a session in its row', () => {
         clientX: 146,
         clientY: 120,
         preventDefault() {},
+        currentTarget: findAll(m.container, hasClass('shell-sessions-row'))[1],
       }),
     );
     const items = findAll(doc.body, (el) => el.getAttribute('role') === 'menuitem');

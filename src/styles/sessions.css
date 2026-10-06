@@ -290,6 +290,12 @@
   grid-column: 2 / 4;
 }
 
+/* While you rename a session, line two says how to finish. */
+.shell-sessions-line.is-hint {
+  grid-column: 2 / 4;
+  color: var(--secondary);
+}
+
 .shell-sessions-who,
 .shell-sessions-row[aria-current='true'] .shell-sessions-line {
   color: var(--secondary);
@@ -395,15 +401,17 @@
   pointer-events: none;
 }
 
-/* The name as a field. Its text starts at the name's own x, so the
-   field reaches 6 past it on each side, 26 high in the control fill
+/* The name as a field on line one, over the name and the right column
+   (S5, board 04). Its text starts at the name's own x of 44, so the
+   field reaches 6 past it on each side, 22 high in the control fill
    with an accent ring, at the regular weight even on the selected row.
    Its selection takes the accent tint the frame draws. */
 .shell-sessions-field {
-  flex: 1 1 auto;
+  grid-row: 1;
+  grid-column: 2 / 4;
   min-width: 0;
-  height: 26px;
-  margin: 0 0 0 -6px;
+  height: 22px;
+  margin: 0 -6px;
   padding: 0 6px;
   border: 0;
   border-radius: 6px;
