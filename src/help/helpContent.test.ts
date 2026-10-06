@@ -1215,7 +1215,12 @@ describe('the help on importing a profile', () => {
       'In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file.',
     );
     expect(text).toContain(
-      'When the catalog already has one of the same name, or a macro on the same key, yours stays, and the line under the list says so.',
+      'When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so.',
+    );
+    // A preset macro waits for yours on its key, and the presets on in
+    // loadout mode add their own, so the file's stay out (B2 chunk 3).
+    expect(text).toContain(
+      'The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.',
     );
   });
 
@@ -1247,5 +1252,24 @@ describe('the help on importing a profile', () => {
       expect(paragraph, start).not.toBe('');
       expect(paragraph, start).not.toMatch(/[;:] /);
     }
+  });
+});
+
+describe('the help on Numpad movement', () => {
+  // Scripts board 7, Q12 and Q13.
+  it('names each key and what it sends, and says a key of yours stays yours', () => {
+    const text = body('automate.macros');
+    expect(text).toContain(
+      '`Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`.',
+    );
+    expect(text).toContain('`Numpad7`, `Numpad1` and `Numpad5` stay free.');
+    expect(text).toContain('A key one of your macros already uses stays yours.');
+    expect(text).toContain('Turning the preset off removes the macros it added and leaves yours.');
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.macros');
+    if (!found) throw new Error('no macros topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 });
