@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
+  blankPattern,
   blankTrigger,
   effectOf,
   extraEffects,
@@ -9,12 +10,15 @@ import {
   highlightOf,
   loadTriggers,
   mainPattern,
+  MATCH_MODE_DESCRIPTIONS,
+  MATCH_MODE_OPTIONS,
   normalizeTrigger,
   patternSource,
   replaceTemplateOf,
   saveTriggerDraft,
   TRIGGER_STYLE_OPTIONS,
   triggerKey,
+  triggerMode,
   triggerStyle,
   validateTriggers,
   withEffect,
@@ -25,6 +29,7 @@ import {
   withMainPatternSource,
   withPatternSource,
   withReplaceTemplate,
+  withTriggerMode,
   withTriggerStyle,
   type HighlightPatch,
   type TriggerStyle,
@@ -133,7 +138,13 @@ function colorOptions(current: string | undefined): readonly SelectOption[] {
   return [...COLOR_OPTIONS, { value: current, label: current }];
 }
 
-function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<TriggerRecord>) {
+/** The card for the selected trigger. */
+export function TriggerDetail({
+  value: t,
+  update,
+  fresh,
+  revealInList,
+}: DetailProps<TriggerRecord>) {
   const [advanced, setAdvanced] = useState(false);
   const advancedId = useId();
   const nameRef = useRef<HTMLInputElement | null>(null);
@@ -178,15 +189,7 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
           }}
         />
       </Row>
-      <Row label="Pattern">
-        <Field
-          mono
-          width="100%"
-          value={patternSource(mainPattern(t))}
-          disabled={locked}
-          onChange={(pattern) => update((v) => withMainPatternSource(v, pattern))}
-        />
-      </Row>
+      <PatternRow t={t} update={update} locked={locked} />
       <Row label="Style">
         <Select
           width="100%"
@@ -232,6 +235,55 @@ function TriggerDetail({ value: t, update, fresh, revealInList }: DetailProps<Tr
         </div>
       )}
     </Card>
+  );
+}
+
+/** The Pattern row as board 6 draws it: the label and what the mode
+ *  does on the left with the mode beside them, and the main pattern at
+ *  full width under both. Built by hand like CodeRow, since a Row keeps
+ *  its control on the right of the label. */
+function PatternRow({
+  t,
+  update,
+  locked,
+}: {
+  t: TriggerRecord;
+  update: DetailProps<TriggerRecord>['update'];
+  locked: boolean;
+}) {
+  const labelId = useId();
+  const descId = useId();
+  const mode = triggerMode(t);
+  return (
+    <div className="st-row st-auto-block">
+      <div className="st-auto-block-head">
+        <div className="st-row-text">
+          <span id={labelId} className="st-row-label">
+            Pattern
+          </span>
+          <span id={descId} className="st-row-desc">
+            {MATCH_MODE_DESCRIPTIONS[mode]}
+          </span>
+        </div>
+        <div className="st-row-control">
+          <Segmented
+            label="Match the pattern as"
+            options={MATCH_MODE_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
+            value={mode}
+            onChange={(next) => update((v) => withTriggerMode(v, next))}
+          />
+        </div>
+      </div>
+      <Field
+        mono
+        width="100%"
+        aria-labelledby={labelId}
+        aria-describedby={descId}
+        value={patternSource(mainPattern(t))}
+        disabled={locked}
+        onChange={(pattern) => update((v) => withMainPatternSource(v, pattern))}
+      />
+    </div>
   );
 }
 
@@ -381,10 +433,10 @@ function PatternsBlock({
   const headingId = useId();
   const main = mainPattern(t);
   const extra = t.patterns.slice(1);
-  const setPatterns = (fn: (rest: TriggerPattern[]) => TriggerPattern[]) =>
+  const setPatterns = (fn: (rest: TriggerPattern[], v: TriggerRecord) => TriggerPattern[]) =>
     update((v) => {
       const first = v.patterns[0] ?? mainPattern(v);
-      return { ...v, patterns: [first, ...fn(v.patterns.slice(1))] };
+      return { ...v, patterns: [first, ...fn(v.patterns.slice(1), v)] };
     });
 
   return (
@@ -446,7 +498,7 @@ function PatternsBlock({
         <div>
           <ChipButton
             icon={<PlusIcon size={12} />}
-            onClick={() => setPatterns((rest) => [...rest, { pattern: '', enabled: true }])}
+            onClick={() => setPatterns((rest, v) => [...rest, blankPattern(triggerMode(v))])}
           >
             Add pattern
           </ChipButton>

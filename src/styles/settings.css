@@ -1839,6 +1839,16 @@
   gap: 8px;
 }
 
+/* A block's label and description with a control beside them, as the
+   trigger Pattern row sets its mode over the field. Not a card row, so
+   it draws no hairline. */
+.st-auto-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .st-auto-iconbutton {
   display: flex;
   align-items: center;
