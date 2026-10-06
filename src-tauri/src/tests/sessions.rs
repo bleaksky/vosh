@@ -1701,7 +1701,7 @@ async fn combat_and_heals(h: &Harness, session: SessionId) -> (bool, bool) {
 
 /// What the Loadouts editor shows as on for the selected session.
 async fn shown_active(h: &Harness) -> Vec<String> {
-    crate::ipc::loadouts::loadouts_get_state(h.app.state())
+    crate::ipc::loadouts::loadouts_get_state(h.app.state(), None)
         .await
         .expect("the loadout state")
         .active
@@ -1716,7 +1716,7 @@ async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() 
     let h = loadout_mode().await;
     let one = h.first;
     // With one profile open, the change writes the top level as before.
-    set_active_loadouts(h.app.handle(), vec!["Melee".into()])
+    set_active_loadouts(h.app.handle(), vec!["Melee".into()], None)
         .await
         .expect("Melee turns on");
     let saved = load_loadout_set(h.dir.path()).expect("loadouts.toml");
@@ -1729,7 +1729,7 @@ async fn a_loadout_turned_on_in_the_second_session_gates_its_own_profile_only() 
     crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
-    set_active_loadouts(h.app.handle(), vec!["Heals".into()])
+    set_active_loadouts(h.app.handle(), vec!["Heals".into()], None)
         .await
         .expect("Heals turns on");
     assert_eq!(combat_and_heals(&h, two).await, (false, true));
@@ -1777,7 +1777,7 @@ async fn an_alias_added_in_the_first_session_reaches_healer_and_survives_its_sav
     crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), two)
         .await
         .expect("the selection moves");
-    set_active_loadouts(h.app.handle(), vec!["Heals".into()])
+    set_active_loadouts(h.app.handle(), vec!["Heals".into()], None)
         .await
         .expect("Heals turns on");
     crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), one)
