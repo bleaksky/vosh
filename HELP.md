@@ -33,7 +33,7 @@ The session button reports the connection through its status dot. The dot turns 
 
 When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed. A connect or `Disconnect` ends the tries. Each profile reconnects until you add `reconnect = false` to its profile file while Vosh is closed.
 
-Two things reset on a disconnect. The chat pane buffer empties the moment the session drops, and session variables set with `#var` clear when the next connection opens, so they never carry into a new session. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
+Two things reset on a disconnect. The chat pane buffer empties the moment the session drops, and session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
 
 `Disconnect` lives in three places. The session button while connected, the Session menu in the macOS menu bar, and the `Cmd+K` palette.
 
@@ -375,7 +375,7 @@ Variables store values you reference in commands as `$name`. Set them from the c
 
 Interpolation runs on the line you type, before alias expansion, and Vosh does not interpolate alias output again. Put variables in the line you type, or resolve them in a Lua script body instead.
 
-`#var` writes session scope, which clears when the next connection opens, so a session value never survives into a new session. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name. Each session keeps its own session variables, and the sessions on one profile share its profile variables. `#unvar` takes the name out of both scopes, so the profile value goes for every session on the profile.
+`#var` writes session scope, which clears when the next connection opens, so a session value never outlives its connection. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name. Each session keeps its own session variables, and the sessions on one profile share its profile variables. `#unvar` takes the name out of both scopes, so the profile value goes for every session on the profile.
 
 Vosh also fills session variables on its own. GMCP binds `hp`, `maxhp`, `char_name`, `room_name`, `target_name`, and more, and setting a target with `tar` mirrors it into `$target`.
 
@@ -794,7 +794,7 @@ The session button in the title band holds the connection controls. Its dot show
 
 `Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
 
-Disconnecting has side effects. Session scoped variables clear when the next connection opens, so anything set with `#var` never carries into the new session, while profile variables survive. The chat pane buffer clears at disconnect. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
+Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane buffer clears at disconnect. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
