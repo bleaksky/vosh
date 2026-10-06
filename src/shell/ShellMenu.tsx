@@ -12,7 +12,9 @@ import { placeMenu } from '../ui/menuPlacement';
 
 // The floating menu the title band opens: the session menu and Add a
 // pane. SPEC 7 menu recipe on the SPEC 3 floating ground. It hangs 12
-// below its button (the session popover's 28 to 40), stays 8 inside
+// below its button (the session popover's 28 to 40), or 6 while it
+// lists the sessions (board 05 of the Sessions Sidebar review, 34),
+// so five rows fit whole at 720 by 450. It stays 8 inside
 // the window, closes on Esc through the escape stack or on a press
 // outside it, and moves focus with the arrow keys. Its role is menu, or
 // dialog while it holds a form. It renders into the body, like the pane
@@ -25,6 +27,7 @@ import { placeMenu } from '../ui/menuPlacement';
 // sessions does, gives way there.
 
 const GAP_BELOW_ANCHOR = 12;
+const GAP_BELOW_ANCHOR_LISTED = 6;
 const WINDOW_INSET = 8;
 
 /** Where the surface sits: under the button that opened it, or with its
@@ -57,6 +60,7 @@ function placeUnder(
   anchor: HTMLElement | null,
   align: 'center' | 'end',
   width: number,
+  gap: number,
 ): { left: number; top: number } {
   if (!anchor) return { left: WINDOW_INSET, top: WINDOW_INSET };
   const r = anchor.getBoundingClientRect();
@@ -64,7 +68,7 @@ function placeUnder(
   const max = window.innerWidth - width - WINDOW_INSET;
   return {
     left: Math.round(Math.max(WINDOW_INSET, Math.min(ideal, max))),
-    top: Math.round(r.bottom + GAP_BELOW_ANCHOR),
+    top: Math.round(r.bottom + gap),
   };
 }
 
@@ -80,6 +84,7 @@ export function ShellMenu({
   children,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const gap = listed ? GAP_BELOW_ANCHOR_LISTED : GAP_BELOW_ANCHOR;
   const x = at?.x;
   const y = at?.y;
   // Placed on the first render, so the surface is visible and focusable
@@ -87,7 +92,9 @@ export function ShellMenu({
   // before the first paint and moves up when it would run off the
   // bottom.
   const [pos, setPos] = useState(() =>
-    x === undefined || y === undefined ? placeUnder(anchor, align, width) : { left: x, top: y },
+    x === undefined || y === undefined
+      ? placeUnder(anchor, align, width, gap)
+      : { left: x, top: y },
   );
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -103,7 +110,7 @@ export function ShellMenu({
     const place = () =>
       setPos(
         x === undefined || y === undefined
-          ? placeUnder(anchor, align, width)
+          ? placeUnder(anchor, align, width, gap)
           : placeMenu(
               { x, y, flipY: y },
               width,
@@ -121,7 +128,7 @@ export function ShellMenu({
       window.removeEventListener('resize', place);
       watch?.disconnect();
     };
-  }, [anchor, align, width, x, y]);
+  }, [anchor, align, width, gap, x, y]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {

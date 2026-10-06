@@ -184,6 +184,20 @@ describe('the session popover with the sidebar folded', () => {
       'New session…⌘T',
       'Disconnect',
     ]);
+    // Frame 05 draws no line between Rename session… and New session…,
+    // so five rows fit whole at 720 by 450.
+    const actions = findAll(
+      menu,
+      (el) => hasClass('shell-menu-item')(el) || hasClass('shell-menu-sep')(el),
+    ).map((el) => (hasClass('shell-menu-sep')(el) ? '|' : el.textContent));
+    expect(actions).toEqual([
+      '|',
+      'Edit connection…',
+      'Rename session…',
+      'New session…⌘T',
+      '|',
+      'Disconnect',
+    ]);
     // Every row wears its mark. The one in front wears the check, Orla
     // the count of what waits there in place of her key.
     const marks = items
