@@ -139,6 +139,9 @@ export interface HandleParts {
   quiet(): boolean;
   /** Rows lent to the pinned prompt band. */
   lent(): number;
+  /** The session whose terminal this is, whose native grid the prompt
+   *  card reads. */
+  session: number;
 }
 
 // Match-highlight colors. Read from CSS vars at search time so a
@@ -168,8 +171,19 @@ const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
 
 /** The handle a terminal pane gives its host once it is set up. */
 export function terminalHandle(parts: HandleParts): TerminalHandle {
-  const { term, searchAddon, paneSizer, sizer, host, write, outputTaken, region, quiet, lent } =
-    parts;
+  const {
+    term,
+    searchAddon,
+    paneSizer,
+    sizer,
+    host,
+    write,
+    outputTaken,
+    region,
+    quiet,
+    lent,
+    session,
+  } = parts;
   // The cell grid the renderer in use draws, in client px: the box it
   // fills and the size of a cell, or null before it has a size. The
   // native grid draws from the pane's top left, below the pixels its
@@ -289,13 +303,13 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
     },
     promptRegion: async () => {
       if (!quiet() && nativeSurfaceEnabled()) {
-        return regionFromCursor(await terminalCursor().catch(() => null));
+        return regionFromCursor(await terminalCursor(session).catch(() => null));
       }
       return regionFromXterm(region(), term.buffer.active, term.cols);
     },
     screenRows: async () => {
       if (!quiet() && nativeSurfaceEnabled()) {
-        const screen = await terminalScreenRows().catch(() => null);
+        const screen = await terminalScreenRows(session).catch(() => null);
         return screen ? { rows: screen.rows, cols: screen.cols, atBottom: screen.at_bottom } : null;
       }
       const buffer = term.buffer.active;

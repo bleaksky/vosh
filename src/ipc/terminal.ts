@@ -129,11 +129,11 @@ export async function terminalLocalWrite(
   await invoke('terminal_local_write', { text, after, session });
 }
 
-/** You started or stopped selecting text or reading back in xterm. While
- *  you do, a clock piece in your design leaves your prompt in the text as
- *  it is. */
-export async function terminalReaderBusy(busy: boolean): Promise<void> {
-  await invoke('terminal_reader_busy', { busy });
+/** You started or stopped selecting text or reading back in the xterm
+ *  of `session`. While you do, a clock piece in your design leaves that
+ *  session's prompt in the text as it is. */
+export async function terminalReaderBusy(busy: boolean, session: number): Promise<void> {
+  await invoke('terminal_reader_busy', { busy, session });
 }
 
 /** Where the native grid's cursor sits and where its open region
@@ -148,12 +148,13 @@ export interface TerminalCursor {
   region: { gen: number; line: number; col: number } | null;
 }
 
-/** The native grid's cursor and open region, for mapping a pointer to a
- *  piece of your prompt while the native renderer draws the terminal.
- *  Null before the grid exists and on a build without it. xterm reads its
- *  own buffer instead. */
-export async function terminalCursor(): Promise<TerminalCursor | null> {
-  return invoke('terminal_cursor');
+/** The cursor and open region of a session's native grid, the selected
+ *  session's when it names none, for mapping a pointer to a piece of your
+ *  prompt while the native renderer draws the terminal. Null before the
+ *  grid exists and on a build without it. xterm reads its own buffer
+ *  instead. */
+export async function terminalCursor(session?: number): Promise<TerminalCursor | null> {
+  return invoke('terminal_cursor', { session });
 }
 
 /** The native grid's live screen as text: each row with trailing blanks
@@ -164,11 +165,12 @@ export interface TerminalScreenRows {
   at_bottom: boolean;
 }
 
-/** The native grid's live screen as text, for the prompt card's marks
- *  while the profile reads no prompt. Null before the grid exists and on
- *  a build without it. xterm reads its own buffer instead. */
-export async function terminalScreenRows(): Promise<TerminalScreenRows | null> {
-  return invoke('terminal_screen_rows');
+/** The live screen of a session's native grid as text, the selected
+ *  session's when it names none, for the prompt card's marks while the
+ *  profile reads no prompt. Null before the grid exists and on a build
+ *  without it. xterm reads its own buffer instead. */
+export async function terminalScreenRows(session?: number): Promise<TerminalScreenRows | null> {
+  return invoke('terminal_screen_rows', { session });
 }
 
 export interface ScrollbackLoad {
@@ -179,9 +181,15 @@ export interface ScrollbackLoad {
   seededNative: boolean;
 }
 
-export async function loadScrollback(feedNative = false): Promise<ScrollbackLoad> {
+/** The lines a session keeps for its terminal, the selected session's
+ *  when it names none. */
+export async function loadScrollback(
+  feedNative = false,
+  session?: number,
+): Promise<ScrollbackLoad> {
   const res = await invoke<{ bytes: number[]; seeded_native: boolean }>('scrollback_load', {
     feedNative,
+    session,
   });
   return { bytes: new Uint8Array(res.bytes), seededNative: res.seeded_native };
 }
@@ -197,8 +205,9 @@ export function highlightGroundSet(ground: {
   return invoke('highlight_ground_set', { ...ground });
 }
 
-/** Forget the lines kept for the next launch, and on the native renderer
- *  the grid's history too. xterm clears its own buffer. */
-export async function scrollbackClear(): Promise<void> {
-  await invoke('scrollback_clear');
+/** Forget the lines a session keeps for the next launch, the selected
+ *  session's when it names none, and on the native renderer its grid's
+ *  history too. xterm clears its own buffer. */
+export async function scrollbackClear(session?: number): Promise<void> {
+  await invoke('scrollback_clear', { session });
 }

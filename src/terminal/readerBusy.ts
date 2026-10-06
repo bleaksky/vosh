@@ -1,8 +1,9 @@
-// Whether you are selecting text or reading back in xterm, which the
-// session hears so a clock piece in your design waits to repaint your
-// prompt while you do (decision 6 of the prompt build spec). The native
-// grid holds its own selection and scroll, which the session reads
-// itself.
+// Whether you are selecting text or reading back in a session's xterm,
+// which that session hears so a clock piece in your design waits to
+// repaint its prompt while you do (decision 6 of the prompt build spec).
+// Each session keeps its own, since its terminal keeps its selection and
+// its scroll while another session shows. The native grid holds its own
+// selection and scroll, which the session reads itself.
 
 import { terminalReaderBusy } from '../ipc/terminal';
 
@@ -34,11 +35,17 @@ export function readerTracker(send: (busy: boolean) => void): ReaderTracker {
   };
 }
 
-const reader = readerTracker((busy) => {
-  terminalReaderBusy(busy).catch(() => {});
-});
+/** Each session's tracker, by session. */
+const readers = new Map<number, ReaderTracker>();
 
-/** Tell the session that `part` started or stopped holding. */
-export function noteReader(part: ReaderPart, on: boolean): void {
+/** Tell `session` that `part` started or stopped holding. */
+export function noteReader(part: ReaderPart, on: boolean, session: number): void {
+  let reader = readers.get(session);
+  if (!reader) {
+    reader = readerTracker((busy) => {
+      terminalReaderBusy(busy, session).catch(() => {});
+    });
+    readers.set(session, reader);
+  }
   reader.note(part, on);
 }

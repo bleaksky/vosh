@@ -147,6 +147,64 @@ describe('sessionsStore', () => {
     expect(store.getSelected()).toBe(1);
   });
 
+  it('opens the session the first list selects, and each selection the app finished', async () => {
+    let finish: (value: null) => void = () => undefined;
+    commands.set(
+      'session_select',
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const store = await load();
+    expect(store.getOpened()).toEqual([1]);
+    // A selection shows at once, and the window opens the session only
+    // once the app read what it kept.
+    store.select(2);
+    expect(store.getOpened()).toEqual([1]);
+    finish(null);
+    await settle();
+    expect(store.getOpened()).toEqual([1, 2]);
+    // A later list that selects the first session again opens nothing
+    // new.
+    fire('vosh://sessions-changed', [TOLLIVER, ORLA]);
+    expect(store.getOpened()).toEqual([1, 2]);
+  });
+
+  it('opens the session a banner click selects', async () => {
+    const store = await load();
+    commands.set('sessions_list', () => ORLA_SELECTED);
+    fire('vosh://session-selected', { session: 2 });
+    await settle();
+    expect(store.getOpened()).toEqual([1, 2]);
+  });
+
+  it('opens no session the app refuses, and lets one that closes go', async () => {
+    const store = await load();
+    commands.set('session_select', () => {
+      throw new Error('No such session.');
+    });
+    store.select(3);
+    await settle();
+    expect(store.getOpened()).toEqual([1]);
+    commands.set('session_select', () => null);
+    store.select(2);
+    await settle();
+    expect(store.getOpened()).toEqual([1, 2]);
+    fire('vosh://sessions-changed', [{ ...ORLA, selected: true }]);
+    expect(store.getOpened()).toEqual([2]);
+  });
+
+  it('names the other sessions on the profile a session plays', async () => {
+    const maren = { ...row(3, 'Maren', 1848), profile: 'Tolliver' };
+    commands.set('sessions_list', () => [TOLLIVER, ORLA, maren]);
+    const store = await load();
+    expect(store.othersOnProfile(1)).toEqual([3]);
+    expect(store.othersOnProfile(3)).toEqual([1]);
+    expect(store.othersOnProfile(2)).toEqual([]);
+    expect(store.othersOnProfile(9)).toEqual([]);
+  });
+
   it('tells a selection listener only when the selection moves', async () => {
     const store = await load();
     const moved = vi.fn();

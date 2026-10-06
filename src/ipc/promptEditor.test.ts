@@ -248,7 +248,7 @@ describe('the prompt editor events', () => {
     vi.mocked(listen).mockImplementation(() => Promise.resolve(() => {}));
   });
 
-  it('asks the native grid where its cursor and open region are', async () => {
+  it('asks the grid of a session where its cursor and open region are', async () => {
     const report = {
       line: 1,
       col: 9,
@@ -257,8 +257,8 @@ describe('the prompt editor events', () => {
       region: { gen: 3, line: 1, col: 0 },
     };
     vi.mocked(invoke).mockImplementation(() => Promise.resolve(report));
-    await expect(terminalCursor()).resolves.toEqual(report);
-    expect(vi.mocked(invoke).mock.calls).toEqual([['terminal_cursor']]);
+    await expect(terminalCursor(2)).resolves.toEqual(report);
+    expect(vi.mocked(invoke).mock.calls).toEqual([['terminal_cursor', { session: 2 }]]);
   });
 });
 

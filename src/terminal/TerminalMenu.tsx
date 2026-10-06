@@ -27,6 +27,8 @@ interface Props {
    *  top-left corner here, clamped so it never overflows the window. */
   x: number;
   y: number;
+  /** The selected session, whose terminal the menu acts on. */
+  session: number;
   termRef: RefObject<TerminalHandle | null>;
   inputRef: RefObject<InputHandle | null>;
   onOpenFind: () => void;
@@ -68,6 +70,7 @@ const EDGE_MARGIN = 8;
 export function TerminalMenu({
   x,
   y,
+  session,
   termRef,
   inputRef,
   onOpenFind,
@@ -130,7 +133,7 @@ export function TerminalMenu({
     // Same fork as the Cmd+C path in Input.tsx: the native surface owns
     // the visible selection when enabled, xterm otherwise.
     if (nativeSurfaceEnabled()) {
-      void nativeSurfaceCopy().catch(() => {});
+      void nativeSurfaceCopy(session).catch(() => {});
       return;
     }
     const text = termRef.current?.getSelection() ?? '';
@@ -143,7 +146,7 @@ export function TerminalMenu({
   // native grid selects through its own command, xterm otherwise.
   const runSelectAll = () => {
     if (nativeSurfaceEnabled()) {
-      void nativeSurfaceSelectAll().catch(() => {});
+      void nativeSurfaceSelectAll(session).catch(() => {});
       return;
     }
     termRef.current?.selectAll();
@@ -163,7 +166,7 @@ export function TerminalMenu({
   // its own buffer, and the backend clears the native grid.
   const runClear = () => {
     if (!nativeSurfaceEnabled()) termRef.current?.clear();
-    void scrollbackClear().catch(() => {});
+    void scrollbackClear(session).catch(() => {});
   };
 
   // Groups split by separators.

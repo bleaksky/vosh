@@ -1,0 +1,231 @@
+import { act, createElement } from 'react';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
+
+// Each session's terminal hears every session's output event and writes
+// only its own session's. React DOM mounts two terminals on a stand in
+// DOM (src/test/fakeDom.ts). xterm and the parts that draw stand in too,
+// so what reaches each terminal's region writer is what it would write.
+
+type Handler = (event: { payload: unknown }) => void;
+const bus = vi.hoisted(() => ({
+  handlers: new Map<string, Set<(event: { payload: unknown }) => void>>(),
+  invoked: [] as [string, unknown][],
+  /** What each terminal's region writer took, by the xterm it writes. */
+  written: new Map<object, string[]>(),
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (event: string, cb: Handler) => {
+    let set = bus.handlers.get(event);
+    if (!set) bus.handlers.set(event, (set = new Set()));
+    set.add(cb);
+    return () => set.delete(cb);
+  },
+  emit: async () => undefined,
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: async (cmd: string, args?: unknown) => {
+    bus.invoked.push([cmd, args]);
+    if (cmd === 'scrollback_load') return { bytes: [], seeded_native: false };
+    return null;
+  },
+}));
+
+vi.mock('@xterm/xterm', () => {
+  const none = () => ({ dispose() {} });
+  class Terminal {
+    cols = 80;
+    rows = 24;
+    options: Record<string, unknown>;
+    unicode = { activeVersion: '' };
+    buffer = { active: { cursorY: 23, baseY: 0, viewportY: 0, type: 'normal' } };
+    constructor(options: Record<string, unknown>) {
+      this.options = { ...options };
+    }
+    loadAddon() {}
+    open() {}
+    onResize = none;
+    onScroll = none;
+    onSelectionChange = none;
+    getSelectionPosition() {
+      return undefined;
+    }
+    hasSelection() {
+      return false;
+    }
+    getSelection() {
+      return '';
+    }
+    dispose() {}
+  }
+  return { Terminal };
+});
+
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: class {} }));
+vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }));
+vi.mock('@xterm/addon-unicode11', () => ({ Unicode11Addon: class {} }));
+vi.mock('@xterm/addon-search', () => ({
+  SearchAddon: class {
+    onDidChangeResults() {
+      return { dispose() {} };
+    }
+    dispose() {}
+  },
+}));
+vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
+
+vi.mock('./terminalRegion', () => ({
+  RegionWriter: class {
+    private readonly took: string[] = [];
+    constructor(term: object) {
+      bus.written.set(term, this.took);
+    }
+    output(out: { text: string }) {
+      this.took.push(out.text);
+    }
+    local() {}
+    pad() {}
+    onErase() {}
+    pendingRows() {
+      return 0;
+    }
+    region() {
+      return null;
+    }
+    whenParsed(then: () => void) {
+      then();
+    }
+    resize() {}
+    dispose() {}
+  },
+}));
+vi.mock('./paneSizer', () => ({
+  PaneSizer: class {
+    nativeSpare = 0;
+    safeFit = () => {};
+    start() {}
+    stop() {}
+    show() {}
+    placeGrid() {}
+    reportCellSize() {}
+    relayout() {}
+    fitKept() {}
+  },
+}));
+vi.mock('./xterm/liftBands', () => ({
+  LiftTracker: class {
+    dropFrom() {}
+    dispose() {}
+  },
+  BandLayer: class {},
+  markLifted: () => {},
+}));
+vi.mock('./xterm/xtermBlink', () => ({
+  XtermBlink: class {
+    setOn() {}
+    setWebgl() {}
+    dispose() {}
+  },
+}));
+vi.mock('./xterm/xtermWebgl', () => ({ xtermWebgl: () => ({ load() {}, release() {} }) }));
+vi.mock('./xterm/xtermMirror', () => ({
+  XtermMirror: class {
+    mirrors() {
+      return true;
+    }
+    write(step: () => void) {
+      step();
+    }
+    check() {}
+  },
+  underlayShows: () => false,
+}));
+vi.mock('./native/underlayPointer', () => ({ forwardUnderlayPointer: () => () => {} }));
+
+const doc = new FakeDocument();
+let createRoot: typeof import('react-dom/client').createRoot;
+
+beforeAll(async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('window', {
+    document: doc,
+    location: { protocol: 'about:' },
+    HTMLIFrameElement: class {},
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  const storage = { getItem: () => null, setItem() {}, removeItem() {} };
+  vi.stubGlobal('localStorage', storage);
+  vi.stubGlobal('sessionStorage', storage);
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('Node', FakeNode);
+  vi.stubGlobal('Element', FakeElement);
+  vi.stubGlobal('HTMLElement', FakeElement);
+  // The pane finds the terminal area it lifts your prompts in, which
+  // this stand in leaves out.
+  (FakeElement.prototype as unknown as { closest: () => null }).closest = () => null;
+  // React DOM checks for a DOM once, when it loads.
+  ({ createRoot } = await import('react-dom/client'));
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
+/** The base64 of a line of game text. */
+const b64 = (text: string) => btoa(text);
+
+function output(session: number, text: string): void {
+  for (const cb of bus.handlers.get('session://output') ?? []) {
+    cb({ payload: { session, b64: b64(text) } });
+  }
+}
+
+describe('a terminal for each session', () => {
+  it('writes only the output of its own session', async () => {
+    const { Terminal } = await import('./Terminal');
+    const handles = new Map<number, object>();
+    const pane = (session: number, shown: boolean) =>
+      createElement(Terminal, {
+        key: session,
+        session,
+        shown,
+        fontFamily: 'monospace',
+        fontSize: 13,
+        lineHeight: 1.2,
+        themeTerminalColors: false,
+        onReady: (handle) => handles.set(session, handle),
+      });
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () => root.render([pane(1, true), pane(2, false)]));
+    expect(handles.size).toBe(2);
+    expect(bus.written.size).toBe(2);
+    // Each pane loaded its own session's scrollback.
+    const loads = bus.invoked.filter(([cmd]) => cmd === 'scrollback_load').map(([, a]) => a);
+    expect(loads).toEqual([
+      { feedNative: false, session: 1 },
+      { feedNative: false, session: 2 },
+    ]);
+
+    // Lines of fixtures/room-colors/looks.json.
+    output(1, 'The day has begun.\r\n');
+    output(2, '[Exits: south]\r\n');
+    output(2, '<1020hp 800m 930mv> ');
+
+    const [tolliver, orla] = [...bus.written.values()];
+    expect(tolliver).toEqual(['The day has begun.\r\n']);
+    expect(orla).toEqual(['[Exits: south]\r\n', '<1020hp 800m 930mv> ']);
+    await act(async () => root.unmount());
+  });
+});

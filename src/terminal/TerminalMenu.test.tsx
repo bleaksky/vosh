@@ -38,6 +38,7 @@ vi.stubGlobal('localStorage', {
 store.set('vosh.nativesurface', '0');
 
 const props = {
+  session: 1,
   termRef: { current: null },
   inputRef: { current: null },
   onOpenFind: () => {},
