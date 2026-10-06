@@ -1904,6 +1904,13 @@
   outline-offset: 2px;
 }
 
+/* The button that plays the alert tone, 24 square and 8 px before the
+   Sound select, as board 1 of the Alerts review draws it. */
+.st-icon-button.st-auto-play {
+  width: 24px;
+  height: 24px;
+}
+
 .st-auto-patterns {
   display: flex;
   flex-direction: column;

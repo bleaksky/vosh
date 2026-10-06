@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import profileFull from '../../fixtures/config/profile.full.toml?raw';
 import type { AlertParts } from '../ipc/automation';
 import { ALERT_TONES } from '../stores/session/alertTones';
-import { alertOrNone, normalizeAlert, withAlertPart, type AlertPart } from './alertParts';
+import {
+  alertOrNone,
+  normalizeAlert,
+  withAlertPart,
+  withAlertParts,
+  type AlertPart,
+} from './alertParts';
 import { normalizeTrigger, triggerForSave } from './automationTriggers';
 
 /** The keys and values of the table `head` names in the TOML, each a
@@ -116,6 +122,26 @@ describe('withAlertPart', () => {
   it('leaves the table it was given alone', () => {
     const before = { ...VISITOR };
     withAlertPart(VISITOR, 'sound', false);
+    expect(VISITOR).toEqual(before);
+  });
+});
+
+describe('withAlertParts', () => {
+  it('starts from the default table, so a tone turns Sound on', () => {
+    expect(withAlertParts(undefined, { sound: 'bell' })).toEqual({ ...QUIET, sound: 'bell' });
+    expect(withAlertParts(undefined, { attention: 'until' })).toEqual({
+      ...QUIET,
+      attention: 'until',
+    });
+  });
+
+  it('sets what it is given and leaves the rest, and the table it was given, alone', () => {
+    const before = { ...VISITOR };
+    expect(withAlertParts(VISITOR, { words: false, sound: 'low' })).toEqual({
+      ...VISITOR,
+      words: false,
+      sound: 'low',
+    });
     expect(VISITOR).toEqual(before);
   });
 });

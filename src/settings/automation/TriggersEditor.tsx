@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { alertOrNone, withAlertPart } from '../../automation/alertParts';
+import { alertOrNone, withAlertPart, withAlertParts } from '../../automation/alertParts';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
@@ -37,6 +37,7 @@ import {
 } from '../../automation/automationTriggers';
 import {
   subscribeTriggersChanged,
+  type AlertParts,
   type HighlightStyle,
   type NamedColor,
   type TriggerAction,
@@ -59,7 +60,7 @@ import {
   type SelectOption,
 } from '../../ui';
 import { usePromptGags } from '../../stores/session/promptGagStore';
-import { AlertRow } from './AlertRows';
+import { AlertDetailRows, AlertRow } from './AlertRows';
 import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -134,6 +135,19 @@ const EFFECT_LABELS = {
   route: 'Also send to pane',
   script: 'Also run Lua',
 } as const;
+
+/** `v` with its alert table set by `fn`, or with none while the table
+ *  is the default, so a trigger that rings nothing saves no alert. */
+function withAlert(
+  v: TriggerRecord,
+  fn: (alert: AlertParts | undefined) => AlertParts,
+): TriggerRecord {
+  const next = { ...v };
+  const alert = alertOrNone(fn(v.alert));
+  if (alert) next.alert = alert;
+  else delete next.alert;
+  return next;
+}
 
 /** The color options, plus the stored one when it is not a named
  *  color, so a select never shows a value it does not hold. */
@@ -226,15 +240,7 @@ export function TriggerDetail({
       <AlertRow
         alert={t.alert}
         disabled={locked}
-        onPress={(part, on) =>
-          update((v) => {
-            const next = { ...v };
-            const alert = alertOrNone(withAlertPart(v.alert, part, on));
-            if (alert) next.alert = alert;
-            else delete next.alert;
-            return next;
-          })
-        }
+        onPress={(part, on) => update((v) => withAlert(v, (a) => withAlertPart(a, part, on)))}
       />
       <Row label="Enabled">
         <Toggle checked={t.enabled} disabled={locked} onChange={(enabled) => set({ enabled })} />
@@ -432,6 +438,11 @@ function TriggerAdvanced({
           )}
         </Row>
       ))}
+      <AlertDetailRows
+        alert={t.alert}
+        disabled={locked}
+        onChange={(patch) => update((v) => withAlert(v, (a) => withAlertParts(a, patch)))}
+      />
     </>
   );
 }

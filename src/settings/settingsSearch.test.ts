@@ -103,6 +103,8 @@ describe('searchSettingsRows', () => {
     expect(labels('flash')).toContain('Triggers');
     expect(labels('alert banner')).toEqual(['Triggers']);
     expect(labels('notification')).toEqual(['Triggers']);
+    expect(labels('alert tone')).toEqual(['Triggers']);
+    expect(labels('chime')).toEqual(['Triggers']);
   });
 
   it('shows loadouts only in loadout mode', () => {

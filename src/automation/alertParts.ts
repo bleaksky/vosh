@@ -10,8 +10,18 @@ import type { AlertParts } from '../ipc/automation';
 export type AlertPart = 'banner' | 'sound' | 'attention';
 
 /** The tone Sound plays until you pick another, Chime, the first of the
- *  tones Alerts Q4 lists. */
-const FIRST_TONE = 'chime';
+ *  tones Alerts Q4 lists. Its row under Advanced shows it while Sound
+ *  is off. */
+export const FIRST_TONE = 'chime';
+
+/** How long Bounce asks for you until you pick another, once. Its row
+ *  under Advanced shows it while Bounce is off. */
+export const FIRST_ATTENTION = 'once';
+
+/** The table of an alert with nothing on, as Rust reads an empty one.
+ *  It rings only while you are not looking at its session, and its
+ *  banner shows the title alone. */
+const QUIET: AlertParts = { banner: false, background: true, words: false };
 
 const isSwitch = (value: unknown) => value === undefined || typeof value === 'boolean';
 
@@ -45,12 +55,23 @@ export function withAlertPart(
   part: AlertPart,
   on: boolean,
 ): AlertParts {
-  const next: AlertParts = { ...(alert ?? { banner: false, background: true, words: false }) };
+  const next: AlertParts = { ...(alert ?? QUIET) };
   if (part === 'banner') next.banner = on;
   else if (!on) delete next[part];
   else if (part === 'sound') next.sound = next.sound ?? FIRST_TONE;
-  else next.attention = next.attention ?? 'once';
+  else next.attention = next.attention ?? FIRST_ATTENTION;
   return next;
+}
+
+/** `alert` with `patch` laid over it, from the default table when the
+ *  trigger rings none. The table holds no tone for a Sound that is off,
+ *  so a tone picked there turns Sound on, and a length turns Bounce on
+ *  the same way. */
+export function withAlertParts(
+  alert: AlertParts | undefined,
+  patch: Partial<AlertParts>,
+): AlertParts {
+  return { ...(alert ?? QUIET), ...patch };
 }
 
 /** `alert`, or undefined when it is the default table, with nothing on,
