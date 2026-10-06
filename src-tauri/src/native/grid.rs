@@ -127,6 +127,10 @@ pub(crate) struct TermGrid {
     /// Line ends the session asked the grid to keep back, written before
     /// the next write lands, while your prompt shows pinned.
     pending_hold: Vec<u8>,
+    /// `pending_hold` is the line end your echo ended on, and no session
+    /// output came since, so the line ends the next one holds back come
+    /// after it.
+    echo_held: bool,
     /// Lifts whose start mark this output fed, with what it fed since.
     lift_tracks: Vec<LiftTrack>,
     /// The row a pinned prompt left is where the next write lands, so the
@@ -152,6 +156,7 @@ impl TermGrid {
             region: None,
             pending_utf8: Vec::new(),
             pending_hold: Vec::new(),
+            echo_held: false,
             lift_tracks: Vec::new(),
             pin_row: false,
             taken: 0,
