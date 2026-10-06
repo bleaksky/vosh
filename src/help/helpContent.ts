@@ -9,6 +9,8 @@
 //   - A block whose lines all start with "|" renders as a table, its
 //     first row the head and its row of dashes left out.
 //   - Backticks delimit inline code.
+//   - A block fenced by ``` lines, like ```lua, renders as a code
+//     block, blank lines and all.
 
 export interface HelpTopic {
   /** Stable id, used as the key in the topic rail. */
@@ -445,7 +447,8 @@ export const HELP_TOPICS: HelpTopic[] = [
 export type HelpBlock =
   | { kind: 'paragraph'; text: string }
   | { kind: 'list'; items: string[] }
-  | { kind: 'table'; head: string[]; rows: string[][] };
+  | { kind: 'table'; head: string[]; rows: string[][] }
+  | { kind: 'code'; lang: string; text: string };
 
 /** The cells of a table line, `| a | b |` as `a` and `b`. */
 function tableCells(line: string): string[] {
@@ -460,6 +463,20 @@ function tableCells(line: string): string[] {
 /** Read a help body into its blocks, in the format at the top of this
  *  file. */
 export function parseHelpBody(body: string): HelpBlock[] {
+  return body.split(/^(```[^\n]*\n[\s\S]*?\n```)$/m).flatMap((chunk, i): HelpBlock[] => {
+    // The split puts each fenced block at an odd index.
+    if (i % 2 === 1) {
+      const lines = chunk.split('\n');
+      return [
+        { kind: 'code', lang: lines[0].slice(3).trim(), text: lines.slice(1, -1).join('\n') },
+      ];
+    }
+    return proseBlocks(chunk);
+  });
+}
+
+/** The paragraphs, lists and tables of a stretch of body with no code. */
+function proseBlocks(body: string): HelpBlock[] {
   return body
     .split(/\n\n+/)
     .map((b) => b.trim())
