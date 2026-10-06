@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{Action, ScriptEngine, ScriptOutcome};
+use crate::{Action, Owner, ScriptEngine, ScriptOutcome};
 
 /// Run `f` on a thread of its own and hand back what it returns,
 /// failing the test when it has not returned within ten seconds, so Lua
@@ -37,7 +37,7 @@ pub(crate) fn stock_and_vosh(body: &str) -> (String, String) {
         "=t",
     );
     let vosh = match outcome.actions.as_slice() {
-        [Action::Log(text)] => text.clone(),
+        [Action::Log { text, .. }] => text.clone(),
         other => panic!("Vosh failed on {body}: {other:?}"),
     };
     (stock, vosh)
@@ -53,13 +53,28 @@ pub(crate) fn same_as_stock(bodies: &[&str]) {
     }
 }
 
-/// The lines Vosh printed about the Lua, errors and stops alike.
+/// The error lines Vosh printed about the Lua, errors and stops alike.
 pub(crate) fn error_lines(outcome: &ScriptOutcome) -> Vec<String> {
     outcome
         .actions
         .iter()
         .filter_map(|action| match action {
-            Action::Error(line) => Some(line.clone()),
+            Action::Error { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Each line Vosh printed about the Lua, an error, a note or a print,
+/// with whose Lua it is about, in order.
+pub(crate) fn said(outcome: &ScriptOutcome) -> Vec<(&'static str, Owner, String)> {
+    outcome
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Error { owner, text, .. } => Some(("error", owner.clone(), text.clone())),
+            Action::Note { owner, text } => Some(("note", owner.clone(), text.clone())),
+            Action::Log { owner, text } => Some(("print", owner.clone(), text.clone())),
             _ => None,
         })
         .collect()

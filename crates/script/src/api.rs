@@ -191,10 +191,18 @@ fn mud_echo(lua: &Lua, text: mlua::String) -> LuaResult<()> {
     Ok(())
 }
 
-/// `mud.log`, and the line `print` makes.
+/// `mud.log`, and the line `print` makes. The line goes with the owner
+/// of the call that printed it, so the Scripts page shows it with that
+/// plugin.
 pub(crate) fn mud_log(lua: &Lua, text: mlua::String) -> LuaResult<()> {
-    queue_capped(lua, [(&text, ECHO_BYTES)], |[text]| Action::Log(text))?;
-    Ok(())
+    let Some([text]) = all_capped(lua, [(&text, ECHO_BYTES)])? else {
+        return Ok(());
+    };
+    with_state(lua, |s| {
+        let owner = s.owner();
+        s.queue(Action::Log { owner, text });
+        Ok(())
+    })
 }
 
 /// `mud.alias`. A plugin's alias lasts for the session and belongs to

@@ -21,6 +21,7 @@ import { searchSettingsRows, settingsRowKey, type SettingsRowEntry } from './set
 import {
   AppearanceIcon,
   BoltIcon,
+  CodeIcon,
   GearIcon,
   Keycap,
   KeyboardIcon,
@@ -32,7 +33,7 @@ import {
 
 // The Settings sidebar (the approved boards): a 32 px drag strip where
 // macOS puts the traffic lights, the search pill at (12, 44), and the
-// six group nav at (8, 84). While the search holds text its results
+// seven group nav at (8, 84). While the search holds text its results
 // replace the nav. Each result is a row, not a group. Enter or a click
 // opens it, and the frame scrolls the row into view and flashes it.
 
@@ -42,6 +43,7 @@ const GROUP_ICONS: Record<SettingsGroup, () => ReactNode> = {
   layout: () => <LayoutIcon />,
   input: () => <KeyboardIcon />,
   automation: () => <BoltIcon />,
+  scripts: () => <CodeIcon />,
   characters: () => <UserIcon />,
 };
 

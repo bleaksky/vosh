@@ -11,6 +11,7 @@ pub(crate) mod native_surface;
 pub(crate) mod panes;
 pub(crate) mod profiles;
 pub(crate) mod prompt;
+pub(crate) mod scripts;
 pub(crate) mod session;
 pub(crate) mod terminal;
 pub(crate) mod tick;
@@ -18,6 +19,17 @@ pub(crate) mod ui_config;
 pub(crate) mod updater;
 pub(crate) mod windows;
 pub(crate) mod wizard;
+
+/// Your Downloads folder, where Export to Downloads saves a profile or a
+/// plugin, or the sentence a command returns when the system names none.
+pub(crate) fn downloads_dir<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    app.path()
+        .download_dir()
+        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())
+}
 
 /// Every command the page can invoke, routed by its function name. The
 /// IPC contract test reads this list, so a command the page calls and
@@ -141,6 +153,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         prompt::prompt_watch,
         prompt::prompt_gags_without_reader,
         characters::profile_export_file,
+        characters::profile_import_read,
+        characters::profile_import_apply,
         ui_config::ui_set_theme,
         affects::ui_set_affects_display,
         ui_config::ui_get_chat_colors,
@@ -160,5 +174,19 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::import_apply,
         windows::menu_set_state,
         windows::menu_copy,
+        scripts::lua_output_get,
+        scripts::lua_output_clear,
+        scripts::lua_run,
+        scripts::plugins_list,
+        scripts::plugin_read,
+        scripts::plugin_create,
+        scripts::plugin_save,
+        scripts::plugin_set_enabled,
+        scripts::plugin_reload,
+        scripts::plugin_reveal,
+        scripts::plugin_install_check,
+        scripts::plugin_install,
+        scripts::plugin_export,
+        scripts::plugin_remove,
     ]
 }

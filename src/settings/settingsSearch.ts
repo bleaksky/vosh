@@ -397,7 +397,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   // Automation, from the approved board.
   {
     label: 'Triggers',
-    keywords: 'trigger pattern highlight gag replace route wash regex',
+    keywords:
+      'trigger pattern highlight gag replace route wash regex text starts with match mode alert banner notification sound tone chime bell knock bounce flash',
     target: at('automation', 'triggers'),
   },
   {
@@ -407,7 +408,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Macros',
-    keywords: 'macro key binding keyboard shortcut',
+    keywords: 'macro key binding keyboard shortcut numpad',
     target: at('automation', 'macros'),
   },
   {
@@ -422,7 +423,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Presets',
-    keywords: 'preset triggers built in',
+    keywords:
+      'preset triggers macros built in numpad movement walk keys alerts tells name attacked health connection banner notification sound',
     target: at('automation', 'presets'),
   },
   {
@@ -442,6 +444,19 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('automation', undefined, 'json'),
   },
 
+  // Scripts, from the approved boards. A section here names a plugin,
+  // so each row is an anchor on the list page.
+  {
+    label: 'Plugins',
+    keywords: 'lua script plugin install new',
+    target: at('scripts', undefined, 'plugins'),
+  },
+  {
+    label: 'Console',
+    keywords: 'lua print run output errors',
+    target: at('scripts', undefined, 'console'),
+  },
+
   // Characters, from the approved board. No section means the active
   // profile.
   {
@@ -453,6 +468,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     label: 'New profile',
     keywords: 'profile character create add',
     target: at('characters', undefined, 'new-profile'),
+  },
+  {
+    label: 'Import a profile',
+    keywords: 'import export toml share',
+    target: at('characters', undefined, 'import-profile'),
   },
   {
     label: 'Use this profile when you log in',

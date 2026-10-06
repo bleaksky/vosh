@@ -132,10 +132,10 @@ pub(crate) const GAME_PROMPT_SEEN: &str = "session://game-prompt-seen";
 /// `onPromptGagWithoutReader` hears it.
 pub(crate) const PROMPT_GAG_WITHOUT_READER: &str = "session://prompt-gag-without-reader";
 /// An alert rang in the session, from a trigger, a preset or Lua. The
-/// payload is a [`crate::alert::AlertPayload`]. `onAlert` hears it, and
-/// the sessions sidebar marks the row of a session you are not looking
-/// at. The page half of the alerts will play its tone and show its
-/// notice.
+/// payload is a [`crate::alert::AlertPayload`]. `onAlert` hears it.
+/// The main window plays its tone, and the sessions sidebar marks the
+/// row of a session you are not looking at. The page half of the alerts
+/// will show its notice.
 pub(crate) const ALERT: &str = "session://alert";
 /// Something for you happened in the session, the event of an alert
 /// preset or an alert a trigger or Lua raised, that rang nothing: its
@@ -156,6 +156,12 @@ pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
 /// through the tries and the triangle when no link comes of them. The
 /// reconnect notice will hear it too.
 pub(crate) const RECONNECT: &str = "session://reconnect";
+/// The `[lua]` lines a step added to the session's Output ring, and the
+/// lines you typed in the Scripts console. The payload is a
+/// [`crate::script::output::LuaOutputPayload`]. `subscribeLuaOutput`
+/// hears it, and the Scripts page in Settings shows the lines in its
+/// Console.
+pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 
 // The lists.
 
@@ -189,10 +195,20 @@ pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 
+// Plugins.
+
+/// Sent to every window when the plugins changed: the Scripts page made
+/// one, saved one, turned one on or off in a profile or loaded one again,
+/// a profile switch turned a session's plugins over, or Vosh stopped one
+/// in a session. The payload is null. `subscribePluginsChanged` hears
+/// it, and the Scripts page in Settings reads the list again.
+pub(crate) const PLUGINS_CHANGED: &str = "vosh://plugins-changed";
+
 // Profiles.
 
-/// Sent to every window when a profile was made, renamed, duplicated or
-/// deleted, its login or world changed, or the sharing scope changed.
+/// Sent to every window when a profile was made, renamed, duplicated,
+/// deleted or imported, its login or world changed, or the sharing scope
+/// changed.
 /// The payload is the profile's name, or `"scope"` after a scope change.
 /// `subscribeProfilesChanged` hears it.
 pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
@@ -202,10 +218,11 @@ pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
 /// payload is that profile's name. `subscribeProfileSwitched` and the
 /// pane layout's `ensureListening` hear it.
 pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
-/// Sent after an edit to one profile's detail, active or not, naming
-/// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
-/// `vosh://pane-layout-changed` it carries no data, so an edit to an
-/// inactive profile can never reach the main window's stores.
+/// Sent after an edit to one profile's detail, or an import to it,
+/// active or not, naming it as `{ name }`. Unlike
+/// `vosh://tracked-affects-changed` and `vosh://pane-layout-changed` it
+/// carries no data, so an edit to an inactive profile can never reach the
+/// main window's stores.
 /// `subscribeProfileChanged` hears it.
 pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
 /// Sent with the selected session's
@@ -759,6 +776,7 @@ mod tests {
             command: "kick".into(),
             group: Some("combat".into()),
             enabled: true,
+            preset: None,
         });
         assert_eq!(
             changes(&mut p, &mut c, "#group combat off").events(),
@@ -870,6 +888,7 @@ mod tests {
             command: "kick".into(),
             group: Some("combat".into()),
             enabled: true,
+            preset: None,
         });
         let toggle = |enabled| vosh_script::ScriptOutcome {
             actions: vec![vosh_script::Action::SetGroupEnabled {

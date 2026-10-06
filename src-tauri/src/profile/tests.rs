@@ -144,6 +144,7 @@ fn macro_omits_enabled_while_on_and_keeps_it_off() {
         command: "kick".into(),
         group: None,
         enabled: true,
+        preset: None,
     };
     let json = serde_json::to_string(&on).unwrap();
     assert!(!json.contains("enabled"), "{json}");
@@ -171,12 +172,14 @@ fn macro_enabled_round_trips_through_toml() {
                 command: "kick".into(),
                 group: Some("combat".into()),
                 enabled: false,
+                preset: None,
             },
             Macro {
                 key: "F2".into(),
                 command: "bash".into(),
                 group: None,
                 enabled: true,
+                preset: None,
             },
         ],
     };

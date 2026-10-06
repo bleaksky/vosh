@@ -261,6 +261,7 @@ fn commit_mudlet_key(item: MudletItem, report: &mut ImportReport) {
         command,
         group: None,
         enabled: true,
+        preset: None,
     });
 }
 

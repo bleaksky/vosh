@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
+import keptKeys from '../../fixtures/macros/kept-keys.json';
+import type { Macro } from '../ipc/automation';
+import { PRESET_ALERT_DEFAULT } from './alertPresets';
 import {
   addDraftItem,
   createDraft,
@@ -25,6 +28,7 @@ import {
   formatInterval,
   importErrorMessage,
   jsonListText,
+  keysYourMacrosKeep,
   loadoutToggles,
   macroSavePlan,
   normalizeAlias,
@@ -52,7 +56,7 @@ import {
   type TimerStoreApi,
 } from './automationRecords';
 import { buildSections, foldedStorageKey } from './automationList';
-import { defaultEnabledIds, PRESETS } from './presets';
+import { defaultEnabledIds, presetById, PRESETS } from './presets';
 
 describe('aliases', () => {
   it('normalizes and saves in the shape aliases_import reads', () => {
@@ -164,19 +168,27 @@ describe('macros', () => {
     const store = start.map((m) => ({ ...m }));
     const calls: string[] = [];
     let failOn: string | null = null;
+    // As set_macro and delete_macro in src-tauri/src/ipc/automation.rs
+    // do: a preset macro takes only its group, and an unbind removes
+    // only yours.
     const api: MacroStoreApi = {
       deleteMacro: async (key) => {
         calls.push(`delete ${key}`);
-        store.splice(0, store.length, ...store.filter((m) => m.key !== key));
+        store.splice(0, store.length, ...store.filter((m) => m.preset || m.key !== key));
       },
-      setMacro: async (key, command, group, enabled) => {
+      setMacro: async (key, command, group, enabled, preset) => {
         if (key === failOn) {
           failOn = null;
           throw new Error('disk full');
         }
-        calls.push(`set ${key}`);
+        calls.push(preset ? `group ${preset} ${key} ${group}` : `set ${key}`);
+        const at = store.findIndex((m) => m.key === key && m.preset === preset);
+        if (preset) {
+          const { group: _, ...rest } = store[at];
+          store[at] = { ...rest, ...(group ? { group } : {}) };
+          return;
+        }
         const next = { key, command, enabled, ...(group ? { group } : {}) };
-        const at = store.findIndex((m) => m.key === key);
         if (at >= 0) store[at] = next;
         else store.push(next);
       },
@@ -250,6 +262,94 @@ describe('macros', () => {
       'The macro on F1 needs a command.',
     );
     expect(validateMacros([macros[0], macros[0]])).toContain('Two macros use F1');
+  });
+
+  describe('a preset macro', () => {
+    const rec = normalizeMacro({ key: 'Numpad3', command: 'rec' });
+    const north = normalizeMacro({ key: 'Numpad8', command: 'n', preset: 'numpad_movement' });
+    const down = normalizeMacro({
+      key: 'Numpad3',
+      command: 'd',
+      enabled: false,
+      preset: 'numpad_movement',
+    });
+    const stored = [rec, north, down];
+
+    it('keeps the preset that added it', () => {
+      expect(down).toEqual({
+        key: 'Numpad3',
+        command: 'd',
+        enabled: false,
+        preset: 'numpad_movement',
+      });
+      expect('preset' in normalizeMacro({ key: 'F1', command: 'x', preset: '' })).toBe(false);
+    });
+
+    it('lets your macro use its key, and needs nothing of it', () => {
+      expect(validateMacros(stored)).toBeNull();
+      expect(validateMacros([...stored, { ...north, command: ' ' }])).toBeNull();
+      // Two of yours on one key still clash.
+      expect(validateMacros([...stored, { ...rec, command: 'rest' }])).toBe(
+        'Two macros use Numpad3. Give each one its own key.',
+      );
+    });
+
+    it('saves only a new group, under the key and preset it loaded with', () => {
+      let draft = createDraft(stored);
+      const [, n, d] = draft.items;
+      draft = updateDraftItem(draft, n.uid, (m) => ({ ...m, group: 'travel', command: 'north' }));
+      // A command or a switch the JSON view changed sends nothing.
+      draft = updateDraftItem(draft, d.uid, (m) => ({ ...m, enabled: true }));
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [],
+        set: [{ uid: n.uid, macro: { ...north, group: 'travel' } }],
+      });
+      // A key the JSON view changed saves the group under the old key.
+      draft = updateDraftItem(draft, n.uid, (m) => ({ ...m, key: 'F9' }));
+      expect(macroSavePlan(draft).set).toEqual([
+        { uid: n.uid, macro: { ...north, group: 'travel' } },
+      ]);
+    });
+
+    it('never unbinds your key for a preset macro the JSON view removed or added', async () => {
+      const { store, calls, api } = macroStore(stored);
+      let draft = createDraft(stored.map((m) => ({ ...m })));
+      draft = removeDraftItem(draft, draft.items[2].uid);
+      draft = addDraftItem(draft, { ...north, key: 'Numpad6', command: 'e' });
+      expect(macroSavePlan(draft)).toEqual({ remove: [], set: [] });
+      await saveMacroDraft(draft, () => {}, api);
+      expect(calls).toEqual([]);
+      expect(store).toEqual(stored);
+    });
+
+    it('takes a row the JSON view moved from yours to a preset as yours removed', () => {
+      let draft = createDraft(stored);
+      const [r] = draft.items;
+      draft = updateDraftItem(draft, r.uid, (m) => ({ ...m, preset: 'numpad_movement' }));
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [{ key: 'Numpad3', uids: [r.uid] }],
+        set: [],
+      });
+      // And one moved from a preset to yours as yours added.
+      draft = createDraft(stored);
+      const [, n] = draft.items;
+      draft = updateDraftItem(draft, n.uid, ({ preset: _, ...m }) => m);
+      expect(macroSavePlan(draft)).toEqual({
+        remove: [],
+        set: [{ uid: n.uid, macro: { key: 'Numpad8', command: 'n', enabled: true } }],
+      });
+    });
+
+    it('sends the group of a preset macro through macros_set with its preset', async () => {
+      const { store, calls, api } = macroStore(stored);
+      let draft = createDraft(stored.map((m) => ({ ...m })));
+      const [r, , d] = draft.items;
+      draft = updateDraftItem(draft, d.uid, (m) => ({ ...m, group: 'travel' }));
+      draft = updateDraftItem(draft, r.uid, (m) => ({ ...m, command: 'recite' }));
+      await saveMacroDraft(draft, () => {}, api);
+      expect(calls).toEqual(['set Numpad3', 'group numpad_movement Numpad3 travel']);
+      expect(store).toEqual([{ ...rec, command: 'recite' }, north, { ...down, group: 'travel' }]);
+    });
   });
 });
 
@@ -527,13 +627,38 @@ describe('presets', () => {
     expect(presetToggles(stored).every((t) => !t.enabled)).toBe(true);
   });
 
-  it('keeps the ids the page has no preset for, as the alert presets', () => {
-    const stored = [PRESETS[0].id, 'alert_tells'];
+  it('keeps the ids no preset of this build knows', () => {
+    const stored = [PRESETS[0].id, 'later_preset'];
     const off = presetToggles(stored).map((t) => ({ ...t, enabled: false }));
-    expect(storedPresetIds(off, stored)).toEqual(['alert_tells']);
+    expect(storedPresetIds(off, stored)).toEqual(['later_preset']);
     const on = presetToggles(stored);
-    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'alert_tells']);
+    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'later_preset']);
     expect(storedPresetIds(off, [PRESETS_OFF_MARKER])).toEqual([PRESETS_OFF_MARKER]);
+  });
+
+  it('keeps or drops an alert preset by its toggle', () => {
+    const stored = [PRESETS[0].id, 'alert_tells', 'alert_name'];
+    const library = presetToggles(stored);
+    const alerts = [
+      { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_name', enabled: false, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_attacked', enabled: true, alert: PRESET_ALERT_DEFAULT },
+    ];
+    expect(storedPresetIds([...library, ...alerts], stored)).toEqual([
+      PRESETS[0].id,
+      'alert_tells',
+      'alert_attacked',
+    ]);
+  });
+
+  it('drops the marker when an alert preset is all that is on', () => {
+    const library = presetToggles([PRESETS_OFF_MARKER]);
+    const tells = { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT };
+    const stored = storedPresetIds([...library, tells], [PRESETS_OFF_MARKER]);
+    expect(stored).toEqual(['alert_tells']);
+    expect(enabledPresetIds(stored)).toEqual([]);
+    const off = { ...tells, enabled: false };
+    expect(storedPresetIds([...library, off], stored)).toEqual([PRESETS_OFF_MARKER]);
   });
 
   it('round trips a partial pick in library order', () => {
@@ -550,6 +675,19 @@ describe('presets', () => {
     draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
     draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: true }));
     expect(isDraftDirty(draft)).toBe(false);
+  });
+
+  it('leaves the alert presets out of installs and removals', () => {
+    let draft = createDraft([
+      ...presetToggles([PRESETS[0].id]),
+      { id: 'alert_tells', enabled: false, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_name', enabled: true, alert: PRESET_ALERT_DEFAULT },
+    ]);
+    const uid = (id: string) => draft.items.find((i) => i.value.id === id)?.uid ?? '';
+    draft = updateDraftItem(draft, uid('alert_tells'), (t) => ({ ...t, enabled: true }));
+    draft = updateDraftItem(draft, uid('alert_name'), (t) => ({ ...t, enabled: false }));
+    draft = updateDraftItem(draft, uid(PRESETS[1].id), (t) => ({ ...t, enabled: true }));
+    expect(presetSavePlan(draft)).toEqual({ install: [PRESETS[1].id], remove: [] });
   });
 
   it('installs the presets that are on at launch, in library order', () => {
@@ -579,6 +717,61 @@ describe('presets', () => {
   it('removes nothing at launch while the store matches the list', () => {
     expect(presetLaunchPlan([], defaultEnabledIds()).remove).toEqual([]);
     expect(presetLaunchPlan([PRESETS_OFF_MARKER], [null, undefined]).remove).toEqual([]);
+  });
+
+  it('reads the preset tags of the macros beside those of the triggers at launch', () => {
+    // The trigger tags, then the macro tags. Your F1 has none, and Numpad
+    // movement tags the six keys it binds.
+    const installed = [
+      ...defaultEnabledIds(),
+      undefined,
+      ...Array<string>(6).fill('numpad_movement'),
+    ];
+    // Off, so a launch takes its macros out, even after another profile
+    // or an older build put them back.
+    expect(presetLaunchPlan([], installed)).toEqual({
+      install: defaultEnabledIds(),
+      remove: ['numpad_movement'],
+    });
+    // On, so a launch installs it again and takes nothing out.
+    const on = [...defaultEnabledIds(), 'numpad_movement'];
+    expect(presetLaunchPlan(on, installed)).toEqual({ install: on, remove: [] });
+  });
+
+  it('names the keys of a preset your macros keep, in the preset order', () => {
+    const numpad = presetById('numpad_movement');
+    if (!numpad) throw new Error('no numpad_movement preset');
+    const theirs = { key: 'Numpad8', command: 'n', preset: 'numpad_movement' };
+    expect(keysYourMacrosKeep(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
+    // Yours keeps a key while it is on, off or in a group.
+    expect(
+      keysYourMacrosKeep(numpad, [
+        { key: 'Numpad3', command: 'rec', enabled: false },
+        { key: 'Numpad9', command: 'gate', group: 'travel' },
+        theirs,
+      ]),
+    ).toEqual(['Numpad9', 'Numpad3']);
+    // A preset with no macros wants no key.
+    const heals = presetById('healing_basics');
+    if (!heals) throw new Error('no healing_basics preset');
+    expect(keysYourMacrosKeep(heals, [{ key: 'Numpad3', command: 'rec' }])).toEqual([]);
+  });
+
+  it('names the keys the Rust hold holds off, over the cases both sides read', () => {
+    // A test in src-tauri/src/loadouts/presets.rs holds hold_taken_keys to
+    // the same cases, so the Presets card and Rust agree on every key.
+    const preset = presetById(keptKeys.preset);
+    if (!preset) throw new Error(`no ${keptKeys.preset} preset`);
+    for (const c of keptKeys.cases) {
+      const macros: readonly Macro[] = c.macros;
+      expect(keysYourMacrosKeep(preset, macros), c.about).toEqual(c.kept);
+      // The rows carry the library's own macros, in its order.
+      const theirs = macros.filter((m) => m.preset === preset.id);
+      expect(
+        theirs.map(({ key, command }) => ({ key, command })),
+        c.about,
+      ).toEqual(preset.macros);
+    }
   });
 });
 

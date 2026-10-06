@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeMenu, submenuAt } from './menuPlacement';
+import { menuBelow, placeMenu, submenuAt } from './menuPlacement';
 
 // A 1280 by 800 window, a menu 200 by 300.
 const W = 200;
@@ -68,5 +68,16 @@ describe('submenuAt', () => {
     const { menu, row } = menuAt(100, 100);
     expect(submenuAt(row, menu)).not.toHaveProperty('preferFlip');
     expect(submenuAt(row, menu, true).preferFlip).toBe(true);
+  });
+});
+
+describe('menuBelow', () => {
+  it('opens 4 px under the button, and over it or left of it at the edges', () => {
+    // A row's more button, 28 by 24.
+    const button = { left: 812, right: 840, top: 92, bottom: 116 };
+    expect(menuBelow(button)).toEqual({ x: 812, y: 120, flipX: 840, flipY: 88 });
+    expect(placeMenu(menuBelow(button), W, H, VW, VH)).toEqual({ left: 812, top: 120 });
+    const low = { left: 1200, right: 1228, top: 700, bottom: 724 };
+    expect(placeMenu(menuBelow(low), W, H, VW, VH)).toEqual({ left: 1028, top: 396 });
   });
 });

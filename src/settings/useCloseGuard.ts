@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { setCloseGuard } from '../../lib/pendingWrites';
+import { setCloseGuard } from '../lib/pendingWrites';
 
 /** Ask before the window closes while `active` is true. `ask` gets a
  *  `proceed` callback that closes the window after all. The Settings

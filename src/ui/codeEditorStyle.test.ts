@@ -1,8 +1,15 @@
 import { StreamLanguage } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
+import { diagnosticCount, forEachDiagnostic, type Diagnostic } from '@codemirror/lint';
 import { highlightTree } from '@lezer/highlight';
+import { EditorState } from '@uiw/react-codemirror';
 import { describe, expect, it } from 'vitest';
-import { codeEditorAttributes, codeHighlightStyle } from './codeEditorStyle';
+import {
+  codeEditorAttributes,
+  codeHighlightStyle,
+  markDiagnostics,
+  marksUpdate,
+} from './codeEditorStyle';
 
 /** The color each highlighted piece of `code` gets, by its text. */
 function colors(code: string): Map<string, string> {
@@ -55,5 +62,69 @@ describe('codeEditorAttributes', () => {
 
   it('adds nothing it was not given', () => {
     expect(codeEditorAttributes({})).toEqual({});
+  });
+});
+
+// wait_full as board 3 of the Scripts design shows it.
+const WAIT_FULL = [
+  '-- wait_full',
+  '-- Stand up once your hit points are full.',
+  '',
+  'mud.on_gmcp("Char.Vitals", function(data)',
+  '  while data.hp < data.maxhp do',
+  '    -- data never changes inside this loop, so it never ends',
+  '  end',
+  '  mud.send("stand")',
+  'end)',
+  '',
+].join('\n');
+
+const STOP = 'Vosh stopped wait_full at main.lua line 5 after 100 ms.';
+
+/** Each diagnostic the state holds, with the text it covers. */
+function marked(state: EditorState) {
+  const out: { text: string; severity: string; message: string }[] = [];
+  forEachDiagnostic(state, (d: Diagnostic, from: number, to: number) => {
+    out.push({ text: state.sliceDoc(from, to), severity: d.severity, message: d.message });
+  });
+  return out;
+}
+
+describe('markDiagnostics', () => {
+  it('covers each marked line from end to end as an error', () => {
+    const doc = EditorState.create({ doc: WAIT_FULL }).doc;
+    expect(markDiagnostics(doc, [{ line: 5, message: STOP }])).toEqual([
+      { from: 99, to: 130, severity: 'error', message: STOP },
+    ]);
+    expect(WAIT_FULL.slice(99, 130)).toBe('  while data.hp < data.maxhp do');
+  });
+
+  it('marks nothing for a line the text does not have', () => {
+    const doc = EditorState.create({ doc: WAIT_FULL }).doc;
+    expect(markDiagnostics(doc, [{ line: 0, message: STOP }])).toEqual([]);
+    expect(markDiagnostics(doc, [{ line: 11, message: STOP }])).toEqual([]);
+  });
+});
+
+describe('marksUpdate', () => {
+  it('puts the marks on through lint diagnostics', () => {
+    const state = EditorState.create({ doc: WAIT_FULL });
+    const update = marksUpdate(state, [{ line: 5, message: STOP }]);
+    expect(update).not.toBeNull();
+    const after = state.update(update ?? {}).state;
+    expect(marked(after)).toEqual([
+      { text: '  while data.hp < data.maxhp do', severity: 'error', message: STOP },
+    ]);
+  });
+
+  it('takes the marks off once the page has none', () => {
+    const state = EditorState.create({ doc: WAIT_FULL });
+    const on = state.update(marksUpdate(state, [{ line: 5, message: STOP }]) ?? {}).state;
+    const off = on.update(marksUpdate(on, []) ?? {}).state;
+    expect(diagnosticCount(off)).toBe(0);
+  });
+
+  it('leaves an editor that never had a mark as it is', () => {
+    expect(marksUpdate(EditorState.create({ doc: WAIT_FULL }), [])).toBeNull();
   });
 });

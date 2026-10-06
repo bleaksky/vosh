@@ -179,8 +179,3 @@ export function CodeRow({
     </div>
   );
 }
-
-/** A quiet line of copy inside a card, above its rows. */
-export function CardNote({ children }: { children: ReactNode }) {
-  return <p className="st-auto-cardnote">{children}</p>;
-}

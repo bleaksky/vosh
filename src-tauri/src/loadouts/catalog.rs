@@ -3,6 +3,7 @@
 //! file is on disk.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ use vosh_automation::alias::{Alias, AliasStore};
 use vosh_automation::trigger::{Trigger, TriggerStore};
 
 use super::gating::apply_effective_state;
+use super::presets::hold_taken_keys;
 use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
@@ -68,8 +70,10 @@ impl GlobalCatalog {
 /// catalog fills the stores, and the aliases, triggers, and macros the
 /// profile file still holds go on top, so a switch keeps them the way a
 /// restart does. An item of the file wins over the catalog item of the
-/// same name, or for a macro the same key. The group state of `set` then
-/// applies to the result.
+/// same name, or for a macro the same key and preset, so your macro on a
+/// key sits beside the preset macro there, which is then held off, see
+/// [`hold_taken_keys`]. The group state of `set` then applies to the
+/// result.
 pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Option<&LoadoutSet>) {
     // What the profile file just put into the live stores, to lay over
     // the catalog.
@@ -106,9 +110,10 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
     p.triggers = triggers;
     let mut macros = catalog.macros.clone();
     for m in per_profile_macros {
-        macros.retain(|x| x.key != m.key);
+        macros.retain(|x| x.key != m.key || x.preset != m.preset);
         macros.push(m);
     }
+    hold_taken_keys(&mut macros);
     p.macros = macros;
     // The presets that are on belong to the catalog with the preset
     // triggers, so the profile's own list gives way to it.
@@ -126,9 +131,10 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
 /// `before` to `after`, which a save from another open profile just
 /// wrote. An item `after` drops leaves `p` and one it adds or changes
 /// comes in, so `p` keeps the edits it has yet to save and the stops Vosh
-/// put on the items that did not change. The group state of `set`, the
-/// loadouts as `p` gates on them, then applies, since the change may
-/// bring a group.
+/// put on the items that did not change. A macro is known by its key and
+/// preset, as your macro and a preset macro can share a key. The group
+/// state of `set`, the loadouts as `p` gates on them, then applies, since
+/// the change may bring a group.
 pub(crate) fn lay_catalog_change_over(
     p: &mut Profile,
     before: &GlobalCatalog,
@@ -151,14 +157,22 @@ pub(crate) fn lay_catalog_change_over(
             warn!(error = %e, "catalog trigger rejected");
         }
     }
-    let (gone, came) = changes(&before.macros, &after.macros, |m| m.key.as_str());
-    p.macros.retain(|m| !gone.contains(&m.key.as_str()));
+    let (gone, came) = changes(&before.macros, &after.macros, |m| {
+        (m.preset.as_deref(), m.key.as_str())
+    });
+    p.macros
+        .retain(|m| !gone.contains(&(m.preset.as_deref(), m.key.as_str())));
     for changed in came {
-        match p.macros.iter_mut().find(|m| m.key == changed.key) {
+        match p
+            .macros
+            .iter_mut()
+            .find(|m| m.key == changed.key && m.preset == changed.preset)
+        {
             Some(m) => m.clone_from(changed),
             None => p.macros.push(changed.clone()),
         }
     }
+    hold_taken_keys(&mut p.macros);
     if after.enabled_presets != before.enabled_presets {
         if let Some(list) = &after.enabled_presets {
             p.ui.enabled_presets.clone_from(list);
@@ -175,18 +189,18 @@ pub(crate) fn lay_catalog_change_over(
 /// The keys of the items of `before` that `after` lacks, and the items of
 /// `after` that `before` lacks or holds otherwise, each item known by
 /// `key`.
-fn changes<'a, T: PartialEq>(
+fn changes<'a, T: PartialEq, K: Eq + Hash>(
     before: &'a [T],
     after: &'a [T],
-    key: impl Fn(&'a T) -> &'a str,
-) -> (Vec<&'a str>, Vec<&'a T>) {
-    let was: HashMap<&str, &T> = before.iter().map(|item| (key(item), item)).collect();
-    let now: HashSet<&str> = after.iter().map(&key).collect();
-    let gone = was.keys().copied().filter(|k| !now.contains(k)).collect();
+    key: impl Fn(&'a T) -> K,
+) -> (Vec<K>, Vec<&'a T>) {
+    let was: HashMap<K, &T> = before.iter().map(|item| (key(item), item)).collect();
     let came = after
         .iter()
-        .filter(|item| was.get(key(item)) != Some(item))
+        .filter(|item| was.get(&key(item)) != Some(item))
         .collect();
+    let now: HashSet<K> = after.iter().map(&key).collect();
+    let gone = was.into_keys().filter(|k| !now.contains(k)).collect();
     (gone, came)
 }
 
@@ -309,6 +323,61 @@ mod tests {
         q.alerts.insert("alert_tells".into(), tells);
         lay_catalog_over(&mut q, &GlobalCatalog::default(), None);
         assert_eq!(q.alerts.len(), 1);
+    }
+
+    /// A macro of yours on `key`, or one the preset `preset` added.
+    fn bind(key: &str, command: &str, preset: Option<&str>) -> Macro {
+        Macro {
+            key: key.into(),
+            command: command.into(),
+            group: None,
+            enabled: true,
+            preset: preset.map(String::from),
+        }
+    }
+
+    /// What each macro of `p` sends and whether it is on.
+    fn sends(p: &Profile) -> Vec<(&str, bool)> {
+        p.macros
+            .iter()
+            .map(|m| (m.command.as_str(), m.enabled))
+            .collect()
+    }
+
+    /// A catalog with Numpad movement on, two of its macros for short.
+    fn numpad_catalog() -> GlobalCatalog {
+        let numpad = Some("numpad_movement");
+        GlobalCatalog {
+            macros: vec![bind("Numpad8", "n", numpad), bind("Numpad3", "d", numpad)],
+            ..GlobalCatalog::default()
+        }
+    }
+
+    #[test]
+    fn your_macro_in_the_file_sits_beside_the_preset_macro_on_its_key() {
+        // A switch just loaded a file that still holds your Numpad3.
+        let mut p = Profile::default();
+        p.macros.push(bind("Numpad3", "rec", None));
+        lay_catalog_over(&mut p, &numpad_catalog(), None);
+        // The preset's d stays, held off while rec keeps the key.
+        assert_eq!(sends(&p), [("n", true), ("d", false), ("rec", true)]);
+    }
+
+    #[test]
+    fn a_change_to_your_macro_leaves_the_preset_macro_on_its_key() {
+        let before = numpad_catalog();
+        let mut p = Profile::default();
+        lay_catalog_over(&mut p, &before, None);
+        // Another open profile binds rec to Numpad3 and saves, which
+        // holds d off.
+        let mut after = before.clone();
+        after.macros.push(bind("Numpad3", "rec", None));
+        hold_taken_keys(&mut after.macros);
+        lay_catalog_change_over(&mut p, &before, &after, None);
+        assert_eq!(sends(&p), [("n", true), ("d", false), ("rec", true)]);
+        // It deletes rec again, and d takes the key back.
+        lay_catalog_change_over(&mut p, &after, &before, None);
+        assert_eq!(sends(&p), [("n", true), ("d", true)]);
     }
 
     #[test]

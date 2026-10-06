@@ -1,16 +1,18 @@
 //! The commands for Settings > Characters. The page reads any profile
 //! through them, active or not, turns a character's login on or off,
-//! points a profile at a world and saves a profile's settings to your
-//! Downloads folder. Settings and the prompt card also ask who is
-//! logged in.
+//! points a profile at a world, saves a profile's settings to your
+//! Downloads folder, and reads and imports a profile export you pick.
+//! Settings and the prompt card also ask who is logged in.
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
-use crate::profile::inactive::{export_path, profile_detail, profile_toml, ProfileDetail};
+use crate::import::vosh::apply::{apply_import, AddAs, ImportResult};
+use crate::import::vosh::{preview, ImportPreview};
+use crate::profile::inactive::{export_path, export_text, profile_detail, ProfileDetail};
 use crate::profile::login_match::LoginClaim;
 use crate::profile::set::{display_name, ProfileEntry};
 use crate::session::identity::{session_identity, SessionIdentity};
@@ -81,19 +83,19 @@ pub(crate) struct ProfileExport {
 
 /// Save a profile's settings as a TOML file in your Downloads folder,
 /// active or not, and say where it went. Settings has no save panel,
-/// so the file takes a name that never replaces another.
+/// so the file takes a name that never replaces another. The file ends
+/// with the `[vosh_export]` table, which names the profile's world and,
+/// of the characters it claims, those in `characters`, the ones you
+/// ticked, so a profile you share names your alts only by choice.
 #[tauri::command]
 pub(crate) async fn profile_export_file(
     app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
+    characters: Vec<String>,
 ) -> Result<ProfileExport, String> {
-    let toml = profile_toml(state.inner(), &name).await?;
-    let dir = app
-        .path()
-        .download_dir()
-        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
-    let path = export_path(&dir, &name);
+    let toml = export_text(state.inner(), &name, &characters).await?;
+    let path = export_path(&super::downloads_dir(&app)?, &name);
     std::fs::write(&path, toml).map_err(|e| {
         warn!(error = %e, path = %path.display(), "profile export write failed");
         format!(
@@ -108,6 +110,46 @@ pub(crate) async fn profile_export_file(
             .unwrap_or_default(),
         path: path.display().to_string(),
     })
+}
+
+/// Read `text`, the file you picked as `file_name`, as a Vosh profile
+/// export, and say what it holds and where it would go. Changes nothing.
+/// See [`preview`].
+#[tauri::command]
+pub(crate) async fn profile_import_read(
+    state: State<'_, SharedState>,
+    file_name: String,
+    text: String,
+) -> Result<ImportPreview, String> {
+    let set = state.loaded_profile_set().await?;
+    preview(&set, &file_name, &text)
+}
+
+/// Import `text`, the Vosh profile export you picked as `file_name`, as a
+/// new profile named `name` or over your profile `name`, and say what
+/// happened. `logins` names each character of the file you left on,
+/// which the new profile takes, from another profile if one has it. See
+/// [`apply_import`].
+#[tauri::command]
+pub(crate) async fn profile_import_apply<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    file_name: String,
+    text: String,
+    add_as: AddAs,
+    name: String,
+    logins: Vec<String>,
+) -> Result<ImportResult, String> {
+    apply_import(
+        &app,
+        state.inner(),
+        &file_name,
+        &text,
+        add_as,
+        &name,
+        &logins,
+    )
+    .await
 }
 
 /// Who is logged in on the session: the connection, the character once

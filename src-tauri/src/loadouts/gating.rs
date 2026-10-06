@@ -333,6 +333,7 @@ mod tests {
                 command: "north".into(),
                 group: Some("movement".into()),
                 enabled: true,
+                preset: None,
             }],
         );
 
@@ -359,6 +360,7 @@ mod tests {
                 command: "north".into(),
                 group: Some("movement".into()),
                 enabled: true,
+                preset: None,
             }],
         );
 
@@ -492,6 +494,7 @@ mod tests {
                 command: "north".into(),
                 group: Some("movement".into()),
                 enabled: true,
+                preset: None,
             }],
         );
 

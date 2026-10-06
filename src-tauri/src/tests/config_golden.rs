@@ -39,12 +39,14 @@ use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
+use crate::profile::export::{self, VoshExport};
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
 use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
+use crate::profile::tests::claim;
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
 use crate::sessions::SessionId;
 use crate::tick::TickConfig;
@@ -56,11 +58,12 @@ const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/config");
 const WRITE: &str = "VOSH_WRITE_CONFIG";
 
 /// Every golden, by its path under `fixtures/config`.
-const GOLDENS: [&str; 16] = [
+const GOLDENS: [&str; 17] = [
     "profile.default.toml",
     "profile.fresh.toml",
     "profile.full.toml",
     "profile.full-regex.toml",
+    "export.full.toml",
     "global.default.toml",
     "global.full.toml",
     "loadouts.default.toml",
@@ -539,12 +542,37 @@ fn full_macros() -> Vec<Macro> {
             command: "score".into(),
             group: Some("info".into()),
             enabled: true,
+            preset: None,
         },
         Macro {
             key: "F2".into(),
             command: "flee".into(),
             group: None,
             enabled: false,
+            preset: None,
+        },
+        Macro {
+            key: "Numpad3".into(),
+            command: "rec".into(),
+            group: None,
+            enabled: true,
+            preset: None,
+        },
+        // A preset macro on a key no macro of yours uses is on, and one
+        // on a key yours uses is held off (Scripts board 7).
+        Macro {
+            key: "Numpad8".into(),
+            command: "n".into(),
+            group: None,
+            enabled: true,
+            preset: Some("numpad_movement".into()),
+        },
+        Macro {
+            key: "Numpad3".into(),
+            command: "d".into(),
+            group: None,
+            enabled: false,
+            preset: Some("numpad_movement".into()),
         },
     ]
 }
@@ -806,6 +834,22 @@ fn a_profile_file_writes_these_bytes() {
         check(name, &text);
         profile_round_trip(&text);
     }
+}
+
+/// Export to Downloads writes the full profile's bytes, then the
+/// `[vosh_export]` table with its world and the one character of its two
+/// you ticked (Scripts Q10). A profile reads the export as the profile
+/// alone, and the table reads back.
+#[test]
+fn an_export_writes_these_bytes() {
+    let profile = profile_bytes(&full_profile());
+    let world = claim("play.theforsakenlands.com", Some(1848), &["Maren", "Orla"]);
+    let table = VoshExport::new(Some(&world), &["Orla".to_string()]);
+    let text = table.write(&profile).unwrap();
+    check("export.full.toml", &text);
+    let back = ProfileConfig::from_toml(&text).unwrap();
+    assert_eq!(back.to_toml().unwrap(), profile);
+    assert_eq!(export::read(&text).unwrap(), Some(table));
 }
 
 #[test]
@@ -1187,6 +1231,77 @@ fn every_golden_still_reads_in_0_8_0_with_line_and_prompt_targets_only() {
     let catalog = read(&Path::new(DIR).join("catalog.full.toml"));
     assert!(catalog.contains("[[room_triggers]]"), "{catalog}");
     assert_eq!(old_build_reads(&catalog).unwrap().len(), 2);
+}
+
+/// A macro as 0.8.1 reads it. It knows no `preset` and skips the key.
+#[derive(serde::Deserialize)]
+struct OldMacro {
+    key: String,
+    command: String,
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default = "old_macro_on")]
+    enabled: bool,
+}
+
+fn old_macro_on() -> bool {
+    true
+}
+
+/// The macros of any config file, as 0.8.1 reads them. catalog.toml
+/// holds no groups that are off.
+#[derive(serde::Deserialize)]
+struct OldMacros {
+    #[serde(default)]
+    macros: Vec<OldMacro>,
+    #[serde(default)]
+    disabled_macro_groups: Vec<String>,
+}
+
+impl OldMacros {
+    /// The command each key sends in 0.8.1. Its command line passes over
+    /// a macro that is off or in a group that is off, and the last macro
+    /// left on a key wins it.
+    fn fired(&self) -> BTreeMap<&str, &str> {
+        self.macros
+            .iter()
+            .filter(|m| m.enabled)
+            .filter(|m| {
+                m.group
+                    .as_ref()
+                    .map_or(true, |g| !self.disabled_macro_groups.contains(g))
+            })
+            .map(|m| (m.key.as_str(), m.command.as_str()))
+            .collect()
+    }
+}
+
+#[test]
+fn every_golden_still_reads_in_0_8_1_and_your_macro_keeps_its_key() {
+    let mut full = 0;
+    for name in GOLDENS {
+        let text = read(&Path::new(DIR).join(name));
+        let old = toml::from_str::<OldMacros>(&text)
+            .unwrap_or_else(|e| panic!("0.8.1 fails fixtures/config/{name}: {e}"));
+        if old.macros.is_empty() {
+            continue;
+        }
+        // Your Numpad3 keeps the key, so the preset's d is held off, and
+        // the preset's n sends on Numpad8.
+        let fired = old.fired();
+        assert_eq!(
+            fired,
+            BTreeMap::from([("F1", "score"), ("Numpad3", "rec"), ("Numpad8", "n")]),
+            "{name}"
+        );
+        full += 1;
+    }
+    // The two profile files, the export and the catalog.
+    assert_eq!(full, 4);
+    // The full macros hold what the hold leaves.
+    let mut held = full_macros();
+    crate::loadouts::presets::hold_taken_keys(&mut held);
+    assert_eq!(held, full_macros());
 }
 
 #[test]

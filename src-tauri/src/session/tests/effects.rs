@@ -109,6 +109,7 @@ fn a_timer_group_line_reports_a_macro_group_that_turned() {
         command: "kick".into(),
         group: Some("combat".into()),
         enabled: true,
+        preset: None,
     });
     let run = super::run_fired_locked(&state, &mut p, &mut c, "#group combat off", None);
     assert!(run.apply.lists.macro_groups);

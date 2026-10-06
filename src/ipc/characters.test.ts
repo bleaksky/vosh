@@ -21,6 +21,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 const { trackedAffectsSet } = await import('./affects');
 const {
   profileDetailGet,
+  profileExportFile,
   profileSetLogin,
   profileSetWorld,
   sessionIdentityGet,
@@ -66,6 +67,19 @@ describe('profile wrappers', () => {
       name: 'Test-Prompt',
       host: null,
       port: null,
+    });
+  });
+
+  it('exports with the characters you ticked, and none unless you tick some', async () => {
+    await profileExportFile('Healer');
+    expect(tauri.invoke).toHaveBeenLastCalledWith('profile_export_file', {
+      name: 'Healer',
+      characters: [],
+    });
+    await profileExportFile('Healer', ['Orla']);
+    expect(tauri.invoke).toHaveBeenLastCalledWith('profile_export_file', {
+      name: 'Healer',
+      characters: ['Orla'],
     });
   });
 

@@ -1,10 +1,10 @@
 // Highlight preset library — Phase 12.
 //
-// Each preset is a named bundle of triggers a user can toggle from the
-// Highlights drawer. Toggling on installs every trigger in the bundle
-// (tagged with the preset id so we can find them again); toggling off
-// removes everything tagged with that id. User-authored triggers are
-// untouched either way.
+// Each preset is a named bundle of triggers, or of macros, a user can
+// toggle under Automation, then Presets. Toggling on installs every
+// trigger and macro in the bundle (tagged with the preset id so we can
+// find them again); toggling off removes everything tagged with that id.
+// User-authored triggers and macros are untouched either way.
 //
 // Patterns are POSIX-flavored regex compatible with Rust's `regex`
 // crate. Captures use $1, $2 in Replace templates. Highlight actions
@@ -16,7 +16,7 @@
 // recall) can be toggled independently from must-see ones (your own
 // buffs falling, your own recall).
 
-import type { HighlightStyle, TriggerRecord, TriggerTarget } from '../ipc/automation';
+import type { HighlightStyle, Macro, TriggerRecord, TriggerTarget } from '../ipc/automation';
 import { colorize } from './colorTokens';
 
 export type PresetCategory =
@@ -27,7 +27,8 @@ export type PresetCategory =
   | 'loot'
   | 'labels'
   | 'chat'
-  | 'world';
+  | 'world'
+  | 'movement';
 
 export interface Preset {
   id: string;
@@ -44,9 +45,13 @@ export interface Preset {
    *  each in the game's own words, with the place in the game's source it
    *  comes from beside it. A character or a number the game fills in comes
    *  from the repo fixtures. presets.test.ts runs each line through the
-   *  preset's own triggers and checks the colors it paints. */
+   *  preset's own triggers and checks the colors it paints. A preset that
+   *  only binds macros changes no line, so it has none. */
   sample: readonly PresetSampleLine[];
   triggers: Omit<TriggerRecord, 'preset'>[];
+  /** The keys the preset binds, each with the command it sends, in the
+   *  order the preset's card lists them. Absent when it binds none. */
+  macros?: readonly Omit<Macro, 'preset'>[];
 }
 
 /** A line of a preset's sample. */
@@ -83,6 +88,7 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   labels: 'Potion and herb labels',
   chat: 'Chat',
   world: 'Rooms, time and weather',
+  movement: 'Movement',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -856,6 +862,32 @@ export const PRESETS: Preset[] = [
       highlight('wiznet.tag', '^WiZNET\\b', { fg: 'magenta', bold: true }, 6),
     ],
   },
+  // The six directions the game has, on the numpad as the arrows sit
+  // there, with up on 9 and down on 3 (Scripts board 7, Q12). The game
+  // has no diagonal exits, so 7, 1 and 5 stay free. Each macro sends the
+  // one letter form, which read_from_buffer in the game's comm.c never
+  // counts toward its spam limit. The keys come from event.code, so
+  // NumLock leaves them as they are. A key one of your macros uses stays
+  // yours, and Rust holds the preset's macro on it off (hold_taken_keys
+  // in src-tauri/src/loadouts/presets.rs). Get started suggests it on no
+  // world (First Run Q18).
+  {
+    id: 'numpad_movement',
+    category: 'movement',
+    name: 'Numpad movement',
+    description: 'Walk with the numpad. The game has six directions, so 7, 1 and 5 stay free.',
+    suggest: [],
+    sample: [],
+    triggers: [],
+    macros: [
+      { key: 'Numpad8', command: 'n' },
+      { key: 'Numpad6', command: 'e' },
+      { key: 'Numpad2', command: 's' },
+      { key: 'Numpad4', command: 'w' },
+      { key: 'Numpad9', command: 'u' },
+      { key: 'Numpad3', command: 'd' },
+    ],
+  },
 ];
 
 // The presets an empty enabled_presets list turns on, which are the
@@ -881,6 +913,10 @@ export const PRESETS_ON_BY_DEFAULT: readonly string[] = [
 
 export function presetTriggers(preset: Preset): TriggerRecord[] {
   return preset.triggers.map((t) => ({ ...t, preset: preset.id }));
+}
+
+export function presetMacros(preset: Preset): Macro[] {
+  return (preset.macros ?? []).map((m) => ({ ...m, preset: preset.id }));
 }
 
 /** The presets on by default, in library order. */

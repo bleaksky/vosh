@@ -651,6 +651,41 @@
   margin-top: 16px;
 }
 
+/* A field in a confirm card, like New plugin's Name: its label 16 under
+   the body copy, and the hint 6 under the field. */
+.ov-field-label {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+}
+
+.ov-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+}
+
+/* A switch in a confirm card, like each character Export to Downloads
+   can name: the name on the left and the switch at the right, 32 high,
+   the first 12 under the body copy. */
+.ov-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+}
+
+.ov-confirm-body + .ov-switch-row {
+  margin-top: 12px;
+}
+
 /* Buttons (SPEC 4): 28 tall, radius 8, 13 medium. The default is the
    secondary look, a ring and no fill. Danger keeps the ring and takes
    the danger text. */
@@ -684,6 +719,29 @@
 
 .ov-button.is-danger {
   color: var(--danger-text);
+}
+
+/* Primary fills with the accent, for the one thing a card asks you to
+   do, like Install and restart on the update notice or Create in New
+   plugin. A button that waits on the card, like Create while the name
+   breaks its rule, sits at 45 percent. */
+.ov-update .ov-button.is-primary,
+.ov-confirm .ov-button.is-primary {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--on-accent);
+}
+
+.ov-update .ov-button.is-primary:focus-visible,
+.ov-confirm .ov-button.is-primary:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--raised),
+    0 0 0 4px var(--accent);
+}
+
+.ov-update .ov-button:disabled,
+.ov-confirm .ov-button:disabled {
+  opacity: 0.45;
 }
 
 /* The shell mounts the toasts among its floating surfaces, a direct
@@ -761,22 +819,6 @@
   flex: none;
   gap: 8px;
   margin-left: 8px;
-}
-
-.ov-update .ov-button.is-primary {
-  background: var(--accent);
-  box-shadow: none;
-  color: var(--on-accent);
-}
-
-.ov-update .ov-button.is-primary:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--raised),
-    0 0 0 4px var(--accent);
-}
-
-.ov-update .ov-button:disabled {
-  opacity: 0.45;
 }
 
 /* The notice mounts among the shell's floating surfaces, a direct child

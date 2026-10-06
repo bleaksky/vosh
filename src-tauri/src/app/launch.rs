@@ -248,7 +248,7 @@ pub(crate) async fn start_selected<R: tauri::Runtime>(
     let plugins_dir = paths::plugins_dir(app_data);
     let _ = std::fs::create_dir_all(&plugins_dir);
     crate::app::plugins::seed_example_plugins(&plugins_dir);
-    crate::app::plugins::load_enabled_plugins(app, state, &session, plugins_dir).await;
+    crate::app::plugins::load_enabled_plugins(app, &session, plugins_dir).await;
 }
 
 /// Hand `session` what the profile it plays holds for a session that
@@ -268,7 +268,7 @@ pub(crate) async fn start_on_profile<R: tauri::Runtime>(
     }
     if let Some(app_data) = state.app_data.get() {
         let plugins_dir = paths::plugins_dir(app_data);
-        crate::app::plugins::load_enabled_plugins(app, state, session, plugins_dir).await;
+        crate::app::plugins::load_enabled_plugins(app, session, plugins_dir).await;
     }
 }
 

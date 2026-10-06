@@ -14,7 +14,9 @@ use vosh_prompt::testkit::mud::{PROMPT, PROMPT_ALL};
 use vosh_prompt::testkit::{Build, Options};
 
 use super::fake_mud::harness::{codes, codes_of, FakeServer, Harness};
+use crate::app::events::LUA_OUTPUT;
 use crate::profile::set::DEFAULT_PROFILE_NAME;
+use crate::script::output::LuaKind;
 use crate::sessions::SessionId;
 
 /// What clients sent `server`, as text.
@@ -51,16 +53,23 @@ const HELPER: &str = "\
 /// profile both play. The first session loads it at launch and the second
 /// as it opens, each into its own engine.
 async fn two_sessions_with_a_plugin() -> (Harness, SessionId, SessionId) {
+    two_sessions_with_plugin("helper", HELPER).await
+}
+
+/// [`two_sessions_on_two_games`] with the plugin `name`, whose entry
+/// script is `body`, on in the profile both play, as
+/// [`two_sessions_with_a_plugin`] has [`HELPER`].
+async fn two_sessions_with_plugin(name: &str, body: &str) -> (Harness, SessionId, SessionId) {
     let h = Harness::new(Options::new(Build::New)).await;
     h.state
         .app_data
         .set(h.dir.path().to_path_buf())
         .expect("the app data folder");
     let plugins = crate::disk::paths::plugins_dir(h.dir.path());
-    write_plugin(&plugins, "helper", HELPER);
-    h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
+    write_plugin(&plugins, name, body);
+    h.state.selected_profile().await.plugins.enabled = vec![name.into()];
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     log_in_two_sessions(h).await
 }
 
@@ -1078,7 +1087,7 @@ async fn what_lua_sets_on_a_login_packet_saves_the_profile_the_login_leaves() {
     );
     h.state.selected_profile().await.plugins.enabled = vec!["greeter".into()];
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     // The second session keeps Default open, so the switch does not save
     // it as it leaves.
     let (one, two) = (h.first, h.open_session().await);
@@ -1153,7 +1162,7 @@ async fn a_login_moves_its_own_session_and_a_login_in_the_other_joins_that_profi
         p.vars.set("camp", "Ford");
     }
     let first = h.state.selected_session();
-    crate::app::plugins::load_enabled_plugins(h.app.handle(), &h.state, &first, plugins).await;
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
     let (one, two) = (h.first, h.open_session().await);
     let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
 
@@ -1653,6 +1662,77 @@ async fn a_profile_reset_and_load_in_one_session_reach_every_session_on_the_prof
     h.finish(grid).await;
 }
 
+/// The characters Default lists.
+async fn default_characters(h: &Harness) -> Option<Vec<String>> {
+    let set = h.state.loaded_profile_set().await.expect("the set");
+    let entry = set.get(DEFAULT_PROFILE_NAME).expect("Default");
+    entry.auto_match.as_ref().map(|am| am.characters.clone())
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no_line() {
+    use crate::import::vosh::apply::AddAs;
+    use crate::profile::file::ProfileConfig;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    // A running tick stays on whatever a profile laid over it saved, so
+    // the tick goes off first and the import turns it on again.
+    h.type_in(one, "#tick disable").await;
+    assert_eq!((last_tick(&h, one), last_tick(&h, two)), (None, None));
+    let draw = draws(&h, one);
+
+    // An export of Default with an alias, the tick on and the prompt
+    // drawn the other way.
+    let mut export = ProfileConfig::default();
+    export
+        .aliases
+        .push(vosh_automation::alias::Alias::new("ww", "spam 3"));
+    let mut prompt = export.prompt_config();
+    prompt.draw = !draw;
+    export.set_prompt(prompt);
+    let text = export.to_toml().expect("the export");
+    let result = crate::ipc::characters::profile_import_apply(
+        h.app.handle().clone(),
+        h.app.state(),
+        "Default profile.toml".into(),
+        text,
+        AddAs::Replace,
+        DEFAULT_PROFILE_NAME.into(),
+        Vec::new(),
+    )
+    .await
+    .expect("the import");
+    assert_eq!(result.name, DEFAULT_PROFILE_NAME);
+
+    // Each session takes the tick settings and the prompt table, and
+    // neither prints the line a `#profile load` prints.
+    for session in [one, two] {
+        assert!(last_tick(&h, session).is_some(), "{session:?}");
+        assert_eq!(draws(&h, session), !draw, "{session:?}");
+        assert!(!shows(&h, session, "this profile"), "{session:?}");
+        assert!(!shows(&h, session, "profile loaded"), "{session:?}");
+    }
+    // The alias expands in the second session, the file saved it, and
+    // Default keeps its claim on Tester.
+    h.type_in(two, "ww").await;
+    h.until("the alias", |h| shows(h, two, "Line 3 of 3 of the spam."))
+        .await;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_aliases(&file, "ww"), 1);
+    assert_eq!(
+        default_characters(&h).await,
+        Some(vec!["Tester".to_string()])
+    );
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
 /// The harness in loadout mode. The catalog holds `kk` in the combat
 /// group and `hh` in heals, Melee turns combat on and Heals turns heals
 /// on, and the first session plays Default.
@@ -2066,6 +2146,7 @@ async fn change_the_lists(h: &Harness, session: SessionId) {
         command: "kick".into(),
         group: Some("combat".into()),
         enabled: true,
+        preset: None,
     });
     h.type_in(session, "#alias kk kick").await;
     h.type_in(session, "#lua mud.alias('hh', 'spam 3')").await;
@@ -2337,5 +2418,637 @@ async fn tick_settings_that_name_build_reach_every_count_on_build_alone() {
 
     h.disconnect_session(two).await;
     h.disconnect_session(three).await;
+    h.finish(grid).await;
+}
+
+/// A plugin with a global of its own that prints a line at the end of
+/// `spam 1`.
+const TELLER: &str = "\
+    greeting = 'from the plugin'\n\
+    mud.trigger('end', 'Line 1 of 1 of the spam', function() print('The spam ended.') end)";
+
+/// The Output ring of `session`, as the Scripts page reads it, each line
+/// as its owner, kind and text.
+async fn output_of(h: &Harness, session: SessionId) -> Vec<(String, LuaKind, String)> {
+    crate::ipc::scripts::lua_output_get(h.app.state(), Some(session))
+        .await
+        .expect("the ring")
+        .into_iter()
+        .map(|line| (line.owner, line.kind, line.text))
+        .collect()
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_session_keeps_the_lua_lines_of_its_own_plugins() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_plugin("teller", TELLER).await;
+    h.type_in(one, "spam 1").await;
+    h.until("the plugin to print in the first session", |h| {
+        shows(h, one, "[lua] The spam ended.")
+    })
+    .await;
+
+    let printed = (
+        "plugin:teller".to_string(),
+        LuaKind::Print,
+        "The spam ended.".to_string(),
+    );
+    assert_eq!(output_of(&h, one).await, [printed]);
+    let leftover = &output_of(&h, two).await;
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // The page hears the line from the first session alone.
+    let heard = h.events_of(one, LUA_OUTPUT);
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0]["lines"][0]["text"], "The spam ended.");
+    let leftover = &h.events_of(two, LUA_OUTPUT);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert!(!shows(&h, two, "The spam ended."));
+
+    // Clearing the plugin's lines clears them in that session.
+    crate::ipc::scripts::lua_output_clear(h.app.state(), Some("plugin:teller".into()), Some(one))
+        .await
+        .expect("the clear");
+    let leftover = &output_of(&h, one).await;
+    assert!(leftover.is_empty(), "{leftover:?}");
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_console_runs_inside_a_plugin_or_in_the_global_environment() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_with_plugin("teller", TELLER).await;
+    let run = |code: &str, plugin: Option<&str>, session| {
+        crate::ipc::scripts::lua_run(
+            h.app.handle().clone(),
+            h.app.state(),
+            code.to_string(),
+            plugin.map(str::to_string),
+            Some(session),
+        )
+    };
+    run("greeting = 'typed in the first'", None, one)
+        .await
+        .expect("the run");
+    run("print(greeting)", Some("teller"), one)
+        .await
+        .expect("the run");
+    run("print(greeting)", None, one).await.expect("the run");
+    run("print(greeting)", None, two).await.expect("the run");
+
+    let line = |owner: &str, kind, text: &str| (owner.to_string(), kind, text.to_string());
+    assert_eq!(
+        output_of(&h, one).await,
+        [
+            line("#lua", LuaKind::Input, "greeting = 'typed in the first'"),
+            line("plugin:teller", LuaKind::Input, "print(greeting)"),
+            line("plugin:teller", LuaKind::Print, "from the plugin"),
+            line("#lua", LuaKind::Input, "print(greeting)"),
+            line("#lua", LuaKind::Print, "typed in the first"),
+        ]
+    );
+    // The second session has a global environment of its own.
+    assert_eq!(
+        output_of(&h, two).await,
+        [
+            line("#lua", LuaKind::Input, "print(greeting)"),
+            line("#lua", LuaKind::Print, "nil"),
+        ]
+    );
+    // What it prints shows in the terminal too, and the line you typed
+    // does not.
+    h.until("the plugin's answer in the first terminal", |h| {
+        shows(h, one, "[lua] from the plugin") && shows(h, one, "[lua] typed in the first")
+    })
+    .await;
+    assert!(!shows(&h, one, "print(greeting)"));
+    assert!(!shows(&h, two, "from the plugin"));
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
+/// Turn the plugin `name` on or off from the Scripts page with `session`
+/// selected there, and return the list as it then shows it.
+async fn switch_plugin(
+    h: &Harness,
+    name: &str,
+    on: bool,
+    session: SessionId,
+) -> Vec<crate::ipc::scripts::PluginRow> {
+    crate::ipc::scripts::plugin_set_enabled(
+        h.app.handle().clone(),
+        h.app.state(),
+        name.into(),
+        on,
+        Some(session),
+    )
+    .await
+    .expect("the switch")
+}
+
+/// The row of the plugin `name` in the list `session` sees.
+async fn plugin_row(h: &Harness, name: &str, session: SessionId) -> crate::ipc::scripts::PluginRow {
+    crate::ipc::scripts::plugins_list(h.app.state(), Some(session))
+        .await
+        .expect("the list")
+        .into_iter()
+        .find(|row| row.name == name)
+        .expect("the plugin's row")
+}
+
+/// The harness with its app data folder in its temporary folder, and the
+/// plugins folder it holds.
+async fn harness_with_plugins() -> (Harness, std::path::PathBuf) {
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    let plugins = crate::disk::paths::plugins_dir(h.dir.path());
+    (h, plugins)
+}
+
+/// A plugin that registers one of each thing a plugin can: a trigger, a
+/// timer and an alias.
+const KEEPER: &str = "\
+    mud.trigger('hunger', 'You are hungry.', function() end)\n\
+    mud.timer(600, function() end)\n\
+    mud.alias('kk', 'look')";
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plugin_turned_on_in_one_session_loads_in_every_session_on_its_profile_only() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, plugins) = harness_with_plugins().await;
+    write_plugin(&plugins, "helper", HELPER);
+    write_plugin(&plugins, "keeper", KEEPER);
+    h.state.selected_profile().await.plugins.enabled = vec!["helper".into()];
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
+    let (one, two) = (h.first, h.open_session().await);
+    let three = open_session_on(&h, "Healer").await;
+
+    let rows = switch_plugin(&h, "keeper", true, two).await;
+    let keeper = rows
+        .iter()
+        .find(|row| row.name == "keeper")
+        .expect("its row");
+    assert!(keeper.on && keeper.stopped.is_none(), "{keeper:?}");
+    // Both sessions on Default load it, each into its own engine, and
+    // the session on Healer does not.
+    assert_eq!(plugins_of(&h, one), ["helper", "keeper"]);
+    assert_eq!(plugins_of(&h, two), ["helper", "keeper"]);
+    let leftover = &plugins_of(&h, three);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    assert!(!plugin_row(&h, "keeper", three).await.on);
+    // Default keeps its order with the new plugin last, and saves it.
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    let saved = crate::profile::file::ProfileConfig::load(&default_file).expect("Default's file");
+    assert_eq!(saved.plugins.enabled, ["helper", "keeper"]);
+    let third = h.state.session(Some(three)).expect("the third session");
+    let leftover = &third.lock_profile().await.plugins.enabled;
+    assert!(leftover.is_empty(), "{leftover:?}");
+
+    h.finish(grid).await;
+}
+
+/// The Lua triggers, the count of Lua timers and the plugin aliases
+/// `session` holds.
+async fn registered(h: &Harness, session: SessionId) -> (Vec<String>, usize, Vec<String>) {
+    let session = h.state.session(Some(session)).expect("the session");
+    let timers = session.lua_timers.lock().await.len();
+    let c = session.connection.lock();
+    let triggers = c
+        .script
+        .lua_triggers()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    let aliases = c
+        .plugin_aliases
+        .list()
+        .into_iter()
+        .map(|(_, alias)| alias.name.clone())
+        .collect();
+    (triggers, timers, aliases)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn turning_a_plugin_off_takes_back_its_triggers_timers_and_aliases() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, plugins) = harness_with_plugins().await;
+    write_plugin(&plugins, "keeper", KEEPER);
+    let (one, two) = (h.first, h.open_session().await);
+
+    switch_plugin(&h, "keeper", true, one).await;
+    for id in [one, two] {
+        assert_eq!(
+            registered(&h, id).await,
+            (vec!["hunger".into()], 1, vec!["kk".into()])
+        );
+    }
+    switch_plugin(&h, "keeper", false, one).await;
+    for id in [one, two] {
+        assert_eq!(registered(&h, id).await, (Vec::new(), 0, Vec::new()));
+        let leftover = &plugins_of(&h, id);
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+    assert!(!plugin_row(&h, "keeper", one).await.on);
+
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plugin_folder_named_by_hand_shows_on_the_list_and_turns_off() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, plugins) = harness_with_plugins().await;
+    // Made by hand, as Help once told you to, with a hyphen New plugin
+    // refuses. Launch loads it all the same.
+    write_plugin(&plugins, "weather-pane", KEEPER);
+    h.state.selected_profile().await.plugins.enabled = vec!["weather-pane".into()];
+    let first = h.state.selected_session();
+    crate::app::plugins::load_enabled_plugins(h.app.handle(), &first, plugins).await;
+    let one = h.first;
+    assert_eq!(plugins_of(&h, one), ["weather-pane"]);
+
+    let row = plugin_row(&h, "weather-pane", one).await;
+    assert!(row.on && row.misnamed, "{row:?}");
+    let rows = switch_plugin(&h, "weather-pane", false, one).await;
+    let row = rows
+        .iter()
+        .find(|row| row.name == "weather-pane")
+        .expect("its row");
+    assert!(!row.on, "{row:?}");
+    assert_eq!(registered(&h, one).await, (Vec::new(), 0, Vec::new()));
+    let leftover = &plugins_of(&h, one);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    // It turns on again only once its folder keeps the rule.
+    let refused = crate::ipc::scripts::plugin_set_enabled(
+        h.app.handle().clone(),
+        h.app.state(),
+        "weather-pane".into(),
+        true,
+        Some(one),
+    )
+    .await;
+    assert_eq!(
+        refused,
+        Err(crate::app::plugins::folder::NAME_RULE.to_string())
+    );
+
+    h.finish(grid).await;
+}
+
+/// `wait_full` as the Scripts design writes it, which never returns
+/// while you are hurt.
+const WAIT_FULL: &str = "-- wait_full
+-- Stand up once your hit points are full.
+
+mud.on_gmcp(\"Char.Vitals\", function(data)
+  while data.hp < data.maxhp do
+    -- data never changes inside this loop, so it never ends
+  end
+  mud.send(\"stand\")
+end)
+";
+
+/// `wait_full` once it waits for the next packet instead.
+const WAIT_FULL_FIXED: &str = "-- wait_full
+-- Stand up once your hit points are full.
+
+mud.on_gmcp(\"Char.Vitals\", function(data)
+  if data.hp >= data.maxhp then
+    mud.send(\"stand\")
+  end
+end)
+";
+
+/// Two sessions on Default with `wait_full` made from the Scripts page,
+/// on, and saved as the design writes it, then stopped in the first
+/// session by a Char.Vitals that finds you hurt.
+async fn wait_full_stopped_in_the_first() -> (Harness, SessionId, SessionId) {
+    let (h, _) = harness_with_plugins().await;
+    let (one, two) = (h.first, h.open_session().await);
+    crate::ipc::scripts::plugin_create(
+        h.app.handle().clone(),
+        h.app.state(),
+        "wait_full".into(),
+        Some(one),
+    )
+    .await
+    .expect("New plugin");
+    save_wait_full(&h, WAIT_FULL, one).await;
+    let session = h.state.session(Some(one)).expect("the session");
+    let apply = {
+        let mut p = session.lock_profile().await;
+        let mut c = session.connection.lock();
+        let hurt = serde_json::json!({"hp": 186, "maxhp": 1020});
+        let stopped = c.script.dispatch_gmcp("Char.Vitals", &hurt);
+        crate::script::apply_actions(&mut p, &mut c, stopped).ran_under(p.open())
+    };
+    crate::session::effects::deliver_detached(h.app.handle(), &session, apply).await;
+    (h, one, two)
+}
+
+/// Save `code` to `wait_full` from the Scripts page with `session`
+/// selected there.
+async fn save_wait_full(
+    h: &Harness,
+    code: &str,
+    session: SessionId,
+) -> Vec<crate::ipc::scripts::PluginRow> {
+    let folder = crate::ipc::scripts::plugin_read(h.app.state(), "wait_full".into(), None)
+        .await
+        .expect("the plugin");
+    crate::ipc::scripts::plugin_save(
+        h.app.handle().clone(),
+        h.app.state(),
+        "wait_full".into(),
+        folder.manifest,
+        code.into(),
+        Some(session),
+    )
+    .await
+    .expect("the save")
+}
+
+/// Whether Vosh holds `wait_full` off in `session` after a stop.
+fn wait_full_stopped(h: &Harness, session: SessionId) -> bool {
+    let session = h.state.session(Some(session)).expect("the session");
+    let c = session.connection.lock();
+    c.script
+        .is_stopped(&vosh_script::Owner::Plugin("wait_full".into()))
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stopped_plugin_stays_stopped_across_its_switch_off_and_on() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = wait_full_stopped_in_the_first().await;
+    assert!(wait_full_stopped(&h, one));
+    let stopped = Some(crate::ipc::scripts::PluginStop::Time);
+    assert_eq!(plugin_row(&h, "wait_full", one).await.stopped, stopped);
+
+    switch_plugin(&h, "wait_full", false, one).await;
+    let rows = switch_plugin(&h, "wait_full", true, one).await;
+    // On for the profile, and still off in the session that stopped it,
+    // with nothing it registered, until a save or a restart.
+    assert!(wait_full_stopped(&h, one));
+    let leftover = &plugins_of(&h, one);
+    assert!(leftover.is_empty(), "{leftover:?}");
+    let row = rows
+        .iter()
+        .find(|row| row.name == "wait_full")
+        .expect("its row");
+    assert!(row.on, "{row:?}");
+    assert_eq!(row.stopped, stopped);
+    // The other session runs it.
+    assert!(!wait_full_stopped(&h, two));
+    assert_eq!(plugins_of(&h, two), ["wait_full"]);
+    assert_eq!(plugin_row(&h, "wait_full", two).await.stopped, None);
+
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_save_reloads_a_stopped_plugin_and_says_so_in_its_output() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = wait_full_stopped_in_the_first().await;
+    assert!(wait_full_stopped(&h, one));
+
+    let rows = save_wait_full(&h, WAIT_FULL_FIXED, one).await;
+    let row = rows
+        .iter()
+        .find(|row| row.name == "wait_full")
+        .expect("its row");
+    assert_eq!(row.stopped, None);
+    assert!(!wait_full_stopped(&h, one));
+    assert_eq!(plugins_of(&h, one), ["wait_full"]);
+    // The row says when it loaded again, no sooner than the stop, so the
+    // page marks the stopped line no more.
+    let ring = crate::ipc::scripts::lua_output_get(h.app.state(), Some(one))
+        .await
+        .expect("the ring");
+    let stop = ring
+        .iter()
+        .find(|line| line.kind == LuaKind::Error)
+        .expect("the stop");
+    assert!(
+        row.loaded_ms.is_some_and(|loaded| loaded >= stop.ts_ms),
+        "{row:?}"
+    );
+    let reloaded = (
+        "plugin:wait_full".to_string(),
+        LuaKind::Note,
+        "Vosh reloaded wait_full.".to_string(),
+    );
+    // The stop, then the reload, in the session that stopped it.
+    let output = output_of(&h, one).await;
+    let kinds: Vec<LuaKind> = output.iter().map(|(_, kind, _)| *kind).collect();
+    assert_eq!(
+        kinds,
+        [LuaKind::Note, LuaKind::Error, LuaKind::Note, LuaKind::Note]
+    );
+    assert_eq!(output.last(), Some(&reloaded));
+    h.until("the reload in the first terminal", |h| {
+        shows(h, one, "[lua] Vosh reloaded wait_full.")
+    })
+    .await;
+    // The other session runs it too, so it reloads there as well.
+    assert_eq!(output_of(&h, two).await.last(), Some(&reloaded));
+
+    h.finish(grid).await;
+}
+
+/// Two sessions on Default, where `helper` and `keeper` 0.1.0 are on,
+/// with Healer's file turning `keeper` on too and Warrior's turning on
+/// only `helper`. Returns the plugins folder and the files of Healer and
+/// Warrior.
+async fn keeper_on_in_two_profiles() -> (
+    Harness,
+    SessionId,
+    SessionId,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let (h, plugins) = harness_with_plugins().await;
+    write_plugin(&plugins, "helper", HELPER);
+    write_plugin(&plugins, "keeper", KEEPER);
+    std::fs::write(
+        plugins.join("keeper").join("manifest.toml"),
+        "[plugin]\nname = \"keeper\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("keeper's manifest");
+    let (one, two) = (h.first, h.open_session().await);
+    switch_plugin(&h, "helper", true, one).await;
+    switch_plugin(&h, "keeper", true, one).await;
+    h.state
+        .profile_set
+        .lock()
+        .await
+        .as_mut()
+        .expect("the set")
+        .create("Warrior")
+        .expect("Warrior");
+    let mut files = Vec::new();
+    for (profile, enabled) in [
+        ("Healer", vec!["keeper", "helper"]),
+        ("Warrior", vec!["helper"]),
+    ] {
+        let file = h.profile_file(profile).await;
+        let mut config = crate::profile::file::ProfileConfig::default();
+        config.plugins.enabled = enabled.into_iter().map(str::to_string).collect();
+        config.save(&file).expect("the profile file");
+        files.push(file);
+    }
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper", "keeper"]);
+    }
+    let warrior = files.pop().expect("Warrior's file");
+    let healer = files.pop().expect("Healer's file");
+    (h, one, two, plugins, healer, warrior)
+}
+
+/// The plugins a profile file turns on.
+fn saved_plugins(file: &std::path::Path) -> Vec<String> {
+    crate::profile::file::ProfileConfig::load(file)
+        .expect("the profile file")
+        .plugins
+        .enabled
+}
+
+/// `keeper` 0.2.0 from Orla, in a .zip of one folder.
+fn keeper_zip() -> Vec<u8> {
+    use std::io::Write;
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let manifest = "[plugin]\nname = \"keeper\"\nversion = \"0.2.0\"\nauthor = \"Orla\"\n";
+    for (name, text) in [
+        ("keeper/manifest.toml", manifest),
+        ("keeper/main.lua", "mud.alias('kk', 'look')"),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .expect("an entry");
+        zip.write_all(text.as_bytes()).expect("its bytes");
+    }
+    zip.finish().expect("the zip").into_inner()
+}
+
+/// Whether `session` holds the trigger `keeper` 0.1.0 makes, with the
+/// count of its Lua timers and its plugin aliases.
+async fn keeper_left(h: &Harness, session: SessionId) -> (bool, usize, Vec<String>) {
+    let (triggers, timers, aliases) = registered(h, session).await;
+    (triggers.contains(&"hunger".to_string()), timers, aliases)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn installing_over_a_plugin_turns_it_off_in_every_profile_first() {
+    use crate::ipc::scripts::{InstalledPlugin, PluginInstallCheck};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two, plugins, healer, warrior) = keeper_on_in_two_profiles().await;
+
+    let check = crate::ipc::scripts::plugin_install_check(
+        h.app.state(),
+        "keeper.zip".into(),
+        Some(keeper_zip()),
+        None,
+    )
+    .await
+    .expect("the check");
+    assert_eq!(
+        check,
+        PluginInstallCheck {
+            name: "keeper".into(),
+            version: "0.2.0".into(),
+            author: "Orla".into(),
+            existing: Some(InstalledPlugin {
+                version: "0.1.0".into(),
+                on_in: vec!["Default".into(), "Healer".into()],
+            }),
+        }
+    );
+
+    let rows = crate::ipc::scripts::plugin_install(
+        h.app.handle().clone(),
+        h.app.state(),
+        "keeper.zip".into(),
+        Some(keeper_zip()),
+        None,
+        Some(two),
+    )
+    .await
+    .expect("the install");
+    let keeper = rows
+        .iter()
+        .find(|row| row.name == "keeper")
+        .expect("its row");
+    assert_eq!((keeper.on, keeper.version.as_str()), (false, "0.2.0"));
+    // Both sessions on Default let go of all it registered, and keep
+    // helper running.
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper"]);
+        assert_eq!(keeper_left(&h, id).await, (false, 0, Vec::new()));
+    }
+    // Default drops it in memory and in its file, Healer in its file,
+    // and Warrior, which never turned it on, keeps its file as it was.
+    assert_eq!(h.state.selected_profile().await.plugins.enabled, ["helper"]);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_plugins(&default_file), ["helper"]);
+    assert_eq!(saved_plugins(&healer), ["helper"]);
+    assert_eq!(saved_plugins(&warrior), ["helper"]);
+    assert_eq!(backups(&warrior), 0);
+    // The new code is in place and runs once you turn it on.
+    assert_eq!(
+        std::fs::read_to_string(plugins.join("keeper").join("main.lua")).expect("main.lua"),
+        "mud.alias('kk', 'look')"
+    );
+    switch_plugin(&h, "keeper", true, one).await;
+    for id in [one, two] {
+        assert_eq!(keeper_left(&h, id).await, (false, 0, vec!["kk".into()]));
+    }
+
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn removing_a_plugin_clears_every_list_and_its_folder() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two, plugins, healer, _) = keeper_on_in_two_profiles().await;
+    let remove = |name: &str| {
+        crate::ipc::scripts::plugin_remove(
+            h.app.handle().clone(),
+            h.app.state(),
+            name.into(),
+            Some(one),
+        )
+    };
+
+    let rows = remove("keeper").await.expect("the remove");
+    let names: Vec<&str> = rows.iter().map(|row| row.name.as_str()).collect();
+    assert_eq!(names, ["helper"]);
+    for id in [one, two] {
+        assert_eq!(plugins_of(&h, id), ["helper"]);
+        assert_eq!(keeper_left(&h, id).await, (false, 0, Vec::new()));
+    }
+    assert_eq!(h.state.selected_profile().await.plugins.enabled, ["helper"]);
+    let default_file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_plugins(&default_file), ["helper"]);
+    assert_eq!(saved_plugins(&healer), ["helper"]);
+    assert!(!plugins.join("keeper").exists());
+    assert!(plugins.join("helper").is_dir());
+    assert_eq!(
+        remove("keeper").await.expect_err("nothing left"),
+        "You have no plugin named keeper."
+    );
+
     h.finish(grid).await;
 }

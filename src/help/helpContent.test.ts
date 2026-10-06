@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
 import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
+import { ALERT_PRESETS } from '../automation/alertPresets';
 import { SETTINGS_MENU } from '../terminal/settingsMenu';
 
 function body(id: string): string {
@@ -890,8 +891,9 @@ describe('the help on Lua', () => {
     );
     expect(text).toContain('A stopped call sends nothing it queued');
     expect(text).toContain(
-      'A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
+      'A plugin then stays off until you save it under Scripts in Settings or restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
     );
+    expect(text).toContain('The page of a plugin Vosh stopped says why above its editor.');
     expect(text).toContain('One call may queue 100 actions');
     expect(text).toContain(
       'The time limit reaches inside string patterns and the `table` functions too',
@@ -959,6 +961,58 @@ describe('the help on Lua', () => {
     );
   });
 
+  it('turns plugins on under Scripts and runs Lua in its Console', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain('Open Settings and choose Scripts to see your plugins.');
+    expect(text).toContain(
+      'The switch on each row turns a plugin on or off for that profile, and the plugin starts or stops at once in each session that plays it.',
+    );
+    expect(text).toContain('A plugin Vosh stopped reads `Stopped` there.');
+    expect(text).toContain(
+      'A plugin folder you named by hand with other characters, like `weather-pane`, still loads and shows there, and its row asks you to rename the folder. Until you do, its switch only turns it off, and its page does not open.',
+    );
+    expect(text).toContain(
+      'The Console under Scripts in Settings shows the same lines for the session in front, each with its time, and runs the Lua you type in its field in that session the way `#lua` does.',
+    );
+    // You no longer edit the profile file to turn a plugin on (Q29).
+    expect(text).not.toContain('while Vosh is closed');
+    expect(text).not.toContain('`[plugins]`');
+  });
+
+  it('makes a plugin with New plugin and edits it on its own page', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`New plugin` asks for a name of letters, digits and underscores, makes a folder of that name in `plugins` under the app data directory with a `manifest.toml` and a `main.lua`, turns the plugin on for the profile of the session in front and opens its page.',
+    );
+    expect(text).toContain(
+      '`Save and reload` writes both to the plugin folder and loads the plugin again at once in every session whose profile turns it on',
+    );
+    expect(text).toContain(
+      '`Show in Finder` under `Manifest` opens the plugin folder, and reads `Show in Explorer` on Windows and `Show the folder` on Linux.',
+    );
+    expect(text).toContain(
+      "A plugin's page shows the lines of that plugin under `Output`, and its field runs Lua inside the plugin",
+    );
+    // A plugin folder comes from New plugin now, not by hand.
+    expect(text).not.toContain('`plugins/<slug>/`');
+  });
+
+  it('installs, exports and removes a plugin from the Scripts list', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`Install…` takes a `.zip` a friend shared, and you can drop a plugin folder or a `.zip` on the Scripts list instead.',
+    );
+    expect(text).toContain('An install starts off for every profile.');
+    expect(text).toContain(
+      '`Export to Downloads` saves the plugin as a `.zip` in your Downloads folder for you to share',
+    );
+    expect(text).toContain('`Reload` reads the plugin from its folder again');
+    expect(text).toContain('`Show in Finder` opens its folder.');
+    expect(text).toContain(
+      '`Remove…` asks first, then deletes the plugin folder and turns the plugin off in every profile.',
+    );
+  });
+
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
     if (!found) throw new Error('no Lua topic');
@@ -969,6 +1023,9 @@ describe('the help on Lua', () => {
     for (const start of [
       'Each script and each plugin',
       'Loads from `#script load`',
+      'Press a plugin under Scripts',
+      'Each plugin row has a menu',
+      '`Install…` takes',
       'Each plugin runs',
       'Every Lua error',
       'Lua runs between',
@@ -1124,14 +1181,28 @@ describe('the help on auto reconnect and Lua alerts', () => {
   it('says what a Mac waits for and that only macOS takes banners back', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain('on macOS turning a plugin off takes back the banners it posted');
-    expect(text).toContain('Vosh asks for that from the Alerts settings, which have yet to land');
+    expect(text).toContain(
+      'Vosh asks for that the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows.',
+    );
+    expect(text).not.toContain('yet to land');
     expect(text).toContain(
       'It also needs a signed Vosh, so a dev build you run from the source shows none there.',
     );
   });
 
+  it('says how Vosh asks to post banners and how to turn them back on', () => {
+    const text = body('automate.alerts');
+    expect(text).toContain('Vosh asks before macOS does');
+    expect(text).toContain(
+      '`Not now` keeps `Banner` on and asks no more until you close Settings.',
+    );
+    expect(text).toContain('`Banner` wears a warning ring on every `Alert` row');
+    expect(text).toContain('`Open notification settings`');
+    expect(text).toContain('A dev build you run from the source shows no banners');
+  });
+
   it('reads the same in HELP.md', () => {
-    for (const id of ['get-connected.reconnect', 'automate.lua-scripts']) {
+    for (const id of ['get-connected.reconnect', 'automate.lua-scripts', 'automate.alerts']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
       expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
@@ -1274,5 +1345,118 @@ describe('the help on what each session keeps and what its profile shares', () =
       if (!topic) throw new Error(`no help topic ${id}`);
       expect(helpMd, id).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
     }
+  });
+});
+
+describe('the help on importing a profile', () => {
+  // Board 5 of the Scripts design, Scripts Q9 and Q10.
+  it('imports a profile under Characters as a new one or over one you have', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain(
+      'To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export.',
+    );
+    expect(text).toContain(
+      '`Replace a profile` lays it over the profile you pick, which keeps its own world and characters.',
+    );
+    expect(text).toContain(
+      'Plugins the file turns on come in off, so you turn each one on under Scripts.',
+    );
+    expect(text).toContain('Vosh names each one under a warning');
+  });
+
+  it('says where loadout mode puts the items, and that a clash keeps yours', () => {
+    // Scripts Q26 and the loadout mode note of board 5.
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain(
+      'In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file.',
+    );
+    expect(text).toContain(
+      'When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so.',
+    );
+    // A preset macro waits for yours on its key, and the presets on in
+    // loadout mode add their own, so the file's stay out (B2 chunk 3).
+    expect(text).toContain(
+      'The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.',
+    );
+  });
+
+  it('says how characters come with the file, and that an export names them only by choice', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain('A character no other profile has starts on and joins the new profile.');
+    expect(text).toContain('A new profile with no character starts with its login off.');
+    expect(text).toContain(
+      'Each starts off, so a profile you share names your characters only when you turn them on.',
+    );
+  });
+
+  it('sends a Vosh export from the importers to Characters', () => {
+    expect(body('characters-and-data.tintin-import')).toMatch(
+      /A Vosh profile export goes in under Characters, with `Import…` beside `New profile`\.$/,
+    );
+  });
+
+  it('keeps colons and semicolons out of the new prose', () => {
+    const paragraphs = body('characters-and-data.profiles').split('\n\n');
+    for (const start of [
+      '`Export to Downloads`',
+      'To bring in',
+      'In loadout mode',
+      'Plugins the file',
+      'A new profile',
+    ]) {
+      const paragraph = paragraphs.find((p) => p.startsWith(start)) ?? '';
+      expect(paragraph, start).not.toBe('');
+      expect(paragraph, start).not.toMatch(/[;:] /);
+    }
+  });
+});
+
+describe('the help on Numpad movement', () => {
+  // Scripts board 7, Q12 and Q13.
+  it('names each key and what it sends, and says a key of yours stays yours', () => {
+    const text = body('automate.macros');
+    expect(text).toContain(
+      '`Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`.',
+    );
+    expect(text).toContain('`Numpad7`, `Numpad1` and `Numpad5` stay free.');
+    // The keys go by event.code (src/automation/macroKeys.ts).
+    expect(text).toContain(
+      'Vosh reads the key itself, so NumLock does not matter and the digit row still types.',
+    );
+    // The Macros list of board 7 (B2 chunk 5).
+    expect(text).toContain(
+      'It adds six macros under `From presets` in Macros, where only their group changes.',
+    );
+    expect(text).toContain(
+      "A key one of your macros uses stays yours, and the preset's macro on it waits.",
+    );
+    expect(text).toContain('The direction takes the key once you move or delete your macro.');
+    expect(text).toContain('Turning the preset off removes its six and none of yours.');
+  });
+
+  it('names the six keys among the shortcuts', () => {
+    expect(body('reference.keyboard-shortcuts')).toContain(
+      'While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2` and `Numpad4` walk north, east, south and west, and `Numpad9` and `Numpad3` go up and down.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'automate.macros');
+    if (!found) throw new Error('no macros topic');
+    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+});
+
+describe('the help on the alert presets', () => {
+  it('names each preset as the Alerts category lists it', () => {
+    const text = body('automate.alerts');
+    for (const preset of ALERT_PRESETS) expect(text).toContain(`\`${preset.name}\``);
+    expect(text).toContain('All five start off.');
+    expect(text).toContain('at most once in 10 seconds');
+  });
+
+  it('points there from Reconnect and Create a trigger', () => {
+    expect(body('get-connected.reconnect')).toContain('in Get alerts at 3.9');
+    expect(body('automate.first-trigger')).toContain('as Get alerts at 3.9 shows');
   });
 });

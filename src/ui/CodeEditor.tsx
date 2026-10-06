@@ -1,9 +1,14 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import CodeMirror, { type Extension } from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
-import { codeEditorAttributes, codeHighlightStyle } from './codeEditorStyle';
+import {
+  codeEditorAttributes,
+  codeHighlightStyle,
+  marksUpdate,
+  type CodeMark,
+} from './codeEditorStyle';
 
 interface Props {
   value: string;
@@ -44,6 +49,16 @@ interface Props {
   ariaLabelledBy?: string;
   /** The id of the text that describes the editor. */
   ariaDescribedBy?: string;
+  /** The full editor a page gives a column of its own, like a plugin's
+   *  code under Scripts. The line the caret is on stays clear, as on
+   *  every editor, and `marks` tint their lines. Give it the `st-code`
+   *  class for the settings field fill, its ring, and the 2 px accent
+   *  outline 2 px out on focus. */
+  page?: boolean;
+  /** The lines the page surface marks as errors, each tinted danger at
+   *  10% from end to end, with its message on a hover over its text.
+   *  Any other editor marks nothing. */
+  marks?: readonly CodeMark[];
 }
 
 /** Vosh's shared code editor. CodeMirror 6 wrapped with a theme keyed
@@ -65,6 +80,8 @@ export function CodeEditor({
   ariaLabel,
   ariaLabelledBy,
   ariaDescribedBy,
+  page = false,
+  marks,
 }: Props) {
   // Language extensions. Lua comes from @codemirror/legacy-modes
   // wrapped via StreamLanguage — the modern CodeMirror 6 dedicated
@@ -123,11 +140,22 @@ export function CodeEditor({
           '.cm-cursor': {
             borderLeftColor: 'var(--text)',
           },
+          ...(page ? PAGE_SURFACE : {}),
         },
         { dark: true },
       ),
-    [inline, minHeight, maxHeight, fill],
+    [inline, minHeight, maxHeight, fill, page],
   );
+
+  // The lint marks go on through the view, which only the page surface
+  // asks for. They go on again when the text comes from outside, as on
+  // Discard, which replaces every line they sat on.
+  const [view, setView] = useState<EditorView | null>(null);
+  useEffect(() => {
+    if (!page || !view) return;
+    const update = marksUpdate(view.state, marks ?? []);
+    if (update) view.dispatch(update);
+  }, [page, view, marks, value]);
 
   // In fill mode the wrapper becomes a flex column so the inner
   // CodeMirror element can stretch via height: 100% — the parent
@@ -148,6 +176,7 @@ export function CodeEditor({
         theme={theme}
         extensions={extensions}
         readOnly={readOnly}
+        {...(page ? { onCreateEditor: setView } : {})}
         {...(fill ? { height: '100%' } : {})}
         {...(mirrorStyle ? { style: mirrorStyle } : {})}
         basicSetup={{
@@ -164,3 +193,49 @@ export function CodeEditor({
     </div>
   );
 }
+
+/** The page surface over the shared theme. The line numbers keep the
+ *  width CodeMirror means them to have, and the fold column takes the
+ *  width frame b1 gives it, so the code starts where the frame draws
+ *  it. An error mark draws no wavy underline and tints its whole line
+ *  instead, the line the caret is on included. A mark on an empty line
+ *  is a point, which drops its corner. Its message floats on the menu
+ *  recipe in the UI font. */
+const PAGE_SURFACE = {
+  // CodeMirror sizes the number column for a content box, and the app
+  // sizes every box by its border, which took 8 px from it.
+  '.cm-lineNumbers .cm-gutterElement': {
+    minWidth: '28px',
+  },
+  // CodeMirror sizes the fold column to its fold glyph, under 10 px in
+  // the bundled font, and frame b1 draws it 11 px wide.
+  '.cm-foldGutter .cm-gutterElement': {
+    minWidth: '11px',
+  },
+  '.cm-lintRange-error': {
+    backgroundImage: 'none',
+  },
+  '.cm-lintPoint-error:after': {
+    display: 'none',
+  },
+  '.cm-line:has(.cm-lintRange-error)': {
+    background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+  },
+  '.cm-line:has(.cm-lintPoint-error)': {
+    background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+  },
+  '.cm-tooltip.cm-tooltip-hover': {
+    border: 'none',
+    borderRadius: 'var(--r-row)',
+    background: 'var(--raised)',
+    boxShadow: 'var(--shadow-float)',
+    color: 'var(--text)',
+  },
+  '.cm-diagnostic, .cm-diagnostic-error': {
+    padding: '6px 10px',
+    borderLeft: 'none',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '12px',
+    lineHeight: '16px',
+  },
+};

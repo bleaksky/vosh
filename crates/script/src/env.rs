@@ -175,6 +175,11 @@ impl Envs {
         self.make.call(mud)
     }
 
+    /// The environment of the plugin `name`, while it runs.
+    pub(crate) fn get(&self, name: &str) -> Option<Table> {
+        self.by_name.raw_get::<Option<Table>>(name).ok().flatten()
+    }
+
     /// Make `env` the environment of the running plugin `name`, or with
     /// None forget the one it had.
     pub(crate) fn set(&self, name: &str, env: Option<Table>) {

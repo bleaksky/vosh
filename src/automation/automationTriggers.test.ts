@@ -11,6 +11,7 @@ import {
 import { jsonListText, parseJsonList } from './automationRecords';
 import type { TriggerAction, TriggerRecord } from '../ipc/automation';
 import {
+  blankPattern,
   blankTrigger,
   loadTriggers,
   moveTriggerToPrompts,
@@ -24,6 +25,7 @@ import {
   TRIGGER_STYLE_OPTIONS,
   triggerForSave,
   triggerKey,
+  triggerMode,
   triggerStyle,
   validateTriggers,
   withEffect,
@@ -34,6 +36,7 @@ import {
   withMainPatternSource,
   withPatternSource,
   withReplaceTemplate,
+  withTriggerMode,
   withTriggerStyle,
   type TriggerStyle,
 } from './automationTriggers';
@@ -407,8 +410,82 @@ describe('match modes', () => {
     expect(patternSource(saved.patterns[1])).toBe('You are hungry.');
   });
 
-  it('starts a new trigger as Regex until the editor offers the modes', () => {
-    expect(blankTrigger().patterns[0].mode).toBeUndefined();
+  it('starts a new trigger as Text', () => {
+    expect(blankTrigger().patterns).toEqual([
+      { pattern: '', enabled: true, mode: 'text', text: '' },
+    ]);
+    expect(triggerMode(blankTrigger())).toBe('text');
+  });
+
+  it('reads a trigger in the main row mode, and Regex when it has none', async () => {
+    const [needs] = await loadTriggers(fakeStore());
+    expect(triggerMode(needs)).toBe('text');
+    expect(triggerMode({ ...needs, patterns: needs.patterns.slice(2) })).toBe('regex');
+    expect(triggerMode({ ...needs, patterns: [] })).toBe('regex');
+  });
+
+  it('sets every row to the mode you pick and keeps what each one holds', async () => {
+    const [needs] = await loadTriggers(fakeStore());
+    const typed = needs.patterns.map(patternSource);
+    for (const mode of ['text', 'starts_with', 'regex'] as const) {
+      const next = withTriggerMode(needs, mode);
+      expect(next.patterns.map((p) => p.mode ?? 'regex')).toEqual(typed.map(() => mode));
+      expect(next.patterns.map(patternSource)).toEqual(typed);
+      expect(next.patterns.map((p) => p.enabled)).toEqual(needs.patterns.map((p) => p.enabled));
+    }
+    // A Regex row carries no mode or text, as the store writes one.
+    expect(withTriggerMode(needs, 'regex').patterns[0]).toEqual({
+      pattern: 'You are thirsty.',
+      enabled: true,
+    });
+    // A Text row moved to Starts with keeps the regex the store sent,
+    // and the store writes the new one from the text on Save.
+    expect(withTriggerMode(needs, 'starts_with').patterns[0]).toEqual({
+      pattern: '^\\s*You are thirsty\\.\\s*$',
+      enabled: true,
+      mode: 'starts_with',
+      text: 'You are thirsty.',
+    });
+  });
+
+  it('reads as saved after Regex to Text and back', () => {
+    // The Regex rows, as the store sends them.
+    const regex = normalizeTrigger({ name: 'needs', patterns: rows.slice(2, 5), actions: [] });
+    const loaded = createDraft([regex]);
+    const uid = loaded.items[0].uid;
+    let draft = updateDraftItem(loaded, uid, (t) => withTriggerMode(t, 'text'));
+    expect(isDraftDirty(draft)).toBe(true);
+    draft = updateDraftItem(draft, uid, (t) => withTriggerMode(t, 'starts_with'));
+    expect(isDraftDirty(draft)).toBe(true);
+    draft = updateDraftItem(draft, uid, (t) => withTriggerMode(t, 'regex'));
+    expect(isDraftDirty(draft)).toBe(false);
+  });
+
+  it('saves a new Text trigger with its mode and text', async () => {
+    const api = fakeStore();
+    let draft = createDraft(await loadTriggers(api));
+    draft = addDraftItem(draft, {
+      ...withMainPatternSource(blankTrigger(), 'A thick fog rolls in'),
+      name: 'fog',
+    });
+    await saveTriggerDraft(draft, api);
+    const fog = (JSON.parse(await api.exportTriggers()) as TriggerRecord[]).find(
+      (t) => t.name === 'fog',
+    );
+    expect(fog?.patterns).toEqual([
+      { pattern: '', enabled: true, mode: 'text', text: 'A thick fog rolls in' },
+    ]);
+  });
+
+  it('adds a pattern in the mode the trigger reads', () => {
+    expect(blankPattern('text')).toEqual({ pattern: '', enabled: true, mode: 'text', text: '' });
+    expect(blankPattern('starts_with')).toEqual({
+      pattern: '',
+      enabled: true,
+      mode: 'starts_with',
+      text: '',
+    });
+    expect(blankPattern('regex')).toEqual({ pattern: '', enabled: true });
   });
 });
 
@@ -478,7 +555,14 @@ describe('saving triggers', () => {
   });
 
   it('keeps the alert table of every trigger through a save', async () => {
-    const alert = { banner: true, sound: 'chime', attention: 'once' };
+    // Every key, as triggers_export sends the table.
+    const alert = {
+      banner: true,
+      sound: 'chime',
+      attention: 'once',
+      background: true,
+      words: false,
+    } as const;
     const store = fakeStore([{ ...trigger('rest', 'sleep'), alert }, trigger('flee', 'flee')]);
     let draft = createDraft(await loadTriggers(store.api));
     expect(draft.items[0].value.alert).toEqual(alert);
