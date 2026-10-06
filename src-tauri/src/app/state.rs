@@ -52,13 +52,15 @@ pub(crate) struct AppState {
     /// takes them through `launch_notices_take`, since launch runs before
     /// any window listens.
     pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
-    /// Counts the times the live profile's panes have been replaced: a
-    /// wholesale replace of the UI config, or a pane reset. It moves under
-    /// the profile lock in the same step that swaps them, so a pane tree
-    /// and the generation read with it always belong together. A pane
-    /// layout write carries the generation of the tree it was edited from,
-    /// and `pane_layout_set` refuses one from before a swap so it cannot
-    /// land on the new profile.
+    /// Counts the times the panes in front have been replaced: a
+    /// wholesale replace of the UI config, a pane reset, or a selection
+    /// that brought another profile to the front. It moves in the same
+    /// step that swaps them, under the profile lock or with the selection
+    /// under the session map, so a pane tree and the generation read with
+    /// it always belong together. A pane layout write carries the
+    /// generation of the tree it was edited from, and `pane_layout_set`
+    /// refuses one from before a swap so it cannot land on the new
+    /// profile.
     panes_generation: AtomicU64,
     /// Set by `migration_apply` once catalog.toml / loadouts.toml are
     /// written: the session is in the post-migration window where the live
@@ -174,9 +176,14 @@ impl AppState {
 
     /// Take the session `id` out of the map, see [`Sessions::close`].
     /// A session Vosh does not hold, or the only one, is an error, in a
-    /// sentence.
+    /// sentence. A close that hands the selection to a session on another
+    /// profile moves the panes generation, as a selection does.
     pub(crate) fn close_session(&self, id: SessionId) -> Result<Arc<Session>, String> {
-        self.sessions().close(id).map_err(str::to_string)
+        let mut sessions = self.sessions();
+        let front = sessions.selected().profile();
+        let closed = sessions.close(id).map_err(str::to_string)?;
+        self.follow_front(&sessions, &front);
+        Ok(closed)
     }
 
     /// The open profile named `name`, while a session plays it.
@@ -249,11 +256,28 @@ impl AppState {
     /// Select the session `id` names. The commands that name no session
     /// act on it from then on, and its native grid shows. A session Vosh
     /// does not hold is an error, in a sentence, and the selection stays.
+    /// A selection that brings another profile to the front moves the
+    /// panes generation, see [`AppState::follow_front`].
     pub(crate) fn select_session(&self, id: SessionId) -> Result<(), String> {
-        if self.sessions().select(id) {
-            Ok(())
-        } else {
-            Err(NO_SUCH_SESSION.to_string())
+        let mut sessions = self.sessions();
+        let front = sessions.selected().profile();
+        if !sessions.select(id) {
+            return Err(NO_SUCH_SESSION.to_string());
+        }
+        self.follow_front(&sessions, &front);
+        Ok(())
+    }
+
+    /// Move the panes generation when the selected session in `sessions`
+    /// plays another profile than `front`, the one in front before. Every
+    /// window then takes that profile's panes, as after a switch, so a
+    /// pane layout write edited from the tree of the profile that showed
+    /// is refused. Call it with the session map held, in the step that
+    /// moved the selection, so a write that finds the new selection reads
+    /// the new generation.
+    fn follow_front(&self, sessions: &Sessions, front: &Arc<OpenProfile>) {
+        if !Arc::ptr_eq(&sessions.selected().profile(), front) {
+            self.bump_panes_generation();
         }
     }
 
@@ -293,8 +317,9 @@ impl AppState {
         )
     }
 
-    /// Advance the panes generation. Call with the profile lock held, in
-    /// the step that replaces the live panes.
+    /// Advance the panes generation. Call it in the step that replaces
+    /// the panes in front, with the profile lock held, or with the session
+    /// map held as a selection moves, see [`AppState::follow_front`].
     pub(crate) fn bump_panes_generation(&self) {
         self.panes_generation.fetch_add(1, Ordering::AcqRel);
     }

@@ -171,10 +171,11 @@ pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 /// The payload is the profile's name, or `"scope"` after a scope change.
 /// `subscribeProfilesChanged` hears it.
 pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
-/// Sent to every window once the active profile switched, after the
-/// events that carry its UI config. The payload is the new profile's
-/// name. `subscribeProfileSwitched` and the pane layout's
-/// `ensureListening` hear it.
+/// Sent to every window once the profile in front changed, after the
+/// events that carry its UI config: the selected session switched
+/// profiles, or the selection moved to a session on another profile. The
+/// payload is that profile's name. `subscribeProfileSwitched` and the
+/// pane layout's `ensureListening` hear it.
 pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
 /// Sent after an edit to one profile's detail, active or not, naming
 /// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
@@ -574,15 +575,16 @@ pub(crate) fn profile_ui_events(state: &AppState, p: &Profile) -> ProfileUiEvent
     }
 }
 
-/// Hand every window the active profile's panes, tracked affects, tick
-/// settings, game time clock, chip style, affects display, and chat
-/// colors, then say the UI config was replaced. For
-/// the paths that replace the live UI config wholesale (a profile
-/// switch, an import, `#profile load` and `reset`), which must also bump
-/// the pane generation under the profile lock as they swap. Only a
-/// switch also sends `vosh://profile-switched`, so the status line hears
-/// these here after an import, a load, or a reset, and Settings reads
-/// the new config on [`UI_CONFIG_REPLACED`].
+/// Hand every window the panes, tracked affects, tick settings, game
+/// time clock, chip style, affects display, and chat colors of the
+/// profile in front, the one the selected session plays, then say the
+/// UI config was replaced. A switch in the selected session and a
+/// selection that brings another profile to the front send them, each of
+/// which moves the pane generation as it swaps the panes, and then
+/// `vosh://profile-switched`. `#profile load` and `reset` send the same
+/// events through [`line_effect_events`], so the status line hears them
+/// there too, and Settings reads the new config on
+/// [`UI_CONFIG_REPLACED`].
 pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,

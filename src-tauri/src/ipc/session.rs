@@ -68,8 +68,10 @@ pub(crate) async fn session_select<R: tauri::Runtime>(
 /// and its recording. Its profile saves, unless `#profile reset` or
 /// `#profile load` holds it, and closes when no other session plays it.
 /// A session that was selected hands the selection on, see
-/// [`crate::sessions::Sessions::close`], and profiles.toml leaves it out
-/// of the list a launch restores. Vosh never closes the only session,
+/// [`crate::sessions::Sessions::close`], and every window hears what the
+/// next one brings to the front, see
+/// [`crate::app::launch::show_selection`]. profiles.toml leaves it out of
+/// the list a launch restores. Vosh never closes the only session,
 /// since closing it closes the window.
 #[tauri::command]
 pub(crate) async fn session_close<R: tauri::Runtime>(
@@ -79,15 +81,18 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
 ) -> Result<(), String> {
     // Under the save lock, so a switch that found its session the last
     // on a profile still finds it so when it closes that profile.
-    let closed = {
+    let (closed, front) = {
         let _persist_guard = PERSIST_LOCK.lock().await;
-        state.close_session(session)?
+        let selected = state.selected_session();
+        let closed = state.close_session(session)?;
+        // A selected session that closes hands the selection on.
+        (closed, (selected.id == session).then(|| selected.profile()))
     };
     crate::session::disconnect(&app, state.inner(), &closed).await;
     if let Some(app_data) = state.app_data.get() {
         let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
     }
-    let _persist_guard = PERSIST_LOCK.lock().await;
+    let persist_guard = PERSIST_LOCK.lock().await;
     let open = closed.profile();
     {
         let mut p = open.lock().await;
@@ -105,6 +110,10 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
     crate::native::grid::forget(closed.id);
     save_sessions(state.inner()).await;
     broadcast_sessions(&app, state.inner());
+    drop(persist_guard);
+    if let Some(front) = front {
+        crate::app::launch::show_selection(&app, state.inner(), &front).await;
+    }
     Ok(())
 }
 

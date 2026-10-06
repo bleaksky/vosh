@@ -1893,3 +1893,143 @@ async fn a_shared_theme_set_in_the_first_session_survives_a_save_from_the_second
         );
     }
 }
+
+/// The harness with Tolliver on the first game, whom Default claims
+/// there, and Orla on the second, whom Build claims there. Nobody has
+/// connected yet, and the first session, on Default, is selected.
+async fn tolliver_and_orla() -> Harness {
+    use crate::profile::login_match::AutoMatch;
+    let h = Harness::new(Options::new(Build::New)).await;
+    let claim = |who: &str, port| AutoMatch {
+        host: Some("127.0.0.1".into()),
+        port: Some(port),
+        characters: vec![who.into()],
+        enabled: true,
+    };
+    for (server, who) in h.servers.iter().zip(["Tolliver", "Orla"]) {
+        server.options.lock().expect("the options").name = who.into();
+    }
+    {
+        let mut set = h.state.profile_set.lock().await;
+        let set = set.as_mut().expect("the set");
+        set.set_metadata(
+            DEFAULT_PROFILE_NAME,
+            None,
+            Some(claim("Tolliver", h.servers[0].port)),
+        )
+        .expect("Default claims Tolliver");
+        set.create("Build").expect("Build");
+        set.set_metadata("Build", None, Some(claim("Orla", h.servers[1].port)))
+            .expect("Build claims Orla");
+    }
+    h
+}
+
+/// Connect `session` to the game `server` and wait for `who` to log in.
+async fn log_in(h: &Harness, session: SessionId, server: usize, who: &str) {
+    h.connect_to(session, &h.servers[server]).await;
+    let welcome = format!("Welcome to the fake Aabahran, {who}.");
+    h.until(&format!("{who}'s login"), |h| shows(h, session, &welcome))
+        .await;
+}
+
+/// Every event of `names` the app sends from here on, in order, with its
+/// payload.
+type Heard = std::sync::Arc<std::sync::Mutex<Vec<(&'static str, serde_json::Value)>>>;
+
+fn hear(h: &Harness, names: &[&'static str]) -> Heard {
+    use tauri::Listener;
+    let heard = Heard::default();
+    for &name in names {
+        let keep = heard.clone();
+        h.app.listen_any(name, move |event| {
+            let payload = serde_json::from_str(event.payload()).expect("a JSON payload");
+            keep.lock().expect("the events").push((name, payload));
+        });
+    }
+    heard
+}
+
+/// What `heard` holds, which it then forgets.
+fn take(heard: &Heard) -> Vec<(&'static str, serde_json::Value)> {
+    std::mem::take(&mut *heard.lock().expect("the events"))
+}
+
+/// The events every window hears as another profile comes to the front,
+/// in order.
+fn profile_ui_names(h: &Harness) -> Vec<&'static str> {
+    let profile = crate::profile::live::Profile::default();
+    let events = crate::app::events::profile_ui_events(&h.state, &profile).events();
+    events.into_iter().map(|(event, _)| event).collect()
+}
+
+/// Select `session`, as a click on its row does.
+async fn select(h: &Harness, session: SessionId) {
+    crate::ipc::session::session_select(h.app.handle().clone(), h.app.state(), session)
+        .await
+        .expect("the selection moves");
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn selecting_orla_hands_every_window_builds_settings_then_its_name() {
+    use crate::app::events::{CHIP_STYLE_CHANGED, PANE_LAYOUT_CHANGED, PROFILE_SWITCHED};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    let one = h.first;
+    log_in(&h, one, 0, "Tolliver").await;
+    let two = open_session_on(&h, "Build").await;
+    // Build keeps a chip style of its own.
+    let orla = h.state.session(Some(two)).expect("Orla's session");
+    orla.lock_profile().await.ui.chip_style = "icon_value".into();
+    log_in(&h, two, 1, "Orla").await;
+    let mut names = profile_ui_names(&h);
+    names.push(PROFILE_SWITCHED);
+    let heard = hear(&h, &names);
+    let payload = |heard: &[(&str, serde_json::Value)], name: &str| {
+        let found = heard.iter().find(|(event, _)| *event == name);
+        found
+            .map(|(_, payload)| payload.clone())
+            .unwrap_or_default()
+    };
+
+    // Every window takes Build's settings, then hears its name, and the
+    // panes move on a generation, so a drag from Default's panes cannot
+    // land on Build's.
+    let generation = h.state.panes_generation();
+    select(&h, two).await;
+    let got = take(&heard);
+    let order: Vec<&str> = got.iter().map(|(event, _)| *event).collect();
+    assert_eq!(order, names);
+    assert_eq!(payload(&got, CHIP_STYLE_CHANGED), json!("icon_value"));
+    assert_eq!(payload(&got, PROFILE_SWITCHED), json!("Build"));
+    assert_eq!(
+        payload(&got, PANE_LAYOUT_CHANGED)["generation"],
+        json!(generation + 1)
+    );
+
+    // Tolliver's row brings Default back.
+    select(&h, one).await;
+    let got = take(&heard);
+    assert_eq!(got.len(), names.len(), "{got:?}");
+    assert_eq!(payload(&got, CHIP_STYLE_CHANGED), json!("value_only"));
+    assert_eq!(payload(&got, PROFILE_SWITCHED), json!(DEFAULT_PROFILE_NAME));
+
+    // A session on the profile in front brings nothing new.
+    let three = h.open_session().await;
+    select(&h, three).await;
+    let got = take(&heard);
+    assert!(got.is_empty(), "{got:?}");
+
+    // Closing Orla's session while it is selected hands the selection to
+    // the session after it, which brings Default back.
+    select(&h, two).await;
+    take(&heard);
+    h.close_session(two).await;
+    assert_eq!(h.state.selected_session().id, three);
+    let got = take(&heard);
+    assert_eq!(got.len(), names.len(), "{got:?}");
+    assert_eq!(payload(&got, PROFILE_SWITCHED), json!(DEFAULT_PROFILE_NAME));
+
+    h.finish(grid).await;
+}
