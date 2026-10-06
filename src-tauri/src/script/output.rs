@@ -3,9 +3,10 @@
 //! Scripts console. The Scripts page reads it as it opens and hears each
 //! new line on `session://lua-output`. The connection keeps it apart from
 //! what a disconnect clears, so the lines plugins print at launch and
-//! before a connect stay.
+//! before a connect stay. It also keeps when each plugin last loaded, so
+//! the page tells an error of the code that runs now from an older one.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use serde::Serialize;
 use vosh_script::{Owner, Place};
@@ -77,10 +78,14 @@ impl LuaLine {
     }
 }
 
-/// The newest [`OUTPUT_LINES`] lines of a session.
+/// The newest [`OUTPUT_LINES`] lines of a session, and when each plugin
+/// last loaded in it.
 #[derive(Debug, Default)]
 pub(crate) struct LuaOutput {
     lines: VecDeque<LuaLine>,
+    /// When each owner last loaded, in milliseconds since the Unix
+    /// epoch, by [`Owner::tag`].
+    loads: HashMap<String, i64>,
 }
 
 impl LuaOutput {
@@ -96,6 +101,17 @@ impl LuaOutput {
     /// Every line, oldest first.
     pub(crate) fn lines(&self) -> Vec<LuaLine> {
         self.lines.iter().cloned().collect()
+    }
+
+    /// Note that `owner` loads at `ts_ms`, ahead of any line its load
+    /// prints, which therefore carries that time or a later one.
+    pub(crate) fn note_load(&mut self, owner: &Owner, ts_ms: i64) {
+        self.loads.insert(owner.tag(), ts_ms);
+    }
+
+    /// When `owner` last loaded, if it has in this session.
+    pub(crate) fn loaded_at(&self, owner: &Owner) -> Option<i64> {
+        self.loads.get(&owner.tag()).copied()
     }
 
     /// Let go of the lines of `owner`, a tag like `plugin:vitals_alert`,
@@ -154,6 +170,20 @@ mod tests {
         ring.clear(None);
         let leftover = &ring.lines();
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn the_ring_keeps_when_each_plugin_last_loaded() {
+        let mut ring = LuaOutput::default();
+        let wait_full = Owner::Plugin("wait_full".into());
+        assert_eq!(ring.loaded_at(&wait_full), None);
+        ring.note_load(&wait_full, 1);
+        ring.note_load(&wait_full, 5);
+        ring.note_load(&Owner::Plugin("vitals_alert".into()), 3);
+        assert_eq!(ring.loaded_at(&wait_full), Some(5));
+        // Clear lets go of lines, not of loads.
+        ring.clear(None);
+        assert_eq!(ring.loaded_at(&wait_full), Some(5));
     }
 
     #[test]

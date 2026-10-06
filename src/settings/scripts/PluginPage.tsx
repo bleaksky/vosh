@@ -144,10 +144,11 @@ export function PluginPage({
     () => lines.filter((line) => line.owner === pluginOwner(name)),
     [lines, name],
   );
+  const loadedMs = row?.loaded_ms ?? null;
   const marks = useMemo(() => {
-    const mark = errorMark(lines, name, entry);
+    const mark = errorMark(lines, name, entry, loadedMs);
     return mark ? [mark] : NO_MARKS;
-  }, [lines, name, entry]);
+  }, [lines, name, entry, loadedMs]);
 
   if (!file || !draft) return null;
 

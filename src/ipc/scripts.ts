@@ -30,6 +30,10 @@ export interface PluginRow {
   on: boolean;
   /** Why Vosh stopped it in the session, while it holds it off. */
   stopped: PluginStop | null;
+  /** When it last loaded in the session, in milliseconds since the Unix
+   *  epoch, or null before its first load. An error from before then is
+   *  about code that no longer runs. */
+  loaded_ms: number | null;
   /** Its folder name breaks the rule New plugin shows, which only a
    *  folder named by hand can do. It loads all the same, and the page
    *  cannot open it but can turn it off. */

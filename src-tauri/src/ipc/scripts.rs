@@ -31,6 +31,9 @@ pub(crate) struct PluginRow {
     pub(crate) on: bool,
     /// Why Vosh stopped it in the session, while it holds it off.
     pub(crate) stopped: Option<PluginStop>,
+    /// When it last loaded in the session, in milliseconds since the Unix
+    /// epoch, so the page marks only an error of the code that runs now.
+    pub(crate) loaded_ms: Option<i64>,
     /// Its name breaks the rule New plugin shows, which only a folder
     /// you named by hand can do. It loads all the same, and the page
     /// cannot open it but can turn it off.
@@ -85,6 +88,7 @@ async fn plugin_rows(state: &SharedState, session: &Session) -> Result<Vec<Plugi
             PluginRow {
                 on: enabled.contains(&manifest.name),
                 stopped: c.script.stop_reason(&owner).map(PluginStop::from),
+                loaded_ms: c.lua_output.loaded_at(&owner),
                 misnamed: !plugin_name_ok(&manifest.name),
                 name: manifest.name,
                 version: manifest.version,

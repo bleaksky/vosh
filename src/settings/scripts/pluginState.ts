@@ -25,23 +25,23 @@ export function noPluginLines(name: string): string {
   return `Every print and error from ${name} shows here and in the terminal.`;
 }
 
-/** The note Vosh prints in Output each time Save or Reload loads the
- *  plugin again (src-tauri/src/app/plugins/live.rs). */
-export function reloadedNote(name: string): string {
-  return `Vosh reloaded ${name}.`;
-}
-
 /** The line of `file` to mark in the editor of the plugin `name`: the
- *  place the newest error or stop of the plugin since its last load
- *  names, with that line of Output for the hover. Null when the plugin
- *  has had none since, or when its newest names no place in `file`. */
-export function errorMark(lines: readonly LuaLine[], name: string, file: string): CodeMark | null {
+ *  place the newest error or stop of the plugin since it loaded at
+ *  `loadedMs` names, with that line of Output for the hover. Null when
+ *  the plugin has had none since, or when its newest names no place in
+ *  `file`. A load prints its own errors no sooner than it starts, so a
+ *  line from before then is about code that no longer runs. */
+export function errorMark(
+  lines: readonly LuaLine[],
+  name: string,
+  file: string,
+  loadedMs: number | null,
+): CodeMark | null {
   const owner = pluginOwner(name);
-  const loaded = reloadedNote(name);
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     if (line.owner !== owner) continue;
-    if (line.kind === 'note' && line.text === loaded) return null;
+    if (loadedMs !== null && line.ts_ms < loadedMs) return null;
     if (line.kind !== 'error') continue;
     // Lua names the chunk by the plugin's folder and the file in it.
     if (line.at?.source !== `${name}/${file}`) return null;

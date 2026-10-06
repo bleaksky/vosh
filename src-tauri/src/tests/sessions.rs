@@ -2333,6 +2333,19 @@ async fn a_save_reloads_a_stopped_plugin_and_says_so_in_its_output() {
     assert_eq!(row.stopped, None);
     assert!(!wait_full_stopped(&h, one));
     assert_eq!(plugins_of(&h, one), ["wait_full"]);
+    // The row says when it loaded again, no sooner than the stop, so the
+    // page marks the stopped line no more.
+    let ring = crate::ipc::scripts::lua_output_get(h.app.state(), Some(one))
+        .await
+        .expect("the ring");
+    let stop = ring
+        .iter()
+        .find(|line| line.kind == LuaKind::Error)
+        .expect("the stop");
+    assert!(
+        row.loaded_ms.is_some_and(|loaded| loaded >= stop.ts_ms),
+        "{row:?}"
+    );
     let reloaded = (
         "plugin:wait_full".to_string(),
         LuaKind::Note,

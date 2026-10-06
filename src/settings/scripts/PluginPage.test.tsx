@@ -121,6 +121,7 @@ const row = (name: string, patch: Partial<PluginRow> = {}): PluginRow => ({
   entry: 'main.lua',
   on: true,
   stopped: null,
+  loaded_ms: null,
   misnamed: false,
   ...patch,
 });
@@ -164,7 +165,11 @@ beforeEach(() => {
   calls.invoked.length = 0;
   seen.editor = null;
   seen.dialog = null;
-  LIST = [row('vitals_alert'), row('wait_full', { stopped: 'time' })];
+  // vitals_alert loaded again at 21:14:31, after its error at line 22.
+  LIST = [
+    row('vitals_alert', { loaded_ms: at(21, 14, 31) }),
+    row('wait_full', { stopped: 'time', loaded_ms: at(21, 19, 0) }),
+  ];
   calls.answers = {
     plugins_list: () => LIST,
     lua_output_get: () => RING,
@@ -387,6 +392,19 @@ describe('a stopped plugin', () => {
       findAll(m.container, (el) => el.getAttribute('class') === 'st-auto-cardnote is-warn'),
     ).toEqual([]);
     // The error at line 22 came before the reload that fixed it.
+    expect(editor().marks).toEqual([]);
+    await m.unmount();
+  });
+
+  it('marks an error from before a load the page saw no note for', async () => {
+    // The switch or a profile switch loads a plugin without a note, and
+    // the row still says when.
+    LIST = [row('vitals_alert', { loaded_ms: at(21, 14, 2) })];
+    const m = await mount({ group: 'scripts', section: 'vitals_alert' });
+    expect(editor().marks).toEqual([{ line: 22, message: RING[0].text }]);
+    LIST = [row('vitals_alert', { loaded_ms: at(21, 14, 4) })];
+    await m.show({ group: 'scripts' });
+    await m.show({ group: 'scripts', section: 'vitals_alert' });
     expect(editor().marks).toEqual([]);
     await m.unmount();
   });

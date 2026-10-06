@@ -69,34 +69,52 @@ describe('stopNote', () => {
 
 describe('errorMark', () => {
   it('marks the line a stop names, with its line of Output', () => {
-    expect(errorMark(BOARD_THREE, 'wait_full', 'main.lua')).toEqual({ line: 5, message: STOP });
+    expect(errorMark(BOARD_THREE, 'wait_full', 'main.lua', null)).toEqual({
+      line: 5,
+      message: STOP,
+    });
+    expect(errorMark(BOARD_THREE, 'wait_full', 'main.lua', at(21, 19, 0))).toEqual({
+      line: 5,
+      message: STOP,
+    });
   });
 
   it('marks nothing once the plugin loaded again after its error', () => {
-    expect(errorMark(BOARD_ONE, 'vitals_alert', 'main.lua')).toBeNull();
-    // The same error after the reload marks its line.
-    const again = [...BOARD_ONE, { ...BOARD_ONE[0], ts_ms: at(21, 16, 0) }];
-    expect(errorMark(again, 'vitals_alert', 'main.lua')).toEqual({
+    // Board 1's reload at 21:14:31 came after the error at line 22.
+    const reloaded = at(21, 14, 31);
+    expect(errorMark(BOARD_ONE, 'vitals_alert', 'main.lua', reloaded)).toBeNull();
+    // An error the load itself prints carries its time or a later one.
+    const again = [...BOARD_ONE, { ...BOARD_ONE[0], ts_ms: reloaded }];
+    expect(errorMark(again, 'vitals_alert', 'main.lua', reloaded)).toEqual({
       line: 22,
       message: BOARD_ONE[0].text,
     });
   });
 
+  it('reads the load from the row, not from the words of a note', () => {
+    // A load through the switch prints no note, and a note is only text.
+    expect(errorMark(BOARD_ONE, 'vitals_alert', 'main.lua', at(21, 14, 2))).toEqual({
+      line: 22,
+      message: BOARD_ONE[0].text,
+    });
+    expect(errorMark(BOARD_THREE, 'wait_full', 'main.lua', at(21, 20, 12))).toBeNull();
+  });
+
   it('reads only the lines of its own plugin', () => {
     const lines = [...BOARD_THREE, ...BOARD_ONE];
-    expect(errorMark(lines, 'wait_full', 'main.lua')).toEqual({ line: 5, message: STOP });
-    expect(errorMark(BOARD_THREE, 'vitals_alert', 'main.lua')).toBeNull();
+    expect(errorMark(lines, 'wait_full', 'main.lua', null)).toEqual({ line: 5, message: STOP });
+    expect(errorMark(BOARD_THREE, 'vitals_alert', 'main.lua', null)).toBeNull();
   });
 
   it('marks nothing when the newest error names another file or no place', () => {
-    expect(errorMark(BOARD_THREE, 'wait_full', 'lib/stand.lua')).toBeNull();
+    expect(errorMark(BOARD_THREE, 'wait_full', 'lib/stand.lua', null)).toBeNull();
     const memory: LuaLine = {
       ts_ms: at(21, 21, 0),
       owner: 'plugin:wait_full',
       kind: 'error',
       text: 'Vosh stopped wait_full. Your scripts hold more than 128 MB.',
     };
-    expect(errorMark([...BOARD_THREE, memory], 'wait_full', 'main.lua')).toBeNull();
+    expect(errorMark([...BOARD_THREE, memory], 'wait_full', 'main.lua', null)).toBeNull();
   });
 });
 

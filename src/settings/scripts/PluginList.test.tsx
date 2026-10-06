@@ -61,6 +61,7 @@ const plugin = (patch: Partial<PluginRow> & Pick<PluginRow, 'name'>): PluginRow 
   entry: 'main.lua',
   on: true,
   stopped: null,
+  loaded_ms: null,
   misnamed: false,
   ...patch,
 });
