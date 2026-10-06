@@ -65,10 +65,9 @@ interface DraftEditorProps<T> {
   pinnedSeq?: number;
   /** More on the left of the save bar, given the draft and its setter. */
   barExtra?: (draft: Draft<T>, setDraft: (next: Draft<T>) => void) => ReactNode;
-  /** Names of list rows that carry the warn ring while they are on. */
-  warnNames?: ReadonlySet<string>;
-  /** Why a row carries the warn ring, for a reader. */
-  warnNote?: string;
+  /** The list rows that carry the warn ring while they are on, by name,
+   *  each with why, for a reader. */
+  warnNotes?: ReadonlyMap<string, string>;
 }
 
 const SAVED_MS = 2000;
@@ -92,8 +91,7 @@ export function DraftEditor<T>({
   pinned = null,
   pinnedSeq = 0,
   barExtra,
-  warnNames,
-  warnNote,
+  warnNotes,
 }: DraftEditorProps<T>) {
   const [draft, setDraftState] = useState<Draft<T> | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -522,8 +520,7 @@ export function DraftEditor<T>({
               revealSeq={revealSeq}
               monoName={spec.monoName ?? false}
               monoMeta={spec.monoMeta ?? false}
-              warnNames={warnNames}
-              warnNote={warnNote}
+              warnNotes={warnNotes}
               folded={folds.folded}
               onFold={folds.setFold}
               groupSwitches={groupSwitches}

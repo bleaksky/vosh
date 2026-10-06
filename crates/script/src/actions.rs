@@ -96,13 +96,29 @@ pub enum Action {
     /// Cancel a previously scheduled timer.
     CancelTimer(u32),
     /// A line from `print` or `mud.log`, for the terminal under the
-    /// `[lua]` tag.
-    Log(String),
+    /// `[lua]` tag, from the Lua of `owner`, whose call printed it.
+    Log {
+        owner: Owner,
+        text: String,
+    },
     /// A Lua error, with its file and line where Lua knows them, or a
-    /// line about a stop or the action cap. The terminal shows it under
-    /// the `[lua]` tag in red. Vosh adds these itself, so no call's
-    /// action cap counts them.
-    Error(String),
+    /// line about a stop or the action cap, about the Lua of `owner`.
+    /// The terminal shows it under the `[lua]` tag in red. `at` is the
+    /// place Lua names, which the Scripts page marks in its editor. Vosh
+    /// adds these itself, so no call's action cap counts them.
+    Error {
+        owner: Owner,
+        text: String,
+        at: Option<Place>,
+    },
+    /// A sentence Vosh writes about the Lua of `owner`, such as how long
+    /// a stopped plugin stays off. The terminal shows it under the
+    /// `[lua]` tag in the default color. Vosh adds these itself, so no
+    /// call's action cap counts them.
+    Note {
+        owner: Owner,
+        text: String,
+    },
     /// Ring an alert, from `mud.alert`, for the Lua of `owner`, which
     /// ends the alerts of a plugin as the plugin turns off.
     Alert {
@@ -112,6 +128,15 @@ pub enum Action {
         text: Option<String>,
         parts: AlertParts,
     },
+}
+
+/// Where in your Lua an error or a stop happened: the chunk as Lua
+/// names it in a message, like `vitals_alert/main.lua` or `#lua`, and
+/// the line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Place {
+    pub source: String,
+    pub line: u32,
 }
 
 impl Action {
@@ -126,8 +151,9 @@ impl Action {
             | Action::DropPluginAliases(text)
             | Action::RemoveVar(text)
             | Action::RemovePromptVar(text)
-            | Action::Log(text)
-            | Action::Error(text) => text.len(),
+            | Action::Log { text, .. }
+            | Action::Error { text, .. }
+            | Action::Note { text, .. } => text.len(),
             Action::SetAlias { name, expansion } => name.len() + expansion.len(),
             Action::SetPluginAlias {
                 plugin,

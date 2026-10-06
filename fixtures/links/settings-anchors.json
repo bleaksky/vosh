@@ -68,8 +68,11 @@
     "automation:loadouts",
     "automation#import",
     "automation#json",
+    "scripts#plugins",
+    "scripts#console",
     "characters",
     "characters#new-profile",
+    "characters#import-profile",
     "characters#login",
     "characters#world",
     "characters#tracked",
@@ -114,6 +117,7 @@
       "layout": "layout",
       "input": "input",
       "automation": "automation",
+      "scripts": "scripts",
       "characters": "characters"
     },
     "old tab ids": {
@@ -146,6 +150,7 @@
     }
   },
   "help": [
+    "automate.lua-scripts",
     "characters-and-data.profiles",
     "characters-and-data.search-logs",
     "make-it-yours.switch-themes",
@@ -241,7 +246,12 @@
       "json",
       "tick"
     ],
+    "scripts": [
+      "console",
+      "plugins"
+    ],
     "characters": [
+      "import-profile",
       "layout",
       "login",
       "new-profile",

@@ -1,6 +1,6 @@
 //! The commands for your automation. Settings lists and saves your
 //! triggers, aliases, macros and timers through them, adds and removes
-//! the preset triggers, and imports another client's file into the live
+//! what the presets add, and imports another client's file into the live
 //! profile. The command line reads your macros through them too.
 //!
 //! Each command that reads or changes a profile takes the `profile` it
@@ -20,7 +20,10 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
-use crate::loadouts::presets::install_preset_triggers;
+use crate::loadouts::presets::{
+    delete_macro, import_macros, install_preset_macros, install_preset_triggers,
+    remove_preset_macros, set_macro,
+};
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::script::{list_groups, set_list_group, GroupList};
@@ -129,11 +132,12 @@ pub(crate) async fn macros_list(
     Ok(p.macros.clone())
 }
 
-/// Set or replace a binding by key. Empty `command` is rejected;
-/// callers that want to unbind should use `macros_delete`.
-/// Re-binding an existing key overwrites the prior command. `enabled`
+/// Set or replace a binding of yours by key. Empty `command` is
+/// rejected; callers that want to unbind should use `macros_delete`.
+/// Re-binding a key of yours overwrites the prior command. `enabled`
 /// turns the binding on or off without unbinding it. Absent keeps an
-/// existing binding's state and makes a new binding on.
+/// existing binding's state and makes a new binding on. With `preset`,
+/// the call changes only the group of that preset's macro on `key`.
 #[tauri::command]
 pub(crate) async fn macros_set(
     app: AppHandle,
@@ -142,37 +146,12 @@ pub(crate) async fn macros_set(
     command: String,
     group: Option<String>,
     enabled: Option<bool>,
+    preset: Option<String>,
     profile: Option<String>,
 ) -> Result<Vec<Macro>, String> {
-    let key = key.trim().to_string();
-    let command = command.trim().to_string();
-    if key.is_empty() {
-        return Err("key cannot be empty".into());
-    }
-    if command.is_empty() {
-        return Err("command cannot be empty".into());
-    }
-    // Normalize the group: empty / whitespace-only -> None so the
-    // wire format does not persist an empty group string.
-    let group = group
-        .map(|g| g.trim().to_string())
-        .filter(|g| !g.is_empty());
     let (open, updated) = {
         let mut p = state.lock_named(profile).await?;
-        if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
-            existing.command = command;
-            existing.group = group;
-            if let Some(enabled) = enabled {
-                existing.enabled = enabled;
-            }
-        } else {
-            p.macros.push(Macro {
-                key,
-                command,
-                group,
-                enabled: enabled.unwrap_or(true),
-            });
-        }
+        set_macro(&mut p, &key, &command, group, enabled, preset.as_deref())?;
         (p.open().clone(), p.macros.clone())
     };
     save_then_broadcast(
@@ -187,7 +166,7 @@ pub(crate) async fn macros_set(
     Ok(updated)
 }
 
-/// Remove a binding by key. No-op when the key is not bound.
+/// Remove your binding on `key`. No-op when you have none there.
 #[tauri::command]
 pub(crate) async fn macros_delete(
     app: AppHandle,
@@ -197,7 +176,7 @@ pub(crate) async fn macros_delete(
 ) -> Result<Vec<Macro>, String> {
     let (open, updated) = {
         let mut p = state.lock_named(profile).await?;
-        p.macros.retain(|m| m.key != key);
+        delete_macro(&mut p, &key);
         (p.open().clone(), p.macros.clone())
     };
     save_then_broadcast(
@@ -458,32 +437,41 @@ pub(crate) async fn timers_delete(
     Ok(updated)
 }
 
-/// Bulk-install a set of preset triggers. Each trigger should already
-/// have its `preset` field set to the preset id; this command
-/// validates and inserts them so the engine starts matching
-/// immediately. Returns the number installed.
+/// Install the triggers and macros of the presets you turned on. Each
+/// one should already have its `preset` field set to the preset id; this
+/// command validates and inserts them so the engine starts matching and
+/// the keys start sending at once. Returns the number installed.
 #[tauri::command]
 pub(crate) async fn presets_install(
     app: AppHandle,
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
+    macros: Vec<Macro>,
     profile: Option<String>,
 ) -> Result<usize, String> {
-    let (open, installed) = {
+    let (triggers_came, macros_came) = (!triggers.is_empty(), !macros.is_empty());
+    let (open, installed, macros) = {
         let mut p = state.lock_named(profile).await?;
-        let installed = install_preset_triggers(&mut p, triggers)?;
-        (p.open().clone(), installed)
+        // The macros go first, since they refuse before they change
+        // anything.
+        let mut installed = install_preset_macros(&mut p, macros)?;
+        installed += install_preset_triggers(&mut p, triggers)?;
+        let macros = macros_came.then(|| p.macros.clone());
+        (p.open().clone(), installed, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    if installed > 0 {
+    if triggers_came {
         broadcast_list_changes(&app, &open, ListChanges::TRIGGERS);
+    }
+    if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
+        broadcast(&app, MACROS_CHANGED, &macros);
     }
     Ok(installed)
 }
 
-/// Remove every trigger tagged with the given preset id. Returns the
-/// number removed.
+/// Remove every trigger and macro tagged with the given preset id.
+/// Returns the number removed.
 #[tauri::command]
 pub(crate) async fn presets_remove(
     app: AppHandle,
@@ -491,17 +479,22 @@ pub(crate) async fn presets_remove(
     preset_id: String,
     profile: Option<String>,
 ) -> Result<usize, String> {
-    let (open, removed) = {
+    let (open, triggers_removed, macros_removed, macros) = {
         let mut p = state.lock_named(profile).await?;
-        let removed = p.triggers.remove_by_preset(&preset_id);
-        (p.open().clone(), removed)
+        let triggers_removed = p.triggers.remove_by_preset(&preset_id);
+        let macros_removed = remove_preset_macros(&mut p, &preset_id);
+        let macros = p.macros.clone();
+        (p.open().clone(), triggers_removed, macros_removed, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
-    if removed > 0 {
+    if triggers_removed > 0 {
         broadcast_list_changes(&app, &open, ListChanges::TRIGGERS);
     }
-    Ok(removed)
+    if macros_removed > 0 && state.in_front(&open) {
+        broadcast(&app, MACROS_CHANGED, &macros);
+    }
+    Ok(triggers_removed + macros_removed)
 }
 
 /// Detect which import format a file uses, based on content sniffing.
@@ -546,7 +539,7 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     };
     let report = crate::import::parse(fmt, &text);
     let mut rejected: Vec<String> = Vec::new();
-    let mut macros_changed = false;
+    let macros_changed = !report.macros.is_empty();
     let macros_snapshot: Vec<Macro>;
     let lists;
     let open = {
@@ -560,13 +553,8 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
                 rejected.push(format!("trigger `{}` rejected: {e}", trigger.name));
             }
         }
-        for m in &report.macros {
-            if let Some(existing) = p.macros.iter_mut().find(|x| x.key == m.key) {
-                existing.command.clone_from(&m.command);
-            } else {
-                p.macros.push(m.clone());
-            }
-            macros_changed = true;
+        if macros_changed {
+            import_macros(&mut p, &report.macros);
         }
         for (k, v) in &report.vars {
             p.vars.set(k.clone(), v.clone());
@@ -622,6 +610,7 @@ mod tests {
             command: "bash".into(),
             group: Some("combat".into()),
             enabled: true,
+            preset: None,
         });
         p.timers.push(Timer {
             id: 1,

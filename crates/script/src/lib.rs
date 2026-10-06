@@ -28,7 +28,7 @@ mod test_support;
 #[cfg(any(test, feature = "testkit"))]
 pub mod testkit;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -36,9 +36,10 @@ use mlua::{Function, Lua, Table, Value};
 use regex::Regex;
 use thiserror::Error;
 
-pub use actions::Action;
+pub use actions::{Action, Place};
 use budget::{Budget, Event};
 use env::Envs;
+pub use limits::StopReason;
 use limits::{Limits, Stop};
 pub use owner::Owner;
 use owner::Site;
@@ -185,9 +186,10 @@ pub struct ScriptEngine {
     /// The plugins and loose scripts that loaded, in the order they first
     /// loaded, which `#script reload` follows.
     loaded_scripts: Vec<Owner>,
-    /// The plugins and loose scripts Vosh stopped. A plugin stays off
-    /// until it loads again, and a loose script until `#script reload`.
-    stopped: HashSet<Owner>,
+    /// The plugins and loose scripts Vosh stopped, with why. A plugin
+    /// stays off until it loads again, and a loose script until `#script
+    /// reload`.
+    stopped: HashMap<Owner, StopReason>,
     /// The environment of each plugin that runs.
     envs: Envs,
     /// The last packet of each GMCP package this connection sent, which
@@ -243,7 +245,7 @@ impl ScriptEngine {
             triggers: Vec::new(),
             gmcp_subs: HashMap::new(),
             loaded_scripts: Vec::new(),
-            stopped: HashSet::new(),
+            stopped: HashMap::new(),
             envs,
             packets: HashMap::new(),
             replaying: false,
@@ -279,7 +281,13 @@ impl ScriptEngine {
     /// True while Vosh holds the plugin or loose script `owner` off
     /// after a stop.
     pub fn is_stopped(&self, owner: &Owner) -> bool {
-        self.stopped.contains(owner)
+        self.stopped.contains_key(owner)
+    }
+
+    /// Why Vosh holds the plugin or loose script `owner` off, while it
+    /// does, so the Scripts page can say what stopped it.
+    pub fn stop_reason(&self, owner: &Owner) -> Option<StopReason> {
+        self.stopped.get(owner).copied()
     }
 
     pub fn lua_triggers(&self) -> Vec<LuaTriggerInfo> {
@@ -303,6 +311,36 @@ impl ScriptEngine {
             lua.load(code).set_name(chunk_name).exec()
         });
         self.finish(&Owner::Typed, &Site::Entry, called)
+    }
+
+    /// Evaluate a string of Lua you typed in the console of the plugin
+    /// `name`, as one call of the plugin in its own environment, so it
+    /// reads the plugin's globals and its `mud` table registers for the
+    /// plugin. A plugin that is off or stopped has no environment, so
+    /// nothing runs and a note says why.
+    pub fn eval_in_plugin(&mut self, name: &str, code: &str) -> ScriptOutcome {
+        let owner = Owner::Plugin(name.to_string());
+        let Some(env) = self.envs.get(name) else {
+            let state = if self.is_stopped(&owner) {
+                "stopped"
+            } else {
+                "not running"
+            };
+            return ScriptOutcome {
+                actions: vec![Action::Note {
+                    text: format!("{name} is {state}, so the console ran nothing."),
+                    owner,
+                }],
+                ..ScriptOutcome::default()
+            };
+        };
+        // The line runs under the chunk name of a `#lua` line, so an
+        // error names it as it names one.
+        let chunk = Owner::Typed.body_chunk();
+        let called = self.call(&owner, |lua| {
+            lua.load(code).set_name(chunk).set_environment(env).exec()
+        });
+        self.finish(&owner, &Site::Entry, called)
     }
 
     /// Run a body that a trigger's Script action or a script alias holds,
@@ -345,7 +383,7 @@ impl ScriptEngine {
         // the profile turned it on and a reload should try it again once
         // you fix it. A loose script that failed keeps its place, or
         // never takes one, so a name you mistyped does not stick.
-        let listed = ran || self.stopped.contains(&owner) || matches!(owner, Owner::Plugin(_));
+        let listed = ran || self.stopped.contains_key(&owner) || matches!(owner, Owner::Plugin(_));
         if listed && !self.loaded_scripts.contains(&owner) {
             self.loaded_scripts.push(owner);
         }
@@ -370,7 +408,9 @@ impl ScriptEngine {
     pub fn reload_order(&self) -> Vec<Owner> {
         self.loaded_scripts
             .iter()
-            .filter(|owner| !(matches!(owner, Owner::Plugin(_)) && self.stopped.contains(owner)))
+            .filter(|owner| {
+                !(matches!(owner, Owner::Plugin(_)) && self.stopped.contains_key(owner))
+            })
             .cloned()
             .collect()
     }
@@ -651,9 +691,11 @@ impl ScriptEngine {
             if !budget.allows(&owner) {
                 let mut outcome = ScriptOutcome::default();
                 if budget.skip(&owner) {
-                    outcome
-                        .actions
-                        .push(Action::Error(report::budget_line(&owner, &budget.event)));
+                    outcome.actions.push(Action::Error {
+                        text: report::budget_line(&owner, &budget.event),
+                        owner,
+                        at: None,
+                    });
                 }
                 return Handled::Skipped(outcome);
             }
@@ -722,34 +764,36 @@ impl ScriptEngine {
     fn finish(&mut self, owner: &Owner, site: &Site, called: Called) -> ScriptOutcome {
         if let Some(stop) = called.stop {
             self.discard_since(called.start);
-            let released = self.stop_owner(owner, site);
+            let released = self.stop_owner(owner, site, stop.reason);
             // The stop took back what the call registered, so nothing
             // new waits for a packet.
             let (mut outcome, _) = self.drain();
             outcome.actions.extend(released);
-            outcome.actions.extend(
-                report::stop_lines(owner, site, &stop)
-                    .into_iter()
-                    .map(Action::Error),
-            );
+            outcome
+                .actions
+                .extend(report::stop_lines(owner, site, &stop));
             outcome.failed = true;
             outcome.stopped.push(owner.clone());
             return outcome;
         }
         let (mut outcome, fresh) = self.drain();
         if let Some(err) = called.error {
-            outcome.actions.push(Action::Error(report::describe(&err)));
+            outcome.actions.push(report::error(owner, &err));
             outcome.failed = true;
         }
         if called.dropped {
-            outcome
-                .actions
-                .push(Action::Error(report::cap_line(owner, site)));
+            outcome.actions.push(Action::Error {
+                owner: owner.clone(),
+                text: report::cap_line(owner, site),
+                at: None,
+            });
         }
         if called.text_dropped {
-            outcome
-                .actions
-                .push(Action::Error(report::text_cap_line(owner, site)));
+            outcome.actions.push(Action::Error {
+                owner: owner.clone(),
+                text: report::text_cap_line(owner, site),
+                at: None,
+            });
         }
         outcome.append(self.replay(fresh));
         outcome
@@ -788,17 +832,17 @@ impl ScriptEngine {
         acc
     }
 
-    /// Turn off what a stop of `owner` in `site` leaves off, and return
-    /// the actions that tell the session. A plugin and a loose script
-    /// lose every function they handed over and stay stopped, and a
-    /// plugin its environment. A trigger or an alias loses its
-    /// functions, and the caller turns it off. A function from a `#lua`
-    /// line goes alone.
-    fn stop_owner(&mut self, owner: &Owner, site: &Site) -> Vec<Action> {
+    /// Turn off what a stop of `owner` in `site` for `reason` leaves
+    /// off, and return the actions that tell the session. A plugin and a
+    /// loose script lose every function they handed over and stay
+    /// stopped, and a plugin its environment. A trigger or an alias loses
+    /// its functions, and the caller turns it off. A function from a
+    /// `#lua` line goes alone.
+    fn stop_owner(&mut self, owner: &Owner, site: &Site, reason: StopReason) -> Vec<Action> {
         let ids = match owner {
             Owner::Typed => site.callback_id().into_iter().collect(),
             Owner::Plugin(_) | Owner::Script(_) => {
-                self.stopped.insert(owner.clone());
+                self.stopped.insert(owner.clone(), reason);
                 self.owned_callbacks(owner)
             }
             Owner::Trigger(_) | Owner::Alias(_) => self.owned_callbacks(owner),
@@ -903,9 +947,11 @@ impl ScriptEngine {
                         });
                     }
                     Err(e) => {
-                        outcome.actions.push(Action::Error(format!(
-                            "lua trigger `{name}` rejected: invalid regex {e}"
-                        )));
+                        outcome.actions.push(Action::Error {
+                            owner,
+                            text: format!("lua trigger `{name}` rejected: invalid regex {e}"),
+                            at: None,
+                        });
                         self.drop_callback(callback_id);
                     }
                 },
@@ -942,7 +988,7 @@ mod tests {
     use vosh_automation::vars::Scope;
 
     use super::*;
-    use crate::test_support::returns_in_time;
+    use crate::test_support::{error_lines, returns_in_time, said};
 
     fn run(code: &str) -> Vec<Action> {
         let mut e = ScriptEngine::new().unwrap();
@@ -970,7 +1016,7 @@ mod tests {
             .actions
             .iter()
             .find_map(|action| match action {
-                Action::Error(line) => Some(line.clone()),
+                Action::Error { text, .. } => Some(text.clone()),
                 _ => None,
             })
             .unwrap_or_else(|| panic!("no error line in {:?}", outcome.actions))
@@ -1763,7 +1809,14 @@ mod tests {
             outcome.actions,
             vec![
                 Action::Echo("before the typo".into()),
-                Action::Error("vitals.lua:4: typo".into()),
+                Action::Error {
+                    owner: Owner::Script("vitals.lua".into()),
+                    text: "vitals.lua:4: typo".into(),
+                    at: Some(Place {
+                        source: "vitals.lua".into(),
+                        line: 4,
+                    }),
+                },
             ]
         );
         let outcome = e
@@ -2266,23 +2319,15 @@ mod tests {
             .eval(r#"mud.trigger("bad", "[unclosed", function() end)"#, "t")
             .unwrap();
         assert!(
-            matches!(&outcome.actions[0], Action::Error(line) if line.starts_with("lua trigger `bad` rejected")),
+            matches!(
+                &outcome.actions[0],
+                Action::Error { owner: Owner::Typed, text, at: None }
+                    if text.starts_with("lua trigger `bad` rejected")
+            ),
             "{:?}",
             outcome.actions
         );
         assert_eq!(held_callbacks(&e), 0);
-    }
-
-    /// The lines Vosh printed about the Lua, errors and stops alike.
-    fn error_lines(outcome: &ScriptOutcome) -> Vec<String> {
-        outcome
-            .actions
-            .iter()
-            .filter_map(|action| match action {
-                Action::Error(line) => Some(line.clone()),
-                _ => None,
-            })
-            .collect()
     }
 
     /// Run `code` as a `#lua` line, which must stop on the time limit
@@ -2655,7 +2700,7 @@ mod tests {
         let kept: Vec<&Action> = outcome
             .actions
             .iter()
-            .filter(|a| !matches!(a, Action::Error(_)))
+            .filter(|a| !matches!(a, Action::Error { .. }))
             .collect();
         assert_eq!(
             kept,
@@ -2684,7 +2729,10 @@ mod tests {
         let printed = e.eval("print('hp', 80, nil, true)", "=#lua").unwrap();
         assert_eq!(
             printed.actions,
-            vec![Action::Log("hp\t80\tnil\ttrue".into())]
+            vec![Action::Log {
+                owner: Owner::Typed,
+                text: "hp\t80\tnil\ttrue".into()
+            }]
         );
         // A callback error no longer vanishes.
         e.eval(
@@ -2721,15 +2769,26 @@ mod tests {
             .unwrap();
         let vitals = serde_json::json!({"hp": 186, "maxhp": 1020});
         let outcome = e.dispatch_gmcp("Char.Vitals", &vitals);
+        // The stop is an error, and how long the plugin stays off a note.
         assert_eq!(
-            error_lines(&outcome),
+            said(&outcome),
             [
-                "Vosh stopped wait_full at main.lua line 5 after 100 ms.",
-                "wait_full stays off until you save it under Scripts in Settings or restart Vosh.",
+                (
+                    "error",
+                    wait_full.clone(),
+                    "Vosh stopped wait_full at main.lua line 5 after 100 ms.".to_string()
+                ),
+                (
+                    "note",
+                    wait_full.clone(),
+                    "wait_full stays off until you save it under Scripts in Settings or restart Vosh."
+                        .to_string()
+                ),
             ]
         );
         assert_eq!(outcome.stopped, std::slice::from_ref(&wait_full));
         assert!(e.is_stopped(&wait_full));
+        assert_eq!(e.stop_reason(&wait_full), Some(StopReason::Time));
         // Its handler is gone, so the next packet runs nothing, and a
         // reload leaves it off.
         let leftover = &e.dispatch_gmcp("Char.Vitals", &vitals).actions;
@@ -2794,10 +2853,19 @@ mod tests {
             "mud.send('look')\nwhile true do end",
         );
         assert_eq!(
-            error_lines(&outcome),
+            said(&outcome),
             [
-                "Vosh stopped spin at main.lua line 2 after 100 ms.",
-                "spin stays off until you save it under Scripts in Settings or restart Vosh.",
+                (
+                    "error",
+                    spin.clone(),
+                    "Vosh stopped spin at main.lua line 2 after 100 ms.".to_string()
+                ),
+                (
+                    "note",
+                    spin.clone(),
+                    "spin stays off until you save it under Scripts in Settings or restart Vosh."
+                        .to_string()
+                ),
             ]
         );
         assert!(!outcome
@@ -2918,6 +2986,195 @@ mod tests {
         assert_eq!(
             e.match_line("The day has begun.").actions,
             vec![Action::Echo("day".into())]
+        );
+    }
+
+    #[test]
+    fn each_line_carries_the_owner_of_the_call_that_queued_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        let meals = Owner::Plugin("meals".into());
+        let loaded = plugin(
+            &mut e,
+            "meals",
+            "print('meals is here')\n\
+             function hungry() mud.log('You are hungry.') end\n\
+             mud.on_gmcp('Char.Vitals', function(d) mud.log('hp ' .. d.hp) end)\n\
+             mud.trigger('typo', 'The day has begun', function() mud.ech('x') end)",
+        )
+        .unwrap();
+        assert_eq!(
+            said(&loaded),
+            [("print", meals.clone(), "meals is here".to_string())]
+        );
+        let vitals = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({"hp": 1020}))
+            .unwrap();
+        assert_eq!(
+            said(&vitals),
+            [("print", meals.clone(), "hp 1020".to_string())]
+        );
+        // An error names the plugin and the place Lua names.
+        assert_eq!(
+            e.match_line("The day has begun.").actions,
+            [Action::Error {
+                owner: meals.clone(),
+                text: "meals/main.lua:4: attempt to call a nil value (field 'ech')".into(),
+                at: Some(Place {
+                    source: "meals/main.lua".into(),
+                    line: 4,
+                }),
+            }]
+        );
+        // Your own line is yours, the plugin function it calls included.
+        let typed = e
+            .eval("print('typed') plugins.meals.hungry()", "=#lua")
+            .unwrap();
+        assert_eq!(
+            said(&typed),
+            [
+                ("print", Owner::Typed, "typed".to_string()),
+                ("print", Owner::Typed, "You are hungry.".to_string()),
+            ]
+        );
+        let tells = Owner::Trigger("tells".into());
+        let body = e
+            .run_body(&tells, "print(captures[1])", &["Maren".into()])
+            .unwrap();
+        assert_eq!(said(&body), [("print", tells, "Maren".to_string())]);
+        // So does a line about the action cap.
+        let flood = Owner::Plugin("flood".into());
+        let flooded = plugin(&mut e, "flood", "for i = 1, 150 do mud.send('look') end");
+        assert_eq!(
+            said(&flooded),
+            [(
+                "error",
+                flood,
+                "flood queued more than 100 actions in one call. Vosh dropped the rest."
+                    .to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn every_other_stop_prints_one_error_and_no_note() {
+        let mut e = ScriptEngine::new().unwrap();
+        let spin = "while true do end";
+        let tells = Owner::Trigger("tells".into());
+        let heal = Owner::Alias("heal".into());
+        let combat = Owner::Script("combat.lua".into());
+        for (owner, outcome) in [
+            (tells.clone(), e.run_body(&tells, spin, &[])),
+            (heal.clone(), e.run_body(&heal, spin, &[])),
+            (combat.clone(), load(&mut e, "combat.lua", spin)),
+            (Owner::Typed, e.eval(spin, "=#lua")),
+        ] {
+            let said = said(&outcome);
+            assert_eq!(said.len(), 1, "{said:?}");
+            assert_eq!((said[0].0, &said[0].1), ("error", &owner));
+        }
+    }
+
+    #[test]
+    fn the_engine_keeps_why_it_stopped_each_plugin() {
+        let mut e = ScriptEngine::new().unwrap();
+        let owner = |name: &str| Owner::Plugin(name.into());
+        plugin(&mut e, "spin", "while true do end");
+        assert_eq!(e.stop_reason(&owner("spin")), Some(StopReason::Time));
+        plugin(
+            &mut e,
+            "grab",
+            "local t = {} for i = 1, 1e9 do t[i] = string.rep('x', 65536) .. i end",
+        );
+        assert_eq!(e.stop_reason(&owner("grab")), Some(StopReason::CallMemory));
+        // Each packet holds 10 MB more, under what one call may use,
+        // until the whole state is full.
+        plugin(
+            &mut e,
+            "hoard",
+            "held = {} \
+             mud.on_gmcp('Char.Vitals', function() \
+               held[#held + 1] = string.rep('x', 10 * 1024 * 1024) \
+             end)",
+        )
+        .unwrap();
+        for _ in 0..20 {
+            if e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+                .failed
+            {
+                break;
+            }
+        }
+        assert_eq!(
+            e.stop_reason(&owner("hoard")),
+            Some(StopReason::StateMemory)
+        );
+        // A plugin that runs has none, and a load clears it.
+        plugin(&mut e, "spin", "x = 1").unwrap();
+        assert_eq!(e.stop_reason(&owner("spin")), None);
+        assert_eq!(e.stop_reason(&Owner::Typed), None);
+    }
+
+    #[test]
+    fn the_console_of_a_plugin_runs_inside_it() {
+        let mut e = ScriptEngine::new().unwrap();
+        let vitals_alert = Owner::Plugin("vitals_alert".into());
+        plugin(&mut e, "vitals_alert", "THRESHOLD = 0.3").unwrap();
+        e.eval("THRESHOLD = 'mine'", "=#lua").unwrap();
+        // It reads the plugin's globals, and your own Lua reads its own.
+        let read = e
+            .eval_in_plugin("vitals_alert", "print(THRESHOLD)")
+            .unwrap();
+        assert_eq!(
+            said(&read),
+            [("print", vitals_alert.clone(), "0.3".to_string())]
+        );
+        let mine = e.eval("print(THRESHOLD)", "=#lua").unwrap();
+        assert_eq!(said(&mine), [("print", Owner::Typed, "mine".to_string())]);
+        // What it registers is the plugin's.
+        e.eval_in_plugin(
+            "vitals_alert",
+            "mud.trigger('day', 'The day has begun', function() print('day') end)",
+        )
+        .unwrap();
+        let triggers = e.lua_triggers();
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].owner, "plugin:vitals_alert");
+        assert_eq!(
+            said(&e.match_line("The day has begun.")),
+            [("print", vitals_alert.clone(), "day".to_string())]
+        );
+        // An error names the console line, for the plugin.
+        assert_eq!(
+            e.eval_in_plugin("vitals_alert", "nope()").actions,
+            [Action::Error {
+                owner: vitals_alert.clone(),
+                text: "#lua:1: attempt to call a nil value (global 'nope')".into(),
+                at: Some(Place {
+                    source: "#lua".into(),
+                    line: 1,
+                }),
+            }]
+        );
+        // Off or stopped, it runs nothing and says why.
+        e.unload(&vitals_alert).unwrap();
+        let off = e.eval_in_plugin("vitals_alert", "print(THRESHOLD)");
+        assert_eq!(
+            said(&off),
+            [(
+                "note",
+                vitals_alert,
+                "vitals_alert is not running, so the console ran nothing.".to_string()
+            )]
+        );
+        plugin(&mut e, "spin", "while true do end");
+        let stopped = e.eval_in_plugin("spin", "print(1)");
+        assert_eq!(
+            said(&stopped),
+            [(
+                "note",
+                Owner::Plugin("spin".into()),
+                "spin is stopped, so the console ran nothing.".to_string()
+            )]
         );
     }
 }

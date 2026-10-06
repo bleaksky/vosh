@@ -27,6 +27,7 @@ const LIBRARY: &[&str] = &[
     "herb_labels",
     "sent_tells",
     "room_and_time",
+    "numpad_movement",
 ];
 
 #[test]
@@ -115,6 +116,7 @@ fn macro_on(key: &str, command: &str) -> crate::profile::live::Macro {
         command: command.into(),
         group: None,
         enabled: true,
+        preset: None,
     }
 }
 
@@ -1529,6 +1531,76 @@ async fn a_preset_stays_on_for_a_character_that_never_saved_a_file() {
         let state = launch_with_presets(dir.path(), "Test-Prompt").await;
         assert_eq!(heal_preset_on(&state).await, (true, true));
     }
+}
+
+/// The macros Numpad movement adds, in the game's order n e s w u d.
+fn numpad_movement() -> Vec<crate::profile::live::Macro> {
+    [
+        ("Numpad8", "n"),
+        ("Numpad6", "e"),
+        ("Numpad2", "s"),
+        ("Numpad4", "w"),
+        ("Numpad9", "u"),
+        ("Numpad3", "d"),
+    ]
+    .into_iter()
+    .map(|(key, command)| crate::profile::live::Macro {
+        preset: Some("numpad_movement".into()),
+        ..macro_on(key, command)
+    })
+    .collect()
+}
+
+#[tokio::test]
+async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    // Both characters have Numpad movement on. Default binds its own
+    // Numpad3 too, which holds the preset's d off in its file.
+    for (name, yours) in [
+        (DEFAULT_PROFILE_NAME, Some(macro_on("Numpad3", "rec"))),
+        ("Healer", None),
+    ] {
+        let mut config = ProfileConfig::default();
+        config.ui.enabled_presets = vec!["numpad_movement".into()];
+        config.macros.extend(yours);
+        config.macros.extend(numpad_movement());
+        crate::loadouts::presets::hold_taken_keys(&mut config.macros);
+        config.save(&set.profile_path(name)).unwrap();
+    }
+    let state = launch_state(dir.path()).await;
+
+    // Default's two Numpad3 rows used to fold into one with Healer's d,
+    // and the wizard asked you to pick between rec and d.
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
+    assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
+
+    // The catalog keeps rec beside one copy of each preset macro. A
+    // launch installs those for Test-Prompt too, so they need no group,
+    // and d waits while rec keeps the key.
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
+    let rows: Vec<(&str, &str, bool)> = catalog
+        .macros
+        .iter()
+        .map(|m| (m.key.as_str(), m.command.as_str(), m.enabled))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Numpad3", "rec", true),
+            ("Numpad2", "s", true),
+            ("Numpad3", "d", false),
+            ("Numpad4", "w", true),
+            ("Numpad6", "e", true),
+            ("Numpad8", "n", true),
+            ("Numpad9", "u", true),
+        ]
+    );
+    let presets = catalog.macros.iter().filter(|m| m.preset.is_some());
+    assert!(presets.clone().all(|m| m.group.is_none()));
+    assert_eq!(presets.count(), 6);
 }
 
 /// Default with the alias kk, a target, and a 300 pixel panel.

@@ -82,7 +82,7 @@ impl Budget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::error_lines;
+    use crate::test_support::{error_lines, said};
     use crate::testkit::engine_with_nap as engine;
     use crate::{Action, ScriptEngine, ScriptOutcome};
 
@@ -203,10 +203,15 @@ mod tests {
         // Another plugin has a budget of its own.
         assert_eq!(echoes_of(&outcome, "quick"), ["quick"]);
         assert_eq!(echoes_of(&outcome, "typed "), ["typed 1", "typed 2"]);
-        // One line says so, for the whole line.
+        // One line says so, for the whole line, about the plugin.
         assert_eq!(
-            error_lines(&outcome),
-            ["slow used its 100 ms for this line, so Vosh skipped the rest of its handlers."]
+            said(&outcome),
+            [(
+                "error",
+                Owner::Plugin("slow".into()),
+                "slow used its 100 ms for this line, so Vosh skipped the rest of its handlers."
+                    .to_string()
+            )]
         );
         // The plugin stays on and keeps every trigger.
         assert!(!e.is_stopped(&Owner::Plugin("slow".into())));

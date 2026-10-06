@@ -13,9 +13,11 @@ import {
   type MenuCloseReason,
   type MenuPlacement,
 } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 import { useEscape } from '../../lib/escapeStack';
 import {
   copyName,
+  exportCharacters,
   keepsProfileName,
   loginSentence,
   newProfileClaim,
@@ -27,7 +29,12 @@ import {
   takenProfileName,
   takenSentence,
 } from '../../lib/characterProfiles';
-import { profileExportFile, profileSetLogin, type SessionIdentity } from '../../ipc/characters';
+import {
+  profileExportFile,
+  profileImportRead,
+  profileSetLogin,
+  type SessionIdentity,
+} from '../../ipc/characters';
 import {
   profileCreate,
   profileDelete,
@@ -36,8 +43,11 @@ import {
   profileSwitch,
   type ProfilesList,
 } from '../../ipc/profiles';
+import { errorText } from '../../lib/text';
 import { useSelected, useSessions } from '../../stores/session/sessionsStore';
 import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } from '../../ui';
+import { ExportDialog } from './ExportDialog';
+import type { ImportFile } from './profileImport';
 
 // The profile list on the Characters board: one 38 px row per profile
 // in index order, every profile a session plays marked by an accent dot
@@ -47,7 +57,11 @@ import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } fro
 // the selected session, renames, duplicates, exports, and deletes. A
 // quiet line under the list says what the last action did when that is
 // not plain to see, and otherwise, with two or more sessions open,
-// which sessions play each profile.
+// which sessions play each profile. Export to Downloads first asks
+// which characters the file names, when the profile has any. Import…
+// beside New profile reads a Vosh profile export you pick (board 5 of
+// the Scripts design), and the page shows its sheet. A file that is no
+// export reads as such on the line under the list.
 
 interface Props {
   list: ProfilesList;
@@ -63,6 +77,8 @@ interface Props {
   onError: (message: string | null) => void;
   /** Read the list again after an edit, ahead of the backend's event. */
   onChanged: () => void;
+  /** A profile export you picked, read, for the import sheet. */
+  onImport: (file: ImportFile) => void;
 }
 
 type Editing =
@@ -93,13 +109,16 @@ export function ProfileList({
   onStatus,
   onError,
   onChanged,
+  onImport,
 }: Props) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<{ name: string; characters: string[] } | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const newRef = useRef<HTMLButtonElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const names = list.profiles.map((p) => p.name);
   const sessions = useSessions();
   const selectedSession = useSelected();
@@ -151,11 +170,7 @@ export function ProfileList({
   };
 
   const openMenu = (name: string, button: HTMLButtonElement | null, point?: MenuPlacement) => {
-    let at = point;
-    if (!at && button) {
-      const r = button.getBoundingClientRect();
-      at = { x: r.left, y: r.bottom + 4, flipX: r.right, flipY: r.top - 4 };
-    }
+    const at = point ?? (button && menuBelow(button.getBoundingClientRect()));
     if (at) setMenu({ name, at, anchor: button });
   };
 
@@ -262,11 +277,40 @@ export function ProfileList({
     }
   };
 
-  const exportProfile = (name: string) =>
+  // Read the file you picked. A refusal, like a file that is no
+  // export, reads on the line under the list, as board 5 draws it. A
+  // file the window cannot read gets the sentence Vosh gives one it
+  // cannot parse.
+  const importFile = async (file: File) => {
+    onError(null);
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      onStatus(`Vosh could not read ${file.name}.`);
+      return;
+    }
+    try {
+      const preview = await profileImportRead(file.name, text);
+      onImport({ fileName: file.name, text, preview });
+    } catch (e) {
+      onStatus(errorText(e));
+    }
+  };
+
+  const saveExport = (name: string, characters: string[]) =>
     void run(async () => {
-      const saved = await profileExportFile(name);
+      const saved = await profileExportFile(name, characters);
       onStatus(`Vosh saved ${saved.file_name} in your Downloads folder.`);
     });
+
+  // A profile with characters on its world asks which ones the file
+  // names (Scripts Q10). One with none exports at once.
+  const exportProfile = (name: string) => {
+    const characters = exportCharacters(list.profiles.find((p) => p.name === name));
+    if (characters.length === 0) saveExport(name, []);
+    else setExporting({ name, characters });
+  };
 
   const deleteProfile = (name: string) => {
     setDeleting(null);
@@ -396,17 +440,39 @@ export function ProfileList({
         )}
       </ul>
 
-      <Button
-        ref={newRef}
-        className="st-chars-new"
-        icon={<PlusIcon />}
-        data-st-anchor="new-profile"
-        data-st-flash=""
-        disabled={editing?.kind === 'new'}
-        onClick={() => setEditing({ kind: 'new' })}
-      >
-        New profile
-      </Button>
+      <div className="st-chars-actions">
+        <Button
+          ref={newRef}
+          icon={<PlusIcon />}
+          data-st-anchor="new-profile"
+          data-st-flash=""
+          disabled={editing?.kind === 'new'}
+          onClick={() => setEditing({ kind: 'new' })}
+        >
+          New profile
+        </Button>
+        <Button
+          data-st-anchor="import-profile"
+          data-st-flash=""
+          onClick={() => fileRef.current?.click()}
+        >
+          Import…
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".toml"
+          className="st-visually-hidden"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Clear the pick so the same file can be picked again.
+            e.target.value = '';
+            if (file) void importFile(file);
+          }}
+        />
+      </div>
 
       <p className="st-chars-status" role="status">
         {status ?? sessionsSentence(list.profiles, sessions)}
@@ -438,6 +504,18 @@ export function ProfileList({
             <span className={menuPlayed ? undefined : 'st-menu-danger'}>Delete…</span>
           </MenuItem>
         </MenuSurface>
+      )}
+
+      {exporting && (
+        <ExportDialog
+          name={exporting.name}
+          characters={exporting.characters}
+          onExport={(characters) => {
+            setExporting(null);
+            saveExport(exporting.name, characters);
+          }}
+          onCancel={() => setExporting(null)}
+        />
       )}
 
       {deleting && (

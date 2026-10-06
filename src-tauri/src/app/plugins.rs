@@ -8,9 +8,11 @@
 //! are on in that profile. The plugins it names load at launch and in
 //! each session you open, and a profile switch turns the next profile's
 //! plugins on and the others off in the session it switches while you
-//! play. You edit the list by hand while Vosh is closed.
+//! play. The Scripts page in Settings makes, reads and saves a plugin's
+//! folder through [`folder`], turns a plugin on or off in a profile and
+//! loads it again through [`live`], shows its folder through [`reveal`],
+//! and installs and exports a plugin as a .zip through [`archive`].
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -20,11 +22,16 @@ use tokio::sync::Mutex;
 use tracing::{error, info};
 use vosh_script::Owner;
 
-use crate::app::state::SharedState;
+use crate::app::state::{AppState, NO_APP_DATA};
 use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 use crate::sessions::Session;
+
+pub(crate) mod archive;
+pub(crate) mod folder;
+pub(crate) mod live;
+pub(crate) mod reveal;
 
 #[derive(Debug, Error)]
 pub(crate) enum PluginError {
@@ -63,19 +70,13 @@ fn default_entry() -> String {
     "main.lua".to_string()
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginRecord {
-    pub manifest: PluginManifest,
-    /// Absolute path to the plugin's directory.
-    pub dir: PathBuf,
-    pub enabled: bool,
-}
-
+/// The plugins in the plugins folder, as the last look found them. The
+/// profile each session plays says which are on, so the list holds only
+/// what each manifest says.
 #[derive(Debug, Default)]
 pub(crate) struct PluginManager {
     plugins_dir: Option<PathBuf>,
-    plugins: Vec<PluginRecord>,
-    enabled: BTreeSet<String>,
+    plugins: Vec<PluginManifest>,
 }
 
 pub(crate) type SharedPluginManager = Arc<Mutex<PluginManager>>;
@@ -83,20 +84,6 @@ pub(crate) type SharedPluginManager = Arc<Mutex<PluginManager>>;
 impl PluginManager {
     pub(crate) fn set_plugins_dir(&mut self, dir: PathBuf) {
         self.plugins_dir = Some(dir);
-    }
-
-    /// Replace the persisted enabled-set. Call once at startup with the
-    /// list loaded from profile.toml.
-    pub(crate) fn set_enabled(&mut self, enabled: impl IntoIterator<Item = String>) {
-        self.enabled = enabled.into_iter().collect();
-        for record in &mut self.plugins {
-            record.enabled = self.enabled.contains(&record.manifest.name);
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn enabled_names(&self) -> Vec<String> {
-        self.enabled.iter().cloned().collect()
     }
 
     /// Re-scan the plugins directory and update the in-memory list.
@@ -133,30 +120,26 @@ impl PluginManager {
             if dir_name != parsed.plugin.name {
                 continue;
             }
-            let enabled = self.enabled.contains(&parsed.plugin.name);
-            found.push(PluginRecord {
-                manifest: parsed.plugin,
-                dir: path,
-                enabled,
-            });
+            found.push(parsed.plugin);
         }
-        found.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
+        found.sort_by(|a, b| a.name.cmp(&b.name));
         self.plugins = found;
         Ok(())
     }
 
-    #[cfg(test)]
-    pub(crate) fn list(&self) -> &[PluginRecord] {
+    /// The plugins the last [`PluginManager::discover`] found, sorted by
+    /// name.
+    pub(crate) fn list(&self) -> &[PluginManifest] {
         &self.plugins
     }
 }
 
-/// A plugin's entry script as it stands on disk.
+/// A plugin's manifest and entry script as they stand on disk.
 #[derive(Debug)]
 pub(crate) struct PluginCode {
-    /// The entry script's path inside the plugin folder, as the manifest
-    /// names it.
-    pub(crate) entry: String,
+    /// What manifest.toml says, the entry script's path inside the
+    /// plugin folder among it.
+    pub(crate) manifest: PluginManifest,
     pub(crate) code: String,
 }
 
@@ -164,7 +147,7 @@ impl PluginCode {
     /// The chunk name the plugin `name` runs under, which its errors
     /// name, like `@vitals_alert/main.lua`.
     pub(crate) fn chunk(&self, name: &str) -> String {
-        format!("@{name}/{}", self.entry)
+        format!("@{name}/{}", self.manifest.entry)
     }
 }
 
@@ -193,10 +176,7 @@ pub(crate) fn read_plugin(
         return Err(not_found());
     }
     let outside = || PluginError::EntryOutside(name.to_string(), manifest.entry.clone());
-    let inside = std::path::Path::new(&manifest.entry)
-        .components()
-        .all(|part| matches!(part, std::path::Component::Normal(_)));
-    if !inside || manifest.entry.is_empty() {
+    if !entry_stays_inside(&manifest.entry) {
         return Err(outside());
     }
     let entry_path = dir.join(&manifest.entry);
@@ -213,8 +193,18 @@ pub(crate) fn read_plugin(
     }
     Ok(PluginCode {
         code: std::fs::read_to_string(entry_path)?,
-        entry: manifest.entry,
+        manifest,
     })
+}
+
+/// True when `entry`, a manifest's entry script, names a file below the
+/// plugin folder by its parts alone, with no `..`, `.` or root. A link
+/// on the way can still lead out, which the caller checks on disk.
+fn entry_stays_inside(entry: &str) -> bool {
+    !entry.is_empty()
+        && std::path::Path::new(entry)
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
 }
 
 /// True when `name` names one folder, with no separator and no `.` or
@@ -263,6 +253,16 @@ pub(crate) fn seed_example_plugins(plugins_dir: &std::path::Path) {
     }
 }
 
+/// The plugins folder, or the error a command returns when launch could
+/// not find the app data folder.
+pub(crate) fn plugins_dir_of(state: &AppState) -> Result<PathBuf, String> {
+    state
+        .app_data
+        .get()
+        .map(|app_data| crate::disk::paths::plugins_dir(app_data))
+        .ok_or_else(|| NO_APP_DATA.to_string())
+}
+
 /// Turn the plugin `name` on, or load it again: read it from
 /// `plugins_dir` as it stands and load it. Returns what it asks of the
 /// session. When Vosh cannot read it, a red `[lua]` line says so, and
@@ -273,29 +273,45 @@ pub(crate) fn plugin_on(
     plugins_dir: &std::path::Path,
     name: &str,
 ) -> ApplyResult {
-    let plugin = match read_plugin(plugins_dir, name) {
-        Ok(plugin) => plugin,
-        Err(e) => {
-            error!(name = %name, error = %e, "plugin entry missing");
-            c.script.list_unread_plugin(name);
-            let outcome = vosh_script::ScriptOutcome {
-                actions: vec![vosh_script::Action::Error(format!(
-                    "Vosh could not read plugin {name} and left it off."
-                ))],
-                failed: true,
-                ..vosh_script::ScriptOutcome::default()
-            };
-            return crate::script::apply_actions(p, c, outcome);
-        }
+    match read_plugin(plugins_dir, name) {
+        Ok(plugin) => load_plugin(p, c, name, &plugin),
+        Err(e) => left_off(p, c, name, &e),
+    }
+}
+
+/// Say in a red `[lua]` line that Vosh could not read the plugin `name`,
+/// for `e`, and list it for `#script reload`, which tries it again.
+fn left_off(p: &mut Profile, c: &mut Connection, name: &str, e: &PluginError) -> ApplyResult {
+    error!(name = %name, error = %e, "plugin entry missing");
+    c.script.list_unread_plugin(name);
+    let outcome = vosh_script::ScriptOutcome {
+        actions: vec![vosh_script::Action::Error {
+            owner: Owner::Plugin(name.to_string()),
+            text: format!("Vosh could not read plugin {name} and left it off."),
+            at: None,
+        }],
+        failed: true,
+        ..vosh_script::ScriptOutcome::default()
     };
+    crate::script::apply_actions(p, c, outcome)
+}
+
+/// Load `plugin`, the plugin `name` as Vosh just read it, which takes the
+/// place of what it ran before and clears a stop.
+fn load_plugin(
+    p: &mut Profile,
+    c: &mut Connection,
+    name: &str,
+    plugin: &PluginCode,
+) -> ApplyResult {
     // A load runs Lua for certain, even when nothing else is loaded,
     // as at a switch that turned every other plugin off first.
     crate::script::refresh_vars(p, c);
-    let outcome = c.script.load_script(
-        Owner::Plugin(name.to_string()),
-        &plugin.chunk(name),
-        &plugin.code,
-    );
+    let owner = Owner::Plugin(name.to_string());
+    c.lua_output.note_load(&owner, crate::session::now_ms());
+    let outcome = c
+        .script
+        .load_script(owner, &plugin.chunk(name), &plugin.code);
     if outcome.failed {
         error!(name = %name, "plugin script error");
     } else {
@@ -344,58 +360,24 @@ pub(crate) fn follow_profile_plugins(
     apply
 }
 
-/// Point the plugin list at `plugins_dir`, find the plugins in it, and
-/// mark the ones the profile `session` plays turns on.
-async fn note_plugins(state: &SharedState, session: &Session, plugins_dir: &std::path::Path) {
-    let enabled = session.lock_profile().await.plugins.enabled.clone();
-    let mut mgr = state.plugins.lock().await;
-    mgr.set_plugins_dir(plugins_dir.to_path_buf());
-    if let Err(e) = mgr.discover() {
-        error!(error = %e, "plugin discovery failed");
-    }
-    mgr.set_enabled(enabled);
-}
-
 /// Once a profile switch made the next profile live for `session` and
 /// turned its plugins on and the others off, deliver what they ask for,
 /// `apply`. Their lines print in the terminal, and what they send goes to
-/// the game when the session runs a connection.
+/// the game when the session runs a connection. Every window then hears
+/// that the plugins changed, so the Scripts page reads them again.
 pub(crate) async fn follow_profile<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    state: &SharedState,
     session: &Arc<Session>,
     apply: ApplyResult,
 ) {
-    if let Some(app_data) = state.app_data.get() {
-        note_plugins(state, session, &crate::disk::paths::plugins_dir(app_data)).await;
-    }
-    let crate::session::effects::Collected {
-        bytes,
-        echoes,
-        walk,
-    } = crate::session::effects::collect_script_result(app, session, apply).await;
-    crate::output::echo_lines(app, session, &echoes);
-    if bytes.is_empty() && walk.is_none() {
-        return;
-    }
-    // A login switches profiles inside the session task, and a
-    // disconnect holds the session lock while it waits for that task to
-    // end. So the bytes and a #walk go from a task of their own and the
-    // switch never waits on the lock.
-    let session = Arc::clone(session);
-    tokio::spawn(async move {
-        let delivered = session.slot.lock().await.as_ref().is_some_and(|handle| {
-            (bytes.is_empty() || handle.send(bytes)) && walk.map_or(true, |walk| handle.walk(walk))
-        });
-        if !delivered {
-            info!("plugin output at a profile switch has no game to go to");
-        }
-    });
+    crate::session::effects::deliver_detached(app, session, apply).await;
+    // The session runs other plugins now, and its profile turns others on.
+    crate::app::events::broadcast(app, crate::app::events::PLUGINS_CHANGED, &());
 }
 
-/// Find the plugins in `plugins_dir` and load each one the profile turns
-/// on into the engine of `session`, once each in the order its list
-/// gives, as a switch does from a start with none running. Launch calls
+/// Load each plugin in `plugins_dir` the profile turns on into the
+/// engine of `session`, once each in the order its list gives, as a
+/// switch does from a start with none running. Launch calls
 /// it for the session the app starts with, and `session_open` for each
 /// session you open. What an entry script asks for applies as on every
 /// other path that runs Lua, so its timers, `mud.input` lines and prompt
@@ -404,11 +386,9 @@ pub(crate) async fn follow_profile<R: tauri::Runtime>(
 /// it would send goes to the log.
 pub(crate) async fn load_enabled_plugins<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    state: &SharedState,
     session: &Arc<Session>,
     plugins_dir: std::path::PathBuf,
 ) {
-    note_plugins(state, session, &plugins_dir).await;
     let apply = {
         let mut p = session.lock_profile().await;
         let mut c = session.connection.lock();
@@ -468,7 +448,7 @@ mod tests {
         mgr.set_plugins_dir(tmp.path().to_path_buf());
         mgr.discover().unwrap();
         assert_eq!(mgr.list().len(), 1);
-        assert_eq!(mgr.list()[0].manifest.name, "alpha");
+        assert_eq!(mgr.list()[0].name, "alpha");
     }
 
     #[test]
@@ -479,27 +459,6 @@ mod tests {
         mgr.set_plugins_dir(tmp.path().to_path_buf());
         mgr.discover().unwrap();
         assert!(mgr.list().is_empty());
-    }
-
-    #[test]
-    fn enabled_state_round_trips_via_set_enabled() {
-        let tmp = tempdir();
-        write_plugin(tmp.path(), "a", "a", "");
-        write_plugin(tmp.path(), "b", "b", "");
-        let mut mgr = PluginManager::default();
-        mgr.set_plugins_dir(tmp.path().to_path_buf());
-        mgr.discover().unwrap();
-        mgr.set_enabled(["b".to_string()]);
-        let listed: Vec<(String, bool)> = mgr
-            .list()
-            .iter()
-            .map(|p| (p.manifest.name.clone(), p.enabled))
-            .collect();
-        assert_eq!(
-            listed,
-            vec![("a".to_string(), false), ("b".to_string(), true)]
-        );
-        assert_eq!(mgr.enabled_names(), vec!["b".to_string()]);
     }
 
     #[test]
@@ -671,6 +630,42 @@ mod tests {
             .script
             .dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);
+    }
+
+    /// `wait_full` as the Scripts design writes it, which never returns
+    /// while you are hurt.
+    const WAIT_FULL: &str = "-- wait_full
+-- Stand up once your hit points are full.
+
+mud.on_gmcp(\"Char.Vitals\", function(data)
+  while data.hp < data.maxhp do
+    -- data never changes inside this loop, so it never ends
+  end
+  mud.send(\"stand\")
+end)
+";
+
+    #[test]
+    fn a_plugin_stop_prints_as_the_terminal_frame_draws_it() {
+        let tmp = tempdir();
+        write_plugin(tmp.path(), "wait_full", "wait_full", WAIT_FULL);
+        let mut p = Profile::default();
+        let mut c = Connection::default();
+        p.plugins.enabled = vec!["wait_full".into()];
+        follow_profile_plugins(&mut p, &mut c, tmp.path());
+        let stopped = c.script.dispatch_gmcp(
+            "Char.Vitals",
+            &serde_json::json!({"hp": 186, "maxhp": 1020}),
+        );
+        let apply = crate::script::apply_actions(&mut p, &mut c, stopped);
+        // The stop reads red, and how long the plugin stays off plain.
+        assert_eq!(
+            apply.echoes,
+            [
+                "\x1b[90m[lua]\x1b[0m \x1b[31mVosh stopped wait_full at main.lua line 5 after 100 ms.\x1b[0m",
+                "\x1b[90m[lua]\x1b[0m wait_full stays off until you save it under Scripts in Settings or restart Vosh.",
+            ]
+        );
     }
 
     #[test]

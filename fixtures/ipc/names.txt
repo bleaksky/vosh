@@ -22,10 +22,13 @@ command loadouts_set_active(active, profile?)
 command logs_export(sessionId, withAnsi)
 command logs_list_sessions(limit, hideLocal?)
 command logs_search_page(pattern, caseSensitive, maxResults, sessionId?, beforeLineId?, hideLocal, withTotal)
+command lua_output_clear(owner?, session?)
+command lua_output_get(session?)
+command lua_run(code, plugin?, session?)
 command macros_delete(key, profile?)
 command macros_groups_list(profile?)
 command macros_list(profile?)
-command macros_set(key, command, group?, enabled?, profile?)
+command macros_set(key, command, group?, enabled?, preset?, profile?)
 command menu_copy(terminal)
 command menu_set_state(state)
 command migration_analyze(library)
@@ -54,14 +57,27 @@ command pane_layout_get(profile?)
 command pane_layout_reset(profile?)
 command pane_layout_set(layout, generation?, profile?)
 command pending_writes_flushed()
-command presets_install(triggers, profile?)
+command plugin_create(name, session?)
+command plugin_export(name)
+command plugin_install(fileName, bytes?, files?, session?)
+command plugin_install_check(fileName, bytes?, files?)
+command plugin_read(name, file?)
+command plugin_reload(name, session?)
+command plugin_remove(name, session?)
+command plugin_reveal(name)
+command plugin_save(name, manifest, code, session?)
+command plugin_set_enabled(name, on, session?)
+command plugins_list(session?)
+command presets_install(triggers, macros, profile?)
 command presets_remove(presetId, profile?)
 command profile_create(name, copyFrom?, autoMatch?)
 command profile_delete(name)
 command profile_detail_get(name)
 command profile_duplicate(source, new)
-command profile_export_file(name)
+command profile_export_file(name, characters)
 command profile_get_scope()
+command profile_import_apply(fileName, text, addAs, name, logins)
+command profile_import_read(fileName, text)
 command profile_rename(old, new)
 command profile_resolve_match(host, port, character?, anyCharacter?)
 command profile_set_login(name, character, on)
@@ -140,6 +156,7 @@ event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
+event session://lua-output app heard
 event session://mark app heard
 event session://output app heard
 event session://prompt-gag-without-reader app heard
@@ -186,6 +203,7 @@ event vosh://native-grid-size app heard
 event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
+event vosh://plugins-changed app heard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard
 event vosh://profiles-changed app heard

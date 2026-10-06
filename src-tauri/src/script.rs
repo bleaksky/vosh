@@ -3,7 +3,10 @@
 //! Lua callbacks return [`vosh_script::Action`] values; this module
 //! applies them to the profile (vars, aliases, triggers), forwards
 //! send/echo to the session, and tracks pending one-shot timers so the
-//! session loop can fire them at the right time.
+//! session loop can fire them at the right time. Every `[lua]` line it
+//! prints joins the session's Output ring in [`output`].
+
+pub(crate) mod output;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -13,8 +16,9 @@ use tokio::time::Instant;
 use vosh_automation::alias::Alias;
 use vosh_automation::vars::Scope;
 use vosh_automation::StopKey;
-use vosh_script::{Action, Owner, ScriptOutcome};
+use vosh_script::{Action, Owner, Place, ScriptOutcome};
 
+use self::output::{LuaKind, LuaLine};
 use crate::app::events::{ListChanges, ListRevisions};
 use crate::input::LineFrom;
 use crate::profile::live::Profile;
@@ -78,6 +82,28 @@ pub(crate) fn run_alias_body(
     apply_actions(profile, c, outcome)
 }
 
+/// Run `code` from the console on the Scripts page in the session of
+/// `c`: inside the plugin `plugin`, or else in the global environment as
+/// a `#lua` line runs. The line you typed joins the Output ring first,
+/// so what it prints follows it.
+pub(crate) fn run_console(
+    profile: &mut Profile,
+    c: &mut Connection,
+    code: &str,
+    plugin: Option<&str>,
+) -> ApplyResult {
+    let owner = plugin.map_or(Owner::Typed, |name| Owner::Plugin(name.to_string()));
+    let mut result = ApplyResult::default();
+    result.keep_lua_lines(c, &owner, LuaKind::Input, code, None);
+    refresh_vars(profile, c);
+    let outcome = match plugin {
+        Some(name) => c.script.eval_in_plugin(name, code),
+        None => c.script.eval(code, "=#lua"),
+    };
+    result.append(apply_actions(profile, c, outcome));
+    result
+}
+
 /// Turn off each trigger and alias whose Lua Vosh stopped in `outcome`,
 /// in the session whose stops `key` names, until you save it again or
 /// restart Vosh. The engine holds a stopped plugin or loose script off
@@ -96,8 +122,9 @@ pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &Sc
 /// theme's bright black, so the line reads as Vosh and not the game.
 const LUA_TAG: &str = "\x1b[90m[lua]\x1b[0m";
 
-/// The terminal lines for `text` from `print` or `mud.log`, one tagged
-/// line for each line of the text, in the default color.
+/// The terminal lines for `text` from `print`, `mud.log` or a note of
+/// Vosh's, one tagged line for each line of the text, in the default
+/// color.
 fn lua_lines(text: &str) -> impl Iterator<Item = String> + '_ {
     text.split('\n')
         .map(|line| format!("{LUA_TAG} {}", line.trim_end_matches('\r')))
@@ -148,6 +175,12 @@ pub(crate) struct ApplyResult {
     /// The Lua owners whose alerts end, each a plugin that turned off,
     /// stopped or loaded again, see [`crate::alert::end_owner`].
     pub ended: Vec<String>,
+    /// The lines this apply added to the session's Output ring, which
+    /// the Scripts page hears on `session://lua-output`.
+    pub lua_lines: Vec<LuaLine>,
+    /// Vosh stopped a plugin, so the Scripts page reads its list again,
+    /// see `vosh://plugins-changed`.
+    pub plugin_stopped: bool,
 }
 
 impl ApplyResult {
@@ -169,6 +202,25 @@ impl ApplyResult {
         }
         self.alerts.extend(later.alerts);
         self.ended.extend(later.ended);
+        self.lua_lines.extend(later.lua_lines);
+        self.plugin_stopped |= later.plugin_stopped;
+    }
+
+    /// Keep the lines `text` prints under the `[lua]` tag about the Lua
+    /// of `owner` in the Output ring of `c`, and among the lines this
+    /// result tells the page.
+    fn keep_lua_lines(
+        &mut self,
+        c: &mut Connection,
+        owner: &Owner,
+        kind: LuaKind,
+        text: &str,
+        at: Option<&Place>,
+    ) {
+        for line in LuaLine::lines(owner, kind, text, at, crate::session::now_ms()) {
+            c.lua_output.push(line.clone());
+            self.lua_lines.push(line);
+        }
     }
 
     /// This result, whose Lua ran under `open` while the step held it.
@@ -191,6 +243,10 @@ pub(crate) fn apply_actions(
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile, c);
     turn_off_stopped(profile, c.stop_key, &outcome);
+    result.plugin_stopped = outcome
+        .stopped
+        .iter()
+        .any(|owner| matches!(owner, Owner::Plugin(_)));
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
@@ -203,11 +259,19 @@ pub(crate) fn apply_actions(
             Action::Echo(line) => {
                 result.echoes.push(line);
             }
-            Action::Log(text) => {
+            Action::Log { owner, text } => {
                 result.echoes.extend(lua_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Print, &text, None);
             }
-            Action::Error(text) => {
+            // A note, such as how long a stopped plugin stays off, reads
+            // plain, as a print does.
+            Action::Note { owner, text } => {
+                result.echoes.extend(lua_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Note, &text, None);
+            }
+            Action::Error { owner, text, at } => {
                 result.echoes.extend(lua_error_lines(&text));
+                result.keep_lua_lines(c, &owner, LuaKind::Error, &text, at.as_ref());
             }
             Action::SetAlias { name, expansion } => {
                 define_alias(profile, name, expansion);

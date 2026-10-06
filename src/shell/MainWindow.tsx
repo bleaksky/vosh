@@ -68,6 +68,7 @@ import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
+import { useAlertTones } from './useAlertTones';
 import { useAppCommands } from './useAppCommands';
 import { useClosing } from './useClosing';
 import { useFind } from './useFind';
@@ -487,6 +488,9 @@ function MainWindow() {
     cardBand,
     focusInput,
   });
+
+  // Play the tone of each alert a session rings.
+  useAlertTones();
 
   useEffect(() => {
     // The game sent a new prompt setting and your capture follows it.

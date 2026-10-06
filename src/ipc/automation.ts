@@ -81,9 +81,28 @@ export interface TriggerRecord {
    *  backend's default). */
   target?: TriggerTarget;
   /** The alert the trigger rings when it matches, in a table of its own
-   *  beside the actions (Alerts Q6). The page keeps it as it came until
-   *  the Alert row lands, so a Save never drops it. */
-  alert?: Record<string, unknown> | null;
+   *  beside the actions (Alerts Q6). Left out while the trigger rings
+   *  none. */
+  alert?: AlertParts;
+}
+
+/** What an alert does when it rings. Each part turns on and off on its
+ *  own. Mirrors `AlertParts` in crates/automation/src/alert.rs, which a
+ *  trigger, an alert preset and mud.alert share. */
+export interface AlertParts {
+  /** Post a system banner, a toast on Windows. */
+  banner: boolean;
+  /** The tone the main window plays, one of ALERT_TONES in
+   *  src/stores/session/alertTones.ts. Left out, none plays. */
+  sound?: string;
+  /** Bounce the Dock icon once or until you come back, flash the
+   *  taskbar on Windows, or set the urgency hint on Linux. Left out,
+   *  the alert asks for none. */
+  attention?: 'once' | 'until';
+  /** Ring only while you are not looking at the session. */
+  background: boolean;
+  /** The banner shows the words of the line, and not the title alone. */
+  words: boolean;
 }
 
 export type TriggerTarget = 'line' | 'prompt' | 'room' | 'room_target';
@@ -190,11 +209,14 @@ export async function importAliases(json: string, profile?: string | null): Prom
   return invoke('aliases_import', { json, profile });
 }
 
+/** Install the triggers and macros of the presets you turned on. Each
+ *  carries its preset's id. */
 export async function presetsInstall(
   triggers: TriggerRecord[],
+  macros: Macro[],
   profile?: string | null,
 ): Promise<number> {
-  return invoke('presets_install', { triggers, profile });
+  return invoke('presets_install', { triggers, macros, profile });
 }
 
 export async function presetsRemove(presetId: string, profile?: string | null): Promise<number> {
@@ -215,6 +237,9 @@ export interface Macro {
    *  were not bound. The backend omits the field while it is on, so
    *  absent means on. */
   enabled?: boolean;
+  /** The id of the preset that added it, absent for one of yours. A
+   *  preset macro on a key one of yours uses comes with enabled false. */
+  preset?: string | null;
 }
 
 /** One row in any groups-list response: name + current enabled state.
@@ -229,12 +254,15 @@ export async function listMacros(profile?: string | null): Promise<Macro[]> {
 }
 
 /** Bind or rebind a key. `enabled` turns the binding on or off. Leave
- *  it out to keep an existing binding's state, or make a new one on. */
+ *  it out to keep an existing binding's state, or make a new one on.
+ *  With `preset`, change only the group of the macro that preset added
+ *  on `key`, which leaves your macro on the same key alone. */
 export async function setMacro(
   key: string,
   command: string,
   group: string | null = null,
   enabled?: boolean,
+  preset?: string,
   profile?: string | null,
 ): Promise<Macro[]> {
   return invoke('macros_set', {
@@ -242,6 +270,7 @@ export async function setMacro(
     command,
     group: group && group.length > 0 ? group : null,
     enabled: enabled ?? null,
+    preset: preset ?? null,
     profile,
   });
 }

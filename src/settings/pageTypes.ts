@@ -6,9 +6,11 @@ import type { SettingsTarget } from '../lib/settingsNav';
  *  latest edit and each save knows what a field held before it. */
 export type SetUiConfig = (updater: (prev: UiConfig | null) => UiConfig | null) => void;
 
-/** Asked before the frame leaves a page for another group. Return true
- *  to hold the navigation, and call `proceed` later to go on, after
- *  the page asks about unsaved changes. Return false to let it go. */
+/** Asked before the frame leaves a page for another group, or for
+ *  another page inside the group, like the Scripts list from a plugin's
+ *  page. Return true to hold the navigation, and call `proceed` later to
+ *  go on, after the page asks about unsaved changes. Return false to let
+ *  it go. */
 export type LeaveGuard = (proceed: () => void) => boolean;
 
 /** What the frame hands every group page. */

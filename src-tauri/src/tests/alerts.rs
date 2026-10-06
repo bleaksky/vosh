@@ -268,7 +268,7 @@ async fn plugin(h: &Harness, name: &str, on: bool) {
         };
         apply.ran_under(p.open())
     };
-    crate::app::plugins::follow_profile(h.app.handle(), &h.state, &session, apply).await;
+    crate::app::plugins::follow_profile(h.app.handle(), &session, apply).await;
 }
 
 #[allow(clippy::await_holding_lock)]

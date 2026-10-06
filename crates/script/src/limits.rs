@@ -53,9 +53,10 @@ pub(crate) const INTERNAL_CHUNK: &str = "=[vosh]";
 /// The message Lua gives a failed allocation.
 const MEMORY_MESSAGE: &str = "not enough memory";
 
-/// Why Vosh stopped a call.
+/// Why Vosh stopped a call, and so the plugin or loose script that ran
+/// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StopReason {
+pub enum StopReason {
     /// It ran past [`TIME_BUDGET`].
     Time,
     /// It held [`CALL_MEMORY`] more than when it began.
@@ -376,4 +377,29 @@ pub(crate) fn install(lua: &Lua, limits: &Arc<Limits>, log: Function) -> mlua::R
     ))?;
     lua.set_memory_limit(STATE_MEMORY)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_stop_note_on_a_plugin_page_names_these_limits() {
+        // STOP_REASON in src/settings/scripts/pluginState.ts says why a
+        // plugin is stopped over its editor.
+        let page = include_str!("../../../src/settings/scripts/pluginState.ts");
+        for reason in [
+            format!("time: 'one call ran past {} ms',", TIME_BUDGET.as_millis()),
+            format!(
+                "call_memory: 'one call used more than {} MB',",
+                CALL_MEMORY / MB
+            ),
+            format!(
+                "state_memory: 'your scripts held more than {} MB',",
+                STATE_MEMORY / MB
+            ),
+        ] {
+            assert!(page.contains(&reason), "{reason}");
+        }
+    }
 }

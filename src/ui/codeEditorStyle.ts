@@ -2,6 +2,8 @@
 // that do not need the DOM, so tests can check them.
 
 import { HighlightStyle } from '@codemirror/language';
+import { diagnosticCount, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+import type { EditorState, TransactionSpec } from '@uiw/react-codemirror';
 import { tags as t } from '@lezer/highlight';
 
 /** Syntax colors for the code editor, drawn from the theme tokens, so
@@ -38,4 +40,34 @@ export function codeEditorAttributes(label: CodeEditorLabel): Record<string, str
   else if (label.ariaLabel) attrs['aria-label'] = label.ariaLabel;
   if (label.ariaDescribedBy) attrs['aria-describedby'] = label.ariaDescribedBy;
   return attrs;
+}
+
+/** A line the editor marks as an error, by its number from 1, with
+ *  what a hover over its text says. */
+export interface CodeMark {
+  line: number;
+  message: string;
+}
+
+/** The lint diagnostics that mark `marks` in the editor's text. Each
+ *  covers its whole line, so the line tints from end to end. A line the
+ *  text does not have marks nothing. */
+export function markDiagnostics(doc: EditorState['doc'], marks: readonly CodeMark[]): Diagnostic[] {
+  return marks
+    .filter((mark) => mark.line >= 1 && mark.line <= doc.lines)
+    .map((mark) => {
+      const line = doc.line(mark.line);
+      return { from: line.from, to: line.to, severity: 'error', message: mark.message };
+    });
+}
+
+/** The transaction that puts `marks` on the editor in place of the
+ *  ones it shows, or null when it shows none and gets none, so an
+ *  editor that never marks a line never loads the lint state. */
+export function marksUpdate(
+  state: EditorState,
+  marks: readonly CodeMark[],
+): TransactionSpec | null {
+  if (marks.length === 0 && diagnosticCount(state) === 0) return null;
+  return setDiagnostics(state, markDiagnostics(state.doc, marks));
 }

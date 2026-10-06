@@ -299,6 +299,23 @@ impl ProfileSet {
         am.names(character).then_some(name)
     }
 
+    /// The first profile whose claim on the world at `host` and `port`
+    /// lists `character`, with its login toggle on or off. A character
+    /// belongs to one profile wherever it logs in, and turning the toggle
+    /// on anywhere else takes it from this one, so an import leaves the
+    /// character here until you move it.
+    pub(crate) fn claimant(&self, host: &str, port: Option<u16>, character: &str) -> Option<&str> {
+        self.index
+            .profiles
+            .iter()
+            .find(|p| {
+                p.auto_match
+                    .as_ref()
+                    .is_some_and(|am| am.on_world(host, port) && am.names(character))
+            })
+            .map(|p| p.name.as_str())
+    }
+
     /// Turn the login toggle for `name` on or off for `character`.
     ///
     /// On lists the character first if the profile does not list it
@@ -1183,6 +1200,29 @@ characters = ["Ilsabet", "Ondrevar"]
         );
         assert_eq!(set.claimed_by(world, 1848, "Ondrevar"), None);
         assert_eq!(set.claimed_by("mud.example.org", 4000, "Ilsabet"), None);
+    }
+
+    #[test]
+    fn the_claimant_lists_the_character_on_the_world_with_its_toggle_on_or_off() {
+        let world = "play.theforsakenlands.com";
+        let mut off = claim(world, None, &["Maren"]);
+        off.enabled = false;
+        let set = set_with_profiles(vec![
+            ("Healer", claim(world, Some(1848), &["Orla"])),
+            ("Tank", off),
+            ("Away", claim("mud.example.org", Some(4000), &["Tolliver"])),
+        ]);
+        assert_eq!(set.claimant(world, Some(1848), "orla"), Some("Healer"));
+        assert_eq!(set.claimant(world, None, "Orla"), Some("Healer"));
+        // Healer pins its port, so another port on the host is free.
+        assert_eq!(set.claimant(world, Some(4000), "Orla"), None);
+        // Tank still lists Maren on every port of the host, toggle off.
+        assert_eq!(set.claimant(world, Some(4000), "Maren"), Some("Tank"));
+        assert_eq!(set.claimant(world, Some(1848), "Tolliver"), None);
+        assert_eq!(
+            set.claimant("mud.example.org", Some(4000), "Tolliver"),
+            Some("Away")
+        );
     }
 
     #[test]

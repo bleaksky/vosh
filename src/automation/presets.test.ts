@@ -11,6 +11,7 @@ import {
   PRESETS,
   PRESETS_ON_BY_DEFAULT,
   presetById,
+  presetMacros,
   type PresetSampleLine,
   presetTriggers,
 } from './presets';
@@ -580,13 +581,16 @@ const SAMPLES_DRAW: Record<string, Run[][]> = {
   ],
 };
 
-// Every preset carries a sample, lines the game prints in its own words,
-// which Get started and the Presets page will show. Each runs here
-// through the preset's own triggers, so a sample cannot drift from what
-// its preset paints.
+// Every preset that adds triggers carries a sample, lines the game prints
+// in its own words, which Get started and the Presets page will show. Each
+// runs here through the preset's own triggers, so a sample cannot drift
+// from what its preset paints. A preset that only binds macros changes no
+// line, so it has no sample.
+const TRIGGER_PRESETS = PRESETS.filter((p) => p.triggers.length > 0);
+
 describe('the sample of every preset', () => {
   it('holds one to three lines as the game prints them, each naming a trigger of its preset', () => {
-    for (const preset of PRESETS) {
+    for (const preset of TRIGGER_PRESETS) {
       expect(preset.sample.length, preset.id).toBeGreaterThanOrEqual(1);
       expect(preset.sample.length, preset.id).toBeLessThanOrEqual(3);
       const names = preset.triggers.map((t) => t.name);
@@ -599,8 +603,8 @@ describe('the sample of every preset', () => {
   });
 
   it('fires the trigger each line means to show, and paints the colors the preset gives it', () => {
-    expect(Object.keys(SAMPLES_DRAW)).toEqual(PRESETS.map((p) => p.id));
-    for (const preset of PRESETS) {
+    expect(Object.keys(SAMPLES_DRAW)).toEqual(TRIGGER_PRESETS.map((p) => p.id));
+    for (const preset of TRIGGER_PRESETS) {
       const drawn = preset.sample.map((line) => draw(preset, line));
       preset.sample.forEach((line, n) => {
         expect(drawn[n].fired, `${preset.id} ${line.text}`).toContain(line.shows);
@@ -639,6 +643,37 @@ describe('the sample of every preset', () => {
         expect(draw(preset, line).routes, `${preset.id} ${line.text}`).toEqual([]);
       }
     }
+  });
+});
+
+// Numpad movement binds the six directions the game has (Scripts board 7,
+// Q12) and adds no trigger. It came after the defaults froze, so it
+// starts off, and Get started suggests it on no world (First Run Q18).
+describe('the Numpad movement preset', () => {
+  const preset = presetById('numpad_movement');
+  if (!preset) throw new Error('no numpad_movement preset');
+
+  it('is off by default, under Movement', () => {
+    expect(PRESETS_ON_BY_DEFAULT).not.toContain(preset.id);
+    expect(enabledPresetIds([])).not.toContain(preset.id);
+    expect(PRESET_CATEGORIES[preset.category]).toBe('Movement');
+  });
+
+  it('suggests no world and has no sample, since it changes no line', () => {
+    expect(preset.suggest).toEqual([]);
+    expect(preset.sample).toEqual([]);
+    expect(preset.triggers).toEqual([]);
+  });
+
+  it('binds the six keys in the game order n e s w u d, each tagged with the preset', () => {
+    expect(presetMacros(preset)).toEqual([
+      { key: 'Numpad8', command: 'n', preset: 'numpad_movement' },
+      { key: 'Numpad6', command: 'e', preset: 'numpad_movement' },
+      { key: 'Numpad2', command: 's', preset: 'numpad_movement' },
+      { key: 'Numpad4', command: 'w', preset: 'numpad_movement' },
+      { key: 'Numpad9', command: 'u', preset: 'numpad_movement' },
+      { key: 'Numpad3', command: 'd', preset: 'numpad_movement' },
+    ]);
   });
 });
 

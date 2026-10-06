@@ -19,7 +19,8 @@
 //! of the first profile keeps the name, and each other one adds the
 //! profiles that have it, such as `greet (Healer)`. The copies of a
 //! preset trigger always fold into one, since a launch installs the
-//! library version.
+//! library version. So do the copies of a preset macro, one for each
+//! preset and key, which sits beside your macro on that key.
 //!
 //! ## Scope
 //!
@@ -164,7 +165,7 @@ pub(crate) fn analyze_profiles(
 
     let aliases = keyed_entries(profiles, |c| &c.aliases);
     let triggers = trigger_entries(profiles, library);
-    let macros = keyed_entries(profiles, |c| &c.macros);
+    let macros = macro_entries(profiles, library);
     let alias_plan = plan_kind(profiles, &aliases, &reserved);
     let trigger_plan = plan_kind(profiles, &triggers, &reserved);
     let macro_plan = plan_kind(profiles, &macros, &reserved);
@@ -235,7 +236,7 @@ pub(super) trait CatalogItem: Clone + Serialize {
     /// The group checkbox list of this kind in `config`, the groups it
     /// has off.
     fn groups_off(config: &ProfileConfig) -> &[String];
-    /// The preset a preset trigger belongs to.
+    /// The preset a preset trigger or macro belongs to.
     fn preset(&self) -> Option<&str> {
         None
     }
@@ -319,6 +320,9 @@ impl CatalogItem for Macro {
     fn groups_off(config: &ProfileConfig) -> &[String] {
         &config.disabled_macro_groups
     }
+    fn preset(&self) -> Option<&str> {
+        self.preset.as_deref()
+    }
     /// A profile keeps every copy of a key, and the input bar fires the
     /// last one that is on and whose group is on. Next comes the last one
     /// that is on, which fires once you turn its group on, then the last.
@@ -339,21 +343,25 @@ impl CatalogItem for Macro {
 /// profile order, by profile index.
 pub(super) struct Entry<T> {
     pub(super) copies: Vec<(usize, T)>,
-    /// A preset trigger, which the shared preset list turns on.
+    /// A preset trigger or macro, which the shared preset list turns on.
     pub(super) preset: bool,
-    /// A preset trigger whose preset the library still has, so a launch
+    /// A preset item whose preset the library still has, so a launch
     /// installs it for every profile, the ones whose file lacks it too.
     pub(super) in_library: bool,
 }
 
-/// The items of one kind in `configs`, one entry per name. Of the copies
-/// of a name in one file, the last one of the highest rank wins, see
-/// [`CatalogItem::rank_in`]. A store keeps the last copy of a name, and
-/// the input bar fires the last macro of a key that is on.
-fn keyed_entries<T: CatalogItem>(
-    profiles: &[(String, ProfileConfig)],
-    items: impl Fn(&ProfileConfig) -> &[T],
-) -> Vec<Entry<T>> {
+/// The items `items` takes from each of `profiles`, one entry per name.
+/// Of the copies of a name in one file, the last one of the highest rank wins,
+/// see [`CatalogItem::rank_in`]. A store keeps the last copy of a name,
+/// and the input bar fires the last macro of a key that is on.
+fn keyed_entries<'a, T, I>(
+    profiles: &'a [(String, ProfileConfig)],
+    items: impl Fn(&'a ProfileConfig) -> I,
+) -> Vec<Entry<T>>
+where
+    T: CatalogItem + 'a,
+    I: IntoIterator<Item = &'a T>,
+{
     let mut by_key: BTreeMap<String, Entry<T>> = BTreeMap::new();
     for (n, (_, config)) in profiles.iter().enumerate() {
         let mut last: BTreeMap<&str, &T> = BTreeMap::new();
@@ -378,6 +386,35 @@ fn keyed_entries<T: CatalogItem>(
         }
     }
     by_key.into_values().collect()
+}
+
+/// The macros in `configs`, one entry for each key of yours. The copies
+/// of a preset macro fold into one entry for each preset and key, beside
+/// your macro on that key, since a launch installs the library copy and
+/// holds it off while yours keeps the key, see [`hold_taken_keys`].
+/// `library` names the presets the library still has.
+///
+/// [`hold_taken_keys`]: crate::loadouts::presets::hold_taken_keys
+fn macro_entries(profiles: &[(String, ProfileConfig)], library: &[&str]) -> Vec<Entry<Macro>> {
+    let mut entries = keyed_entries(profiles, |c| c.macros.iter().filter(|m| m.preset.is_none()));
+    let presets: BTreeSet<&str> = profiles
+        .iter()
+        .flat_map(|(_, c)| &c.macros)
+        .filter_map(|m| m.preset.as_deref())
+        .collect();
+    for id in presets {
+        let of_preset = keyed_entries(profiles, |c| {
+            c.macros
+                .iter()
+                .filter(move |m| m.preset.as_deref() == Some(id))
+        });
+        entries.extend(of_preset.into_iter().map(|entry| Entry {
+            preset: true,
+            in_library: library.contains(&id),
+            ..entry
+        }));
+    }
+    entries
 }
 
 /// The triggers in `configs`, in the order the catalog keeps them. A
@@ -551,8 +588,9 @@ pub(super) fn preset_on(list: &[String], preset: &str) -> bool {
 /// Give each copy of each entry its catalog group and on state, then
 /// collapse every entry whose copies agree into `auto`, the copy of the
 /// first profile that holds it, and hand the others to `conflicts`. The
-/// copies of a preset trigger always collapse, since a launch installs
-/// the version the library holds, whichever one the catalog keeps.
+/// copies of a preset trigger or macro always collapse, since a launch
+/// installs the version the library holds, whichever one the catalog
+/// keeps.
 fn resolve<T: CatalogItem>(
     profiles: &[(String, ProfileConfig)],
     entries: Vec<Entry<T>>,
@@ -804,6 +842,7 @@ pub(super) mod tests {
             command: command.into(),
             group: None,
             enabled,
+            preset: None,
         };
         let plan = analyze(&[
             (
@@ -896,6 +935,7 @@ pub(super) mod tests {
             command: command.into(),
             group: group.map(String::from),
             enabled,
+            preset: None,
         }
     }
 

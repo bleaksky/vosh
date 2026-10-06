@@ -14,7 +14,7 @@ describe('SETTINGS_ROWS', () => {
     }
   });
 
-  it('covers all six groups', () => {
+  it('covers all seven groups', () => {
     const groups = new Set(SETTINGS_ROWS.map((r) => r.target.group));
     expect([...groups]).toEqual([
       'general',
@@ -22,6 +22,7 @@ describe('SETTINGS_ROWS', () => {
       'layout',
       'input',
       'automation',
+      'scripts',
       'characters',
     ]);
   });
@@ -61,7 +62,12 @@ describe('searchSettingsRows', () => {
 
   it('needs every word, in any field', () => {
     expect(labels('dark theme')[0]).toBe('Dark theme');
-    expect(labels('import')).toEqual(['Import a theme', 'Import from another client']);
+    expect(labels('import')).toEqual([
+      'Import a theme',
+      'Import from another client',
+      'Import a profile',
+    ]);
+    expect(labels('toml')).toEqual(['Import a profile']);
   });
 
   it('finds a group by its name', () => {
@@ -79,6 +85,38 @@ describe('searchSettingsRows', () => {
   it('ignores case and accents', () => {
     expect(labels('LINE HEIGHT')).toEqual(['Line height']);
     expect(labels('thème')[0]).toBe('Theme');
+  });
+
+  it('finds Plugins and Console on the Scripts list by lua', () => {
+    expect(labels('lua')).toEqual(['Plugins', 'Console']);
+    expect(labels('install plugin')).toEqual(['Plugins']);
+    expect(labels('print')).toEqual(['Console']);
+    expect(labels('scripts')).toEqual(['Plugins', 'Console']);
+    expect(searchSettingsRows('lua', mac).map(settingsRowKey)).toEqual([
+      'scripts#plugins',
+      'scripts#console',
+    ]);
+  });
+
+  it('finds Macros and Presets by numpad', () => {
+    expect(labels('numpad')).toEqual(['Macros', 'Presets']);
+    expect(labels('walk keys')).toEqual(['Presets']);
+  });
+
+  it('finds Triggers by the parts of an alert', () => {
+    expect(labels('bounce')).toEqual(['Triggers']);
+    expect(labels('flash')).toContain('Triggers');
+    expect(labels('alert banner')).toEqual(['Triggers', 'Presets']);
+    expect(labels('notification')).toEqual(['Triggers', 'Presets']);
+    expect(labels('alert tone')).toEqual(['Triggers']);
+    expect(labels('chime')).toEqual(['Triggers']);
+  });
+
+  it('finds Presets by the alert presets', () => {
+    expect(labels('tells')).toContain('Presets');
+    expect(labels('attacked')).toEqual(['Presets']);
+    expect(labels('health')).toContain('Presets');
+    expect(labels('connection')).toContain('Presets');
   });
 
   it('shows loadouts only in loadout mode', () => {

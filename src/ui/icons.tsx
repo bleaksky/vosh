@@ -96,6 +96,15 @@ export function BoltIcon(props: IconProps) {
   );
 }
 
+/** Angle brackets around a slash: Scripts. */
+export function CodeIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.25 4.75L2 8l3.25 3.25M10.75 4.75L14 8l-3.25 3.25M9.25 3l-2.5 10" />
+    </Glyph>
+  );
+}
+
 export function UserIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -171,6 +180,16 @@ export function CopyIcon(props: IconProps) {
         d="M10.75 5.25v-1.5c0-.83-.67-1.5-1.5-1.5h-5.5c-.83 0-1.5.67-1.5 1.5v5.5c0 .83.67 1.5 1.5 1.5h1.5"
         {...scale(props.size)}
       />
+    </Glyph>
+  );
+}
+
+/** A stroked triangle that points right, the button that plays an
+ *  alert tone. */
+export function PlayIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.75 4.25v7.5L11.75 8z" {...scale(props.size)} />
     </Glyph>
   );
 }

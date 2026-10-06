@@ -11,6 +11,7 @@
 
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
+export { CardNote } from './CardNote';
 export { Chip, ChipButton, type ChipButtonProps, type ChipProps } from './Chip';
 export { ColorField, type ColorFieldProps } from './ColorField';
 export { cx } from './cx';

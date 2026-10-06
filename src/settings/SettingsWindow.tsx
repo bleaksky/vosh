@@ -24,6 +24,7 @@ import { customToAppTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
 import { isMacPlatform } from '../lib/shortcuts';
 import {
+  leavesSettingsPage,
   resolveSettingsTarget,
   settingsGroupLabel,
   settingsScrollIds,
@@ -47,9 +48,10 @@ import { InputPage } from './input/InputPage';
 import { AutomationPage } from './automation/AutomationPage';
 import { CharactersPage } from './characters/CharactersPage';
 import { AppearancePage } from './appearance/AppearancePage';
+import { ScriptsPage } from './scripts/ScriptsPage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
-// with search and the six group nav, and a content column with the
+// with search and the seven group nav, and a content column with the
 // breadcrumb in the 32 px band over the group's page. With two or more
 // sessions open, the band names the session and the profile Settings
 // edits at its right (ShownSession.tsx). On macOS the
@@ -76,6 +78,8 @@ const PAGES: Record<SettingsGroup, GroupPage> = {
   layout: { Page: LayoutPage },
   input: { Page: InputPage },
   automation: { Page: AutomationPage, selfScroll: true },
+  // A plugin's page pins its editor and Output to the window.
+  scripts: { Page: ScriptsPage, selfScroll: (target) => settingsSubpage(target) !== null },
   characters: { Page: CharactersPage },
 };
 
@@ -119,29 +123,30 @@ export function SettingsWindow() {
   const [error, setError] = useState<string | null>(null);
   const [pathB, setPathB] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const groupRef = useRef(nav.target.group);
+  const targetRef = useRef(nav.target);
   const leaveGuardRef = useRef<LeaveGuard | null>(null);
   const setLeaveGuard = useCallback((guard: LeaveGuard | null) => {
     leaveGuardRef.current = guard;
   }, []);
 
   useEffect(() => {
-    groupRef.current = nav.target.group;
+    targetRef.current = nav.target;
   }, [nav]);
 
   // Closing the window, and quitting, send every write still waiting,
   // the field you are typing in included.
   useSettingsClose();
 
-  // A page with unsaved changes can hold a move to another group until
-  // you answer its question. A move inside the group is the page's own.
+  // A page with unsaved changes can hold a move to another group, or to
+  // another page inside its group, until you answer its question. Any
+  // other move inside the page is the page's own.
   const go = useCallback((target: SettingsTarget) => {
     const move = () => {
       setError(null);
       setNav((prev) => ({ target, seq: prev.seq + 1 }));
     };
     const guard = leaveGuardRef.current;
-    if (guard && target.group !== groupRef.current && guard(move)) return;
+    if (guard && leavesSettingsPage(targetRef.current, target) && guard(move)) return;
     move();
   }, []);
 

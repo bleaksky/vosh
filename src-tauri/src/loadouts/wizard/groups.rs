@@ -30,12 +30,13 @@
 //! turning on loadout `default` turns on what the default profile had
 //! on, the items it shared included, and nothing it did not have.
 //!
-//! A preset trigger follows the list of presets that are on, which every
-//! profile shares in loadout mode, so it is on for every profile, the
-//! ones whose file lacks it included, since a launch installs every
-//! preset that is on. It stays in a folder only for a profile that had
-//! it there. A preset the library no longer has installs for no one, so
-//! its trigger stays off for a profile whose file lacks it.
+//! A preset trigger or macro follows the list of presets that are on,
+//! which every profile shares in loadout mode, so it is on for every
+//! profile, the ones whose file lacks it included, since a launch
+//! installs every preset that is on. It stays in a folder only for a
+//! profile that had it there. A preset the library no longer has
+//! installs for no one, so what it added stays off for a profile whose
+//! file lacks it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -91,9 +92,9 @@ fn roles<T: CatalogItem>(profiles: &[(String, ProfileConfig)], entry: &Entry<T>)
                 .map(|(_, item)| item);
             if entry.preset {
                 // A launch installs every preset that is on, whatever the
-                // file held, and turns its triggers on. A launch also takes
-                // out the triggers of a preset that is off, so only a
-                // preset its holder had on can sit in its folder. A preset
+                // file held, and turns what it adds on. A launch also takes
+                // out what a preset that is off added, so only a preset
+                // its holder had on can sit in its folder. A preset
                 // the library no longer has installs for no one, so it
                 // stays off for a profile whose file lacks it.
                 let config = &profiles[n].1;
@@ -425,6 +426,7 @@ mod tests {
             command: "cast heal".into(),
             group: None,
             enabled: true,
+            preset: None,
         };
         let f1_off = Macro {
             enabled: false,

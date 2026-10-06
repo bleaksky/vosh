@@ -9,6 +9,9 @@ export interface RowProps {
   /** Optional line under the label at 11/15 in the secondary color,
    *  4 px below. The row's control is described by it. */
   description?: ReactNode;
+  /** `danger` sets the description in the danger tone, for a line that
+   *  says why the control's value is refused. */
+  descriptionTone?: 'danger';
   /** Search and deep link anchor. The frame scrolls the row into view
    *  and flashes it. Keep it in step with src/settings/settingsSearch.ts. */
   anchor?: string;
@@ -20,7 +23,14 @@ export interface RowProps {
 /** One card row: min height 44, padding 10 16, the label and optional
  *  description on the left and the control on the right. Every row
  *  after the first in a card draws a 1 px hairline inset 16. */
-export function Row({ label, description, anchor, children, className }: RowProps) {
+export function Row({
+  label,
+  description,
+  descriptionTone,
+  anchor,
+  children,
+  className,
+}: RowProps) {
   const controlId = useId();
   const labelId = useId();
   const descriptionId = useId();
@@ -44,7 +54,7 @@ export function Row({ label, description, anchor, children, className }: RowProp
           {label}
         </label>
         {hasDescription && (
-          <span id={descriptionId} className="st-row-desc">
+          <span id={descriptionId} className="st-row-desc" data-tone={descriptionTone}>
             {description}
           </span>
         )}

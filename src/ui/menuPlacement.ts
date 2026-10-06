@@ -28,6 +28,22 @@ const MENU_PAD = 6;
 /** The edges of a box on screen, as getBoundingClientRect gives them. */
 export type MenuBox = Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
 
+// Space between a button and the menu it opens.
+const BUTTON_GAP = 4;
+
+/** Where the menu `button` opens wants to sit: under the button from
+ *  its left edge, ending at its right edge at the window's right edge,
+ *  and over it at the bottom edge. A row's more button opens its menu
+ *  here. */
+export function menuBelow(button: MenuBox): MenuPlacement {
+  return {
+    x: button.left,
+    y: button.bottom + BUTTON_GAP,
+    flipX: button.right,
+    flipY: button.top - BUTTON_GAP,
+  };
+}
+
 /** Where a submenu wants to sit beside `row`, a row of `menu`: to the
  *  right of the menu with its first row level with `row`, flipped to the
  *  left of the menu at the window's right edge, and up from the bottom

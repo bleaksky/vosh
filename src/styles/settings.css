@@ -612,6 +612,11 @@
   font-weight: 400;
 }
 
+/* Why the row's value is refused, like a profile name you have. */
+.st-row-desc[data-tone='danger'] {
+  color: var(--danger-text);
+}
+
 .st-row-control {
   display: flex;
   align-items: center;
@@ -629,6 +634,10 @@
 
 .st-meta[data-tone='danger'] {
   color: var(--danger-text);
+}
+
+.st-meta[data-tone='warn'] {
+  color: var(--warn-text);
 }
 
 /* Two fields that share one row, like General's host and port. */
@@ -1175,19 +1184,71 @@
   height: 36px;
 }
 
-.st-chars-new {
+/* New profile and Import… share the row under the list, 12 apart. */
+.st-chars-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 12px;
 }
 
-.st-chars-status {
+/* The quiet line under a list that says what its last action did, like
+   where an export went. The Scripts list says it the same way. */
+.st-chars-status,
+.st-plugin-status {
   margin: 12px 0 0;
   color: var(--secondary);
   font-size: 11px;
   line-height: 15px;
 }
 
-.st-chars-status:empty {
+.st-chars-status:empty,
+.st-plugin-status:empty {
   display: none;
+}
+
+/* What a profile export holds, in the import sheet (board 5 of the
+   Scripts design): label and value pairs 24 high in two columns, with
+   Runs Lua and Plugins across both. Under the Lua warning the pairs
+   start at once. */
+.st-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  margin: 0;
+  padding: 8px 16px;
+}
+
+.st-card-note.is-warn + .st-import-grid {
+  padding-top: 0;
+}
+
+.st-import-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-import-row.is-wide {
+  grid-column: 1 / -1;
+}
+
+.st-import-key {
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.st-import-value {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .st-menu-danger {
@@ -1705,7 +1766,7 @@
 }
 
 /* A quiet button with no ring in the secondary color, like Edit all
-   as JSON…. */
+   as JSON… and Clear over the Scripts Console. */
 .st-button.st-auto-quiet {
   padding: 0 10px;
   box-shadow: none;
@@ -1785,7 +1846,11 @@
   border-bottom-right-radius: var(--r-card);
 }
 
-.st-auto-cardnote {
+/* CardNote in src/ui, the quiet line at the head of a card. The
+   st-auto- card recipe around it, st-auto-card, -value, -mono, -block
+   and -quiet, began on Automation and now draws the cards of Scripts and
+   of the import sheet under Characters too. */
+.st-card-note {
   margin: 0;
   padding: 12px 16px;
   color: var(--secondary);
@@ -1794,14 +1859,14 @@
 }
 
 /* What needs you about this item, in warn with the pane status dot. */
-.st-auto-cardnote.is-warn {
+.st-card-note.is-warn {
   display: flex;
   gap: 6px;
   padding: 10px 16px;
   color: var(--warn-text);
 }
 
-.st-auto-warndot {
+.st-warn-dot {
   display: block;
   flex: none;
   width: 8px;
@@ -1809,6 +1874,13 @@
   margin-top: 3.5px;
   border-radius: 4px;
   background: var(--warn);
+}
+
+/* The way to fix it, at the end of a warn note. */
+.st-card-note.is-warn > .st-button {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
 }
 
 .st-auto-value {
@@ -1826,6 +1898,37 @@
   white-space: nowrap;
 }
 
+/* The Keys row of a macro preset (Scripts board 7). Each key on a
+   keycap 4 before the command it sends, in the game's font, and the
+   pairs 12 apart. A pair your macro holds takes the warn ring. */
+.st-auto-keys {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.st-auto-keypair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.st-auto-keysend {
+  color: var(--text);
+  font-family: var(--font-mud);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-auto-keypair.is-warn .st-keycap {
+  border-color: var(--warn);
+  color: var(--warn-text);
+}
+
+.st-auto-keypair.is-warn .st-auto-keysend {
+  color: var(--warn-text);
+}
+
 /* A row that stacks its label over a block: Lua, patterns, a pasted
    file. */
 .st-row.st-auto-coderow,
@@ -1833,6 +1936,16 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+/* A block's label and description with a control beside them, as the
+   trigger Pattern row sets its mode over the field. Not a card row, so
+   it draws no hairline. */
+.st-auto-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .st-auto-iconbutton {
@@ -1857,6 +1970,13 @@
 .st-auto-iconbutton:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* The button that plays the alert tone, 24 square and 8 px before the
+   Sound select, as board 1 of the Alerts review draws it. */
+.st-icon-button.st-auto-play {
+  width: 24px;
+  height: 24px;
 }
 
 .st-auto-patterns {
@@ -2165,4 +2285,247 @@
   border-radius: var(--r-key);
   box-shadow: 0 0 0 1px var(--warn);
   pointer-events: none;
+}
+
+/* ── Scripts (Scripts and Panels, boards 2 and 4) ──────────────────── */
+
+/* A plugin row names the plugin in the MUD font, as its folder reads,
+   and keeps its description to one line. */
+.st-plugin-row .st-row-label {
+  font-family: var(--font-mud);
+}
+
+.st-plugin-row .st-row-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A press anywhere on a plugin row opens the plugin, as a profile row
+   does in Characters. The name and description are one button whose
+   press area stretches over the row, and the switch and the more
+   button sit above it. */
+.st-plugin-open {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.st-plugin-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.st-plugin-open:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.st-plugin-row .st-row-control {
+  position: relative;
+  z-index: 1;
+}
+
+/* The more button of the row whose menu is open keeps the selected row
+   fill while the menu shows (board 4). */
+.st-plugin-row .st-icon-button[aria-expanded='true'] {
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.st-plugin-empty {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The Console: the [lua] lines the terminal gets, in the MUD font, over
+   the field that runs Lua, all on the input band well. */
+.st-lua-out {
+  display: flex;
+  flex-direction: column;
+  padding-top: 10px;
+  border-radius: var(--r-card);
+  background: var(--inputband);
+}
+
+/* With no line yet, the note sits in a 150 px well over the field. */
+.st-lua-out.is-empty {
+  height: 150px;
+  padding-top: 0;
+}
+
+.st-lua-empty {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Thirteen lines show at once, so the Console fits the 600 px window
+   under three plugins. The rest scroll, and the newest shows. */
+.st-lua-lines {
+  max-height: calc(13 * 17px);
+  margin: 0;
+  padding: 0 16px;
+  overflow-y: auto;
+  list-style: none;
+  font-family: var(--font-mud);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.st-lua-line {
+  display: flex;
+  gap: 12px;
+}
+
+.st-lua-time {
+  flex: none;
+  width: 50px;
+  color: var(--tertiary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A line too long for the well wraps under its text, 6ch in, past the
+   `[lua] ` tag. */
+.st-lua-text {
+  min-width: 0;
+  padding-left: 6ch;
+  text-indent: -6ch;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.st-lua-tag {
+  color: var(--tertiary);
+}
+
+.st-lua-line.is-error .st-lua-text {
+  color: var(--danger-text);
+}
+
+.st-lua-line.is-error .st-lua-tag {
+  color: color-mix(in srgb, var(--danger-text) 70%, transparent);
+}
+
+.st-lua-line.is-note .st-lua-text,
+.st-lua-line.is-input .st-lua-text {
+  color: var(--secondary);
+}
+
+.st-lua-prompt {
+  position: relative;
+  margin: 8px;
+}
+
+.st-lua-prompt .st-field {
+  padding-left: 28px;
+}
+
+.st-lua-glyph {
+  position: absolute;
+  top: 5px;
+  left: 12px;
+  color: var(--tertiary);
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: none;
+}
+
+/* A plugin's page (boards 1 and 3): the file and On for this profile,
+   then the stop note while Vosh holds the plugin off, the editor and
+   Output, 12 apart over the save bar. In the 880 by 600 window the
+   editor shows 14 lines of 18.2 px, or 12 under the note, and Output
+   takes the rest of the column. A taller or shorter window grows or
+   shrinks the editor alone, so Output keeps the lines it shows at 600,
+   the stop line of board 3 among them. */
+.st-plugin-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.st-plugin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 12px;
+}
+
+.st-plugin-code {
+  flex: none;
+}
+
+/* The height goes on the editor, since the React wrapper holds its
+   scroller at the editor's full height. It gains or loses what the
+   window has past or under 600, and never shows fewer than 6 lines. */
+.st-app .st-plugin-code .cm-editor {
+  height: max(calc(6 * 18.2px + 10px), calc(14 * 18.2px + 10px + 100vh - 600px));
+}
+
+.st-app .st-plugin-code.is-short .cm-editor {
+  height: max(calc(6 * 18.2px + 10px), calc(12 * 18.2px + 10px + 100vh - 600px));
+}
+
+/* Output fills what the editor leaves, its lines scroll inside the
+   well, and the field sits at the foot of it. The space over the first
+   line scrolls with the lines, so a well a few pixels short of its
+   lines, as board 1's is at 600, hides that space before any text. It
+   never drops under its head and its 8 px gap, the newest two lines,
+   and the field with its margins. */
+.st-plugin-output {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: calc(36px + 2 * 17px + 44px);
+}
+
+.st-plugin-output .st-lua-out {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 0;
+}
+
+.st-plugin-output .st-lua-out.is-empty {
+  height: auto;
+}
+
+.st-plugin-output .st-lua-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding-top: 10px;
+}
+
+/* The folder a plugin lives in, under the Folder label, in the MUD font
+   on a line of its own, so the line takes that font's height. */
+.st-plugin-folder {
+  display: block;
+  font-family: var(--font-mud);
+}
+
+/* The Manifest tab scrolls on its own over the save bar. */
+.st-plugin-manifest {
+  display: block;
+  overflow-y: auto;
 }

@@ -138,7 +138,7 @@ const store = createSessionStore<SessionRowState>({
     (apply) => onReconnect((payload, session) => apply(session, (now) => redialed(now, payload))),
     (apply) =>
       onGameLine(waitsForLines, (session) => apply(session, (now) => moved(now, { lines: true }))),
-    (apply) => onAlert((session) => mark(apply, session)),
+    (apply) => onAlert((alert) => mark(apply, alert.session)),
     (apply) => onMark((session) => mark(apply, session)),
     (apply) =>
       subscribeSelected(() =>

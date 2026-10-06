@@ -120,6 +120,26 @@
   box-shadow: var(--st-seg-ring);
 }
 
+/* A group whose segments press on and off on their own, like the Alert
+   row. A pressed one leads with the check in the accent, pulled 3 px
+   into its padding, as board 1 of the Alerts review draws it. */
+.st-seg.is-multi .st-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.st-seg.is-multi .st-seg-item[aria-pressed='true'] svg {
+  color: var(--accent);
+  margin-left: -3px;
+}
+
+/* A segment that needs you, like Banner while the system turns Vosh's
+   banners off. The ring sits inside it, as on a warn automation row. */
+.st-seg-item.is-warn {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
 .st-select {
   position: relative;
   display: block;
@@ -190,6 +210,12 @@
 .st-field::-webkit-search-decoration {
   display: none;
   -webkit-appearance: none;
+}
+
+/* A field holding text Vosh will not take, like a profile name you
+   already have: a danger ring inside the fill, as on a color field. */
+.st-field[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 
 .st-field-mono {

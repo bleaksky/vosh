@@ -8,7 +8,7 @@ import {
 } from '../../ipc/automation';
 import { getShownProfile } from '../shownProfile';
 import { MigrationWizard } from './MigrationWizard';
-import { Button, Disclosure, Row, Section, Select } from '../../ui';
+import { Button, CardNote, Disclosure, Row, Section, Select } from '../../ui';
 
 // Import from another client, the old Import tab's logic in the new
 // frame. Pick a file or paste its contents, pick the format or let
@@ -100,10 +100,10 @@ export function ImportPanel({ onError }: ImportPanelProps) {
           </>
         }
       >
-        <p className="st-auto-cardnote">
+        <CardNote>
           Vosh adds the aliases, triggers, macros, and variables it can read and replaces any with
           the same name. The summary lists what it could not bring over.
-        </p>
+        </CardNote>
         <Row label="File" description={fileName ?? 'Or paste the contents below.'}>
           <Button onClick={() => fileRef.current?.click()} disabled={busy}>
             Choose file…
