@@ -23,7 +23,6 @@ describe('sessionLabel', () => {
       place: 'The Forsaken Lands',
       meta: null,
       split: null,
-      tooltip: 'Tolliver on The Forsaken Lands',
     });
   });
 
@@ -36,7 +35,6 @@ describe('sessionLabel', () => {
       place: 'The Forsaken Lands 1825',
       meta: '1825',
       split: null,
-      tooltip: 'Orla on The Forsaken Lands 1825',
     });
   });
 
@@ -46,7 +44,6 @@ describe('sessionLabel', () => {
       name: 'Builder',
       who: 'Builder',
       meta: '1825',
-      tooltip: 'Tolliver on The Forsaken Lands 1825',
     });
     const home = session(1, { name: 'Main', character: 'Tolliver' });
     expect(sessionLabel(home, [home])).toMatchObject({ name: 'Main', meta: null });
@@ -65,7 +62,6 @@ describe('sessionLabel', () => {
       place: 'The Forsaken Lands 1825',
       meta: null,
       split: { world: 'The Forsaken Lands', port: '1825' },
-      tooltip: 'The Forsaken Lands 1825',
     });
     const play = session(4);
     expect(sessionLabel(play, [play])).toMatchObject({
@@ -83,7 +79,6 @@ describe('sessionLabel', () => {
       place: null,
       meta: null,
       split: null,
-      tooltip: null,
     });
   });
 
@@ -98,7 +93,6 @@ describe('sessionLabel', () => {
     expect(sessionLabel(alone, [alone, other])).toMatchObject({
       place: 'mud.example.org 4000',
       meta: '4000',
-      tooltip: 'Maren on mud.example.org 4000',
     });
     const elsewhere = session(3, { host: 'other.example.org', port: 4000 });
     expect(sessionLabel(alone, [alone, elsewhere]).meta).toBeNull();

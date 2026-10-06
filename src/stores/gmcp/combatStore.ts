@@ -129,3 +129,9 @@ export const subscribeCombat = store.subscribe;
 
 /** The opponent you are fighting, or null out of combat. */
 export const useCombat = store.use;
+/** The fight of the session `session` names as Char.Combat sent it.
+ *  Its hidden flags, which withHidden lays over it, hide only the
+ *  opponent's health and condition. */
+export const getCombatOf = store.stateOf;
+/** Hear each change to a session's fight, with that session. */
+export const subscribeCombatOf = store.subscribeStates;

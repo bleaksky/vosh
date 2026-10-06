@@ -160,6 +160,11 @@ pub(crate) struct Session {
     /// connect you start clears it, since the row then names the world
     /// until you log in. A leaf lock, held for a copy.
     played: std::sync::Mutex<Option<String>>,
+    /// When the live link reached the game, in Unix ms, for the time
+    /// online the row shows. A connect or a redial that reaches the game
+    /// sets it, and the end of the link clears it. A leaf lock, held for
+    /// a copy.
+    since: std::sync::Mutex<Option<u64>>,
     /// The last Char.Affects list of the connection, for a window that
     /// opens between ticks. Cleared on connect and when the connection
     /// ends.
@@ -222,6 +227,7 @@ impl Session {
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
             played: std::sync::Mutex::new(None),
+            since: std::sync::Mutex::new(None),
             last_affects: AffectsSnapshot::default(),
             affect_full: AffectFull::default(),
             prompt_watch: AtomicBool::new(false),
@@ -330,6 +336,15 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
     }
 
+    /// Note when the live link reached the game, or None as it ends, see
+    /// [`Session::since`].
+    pub(crate) fn set_since(&self, since: Option<u64>) {
+        *self
+            .since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = since;
+    }
+
     /// Whether the session's connection runs. The loop marks its tick
     /// count in session as it starts and out as it ends, see
     /// [`crate::tick::TickRuntime::in_session`]. Takes the connection
@@ -380,6 +395,10 @@ impl Session {
             tls: address.is_some_and(|a| a.tls),
             profile: self.profile().name(),
             connected: self.connected(),
+            since: *self
+                .since
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
             selected,
         }
     }
@@ -577,6 +596,9 @@ pub(crate) struct SessionRow {
     /// The profile it plays, None only before launch loads one.
     pub(crate) profile: Option<String>,
     pub(crate) connected: bool,
+    /// When the live link reached the game, in Unix ms, None while no
+    /// link runs.
+    pub(crate) since: Option<u64>,
     pub(crate) selected: bool,
 }
 
@@ -1071,6 +1093,7 @@ mod tests {
                 tls: port.is_some(),
                 profile: None,
                 connected: false,
+                since: None,
                 selected,
             }
         };

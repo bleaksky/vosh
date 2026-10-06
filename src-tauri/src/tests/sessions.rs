@@ -1004,6 +1004,31 @@ async fn every_window_hears_a_row_follow_a_connect_a_login_a_switch_and_a_discon
 }
 
 #[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_connect_tells_the_row_when_the_session_went_online_and_a_disconnect_clears_it() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let now = || {
+        let since_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("a clock after 1970");
+        u64::try_from(since_epoch.as_millis()).expect("a time in range")
+    };
+    let before = now();
+    h.connect().await;
+    h.until("the time online on the row", |h| {
+        heard_row(h, h.first)["since"].is_u64()
+    })
+    .await;
+    let since = heard_row(&h, h.first)["since"].as_u64().expect("a time");
+    assert!((before..=now()).contains(&since));
+
+    h.disconnect().await;
+    assert_eq!(heard_row(&h, h.first)["since"], json!(null));
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
 #[tokio::test]
 async fn a_profile_a_session_plays_stays_on_delete_and_renames_for_every_session_on_it() {
     // A selection shows the session's grid, which other tests read.

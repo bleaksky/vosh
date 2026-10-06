@@ -41,6 +41,7 @@ function row(id: number, profile: string): SessionRow {
     tls: false,
     profile,
     connected: true,
+    since: null,
     selected: id === 1,
   };
 }

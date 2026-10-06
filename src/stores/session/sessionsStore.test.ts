@@ -46,6 +46,7 @@ const row = (id: number, character: string, port: number, selected = false): Ses
   tls: false,
   profile: character,
   connected: true,
+  since: null,
   selected,
 });
 

@@ -55,17 +55,19 @@ Variables set with `#var` live in session scope. They clear when the next connec
 
 Each session is one connection to a game, with its own terminal, command line and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, one row for each. With one session it hides by itself.
 
+Each row reads on two lines. The first starts with a mark that says where the session stands, then its name, and ends with a count when something waits for you there. The second says what the session is doing.
+
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key. On macOS the Session menu steps too, with `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
 - Click `Hide sessions` at the top right of the sidebar to fold it away in this window. `Show sessions` in the `Cmd+K` palette brings it back, and on macOS so does `Show sessions` in the View menu.
 - Right click a row for its menu, with `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each acts on that row's session. `Rename session…` and `Edit connection…` bring it to the front first.
 
-More rows than fit scroll under the `Sessions` header, which draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
+`Sessions` heads the list with how many are open, such as `Sessions 3`. More rows than fit scroll under it, and it draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
 
 Drag the line at the sidebar's right edge to make it wider or narrower, from 180 to 320 pixels, and double click the line to go back to 220. Vosh keeps the width for your next launch.
 
-When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. While the sidebar is folded, in a narrow window or after `Hide sessions`, the session button's menu lists every session at its top under `Sessions`. The session in front has a check, and each other one shows its port, any glyph its row would show and its key, such as `Cmd+2`. Click one to bring it to the front.
+When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. While the sidebar is folded, in a narrow window or after `Hide sessions`, the session button's menu lists every session at its top under `Sessions`. Each one reads the same two lines as its row. The session in front has a check, a session where something waits shows its count, and any other one its key, such as `Cmd+2`. Click one to bring it to the front, or point at it and click the cross to close it. The session button adds up what waits in your other sessions, such as `2` after the arrow, and the number goes once you have looked at each.
 
 To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
 
@@ -85,25 +87,39 @@ Each row names its session by the first of these it has.
 - Before you log in, the world it plays, such as `The Forsaken Lands`.
 - `New session` while it has no world yet.
 
-A port that is not the world's own shows in grey at the right of the row, so Orla on the build port reads `Orla` with `1825` beside it. A row named by its world puts the port in its name instead, as `The Forsaken Lands 1825`, and when the row runs short the world ends in an ellipsis and the port stays. On a host Vosh does not know by name, the port shows only while another session plays on the same host. Point at a row to see the character and the world together, such as `Orla on The Forsaken Lands 1825`.
+A port that is not the world's own shows in grey beside the name, so Orla on the build port reads `Orla` with `1825` beside it. A row named by its world puts the port in its name instead, as `The Forsaken Lands 1825`, and when the row runs short the world ends in an ellipsis and the port stays. On a host Vosh does not know by name, the port shows only while another session plays on the same host.
 
-To name a session, double click its name in the row, or right click the row and choose `Rename session…`. The session button, the `Cmd+K` palette and the Session menu on macOS offer `Rename session…` for the session in front. The name turns into a field with its text selected, and the port stays beside it. Press `Enter` or click elsewhere to keep what you typed, or press `Escape` to leave the row as it was. Clear the field and the row reads the character again. A name tells apart two rows that play one character, such as `Tolliver` on the play port and `Builder` for Tolliver on the build port.
+Line two says what the session is doing. While you play it reads the room, such as `Thickening Woods`, or who you fight while a fight lasts, such as `Fighting a Blackwatch guard`, with your health at the right, such as `91%`. Health turns red once it runs low. The game hides your vitals in some places, and then the line shows no health. Otherwise the line says what happened.
+
+- `Waiting for your login` while the game waits for you to log in.
+- `Connecting…` while Vosh dials, and `Reconnecting, try 2 of 8` while it dials again after a drop.
+- `Couldn’t connect` when the first dial fails.
+- `Dropped 4 min ago` when the link dropped and Vosh does not dial again.
+- The world it dials, such as `The Forsaken Lands`, while the session is not connected.
+
+A row you named starts line two with the character it plays, so you always see who plays it.
+
+Rest the pointer on a row for half a second and a card opens beside it with the rest of the session. It names the world and the profile, such as `The Forsaken Lands 1825, profile Build`, then the room, the area, who you fight, your health, mana and moves, how long you have been online and what waits for you. A session that is not connected shows when it last played. Point at the next row and the card moves there at once. The card ends with `Double click the name to rename`. It closes when the pointer leaves the rows, when you click and when you press a key.
+
+To name a session, double click its name in the row. When a row has the keyboard, after `Tab` or the arrow keys bring you into the sidebar, `Enter` or `F2` does it too, and `F2` on the command line stays yours. You can also right click the row and choose `Rename session…`, which shows `F2` beside it when the row has the keyboard. The session button, the `Cmd+K` palette and the Session menu on macOS offer `Rename session…` for the session in front. The name turns into a field with its text selected, the mark stays, and line two reads `Return saves, Esc cancels`. Press `Enter` or click elsewhere to keep what you typed, or press `Escape` to leave the row as it was. Clear the field and the row reads the character again. A name tells apart two rows that play one character, such as `Tolliver` on the play port and `Builder` for Tolliver on the build port.
 
 With one session there is no sidebar, so `Rename session…` opens a form under the title with one `Name` field. Click `Save` to keep what you typed.
 
-The name shows in place of the character in the row, the title band, the window title, the palette and the questions before a close. Pointing at the row still shows the character and the world, such as `Tolliver on The Forsaken Lands 1825`. The name stays with the session through a reconnect, another character and your next launch.
+The name shows in place of the character in the row, the title band, the window title, the palette and the questions before a close. The card beside the row still names the character with the world, such as `Tolliver on The Forsaken Lands 1825, profile Build`. The name stays with the session through a reconnect, another character and your next launch.
 
 The selected row is the filled one. The title band and the window title follow it and add the port after the world the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
 
-A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. An accent dot takes the place of the port once something for you happens there. That is a tell, your name in a line, a fight that starts on you, low health or a drop, whether or not you turned their alerts on, and any alert a trigger or a script raises. Bringing the session to the front clears both.
+A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. A count in an accent pill shows at the right of line one once something for you happens there. It counts each tell, each line with your name and each fight that starts on you, whether or not you turned their alerts on. Low health counts once, however often it falls. Past nine it reads `9+`. A drop adds nothing, since the mark shows it, and neither does an alert a trigger or a script raises. Bringing the session to the front clears the count and the bright name.
 
-A glyph takes the place of the port while a session is not ready to play.
+Every row shows one mark at its left, the row in front too.
 
+- A green dot while you play.
+- A ring while the session is not connected, and its name turns grey.
 - A spinner while Vosh dials, and through every try when it dials again after a drop.
 - A hand while the game waits for you to log in, until you play. It shows on The Forsaken Lands, and on any world after Vosh dials again.
 - A triangle when the first dial fails, or when the link dropped and Vosh does not dial again. Connect again to play on.
 
-A session that is not connected shows its name in grey. A row shows one glyph at a time, the triangle first, then the hand, then the spinner, then the dot.
+A row shows one mark at a time, the triangle first, then the hand, then the spinner.
 
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
 
@@ -127,7 +143,7 @@ When you bring a session on another profile to the front while a list under Auto
 
 Settings under General, then Connection, edits where the session in front connects with its `World`, `Host and port`, and `Use TLS` rows, and each session keeps its own. A session on a port that is not the world's own shows in `World` as its row reads, such as `The Forsaken Lands 1825`. Choosing `The Forsaken Lands` sets port `1848`.
 
-To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
+To close a session, point at its row and click the cross that takes the place of the count, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
 Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
 
