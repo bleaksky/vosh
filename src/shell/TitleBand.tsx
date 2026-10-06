@@ -67,9 +67,9 @@ export function TitleBand({
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
   // What the session popover opens on. The menu bar's Edit connection
-  // opens it straight on its form, New session… on the form of the
-  // session it opened, and the key remounts it so a second request
-  // starts fresh.
+  // opens it straight on its form, Rename session… with no sidebar on
+  // its own, New session… on the form of the session it opened, and the
+  // key remounts it so a second request starts fresh.
   const [session, setSession] = useState<{ request: SessionMenuRequest; key: number }>({
     request: { mode: 'menu' },
     key: 0,

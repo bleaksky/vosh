@@ -122,9 +122,13 @@ function MainWindow() {
   // Hide sessions, and Show sessions in the palette and the View menu.
   const toggleSessions = () => setSessionsHidden((hidden) => !hidden);
   // Rename session… names the selected session in its row while the
-  // sidebar shows (Q7).
+  // sidebar shows (Q7), and in the session popover's own form while it
+  // does not, as with one session.
   const sidebar = useRef<SessionSidebarHandle | null>(null);
-  const renameSession = () => sidebar.current?.rename(getSelected());
+  const renameSession = () => {
+    if (sidebar.current) sidebar.current.rename(getSelected());
+    else requestSessionMenu({ mode: 'rename' });
+  };
   // The session launch selected, which takes what launch has to tell you.
   const launchSession = useRef<number | null>(null);
   launchSession.current ??= opened[0] ?? null;
@@ -451,7 +455,7 @@ function MainWindow() {
     openSettingsTab,
     connect: () => void connection.connect(),
     newSession: () => void openNewSession(),
-    renameSession: sessionsShown ? renameSession : undefined,
+    renameSession,
     closeSession: () => closing.closeSession(),
     sessions: {
       rows: sessions,
@@ -774,7 +778,7 @@ function MainWindow() {
           paneTree={panelLayout?.root ?? null}
           onAddPane={addPaneType}
           onMenuClosed={focusInput}
-          renameInRow={sessionsShown ? renameSession : undefined}
+          renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
         />
       }
       terminal={terminalAreaElement}
