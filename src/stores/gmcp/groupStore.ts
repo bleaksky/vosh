@@ -1,6 +1,5 @@
 import { createGmcpStore } from './gmcpStore';
-import { getHidden, subscribeHidden } from './hiddenStore';
-import { getSelected } from '../session/sessionsStore';
+import { getHiddenOf, subscribeHiddenOf } from './hiddenStore';
 import { isHiddenFlag } from '../store';
 
 export interface GroupMember {
@@ -62,9 +61,10 @@ const EMPTY: GroupState = { group: {}, worth: {}, self: undefined };
  *  compares snapshots sees no change while the group stays hidden. */
 const HIDDEN_GROUP: GroupInfo = { hidden: true };
 
-/** The group the panes see, hidden while the backend says so. */
-function shownGroup(group: GroupInfo): GroupInfo {
-  return getHidden().group && group.hidden !== true ? HIDDEN_GROUP : group;
+/** The group the panes see of a session, hidden while the backend says
+ *  so. */
+function shownGroup(group: GroupInfo, session: number): GroupInfo {
+  return getHiddenOf(session).group && group.hidden !== true ? HIDDEN_GROUP : group;
 }
 
 /** Dedupe key for a member. The server `id` when present, else the
@@ -121,13 +121,13 @@ const store = createGmcpStore<GroupState>({
     'Char.Status': takeName,
     'Char.Name': takeName,
   },
-  // The view reads the hidden store, so each report it makes runs the
-  // view again.
-  events: [(apply) => subscribeHidden(() => apply(getSelected(), (state) => state))],
+  // The view reads the session's flags in the hidden store, so each
+  // report that moves them runs the view again.
+  events: [(apply) => subscribeHiddenOf((session) => apply(session, (state) => state))],
   // One snapshot while its parts stay the same, so a pane reads the same
   // value between pushes.
-  view: (state, last) => {
-    const group = shownGroup(state.group);
+  view: (state, last, session) => {
+    const group = shownGroup(state.group, session);
     return last?.group === group && last.worth === state.worth && last.self === state.self
       ? last
       : { group, worth: state.worth, self: state.self };

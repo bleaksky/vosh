@@ -70,5 +70,10 @@ const store = createGmcpStore<HiddenState>({
 });
 
 export const startHiddenStore = store.start;
+/** What the selected session hides. */
 export const getHidden = store.get;
 export const subscribeHidden = store.subscribe;
+/** What the session `session` names hides. */
+export const getHiddenOf = store.stateOf;
+/** Hear each session's report change, with that session. */
+export const subscribeHiddenOf = store.subscribeStates;

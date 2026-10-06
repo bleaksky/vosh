@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import lament from '../../../fixtures/gmcp/aabahran/lament.json';
 import { aabahranChatPacket, aabahranPacket } from '../../test/aabahranGmcp';
 
 // Drives the GMCP stores through a fake Tauri event bus with two
@@ -76,6 +77,8 @@ async function load() {
     chat: await import('./chatStore'),
     room: await import('./roomStore'),
     world: await import('./worldStore'),
+    combat: await import('./combatStore'),
+    group: await import('./groupStore'),
   };
 }
 
@@ -196,6 +199,59 @@ describe('a GMCP store with two sessions', () => {
     for (const cmd of ['affects_snapshot_get', 'affect_full_get', 'hidden_get']) {
       expect(asked.get(cmd), cmd).toEqual([TOLLIVER, ORLA]);
     }
+  });
+
+  it('reads the hidden flags of the same session in each view', async () => {
+    const s = await load();
+    const send = (session: number, name: string) => {
+      const p = aabahranPacket(name);
+      gmcp(session, p.package, p.data);
+    };
+    for (const name of ['char-affects.gmcp', 'char-vitals.gmcp', 'char-combat.gmcp']) {
+      send(TOLLIVER, name);
+    }
+    send(TOLLIVER, 'group-info.gmcp');
+    const heard = vi.fn();
+    s.combat.subscribeCombat(heard);
+    // Orla plays on the older build, which sends the true values under
+    // lamented tears, and the backend reports them hidden for her alone.
+    const older = lament.cases[2];
+    for (const name of older.packets) send(ORLA, name);
+    fire('session://hidden', { session: ORLA, ...older.hidden });
+
+    expect(heard).not.toHaveBeenCalled();
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 850, hidden: false });
+    expect(s.combat.getCombat()).toMatchObject({ hp_pct: 54, hidden: false });
+    expect(s.group.getGroupState().group.hidden).toBeUndefined();
+    expect(s.affects.getAffectsHidden()).toBe(false);
+
+    select(ORLA);
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 0, maxhp: 0, hidden: true });
+    expect(s.combat.getCombat()).toMatchObject({ hp_pct: null, condition: null, hidden: true });
+    expect(s.group.getGroupState().group).toEqual({ hidden: true });
+    expect(s.affects.getAffectsHidden()).toBe(true);
+
+    select(TOLLIVER);
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 850, hidden: false });
+    expect(s.combat.getCombat()).toMatchObject({ hp_pct: 54, hidden: false });
+    expect(s.affects.getAffectsHidden()).toBe(false);
+  });
+
+  it('holds back what the prompt read under the song in a session behind', async () => {
+    const s = await load();
+    const zeros = { hp: '0', maxhp: '0', mana: '0', maxmana: '0', move: '0', maxmove: '0' };
+    const nothing = { vitals: false, tank: false, opponent: false, affects: false, group: false };
+    // The song hides Orla's vitals while Tolliver is in front, and her
+    // prompt reads the zeros the game prints meanwhile.
+    fire('session://hidden', { session: ORLA, ...nothing, vitals: true });
+    fire('session://prompt-vars', { session: ORLA, data: zeros });
+    // The song ends, and the game sends her true vitals.
+    fire('session://hidden', { session: ORLA, ...nothing });
+    const p = aabahranPacket('char-vitals.gmcp');
+    gmcp(ORLA, p.package, p.data);
+
+    select(ORLA);
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900, hidden: false });
   });
 
   it('drops the state of a session that leaves the list', async () => {
