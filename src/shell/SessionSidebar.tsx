@@ -340,10 +340,11 @@ function SessionSlot({
         aria-current={current ? 'true' : undefined}
         title={label.tooltip ?? undefined}
         onPointerDown={onPress}
-        onClick={(e) => {
+        onClick={() => {
           if (dropped()) return;
           onSelect(row.id);
-          if (held(e)) onCaret();
+          // Picking a session puts you back on its command line.
+          onCaret();
         }}
         onContextMenu={(e) => {
           e.preventDefault();

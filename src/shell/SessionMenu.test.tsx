@@ -1,3 +1,4 @@
+import { returnToCommandLine } from '../panel/paneActions';
 import { act, createElement } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SessionRow } from '../ipc/session';
@@ -17,6 +18,7 @@ const store = vi.hoisted(() => ({
   states: new Map<number, Partial<SessionRowState>>(),
 }));
 
+vi.mock('../panel/paneActions', () => ({ returnToCommandLine: vi.fn() }));
 vi.mock('../stores/session/sessionsStore', async (actual) => ({
   ...(await actual<typeof import('../stores/session/sessionsStore')>()),
   useSessions: () => store.rows,
@@ -168,6 +170,8 @@ describe('the session popover with the sidebar folded', () => {
     await act(async () => on(items[1]).onClick());
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(store.goTo).toHaveBeenCalledWith(2);
+    await act(async () => new Promise((done) => setTimeout(done, 0)));
+    expect(returnToCommandLine).toHaveBeenCalledTimes(1);
   });
 
   // The list takes the sidebar's place while it is folded, so each row
