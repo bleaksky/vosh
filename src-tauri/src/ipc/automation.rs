@@ -16,7 +16,8 @@ use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
 use crate::import::ImportFormat;
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::{
-    hold_taken_keys, install_preset_macros, install_preset_triggers, remove_preset_macros,
+    delete_macro, import_macros, install_preset_macros, install_preset_triggers,
+    remove_preset_macros, set_macro,
 };
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
@@ -145,61 +146,6 @@ pub(crate) async fn macros_set(
     Ok(updated)
 }
 
-/// The body of [`macros_set`] over the live profile `p`. It finds and
-/// adds only your macros, so a key a preset macro holds too never
-/// overwrites either one. A preset macro takes only its group from you,
-/// as a preset trigger does (Scripts Q13).
-pub(crate) fn set_macro(
-    p: &mut Profile,
-    key: &str,
-    command: &str,
-    group: Option<String>,
-    enabled: Option<bool>,
-    preset: Option<&str>,
-) -> Result<(), String> {
-    let key = key.trim();
-    let command = command.trim();
-    if key.is_empty() {
-        return Err("key cannot be empty".into());
-    }
-    if command.is_empty() {
-        return Err("command cannot be empty".into());
-    }
-    // Normalize the group: empty / whitespace-only -> None so the
-    // wire format does not persist an empty group string.
-    let group = group
-        .map(|g| g.trim().to_string())
-        .filter(|g| !g.is_empty());
-    if let Some(preset) = preset {
-        let held = p
-            .macros
-            .iter_mut()
-            .find(|m| m.preset.as_deref() == Some(preset) && m.key == key)
-            .ok_or_else(|| format!("That preset has no macro on {key} now."))?;
-        held.group = group;
-    } else if let Some(existing) = p
-        .macros
-        .iter_mut()
-        .find(|m| m.preset.is_none() && m.key == key)
-    {
-        existing.command = command.to_string();
-        existing.group = group;
-        if let Some(enabled) = enabled {
-            existing.enabled = enabled;
-        }
-    } else {
-        p.macros.push(Macro {
-            key: key.to_string(),
-            command: command.to_string(),
-            group,
-            enabled: enabled.unwrap_or(true),
-            preset: None,
-        });
-    }
-    hold_taken_keys(&mut p.macros);
-    Ok(())
-}
-
 /// Remove your binding on `key`. No-op when you have none there.
 #[tauri::command]
 pub(crate) async fn macros_delete(
@@ -222,13 +168,6 @@ pub(crate) async fn macros_delete(
     )
     .await;
     Ok(updated)
-}
-
-/// The body of [`macros_delete`] over the live profile `p`. A preset
-/// macro on `key` stays, and takes the key once yours goes.
-pub(crate) fn delete_macro(p: &mut Profile, key: &str) {
-    p.macros.retain(|m| m.preset.is_some() || m.key != key);
-    hold_taken_keys(&mut p.macros);
 }
 
 /// One entry in the macro groups list: name + whether the group is
@@ -612,29 +551,9 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     })
 }
 
-/// Merge the macros an import brought into yours. One on a key of yours
-/// gives that macro its command, and the rest join yours. A preset macro
-/// on the key stays, and the key is yours.
-fn import_macros(p: &mut Profile, imported: &[Macro]) {
-    for m in imported {
-        if let Some(existing) = p
-            .macros
-            .iter_mut()
-            .find(|x| x.preset.is_none() && x.key == m.key)
-        {
-            existing.command.clone_from(&m.command);
-        } else {
-            p.macros.push(m.clone());
-        }
-    }
-    hold_taken_keys(&mut p.macros);
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        delete_macro, group_switches, import_macros, set_macro, switch_group, GroupSwitchState,
-    };
+    use super::{group_switches, switch_group, GroupSwitchState};
     use crate::loadouts::gating::LoadoutHold;
     use crate::loadouts::set::{Loadout, LoadoutSet};
     use crate::profile::live::{Macro, Profile, Timer};
@@ -681,77 +600,6 @@ mod tests {
             enabled,
             loadouts: None,
         }
-    }
-
-    /// A macro as (key, command, group, on, preset).
-    type MacroRow<'a> = (&'a str, &'a str, Option<&'a str>, bool, Option<&'a str>);
-
-    fn macro_rows(p: &Profile) -> Vec<MacroRow<'_>> {
-        p.macros
-            .iter()
-            .map(|m| {
-                let preset = m.preset.as_deref();
-                (&*m.key, &*m.command, m.group.as_deref(), m.enabled, preset)
-            })
-            .collect()
-    }
-
-    #[test]
-    fn your_macro_and_a_preset_macro_on_one_key_never_overwrite_each_other() {
-        let numpad = Some("numpad_movement");
-        let mut p = Profile::default();
-        p.macros.push(Macro {
-            key: "Numpad3".into(),
-            command: "d".into(),
-            group: None,
-            enabled: true,
-            preset: Some("numpad_movement".into()),
-        });
-        // Yours joins beside the preset's d, which waits off.
-        set_macro(&mut p, "Numpad3", "rec", None, None, None).unwrap();
-        assert_eq!(
-            macro_rows(&p),
-            [
-                ("Numpad3", "d", None, false, numpad),
-                ("Numpad3", "rec", None, true, None)
-            ]
-        );
-        // The preset's takes only its group from you.
-        let travel = Some("travel".to_string());
-        set_macro(&mut p, "Numpad3", "rest", travel, Some(true), numpad).unwrap();
-        assert_eq!(
-            macro_rows(&p)[0],
-            ("Numpad3", "d", Some("travel"), false, numpad)
-        );
-        assert_eq!(
-            set_macro(&mut p, "Numpad5", "look", None, None, numpad),
-            Err("That preset has no macro on Numpad5 now.".to_string())
-        );
-        // An import and your edits change yours alone, and yours keeps
-        // the key while it is off.
-        let imported = Macro {
-            key: "Numpad3".into(),
-            command: "recite".into(),
-            group: None,
-            enabled: true,
-            preset: None,
-        };
-        import_macros(&mut p, &[imported]);
-        set_macro(&mut p, "Numpad3", "recite", None, Some(false), None).unwrap();
-        assert_eq!(
-            macro_rows(&p),
-            [
-                ("Numpad3", "d", Some("travel"), false, numpad),
-                ("Numpad3", "recite", None, false, None)
-            ]
-        );
-        // Delete takes yours, and the preset's takes the key back.
-        delete_macro(&mut p, "Numpad3");
-        delete_macro(&mut p, "Numpad3");
-        assert_eq!(
-            macro_rows(&p),
-            [("Numpad3", "d", Some("travel"), true, numpad)]
-        );
     }
 
     #[test]
