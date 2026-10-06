@@ -567,6 +567,13 @@
   color: var(--tertiary);
 }
 
+.shell-menu-side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 /* The connection form the session menu swaps in. Fields, buttons, and
    the toggle follow SPEC 4. Host and port are text for the MUD, so
    they take the terminal face. */
