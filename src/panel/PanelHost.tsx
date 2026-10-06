@@ -10,7 +10,7 @@ import {
 import {
   PANE_TYPES,
   isPaneType,
-  paneKey,
+  leafKey,
   setWeights,
   type PaneLeaf,
   type PaneType,
@@ -41,10 +41,12 @@ import { VitalsFooter } from './VitalsFooter';
 // owns the panel's column, its left edge drag, and its label.
 //
 // Every pane renders as a flat, absolutely placed sibling keyed by its
-// paneKey, which the tree holds at most once. Splitting, closing, or
-// showing a pane somewhere else only moves boxes, so the map canvas
-// and each pane's scroll position survive every tree edit, and a pane
-// moved with Show here instead keeps its state too.
+// leafKey: its paneKey for a pane the tree holds once, with the leaf id
+// added for a Chat pane, which the tree can hold up to four times.
+// Splitting, closing, or showing a pane somewhere else only moves
+// boxes, so the map canvas and each pane's scroll position survive
+// every tree edit, and a pane moved with Show here instead keeps its
+// state too.
 //
 // Every pane draws at your panel size. The main window writes it on the
 // root as --panel-text-px for panel.css, and the panel hands it to
@@ -70,15 +72,15 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   imm: () => <ImmPane />,
 };
 
-// Built-in panes in type order, then Lua panes by key. Not tree order,
-// so no edit ever reorders the DOM.
+// Built-in panes in type order, then Lua panes, each by leafKey within
+// its rank. Not tree order, so no edit ever reorders the DOM.
 function domRank(leaf: PaneLeaf): number {
   return isPaneType(leaf.pane) ? PANE_TYPES.indexOf(leaf.pane) : PANE_TYPES.length;
 }
 
 function domOrder(a: PaneLeaf, b: PaneLeaf): number {
-  const ka = paneKey(a);
-  const kb = paneKey(b);
+  const ka = leafKey(a);
+  const kb = leafKey(b);
   return domRank(a) - domRank(b) || (ka < kb ? -1 : ka > kb ? 1 : 0);
 }
 
@@ -129,7 +131,7 @@ export function PanelHost({
         <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
-              key={paneKey(leaf)}
+              key={leafKey(leaf)}
               className={`pane pane-${leaf.pane}`}
               aria-label={paneLabel(leaf)}
               style={{
