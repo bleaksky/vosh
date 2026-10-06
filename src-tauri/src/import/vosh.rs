@@ -1,17 +1,22 @@
 //! A Vosh profile export, read for the import under Characters (Scripts
-//! Q9 and Q10). [`preview`] says what the file holds and where it would
-//! go, and changes nothing. Files from other clients go through the
-//! importers beside this one, under Automation.
+//! Q9, Q10 and Q26). [`preview`] says what the file holds and where it
+//! would go, and changes nothing. [`plan`] works out what the import
+//! writes before anything is written. Files from other clients go through
+//! the importers beside this one, under Automation.
 
 use serde::Serialize;
 use tracing::warn;
-use vosh_automation::trigger::TriggerAction;
+use vosh_automation::alias::Alias;
+use vosh_automation::trigger::{Trigger, TriggerAction};
 
+use crate::loadouts::catalog::GlobalCatalog;
 use crate::profile::export;
 use crate::profile::file::ProfileConfig;
+use crate::profile::live::Macro;
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::leaf_panes;
 use crate::profile::set::{sanitize_name, ProfileSet};
+use crate::profile::shared::{strip_global_fields, ScopeConfig};
 use crate::profile::worlds::world_name;
 use crate::tick::TickConfig;
 
@@ -73,16 +78,75 @@ pub(crate) struct ImportCharacter {
     pub claimed_by: Option<String>,
 }
 
+/// What an import writes, planned from the export before anything is
+/// written.
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug)]
+pub(crate) struct ImportPlan {
+    /// The profile file to write. Its `[plugins]` list is empty, since an
+    /// import brings each plugin in off (Q9), and the settings your scope
+    /// shares sit at their defaults, so your shared theme and font stay.
+    /// In loadout mode it holds no triggers, aliases, macros or alert
+    /// presets, which belong to the catalog.
+    pub file: ProfileConfig,
+    /// The world the `[vosh_export]` table names, with the characters it
+    /// lists, or None when it names no world.
+    pub claim: Option<AutoMatch>,
+    /// What the catalog takes in loadout mode. None in per profile mode.
+    pub catalog: Option<CatalogJoin>,
+}
+
+/// The triggers, aliases and macros of an export as the catalog takes
+/// them in loadout mode (Q26). A profile file's own items lay over the
+/// catalog at every launch, so they go to the catalog instead.
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, PartialEq)]
+pub(crate) struct CatalogJoin {
+    /// The group each item joins, named for the file, like
+    /// `Healer profile`.
+    pub group: String,
+    pub triggers: Vec<Trigger>,
+    pub aliases: Vec<Alias>,
+    pub macros: Vec<Macro>,
+    /// The file's items the catalog already has, which it keeps.
+    pub clashes: Vec<Clash>,
+}
+
+/// An item of the file that the catalog already holds, a trigger or an
+/// alias by its name and a macro by its key. Yours stays and the file's
+/// is left out.
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Clash {
+    pub kind: ClashKind,
+    /// The name, or the key of a macro.
+    pub name: String,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ClashKind {
+    Trigger,
+    Alias,
+    Macro,
+}
+
+/// An export as the import reads it.
+struct Export {
+    /// The name the file name gives, see [`ImportPreview::name`].
+    name: Option<String>,
+    /// The `[vosh_export]` table as a login claim, cleaned.
+    claim: Option<AutoMatch>,
+    config: ProfileConfig,
+}
+
 /// Read `text`, the file you picked as `file_name`, as a Vosh profile
 /// export. Every field of a profile file has a default, so any TOML file
 /// reads as a profile. Only the `[vosh_export]` table, or the file name
 /// Export to Downloads gave before it wrote the table, marks an export,
 /// so catalog.toml or a plugin's manifest.toml is refused.
-pub(crate) fn preview(
-    set: &ProfileSet,
-    file_name: &str,
-    text: &str,
-) -> Result<ImportPreview, String> {
+fn read_export(file_name: &str, text: &str) -> Result<Export, String> {
     let (name, export_name) = name_from_file(file_name);
     let unreadable = |e: &dyn std::fmt::Display| {
         warn!(error = %e, file = file_name, "profile import read failed");
@@ -111,6 +175,26 @@ pub(crate) fn preview(
         }
         .cleaned()
     });
+    Ok(Export {
+        name,
+        claim,
+        config,
+    })
+}
+
+/// Say what the export `text`, the file you picked as `file_name`, holds
+/// and where it would go. A file that is no export is refused, see
+/// [`read_export`].
+pub(crate) fn preview(
+    set: &ProfileSet,
+    file_name: &str,
+    text: &str,
+) -> Result<ImportPreview, String> {
+    let Export {
+        name,
+        claim,
+        config,
+    } = read_export(file_name, text)?;
     let world = claim.as_ref().and_then(|am| {
         let host = am.host.clone()?;
         Some(ImportWorld {
@@ -169,6 +253,109 @@ pub(crate) fn preview(
         world,
         characters,
     })
+}
+
+/// Plan the import of the export `text`, the file you picked as
+/// `file_name`, before anything is written. `scope` is what your profiles
+/// share, and `catalog` the catalog as it stands in loadout mode, None in
+/// per profile mode. A file that is no export is refused, see
+/// [`read_export`].
+///
+/// The `[plugins]` list empties. The settings `scope` shares go back to
+/// their defaults, as every save writes them, so your shared theme and
+/// font stay. A scope that shares nothing keeps the file's own. In
+/// loadout mode the file's triggers, aliases and macros move to the
+/// catalog in a group named for the file, and the alert presets the
+/// catalog keeps stay yours.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn plan(
+    file_name: &str,
+    text: &str,
+    scope: &ScopeConfig,
+    catalog: Option<&GlobalCatalog>,
+) -> Result<ImportPlan, String> {
+    let Export {
+        claim, mut config, ..
+    } = read_export(file_name, text)?;
+    config.plugins.enabled.clear();
+    strip_global_fields(&mut config, scope);
+    let catalog = catalog.map(|catalog| {
+        let group = file_name.strip_suffix(".toml").unwrap_or(file_name);
+        let join = join_catalog(&config, catalog, group);
+        config.clear_catalog_items();
+        join
+    });
+    Ok(ImportPlan {
+        file: config,
+        claim: claim.filter(|am| am.host.is_some()),
+        catalog,
+    })
+}
+
+/// The triggers, aliases and macros of `file` that `catalog` lacks, each
+/// moved into `group`, with a clash for each one it has.
+#[cfg_attr(not(test), allow(dead_code))]
+fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> CatalogJoin {
+    let mut clashes = Vec::new();
+    let triggers = join(
+        ClashKind::Trigger,
+        &file.triggers,
+        &catalog.triggers,
+        |t| &t.name,
+        |t| t.group = Some(group.to_string()),
+        &mut clashes,
+    );
+    let aliases = join(
+        ClashKind::Alias,
+        &file.aliases,
+        &catalog.aliases,
+        |a| &a.name,
+        |a| a.group = Some(group.to_string()),
+        &mut clashes,
+    );
+    let macros = join(
+        ClashKind::Macro,
+        &file.macros,
+        &catalog.macros,
+        |m| &m.key,
+        |m| m.group = Some(group.to_string()),
+        &mut clashes,
+    );
+    CatalogJoin {
+        group: group.to_string(),
+        triggers,
+        aliases,
+        macros,
+        clashes,
+    }
+}
+
+/// The items of `file` whose `key` no item of `kept` has, each changed by
+/// `regroup`. Each one `kept` has adds a clash of `kind` to `clashes`.
+#[cfg_attr(not(test), allow(dead_code))]
+fn join<T: Clone>(
+    kind: ClashKind,
+    file: &[T],
+    kept: &[T],
+    key: impl Fn(&T) -> &String,
+    regroup: impl Fn(&mut T),
+    clashes: &mut Vec<Clash>,
+) -> Vec<T> {
+    let mut joined = Vec::new();
+    for item in file {
+        let name = key(item);
+        if kept.iter().any(|mine| key(mine) == name) {
+            clashes.push(Clash {
+                kind,
+                name: name.clone(),
+            });
+            continue;
+        }
+        let mut item = item.clone();
+        regroup(&mut item);
+        joined.push(item);
+    }
+    joined
 }
 
 /// The profile name a file name gives, and whether the file name is one
@@ -357,5 +544,150 @@ mod tests {
             (Some("profile".into()), false)
         );
         assert_eq!(name_from_file(" profile.toml"), (None, true));
+    }
+
+    /// A scope that keeps every category per profile, so it shares
+    /// nothing.
+    fn shares_nothing() -> ScopeConfig {
+        use crate::profile::shared::Scope;
+        ScopeConfig {
+            theme: Scope::Profile,
+            font: Scope::Profile,
+            dock_layout: Scope::Profile,
+            keep_last_command: Scope::Profile,
+            auto_update: Scope::Profile,
+        }
+    }
+
+    fn names<T>(items: &[T], key: impl Fn(&T) -> &String) -> Vec<&str> {
+        items.iter().map(|item| key(item).as_str()).collect()
+    }
+
+    #[test]
+    fn a_plan_turns_every_plugin_off_and_keeps_the_rest_in_per_profile_mode() {
+        let plan = plan("Healer profile.toml", EXPORT, &ScopeConfig::default(), None).unwrap();
+        let plugins = &plan.file.plugins.enabled;
+        assert!(plugins.is_empty(), "{plugins:?}");
+        assert!(plan.catalog.is_none());
+        assert_eq!(
+            names(&plan.file.triggers, |t| &t.name),
+            ["tells", "spam", "room-items"]
+        );
+        assert_eq!(names(&plan.file.aliases, |a| &a.name), ["kk", "heal"]);
+        assert_eq!(names(&plan.file.macros, |m| &m.key), ["F1", "F2"]);
+        assert_eq!(plan.file.timers.len(), 1);
+        assert_eq!(plan.file.alerts.len(), 2);
+        let am = plan.claim.unwrap();
+        assert_eq!(
+            (am.host.as_deref(), am.port, am.characters, am.enabled),
+            (Some(WORLD), Some(1848), vec!["Orla".to_string()], true)
+        );
+        // A file with no table names no world.
+        let plan = plan_of("Healer profile.toml", FULL);
+        assert!(plan.claim.is_none());
+    }
+
+    fn plan_of(file_name: &str, text: &str) -> ImportPlan {
+        plan(file_name, text, &ScopeConfig::default(), None).unwrap()
+    }
+
+    #[test]
+    fn your_shared_theme_and_font_stay_unless_your_profiles_share_nothing() {
+        use crate::profile::ui::UiConfig;
+        let defaults = UiConfig::default();
+        let shared = plan_of("Healer profile.toml", FULL).file.ui;
+        assert_eq!(shared.theme, defaults.theme);
+        assert_eq!(shared.font_family, defaults.font_family);
+        assert_eq!(shared.font_size, defaults.font_size);
+        assert!(
+            shared.custom_themes.is_empty(),
+            "{:?}",
+            shared.custom_themes
+        );
+        // What no scope shares comes with the file.
+        assert_eq!(shared.tracked_affects.len(), 2);
+
+        let own = plan("Healer profile.toml", FULL, &shares_nothing(), None)
+            .unwrap()
+            .file
+            .ui;
+        assert_eq!(own.theme, "custom-dusk");
+        assert_eq!(own.font_size, 16);
+        assert_eq!(own.custom_themes.len(), 1);
+    }
+
+    #[test]
+    fn in_loadout_mode_the_items_join_the_catalog_in_a_group_named_for_the_file() {
+        let mut catalog = GlobalCatalog::default();
+        catalog.aliases.push(Alias::new("kk", "kick"));
+        catalog
+            .triggers
+            .push(Trigger::new("spam", "^spam$", TriggerAction::Gag));
+        catalog.macros.push(Macro {
+            key: "F2".into(),
+            command: "rest".into(),
+            group: None,
+            enabled: true,
+        });
+        let plan = plan(
+            "Healer profile (2).toml",
+            EXPORT,
+            &ScopeConfig::default(),
+            Some(&catalog),
+        )
+        .unwrap();
+
+        // The file keeps everything else, and never the catalog's items.
+        let file = &plan.file;
+        assert!(file.triggers.is_empty() && file.aliases.is_empty() && file.macros.is_empty());
+        assert!(file.alerts.is_empty(), "{:?}", file.alerts);
+        assert_eq!(file.timers.len(), 1);
+        assert_eq!(file.profile_vars.len(), 2);
+
+        let join = plan.catalog.unwrap();
+        assert_eq!(join.group, "Healer profile (2)");
+        assert_eq!(names(&join.triggers, |t| &t.name), ["tells", "room-items"]);
+        assert_eq!(names(&join.aliases, |a| &a.name), ["heal"]);
+        assert_eq!(names(&join.macros, |m| &m.key), ["F1"]);
+        let groups: Vec<_> = join
+            .triggers
+            .iter()
+            .map(|t| t.group.as_deref())
+            .chain(join.aliases.iter().map(|a| a.group.as_deref()))
+            .chain(join.macros.iter().map(|m| m.group.as_deref()))
+            .collect();
+        assert_eq!(groups, [Some("Healer profile (2)"); 4]);
+        // A clash keeps yours, by name and for a macro by key.
+        let clash = |kind, name: &str| Clash {
+            kind,
+            name: name.into(),
+        };
+        assert_eq!(
+            join.clashes,
+            [
+                clash(ClashKind::Trigger, "spam"),
+                clash(ClashKind::Alias, "kk"),
+                clash(ClashKind::Macro, "F2"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_plan_refuses_what_the_preview_refuses() {
+        let catalog = include_str!("../../../fixtures/config/catalog.full.toml");
+        assert_eq!(
+            plan("catalog.toml", catalog, &ScopeConfig::default(), None).unwrap_err(),
+            "catalog.toml is not a Vosh profile export. Import other clients under Automation."
+        );
+        assert_eq!(
+            plan(
+                "Healer profile.toml",
+                "not = [toml",
+                &ScopeConfig::default(),
+                None
+            )
+            .unwrap_err(),
+            "Vosh could not read Healer profile.toml."
+        );
     }
 }
