@@ -21,6 +21,7 @@ use tracing::warn;
 use crate::app::events::{broadcast, pane_layout_envelope, PaneLayoutEnvelope, PROFILE_CHANGED};
 use crate::app::state::SharedState;
 use crate::disk::save::PERSIST_LOCK;
+use crate::profile::export::VoshExport;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::login_match::AutoMatch;
@@ -269,32 +270,40 @@ pub(crate) fn reset_open_panes(
     pane_layout_envelope(state, p)
 }
 
-/// A profile's settings as TOML, the way `#profile save` writes them:
-/// the open copy of a profile a session plays, the saved file (or
-/// defaults) for any other. Holds [`PERSIST_LOCK`] like
-/// [`profile_detail`], so a switch cannot land between deciding which one
-/// to read and reading it.
-pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<String, String> {
+/// A profile as Export to Downloads writes it. First its settings as
+/// TOML, the way `#profile save` writes them: the open copy of a profile
+/// a session plays, the saved file (or defaults) for any other. Then the
+/// `[vosh_export]` table with its world and the characters in `ticked`
+/// that it claims. Holds [`PERSIST_LOCK`] like [`profile_detail`], so a
+/// switch or a rename cannot land between reading the claim, deciding
+/// which copy to read and reading it.
+pub(crate) async fn export_text(
+    state: &SharedState,
+    name: &str,
+    ticked: &[String],
+) -> Result<String, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     let open = state.open_profile(name);
-    let stored = {
+    let (table, stored) = {
         let set = state.loaded_profile_set().await?;
-        if set.get(name).is_none() {
-            return Err(not_found(name));
-        }
-        match open {
+        let entry = set.get(name).ok_or_else(|| not_found(name))?;
+        let table = VoshExport::new(entry.auto_match.as_ref(), ticked);
+        let stored = match open {
             Some(open) => Stored::Open(open),
             None => Stored::File(load_profile_file(&set, name)?),
-        }
+        };
+        (table, stored)
     };
     let config = match stored {
         Stored::File(config) => config,
         Stored::Open(open) => ProfileConfig::from_profile(&*open.lock().await),
     };
-    config.to_toml().map_err(|e| {
+    let failed = |e: &dyn std::fmt::Display| {
         warn!(error = %e, profile = name, "profile export failed");
         format!("Vosh could not export the {} profile.", display_name(name))
-    })
+    };
+    let text = config.to_toml().map_err(|e| failed(&e))?;
+    table.write(&text).map_err(|e| failed(&e))
 }
 
 /// Where an export of `name` lands in `dir`: `Ilsabet profile.toml`,
@@ -325,7 +334,7 @@ mod tests {
     use crate::profile::panes::DockEntryPersist;
     use crate::profile::set::DEFAULT_PROFILE_NAME;
     use crate::profile::shared::ScopeConfig;
-    use crate::profile::tests::james_like_set;
+    use crate::profile::tests::{claim, james_like_set, put_claim};
 
     fn affect(name: &str) -> TrackedAffect {
         TrackedAffect {
@@ -540,7 +549,7 @@ mod tests {
         config.ui.tracked_affects = vec![affect("Haste")];
         write_profile(dir.path(), "Healer", &config);
 
-        let healer = profile_toml(&state, "Healer").await.unwrap();
+        let healer = export_text(&state, "Healer", &[]).await.unwrap();
         let back = ProfileConfig::from_toml(&healer).unwrap();
         assert_eq!(
             back.profile_vars.get("target").map(String::as_str),
@@ -548,19 +557,51 @@ mod tests {
         );
         assert_eq!(names(&back.ui.tracked_affects), ["Haste"]);
 
-        let live = profile_toml(&state, DEFAULT_PROFILE_NAME).await.unwrap();
+        let live = export_text(&state, DEFAULT_PROFILE_NAME, &[])
+            .await
+            .unwrap();
         let back = ProfileConfig::from_toml(&live).unwrap();
         assert_eq!(names(&back.ui.tracked_affects), ["Sanctuary"]);
 
         // Test-Prompt never saved a file, so it exports what a switch to
         // it loads, the defaults, following the game with drawing off.
-        let blank = profile_toml(&state, "Test-Prompt").await.unwrap();
+        let blank = export_text(&state, "Test-Prompt", &[]).await.unwrap();
         let back = ProfileConfig::from_toml(&blank).unwrap();
         let leftover = &back.ui.tracked_affects;
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(back.prompt_config(), vosh_prompt::PromptConfig::fresh());
 
-        assert!(profile_toml(&state, "Nobody").await.is_err());
+        assert!(export_text(&state, "Nobody", &[]).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn an_export_ends_with_the_world_and_the_characters_you_ticked() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let world = claim("play.theforsakenlands.com", Some(1848), &["Maren", "Orla"]);
+        {
+            let mut guard = state.profile_set.lock().await;
+            let set = guard.as_mut().unwrap();
+            put_claim(set, "Healer", None, world.clone());
+            set.set_world("Test-Prompt", None, None).unwrap();
+        }
+        let ticked = vec!["Orla".to_string(), "Tolliver".to_string()];
+
+        let text = export_text(&state, "Healer", &ticked).await.unwrap();
+        let profile = load_profile_file(&state.loaded_profile_set().await.unwrap(), "Healer")
+            .unwrap()
+            .to_toml()
+            .unwrap();
+        let table = VoshExport {
+            host: world.host,
+            port: world.port,
+            characters: vec!["Orla".into()],
+        };
+        assert_eq!(text, table.write(&profile).unwrap());
+
+        // With no world, the table names nothing, not even what you ticked.
+        let text = export_text(&state, "Test-Prompt", &ticked).await.unwrap();
+        assert!(text.ends_with("\n\n[vosh_export]\n"), "{text}");
     }
 
     #[test]

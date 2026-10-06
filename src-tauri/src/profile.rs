@@ -4,9 +4,11 @@
 //! sharing scope, `set.rs` profiles.toml and the set of profiles,
 //! `login_match.rs` which profile a login picks and `worlds.rs` the
 //! worlds Vosh knows. `open.rs` holds a profile the sessions play,
-//! `switch.rs` moves a session to another profile, and `inactive.rs`
-//! reads and edits a profile that is not active.
+//! `switch.rs` moves a session to another profile, `inactive.rs`
+//! reads and edits a profile that is not active, and `export.rs` holds
+//! the table an export adds after a profile's settings.
 
+pub(crate) mod export;
 pub(crate) mod file;
 pub(crate) mod inactive;
 pub(crate) mod live;

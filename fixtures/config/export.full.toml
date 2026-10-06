@@ -1,0 +1,350 @@
+disabled_alias_groups = ["social"]
+disabled_trigger_groups = ["spam"]
+disabled_macro_groups = ["travel"]
+disabled_timer_groups = ["upkeep"]
+reconnect = false
+
+[[aliases]]
+name = "kk"
+expansion = "kick %1"
+enabled = true
+group = "combat"
+
+[[aliases]]
+name = "heal"
+expansion = ""
+enabled = false
+script = "mud.send(\"cast heal \" .. args[1])"
+
+[profile_vars]
+target = "orc"
+weapon = "sword"
+
+[[triggers]]
+name = "tells"
+pattern = '''^(\w+) tells you '(.*)'$'''
+priority = 5
+enabled = true
+preset = "sent_tells"
+group = "comms"
+target = "prompt"
+
+[[triggers.patterns]]
+pattern = '''^(\w+) tells you '(.*)'$'''
+enabled = true
+
+[[triggers.patterns]]
+pattern = '^(\w+) whispers to you'
+enabled = false
+
+[[triggers.patterns]]
+pattern = '^\s*Tolliver tells you.*'
+enabled = true
+mode = "starts_with"
+text = "Tolliver tells you"
+
+[[triggers.actions]]
+kind = "highlight"
+
+[triggers.actions.style]
+fg = "bright_cyan"
+bg = "black"
+bold = true
+underline = true
+inverse = true
+wash = true
+
+[[triggers.actions]]
+kind = "replace"
+template = "$1: $2"
+
+[[triggers.actions]]
+kind = "send"
+template = "reply ok"
+
+[[triggers.actions]]
+kind = "route"
+pane = "chat"
+
+[[triggers.actions]]
+kind = "script"
+body = "mud.echo(captures[1])"
+
+[triggers.alert]
+banner = true
+sound = "chime"
+attention = "until"
+background = false
+words = true
+
+[[triggers]]
+name = "spam"
+pattern = '^You are hungry\.$'
+priority = 0
+enabled = false
+
+[[triggers.patterns]]
+pattern = '^You are hungry\.$'
+enabled = true
+
+[[triggers.patterns]]
+pattern = '^\s*You are thirsty\.\s*$'
+enabled = true
+mode = "text"
+text = "You are thirsty."
+
+[[triggers.actions]]
+kind = "gag"
+
+[[room_triggers]]
+name = "room-items"
+pattern = "^.+$"
+priority = 4
+enabled = true
+target = "room"
+
+[[room_triggers.patterns]]
+pattern = "^.+$"
+enabled = true
+
+[[room_triggers.actions]]
+kind = "highlight"
+
+[room_triggers.actions.style]
+fg = "yellow"
+base = true
+
+[tick]
+enabled = false
+interval_secs = 45
+auto_fire = "score"
+sound = false
+reset_pattern = '^The day has begun\.$'
+warn_at_secs = 5
+warn_message = "tick soon"
+warn_color = "#ffcc00"
+
+[ui]
+theme = "custom-dusk"
+follow_system_appearance = true
+light_theme = "kanso-pearl"
+dark_theme = "tokyo-night"
+auto_update = true
+font_family = "JetBrains Mono, monospace"
+font_size = 16
+terminal_line_height = "loose"
+panel_font = "\"Iosevka\", Menlo, monospace"
+panel_font_size = 13
+enabled_presets = [
+    "healing_basics",
+    "sent_tells",
+]
+keep_last_command = true
+theme_terminal_colors = false
+bright_bold = true
+blink_text = false
+color_vision = "deuteranopia"
+terminal_base_ansi = [
+    "#000000",
+    "#cd3131",
+    "#0dbc79",
+    "#e5e510",
+    "#2472c8",
+    "#bc3fbc",
+    "#11a8cd",
+    "#e5e5e5",
+    "#666666",
+    "#f14c4c",
+    "#23d18b",
+    "#f5f543",
+    "#3b8eea",
+    "#d670d6",
+    "#29b8db",
+    "#ffffff",
+]
+split_divider_color = "#ff00ff"
+input_echo_color = "#88aaff"
+echo_macros = false
+input_echo_caret = false
+side_panels_fill_height = true
+paste_line_delay_ms = 250
+spellcheck_prompt = true
+input_cursor_style = "underline_thick"
+prompt_template_enabled = true
+prompt_template = "%hp/%maxhp hp %mana/%maxmana mn > "
+vitals_density = "line"
+vitals_values = "percent"
+vitals_meter = "bar"
+vitals_warn_thirds = true
+vitals_hide_when_pinned = false
+moons_position = "before-time"
+chip_style = "icon_value"
+tick_count = "down_past_zero"
+game_time = "12h"
+affects_style = "chips"
+affects_marker = "plus_minus"
+affects_tint = true
+affects_running_out_hours = 5
+affects_almost_gone_hours = 2
+
+[[ui.tracked_affects]]
+name = "sanctuary"
+
+[[ui.tracked_affects]]
+name = "Field of Discord"
+label = "Shroud"
+
+[[ui.dock_layout]]
+id = "map"
+zone = "right"
+align = "top"
+
+[[ui.dock_layout]]
+id = "chat"
+zone = "hidden"
+
+[ui.panes]
+version = 1
+panel_open = false
+panel_width = 340
+
+[ui.panes.root]
+id = "root"
+split = "column"
+weight = 1.0
+
+[[ui.panes.root.children]]
+id = "map"
+pane = "map"
+weight = 0.5
+
+[[ui.panes.root.children]]
+id = "split"
+split = "row"
+weight = 0.5
+
+[[ui.panes.root.children.children]]
+id = "chat"
+pane = "chat"
+weight = 0.6
+
+[ui.panes.root.children.children.props]
+channels = "ooc,tell"
+
+[[ui.panes.root.children.children]]
+id = "group"
+pane = "group"
+weight = 0.4
+
+[[ui.custom_themes]]
+id = "custom-dusk"
+label = "Dusk"
+description = "A warm dark theme"
+
+[ui.custom_themes.xterm]
+background = "#1a1b26"
+foreground = "#c0caf5"
+
+[ui.custom_themes.chrome]
+accent = "#ff9e64"
+surface = "#16161e"
+
+[ui.custom_themes.fitted]
+brightBlack = "#94989f"
+red = "#cb7b74"
+
+[ui.vitals]
+show_bar = false
+show_percent = false
+show_numeric = false
+show_delta = false
+bar_filled = "#"
+bar_empty = "."
+bar_width = 12
+bar_style = "track"
+bar_layout = "with_history"
+layout = "gauges"
+inline_style = "badge"
+percent_color_mode = "accent"
+pct_chip_style = "glow"
+percent_color = "gradient"
+template_enabled = true
+template = "%hp/%maxhp %mn/%maxmn %mv/%maxmv"
+hp_color = "#e06c75"
+mn_color = "#61afef"
+mv_color = "#98c379"
+use_color_ramp = false
+bar_font = "JetBrains Mono"
+low_hp_vignette = true
+
+[ui.chat_colors]
+ooc = "brightBlue"
+tell = "magenta"
+
+[plugins]
+enabled = ["vitals_alert"]
+
+[[macros]]
+key = "F1"
+command = "score"
+group = "info"
+
+[[macros]]
+key = "F2"
+command = "flee"
+enabled = false
+
+[[timers]]
+id = 1
+name = "save"
+interval_secs = 300
+command = "save"
+enabled = true
+group = "upkeep"
+
+[group_folders.aliases]
+combat = [
+    "combat",
+    "combat (Healer)",
+]
+
+[group_folders.triggers]
+comms = ["comms"]
+
+[group_folders.macros]
+travel = []
+
+[prompt]
+draw = true
+template = "%hp/%maxhp hp %mana/%maxmana mn > "
+previous_templates = [
+    "%hp hp > ",
+    "> ",
+]
+show = "pinned"
+
+[prompt.capture]
+kind = "aabahran"
+prompt = "<%hhp %mm %vmv> "
+fprompt = "<%hhp %mm %vmv [%e]> "
+follow_game = false
+seen_at = "2026-09-30T21:14:05-07:00"
+source = "gmcp"
+
+[alerts.alert_low_health]
+banner = false
+sound = "low"
+background = false
+words = false
+
+[alerts.alert_tells]
+banner = true
+sound = "bell"
+attention = "once"
+background = true
+words = false
+
+[vosh_export]
+host = "play.theforsakenlands.com"
+port = 1848
+characters = ["Orla"]
