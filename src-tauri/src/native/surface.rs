@@ -43,6 +43,7 @@ mod split_drag;
 
 use device::GpuState;
 use pointer::{hover_url, load_f32, set_divider_frac, split_ratio, store_f32, CELLS};
+pub(crate) use report::report_scroll;
 use report::{grid_and_game_rows, report_scroll_if_changed, report_sizes};
 
 // The installed surface: the platform's window/view handles plus the GPU

@@ -318,8 +318,9 @@ pub(crate) const HELP_FIND: &str = "vosh://help-find";
 /// the same grid. The payload is `[cols, rows]`. `Terminal` hears it.
 #[cfg(native_surface)]
 pub(crate) const NATIVE_GRID_SIZE: &str = "vosh://native-grid-size";
-/// How far back the native surface shows changed. The payload is
-/// `[offset, max]` in rows. `startNativeScroll` hears it.
+/// How far back the native surface shows changed, or a selection showed
+/// the grid of another session. The payload is `[offset, max]` in rows.
+/// `startNativeScroll` hears it.
 #[cfg(native_surface)]
 pub(crate) const NATIVE_SCROLL: &str = "vosh://native-scroll";
 /// The native surface copied your selection. The payload is the count

@@ -144,6 +144,22 @@ pub(super) fn report_scroll_if_changed() {
     }
 }
 
+/// Send the page the scroll depth of the grid that shows now, as a
+/// selection shows another session's grid, whether or not a frame comes
+/// to draw it. A frame reports only a key that changed, and two grids at
+/// their live tails share one, so the page would keep the history length
+/// of the grid that showed before. The next frame finds this key and
+/// stays quiet.
+pub(crate) fn report_scroll() {
+    let (offset, max) = crate::native::grid::scroll_metrics(crate::native::grid::shown());
+    REPORTED
+        .scroll
+        .store(scroll_report_key(offset, max), Ordering::Release);
+    if let Some(app) = APP.get() {
+        let _ = app.emit(NATIVE_SCROLL, (offset, max));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

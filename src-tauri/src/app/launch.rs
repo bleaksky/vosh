@@ -357,6 +357,8 @@ pub(crate) async fn select_session<R: tauri::Runtime>(
 /// one every window takes its panes, tracked affects, tick settings and
 /// the rest, then hears its name on `vosh://profile-switched`, as after a
 /// switch. Settings › Characters hears who the session is logged in as.
+/// With the native surface the page hears how far back the grid that
+/// now shows sits, so the depth chip and the copy in xterm follow it.
 /// Call it once profiles.toml names the new active profile, which
 /// Characters reads again on the switch.
 pub(crate) async fn show_selection<R: tauri::Runtime>(
@@ -364,6 +366,8 @@ pub(crate) async fn show_selection<R: tauri::Runtime>(
     state: &SharedState,
     front: &Arc<OpenProfile>,
 ) {
+    #[cfg(native_surface)]
+    crate::native::surface::report_scroll();
     let selected = state.selected_session();
     let plays = selected.profile();
     if !Arc::ptr_eq(&plays, front) {
