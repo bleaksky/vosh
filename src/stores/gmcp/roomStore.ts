@@ -1,6 +1,5 @@
-import { useSyncExternalStore } from 'react';
-import { onGmcpPackage } from '../../ipc/session';
-import { asNumber, asText, createStore } from '../store';
+import { createGmcpStore } from './gmcpStore';
+import { asNumber, asText } from '../store';
 
 // The room you stand in, for the rows under the Map pane. Room.Info
 // gives the name, vnum, area name, sector, climate region and exits.
@@ -251,46 +250,41 @@ function withArea(base: RoomInfoBase | null, tiles: MapTilesAreas | null): RoomI
   return { ...base, areaVnum: area?.vnum ?? null, areaColor: area?.color ?? null };
 }
 
-const store = createStore<RoomState>({ info: null, people: [] });
-let base: RoomInfoBase | null = null;
-let tiles: MapTilesAreas | null = null;
-let started = false;
-
-export function startRoomStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('Room.Info', (data) => {
-    const next = parseRoomInfo(data);
-    if (!next) return;
-    base = next;
-    store.set({ ...store.get(), info: withArea(base, tiles) });
-  });
-  void onGmcpPackage<unknown>('Room.Chars', (data) => {
-    store.set({ ...store.get(), people: parsePeople(data) });
-  });
-  void onGmcpPackage<unknown>('Map.Tiles', (data) => {
-    const next = parseMapAreas(data);
-    if (!next) return;
-    tiles = next;
-    // Map.Tiles comes with every step. Publish only when it changes
-    // which area the room resolves to.
-    const info = withArea(base, tiles);
-    const prev = store.get().info;
-    if (info && (info.areaVnum !== prev?.areaVnum || info.areaColor !== prev?.areaColor)) {
-      store.set({ ...store.get(), info });
-    }
-  });
+/** What the store keeps. The panes read `info` and `people`. */
+interface RoomStoreState extends RoomState {
+  /** The last Room.Info, before the Map.Tiles area. */
+  base: RoomInfoBase | null;
+  /** The areas of the last Map.Tiles. */
+  tiles: MapTilesAreas | null;
 }
 
-export function getRoom(): RoomState {
-  return store.get();
-}
+const store = createGmcpStore<RoomStoreState, RoomState>({
+  state: { base: null, tiles: null, info: null, people: [] },
+  packages: {
+    'Room.Info': (state, data) => {
+      const base = parseRoomInfo(data);
+      return base ? { ...state, base, info: withArea(base, state.tiles) } : state;
+    },
+    'Room.Chars': (state, data) => ({ ...state, people: parsePeople(data) }),
+    'Map.Tiles': (state, data) => {
+      const tiles = parseMapAreas(data);
+      if (!tiles) return state;
+      // Map.Tiles comes with every step. It replaces the room only when
+      // it changes which area the room resolves to.
+      const info = withArea(state.base, tiles);
+      const prev = state.info;
+      return info && (info.areaVnum !== prev?.areaVnum || info.areaColor !== prev?.areaColor)
+        ? { ...state, tiles, info }
+        : { ...state, tiles };
+    },
+  },
+  connection: (state) => state,
+  view: (state, last) =>
+    last?.info === state.info && last.people === state.people
+      ? last
+      : { info: state.info, people: state.people },
+});
 
-export function subscribeRoom(cb: () => void): () => void {
-  startRoomStore();
-  return store.subscribe(cb);
-}
-
-export function useRoom(): RoomState {
-  return useSyncExternalStore(subscribeRoom, getRoom);
-}
+export const startRoomStore = store.start;
+export const getRoom = store.get;
+export const useRoom = store.use;
