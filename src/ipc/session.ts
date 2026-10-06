@@ -1,10 +1,68 @@
-// Calls and events of the live connection. Connect, send a line, hear
-// the state, the GMCP packages, routed text and your target, and tell
-// every window where Connect dials.
+// Calls and events of your sessions and their connections. List and
+// select the sessions, connect, send a line, hear the state, the GMCP
+// packages, routed text and your target, and tell every window where
+// Connect dials.
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { CONNECTION_TARGET_CHANGED, INPUT_MODE, ROUTED, STATE, TARGET } from './events';
+import {
+  CONNECTION_TARGET_CHANGED,
+  INPUT_MODE,
+  ROUTED,
+  SESSION_SELECTED,
+  SESSIONS_CHANGED,
+  STATE,
+  TARGET,
+} from './events';
+
+/** The session the app starts with, `SessionId::FIRST` in
+ *  src-tauri/src/sessions.rs. */
+export const FIRST_SESSION = 1;
+
+/** One session as the sidebar lists it, `SessionRow` in
+ *  src-tauri/src/sessions.rs. */
+export interface SessionRow {
+  id: number;
+  /** The name you gave it. */
+  name: string | null;
+  /** The character logged in on its live connection. */
+  character: string | null;
+  /** Where it dials, null before its first connect or address. */
+  host: string | null;
+  port: number | null;
+  tls: boolean;
+  /** The profile it plays, null only before launch loads one. */
+  profile: string | null;
+  connected: boolean;
+  selected: boolean;
+}
+
+/** Every session in the order the sidebar lists them, the selected one
+ *  marked. */
+export async function listSessions(): Promise<SessionRow[]> {
+  return invoke('sessions_list');
+}
+
+/** Select a session. The commands that name no session act on it from
+ *  then on, and every window hears the rows again. */
+export async function selectSession(session: number): Promise<void> {
+  await invoke('session_select', { session });
+}
+
+/** Hear every session's row after a step that changed what one shows. */
+export async function onSessionsChanged(cb: (rows: SessionRow[]) => void): Promise<UnlistenFn> {
+  return listen<SessionRow[]>(SESSIONS_CHANGED, (event) => {
+    cb(event.payload);
+  });
+}
+
+/** Hear Vosh select a session itself, as a click on an alert banner
+ *  does. */
+export async function onSessionSelected(cb: (session: number) => void): Promise<UnlistenFn> {
+  return listen<{ session: number }>(SESSION_SELECTED, (event) => {
+    cb(event.payload.session);
+  });
+}
 
 export type StatePayload =
   | { kind: 'connecting'; host: string; port: number; tls: boolean }
