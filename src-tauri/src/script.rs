@@ -178,6 +178,9 @@ pub(crate) struct ApplyResult {
     /// The lines this apply added to the session's Output ring, which
     /// the Scripts page hears on `session://lua-output`.
     pub lua_lines: Vec<LuaLine>,
+    /// Vosh stopped a plugin, so the Scripts page reads its list again,
+    /// see `vosh://plugins-changed`.
+    pub plugin_stopped: bool,
 }
 
 impl ApplyResult {
@@ -200,6 +203,7 @@ impl ApplyResult {
         self.alerts.extend(later.alerts);
         self.ended.extend(later.ended);
         self.lua_lines.extend(later.lua_lines);
+        self.plugin_stopped |= later.plugin_stopped;
     }
 
     /// Keep the lines `text` prints under the `[lua]` tag about the Lua
@@ -239,6 +243,10 @@ pub(crate) fn apply_actions(
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile, c);
     turn_off_stopped(profile, c.stop_key, &outcome);
+    result.plugin_stopped = outcome
+        .stopped
+        .iter()
+        .any(|owner| matches!(owner, Owner::Plugin(_)));
     for action in outcome.actions {
         match action {
             Action::Send(line) => {

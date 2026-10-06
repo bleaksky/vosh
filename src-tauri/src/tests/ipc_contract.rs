@@ -178,6 +178,11 @@ const UNHEARD: &[Unheard] = &[
               reads it in the page half, after R18 (Alerts Q16).",
     },
     Unheard {
+        name: "vosh://plugins-changed",
+        why: "The plugins changed. The Scripts page of track B item B1 reads \
+              its list again.",
+    },
+    Unheard {
         name: "vosh://session-selected",
         why: "A click on a banner selected a session. The page opens one \
               session until the page half of R14b after R20.",

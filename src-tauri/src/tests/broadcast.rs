@@ -400,3 +400,97 @@ fn a_group_switch_tells_every_window_once() {
     });
     assert_eq!(heard, want);
 }
+
+/// `wait_full` as the Scripts design writes it, which never returns
+/// while you are hurt.
+const WAIT_FULL: &str = "mud.on_gmcp('Char.Vitals', function(data)
+  while data.hp < data.maxhp do end
+  mud.send('stand')
+end)
+";
+
+#[test]
+fn every_change_to_the_plugins_tells_every_window_once() {
+    use crate::app::events::PLUGINS_CHANGED;
+    use crate::ipc::scripts;
+    // The commands print in the terminal, which feeds the shared grid.
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    let app = app_with_settings_open();
+    let handle = app.handle();
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    let dir = tempfile::tempdir().unwrap();
+    state.app_data.set(dir.path().to_path_buf()).unwrap();
+    let name = || "wait_full".to_string();
+    let mut heard = Report::new();
+    let mut want = Report::new();
+    tauri::async_runtime::block_on(async {
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        scripts::plugin_create(handle.clone(), app.state(), name(), None)
+            .await
+            .unwrap();
+        listening.finish("plugin_create", &mut heard, &mut want);
+
+        let manifest = scripts::plugin_read(app.state(), name())
+            .await
+            .unwrap()
+            .manifest;
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        scripts::plugin_save(
+            handle.clone(),
+            app.state(),
+            name(),
+            manifest,
+            WAIT_FULL.into(),
+            None,
+        )
+        .await
+        .unwrap();
+        listening.finish("plugin_save", &mut heard, &mut want);
+
+        for on in [false, true] {
+            let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+            scripts::plugin_set_enabled(handle.clone(), app.state(), name(), on, None)
+                .await
+                .unwrap();
+            let helper = if on {
+                "plugin_set_enabled on"
+            } else {
+                "plugin_set_enabled off"
+            };
+            listening.finish(helper, &mut heard, &mut want);
+        }
+
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        scripts::plugin_reload(handle.clone(), app.state(), name(), None)
+            .await
+            .unwrap();
+        listening.finish("plugin_reload", &mut heard, &mut want);
+
+        // A packet that finds you hurt runs the loop until Vosh stops it,
+        // on the path every step's Lua takes.
+        let session = state.selected_session();
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        let apply = {
+            let mut p = session.lock_profile().await;
+            let mut c = session.connection.lock();
+            let hurt = serde_json::json!({"hp": 186, "maxhp": 1020});
+            let stopped = c.script.dispatch_gmcp("Char.Vitals", &hurt);
+            crate::script::apply_actions(&mut p, &mut c, stopped).ran_under(p.open())
+        };
+        assert!(apply.plugin_stopped);
+        crate::session::effects::collect_script_result(handle, &session, apply).await;
+        listening.finish("a plugin stop", &mut heard, &mut want);
+
+        // A profile switch turns the session's plugins over.
+        let listening = Heard::listen(&app, &[PLUGINS_CHANGED]);
+        crate::app::plugins::follow_profile(
+            handle,
+            &state,
+            &session,
+            crate::script::ApplyResult::default(),
+        )
+        .await;
+        listening.finish("follow_profile", &mut heard, &mut want);
+    });
+    assert_eq!(heard, want);
+}

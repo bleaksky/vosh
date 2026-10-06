@@ -247,6 +247,10 @@ pub(super) async fn apply_script_result<R: tauri::Runtime>(
             let lines = std::mem::take(&mut apply.lua_lines);
             session.emit(app, events::LUA_OUTPUT, &LuaOutputPayload { lines });
         }
+        // It shows a plugin Vosh stopped as stopped in its list too.
+        if std::mem::take(&mut apply.plugin_stopped) {
+            events::broadcast(app, events::PLUGINS_CHANGED, &());
+        }
         if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
             // New timers go in before the cancels run, so a timer that
             // one result both starts and cancels never fires. Lua never

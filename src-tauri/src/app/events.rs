@@ -170,6 +170,15 @@ pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 
+// Plugins.
+
+/// Sent to every window when the plugins changed: the Scripts page made
+/// one, saved one, turned one on or off in a profile or loaded one again,
+/// a profile switch turned a session's plugins over, or Vosh stopped one
+/// in a session. The payload is null. The Scripts page in Settings reads
+/// the list again. No page listener hears it yet.
+pub(crate) const PLUGINS_CHANGED: &str = "vosh://plugins-changed";
+
 // Profiles.
 
 /// Sent to every window when a profile was made, renamed, duplicated or
