@@ -3,7 +3,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
 import { aabahranPacket } from '../test/aabahranGmcp';
-import { onGmcpPackage, sendInput, sendMaskedInput, stopWalk } from './session';
+import {
+  onGmcpPackage,
+  reconnectCancel,
+  reconnectGet,
+  reconnectNow,
+  reconnectSet,
+  sendInput,
+  sendMaskedInput,
+  stopWalk,
+} from './session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -46,6 +55,22 @@ describe('sending a line', () => {
     expect(vi.mocked(invoke).mock.calls).toEqual([
       ['session_send_input', { line: 'look', session: 2 }],
       ['session_send_masked', { line: SECRET, session: 2 }],
+    ]);
+  });
+});
+
+describe('the redial after a drop', () => {
+  it('names the session whose redial the notice acts on, and the profile of the switch', async () => {
+    vi.mocked(invoke).mockClear();
+    await reconnectNow(2);
+    await reconnectCancel(2);
+    await reconnectGet();
+    await reconnectSet(false, 'Orla');
+    expect(vi.mocked(invoke).mock.calls).toEqual([
+      ['session_reconnect_now', { session: 2 }],
+      ['session_reconnect_cancel', { session: 2 }],
+      ['reconnect_get', { profile: undefined }],
+      ['reconnect_set', { on: false, profile: 'Orla' }],
     ]);
   });
 });
