@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import { onGmcpPackage, onState, type StatePayload } from '../../ipc/session';
 import { createStore } from '../store';
 
@@ -21,9 +22,18 @@ interface GmcpStoreSpec<S> {
   /** The change a connection state makes. Without it a disconnect
    *  puts back `state`, and connecting or connected changes nothing. */
   connection?: (state: S, payload: StatePayload) => S;
+  /** The store's other session events. Each one starts hearing its
+   *  event and runs every change it hears through `apply`, which
+   *  publishes the result. */
+  events?: ((apply: (change: Change<S>) => void) => Promise<UnlistenFn> | (() => void))[];
 }
 
-export function createGmcpStore<S>({ state: initial, packages, connection }: GmcpStoreSpec<S>) {
+export function createGmcpStore<S>({
+  state: initial,
+  packages,
+  connection,
+  events = [],
+}: GmcpStoreSpec<S>) {
   const store = createStore<S>(initial);
   const connectionChange =
     connection ??
@@ -40,6 +50,7 @@ export function createGmcpStore<S>({ state: initial, packages, connection }: Gmc
     for (const [name, change] of Object.entries(packages)) {
       void onGmcpPackage<unknown>(name, (data) => apply((state) => change(state, data)));
     }
+    for (const event of events) void event(apply);
     void onState((payload) => apply((state) => connectionChange(state, payload)));
   }
 

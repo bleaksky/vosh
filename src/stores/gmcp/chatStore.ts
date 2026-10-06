@@ -1,4 +1,5 @@
-import { onGmcpPackage, onRouted, onState, type RoutedPayload } from '../../ipc/session';
+import { onRouted, type RoutedPayload } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 
 /** Which way a tell went. Aabahran marks a tell you receive
  *  `received`. It sends nothing for a tell you send, so a `sent` line
@@ -104,55 +105,35 @@ export function parseRoutedLine(payload: RoutedPayload, ts: number = Date.now())
   };
 }
 
-// Module-level chat buffer. Subscribes to GMCP / routed / state on
-// first read or first subscribe and keeps a rolling window of the
-// most recent MAX_LINES entries. ChatPane reads from this store so
-// closing and reopening the pane no longer drops history — only a
-// disconnect clears the buffer (new session, irrelevant chat).
-let lines: ChatLine[] = [];
-let listeners: Array<(lines: ChatLine[]) => void> = [];
-let started = false;
-
-function notify() {
-  const snapshot = lines;
-  for (const l of listeners) l(snapshot);
+/** The lines with `line` added and the oldest dropped past MAX_LINES,
+ *  or the same lines when there is nothing to add. */
+function append(lines: ChatLine[], line: ChatLine | null): ChatLine[] {
+  if (!line) return lines;
+  return lines.length >= MAX_LINES ? [...lines.slice(1), line] : [...lines, line];
 }
 
-function append(line: ChatLine) {
-  lines = lines.length >= MAX_LINES ? [...lines.slice(1), line] : [...lines, line];
-  notify();
-}
+// The most recent MAX_LINES chat lines, from the channel packages and
+// the lines triggers route. ChatPane reads them here, so closing and
+// reopening the pane keeps the history. Only a disconnect clears them,
+// since a new connection makes the old chat irrelevant.
+const store = createGmcpStore<ChatLine[]>({
+  state: [],
+  packages: {
+    'Comm.Channel': (lines, data) => append(lines, parseCommChannel(data)),
+    'Comm.Channel.Text': (lines, data) => append(lines, parseCommChannel(data)),
+  },
+  events: [
+    (apply) => onRouted((payload) => apply((lines) => append(lines, parseRoutedLine(payload)))),
+  ],
+});
 
-export function startChatStore(): void {
-  if (started) return;
-  started = true;
-  const handleComm = (data: unknown) => {
-    const line = parseCommChannel(data);
-    if (line) append(line);
-  };
-  void onGmcpPackage<unknown>('Comm.Channel', handleComm);
-  void onGmcpPackage<unknown>('Comm.Channel.Text', handleComm);
-  void onRouted((payload: RoutedPayload) => {
-    const line = parseRoutedLine(payload);
-    if (line) append(line);
-  });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') {
-      lines = [];
-      notify();
-    }
-  });
-}
+export const startChatStore = store.start;
 
 export function getChatLines(): ChatLine[] {
-  startChatStore();
-  return lines;
+  store.start();
+  return store.get();
 }
 
 export function subscribeChatLines(cb: (lines: ChatLine[]) => void): () => void {
-  startChatStore();
-  listeners.push(cb);
-  return () => {
-    listeners = listeners.filter((l) => l !== cb);
-  };
+  return store.subscribe(() => cb(store.get()));
 }
