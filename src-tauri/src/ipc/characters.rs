@@ -10,7 +10,7 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
-use crate::profile::inactive::{export_path, profile_detail, profile_toml, ProfileDetail};
+use crate::profile::inactive::{export_path, export_text, profile_detail, ProfileDetail};
 use crate::profile::login_match::LoginClaim;
 use crate::profile::set::{display_name, ProfileEntry};
 use crate::session::identity::{session_identity, SessionIdentity};
@@ -81,14 +81,18 @@ pub(crate) struct ProfileExport {
 
 /// Save a profile's settings as a TOML file in your Downloads folder,
 /// active or not, and say where it went. Settings has no save panel,
-/// so the file takes a name that never replaces another.
+/// so the file takes a name that never replaces another. The file ends
+/// with the `[vosh_export]` table, which names the profile's world and,
+/// of the characters it claims, those in `characters`, the ones you
+/// ticked, so a profile you share names your alts only by choice.
 #[tauri::command]
 pub(crate) async fn profile_export_file(
     app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
+    characters: Vec<String>,
 ) -> Result<ProfileExport, String> {
-    let toml = profile_toml(state.inner(), &name).await?;
+    let toml = export_text(state.inner(), &name, &characters).await?;
     let dir = app
         .path()
         .download_dir()

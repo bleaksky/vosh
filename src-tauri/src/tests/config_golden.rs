@@ -39,12 +39,14 @@ use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
+use crate::profile::export::VoshExport;
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
 use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
+use crate::profile::tests::claim;
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
 use crate::sessions::SessionId;
 use crate::tick::TickConfig;
@@ -56,11 +58,12 @@ const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/config");
 const WRITE: &str = "VOSH_WRITE_CONFIG";
 
 /// Every golden, by its path under `fixtures/config`.
-const GOLDENS: [&str; 16] = [
+const GOLDENS: [&str; 17] = [
     "profile.default.toml",
     "profile.fresh.toml",
     "profile.full.toml",
     "profile.full-regex.toml",
+    "export.full.toml",
     "global.default.toml",
     "global.full.toml",
     "loadouts.default.toml",
@@ -806,6 +809,21 @@ fn a_profile_file_writes_these_bytes() {
         check(name, &text);
         profile_round_trip(&text);
     }
+}
+
+/// Export to Downloads writes the full profile's bytes, then the
+/// `[vosh_export]` table with its world and the one character of its two
+/// you ticked (Scripts Q10). A profile reads the export as the profile
+/// alone.
+#[test]
+fn an_export_writes_these_bytes() {
+    let profile = profile_bytes(&full_profile());
+    let world = claim("play.theforsakenlands.com", Some(1848), &["Maren", "Orla"]);
+    let table = VoshExport::new(Some(&world), &["Orla".to_string()]);
+    let text = table.write(&profile).unwrap();
+    check("export.full.toml", &text);
+    let back = ProfileConfig::from_toml(&text).unwrap();
+    assert_eq!(back.to_toml().unwrap(), profile);
 }
 
 #[test]

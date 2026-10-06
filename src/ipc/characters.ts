@@ -89,9 +89,14 @@ export interface ProfileExport {
 }
 
 /** Save a profile's settings, active or not, as a TOML file in your
- *  Downloads folder. The name never replaces a file already there. */
-export async function profileExportFile(name: string): Promise<ProfileExport> {
-  return invoke('profile_export_file', { name });
+ *  Downloads folder. The name never replaces a file already there. The
+ *  file names the profile's world and, of the characters it claims, the
+ *  ones in `characters`. */
+export async function profileExportFile(
+  name: string,
+  characters: string[] = [],
+): Promise<ProfileExport> {
+  return invoke('profile_export_file', { name, characters });
 }
 
 /** Who is logged in. */
