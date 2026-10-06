@@ -837,8 +837,9 @@ describe('the help on Lua', () => {
     );
     expect(text).toContain('A stopped call sends nothing it queued');
     expect(text).toContain(
-      'A plugin then stays off until you restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
+      'A plugin then stays off until you save it under Scripts in Settings or restart Vosh, a script from `#script load` until `#script reload`, and a trigger or alias whose Lua ran away until you save it or restart Vosh.',
     );
+    expect(text).toContain('The page of a plugin Vosh stopped says why above its editor.');
     expect(text).toContain('One call may queue 100 actions');
     expect(text).toContain(
       'The time limit reaches inside string patterns and the `table` functions too',
@@ -921,6 +922,24 @@ describe('the help on Lua', () => {
     expect(text).not.toContain('`[plugins]`');
   });
 
+  it('makes a plugin with New plugin and edits it on its own page', () => {
+    const text = body('automate.lua-scripts');
+    expect(text).toContain(
+      '`New plugin` asks for a name of letters, digits and underscores, makes a folder of that name in `plugins` under the app data directory with a `manifest.toml` and a `main.lua`, turns the plugin on for the profile you play and opens its page.',
+    );
+    expect(text).toContain(
+      '`Save and reload` writes both to the plugin folder and loads the plugin again at once in every session whose profile turns it on',
+    );
+    expect(text).toContain(
+      '`Show in Finder` under `Manifest` opens the plugin folder, and reads `Show in Explorer` on Windows and `Show the folder` on Linux.',
+    );
+    expect(text).toContain(
+      "A plugin's page shows the lines of that plugin under `Output`, and its field runs Lua inside the plugin",
+    );
+    // A plugin folder comes from New plugin now, not by hand.
+    expect(text).not.toContain('`plugins/<slug>/`');
+  });
+
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
     if (!found) throw new Error('no Lua topic');
@@ -931,6 +950,7 @@ describe('the help on Lua', () => {
     for (const start of [
       'Each script and each plugin',
       'Loads from `#script load`',
+      'Press a plugin under Scripts',
       'Each plugin runs',
       'Every Lua error',
       'Lua runs between',
