@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal } from '../terminal/Terminal';
 import type { TerminalHandle } from '../terminal/terminalHandle';
@@ -39,8 +31,7 @@ import {
   subscribePromptCardOpen,
 } from '../ipc/prompt';
 import { promptPreviewSet } from '../ipc/promptDesign';
-import { disconnectSession, setWindowSize, onState, type StatePayload } from '../ipc/session';
-import { terminalLocalWrite } from '../ipc/terminal';
+import { disconnectSession } from '../ipc/session';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
@@ -48,7 +39,7 @@ import { subscribeMigrationApplied } from '../ipc/wizard';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
 import { pushToast } from '../stores/toasts';
-import { showLaunchNotices, showMigrationApplied } from './launchNotices';
+import { showMigrationApplied } from './launchNotices';
 import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
@@ -58,12 +49,10 @@ import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
-import { noteConnectionError } from '../stores/session/connectionStore';
 import {
   getSelected,
   goTo,
   move,
-  othersOnProfile,
   rename,
   select,
   sessionStep,
@@ -84,6 +73,7 @@ import { useClosing } from './useClosing';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 import { useScrollbackSplit } from './useScrollbackSplit';
+import { useSessionTerminals } from './useSessionTerminals';
 import { useSessionsSidebar } from './useSessionsSidebar';
 import { useUiConfigFollow } from './useUiConfigFollow';
 
@@ -130,9 +120,6 @@ function MainWindow() {
     if (sidebar.current) sidebar.current.rename(getSelected());
     else requestSessionMenu({ mode: 'rename' });
   };
-  // The session launch selected, which takes what launch has to tell you.
-  const launchSession = useRef<number | null>(null);
-  launchSession.current ??= opened[0] ?? null;
   // The cell the live terminal draws at, which the pinned band lays its
   // characters out on.
   const [cellSize, setCellSize] = useState<CellSize | null>(null);
@@ -147,16 +134,11 @@ function MainWindow() {
   const dockLent = dockShows ? lentRows(dockShown) : 0;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
-  // Each opened session's live terminal, and the selected session's,
-  // which the find bar, the split, the menus and the prompt card reach.
-  const terminals = useRef(new Map<number, TerminalHandle>());
-  const termRef = useRef<TerminalHandle | null>(null);
-  useLayoutEffect(() => {
-    for (const id of terminals.current.keys()) {
-      if (!opened.includes(id)) terminals.current.delete(id);
-    }
-    termRef.current = terminals.current.get(selected) ?? null;
-  }, [selected, opened]);
+  // Each opened session's live terminal, the selected session's, which
+  // the find bar, the split, the menus and the prompt card reach, and
+  // what the window writes into them.
+  const { termRef, writeTo, writeLive, handleError, onTerminalReady, onScrollbackLoaded } =
+    useSessionTerminals(selected, opened);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
   // The selected session's macros, which the command line fires and the
@@ -164,29 +146,6 @@ function MainWindow() {
   const macroKeys = useMacroKeys();
   // Puts the caret back on the command line.
   const focusInput = () => inputRef.current?.focus();
-  // Write text the page draws itself (your typed echo, error notices) to
-  // the xterm of `session`, and through terminal_local_write to its
-  // native grid and the session on either renderer. The session closes
-  // the open row, since the text now follows it, so it never repaints
-  // over your echo. Your line goes out by its own call, so the session
-  // can hear of the echo after the reply. It closes only the rows that
-  // came before the newest output the renderer that shows took: xterm
-  // names it here, and the native grid names its own as it takes the
-  // text, as it does for a session with no terminal here yet.
-  const writeTo = (session: number, text: string) => {
-    const term = terminals.current.get(session);
-    term?.write(text);
-    const after = nativeSurfaceEnabled() || !term ? null : term.outputTaken();
-    void terminalLocalWrite(text, after, session).catch(() => {});
-  };
-  // Write text into the selected session's terminal.
-  const writeLive = (text: string) => writeTo(getSelected(), text);
-  // An action failed, a connect, a send or a disconnect. The session it
-  // was for shows the error in its title band and its terminal.
-  const handleError = (message: string, session = getSelected()) => {
-    noteConnectionError(session, message);
-    writeTo(session, `\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
-  };
   // The selected session for the title band, the session menu, the
   // palette, and Cmd+R.
   const connection = useConnection(handleError);
@@ -225,14 +184,15 @@ function MainWindow() {
     );
   }, []);
 
-  // The prompt card reaches the terminal it sits over through these.
+  // The prompt card reaches the terminal it sits over through these. The
+  // ref never changes, so the host never does.
   const promptCardHost = useMemo<PromptCardHost>(
     () => ({
       terminal: () => termRef.current,
       area: () => terminalAreaRef.current,
       dock: () => document.querySelector<HTMLElement>('.prompt-dock'),
     }),
-    [],
+    [termRef],
   );
   const closePromptCard = () => {
     setPromptCard(null);
@@ -302,7 +262,7 @@ function MainWindow() {
       historyTermRef.current?.fit();
     });
     return () => cancelAnimationFrame(id);
-  }, [panelOpen, panelWidth, sessionsShown, sessionsSidebar.width]);
+  }, [termRef, panelOpen, panelWidth, sessionsShown, sessionsSidebar.width]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -549,42 +509,6 @@ function MainWindow() {
     showMigrationApplied(writeLive);
   });
 
-  // The connection store keeps where each session stands. Here the
-  // window says so: the toasts speak for the selected session only, and
-  // a session behind shows its drop on its row.
-  useTauriEvent(onState, (payload: StatePayload) => {
-    const shown = payload.session === getSelected();
-    if (payload.kind === 'disconnected') {
-      // A reason means the link dropped out from under us; a clean
-      // user-initiated disconnect carries none and stays quiet. The
-      // reason goes into the terminal of the session that dropped.
-      if (payload.reason) {
-        writeTo(payload.session, `\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
-        if (shown) pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
-      }
-    } else if (payload.kind === 'connected') {
-      if (shown) {
-        pushToast({
-          kind: 'success',
-          message: 'Connected',
-          meta: `${payload.host}:${payload.port}`,
-        });
-      }
-      // Push the current terminal size on every (re)connect so the
-      // negotiator advertises the live cols × rows via NAWS as soon
-      // as the server asks. MUDs that honor NAWS wrap at this width
-      // server-side, which is the right answer to word wrap. A session
-      // behind on the selected session's profile shares the pane, so it
-      // takes the same size. One on another profile hears its own as its
-      // pane shows.
-      const handle = termRef.current;
-      if (handle && (shown || othersOnProfile(getSelected()).includes(payload.session))) {
-        const { cols, rows } = handle.windowSize();
-        void setWindowSize(cols, rows, payload.session).catch(() => {});
-      }
-    }
-  });
-
   const inputElement = (
     <Input
       ref={inputRef}
@@ -698,18 +622,8 @@ function MainWindow() {
               lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
               blinkText={blinkText}
-              onReady={(handle) => {
-                terminals.current.set(id, handle);
-                if (id === getSelected()) termRef.current = handle;
-              }}
-              // After the restored scrollback, so what launch has to tell
-              // you lands below it instead of scrolling away above, in the
-              // session launch selected.
-              onScrollbackLoaded={
-                id === launchSession.current
-                  ? () => void showLaunchNotices((text) => writeTo(id, text))
-                  : undefined
-              }
+              onReady={onTerminalReady(id)}
+              onScrollbackLoaded={onScrollbackLoaded(id)}
               onResultsChanged={(event) => onFindResults(id, event)}
               onCellSize={setCellSize}
               lifted={promptLifted}
