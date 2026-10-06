@@ -40,9 +40,10 @@ pub enum Action {
         plugin: String,
         name: String,
     },
-    /// Remove every alias the plugin of this name made. Vosh adds it
-    /// itself when the plugin turns off, stops or loads again.
-    DropPluginAliases(String),
+    /// End what the plugin of this name left with the session, its
+    /// aliases and its alerts. Vosh adds it itself when the plugin turns
+    /// off, stops or loads again.
+    DropPlugin(String),
     /// Insert or replace a variable.
     SetVar {
         scope: Scope,
@@ -148,7 +149,7 @@ impl Action {
             | Action::Input { line: text, .. }
             | Action::Echo(text)
             | Action::RemoveAlias(text)
-            | Action::DropPluginAliases(text)
+            | Action::DropPlugin(text)
             | Action::RemoveVar(text)
             | Action::RemovePromptVar(text)
             | Action::Log { text, .. }
