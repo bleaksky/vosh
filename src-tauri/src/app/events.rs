@@ -144,8 +144,10 @@ pub(crate) const ALERTS_ENDED: &str = "session://alerts-ended";
 /// Where the redial of the session stands after a drop: a wait, a try, a
 /// failed try, the try that reached the game, the end of the tries, a
 /// cancel, or why a drop does not redial. The payload is a
-/// [`crate::session::reconnect::ReconnectPayload`]. The reconnect notice
-/// of the page half hears it. No page listener hears it yet.
+/// [`crate::session::reconnect::ReconnectPayload`]. `onReconnect` hears
+/// it, and the session's row in the sessions sidebar shows the spinner
+/// through the tries and the triangle when no link comes of them. The
+/// reconnect notice will hear it too.
 pub(crate) const RECONNECT: &str = "session://reconnect";
 
 // The lists.

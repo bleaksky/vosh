@@ -290,3 +290,64 @@ export function DotIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/** Vosh dials or redials: otty's spinner, eight spokes in a 1.5 stroke
+ *  fading round the circle from the one at 12 o clock. */
+export function SpinnerIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="M8 4.6V1.6" />
+      <path d="M5.6 5.6L3.47 3.47" opacity="0.84" />
+      <path d="M4.6 8H1.6" opacity="0.68" />
+      <path d="M5.6 10.4l-2.13 2.13" opacity="0.54" />
+      <path d="M8 11.4v3" opacity="0.42" />
+      <path d="M10.4 10.4l2.13 2.13" opacity="0.32" />
+      <path d="M11.4 8h3" opacity="0.24" />
+      <path d="M10.4 5.6l2.13-2.13" opacity="0.18" />
+    </svg>
+  );
+}
+
+/** The game waits for your login: otty's raised hand, 12 across. */
+export function HandIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.4 8.6V4.3a.95.95 0 0 1 1.9 0v3.4" />
+      <path d="M7.3 7.4V3.1a.95.95 0 0 1 1.9 0v4.3" />
+      <path d="M9.2 7.4V3.9a.95.95 0 0 1 1.9 0v3.9" />
+      <path d="M11.1 8.2V5.8a.95.95 0 0 1 1.9 0v3.3c0 2.85-1.95 4.9-4.6 4.9h-.55c-1.35 0-2.4-.6-3.15-1.7L2.95 9.85a.95.95 0 0 1 1.45-1.2l1 1.05" />
+    </Glyph>
+  );
+}
+
+/** Connect again yourself: otty's failure badge, a filled triangle 10.5
+ *  across. Its ! is a hole in the fill, so the row's own ground shows
+ *  through it, the pill or the hover tone included. */
+export function TriangleIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      fillRule="evenodd"
+      stroke="none"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="M7.185 3.41a.937.937 0 0 1 1.63 0l4.309 7.587a.937.937 0 0 1-.815 1.405H3.691a.937.937 0 0 1-.815-1.405zM7.3 6.408a.7.7 0 0 1 1.4 0v2.529a.7.7 0 0 1-1.4 0zM7.305 10.81a.7.7 0 1 0 1.4 0a.7.7 0 1 0-1.4 0z" />
+    </svg>
+  );
+}

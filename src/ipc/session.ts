@@ -8,6 +8,7 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   CONNECTION_TARGET_CHANGED,
   INPUT_MODE,
+  RECONNECT,
   ROUTED,
   SESSION_SELECTED,
   SESSIONS_CHANGED,
@@ -77,6 +78,31 @@ export type StatePayload = { session: number } & (
   | { kind: 'connected'; host: string; port: number; tls: boolean }
   | { kind: 'disconnected'; reason: string | null }
 );
+
+/** Where the redial of a session stands after a drop,
+ *  `ReconnectPayload` in src-tauri/src/session/reconnect.rs. A series
+ *  waits and dials each try in turn until one reaches the game or the
+ *  tries run out. Your Disconnect, a Connect or a close cancels it. A
+ *  drop declines to redial for a quit of yours, the game's closing line,
+ *  another session that took the character, or Reconnect when the link
+ *  drops turned off. */
+export type ReconnectPayload =
+  | { kind: 'waiting'; try: number; tries: number; seconds: number }
+  | { kind: 'dialing'; try: number; tries: number }
+  | { kind: 'failed'; try: number; tries: number; reason: string }
+  | { kind: 'reached'; try: number }
+  | { kind: 'stopped'; tries: number }
+  | { kind: 'cancelled' }
+  | { kind: 'declined'; why: 'quit' | 'closing' | 'taken' | 'off' };
+
+/** Hear each step of a session's redial, with that session. */
+export async function onReconnect(
+  cb: (payload: ReconnectPayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<ReconnectPayload & { session?: number }>(RECONNECT, (event) => {
+    cb(event.payload, sessionOf(event.payload));
+  });
+}
 
 /** Where Connect dials. */
 export interface ConnectionTarget {

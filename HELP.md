@@ -70,6 +70,14 @@ The selected row is the filled one. The title band and the window title follow i
 
 A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. An accent dot takes the place of the port once an alert rings there, such as one a trigger or a script raises. Bringing the session to the front clears both.
 
+A glyph takes the place of the port while a session is not ready to play.
+
+- A spinner while Vosh dials, and through every try when it dials again after a drop.
+- A hand while the game waits for you to log in, until you play. It shows on The Forsaken Lands, and on any world after Vosh dials again.
+- A triangle when the first dial fails, or when the link dropped and Vosh does not dial again. Connect again to play on.
+
+A session that is not connected shows its name in grey. A row shows one glyph at a time, the triangle first, then the hand, then the spinner, then the dot.
+
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
 
 ## Play
