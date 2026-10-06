@@ -95,10 +95,8 @@ async function mount(props: Partial<Parameters<typeof CodeEditorType>[0]>) {
 }
 
 describe('the page surface', () => {
-  it('shows the active line and marks the lines it names', async () => {
+  it('marks the lines it names', async () => {
     const m = await mount({ page: true, language: 'lua', marks: [STOP] });
-    const basic = m.last().basicSetup as Record<string, boolean>;
-    expect(basic.highlightActiveLine).toBe(true);
     const view = fakeView();
     await act(async () => {
       (m.last().onCreateEditor as (v: unknown) => void)(view);

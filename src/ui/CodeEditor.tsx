@@ -50,8 +50,8 @@ interface Props {
   /** The id of the text that describes the editor. */
   ariaDescribedBy?: string;
   /** The full editor a page gives a column of its own, like a plugin's
-   *  code under Scripts. The line the caret is on shows while the editor
-   *  has focus, and `marks` tint their lines. Give it the `st-code`
+   *  code under Scripts. The line the caret is on stays clear, as on
+   *  every editor, and `marks` tint their lines. Give it the `st-code`
    *  class for the settings field fill, its ring, and the 2 px accent
    *  outline 2 px out on focus. */
   page?: boolean;
@@ -195,20 +195,15 @@ export function CodeEditor({
 }
 
 /** The page surface over the shared theme. The line numbers keep the
- *  width CodeMirror means them to have. The active line takes the
- *  menu highlight while the editor has focus. An error mark draws no
- *  wavy underline and tints its whole line instead, a later rule than
- *  the active line's, so the tint shows on the line the caret is on
- *  too. A mark on an empty line is a point, which drops its corner. Its
- *  message floats on the menu recipe in the UI font. */
+ *  width CodeMirror means them to have. An error mark draws no wavy
+ *  underline and tints its whole line instead, the line the caret is on
+ *  included. A mark on an empty line is a point, which drops its
+ *  corner. Its message floats on the menu recipe in the UI font. */
 const PAGE_SURFACE = {
   // CodeMirror sizes the number column for a content box, and the app
   // sizes every box by its border, which took 8 px from it.
   '.cm-lineNumbers .cm-gutterElement': {
     minWidth: '28px',
-  },
-  '&.cm-focused .cm-activeLine': {
-    background: 'var(--menu-hi)',
   },
   '.cm-lintRange-error': {
     backgroundImage: 'none',
