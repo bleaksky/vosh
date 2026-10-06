@@ -1,5 +1,6 @@
 import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
+import { getSelected } from '../session/sessionsStore';
 import { isHiddenFlag } from '../store';
 
 export interface GroupMember {
@@ -122,7 +123,7 @@ const store = createGmcpStore<GroupState>({
   },
   // The view reads the hidden store, so each report it makes runs the
   // view again.
-  events: [(apply) => subscribeHidden(() => apply((state) => state))],
+  events: [(apply) => subscribeHidden(() => apply(getSelected(), (state) => state))],
   // One snapshot while its parts stay the same, so a pane reads the same
   // value between pushes.
   view: (state, last) => {

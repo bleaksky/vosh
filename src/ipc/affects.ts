@@ -4,7 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { AFFECTS_DISPLAY_CHANGED, AFFECT_FULL_CHANGED, TRACKED_AFFECTS_CHANGED } from './events';
-import type { SessionData } from './session';
+import { sessionOf, type SessionData } from './session';
 import type { UiConfig } from './uiConfig';
 
 /** One tracked-affect entry. `name` is what the server pushes in the
@@ -51,8 +51,8 @@ export function normalizeTrackedAffects(raw: unknown[]): TrackedAffect[] {
 /** The last Char.Affects payload of this connection, raw as the MUD
  *  sent it, or null. A window that opens between ticks reads it so it
  *  shows the affects on you without waiting for the next list. */
-export async function affectsSnapshotGet(): Promise<unknown> {
-  return invoke('affects_snapshot_get');
+export async function affectsSnapshotGet(session: number): Promise<unknown> {
+  return invoke('affects_snapshot_get', { session });
 }
 
 /** Hours at full for each affect key, the most Vosh has seen for the
@@ -62,18 +62,22 @@ export async function affectsSnapshotGet(): Promise<unknown> {
  *  as full. */
 export type AffectFulls = Readonly<Record<string, number>>;
 
-/** The affect fulls the backend keeps for the logged in character. */
-export async function affectFullGet(): Promise<unknown> {
-  return invoke('affect_full_get');
+/** The affect fulls the backend keeps for the character a session
+ *  logged in. */
+export async function affectFullGet(session: number): Promise<unknown> {
+  return invoke('affect_full_get', { session });
 }
 
 /** Hear the affect fulls change: a list that starts, recasts, or ends
  *  an affect, the saved fulls at login, or a disconnect that empties
- *  them. The payload's data is the whole map. */
+ *  them. The listener gets the payload's data, the whole map, and the
+ *  session it belongs to. */
 export async function subscribeAffectFullChanged(
-  cb: (value: unknown) => void,
+  cb: (value: unknown, session: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<SessionData<unknown>>(AFFECT_FULL_CHANGED, (event) => cb(event.payload.data));
+  return listen<SessionData<unknown>>(AFFECT_FULL_CHANGED, (event) =>
+    cb(event.payload.data, sessionOf(event.payload)),
+  );
 }
 
 /** The layouts the Affects pane draws. `timers` is Timers first, the

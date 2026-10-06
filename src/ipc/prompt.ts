@@ -14,7 +14,7 @@ import {
   PROMPT_VARS,
 } from './events';
 import type { PromptSpan } from './promptDesign';
-import type { SessionData } from './session';
+import { sessionOf, type SessionData } from './session';
 
 // Prompt vars, the values a trigger writes with
 // `mud.set_prompt_var(...)`. The vitals store reads them with priority
@@ -22,12 +22,15 @@ import type { SessionData } from './session';
 // prompt text. The payload's data is the full snapshot, and the
 // frontend replaces its copy. A value for a name GMCP also supplies,
 // such as hp, drops out at the next Char.Vitals, or at your next send
-// on a server without it. A value the game hides comes as `?`.
+// on a server without it. A value the game hides comes as `?`. The
+// listener gets the session that sent them too.
 export type PromptVarsPayload = Record<string, string>;
 
-export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Promise<UnlistenFn> {
+export async function onPromptVars(
+  cb: (payload: PromptVarsPayload, session: number) => void,
+): Promise<UnlistenFn> {
   return listen<SessionData<PromptVarsPayload>>(PROMPT_VARS, (event) => {
-    cb(event.payload.data);
+    cb(event.payload.data, sessionOf(event.payload));
   });
 }
 
@@ -45,9 +48,12 @@ export interface HiddenPayload {
   group: boolean;
 }
 
-export async function onHidden(cb: (payload: HiddenPayload) => void): Promise<UnlistenFn> {
-  return listen<HiddenPayload>(HIDDEN, (event) => {
-    cb(event.payload);
+/** Hear each report, with the session it is about. */
+export async function onHidden(
+  cb: (payload: HiddenPayload, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<HiddenPayload & { session?: number }>(HIDDEN, (event) => {
+    cb(event.payload, sessionOf(event.payload));
   });
 }
 
@@ -97,10 +103,10 @@ export async function promptLastSeen(): Promise<PromptLastSeen | null> {
   return invoke('prompt_last_seen');
 }
 
-/** What the backend last reported on session://hidden, for a window
- *  that opens or reloads after the report. */
-export async function hiddenGet(): Promise<HiddenPayload> {
-  return invoke('hidden_get');
+/** What the backend last reported on session://hidden for a session,
+ *  for a window that opens or reloads after the report. */
+export async function hiddenGet(session: number): Promise<HiddenPayload> {
+  return invoke('hidden_get', { session });
 }
 
 // Prompt

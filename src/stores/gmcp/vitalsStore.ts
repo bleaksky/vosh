@@ -1,6 +1,7 @@
 import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
 import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
+import { getSelected } from '../session/sessionsStore';
 import { asNumber, isHiddenFlag } from '../store';
 
 /** Below this percent a vital enters the low state. */
@@ -231,7 +232,7 @@ function empty(last: Vitals | null = null): VitalsState {
 }
 
 const store = createGmcpStore<VitalsState, Vitals | null>({
-  state: empty,
+  state: () => empty(),
   packages: {
     'Char.Vitals': (state, data) => {
       const next = { ...state, packet: parseVitalsPacket(data) };
@@ -241,8 +242,8 @@ const store = createGmcpStore<VitalsState, Vitals | null>({
   connection: (state, { kind }) => (kind === 'disconnected' ? empty(state.shown) : state),
   events: [
     (apply) =>
-      onPromptVars((payload) =>
-        apply((state) => {
+      onPromptVars((payload, session) =>
+        apply(session, (state) => {
           const vars = payload && typeof payload === 'object' ? payload : {};
           const held = hiddenNow(state)
             ? holdPromptVitals(vars)
@@ -252,7 +253,7 @@ const store = createGmcpStore<VitalsState, Vitals | null>({
       ),
     (apply) =>
       subscribeHidden(() =>
-        apply((state) => {
+        apply(getSelected(), (state) => {
           const hiddenByBackend = getHidden().vitals;
           if (hiddenByBackend === state.hiddenByBackend) return state;
           const held = hiddenByBackend ? holdPromptVitals(state.vars) : state.held;

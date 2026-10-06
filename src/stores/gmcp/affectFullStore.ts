@@ -4,9 +4,10 @@ import { createGmcpStore } from './gmcpStore';
 // How full each affect was cast, for the Affects pane's gauges (the
 // Countdown meter and the Grouped chips). The backend decides full
 // (src-tauri/src/affects/full.rs) and sends the whole map on
-// vosh://affect-full-changed whenever it changes. Seeded from
-// affect_full_get for a window that opens mid session, and emptied on
-// the disconnected state, as the backend empties its own.
+// vosh://affect-full-changed whenever it changes, for each session.
+// Seeded from affect_full_get the first time a window shows a session,
+// and emptied on that session's disconnect, as the backend empties its
+// own.
 
 const EMPTY: AffectFulls = Object.freeze({});
 
@@ -31,7 +32,12 @@ function nextFulls(fulls: AffectFulls, raw: unknown): AffectFulls {
 
 const store = createGmcpStore<AffectFulls>({
   state: EMPTY,
-  events: [(apply) => subscribeAffectFullChanged((raw) => apply((fulls) => nextFulls(fulls, raw)))],
+  events: [
+    (apply) =>
+      subscribeAffectFullChanged((raw, session) =>
+        apply(session, (fulls) => nextFulls(fulls, raw)),
+      ),
+  ],
   snapshot: { ask: affectFullGet, take: nextFulls },
 });
 
