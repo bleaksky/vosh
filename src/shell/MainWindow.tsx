@@ -131,7 +131,7 @@ function MainWindow() {
   // bottom of its pane, so its newest line sits the dock's gap over the
   // band in any window.
   const dockShown = usePinnedDockRows(promptShow?.zone ?? 1, promptShow?.promptsOff ?? false);
-  const dockShows = promptPinned && cellSize !== null;
+  const dockShows = promptPinned && cellSize !== null && dockShown > 0;
   const dockLent = dockShows ? lentRows(dockShown) : 0;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
@@ -638,8 +638,9 @@ function MainWindow() {
         </div>
       </div>
       {/* Your prompt pinned above the command line. It takes one row from
-          the terminal only while your prompt shows pinned, and borrows
-          the rows past its first from the bottom of the live pane. */}
+          the terminal only while your prompt shows pinned and a prompt
+          is pinned, and borrows the rows past its first from the bottom
+          of the live pane. */}
       {promptPinned && promptShow && cellSize && (
         <PromptDock
           state={promptShow}

@@ -30,10 +30,12 @@ import type { Cell } from '../terminal/sgrCells';
 // waits inside the band for a tank who is not there. Until 2026-10-01 the
 // dock kept the most rows any prompt could take, and James saw that row
 // standing empty out of a fight: "there should not be a blank line where
-// the tank is supposed to be when not fighting." Before your first prompt
-// and after you disconnect it keeps one row with nothing on it, so the
-// first prompt never moves the text, and while prompts are off that row
-// holds the sentence that says so.
+// the tank is supposed to be when not fighting." While prompts are off it
+// keeps one row for the sentence that says so. Before your first prompt
+// and after you disconnect it takes no room at all. Until 2026-10-06 it
+// kept one empty row there so the first prompt never moved the text, and
+// at the login menu, which the game ends with no prompt Vosh reads, that
+// row and its gap stood empty under the menu like two blank lines.
 //
 // Above the band it keeps one blank line and 6 px of space, in a fight
 // and out of one, as the game leaves a blank line before each prompt:
@@ -130,6 +132,7 @@ export function PinnedBand({
   const blinking = useMemo(() => rows.some((row) => row.some(blinks)), [rows]);
   const blinkHidden = !useBlinkShown(blinkText && blinking);
   const shown = dockRows(pin, zone, state.promptsOff);
+  if (shown === 0) return null;
   const height = dockHeight(shown, cell.height);
   // How far the dock reaches up over the terminal: the rows it borrows.
   const reach = lentRows(shown) * cell.height;
