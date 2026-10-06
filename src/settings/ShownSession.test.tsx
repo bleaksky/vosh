@@ -22,8 +22,14 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: async () => undefined,
 }));
 
+/** The profile each profile_hold_edits call named. */
+const holdCalls: (string | null)[] = [];
+
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async (cmd: string) => (cmd === 'sessions_list' ? rows : null),
+  invoke: async (cmd: string, args?: { profile?: string | null }) => {
+    if (cmd === 'profile_hold_edits') holdCalls.push(args?.profile ?? null);
+    return cmd === 'sessions_list' ? rows : null;
+  },
 }));
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -77,6 +83,7 @@ afterEach(async () => {
 beforeEach(() => {
   vi.resetModules();
   handlers.clear();
+  holdCalls.length = 0;
 });
 
 /** Send every window the rows, as the app does after a step. */
@@ -179,6 +186,14 @@ describe('a page with unsaved edits', () => {
       ['st-who-name', 'Orla'],
       ['st-who-profile', 'Build'],
     ]);
+  });
+
+  it('asks Rust to keep its profile open until you save or discard', async () => {
+    const shown = await header([{ ...TOLLIVER, selected: true }, ORLA], true);
+    await send([TOLLIVER, { ...ORLA, selected: true }]);
+    expect(holdCalls).toEqual(['default']);
+    await shown.letGo();
+    expect(holdCalls).toEqual(['default', null]);
   });
 
   it('only renames the header for a session on the same profile', async () => {

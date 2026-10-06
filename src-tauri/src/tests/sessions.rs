@@ -2398,6 +2398,58 @@ async fn a_trigger_list_that_names_build_saves_build_and_tells_no_window_while_d
 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_profile_settings_holds_stays_open_past_its_last_session_until_save_lets_go() {
+    use crate::ipc::automation::triggers_import;
+    use crate::ipc::profiles::hold_edits;
+    use vosh_automation::trigger::{Trigger, TriggerAction, TriggerStore};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let two = open_session_on(&h, "Healer").await;
+    let mut list = TriggerStore::default();
+    list.set(Trigger::new("spam", "Maren tells you", TriggerAction::Gag))
+        .expect("the trigger");
+    let json = list.export_json().expect("the list");
+    let save = || {
+        let profile = Some("Healer".to_string());
+        triggers_import(h.app.handle().clone(), h.app.state(), json.clone(), profile)
+    };
+
+    // A page holds unsaved edits on Healer as its last session closes.
+    hold_edits(&h.state, Some("Healer")).await;
+    crate::ipc::session::session_close(h.app.handle().clone(), h.app.state(), two)
+        .await
+        .expect("the second session closes");
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Healer"]);
+
+    // Save still finds it, and writes its file.
+    assert_eq!(save().await, Ok(1));
+    assert_eq!(saved_triggers(&h.profile_file("Healer").await), ["spam"]);
+
+    // Letting go closes it, since no session plays it.
+    hold_edits(&h.state, None).await;
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME]);
+    assert_eq!(
+        save().await,
+        Err("Healer closed before Vosh could save this change.".to_string())
+    );
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_profile_settings_lets_go_of_stays_open_while_a_session_plays_it() {
+    use crate::ipc::profiles::hold_edits;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let _two = open_session_on(&h, "Healer").await;
+    hold_edits(&h.state, Some("Healer")).await;
+    hold_edits(&h.state, None).await;
+    assert_eq!(open_names(&h), [DEFAULT_PROFILE_NAME, "Healer"]);
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_alert_preset_that_names_build_saves_build_while_default_shows() {
     use crate::alert::presets::TELLS;
     use crate::ipc::alerts::{alert_presets_get, alert_presets_set};

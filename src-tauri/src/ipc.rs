@@ -98,6 +98,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         profiles::profile_rename,
         profiles::profile_duplicate,
         profiles::profile_switch,
+        profiles::profile_hold_edits,
         profiles::profile_resolve_match,
         wizard::migration_analyze,
         wizard::migration_apply,

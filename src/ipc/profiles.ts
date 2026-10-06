@@ -49,6 +49,12 @@ export async function profileDuplicate(source: string, newName: string): Promise
   return invoke('profile_duplicate', { source, new: newName });
 }
 
+/** Keep the profile `profile` names open while a Settings page holds
+ *  unsaved edits on it, or let go with null after Save or Discard. */
+export async function profileHoldEdits(profile: string | null): Promise<void> {
+  return invoke('profile_hold_edits', { profile });
+}
+
 /** Switch a session to the profile `name`, the selected session when it
  *  names none. */
 export async function profileSwitch(name: string, session?: number): Promise<void> {
