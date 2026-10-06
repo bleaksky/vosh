@@ -12,6 +12,7 @@ import {
   type PaletteDeps,
 } from './palette';
 import { resolveSettingsTarget } from '../../lib/settingsNav';
+import type { SessionRow } from '../../ipc/session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -45,6 +46,33 @@ function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
 }
 
 const flat = (sections: ReturnType<typeof paletteSections>) => sections.flatMap((s) => s.rows);
+
+function sessionRow(id: number, character: string | null, port: number): SessionRow {
+  return {
+    id,
+    name: null,
+    character,
+    host: 'play.theforsakenlands.com',
+    port,
+    tls: false,
+    profile: 'Default',
+    connected: true,
+    selected: id === 1,
+  };
+}
+
+/** Tolliver and Orla on the build port, Tolliver in front, as board 4
+ *  draws them. */
+function sessions() {
+  return {
+    rows: [sessionRow(1, 'Tolliver', 1848), sessionRow(2, 'Orla', 1825)],
+    selected: 1,
+    shown: true,
+    goTo: vi.fn(),
+    step: vi.fn(),
+    toggleShown: vi.fn(),
+  };
+}
 
 describe('paletteSections', () => {
   it('lists the approved View and Session rows with Disconnect last', () => {
@@ -177,7 +205,7 @@ describe('paletteSections', () => {
     expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-new')).toBe(false);
   });
 
-  it('lists Close session once you type, after New session…', () => {
+  it('lists Close session with its key once you type, after New session…', () => {
     const closeSession = vi.fn();
     const entries = buildPaletteEntries(deps({ newSession: vi.fn(), closeSession }));
     expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('session-close');
@@ -185,11 +213,101 @@ describe('paletteSections', () => {
     const ids = session?.rows.map((r) => r.id) ?? [];
     expect(ids.indexOf('session-close')).toBe(ids.indexOf('session-new') + 1);
     const row = session?.rows.find((r) => r.id === 'session-close');
-    expect(row).toMatchObject({ title: 'Close session' });
+    expect(row).toMatchObject({ title: 'Close session', keys: 'Mod+W' });
     expect(row?.destructive).toBeUndefined();
     void row?.run();
     expect(closeSession).toHaveBeenCalled();
     expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-close')).toBe(false);
+  });
+
+  it('lists the session rows and every session to go to, as board 4 draws them', () => {
+    const two = sessions();
+    const entries = buildPaletteEntries(
+      deps({ newSession: vi.fn(), closeSession: vi.fn(), sessions: two }),
+    );
+    // Nothing typed, the palette opens as before.
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).toEqual([
+      'panel',
+      'split',
+      'theme',
+      'disconnect',
+    ]);
+    const found = paletteSections(entries, 'session', []);
+    expect(found.map((s) => s.label)).toEqual(['View', 'Session', 'Go to']);
+    const [, session, goTo] = found;
+    expect(session.rows.map((r) => [r.title, r.keys])).toEqual([
+      ['New session…', 'Mod+T'],
+      ['Next session', 'Mod+Shift+]'],
+      ['Previous session', 'Mod+Shift+['],
+      ['Close session', 'Mod+W'],
+      ['Hide sessions', undefined],
+      ['Disconnect', undefined],
+    ]);
+    expect(goTo.rows.map((r) => [r.title, r.meta, r.keys, r.checked])).toEqual([
+      ['Tolliver', 'The Forsaken Lands', 'Mod+1', true],
+      ['Orla', 'The Forsaken Lands 1825', 'Mod+2', false],
+    ]);
+  });
+
+  it('steps, goes to a session and hides the sidebar through the shell', () => {
+    const two = sessions();
+    const entries = buildPaletteEntries(deps({ sessions: two }));
+    const run = (id: string) => void entries.find((e) => e.id === id)?.run();
+    run('session-next');
+    run('session-previous');
+    expect(two.step.mock.calls).toEqual([[1], [-1]]);
+    run('session-goto-2');
+    expect(two.goTo).toHaveBeenCalledWith(2);
+    run('sessions-sidebar');
+    expect(two.toggleShown).toHaveBeenCalled();
+    const hidden = buildPaletteEntries(deps({ sessions: { ...two, shown: false } }));
+    expect(hidden.find((e) => e.id === 'sessions-sidebar')?.title).toBe('Show sessions');
+  });
+
+  it('finds a session by its name or its world', () => {
+    const entries = buildPaletteEntries(deps({ sessions: sessions() }));
+    const titles = (q: string) =>
+      paletteSections(entries, q, [])
+        .find((s) => s.label === 'Go to')
+        ?.rows.map((r) => r.title);
+    expect(titles('orla')).toEqual(['Orla']);
+    expect(titles('1825')).toEqual(['Orla']);
+  });
+
+  it('leaves the rows between sessions out with one session', () => {
+    const one = { ...sessions(), rows: [sessionRow(1, 'Tolliver', 1848)] };
+    const entries = buildPaletteEntries(
+      deps({ newSession: vi.fn(), closeSession: vi.fn(), sessions: one }),
+    );
+    const ids = entries.map((e) => e.id);
+    expect(ids).toContain('session-new');
+    expect(ids).toContain('session-close');
+    for (const id of ['session-next', 'session-previous', 'sessions-sidebar', 'session-goto-1']) {
+      expect(ids).not.toContain(id);
+    }
+  });
+
+  it('keys the first nine sessions and names one before its login by its world', () => {
+    const rows = [
+      sessionRow(1, 'Tolliver', 1848),
+      ...Array.from({ length: 9 }, (_, i) => sessionRow(i + 2, null, 1825)),
+    ];
+    const entries = buildPaletteEntries(deps({ sessions: { ...sessions(), rows } }));
+    const goTo = entries.filter((e) => e.section === 'goto');
+    expect(goTo.map((e) => e.keys)).toEqual([
+      'Mod+1',
+      'Mod+2',
+      'Mod+3',
+      'Mod+4',
+      'Mod+5',
+      'Mod+6',
+      'Mod+7',
+      'Mod+8',
+      'Mod+9',
+      undefined,
+    ]);
+    expect(goTo[1]).toMatchObject({ title: 'The Forsaken Lands 1825' });
+    expect(goTo[1].meta).toBeUndefined();
   });
 
   it('hides search only rows until you type, then ranks matches by section', () => {

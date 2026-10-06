@@ -164,6 +164,12 @@ export function sessionAt(place: number): number | null {
   return store.get().rows[place - 1]?.id ?? null;
 }
 
+/** Bring `session` to the front, unless it is there already or there is
+ *  none. */
+export function goTo(session: number | null): void {
+  if (session !== null && session !== getSelected()) void select(session);
+}
+
 function selectedRow(): SessionRow | null {
   const { rows, selected } = store.get();
   return rows.find((row) => row.id === selected) ?? null;

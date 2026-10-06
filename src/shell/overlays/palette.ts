@@ -2,7 +2,8 @@ import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
-import { sendInput } from '../../ipc/session';
+import { sendInput, type SessionRow } from '../../ipc/session';
+import { sessionLabel } from '../../lib/sessionLabel';
 import { setUiTheme } from '../../ipc/uiConfig';
 import type { PaneType } from '../../panel/paneLayout';
 import {
@@ -24,15 +25,16 @@ import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from '../../theme
 
 // ── Registry ─────────────────────────────────────────────────────────
 
-/** Home sections, in the order the palette lists them. Session goes
- *  last so Disconnect is the final row. With nothing typed the palette
- *  shows Recent, View, and Session (SPEC 7). Aliases, settings, help,
- *  and find surface as you type or through Recent. */
-export type PaletteSection = 'input' | 'view' | 'aliases' | 'session';
+/** Home sections, in the order the palette lists them. With nothing
+ *  typed the palette shows Recent, View, and Session (SPEC 7), so
+ *  Disconnect is the final row. Aliases, settings, help, find and the
+ *  sessions to go to surface as you type or through Recent. */
+export type PaletteSection = 'input' | 'view' | 'aliases' | 'session' | 'goto';
 
 /** Input holds the prompt card's rows, which show only as you type, so
- *  the palette still opens on View and Session. */
-export const SECTION_ORDER: PaletteSection[] = ['input', 'view', 'aliases', 'session'];
+ *  the palette still opens on View and Session. Go to follows Session,
+ *  as board 4 of the Sessions review draws it. */
+export const SECTION_ORDER: PaletteSection[] = ['input', 'view', 'aliases', 'session', 'goto'];
 
 export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
   recent: 'Recent',
@@ -40,6 +42,7 @@ export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
   view: 'View',
   aliases: 'Aliases',
   session: 'Session',
+  goto: 'Go to',
 };
 
 export interface PaletteEntry {
@@ -68,6 +71,21 @@ export interface PaletteEntry {
   children?: () => PaletteEntry[];
   childLabel?: string;
   run: () => void | Promise<void>;
+}
+
+/** The open sessions, for the rows that move between them. */
+export interface PaletteSessions {
+  /** Every open session, in the sidebar's order. */
+  rows: readonly SessionRow[];
+  selected: number;
+  /** Whether the sidebar shows them. */
+  shown: boolean;
+  /** Bring a session to the front. */
+  goTo: (session: number) => void;
+  /** Bring the next session to the front, or the one before with -1. */
+  step: (step: 1 | -1) => void;
+  /** Hide the sidebar in this window, or show it again. */
+  toggleShown: () => void;
 }
 
 export interface PaletteDeps {
@@ -100,6 +118,9 @@ export interface PaletteDeps {
   /** Close the selected session, asking first while it is connected.
    *  The row appears when the shell passes it. */
   closeSession?: () => void;
+  /** The open sessions. With two or more, Next session, Previous session,
+   *  Hide sessions and a Go to row for each appear. */
+  sessions?: PaletteSessions;
   disconnect: () => void;
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
@@ -319,6 +340,9 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     });
   }
 
+  // The rows that move between sessions wait for a second session, as
+  // the sidebar does (Q12, Q17).
+  const sessions = deps.sessions && deps.sessions.rows.length >= 2 ? deps.sessions : null;
   if (deps.newSession) {
     entries.push({
       id: 'session-new',
@@ -330,14 +354,64 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: deps.newSession,
     });
   }
+  if (sessions) {
+    entries.push(
+      {
+        id: 'session-next',
+        section: 'session',
+        title: 'Next session',
+        keywords: 'step switch tab',
+        keys: APP_SHORTCUTS['session-next'],
+        searchOnly: true,
+        run: () => sessions.step(1),
+      },
+      {
+        id: 'session-previous',
+        section: 'session',
+        title: 'Previous session',
+        keywords: 'step switch tab back',
+        keys: APP_SHORTCUTS['session-previous'],
+        searchOnly: true,
+        run: () => sessions.step(-1),
+      },
+    );
+  }
   if (deps.closeSession) {
     entries.push({
       id: 'session-close',
       section: 'session',
       title: 'Close session',
       keywords: 'end remove tab',
+      keys: APP_SHORTCUTS['session-close'],
       searchOnly: true,
       run: deps.closeSession,
+    });
+  }
+  if (sessions) {
+    entries.push({
+      id: 'sessions-sidebar',
+      section: 'session',
+      title: sessions.shown ? 'Hide sessions' : 'Show sessions',
+      keywords: 'sidebar list tabs',
+      searchOnly: true,
+      run: sessions.toggleShown,
+    });
+    // Each session to go to, by its label as its row reads, the world
+    // beside a session named for its character or its name, and the key
+    // that reaches the first nine.
+    sessions.rows.forEach((row, i) => {
+      const label = sessionLabel(row, sessions.rows);
+      entries.push({
+        id: `session-goto-${row.id}`,
+        section: 'goto',
+        title: label.name,
+        keywords: 'session go to switch tab',
+        ...(label.who && label.place ? { meta: label.place } : {}),
+        ...(i < 9 ? { keys: `Mod+${i + 1}` } : {}),
+        checked: row.id === sessions.selected,
+        searchOnly: true,
+        run: () => sessions.goTo(row.id),
+      });
     });
   }
   entries.push({

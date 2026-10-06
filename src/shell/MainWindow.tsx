@@ -60,8 +60,10 @@ import { offeredPaneTypes } from '../panel/paneTypes';
 import { noteConnectionError } from '../stores/session/connectionStore';
 import {
   getSelected,
+  goTo,
   othersOnProfile,
   select,
+  sessionStep,
   useOpened,
   useSelected,
   useSessions,
@@ -115,6 +117,8 @@ function MainWindow() {
   const sessions = useSessions();
   const [sessionsHidden, setSessionsHidden] = useState(false);
   const sessionsShown = sessions.length >= 2 && !sessionsHidden;
+  // Hide sessions, and Show sessions in the palette and the View menu.
+  const toggleSessions = () => setSessionsHidden((hidden) => !hidden);
   // The session launch selected, which takes what launch has to tell you.
   const launchSession = useRef<number | null>(null);
   launchSession.current ??= opened[0] ?? null;
@@ -442,6 +446,14 @@ function MainWindow() {
     connect: () => void connection.connect(),
     newSession: () => void openNewSession(),
     closeSession: () => closing.closeSession(),
+    sessions: {
+      rows: sessions,
+      selected,
+      shown: sessionsShown,
+      goTo,
+      step: (step) => goTo(sessionStep(step)),
+      toggleShown: toggleSessions,
+    },
     disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
@@ -475,7 +487,7 @@ function MainWindow() {
     shownPanes,
     sessionCount: sessions.length,
     sessionsShown,
-    toggleSessions: () => setSessionsHidden((hidden) => !hidden),
+    toggleSessions,
     termRef,
     historyTermRef,
     writeLive,

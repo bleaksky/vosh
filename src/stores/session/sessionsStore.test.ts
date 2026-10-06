@@ -234,6 +234,17 @@ describe('sessionsStore', () => {
     expect(store.sessionAt(3)).toBeNull();
   });
 
+  it('goes to a session only when it is another one', async () => {
+    const store = await load();
+    const asked = () => calls.filter(([cmd]) => cmd === 'session_select').length;
+    store.goTo(null);
+    store.goTo(1);
+    expect(asked()).toBe(0);
+    store.goTo(2);
+    expect(store.getSelected()).toBe(2);
+    expect(calls.at(-1)).toEqual(['session_select', { session: 2 }]);
+  });
+
   it('tells a selection listener only when the selection moves', async () => {
     const store = await load();
     const moved = vi.fn();

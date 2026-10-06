@@ -58,7 +58,7 @@ Each session is one connection to a game, with its own terminal, command line an
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key. On macOS the Session menu steps too, with `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
-- Click `Hide sessions` at the top right of the sidebar to fold it away in this window. On macOS, `Show sessions` in the View menu brings it back.
+- Click `Hide sessions` at the top right of the sidebar to fold it away in this window. `Show sessions` in the `Cmd+K` palette brings it back, and on macOS so does `Show sessions` in the View menu.
 
 To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
 
@@ -203,7 +203,7 @@ The right click menu also offers `Clear scrollback`, which empties what you can 
 
 ### 2.7 Use the command palette
 
-The command palette runs Vosh commands from the keyboard. It covers the View and Session commands, the Settings pages, your prompt, and your aliases.
+The command palette runs Vosh commands from the keyboard. It covers the View and Session commands, the Settings pages, your prompt, your aliases, and your sessions.
 
 - Press `Cmd+K` on macOS or `Ctrl+K` elsewhere, or click the search button at the right end of the title band. The same shortcut closes it again.
 - With nothing typed it lists the last few commands you ran under Recent, then View and Session.
@@ -211,12 +211,13 @@ The command palette runs Vosh commands from the keyboard. It covers the View and
 - Move the selection with the arrow keys and press `Enter` to run the highlighted entry. A row with a list behind it, like `Choose theme`, opens the list on `Enter` or `ArrowRight`, and `ArrowLeft` or `Backspace` steps back out.
 - Press `Esc` to step out of a list, or to close the palette without running anything.
 
-The palette sorts what it finds into four sections.
+The palette sorts what it finds into five sections.
 
 - Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`.
 - View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
 - Aliases. Every alias that is on. One that takes no arguments runs the moment you pick it. One that takes arguments puts its name in the command line instead, so you finish the line and press `Enter`.
-- Session. `Save profile`, then the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
+- Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open, `Close session`, `Hide sessions` or `Show sessions` with two or more, `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
+- Go to. Every open session by the name its row shows, with the world beside a character, while two or more are open. The one in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Pick one to bring it to the front, or type a name or a port to find it.
 
 ### 2.8 Use the right click menu
 
