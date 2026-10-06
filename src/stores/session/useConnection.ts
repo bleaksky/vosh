@@ -4,6 +4,7 @@ import {
   connectSession,
   disconnectSession,
   emitConnectionTargetChanged,
+  reconnectNow,
   setSessionAddress,
   subscribeConnectionTargetChanged,
   type ConnectionTarget,
@@ -13,6 +14,7 @@ import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
 import { useSessionConnection, type ConnectionStatus } from './connectionStore';
+import { reconnectOf } from './reconnectStore';
 import { getSelected, getSessions, useSelectedRow } from './sessionsStore';
 
 // The session the title band shows and the session menu drives, which
@@ -175,6 +177,14 @@ export async function connectTo(target: ConnectionTarget, session: number): Prom
   await connectSession(target.host, target.port, target.tls, session);
 }
 
+/** Connect `session` to `target`, or while a redial of it waits, dial
+ *  that try now, as Reconnect now on the notice does. Cmd+R, the session
+ *  menu's Connect to row and the palette reach it. */
+export async function connectOrRedial(target: ConnectionTarget, session: number): Promise<void> {
+  if (reconnectOf(session).kind === 'waiting') await reconnectNow(session);
+  else await connectTo(target, session);
+}
+
 /** Dial a session its New session form opened, on the profile the form
  *  chose, so no profile match runs first (board 9). The target becomes
  *  the saved world the next form starts from, and the session keeps it
@@ -195,7 +205,8 @@ export interface Connection {
    *  else the target. */
   world: string;
   character: string | null;
-  /** Dial the selected session at its target. */
+  /** Dial the selected session at its target, or its waiting redial
+   *  now. */
   connect: () => Promise<void>;
   /** Dial a session its New session form opened, as connectOpened
    *  does. */
@@ -227,7 +238,7 @@ export function useConnection(onError: (message: string, session: number) => voi
   const dial = useCallback(async (to: ConnectionTarget) => {
     const session = getSelected();
     try {
-      await connectTo(to, session);
+      await connectOrRedial(to, session);
     } catch (e) {
       onErrorRef.current(String(e), session);
     }
