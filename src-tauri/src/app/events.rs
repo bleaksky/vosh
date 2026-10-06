@@ -707,6 +707,7 @@ mod tests {
             command: "kick".into(),
             group: Some("combat".into()),
             enabled: true,
+            preset: None,
         });
         assert_eq!(
             changes(&mut p, &mut c, "#group combat off").events(),
@@ -818,6 +819,7 @@ mod tests {
             command: "kick".into(),
             group: Some("combat".into()),
             enabled: true,
+            preset: None,
         });
         let toggle = |enabled| vosh_script::ScriptOutcome {
             actions: vec![vosh_script::Action::SetGroupEnabled {

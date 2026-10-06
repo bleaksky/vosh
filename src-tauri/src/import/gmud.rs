@@ -42,6 +42,7 @@ pub(super) fn parse_gmud(text: &str) -> ImportReport {
                         command: command.clone(),
                         group: None,
                         enabled: true,
+                        preset: None,
                     });
                 } else {
                     report

@@ -228,6 +228,7 @@ fn grouped_macro(key: &str, command: &str, group: &str) -> Macro {
         command: command.into(),
         group: Some(group.into()),
         enabled: true,
+        preset: None,
     }
 }
 

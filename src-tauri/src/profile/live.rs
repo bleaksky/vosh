@@ -130,6 +130,14 @@ pub(crate) struct Macro {
         skip_serializing_if = "is_macro_enabled"
     )]
     pub(crate) enabled: bool,
+    /// The id of the preset that added this macro, None for one of yours.
+    /// A preset macro on a key one of yours uses waits with `enabled`
+    /// false, see [`hold_taken_keys`]. Left out of the file while None,
+    /// and 0.8.1 skips the key, so it still reads the file.
+    ///
+    /// [`hold_taken_keys`]: crate::loadouts::presets::hold_taken_keys
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) preset: Option<String>,
 }
 
 fn default_macro_enabled() -> bool {

@@ -115,6 +115,7 @@ fn macro_on(key: &str, command: &str) -> crate::profile::live::Macro {
         command: command.into(),
         group: None,
         enabled: true,
+        preset: None,
     }
 }
 

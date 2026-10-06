@@ -394,7 +394,7 @@ mod tests {
                 name: Some("Healer".into()),
                 triggers: 3,
                 aliases: 2,
-                macros: 2,
+                macros: 5,
                 timers: 1,
                 tick: true,
                 variables: 2,
@@ -554,7 +554,10 @@ mod tests {
             ["tells", "spam", "room-items"]
         );
         assert_eq!(names(&plan.file.aliases, |a| &a.name), ["kk", "heal"]);
-        assert_eq!(names(&plan.file.macros, |m| &m.key), ["F1", "F2"]);
+        assert_eq!(
+            names(&plan.file.macros, |m| &m.key),
+            ["F1", "F2", "Numpad3", "Numpad8", "Numpad3"]
+        );
         assert_eq!(plan.file.timers.len(), 1);
         assert_eq!(plan.file.alerts.len(), 2);
         let am = plan.claim.unwrap();
@@ -608,6 +611,7 @@ mod tests {
             command: "rest".into(),
             group: None,
             enabled: true,
+            preset: None,
         });
         let plan = plan(
             "Healer profile (2).toml",
@@ -628,7 +632,10 @@ mod tests {
         assert_eq!(join.group, "Healer profile (2)");
         assert_eq!(names(&join.triggers, |t| &t.name), ["tells", "room-items"]);
         assert_eq!(names(&join.aliases, |a| &a.name), ["heal"]);
-        assert_eq!(names(&join.macros, |m| &m.key), ["F1"]);
+        assert_eq!(
+            names(&join.macros, |m| &m.key),
+            ["F1", "Numpad3", "Numpad8", "Numpad3"]
+        );
         let groups: Vec<_> = join
             .triggers
             .iter()
@@ -636,7 +643,7 @@ mod tests {
             .chain(join.aliases.iter().map(|a| a.group.as_deref()))
             .chain(join.macros.iter().map(|m| m.group.as_deref()))
             .collect();
-        assert_eq!(groups, [Some("Healer profile (2)"); 4]);
+        assert_eq!(groups, [Some("Healer profile (2)"); 7]);
         // A clash keeps yours, by name and for a macro by key.
         let clash = |kind, name: &str| Clash {
             kind,

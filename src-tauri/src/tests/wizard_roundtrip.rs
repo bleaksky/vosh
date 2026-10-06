@@ -475,6 +475,7 @@ fn generate(seed: u64) -> Set {
                 command: format!("cast {version}"),
                 group: item_group(&mut rng, usual[&format!("macro {key}")].as_ref()),
                 enabled: rng.chance(85),
+                preset: None,
             });
         }
         // Now and then a file binds a key twice, in the same folder, and

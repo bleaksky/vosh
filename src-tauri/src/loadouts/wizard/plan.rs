@@ -804,6 +804,7 @@ pub(super) mod tests {
             command: command.into(),
             group: None,
             enabled,
+            preset: None,
         };
         let plan = analyze(&[
             (
@@ -896,6 +897,7 @@ pub(super) mod tests {
             command: command.into(),
             group: group.map(String::from),
             enabled,
+            preset: None,
         }
     }
 

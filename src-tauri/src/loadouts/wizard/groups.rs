@@ -425,6 +425,7 @@ mod tests {
             command: "cast heal".into(),
             group: None,
             enabled: true,
+            preset: None,
         };
         let f1_off = Macro {
             enabled: false,
