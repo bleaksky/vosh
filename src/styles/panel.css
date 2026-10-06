@@ -786,6 +786,16 @@
   color: var(--accent);
 }
 
+/* The plugin that draws a Lua pane, after its title under Show here
+   instead, as Add a pane shows it. */
+.pane-menu-plugin {
+  flex: none;
+  margin-left: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
 /* The color a chat channel shows, before its name under Channel colors
    and before each color it can take. The swatch ring keeps black and
    the ground's own color visible on the menu. */

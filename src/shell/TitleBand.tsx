@@ -4,8 +4,17 @@ import { useTauriEvent } from '../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
-import type { PaneSplit, PaneType } from '../panel/paneLayout';
-import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
+import { paneKey, paneRef, type PaneRef, type PaneSplit } from '../panel/paneLayout';
+import {
+  PANE_LABELS,
+  luaPaneRef,
+  luaPanesToAdd,
+  offeredLuaPanes,
+  paneLabel,
+  paneTypesToAdd,
+} from '../panel/paneTypes';
+import { useLuaPanes } from '../stores/session/luaPanesStore';
+import { usePluginRows } from '../stores/session/pluginRowsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
   CloseIcon,
@@ -17,7 +26,7 @@ import {
 } from '../ui/icons';
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
-import { ShellMenu, ShellMenuItem } from './ShellMenu';
+import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import { TitleButton } from './TitleButton';
 
 // The 32 px title band across the top of the window (SPEC 1 and 9). No
@@ -42,9 +51,9 @@ interface Props {
   /** Open Settings, the same as its shortcut. */
   onOpenSettings: () => void;
   /** The panel's pane tree. Add a pane lists the pane types it does
-   *  not show yet. */
+   *  not show yet, then the Lua panes it does not show. */
   paneTree: PaneSplit | null;
-  onAddPane: (pane: PaneType) => void;
+  onAddPane: (ref: PaneRef) => void;
   /** Runs after a menu closes, or after the gear opens Settings, to
    *  hand the caret back to the command line. */
   onMenuClosed: () => void;
@@ -107,7 +116,15 @@ export function TitleBand({
   useEffect(() => {
     if (!panelOpen) setMenu((current) => (current === 'add' ? null : current));
   }, [panelOpen]);
-  const addable = menu === 'add' ? paneTypesToAdd(paneTree) : [];
+  const luaPanes = useLuaPanes();
+  const pluginRows = usePluginRows();
+  const builtIns = menu === 'add' ? paneTypesToAdd(paneTree) : [];
+  const luaToAdd =
+    menu === 'add' ? luaPanesToAdd(paneTree, offeredLuaPanes(luaPanes, pluginRows)) : [];
+  const add = (ref: PaneRef) => () => {
+    closeMenu();
+    onAddPane(ref);
+  };
   const panelLabel = panelOpen ? 'Hide panel' : 'Show panel';
 
   return (
@@ -192,21 +209,27 @@ export function TitleBand({
           label="Add a pane"
           onClose={closeMenu}
         >
-          {addable.length === 0 ? (
+          {builtIns.length === 0 && luaToAdd.length === 0 && (
             <p className="shell-menu-note">Every pane is showing.</p>
-          ) : (
-            addable.map((pane) => (
-              <ShellMenuItem
-                key={pane}
-                onSelect={() => {
-                  closeMenu();
-                  onAddPane(pane);
-                }}
-              >
-                {PANE_LABELS[pane]}
-              </ShellMenuItem>
-            ))
           )}
+          {builtIns.map((pane) => (
+            <ShellMenuItem key={pane} onSelect={add(paneRef(pane))}>
+              {PANE_LABELS[pane]}
+            </ShellMenuItem>
+          ))}
+          {builtIns.length > 0 && luaToAdd.length > 0 && <ShellMenuSeparator />}
+          {luaToAdd.map((offer) => {
+            const ref = luaPaneRef(offer);
+            return (
+              <ShellMenuItem
+                key={paneKey(ref)}
+                trailing={<span className="shell-menu-kbd">{offer.plugin}</span>}
+                onSelect={add(ref)}
+              >
+                {paneLabel(ref)}
+              </ShellMenuItem>
+            );
+          })}
         </ShellMenu>
       )}
     </div>

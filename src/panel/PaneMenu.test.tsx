@@ -7,7 +7,8 @@ import { resetChatColors, setChatColor } from '../ipc/uiConfig';
 import { openSettingsTab } from '../lib/settingsLink';
 import { findTheme } from '../theme/themes';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
-import { ChannelColorItems, ChannelColorRows, PaneMenu } from './PaneMenu';
+import { ChannelColorItems, ChannelColorRows, PaneMenu, ShowHereRows } from './PaneMenu';
+import { panesToShowInstead } from './paneTypes';
 import { PaneTextSizeContext } from './paneTextSize';
 
 // The stores behind the menu reach the Tauri bridge when they start.
@@ -52,6 +53,28 @@ const laid = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
 vi.mock('./panelLayoutStore', async (actual) => ({
   ...(await actual<typeof import('./panelLayoutStore')>()),
   getPanelLayout: () => laid.layout,
+}));
+// The Lua panes the session in front holds, Weather and Worth, and
+// whether their plugins run, neither unless a test turns them on.
+const lua = vi.hoisted(() => ({ on: false }));
+vi.mock('../stores/session/luaPanesStore', () => ({
+  getLuaPanes: () =>
+    new Map(
+      ['worth', 'weather'].map((id) => [
+        id,
+        {
+          plugin: `${id}_pane`,
+          id,
+          title: id[0].toUpperCase() + id.slice(1),
+          meta: '',
+          blocks: [],
+        },
+      ]),
+    ),
+}));
+vi.mock('../stores/session/pluginRowsStore', () => ({
+  getPluginRows: () =>
+    ['weather_pane', 'worth_pane'].map((name) => ({ name, on: lua.on, stopped: null })),
 }));
 vi.mock('../theme/useActiveTheme', async () => {
   const { findTheme: find } = await import('../theme/themes');
@@ -130,6 +153,7 @@ beforeEach(() => {
   vi.mocked(setChatColor).mockClear();
   shown.style = null;
   laid.layout = null;
+  lua.on = false;
 });
 
 describe('PaneMenu', () => {
@@ -310,5 +334,62 @@ describe('ChannelColorItems', () => {
     all[0].props.onSelect?.();
     expect(setChatColor).toHaveBeenLastCalledWith('tell', null);
     expect(done).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Show here instead', () => {
+  const weather: PaneLeaf = {
+    id: 'leaf-weather',
+    pane: 'lua',
+    weight: 1,
+    props: { plugin: 'weather_pane', id: 'weather', title: 'Weather' },
+  };
+
+  const listed = (leaf: PaneLeaf) => {
+    const pick = vi.fn();
+    const list = rows(ShowHereRows({ ...panesToShowInstead(leaf), pick }));
+    const text = list.map((row) => {
+      if (row === '---') return row;
+      const plugin = row.props.trailing as ReactElement<{ children: string }> | null;
+      return plugin ? `${label(row)} | ${plugin.props.children}` : label(row);
+    });
+    return { text, all: list.filter((r): r is Item => r !== '---'), pick };
+  };
+
+  it('lists the other panes, then a rule and the Lua panes in title order', () => {
+    lua.on = true;
+    const leaf: PaneLeaf = { id: 'leaf-chat', pane: 'chat', weight: 1, props: {} };
+    expect(listed(leaf).text).toEqual([
+      'Map',
+      'Affects',
+      'Group',
+      '---',
+      'Weather | weather_pane',
+      'Worth | worth_pane',
+    ]);
+  });
+
+  it('leaves out the Lua pane it is and those whose plugin is off', () => {
+    lua.on = true;
+    expect(listed(weather).text).toEqual([
+      'Map',
+      'Affects',
+      'Group',
+      'Chat',
+      '---',
+      'Worth | worth_pane',
+    ]);
+    lua.on = false;
+    expect(listed(weather).text).toEqual(['Map', 'Affects', 'Group', 'Chat']);
+  });
+
+  it('shows the Lua pane picked in place of the pane', () => {
+    lua.on = true;
+    const { all, pick } = listed(weather);
+    all.find((row) => label(row) === 'Worth')?.props.onSelect?.();
+    expect(pick).toHaveBeenCalledWith({
+      pane: 'lua',
+      props: { plugin: 'worth_pane', id: 'worth', title: 'Worth' },
+    });
   });
 });

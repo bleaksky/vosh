@@ -45,6 +45,8 @@ const store = createSessionStore<LuaPanes>({
 
 export const startLuaPanesStore = store.start;
 export const getLuaPanes = store.get;
+/** Every pane the session in front holds. */
+export const useLuaPanes = store.use;
 
 /** The pane `id` of `plugin` in the session in front, or undefined
  *  while it draws none. */

@@ -22,7 +22,15 @@ import { useAffectsDisplay } from '../stores/config/affectsDisplayStore';
 import { useChatColors } from '../stores/config/chatColorsStore';
 import { usePlayPalette } from '../theme/fitGameColors';
 import type { XtermPalette } from '../theme/themes';
-import { LUA_PANE, paneRef, splitPane, type PaneLeaf, type SplitDir } from './paneLayout';
+import {
+  LUA_PANE,
+  paneKey,
+  paneRef,
+  splitPane,
+  type PaneLeaf,
+  type PaneRef,
+  type SplitDir,
+} from './paneLayout';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
@@ -38,10 +46,11 @@ import { fitsPanel } from './paneGeometry';
 import { PaneTextSizeContext } from './paneTextSize';
 import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
-import { PANE_LABELS, offeredPaneTypes, paneLabel } from './paneTypes';
+import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } from './paneTypes';
 
 // The more menu on every pane header (SPEC 9): Split right, Split
-// down, Show here instead with a submenu of pane types, and Close pane.
+// down, Show here instead with a submenu of pane types and then, after
+// a rule, the Lua panes on offer, and Close pane.
 // The Affects pane adds Style and Marker, each a submenu with a check
 // on the current pick, Change when affects warn, which opens Settings
 // on the hours under Layout, Affects, and Edit tracked affects, which
@@ -120,7 +129,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   };
 
   const splitIn = paneToSplitIn();
-  const others = offeredPaneTypes().filter((t) => t !== leaf.pane);
+  const showHere = panesToShowInstead(leaf);
   const area = anchor.closest('.panel-panes');
   const canSplit = (dir: SplitDir) => {
     const root = getPanelLayout()?.root;
@@ -152,12 +161,9 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const submenus: Record<PaneSubmenu, { label: string; items: () => ReactNode }> = {
     show: {
       label: 'Show here instead',
-      items: () =>
-        others.map((t) => (
-          <MenuItem key={t} onSelect={run(() => showHereInstead(leaf.id, paneRef(t)))}>
-            {PANE_LABELS[t]}
-          </MenuItem>
-        )),
+      items: () => (
+        <ShowHereRows {...showHere} pick={(ref) => run(() => showHereInstead(leaf.id, ref))()} />
+      ),
     },
     style: {
       label: 'Style',
@@ -308,7 +314,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           Split down
         </MenuItem>
         <MenuSeparator />
-        {submenuRow('show', others.length === 0)}
+        {submenuRow('show', showHere.builtIns.length === 0 && showHere.lua.length === 0)}
         {leaf.pane === 'affects' && (
           <>
             <MenuSeparator />
@@ -375,6 +381,34 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
       </MenuSurface>
       {sub}
       {chanSub}
+    </>
+  );
+}
+
+/** The rows of Show here instead: the built-in panes, then a rule and
+ *  the Lua panes, each with the plugin that draws it. */
+export function ShowHereRows({
+  builtIns,
+  lua,
+  pick,
+}: PanesToShowInstead & { pick: (ref: PaneRef) => void }) {
+  return (
+    <>
+      {builtIns.map((t) => (
+        <MenuItem key={t} onSelect={() => pick(paneRef(t))}>
+          {PANE_LABELS[t]}
+        </MenuItem>
+      ))}
+      {builtIns.length > 0 && lua.length > 0 && <MenuSeparator />}
+      {lua.map((ref) => (
+        <MenuItem
+          key={paneKey(ref)}
+          trailing={<span className="pane-menu-plugin">{ref.props.plugin}</span>}
+          onSelect={() => pick(ref)}
+        >
+          {paneLabel(ref)}
+        </MenuItem>
+      ))}
     </>
   );
 }
