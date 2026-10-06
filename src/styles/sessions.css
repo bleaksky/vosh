@@ -1,0 +1,420 @@
+/* The sessions sidebar of the Sessions review, inside the first column
+   of the frame that frame.css lays out: the header, the rows and their
+   glyphs, the drag, the name field, the spinner and the line you drag
+   to resize it. Then the session popover's list of sessions, which
+   takes the sidebar's place while it is folded. Loads last, after
+   frame.css. Every rule sits under a shell-sessions- class, or a
+   shell-menu- class only that list uses. */
+
+/* Board 2 of the Sessions review, on otty's measures (otty-measure.md).
+   220 of rows on the panel ground, then a 1 px --sep line at x 220,
+   drawn inset the way the Settings sidebar draws its own. */
+.shell-sessions {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--panel);
+  box-shadow: inset -1px 0 0 var(--sep);
+  font-family: var(--font-ui);
+  color: var(--secondary);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The top 32 drags the window and holds the lights on macOS. New
+   session and Hide sessions end 16 in from the line, at otty's centers
+   x 162 and 190 on y 16, and stay in view where otty shows them only on
+   hover, since the plus is how you open a session. */
+.shell-sessions-top {
+  position: relative;
+  flex: none;
+  height: var(--band);
+}
+
+.shell-sessions-actions {
+  position: absolute;
+  top: 4px;
+  right: 17px;
+  display: flex;
+}
+
+.shell-sessions-actions .shell-icon-button {
+  color: var(--tertiary);
+}
+
+.shell-sessions-actions .shell-icon-button:hover {
+  color: var(--secondary);
+}
+
+/* SESSIONS in the caps label style at x 20, its line centered at y 49,
+   so the first row's slot starts at 59. It stays put over the list, and
+   once a row has passed under it a --divider hairline draws along its
+   foot (board 8). */
+.shell-sessions-head {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  height: 27px;
+  margin: 0;
+  padding: 10px 15px 0 20px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.shell-sessions-head.is-scrolled {
+  box-shadow: 0 1px 0 var(--divider);
+}
+
+/* The list stops 1 px short of the line, so the pill runs 8 to 212 and
+   clears it, as otty's does. It scrolls with no bar, as the frame draws
+   it, since a bar would take its width from the rows on Windows and
+   Linux. The hairline and the cut row say there is more. */
+.shell-sessions-list {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 1px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.shell-sessions-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Rows on a 38 pitch, the pill 36 high and inset 8 with Vosh's row
+   radius, the name 12 inside it at x 20 and the meta ending at 200. The
+   slot lets the pointer through, so it counts as under the pointer only
+   while its row or the row's close button is. */
+.shell-sessions-slot {
+  position: relative;
+  height: 38px;
+  padding: 1px 8px;
+  pointer-events: none;
+}
+
+.shell-sessions-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+/* A row behind brightens once the game prints a line there (Q9), and
+   dims while its session is not connected (Q8). */
+.shell-sessions-row.is-new {
+  color: var(--text);
+}
+
+.shell-sessions-row.is-off {
+  color: var(--tertiary);
+}
+
+/* A row under the pointer lights and its name takes the text tone, its
+   close button under the pointer too. */
+.shell-sessions-slot:hover .shell-sessions-row {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The selected row is the filled pill, its name in the text tone, at
+   600 on a dark theme and 400 on a light one as otty draws Nord and
+   Paper. A light theme rings it through .st-controls, as Settings does.
+   The slot keeps the pill over the light of a row under the pointer. */
+.shell-sessions-slot .shell-sessions-row[aria-current='true'] {
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
+  color: var(--text);
+  font-weight: 600;
+}
+
+:root[data-appearance='light'] .shell-sessions-row[aria-current='true'] {
+  font-weight: 400;
+}
+
+.shell-sessions-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A row named by its world keeps the port whole, and the world ends in
+   an ellipsis first. */
+.shell-sessions-name.is-world {
+  display: flex;
+  gap: 0.3em;
+}
+
+.shell-sessions-world {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-sessions-meta {
+  flex: none;
+  margin-left: 8px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* While you hold ⌘ the row's key takes the place of its meta and its
+   glyph, its right edge at otty's 209.5 (board 8). */
+.shell-sessions-meta.is-key {
+  margin-right: -9.5px;
+}
+
+/* A glyph takes the meta's place in a 16 square centered at x 195, as
+   otty draws its badges (Q8, board 3). */
+.shell-sessions-glyph {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 -3px 0 8px;
+  color: var(--tertiary);
+}
+
+.shell-sessions-glyph svg {
+  display: block;
+}
+
+/* Under the pointer the close button takes the place of the meta or the
+   glyph, an 8 by 8 cross centered at otty's x 196.75 on the row's
+   center, 15.25 in from the slot's right (board 3). */
+.shell-sessions-close {
+  position: absolute;
+  top: 11px;
+  right: 15.25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tertiary);
+  visibility: hidden;
+  pointer-events: auto;
+}
+
+.shell-sessions-close svg {
+  display: block;
+}
+
+.shell-sessions-close:hover {
+  color: var(--secondary);
+}
+
+.shell-sessions-slot:hover .shell-sessions-close {
+  visibility: visible;
+}
+
+.shell-sessions-slot:hover .shell-sessions-meta,
+.shell-sessions-slot:hover .shell-sessions-glyph {
+  visibility: hidden;
+}
+
+/* A row in the air follows the pointer on the floating ground, its name
+   in the text tone, over the rows it passes. The other rows let the
+   pointer through, so none lights under it, and part to make room
+   (board 8). */
+.shell-sessions-list.is-dragging .shell-sessions-row,
+.shell-sessions-list.is-dragging .shell-sessions-close {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shell-sessions-list.is-dragging .shell-sessions-slot {
+    transition: transform 0.15s ease;
+  }
+
+  .shell-sessions-list.is-dragging .shell-sessions-slot.is-lifted {
+    transition: none;
+  }
+}
+
+.shell-sessions-slot.is-lifted {
+  z-index: 2;
+}
+
+.shell-sessions-slot.is-lifted .shell-sessions-row {
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+}
+
+/* Where the row in the air lands, a 2 px accent line across the slot it
+   takes. */
+.shell-sessions-drop {
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* While you rename a session the row has no close button, so its meta
+   and its glyph stay under the pointer (board 9). */
+.shell-sessions-row.is-edit .shell-sessions-meta,
+.shell-sessions-row.is-edit .shell-sessions-glyph {
+  visibility: visible;
+}
+
+/* The name as a field. Its text starts at the name's own x, so the
+   field reaches 6 past it on each side, 26 high in the control fill
+   with an accent ring, at the regular weight even on the selected row.
+   Its selection takes the accent tint the frame draws. */
+.shell-sessions-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  margin: 0 0 0 -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  outline: none;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.shell-sessions-field::selection {
+  background: var(--mark-tint);
+  color: var(--text);
+}
+
+.shell-sessions-field::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
+}
+
+.shell-sessions-glyph.is-dot {
+  color: var(--accent);
+}
+
+.shell-sessions-glyph.is-hand {
+  color: var(--warn);
+}
+
+.shell-sessions-glyph.is-triangle {
+  color: var(--danger);
+}
+
+/* The spinner turns a spoke at a time, as otty's does, and holds still
+   for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .shell-sessions-glyph.is-spinner svg {
+    animation: shell-spinner 0.8s steps(8) infinite;
+  }
+}
+
+@keyframes shell-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The sessions sidebar's line as its width handle. It starts below the
+   top 32, which still drags the window. The sidebar draws the
+   line itself, so the handle shows only while it has the keyboard. Its
+   hit area reaches 3 px each side, as the panel's edge does. */
+.shell-sessions-edge {
+  grid-row: 2 / -1;
+  grid-column: 1;
+  justify-self: end;
+  position: relative;
+  z-index: 2;
+  width: 1px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.shell-sessions-edge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.shell-sessions-edge:focus-visible {
+  background: var(--accent);
+}
+
+/* The session popover's list of sessions while the sidebar is folded
+   (board 8). SESSIONS in the palette's caps style heads it. Each row
+   reads its session as the sidebar's row does, the port in quiet meta,
+   and at its right the check or the row's glyph before its key. */
+.shell-menu-head {
+  margin: 0;
+  padding: 7px 12px 3px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.shell-menu-session {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.shell-menu-session-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-menu-meta {
+  flex: none;
+  margin-left: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The glyph takes 8 of the row, the width of the dot it draws most. */
+.shell-menu-side .shell-sessions-glyph {
+  margin: 0 -4px;
+}
