@@ -33,7 +33,7 @@ The session button reports the connection through its status dot. The dot turns 
 
 When the link drops while you play, Vosh dials the same world again on its own. It tries 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8 tries over about five minutes, and the terminal shows a `[reconnect]` line with the reason for each try that fails. It stops at the first try that connects and sends nothing there, so the game waits at its prompt, for about two minutes, for you to log in. Vosh never dials again after your `Disconnect`, a `quit` you typed, or a line from the game that ends your visit, such as `You have escaped from the Forsaken Lands.`, and a drop at the account menu or the login prompt starts nothing. When another session logs in as the character this one plays, the game closes this link and Vosh leaves it closed. A connect or `Disconnect` ends the tries. Each profile reconnects until you add `reconnect = false` to its profile file while Vosh is closed. Turn on the `Connection` alert preset, in Get alerts at 3.9, and Vosh gets your attention when the link drops, when a redial reaches the login, and when it stops trying.
 
-Two things reset on a disconnect. The chat pane buffer empties the moment the session drops, and session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
+Two things reset between connections. The chat pane empties when you choose `Disconnect` or connect to another world. A drop keeps it, so your tells are still there once Vosh reconnects. Session variables set with `#var` clear when the next connection opens, so they never outlive a connection. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.
 
 `Disconnect` lives in three places. The session button while connected, the Session menu in the macOS menu bar, and the `Cmd+K` palette.
 
@@ -869,7 +869,7 @@ The session button in the title band holds the connection controls. Its dot show
 
 `Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
 
-Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane buffer clears at disconnect. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
+Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you disconnect, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
