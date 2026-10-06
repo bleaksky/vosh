@@ -10,8 +10,8 @@
 //! plugins on and the others off in the session it switches while you
 //! play. The Scripts page in Settings makes, reads and saves a plugin's
 //! folder through [`folder`], turns a plugin on or off in a profile and
-//! loads it again through [`live`], and shows its folder through
-//! [`reveal`].
+//! loads it again through [`live`], shows its folder through [`reveal`],
+//! and installs and exports a plugin as a .zip through [`archive`].
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -29,6 +29,9 @@ use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 use crate::sessions::Session;
 
+// The commands that install and export a plugin come next.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) mod archive;
 pub(crate) mod folder;
 pub(crate) mod live;
 pub(crate) mod reveal;
