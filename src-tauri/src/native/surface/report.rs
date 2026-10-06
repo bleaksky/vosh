@@ -90,6 +90,15 @@ pub(super) fn report_sizes(cols: usize, rows: usize, game_rows: usize) {
     tell_session(&session, &REPORTED.game_size);
 }
 
+/// Forget the size the frames last told the game, as a selection brings
+/// another session's grid to the front. The frame before told the session
+/// that showed then, and a frame tells the game only a size that changed,
+/// so the next frame tells the session that shows now, whose grid the
+/// frame sizes to the same pane.
+pub(super) fn forget_game_size() {
+    REPORTED.game_size.store(0, Ordering::Release);
+}
+
 /// Tell the connection `session` runs the game's size that `newest`
 /// holds, packed as `changed` keeps it. The frame runs on the main thread,
 /// so it never waits on the session slot. When a command holds the slot,
@@ -228,6 +237,18 @@ mod tests {
         // The game hears the rows the pane holds with a one row band,
         // once, and again only when the window itself changes.
         assert_eq!(told, [40, 42]);
+    }
+
+    #[test]
+    fn a_selection_has_the_next_frame_tell_the_game_its_size() {
+        // A frame told the session that showed its size, and the frames
+        // after it, at the same size, tell nothing.
+        changed(&REPORTED.game_size, 120, 40);
+        assert!(!changed(&REPORTED.game_size, 120, 40));
+        // A selection shows another session's grid at the same size.
+        forget_game_size();
+        assert!(changed(&REPORTED.game_size, 120, 40));
+        assert!(!changed(&REPORTED.game_size, 120, 40));
     }
 
     #[test]
