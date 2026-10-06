@@ -1,13 +1,14 @@
-import { createElement, type ComponentProps } from 'react';
+import { act, createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LuaBlock, LuaPane } from '../../ipc/panes';
 import type { PluginRow } from '../../ipc/scripts';
 import { findTheme, themeTokens } from '../../theme/themes';
 import { chatInks } from '../chat/chatColors';
 import { PaneLeafContext } from '../paneActions';
 import type { PaneLeaf } from '../paneLayout';
-import { LuaPaneView } from './LuaPane';
+import { FakeDocument, FakeElement } from '../../test/fakeDom';
+import { LuaPane as LuaPaneLeaf, LuaPaneView } from './LuaPane';
 
 // The stores behind the header and its menu reach the Tauri bridge when
 // they start. The view draws from plain values and never calls it.
@@ -15,6 +16,25 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) 
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
+// What the session holds for the pane and its plugin, and the leaf
+// writes the pane makes, for the tests that mount the whole pane.
+const session = vi.hoisted(() => ({
+  pane: undefined as LuaPane | undefined,
+  rows: null as PluginRow[] | null,
+}));
+vi.mock('../../stores/session/luaPanesStore', async (actual) => ({
+  ...(await actual<typeof import('../../stores/session/luaPanesStore')>()),
+  useLuaPane: () => session.pane,
+}));
+vi.mock('../../stores/session/pluginRowsStore', async (actual) => ({
+  ...(await actual<typeof import('../../stores/session/pluginRowsStore')>()),
+  usePluginRows: () => session.rows,
+}));
+const updateLeafProps = vi.hoisted(() => vi.fn());
+vi.mock('../paneActions', async (actual) => ({
+  ...(await actual<typeof import('../paneActions')>()),
+  updateLeafProps,
 }));
 // The last button drawn, so a test can press it.
 const pressed = vi.hoisted(() => ({ onClick: undefined as (() => void) | undefined }));
@@ -153,5 +173,87 @@ describe('LuaPaneView', () => {
   it('leaves the body empty while a plugin that is on has not drawn the pane', () => {
     expect(body(draw(undefined))).toBe('class="pane-body"></div>');
     expect(body(draw(undefined, undefined))).toBe('class="pane-body"></div>');
+  });
+});
+
+describe('LuaPane', () => {
+  const doc = new FakeDocument();
+  let createRoot: typeof import('react-dom/client').createRoot;
+  const unmounts: (() => Promise<void>)[] = [];
+
+  beforeAll(async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    // The theme hooks watch the page for a theme change, which these
+    // tests never make.
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    // React DOM checks for a DOM once, when it loads.
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  afterEach(async () => {
+    for (const unmount of unmounts.splice(0)) await unmount();
+    session.pane = undefined;
+    session.rows = null;
+    updateLeafProps.mockClear();
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Mount the pane in `saved`, a leaf that keeps the title it saved. */
+  async function mount(saved: PaneLeaf) {
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () => {
+      root.render(
+        <PaneLeafContext.Provider value={saved}>
+          <LuaPaneLeaf />
+        </PaneLeafContext.Provider>,
+      );
+    });
+    unmounts.push(async () => {
+      await act(async () => root.unmount());
+    });
+  }
+
+  it('saves the title its plugin draws now into the leaf', async () => {
+    session.pane = { ...weather([]), title: 'Weather at sea' };
+    session.rows = [plugin({})];
+    await mount(leaf);
+    expect(updateLeafProps).toHaveBeenCalledTimes(1);
+    expect(updateLeafProps).toHaveBeenCalledWith('leaf-weather', { title: 'Weather at sea' });
+  });
+
+  it('saves the title of a pane added by split, which has none yet', async () => {
+    session.pane = weather([]);
+    await mount({ ...leaf, props: { plugin: 'weather_pane', id: 'weather' } });
+    expect(updateLeafProps).toHaveBeenCalledWith('leaf-weather', { title: 'Weather' });
+  });
+
+  it('leaves the leaf alone when the title matches or the plugin draws nothing', async () => {
+    session.pane = weather([]);
+    session.rows = [plugin({})];
+    await mount(leaf);
+    session.pane = undefined;
+    session.rows = [plugin({ on: false })];
+    await mount(leaf);
+    expect(updateLeafProps).not.toHaveBeenCalled();
   });
 });
