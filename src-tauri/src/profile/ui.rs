@@ -357,6 +357,57 @@ pub(crate) struct UiConfig {
     /// written before this switch reads it on.
     #[serde(default = "default_true")]
     pub vitals_hide_when_pinned: bool,
+    /// The vitals style you picked from the gallery: `ledger`, `gauges`,
+    /// `pips` or `text`. None for Rows and One line, which stay in
+    /// `vitals_density`, so a build without styles reads your look. The
+    /// keys from here to `vitals_text_previous` are written only once
+    /// they differ from the default, so a profile that never picks saves
+    /// the bytes it saved before, and a build without them reads past
+    /// them. Unknown values coerce back to None on save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vitals_style: Option<String>,
+    /// Where your vitals show: `panel`, the default, under the panel's
+    /// panes, or `status`, in the status line under the terminal.
+    #[serde(
+        default = "default_vitals_place",
+        skip_serializing_if = "is_default_vitals_place"
+    )]
+    pub vitals_place: String,
+    /// The order every style draws your vitals in, each of `hp`, `mana`
+    /// and `move` once. Today's order by default.
+    #[serde(
+        default = "default_vitals_order",
+        skip_serializing_if = "is_default_vitals_order"
+    )]
+    pub vitals_order: Vec<String>,
+    /// The vitals you turned off, of `hp`, `mana` and `move`, and
+    /// `opponent` while your opponent's row is off. None by default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vitals_off: Vec<String>,
+    /// Where your opponent's row sits in a fight: `top`, the default, or
+    /// `bottom`.
+    #[serde(
+        default = "default_vitals_opponent",
+        skip_serializing_if = "is_default_vitals_opponent"
+    )]
+    pub vitals_opponent: String,
+    /// The color each vital takes, as one of the theme's 16 ANSI slots,
+    /// 0 to 15. A vital left out takes Default. A hand edit that holds
+    /// no slot drops that vital and never stops the profile loading.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vitals_colors",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub vitals_colors: BTreeMap<String, u8>,
+    /// The text the Text style writes your vitals with, in your prompt's
+    /// codes. Empty by default.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub vitals_text: String,
+    /// At most two texts you had before, newest first, as `[prompt]`
+    /// keeps `previous_templates`, so a reset never loses one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vitals_text_previous: Vec<String>,
     /// Where the old status bar drew the moons. The status line places
     /// them itself, so nothing reads this. Every save writes back the
     /// value it loaded, so 0.7.2 keeps it on a downgrade (D12, D14).
@@ -930,6 +981,14 @@ impl Default for UiConfig {
             vitals_meter: default_vitals_meter(),
             vitals_warn_thirds: false,
             vitals_hide_when_pinned: true,
+            vitals_style: None,
+            vitals_place: default_vitals_place(),
+            vitals_order: default_vitals_order(),
+            vitals_off: Vec::new(),
+            vitals_opponent: default_vitals_opponent(),
+            vitals_colors: BTreeMap::new(),
+            vitals_text: String::new(),
+            vitals_text_previous: Vec::new(),
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),
@@ -1059,6 +1118,166 @@ pub(crate) fn coerce_vitals_meter(value: String) -> String {
     } else {
         default_vitals_meter()
     }
+}
+
+/// The vitals styles the gallery adds to Rows and One line. Anything
+/// else saves as None, which draws `vitals_density`.
+pub(crate) const VITALS_STYLES: [&str; 4] = ["ledger", "gauges", "pips", "text"];
+
+/// Keep a known style and turn anything else into None.
+pub(crate) fn coerce_vitals_style(value: Option<String>) -> Option<String> {
+    value.filter(|style| VITALS_STYLES.contains(&style.as_str()))
+}
+
+/// The places your vitals show. Anything else saves as the default.
+pub(crate) const VITALS_PLACES: [&str; 2] = ["panel", "status"];
+
+fn default_vitals_place() -> String {
+    "panel".to_string()
+}
+
+fn is_default_vitals_place(value: &str) -> bool {
+    value == "panel"
+}
+
+/// Keep a known place and turn anything else into `panel`.
+pub(crate) fn coerce_vitals_place(value: String) -> String {
+    if VITALS_PLACES.contains(&value.as_str()) {
+        value
+    } else {
+        default_vitals_place()
+    }
+}
+
+/// Your vitals in today's order, which `vitals_order` defaults to.
+pub(crate) const VITALS: [&str; 3] = ["hp", "mana", "move"];
+
+fn default_vitals_order() -> Vec<String> {
+    VITALS.map(String::from).to_vec()
+}
+
+fn is_default_vitals_order(order: &[String]) -> bool {
+    order.iter().map(String::as_str).eq(VITALS)
+}
+
+/// Keep each known vital once, in the order given, and add any it is
+/// missing after them in today's order.
+pub(crate) fn coerce_vitals_order(order: Vec<String>) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::with_capacity(VITALS.len());
+    for vital in order.into_iter().chain(default_vitals_order()) {
+        if VITALS.contains(&vital.as_str()) && !kept.contains(&vital) {
+            kept.push(vital);
+        }
+    }
+    kept
+}
+
+/// What `vitals_off` can hold: each vital, and your opponent's row.
+pub(crate) const VITALS_OFF: [&str; 4] = ["hp", "mana", "move", "opponent"];
+
+/// Keep each known name once, in the order of [`VITALS_OFF`], so the
+/// same set always saves the same way.
+pub(crate) fn coerce_vitals_off(off: Vec<String>) -> Vec<String> {
+    VITALS_OFF
+        .iter()
+        .filter(|name| off.iter().any(|o| o == *name))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+/// The places your opponent's row takes. Anything else saves as the
+/// default.
+pub(crate) const VITALS_OPPONENT_PLACES: [&str; 2] = ["top", "bottom"];
+
+fn default_vitals_opponent() -> String {
+    "top".to_string()
+}
+
+fn is_default_vitals_opponent(value: &str) -> bool {
+    value == "top"
+}
+
+/// Keep a known place for your opponent and turn anything else into
+/// `top`.
+pub(crate) fn coerce_vitals_opponent(value: String) -> String {
+    if VITALS_OPPONENT_PLACES.contains(&value.as_str()) {
+        value
+    } else {
+        default_vitals_opponent()
+    }
+}
+
+/// The last ANSI slot a vital's color can take.
+const VITALS_COLOR_SLOT_MAX: u8 = 15;
+
+/// Keep the colors of known vitals that name a slot from 0 to 15, and
+/// drop the rest, which then take Default.
+pub(crate) fn coerce_vitals_colors(colors: BTreeMap<String, i64>) -> BTreeMap<String, u8> {
+    colors
+        .into_iter()
+        .filter(|(vital, _)| VITALS.contains(&vital.as_str()))
+        .filter_map(|(vital, slot)| {
+            let slot = u8::try_from(slot)
+                .ok()
+                .filter(|s| *s <= VITALS_COLOR_SLOT_MAX)?;
+            Some((vital, slot))
+        })
+        .collect()
+}
+
+/// Read the vitals colors leniently, so a hand edit never stops a
+/// profile loading. A value that is not a whole number drops that vital,
+/// as a slot past 15 does.
+pub(crate) fn deserialize_vitals_colors<'de, D>(deser: D) -> Result<BTreeMap<String, u8>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Whole(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    let raw = BTreeMap::<String, Raw>::deserialize(deser)?;
+    Ok(coerce_vitals_colors(
+        raw.into_iter()
+            .filter_map(|(vital, slot)| match slot {
+                Raw::Whole(slot) => Some((vital, slot)),
+                Raw::Other(_) => None,
+            })
+            .collect(),
+    ))
+}
+
+/// How many earlier texts `vitals_text_previous` keeps.
+pub(crate) const VITALS_TEXT_PREVIOUS: usize = 2;
+
+/// Drop blank and repeated texts and keep the newest two.
+pub(crate) fn normalize_vitals_text_previous(texts: Vec<String>) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::with_capacity(VITALS_TEXT_PREVIOUS);
+    for text in texts {
+        if kept.len() == VITALS_TEXT_PREVIOUS {
+            break;
+        }
+        if !text.is_empty() && !kept.contains(&text) {
+            kept.push(text);
+        }
+    }
+    kept
+}
+
+/// Write a new vitals text and put the one it replaces first among the
+/// earlier texts, so you can take it back. A blank text is never kept,
+/// and the new text leaves the earlier ones, since it is no longer
+/// earlier.
+pub(crate) fn replace_vitals_text(ui: &mut UiConfig, text: String) {
+    let replaced = std::mem::replace(&mut ui.vitals_text, text);
+    let mut previous = std::mem::take(&mut ui.vitals_text_previous);
+    previous.retain(|earlier| *earlier != ui.vitals_text);
+    if replaced != ui.vitals_text {
+        previous.insert(0, replaced);
+    }
+    ui.vitals_text_previous = normalize_vitals_text_previous(previous);
 }
 
 fn default_font_family() -> String {
@@ -1353,6 +1572,137 @@ name = "haste"
             text.contains(r#"panel_font = "\"Iosevka\", Menlo, monospace""#),
             "{text}"
         );
+    }
+
+    #[test]
+    fn the_vitals_styles_keys_round_trip_and_stay_out_of_the_file_until_you_pick() {
+        // Nothing picked writes none of the eight keys, so every file
+        // saved before them keeps its bytes, and a file without them
+        // reads the defaults.
+        let written = ProfileConfig::default().to_toml().unwrap();
+        for key in [
+            "vitals_style",
+            "vitals_place",
+            "vitals_order",
+            "vitals_off",
+            "vitals_opponent",
+            "vitals_colors",
+            "vitals_text",
+        ] {
+            assert!(!written.contains(key), "{key}: {written}");
+        }
+        let old = ProfileConfig::from_toml("[ui]\nvitals_density = \"line\"\n").unwrap();
+        let fresh = UiConfig::default();
+        assert_eq!(old.ui.vitals_style, None);
+        assert_eq!(old.ui.vitals_place, "panel");
+        assert_eq!(old.ui.vitals_order, ["hp", "mana", "move"]);
+        assert_eq!(old.ui.vitals_off, Vec::<String>::new());
+        assert_eq!(old.ui.vitals_opponent, "top");
+        assert!(old.ui.vitals_colors.is_empty());
+        assert_eq!(old.ui.vitals_text, "");
+        assert_eq!(old.ui.vitals_text_previous, Vec::<String>::new());
+        assert_eq!(through_toml(&fresh).vitals_order, fresh.vitals_order);
+
+        let ui = UiConfig {
+            vitals_style: Some("pips".into()),
+            vitals_place: "status".into(),
+            vitals_order: vec!["move".into(), "hp".into(), "mana".into()],
+            vitals_off: vec!["mana".into(), "opponent".into()],
+            vitals_opponent: "bottom".into(),
+            vitals_colors: BTreeMap::from([("hp".into(), 1), ("mana".into(), 12)]),
+            vitals_text: "%hp/%maxhp %mn/%maxmn %mv/%maxmv".into(),
+            vitals_text_previous: vec!["%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v".into()],
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert_eq!(back.vitals_style, ui.vitals_style);
+        assert_eq!(back.vitals_place, ui.vitals_place);
+        assert_eq!(back.vitals_order, ui.vitals_order);
+        assert_eq!(back.vitals_off, ui.vitals_off);
+        assert_eq!(back.vitals_opponent, ui.vitals_opponent);
+        assert_eq!(back.vitals_colors, ui.vitals_colors);
+        assert_eq!(back.vitals_text, ui.vitals_text);
+        assert_eq!(back.vitals_text_previous, ui.vitals_text_previous);
+    }
+
+    #[test]
+    fn junk_in_the_vitals_styles_keys_saves_as_something_vosh_draws() {
+        let strings = |list: &[&str]| list.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        for style in VITALS_STYLES {
+            assert_eq!(
+                coerce_vitals_style(Some(style.into())).as_deref(),
+                Some(style)
+            );
+        }
+        // Rows and One line live in vitals_density, so they are no style.
+        for junk in ["rows", "line", "Gauges", ""] {
+            assert_eq!(coerce_vitals_style(Some(junk.into())), None, "{junk}");
+        }
+        assert_eq!(coerce_vitals_style(None), None);
+
+        assert_eq!(coerce_vitals_place("status".into()), "status");
+        assert_eq!(coerce_vitals_place("footer".into()), "panel");
+        assert_eq!(coerce_vitals_opponent("bottom".into()), "bottom");
+        assert_eq!(coerce_vitals_opponent("middle".into()), "top");
+
+        // Known vitals once each, in your order, then any missing.
+        assert_eq!(
+            coerce_vitals_order(strings(&["move", "move", "tp", "hp"])),
+            ["move", "hp", "mana"]
+        );
+        assert_eq!(coerce_vitals_order(Vec::new()), ["hp", "mana", "move"]);
+
+        assert_eq!(
+            coerce_vitals_off(strings(&["opponent", "move", "move", "tp"])),
+            ["move", "opponent"]
+        );
+
+        let colors = BTreeMap::from([
+            ("hp".to_string(), 0),
+            ("mana".to_string(), 15),
+            ("move".to_string(), 16),
+            ("opponent".to_string(), 3),
+        ]);
+        assert_eq!(
+            coerce_vitals_colors(colors),
+            BTreeMap::from([("hp".to_string(), 0), ("mana".to_string(), 15)])
+        );
+        assert!(coerce_vitals_colors(BTreeMap::from([("hp".to_string(), -1)])).is_empty());
+
+        // A hand edit that holds no slot drops that vital and loads.
+        let toml = "[ui.vitals_colors]\nhp = \"red\"\nmana = 99\nmove = 6\n";
+        let ui = ProfileConfig::from_toml(toml).unwrap().ui;
+        assert_eq!(ui.vitals_colors, BTreeMap::from([("move".to_string(), 6)]));
+
+        assert_eq!(
+            normalize_vitals_text_previous(strings(&["", "a", "a", "b", "c"])),
+            ["a", "b"]
+        );
+    }
+
+    #[test]
+    fn a_new_vitals_text_keeps_the_one_it_replaces() {
+        let mut ui = UiConfig::default();
+        // Nothing to keep the first time.
+        replace_vitals_text(&mut ui, "a".into());
+        assert_eq!(ui.vitals_text_previous, Vec::<String>::new());
+        replace_vitals_text(&mut ui, "b".into());
+        assert_eq!(ui.vitals_text_previous, ["a"]);
+        replace_vitals_text(&mut ui, "c".into());
+        assert_eq!(ui.vitals_text_previous, ["b", "a"]);
+        // Two kept, newest first.
+        replace_vitals_text(&mut ui, "d".into());
+        assert_eq!(ui.vitals_text_previous, ["c", "b"]);
+        // The same text again changes nothing.
+        replace_vitals_text(&mut ui, "d".into());
+        assert_eq!(ui.vitals_text_previous, ["c", "b"]);
+        // Taking an earlier one back moves it out, with no repeats.
+        replace_vitals_text(&mut ui, "b".into());
+        assert_eq!(ui.vitals_text, "b");
+        assert_eq!(ui.vitals_text_previous, ["d", "c"]);
+        // Clearing keeps what you had.
+        replace_vitals_text(&mut ui, String::new());
+        assert_eq!(ui.vitals_text_previous, ["b", "d"]);
     }
 
     #[test]

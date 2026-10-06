@@ -135,6 +135,97 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
   return value === 'bar' || value === 'none' ? value : 'line';
 }
 
+/** The vitals styles the gallery adds to Rows and One line, which stay
+ *  in vitals_density. Null draws the density. */
+export const VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
+
+export type VitalsStyle = (typeof VITALS_STYLES)[number];
+
+/** Coerce an unknown vitals style back to null. */
+export function normalizeVitalsStyle(value: unknown): VitalsStyle | null {
+  return VITALS_STYLES.find((style) => style === value) ?? null;
+}
+
+/** Where your vitals show, under the panel's panes or in the status
+ *  line. */
+export const VITALS_PLACES = ['panel', 'status'] as const;
+
+export type VitalsPlace = (typeof VITALS_PLACES)[number];
+
+/** Coerce an unknown place back to the panel. */
+export function normalizeVitalsPlace(value: unknown): VitalsPlace {
+  return value === 'status' ? 'status' : 'panel';
+}
+
+/** Your vitals in today's order. */
+export const VITALS = ['hp', 'mana', 'move'] as const;
+
+export type Vital = (typeof VITALS)[number];
+
+/** Keep each known vital once, in the order given, and add any missing
+ *  after them in today's order. */
+export function normalizeVitalsOrder(value: unknown): Vital[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  const kept: Vital[] = [];
+  for (const name of [...given, ...VITALS]) {
+    const vital = VITALS.find((v) => v === name);
+    if (vital && !kept.includes(vital)) kept.push(vital);
+  }
+  return kept;
+}
+
+/** What vitals_off can hold, each vital and your opponent's row. */
+export const VITALS_OFF = [...VITALS, 'opponent'] as const;
+
+export type VitalOff = (typeof VITALS_OFF)[number];
+
+/** Keep each known name once, in the order of VITALS_OFF. */
+export function normalizeVitalsOff(value: unknown): VitalOff[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  return VITALS_OFF.filter((name) => given.includes(name));
+}
+
+/** Where your opponent's row sits in a fight. */
+export const VITALS_OPPONENT_PLACES = ['top', 'bottom'] as const;
+
+export type VitalsOpponent = (typeof VITALS_OPPONENT_PLACES)[number];
+
+/** Coerce an unknown opponent place back to the top. */
+export function normalizeVitalsOpponent(value: unknown): VitalsOpponent {
+  return value === 'bottom' ? 'bottom' : 'top';
+}
+
+/** Each vital's color as an ANSI slot from 0 to 15. A vital left out
+ *  takes Default. */
+export type VitalsColors = Partial<Record<Vital, number>>;
+
+/** Keep the colors of known vitals that name a slot from 0 to 15. */
+export function normalizeVitalsColors(value: unknown): VitalsColors {
+  const given = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const colors: VitalsColors = {};
+  for (const vital of VITALS) {
+    const slot = given[vital];
+    if (typeof slot === 'number' && Number.isInteger(slot) && slot >= 0 && slot <= 15) {
+      colors[vital] = slot;
+    }
+  }
+  return colors;
+}
+
+/** How many earlier vitals texts Vosh keeps. */
+const VITALS_TEXT_PREVIOUS = 2;
+
+/** Drop blank and repeated texts and keep the newest two. */
+export function normalizeVitalsTextPrevious(value: unknown): string[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  const kept: string[] = [];
+  for (const text of given) {
+    if (kept.length === VITALS_TEXT_PREVIOUS) break;
+    if (typeof text === 'string' && text.length > 0 && !kept.includes(text)) kept.push(text);
+  }
+  return kept;
+}
+
 /** The vitals rows that join Density under Layout, Vitals, as one
  *  event payload. The panel footer reads the first three, and the panel
  *  reads the last to drop the footer. The status line reads the values
@@ -287,6 +378,24 @@ export interface UiConfig {
   /** Hide the panel's vitals while your prompt is pinned, so the panes
    *  take their room. On unless you turn it off. */
   vitals_hide_when_pinned: boolean;
+  /** The style you picked from the gallery, or null for Rows and One
+   *  line, which vitals_density holds. */
+  vitals_style: VitalsStyle | null;
+  /** Where your vitals show, one of VITALS_PLACES. */
+  vitals_place: VitalsPlace;
+  /** The order every style draws your vitals in. */
+  vitals_order: Vital[];
+  /** The vitals you turned off, and `opponent` for your opponent's row. */
+  vitals_off: VitalOff[];
+  /** Where your opponent's row sits, one of VITALS_OPPONENT_PLACES. */
+  vitals_opponent: VitalsOpponent;
+  /** Each vital's ANSI slot. A vital left out takes Default. */
+  vitals_colors: VitalsColors;
+  /** The text the Text style writes your vitals with. */
+  vitals_text: string;
+  /** At most two earlier texts, newest first. Saving vitals_text puts
+   *  the one it replaces here. */
+  vitals_text_previous: string[];
   /** How the status line draws the tick, the game time, and the moons.
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
@@ -397,6 +506,14 @@ export interface RawUiConfig {
   vitals_meter?: string;
   vitals_warn_thirds?: boolean;
   vitals_hide_when_pinned?: boolean;
+  vitals_style?: string | null;
+  vitals_place?: string;
+  vitals_order?: unknown;
+  vitals_off?: unknown;
+  vitals_opponent?: string;
+  vitals_colors?: unknown;
+  vitals_text?: string;
+  vitals_text_previous?: unknown;
   chip_style?: string;
   tick_count?: string;
   game_time?: string;
@@ -505,6 +622,14 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
     vitals_warn_thirds: cfg.vitals_warn_thirds === true,
     vitals_hide_when_pinned: cfg.vitals_hide_when_pinned !== false,
+    vitals_style: normalizeVitalsStyle(cfg.vitals_style),
+    vitals_place: normalizeVitalsPlace(cfg.vitals_place),
+    vitals_order: normalizeVitalsOrder(cfg.vitals_order),
+    vitals_off: normalizeVitalsOff(cfg.vitals_off),
+    vitals_opponent: normalizeVitalsOpponent(cfg.vitals_opponent),
+    vitals_colors: normalizeVitalsColors(cfg.vitals_colors),
+    vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
+    vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
