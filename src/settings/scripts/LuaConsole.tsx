@@ -1,13 +1,19 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { luaOutputClear, luaRun, type LuaKind, type LuaLine } from '../../ipc/scripts';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { luaOutputClear, luaRun, pluginOwner, type LuaKind, type LuaLine } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
 import { Button, Field, Section, cx } from '../../ui';
 import { clockTime } from './clockTime';
+import { noPluginLines } from './pluginState';
 
 // The Console section of Scripts (boards 2 and 4). Every [lua] line the
 // selected session printed, whoever's Lua it is about, so loose scripts
 // and #lua lines show beside your plugins, each with its local time.
 // The field under them runs Lua there as a #lua line does.
+//
+// A plugin's page draws the same section as its Output (boards 1 and
+// 3), with only that plugin's lines. Clear there lets go of those
+// alone, and the field runs Lua inside the plugin, where it sees the
+// plugin's globals and its own mud table.
 
 /** The well's note before any line. */
 export const NO_LUA_LINES =
@@ -23,12 +29,15 @@ const KIND_CLASS: Readonly<Record<LuaKind, string | undefined>> = {
 
 interface Props {
   lines: LuaLine[];
+  /** The plugin whose Output this is, on its page, which `lines` holds
+   *  the lines of. Left out, this is the Console of the Scripts list. */
+  plugin?: string;
   /** Let go of the page's lines once Clear empties the session's. */
   onCleared: () => void;
   onError: (message: string | null) => void;
 }
 
-export function LuaConsole({ lines, onCleared, onError }: Props) {
+export function LuaConsole({ lines, plugin, onCleared, onError }: Props) {
   const [code, setCode] = useState('');
   const listRef = useRef<HTMLOListElement | null>(null);
   // Whether the list shows its newest line, so a new one scrolls into
@@ -42,8 +51,22 @@ export function LuaConsole({ lines, onCleared, onError }: Props) {
     else if (atEnd.current) list.scrollTop = list.scrollHeight;
   }, [lines]);
 
+  // The well of a plugin's Output takes what the page leaves, so it
+  // shrinks as the editor above it draws and as the window does. The
+  // newest line stays in view through that too.
+  const empty = lines.length === 0;
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (atEnd.current) list.scrollTop = list.scrollHeight;
+    });
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [empty]);
+
   const clear = () => {
-    luaOutputClear()
+    luaOutputClear(plugin === undefined ? undefined : pluginOwner(plugin))
       .then(() => {
         onCleared();
         onError(null);
@@ -56,7 +79,7 @@ export function LuaConsole({ lines, onCleared, onError }: Props) {
   const run = () => {
     const sent = code;
     if (sent.trim() === '') return;
-    luaRun(sent)
+    luaRun(sent, plugin)
       .then(() => {
         setCode((now) => (now === sent ? '' : now));
         onError(null);
@@ -64,11 +87,11 @@ export function LuaConsole({ lines, onCleared, onError }: Props) {
       .catch((e: unknown) => onError(errorText(e)));
   };
 
-  const empty = lines.length === 0;
+  const prompt = plugin === undefined ? 'Run Lua' : `Run Lua in ${plugin}`;
   return (
     <Section
-      title="Console"
-      id="console"
+      title={plugin === undefined ? 'Console' : 'Output'}
+      {...(plugin === undefined ? { id: 'console' } : { className: 'st-plugin-output' })}
       card={false}
       actions={
         <Button className="st-auto-quiet" disabled={empty} onClick={clear}>
@@ -78,7 +101,9 @@ export function LuaConsole({ lines, onCleared, onError }: Props) {
     >
       <div className={cx('st-lua-out', empty && 'is-empty')}>
         {empty ? (
-          <p className="st-lua-empty">{NO_LUA_LINES}</p>
+          <p className="st-lua-empty">
+            {plugin === undefined ? NO_LUA_LINES : noPluginLines(plugin)}
+          </p>
         ) : (
           <ol
             ref={listRef}
@@ -113,8 +138,8 @@ export function LuaConsole({ lines, onCleared, onError }: Props) {
             width="100%"
             value={code}
             onChange={setCode}
-            placeholder="Run Lua"
-            aria-label="Run Lua"
+            placeholder={prompt}
+            aria-label={prompt}
             onKeyDown={(e) => {
               if (e.key !== 'Enter') return;
               e.preventDefault();

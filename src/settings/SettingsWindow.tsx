@@ -25,6 +25,7 @@ import { customToAppTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
 import { isMacPlatform } from '../lib/shortcuts';
 import {
+  leavesSettingsPage,
   resolveSettingsTarget,
   settingsGroupLabel,
   settingsScrollIds,
@@ -119,29 +120,30 @@ export function SettingsWindow() {
   const [error, setError] = useState<string | null>(null);
   const [pathB, setPathB] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const groupRef = useRef(nav.target.group);
+  const targetRef = useRef(nav.target);
   const leaveGuardRef = useRef<LeaveGuard | null>(null);
   const setLeaveGuard = useCallback((guard: LeaveGuard | null) => {
     leaveGuardRef.current = guard;
   }, []);
 
   useEffect(() => {
-    groupRef.current = nav.target.group;
+    targetRef.current = nav.target;
   }, [nav]);
 
   // Closing the window, and quitting, send every write still waiting,
   // the field you are typing in included.
   useSettingsClose();
 
-  // A page with unsaved changes can hold a move to another group until
-  // you answer its question. A move inside the group is the page's own.
+  // A page with unsaved changes can hold a move to another group, or to
+  // another page inside its group, until you answer its question. Any
+  // other move inside the page is the page's own.
   const go = useCallback((target: SettingsTarget) => {
     const move = () => {
       setError(null);
       setNav((prev) => ({ target, seq: prev.seq + 1 }));
     };
     const guard = leaveGuardRef.current;
-    if (guard && target.group !== groupRef.current && guard(move)) return;
+    if (guard && leavesSettingsPage(targetRef.current, target) && guard(move)) return;
     move();
   }, []);
 

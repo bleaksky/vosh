@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatSettingsTarget,
+  leavesSettingsPage,
   resolveSettingsTarget,
   settingsGroupLabel,
   settingsScrollIds,
@@ -138,6 +139,24 @@ describe('a plugin page under Scripts', () => {
     expect(settingsGroupLabel('scripts')).toBe('Scripts');
     expect(settingsSubpage({ group: 'scripts' })).toBeNull();
     expect(formatSettingsTarget({ group: 'scripts' })).toBe('scripts');
+  });
+
+  it('leaves the page for the list, another plugin or another group', () => {
+    const page = { group: 'scripts', section: 'wait_full' } as const;
+    // The crumb back to Scripts asks a dirty plugin page first.
+    expect(leavesSettingsPage(page, { group: 'scripts' })).toBe(true);
+    expect(leavesSettingsPage(page, { group: 'scripts', section: 'vitals_alert' })).toBe(true);
+    expect(leavesSettingsPage(page, { group: 'automation' })).toBe(true);
+    // A second press of the same link stays.
+    expect(leavesSettingsPage(page, { group: 'scripts', section: 'wait_full' })).toBe(false);
+    // A move inside a group with no page in it stays on the page, so
+    // Automation asks about its kinds itself.
+    expect(
+      leavesSettingsPage(
+        { group: 'automation', section: 'triggers' },
+        { group: 'automation', section: 'aliases' },
+      ),
+    ).toBe(false);
   });
 
   it('never scrolls to the plugin', () => {

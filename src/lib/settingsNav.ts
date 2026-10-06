@@ -76,6 +76,14 @@ export function settingsSubpage(target: SettingsTarget): string | null {
   return SETTINGS_SUBPAGES[target.group]?.[target.section] ?? null;
 }
 
+/** Whether a move from `from` to `to` leaves the page you are on: to
+ *  another group, or to another page inside the group, like the Scripts
+ *  list from a plugin's page. A page with unsaved changes asks before
+ *  such a move. */
+export function leavesSettingsPage(from: SettingsTarget, to: SettingsTarget): boolean {
+  return from.group !== to.group || settingsSubpage(from) !== settingsSubpage(to);
+}
+
 // The tab ids the old Settings window used, from the palette, the pane
 // menu, and any pending tab left over from an older build.
 const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {

@@ -11,7 +11,7 @@ A page is the component its folder is named for, like `layout/LayoutPage.tsx`, a
 - `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Never keep a second copy of the config, since every page shows this one and each save reads what a field held from it.
 - `pathB` is true in loadout mode.
 - `navigate(target)` goes somewhere else in Settings.
-- `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation uses it to ask before it drops unsaved changes. Clear it with null when the page unmounts.
+- `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group, or to another page inside the group, like the crumb back to Scripts from a plugin's page. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation and a plugin's page use it to ask before they drop unsaved changes. Clear it with null when the page unmounts.
 
 Register a page in `PAGES` in `SettingsWindow.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there. `selfScroll` can also be a function of the target, for a group where only some targets scroll on their own.
 
@@ -21,7 +21,7 @@ A page that saves as you go takes `update` from `useSettingsAutoSave`, beside th
 
 `characters/CharactersPage.tsx` is the Characters board and `appearance/AppearancePage.tsx` the Appearance board, each with its parts beside it. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `automation/AutomationPage.tsx` is the Automation board, described under Automation below.
 
-`scripts/ScriptsPage.tsx` is the list page of the Scripts boards, your plugins in `scripts/PluginList.tsx` and the Console in `scripts/LuaConsole.tsx`. It reads the plugins and the Lua lines as it opens and keeps them itself, following `vosh://plugins-changed`, `vosh://profile-switched` and `session://lua-output`.
+`scripts/ScriptsPage.tsx` is the list page of the Scripts boards, your plugins in `scripts/PluginList.tsx` and the Console in `scripts/LuaConsole.tsx`. It reads the plugins and the Lua lines as it opens and keeps them itself, following `vosh://plugins-changed`, `vosh://profile-switched` and `session://lua-output`. New plugin opens `scripts/NewPluginDialog.tsx`, and a press on a row opens the plugin's page, `scripts/PluginPage.tsx`. That page edits a draft of the file the plugin runs first in the page surface of `CodeEditor` and of its manifest in `scripts/ManifestCard.tsx`, shows its stop note and its Output, the Console section with that plugin's lines, and saves through `plugin_save`. What it says about the plugin, the stop note, the line its newest error marks and the save bar's time, comes from `scripts/pluginState.ts`.
 
 `general/GeneralPage.tsx` is the General board, with the session log view in `general/SessionLogs.tsx`. `input/InputPage.tsx` and `layout/LayoutPage.tsx` are the Input and Layout boards. Layout's Status line section holds `layout/TickTimeStyleRow.tsx`, the Tick and time row, and under it `layout/TickCountRow.tsx`, the Tick counts row.
 
