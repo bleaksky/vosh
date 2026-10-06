@@ -191,18 +191,26 @@ impl AppState {
         self.sessions().profile(name)
     }
 
-    /// The profile a Settings command edits, locked: the open profile
-    /// `profile` names, or the selected session's when it names none. A
-    /// name no session plays is an error, in a sentence. It finds the
-    /// profile in the session map, so take it before any other lock.
-    pub(crate) async fn lock_named(&self, profile: Option<String>) -> Result<ProfileGuard, String> {
+    /// The profile a Settings command edits: the open profile `profile`
+    /// names, or the selected session's when it names none. A name no
+    /// session plays is an error, in a sentence. It finds the profile in
+    /// the session map, so take it before any other lock. A command that
+    /// takes the loadouts before the profile finds it here first.
+    pub(crate) fn edited_profile(&self, profile: Option<String>) -> Result<EditedProfile, String> {
         match profile {
-            None => Ok(self.selected_session().lock_profile().await),
-            Some(name) => match self.open_profile(&name) {
-                Some(open) => Ok(open.lock().await),
-                None => Err(format!("No session plays the profile {name}.")),
-            },
+            None => Ok(EditedProfile::Selected(self.selected_session())),
+            Some(name) => self
+                .open_profile(&name)
+                .map(EditedProfile::Named)
+                .ok_or_else(|| format!("No session plays the profile {name}.")),
         }
+    }
+
+    /// The profile a Settings command edits, see
+    /// [`AppState::edited_profile`], locked. Take it before any other
+    /// lock.
+    pub(crate) async fn lock_named(&self, profile: Option<String>) -> Result<ProfileGuard, String> {
+        Ok(self.edited_profile(profile)?.lock().await)
     }
 
     /// Keep `profile`, named `name`, open for a session to play, see
@@ -354,6 +362,27 @@ impl AppState {
     /// Read the panes generation. Call with the profile lock held.
     pub(crate) fn panes_generation(&self) -> u64 {
         self.panes_generation.load(Ordering::Acquire)
+    }
+}
+
+/// The profile a Settings command edits, as the session map found it
+/// before the command took any other lock, see
+/// [`AppState::edited_profile`].
+pub(crate) enum EditedProfile {
+    /// The selected session's. The lock reads which profile the session
+    /// plays, since a switch may move it first.
+    Selected(Arc<Session>),
+    /// The open profile the command named.
+    Named(Arc<OpenProfile>),
+}
+
+impl EditedProfile {
+    /// Lock the profile.
+    pub(crate) async fn lock(&self) -> ProfileGuard {
+        match self {
+            Self::Selected(session) => session.lock_profile().await,
+            Self::Named(open) => open.lock().await,
+        }
     }
 }
 
