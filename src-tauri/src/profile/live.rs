@@ -131,8 +131,8 @@ pub(crate) struct Macro {
     )]
     pub(crate) enabled: bool,
     /// The id of the preset that added this macro, None for one of yours.
-    /// A preset macro on a key one of yours uses waits with `enabled`
-    /// false, see [`hold_taken_keys`]. Left out of the file while None,
+    /// A preset macro on a key one of yours uses is held off with
+    /// `enabled` false, see [`hold_taken_keys`]. Left out of the file while None,
     /// and 0.8.1 skips the key, so it still reads the file.
     ///
     /// [`hold_taken_keys`]: crate::loadouts::presets::hold_taken_keys

@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { countPhrase, draftValues } from '../../automation/automationDraft';
 import { searchText } from '../../automation/automationList';
 import {
-  keysYoursHold,
-  keysYoursHoldNote,
+  keptKeyNote,
+  keysYourMacrosKeep,
   presetSavePlan,
   presetToggles,
   storedPresetIds,
@@ -124,22 +124,22 @@ export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
  *  ring and a note closes the card. The note shows with the preset on or
  *  off, since it is true either way. */
 function PresetKeys({ preset }: { preset: Preset }) {
-  const held = new Set(keysYoursHold(preset, useMacroList()));
+  const kept = new Set(keysYourMacrosKeep(preset, useMacroList()));
   const binds = preset.macros ?? [];
-  const waiting = binds.filter((m) => held.has(m.key));
+  const held = binds.filter((m) => kept.has(m.key));
   return (
     <>
       <Row label="Keys">
         <div className="st-auto-keys" role="group" aria-label="Keys this preset binds">
           {binds.map((m) => (
-            <span key={m.key} className={cx('st-auto-keypair', held.has(m.key) && 'is-warn')}>
+            <span key={m.key} className={cx('st-auto-keypair', kept.has(m.key) && 'is-warn')}>
               <Keycap>{m.key.replace(/^Numpad/, '')}</Keycap>
               <span className="st-auto-keysend">{m.command}</span>
             </span>
           ))}
         </div>
       </Row>
-      {waiting.length > 0 && <CardNote tone="warn">{keysYoursHoldNote(waiting)}</CardNote>}
+      {held.length > 0 && <CardNote tone="warn">{keptKeyNote(held)}</CardNote>}
     </>
   );
 }

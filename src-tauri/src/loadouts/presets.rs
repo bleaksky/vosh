@@ -238,7 +238,7 @@ pub(crate) fn install_preset_triggers(
 /// those presets and adds `macros` in the order given, which for Numpad
 /// movement is the game's n e s w u d (Scripts board 7). A macro keeps
 /// the group you put it in, as a preset trigger does, and one on a key of
-/// yours waits off, see [`hold_taken_keys`]. Returns the number
+/// yours is held off, see [`hold_taken_keys`]. Returns the number
 /// installed.
 ///
 /// [`presets_install`]: crate::ipc::automation::presets_install
@@ -281,8 +281,8 @@ pub(crate) fn remove_preset_macros(p: &mut Profile, preset: &str) -> usize {
 }
 
 /// The body of [`macros_set`] over the live profile `p`. It finds and
-/// adds only your macros, so a key a preset macro holds too never
-/// overwrites either one. A preset macro takes only its group from you,
+/// adds only your macros, so your macro and a preset macro on one key
+/// never overwrite each other. A preset macro takes only its group from you,
 /// as a preset trigger does (Scripts Q13).
 ///
 /// [`macros_set`]: crate::ipc::automation::macros_set
@@ -308,12 +308,12 @@ pub(crate) fn set_macro(
         .map(|g| g.trim().to_string())
         .filter(|g| !g.is_empty());
     if let Some(preset) = preset {
-        let held = p
+        let theirs = p
             .macros
             .iter_mut()
             .find(|m| m.preset.as_deref() == Some(preset) && m.key == key)
             .ok_or_else(|| format!("That preset has no macro on {key} now."))?;
-        held.group = group;
+        theirs.group = group;
     } else if let Some(existing) = p
         .macros
         .iter_mut()
@@ -745,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn a_preset_macro_on_your_key_waits_until_your_macro_moves_or_goes() {
+    fn a_preset_macro_on_your_key_is_held_until_your_macro_moves_or_goes() {
         let mut p = Profile::default();
         p.macros.push(yours("Numpad3", "rec"));
         install_preset_macros(&mut p, numpad()).unwrap();
@@ -760,7 +760,7 @@ mod tests {
         assert_eq!(off, [("Numpad3", "rec"), ("Numpad3", "d")]);
 
         // Settings moves yours to Numpad8 as an unbind, then a bind. d
-        // takes Numpad3 back and n waits.
+        // takes Numpad3 back and n is held off.
         delete_macro(&mut p, "Numpad3");
         set_macro(&mut p, "Numpad8", "rec", None, Some(true), None).unwrap();
         let [on, off] = on_and_off(&p);
@@ -814,7 +814,7 @@ mod tests {
             enabled: true,
             preset: Some("numpad_movement".into()),
         });
-        // Yours joins beside the preset's d, which waits off.
+        // Yours joins beside the preset's d, which is held off.
         set_macro(&mut p, "Numpad3", "rec", None, None, None).unwrap();
         assert_eq!(
             macro_rows(&p),

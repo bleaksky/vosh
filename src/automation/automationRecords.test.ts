@@ -25,7 +25,7 @@ import {
   formatInterval,
   importErrorMessage,
   jsonListText,
-  keysYoursHold,
+  keysYourMacrosKeep,
   loadoutToggles,
   macroSavePlan,
   normalizeAlias,
@@ -701,19 +701,19 @@ describe('presets', () => {
     const numpad = presetById('numpad_movement');
     if (!numpad) throw new Error('no numpad_movement preset');
     const theirs = { key: 'Numpad8', command: 'n', preset: 'numpad_movement' };
-    expect(keysYoursHold(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
+    expect(keysYourMacrosKeep(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
     // Yours keeps a key while it is on, off or in a group.
     expect(
-      keysYoursHold(numpad, [
+      keysYourMacrosKeep(numpad, [
         { key: 'Numpad3', command: 'rec', enabled: false },
         { key: 'Numpad9', command: 'gate', group: 'travel' },
         theirs,
       ]),
     ).toEqual(['Numpad9', 'Numpad3']);
-    // A preset with no macros holds no key.
+    // A preset with no macros wants no key.
     const heals = presetById('healing_basics');
     if (!heals) throw new Error('no healing_basics preset');
-    expect(keysYoursHold(heals, [{ key: 'Numpad3', command: 'rec' }])).toEqual([]);
+    expect(keysYourMacrosKeep(heals, [{ key: 'Numpad3', command: 'rec' }])).toEqual([]);
   });
 });
 
