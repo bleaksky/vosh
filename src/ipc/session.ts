@@ -124,6 +124,17 @@ export interface ConnectionTarget {
   tls: boolean;
 }
 
+/** Keep where a session dials, without dialing. Its row names that
+ *  world from then on. */
+export async function setSessionAddress(session: number, target: ConnectionTarget): Promise<void> {
+  await invoke('session_set_address', {
+    session,
+    host: target.host,
+    port: target.port,
+    tls: target.tls,
+  });
+}
+
 /** Dial `host` in a session, the selected one when it names none. */
 export async function connectSession(
   host: string,
