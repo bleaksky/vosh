@@ -19,6 +19,7 @@ import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
+import { SessionSidebar } from './SessionSidebar';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
@@ -51,6 +52,7 @@ import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { openSettingsTab } from '../lib/settingsLink';
+import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
@@ -58,8 +60,10 @@ import { noteConnectionError } from '../stores/session/connectionStore';
 import {
   getSelected,
   othersOnProfile,
+  select,
   useOpened,
   useSelected,
+  useSessions,
 } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useEscape } from '../lib/escapeStack';
@@ -103,6 +107,12 @@ function MainWindow() {
   // The sessions this window opened. Each keeps a live terminal of its
   // own until it closes, and only the selected session's shows.
   const opened = useOpened();
+  // Every open session, which the sessions sidebar lists. It shows while
+  // two or more are open, until Hide sessions folds it for this window
+  // (Q17).
+  const sessions = useSessions();
+  const [sessionsHidden, setSessionsHidden] = useState(false);
+  const sessionsShown = sessions.length >= 2 && !sessionsHidden;
   // The session launch selected, which takes what launch has to tell you.
   const launchSession = useRef<number | null>(null);
   launchSession.current ??= opened[0] ?? null;
@@ -261,8 +271,8 @@ function MainWindow() {
     focusInput,
   });
 
-  // Showing, hiding, or resizing the panel changes the terminal
-  // column's width. FitAddon's own internal observers do not always
+  // Showing, hiding, or resizing the panel or the sessions sidebar
+  // changes the terminal column's width. FitAddon's own internal observers do not always
   // pick up the change before xterm draws the next frame, which leaves
   // a stripe of unused space at the edge of the terminal until
   // something else (e.g. a scroll) kicks off a refit. Force a fit
@@ -273,7 +283,7 @@ function MainWindow() {
       historyTermRef.current?.fit();
     });
     return () => cancelAnimationFrame(id);
-  }, [panelOpen, panelWidth]);
+  }, [panelOpen, panelWidth, sessionsShown]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -698,6 +708,18 @@ function MainWindow() {
       panelWidth={panelWidth}
       onPanelWidth={setPanelWidth}
       onMouseUp={handleAppMouseUp}
+      sessions={
+        sessionsShown ? (
+          <SessionSidebar
+            rows={sessions}
+            selected={selected}
+            onSelect={select}
+            onNewSession={() => requestSessionMenu('new')}
+            onHide={() => setSessionsHidden(true)}
+            onCaret={focusInput}
+          />
+        ) : null
+      }
       titleBand={
         <TitleBand
           connection={connection}

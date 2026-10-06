@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import frameCss from '../styles/frame.css?raw';
 import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../panel/paneLayout';
 import { AppShell } from './AppShell';
 
@@ -10,8 +12,14 @@ import { AppShell } from './AppShell';
 
 type Platform = 'macos' | 'windows' | 'linux';
 
-/** The frame as it draws on `platform` with a saved panel width. */
-function draw(platform: Platform, panelWidth: number, panelOpen = true): string {
+/** The frame as it draws on `platform` with a saved panel width, and the
+ *  sessions sidebar when `sessions` is given. */
+function draw(
+  platform: Platform,
+  panelWidth: number,
+  panelOpen = true,
+  sessions: ReactNode = null,
+): string {
   vi.stubGlobal('document', { documentElement: { dataset: { platform } } });
   try {
     return renderToStaticMarkup(
@@ -19,6 +27,7 @@ function draw(platform: Platform, panelWidth: number, panelOpen = true): string 
         panelOpen={panelOpen}
         panelWidth={panelWidth}
         onPanelWidth={() => undefined}
+        sessions={sessions}
         titleBand={null}
         terminal={null}
         input={null}
@@ -92,6 +101,38 @@ describe('the panel width the frame draws', () => {
     expect(vars(draw('windows', PANEL_WIDTH_MIN, false))).toEqual({
       '--panel-w': '248px',
       '--panel-col': '0px',
+    });
+  });
+});
+
+describe('the sessions column', () => {
+  const sidebar = <nav>sessions</nav>;
+
+  it('keeps the grid of one session as it was, the first column at 0', () => {
+    const html = draw('macos', 300);
+    expect(vars(html)).toEqual({ '--panel-w': '300px', '--panel-col': column(300) });
+    expect(html).not.toContain('shell-slot-sessions');
+    const shell = frameCss.match(/\n\.shell \{([^}]*)\}/)?.[1] ?? '';
+    expect(shell).toMatch(
+      /grid-template-columns: var\(--sessions-col, 0px\) minmax\(0, 1fr\) var\(--panel-col, var\(--panel-w\)\);/,
+    );
+  });
+
+  it('takes 221 px for the sidebar and keeps the terminal floor past it', () => {
+    const html = draw('macos', 300, true, sidebar);
+    expect(vars(html)).toEqual({
+      '--panel-w': '300px',
+      '--panel-col': 'min(300px, calc(100vw - 541px))',
+      '--sessions-col': '221px',
+    });
+    expect(html).toContain('<div class="shell-slot-sessions"><nav>sessions</nav></div>');
+  });
+
+  it('gives the panel column nothing while the panel is hidden', () => {
+    expect(vars(draw('linux', 300, false, sidebar))).toEqual({
+      '--panel-w': '300px',
+      '--panel-col': '0px',
+      '--sessions-col': '221px',
     });
   });
 });
