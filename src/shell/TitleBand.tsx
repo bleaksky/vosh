@@ -116,15 +116,6 @@ export function TitleBand({
   useEffect(() => {
     if (!panelOpen) setMenu((current) => (current === 'add' ? null : current));
   }, [panelOpen]);
-  const luaPanes = useLuaPanes();
-  const pluginRows = usePluginRows();
-  const builtIns = menu === 'add' ? paneTypesToAdd(paneTree) : [];
-  const luaToAdd =
-    menu === 'add' ? luaPanesToAdd(paneTree, offeredLuaPanes(luaPanes, pluginRows)) : [];
-  const add = (ref: PaneRef) => () => {
-    closeMenu();
-    onAddPane(ref);
-  };
   const panelLabel = panelOpen ? 'Hide panel' : 'Show panel';
 
   return (
@@ -202,37 +193,69 @@ export function TitleBand({
         />
       )}
       {menu === 'add' && panelOpen && (
-        <ShellMenu
+        <AddPaneMenu
           anchor={addRef.current}
-          align="end"
-          width={ADD_MENU_WIDTH}
-          label="Add a pane"
+          paneTree={paneTree}
+          onAdd={(ref) => {
+            closeMenu();
+            onAddPane(ref);
+          }}
           onClose={closeMenu}
-        >
-          {builtIns.length === 0 && luaToAdd.length === 0 && (
-            <p className="shell-menu-note">Every pane is showing.</p>
-          )}
-          {builtIns.map((pane) => (
-            <ShellMenuItem key={pane} onSelect={add(paneRef(pane))}>
-              {PANE_LABELS[pane]}
-            </ShellMenuItem>
-          ))}
-          {builtIns.length > 0 && luaToAdd.length > 0 && <ShellMenuSeparator />}
-          {luaToAdd.map((offer) => {
-            const ref = luaPaneRef(offer);
-            return (
-              <ShellMenuItem
-                key={paneKey(ref)}
-                trailing={<span className="shell-menu-kbd">{offer.plugin}</span>}
-                onSelect={add(ref)}
-              >
-                {paneLabel(ref)}
-              </ShellMenuItem>
-            );
-          })}
-        </ShellMenu>
+        />
       )}
     </div>
+  );
+}
+
+// Add a pane's menu: the pane types the tree does not show, then the
+// Lua panes it does not show. It reads the Lua pane and plugin stores
+// only while it is open, since a plugin can send its panes on every
+// prompt and the band should not draw again for each one.
+function AddPaneMenu({
+  anchor,
+  paneTree,
+  onAdd,
+  onClose,
+}: {
+  anchor: HTMLElement | null;
+  paneTree: PaneSplit | null;
+  onAdd: (ref: PaneRef) => void;
+  onClose: () => void;
+}) {
+  const luaPanes = useLuaPanes();
+  const pluginRows = usePluginRows();
+  const builtIns = paneTypesToAdd(paneTree);
+  const luaToAdd = luaPanesToAdd(paneTree, offeredLuaPanes(luaPanes, pluginRows));
+  return (
+    <ShellMenu
+      anchor={anchor}
+      align="end"
+      width={ADD_MENU_WIDTH}
+      label="Add a pane"
+      onClose={onClose}
+    >
+      {builtIns.length === 0 && luaToAdd.length === 0 && (
+        <p className="shell-menu-note">Every pane is showing.</p>
+      )}
+      {builtIns.map((pane) => (
+        <ShellMenuItem key={pane} onSelect={() => onAdd(paneRef(pane))}>
+          {PANE_LABELS[pane]}
+        </ShellMenuItem>
+      ))}
+      {builtIns.length > 0 && luaToAdd.length > 0 && <ShellMenuSeparator />}
+      {luaToAdd.map((offer) => {
+        const ref = luaPaneRef(offer);
+        return (
+          <ShellMenuItem
+            key={paneKey(ref)}
+            trailing={<span className="shell-menu-kbd">{offer.plugin}</span>}
+            onSelect={() => onAdd(ref)}
+          >
+            {paneLabel(ref)}
+          </ShellMenuItem>
+        );
+      })}
+    </ShellMenu>
   );
 }
 
