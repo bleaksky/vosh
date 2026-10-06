@@ -2,7 +2,7 @@ import { act, createElement } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LuaLine } from '../../ipc/scripts';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
-import { clockTime } from './clockTime';
+import { lineTime } from './scriptTimes';
 import type { LuaConsole as LuaConsoleType } from './LuaConsole';
 
 // The Console section of Scripts, mounted in the stand in for the DOM in
@@ -125,11 +125,11 @@ const clearButton = (root: FakeElement) =>
 const field = (root: FakeElement) =>
   findAll(root, (el) => el.getAttribute('aria-label') === 'Run Lua')[0];
 
-describe('clockTime', () => {
+describe('lineTime', () => {
   it('reads your local time as hours, minutes and seconds, two digits each', () => {
-    expect(clockTime(at(21, 14, 3))).toBe('21:14:03');
-    expect(clockTime(at(9, 5, 0))).toBe('09:05:00');
-    expect(clockTime(at(0, 0, 59))).toBe('00:00:59');
+    expect(lineTime(at(21, 14, 3))).toBe('21:14:03');
+    expect(lineTime(at(9, 5, 0))).toBe('09:05:00');
+    expect(lineTime(at(0, 0, 59))).toBe('00:00:59');
   });
 });
 

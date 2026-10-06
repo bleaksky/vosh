@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { luaOutputClear, luaRun, pluginOwner, type LuaKind, type LuaLine } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
 import { Button, Field, Section, cx } from '../../ui';
-import { clockTime } from './clockTime';
+import { lineTime } from './scriptTimes';
 import { noPluginLines } from './pluginState';
 
 // The Console section of Scripts (boards 2 and 4). Every [lua] line the
@@ -115,7 +115,7 @@ export function LuaConsole({ lines, plugin, onCleared, onError }: Props) {
           >
             {lines.map((line, i) => (
               <li key={i} className={cx('st-lua-line', KIND_CLASS[line.kind])}>
-                <span className="st-lua-time">{clockTime(line.ts_ms)}</span>
+                <span className="st-lua-time">{lineTime(line.ts_ms)}</span>
                 <span className="st-lua-text">
                   {line.kind === 'input' ? (
                     `› ${line.text}`

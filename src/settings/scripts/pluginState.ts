@@ -5,7 +5,7 @@
 
 import { pluginOwner, type LuaLine, type PluginStop } from '../../ipc/scripts';
 import type { CodeMark } from '../../ui/codeEditorStyle';
-import { clockMinutes } from './clockTime';
+import { saveTime } from './scriptTimes';
 
 /** What each stop of the Scripts design says the call did. */
 const STOP_REASON: Readonly<Record<PluginStop, string>> = {
@@ -59,7 +59,7 @@ export interface PluginSave {
 
 /** What the save bar says after `save`, like `Reloaded at 21:14`. */
 export function saveStatus(save: PluginSave): string {
-  return `${save.reloaded ? 'Reloaded' : 'Saved'} at ${clockMinutes(save.at)}`;
+  return `${save.reloaded ? 'Reloaded' : 'Saved'} at ${saveTime(save.at)}`;
 }
 
 /** The Folder button for the platform the page runs on (Scripts Q27). */
