@@ -3,7 +3,7 @@
 //! disk or sent by the page, and the lazy conversion from the old dock
 //! layout for a profile that has no tree yet.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -21,13 +21,19 @@ pub(crate) struct DockEntryPersist {
     pub align: Option<String>,
 }
 
-/// The built-in content types a pane can show. The panel holds at
-/// most one of each, so a type doubles as its leaf's default id.
-/// Mirrored by `PANE_TYPES` in src/panel/paneLayout.ts.
+/// The built-in content types a pane can show. The panel holds up to
+/// [`CHAT_PANES_MAX`] Chat panes and one of each other type, and a
+/// type doubles as its first leaf's default id. Mirrored by
+/// `PANE_TYPES` in src/panel/paneLayout.ts.
 pub(crate) const PANE_TYPES: [&str; 5] = ["map", "affects", "group", "chat", "imm"];
 
+/// How many Chat panes the panel holds. Mirrored by `CHAT_PANES_MAX`
+/// in src/panel/paneLayout.ts.
+const CHAT_PANES_MAX: usize = 4;
+
 /// The type of a pane a plugin draws with `mud.pane`. The panel holds
-/// any number of them, one per `plugin` and `id` in the leaf's props.
+/// any number of them, but only one per `plugin` and `id` in the
+/// leaf's props.
 /// The props also keep `title`, the last title the pane showed, so a
 /// pane whose plugin is not running can still name itself.
 pub(crate) const LUA_PANE: &str = "lua";
@@ -88,7 +94,10 @@ pub(crate) struct PaneNode {
     pub weight: f64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<PaneNode>,
-    /// Per-pane settings, such as the chat pane's channel filter.
+    /// Per-pane settings. A Chat pane keeps `channel`, the channel it
+    /// shows, and `rest`, set while it shows Everything else, the
+    /// channels no other Chat pane shows. A Lua pane keeps `plugin`,
+    /// `id` and `title`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub props: BTreeMap<String, String>,
 }
@@ -267,8 +276,8 @@ impl PaneLayoutPersist {
     }
 
     /// Repair a layout read from disk or sent by the frontend. Unknown
-    /// pane types, repeat panes and Lua panes without a plugin or an id
-    /// drop out, blank or clashing ids get
+    /// pane types, panes past their cap (see [`pane_cap`]) and Lua
+    /// panes without a plugin or an id drop out, blank or clashing ids get
     /// fresh ones, a split with one child gives way to that child, a
     /// split inside a split of the same direction merges into it,
     /// splits nested deeper than [`PANE_MAX_SPLIT_DEPTH`] flatten,
@@ -345,9 +354,9 @@ fn migrated_weight(id: &str, has_map: bool, has_affects: bool, others: usize) ->
     }
 }
 
-/// What makes a leaf one of a kind in the tree: its type for a
-/// built-in pane, its plugin and id for a Lua pane. Mirrored by
-/// `paneKey` in src/panel/paneLayout.ts.
+/// What the tree counts a leaf as: its type for a built-in pane, its
+/// plugin and id for a Lua pane. Mirrored by `paneKey` in
+/// src/panel/paneLayout.ts.
 #[derive(PartialEq, Eq, Hash)]
 enum PaneKey {
     Builtin(&'static str),
@@ -372,6 +381,16 @@ fn pane_key(kind: &'static str, props: &BTreeMap<String, String>) -> Option<Pane
     })
 }
 
+/// How many leaves the tree keeps with `key`: [`CHAT_PANES_MAX`] for
+/// Chat, one for anything else. Mirrored by `paneCap` in
+/// src/panel/paneLayout.ts.
+fn pane_cap(key: &PaneKey) -> usize {
+    match key {
+        PaneKey::Builtin("chat") => CHAT_PANES_MAX,
+        _ => 1,
+    }
+}
+
 /// Walks a raw tree once, handing out ids and remembering which panes
 /// it has already placed.
 struct TreeSanitizer {
@@ -379,7 +398,8 @@ struct TreeSanitizer {
     /// one a later node already owns.
     reserved: HashSet<String>,
     used: HashSet<String>,
-    panes: HashSet<PaneKey>,
+    /// How many leaves of each key are placed so far.
+    panes: HashMap<PaneKey, usize>,
 }
 
 impl TreeSanitizer {
@@ -397,7 +417,7 @@ impl TreeSanitizer {
         Self {
             reserved,
             used: HashSet::new(),
-            panes: HashSet::new(),
+            panes: HashMap::new(),
         }
     }
 
@@ -446,9 +466,13 @@ impl TreeSanitizer {
         let weight = clean_weight(raw.weight);
         if let Some(kind) = raw.pane.as_deref() {
             let kind = pane_type(kind)?;
-            if !self.panes.insert(pane_key(kind, &raw.props)?) {
+            let key = pane_key(kind, &raw.props)?;
+            let cap = pane_cap(&key);
+            let placed = self.panes.entry(key).or_default();
+            if *placed >= cap {
                 return None;
             }
+            *placed += 1;
             let id = self.claim_id(&raw.id, kind);
             return Some(PaneNode {
                 id,

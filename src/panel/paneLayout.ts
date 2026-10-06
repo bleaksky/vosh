@@ -18,13 +18,18 @@ import { pendingWrites } from '../lib/pendingWrites';
 // are pure and always return a sanitized tree, so the panel can keep
 // the result in state and hand it straight back to setPaneLayout.
 
-/** The built-in content a pane can show. The panel holds at most one
- *  of each. */
+/** The built-in content a pane can show. The panel holds up to
+ *  CHAT_PANES_MAX Chat panes and one of each other type. */
 export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
 
+/** How many Chat panes the panel holds. Mirrors CHAT_PANES_MAX in
+ *  src-tauri/src/profile/panes.rs. */
+export const CHAT_PANES_MAX = 4;
+
 /** The type of a pane a plugin draws with mud.pane. The panel holds
- *  any number of them, one per `plugin` and `id` in the leaf's props.
+ *  any number of them, but only one per `plugin` and `id` in the
+ *  leaf's props.
  *  The props also keep `title`, the last title the pane showed, so a
  *  pane whose plugin is not running can still name itself. */
 export const LUA_PANE = 'lua';
@@ -42,12 +47,19 @@ export function paneRef(pane: PaneType): PaneRef {
   return { pane, props: {} };
 }
 
-/** What makes a pane one of a kind in the tree: its type for a
- *  built-in pane, its plugin and id for a Lua pane. Mirrors PaneKey in
+/** What the tree counts a pane as: its type for a built-in pane, its
+ *  plugin and id for a Lua pane. Mirrors PaneKey in
  *  src-tauri/src/profile/panes.rs. */
 export function paneKey(ref: PaneRef): string {
   if (ref.pane !== LUA_PANE) return ref.pane;
   return `${LUA_PANE}:${JSON.stringify([ref.props.plugin ?? '', ref.props.id ?? ''])}`;
+}
+
+/** How many panes the tree keeps with the paneKey of `ref`:
+ *  CHAT_PANES_MAX for Chat, one for anything else. Mirrors pane_cap in
+ *  src-tauri/src/profile/panes.rs. */
+export function paneCap(ref: PaneRef): number {
+  return ref.pane === 'chat' ? CHAT_PANES_MAX : 1;
 }
 
 /** The pane header, the --pane-header token. */
@@ -205,8 +217,8 @@ interface SanitizeContext {
    *  one a later node already owns. */
   reserved: Set<string>;
   used: Set<string>;
-  /** The paneKey of every leaf placed so far. */
-  panes: Set<string>;
+  /** How many leaves of each paneKey are placed so far. */
+  panes: Map<string, number>;
 }
 
 function claimId(ctx: SanitizeContext, raw: string, base: string): string {
@@ -274,9 +286,11 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
     const kind = paneType(raw.pane);
     if (kind === null) return null;
     if (kind === LUA_PANE && (blank(raw.props.plugin) || blank(raw.props.id))) return null;
-    const key = paneKey({ pane: kind, props: raw.props });
-    if (ctx.panes.has(key)) return null;
-    ctx.panes.add(key);
+    const ref = { pane: kind, props: raw.props };
+    const key = paneKey(ref);
+    const placed = ctx.panes.get(key) ?? 0;
+    if (placed >= paneCap(ref)) return null;
+    ctx.panes.set(key, placed + 1);
     return { id: claimId(ctx, raw.id, kind), pane: kind, weight, props: sortedProps(raw.props) };
   }
   const dir = splitDir(raw.split);
@@ -317,7 +331,8 @@ function sanitizeChildren(
 }
 
 /** Repair a pane tree from disk, the wire, or a hand edit. Unknown
- *  pane types, repeat panes and Lua panes without a plugin or an id
+ *  pane types, panes past their paneCap and Lua panes without a plugin
+ *  or an id
  *  drop out, blank or clashing ids get
  *  fresh ones, a split with one child gives way to that child, a split
  *  inside a split of the same direction merges into it, splits nested
@@ -331,7 +346,7 @@ export function sanitize(tree: unknown): PaneSplit {
     node.children.forEach(collect);
   };
   collect(rawRoot);
-  const ctx: SanitizeContext = { reserved, used: new Set(), panes: new Set() };
+  const ctx: SanitizeContext = { reserved, used: new Set(), panes: new Map() };
 
   // A bare leaf at the root gets wrapped so the root stays a split.
   const raw: RawNode =
