@@ -12,8 +12,9 @@ The source of truth for both is `src/help/helpContent.ts`.
 
 You connect from the session button, centered in the title band over the terminal. While you are not connected it reads `Not connected` beside a status dot.
 
-- Click the session button and choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere. Vosh dials the saved world, `play.theforsakenlands.com` on port `1848` until you save another.
-- To play somewhere else, choose `New connection…` instead. Fill in `Host` and `Port`, turn on `Use TLS` when your server offers TLS, and click `Connect`. Vosh saves that world as the one Connect dials from then on.
+- Click the session button and choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere. Vosh dials the world this session keeps, `play.theforsakenlands.com` on port `1848` until you save another.
+- To play somewhere else in this session, choose `Edit connection…` first. Fill in `Host` and `Port`, turn on `Use TLS` when your server offers TLS, and click `Save`. The session dials that world from then on.
+- To play in a second session beside this one, choose `New session…` instead. It opens a row of its own with a form that starts from the world you last saved.
 - Watch the dot shift from connecting to connected.
 - Type your character name at the login prompt and press `Enter`.
 - When the server asks for a password, the command line swaps to a masked field with the placeholder `password`. Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
@@ -57,6 +58,17 @@ Each session is one connection to a game, with its own terminal, command line an
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
 - Click `Hide sessions` at the top right of the sidebar to fold it away in this window.
+
+To open a session, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
+
+- `Host` and `Port` start from the world you last saved or dialed from a form. The caret waits in `Port`, so you can type the build port and keep the host.
+- `Profile` starts on a profile pinned to that host and port, then one that claims the host on any port, then the profile you were playing. It picks again as you change the address, until you choose one yourself, and the window takes the layout of the profile it shows.
+- Click `Connect` to dial. The session plays the profile the form shows, with no other profile matched first, and keeps the address as its own.
+- Click `Cancel` or press `Escape` to close the new row. Vosh writes nothing.
+
+The line under `Profile` tells you why it shows. `Build is pinned to The Forsaken Lands 1825.` names the pin. When another session plays the same profile, the line names that session, such as `Tolliver's session plays Default too. An edit in either reaches both.` Two sessions on one profile share its aliases, triggers and settings, and an edit in either saves once. Each keeps its own connection, command history and Lua.
+
+While another session is connected to the same world and port, a note quotes the game, such as `Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` Vosh still connects when you click `Connect`, and the game decides what happens next.
 
 Each row names its session.
 
@@ -728,14 +740,14 @@ Under General, `Font and size` in Keep the same for every character decides whet
 The session button in the title band holds the connection controls. Its dot shows idle, connecting, connected, or an error. After a failed connection the button reads `Not connected`, and pointing at it shows why.
 
 - Click the session button and choose `Disconnect`, then wait for the dot to go idle.
-- Choose `Edit connection…` to check the address. The form holds `Host`, `Port`, and `Use TLS`, and the defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
+- Choose `Edit connection…` to check the address of this session. The form holds `Host`, `Port`, and `Use TLS`, and the defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
 - Choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere.
 
-`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same saved world with its `World`, `Host and port`, and `Use TLS` rows.
+`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows.
 
 Disconnecting has side effects. Session scoped variables clear when the next connection opens, so anything set with `#var` never carries into the new session, while profile variables survive. The chat pane buffer clears at disconnect. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
 
-Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New connection…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
+Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
 ### 8.3 Find your data on disk
 

@@ -609,8 +609,39 @@ describe('the help on the one window', () => {
   it('opens the session from the title band', () => {
     const text = body('get-connected.connect');
     expect(text).toContain('You connect from the session button, centered in the title band');
-    expect(text).toContain('choose `New connection…` instead');
-    expect(body('fix-it.reconnect')).toContain('Choose `Edit connection…` to check the address.');
+    expect(text).toContain('choose `New session…` instead');
+    expect(text).not.toContain('New connection');
+    expect(body('fix-it.reconnect')).toContain(
+      'Choose `Edit connection…` to check the address of this session.',
+    );
+    expect(body('fix-it.reconnect')).not.toContain('New connection');
+  });
+
+  it('walks through the New session form, its Profile row and the note on the play port', () => {
+    const text = body('get-connected.sessions');
+    expect(text).toContain('Vosh adds a row that reads `New session`');
+    expect(text).toContain('The caret waits in `Port`');
+    expect(text).toContain(
+      '`Profile` starts on a profile pinned to that host and port, then one that claims the host on any port, then the profile you were playing.',
+    );
+    expect(text).toContain('`Build is pinned to The Forsaken Lands 1825.`');
+    expect(text).toContain(
+      "`Tolliver's session plays Default too. An edit in either reaches both.`",
+    );
+    expect(text).toContain(
+      '`Tolliver is connected to this world. HELP MULTI lists “Having more than one character logged on at once.”` Vosh still connects',
+    );
+    expect(text).toContain(
+      'Click `Cancel` or press `Escape` to close the new row. Vosh writes nothing.',
+    );
+  });
+
+  it('reads the same in HELP.md for each topic that opens a session', () => {
+    for (const id of ['get-connected.connect', 'get-connected.sessions', 'fix-it.reconnect']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
   });
 
   it('arranges panes in the panel itself', () => {
