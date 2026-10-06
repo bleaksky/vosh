@@ -35,9 +35,10 @@ import { listJoin } from '../../lib/text';
 import { useMacroList } from '../../stores/config/macroListStore';
 import type { SetUiConfig } from '../pageTypes';
 import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
-import { AlertDetailRows, AlertRow, type AlertDetail } from './AlertRows';
+import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
+import { useBannerPermission } from './useBannerPermission';
 
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 const MACRO_NOUN = { one: 'macro', many: 'macros' };
@@ -125,12 +126,12 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
       keyOf: (t) => t.id,
       renderDetail: (props) =>
         isAlertPresetId(props.value.id) ? (
-          <AlertPresetDetail {...props} />
+          <AlertPresetDetail {...props} onError={onError} />
         ) : (
           <PresetDetail {...props} />
         ),
     }),
-    [setConfig],
+    [setConfig, onError],
   );
 
   return (
@@ -174,11 +175,23 @@ function isPresetDefault(alert: AlertParts): boolean {
  *  it listens to, the Alert row, the rows of the parts that are pressed
  *  and the switch. Banner shows waits for a preset whose banner can
  *  carry words. A preset always holds its parts, so releasing every one
- *  keeps the table and the preset rings nothing. */
-export function AlertPresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
+ *  keeps the table and the preset rings nothing. Turning on a preset
+ *  whose Banner is on asks first, as pressing Banner does (board 3), and
+ *  while the system turns banners off the card opens with a note. */
+export function AlertPresetDetail({
+  value: t,
+  update,
+  onError,
+}: DetailProps<PresetToggle> & { onError: (message: string | null) => void }) {
+  const banner = useBannerPermission();
   const preset = alertPresetById(t.id);
   if (!preset) return null;
   const alert = t.alert ?? PRESET_ALERT_DEFAULT;
+  const turn = (enabled: boolean) => {
+    const press = () => update((v) => ({ ...v, enabled }));
+    if (enabled && alert.banner) banner.askFirst(press);
+    else press();
+  };
   const rows: AlertDetail[] = [
     ...(alert.sound !== undefined ? (['sound'] as const) : []),
     ...(alert.attention !== undefined ? (['attention'] as const) : []),
@@ -187,8 +200,9 @@ export function AlertPresetDetail({ value: t, update }: DetailProps<PresetToggle
   ];
   return (
     <Card className="st-auto-card">
+      {banner.permission === 'denied' && <BannerOffNote onError={onError} />}
       <Row label={preset.name} description={preset.description}>
-        <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
+        <Toggle checked={t.enabled} onChange={turn} />
       </Row>
       <Row label="Listens to">
         <span className="st-auto-value">{preset.listensTo}</span>
@@ -196,6 +210,7 @@ export function AlertPresetDetail({ value: t, update }: DetailProps<PresetToggle
       <AlertRow
         alert={alert}
         disabled={false}
+        banner={banner}
         onPress={(part, on) =>
           update((v) => ({ ...v, alert: withAlertPart(v.alert ?? alert, part, on) }))
         }

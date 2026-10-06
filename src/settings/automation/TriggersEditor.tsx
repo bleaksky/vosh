@@ -61,6 +61,7 @@ import {
 } from '../../ui';
 import { usePromptGags } from '../../stores/session/promptGagStore';
 import { AlertDetailRows, AlertRow } from './AlertRows';
+import { useBannerPermission } from './useBannerPermission';
 import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -170,6 +171,7 @@ export function TriggerDetail({
   const style = triggerStyle(t.actions);
   const gags = usePromptGags();
   const hidesPrompt = t.enabled && gags.has(t.name);
+  const banner = useBannerPermission();
 
   useEffect(() => {
     if (fresh) nameRef.current?.focus();
@@ -240,6 +242,7 @@ export function TriggerDetail({
       <AlertRow
         alert={t.alert}
         disabled={locked}
+        banner={banner}
         onPress={(part, on) => update((v) => withAlert(v, (a) => withAlertPart(a, part, on)))}
       />
       <Row label="Enabled">

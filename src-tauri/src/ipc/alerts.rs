@@ -2,8 +2,8 @@
 //! the alert presets of the selected session's profile do, whether the
 //! system lets Vosh post banners, the system's own question, and the
 //! system page where you turn banners on. The Alerts category of the
-//! Presets page calls the two preset commands. The other three wait for
-//! the warn ring.
+//! Presets page calls the two preset commands, and the Alert row the
+//! other three.
 
 use std::collections::BTreeMap;
 
