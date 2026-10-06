@@ -158,7 +158,7 @@ event session://gmcp/* app heard
 event session://hidden app heard
 event session://input-mode app heard
 event session://lua-output app heard
-event session://lua-panes app unheard
+event session://lua-panes app heard
 event session://mark app heard
 event session://output app heard
 event session://prompt-gag-without-reader app heard

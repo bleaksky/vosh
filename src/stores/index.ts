@@ -12,6 +12,7 @@ import { startGameTimeStore } from './config/gameTimeStore';
 import { startGamePromptStore } from './gmcp/gamePromptStore';
 import { startHiddenStore } from './gmcp/hiddenStore';
 import { startInputModeStore } from './session/inputModeStore';
+import { startLuaPanesStore } from './session/luaPanesStore';
 import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startRoomStore } from './gmcp/roomStore';
 import { startSessionRowStore } from './session/sessionRowStore';
@@ -62,4 +63,5 @@ export function startStores(): void {
   startChipStyleStore();
   startPinnedPromptStore();
   startInputModeStore();
+  startLuaPanesStore();
 }

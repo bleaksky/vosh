@@ -1,12 +1,14 @@
 // The active profile's pane layout, which the backend saves and sends
 // when it changes outside this window, and the reset of any profile's
 // panes. panel/paneLayout.ts sanitizes every tree it reads. Each call
-// returns the Tauri promise as it is.
+// returns the Tauri promise as it is. Then the panes a session's plugins
+// draw with mud.pane, which stores/session/luaPanesStore.ts keeps.
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { PaneLayout } from '../panel/paneLayout';
-import { PANE_LAYOUT_CHANGED } from './events';
+import { LUA_PANES, PANE_LAYOUT_CHANGED } from './events';
+import { sessionOf } from './session';
 
 /** The active profile's pane layout, as the backend sends it. Pages
  *  read it through getPaneLayout in panel/paneLayout.ts, which cleans it. */
@@ -40,4 +42,45 @@ export function paneLayoutReset(profile?: string | null): Promise<unknown> {
  *  it back while a save of their own is out. */
 export function subscribePaneLayoutChanged(cb: (payload: unknown) => void): Promise<UnlistenFn> {
   return listen<unknown>(PANE_LAYOUT_CHANGED, (event) => cb(event.payload));
+}
+
+/** One block of a Lua pane, `Block` in src-tauri/src/script/panes.rs.
+ *  A line carries Vosh color codes like {red}. */
+export type LuaBlock =
+  | { kind: 'row'; label: string; value: string }
+  | { kind: 'gauge'; label: string; value: number; max: number }
+  | { kind: 'line'; text: string }
+  | { kind: 'rule' };
+
+/** A pane a plugin draws, by its plugin and the id mud.pane took, with
+ *  its title, the words beside it, empty for none, and its blocks. */
+export interface LuaPane {
+  plugin: string;
+  id: string;
+  title: string;
+  meta: string;
+  blocks: LuaBlock[];
+}
+
+/** What changed in a session's Lua panes since the last send: each pane
+ *  that changed, whole, and each one that went. */
+export interface LuaPanesChange {
+  panes: LuaPane[];
+  removed: { plugin: string; id: string }[];
+}
+
+/** Every pane the plugins of `session` draw, by plugin and then id. */
+export function luaPanesGet(session?: number): Promise<LuaPane[]> {
+  return invoke<LuaPane[]>('lua_panes_get', { session });
+}
+
+/** Hear what the plugins of a session changed in their panes, once per
+ *  flush, with that session. */
+export function onLuaPanes(
+  cb: (change: LuaPanesChange, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<LuaPanesChange & { session?: number }>(LUA_PANES, (event) => {
+    const { panes, removed } = event.payload;
+    cb({ panes, removed }, sessionOf(event.payload));
+  });
 }
