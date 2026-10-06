@@ -1011,6 +1011,7 @@ async fn an_alias_a_macro_and_a_piece_of_a_line_each_walk() {
             command: "#walk e;kk".into(),
             group: None,
             enabled: true,
+            preset: None,
         });
     }
     h.connect().await;

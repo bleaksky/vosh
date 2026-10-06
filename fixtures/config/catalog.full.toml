@@ -119,6 +119,21 @@ key = "F2"
 command = "flee"
 enabled = false
 
+[[macros]]
+key = "Numpad3"
+command = "rec"
+
+[[macros]]
+key = "Numpad8"
+command = "n"
+preset = "numpad_movement"
+
+[[macros]]
+key = "Numpad3"
+command = "d"
+enabled = false
+preset = "numpad_movement"
+
 [alerts.alert_low_health]
 banner = false
 sound = "low"

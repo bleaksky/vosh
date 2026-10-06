@@ -305,13 +305,14 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
         .map(|t| t.name.as_str())
         .collect();
     assert_eq!(triggers.len(), 3, "{triggers:?}");
+    // Your macros join in the file's group.
     let macros: Vec<&str> = saved_catalog
         .macros
         .iter()
-        .filter(|m| group(&m.group))
+        .filter(|m| group(&m.group) && m.preset.is_none())
         .map(|m| m.key.as_str())
         .collect();
-    assert_eq!(macros, ["F1", "F2"]);
+    assert_eq!(macros, ["F1", "F2", "Numpad3"]);
 
     // The new profile file holds none of them, and the live profile does.
     let file = saved(dir.path(), "Healer 2");

@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use vosh_automation::trigger::Trigger;
 
 use super::catalog::GlobalCatalog;
-use crate::profile::live::Profile;
+use crate::profile::live::{Macro, Profile};
 use crate::profile::set::ProfileSet;
 
 /// What `ui.enabled_presets` holds when you turned every preset off. An
@@ -182,6 +182,23 @@ pub(crate) fn adopt_catalog_presets(
     profile.ui.enabled_presets.clone_from(&adopted);
     catalog.enabled_presets = Some(adopted);
     true
+}
+
+/// Hold off each preset macro on a key one of your macros uses, and turn
+/// every other preset macro on, so a key you already use stays yours
+/// (Scripts Q13). Yours keeps the key while it is on, off or in a group
+/// that is off. A held macro saves with `enabled` false, so the command
+/// line and 0.8.1 both pass it over. Every step that changes the macros
+/// runs this before it saves.
+pub(crate) fn hold_taken_keys(macros: &mut [Macro]) {
+    let yours: BTreeSet<String> = macros
+        .iter()
+        .filter(|m| m.preset.is_none())
+        .map(|m| m.key.clone())
+        .collect();
+    for m in macros.iter_mut().filter(|m| m.preset.is_some()) {
+        m.enabled = !yours.contains(&m.key);
+    }
 }
 
 /// The body of [`presets_install`] over the live profile `p`, so a test

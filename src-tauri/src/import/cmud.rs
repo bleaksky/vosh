@@ -337,6 +337,7 @@ fn commit_cmud_macro(m: CmudMacroInProgress, report: &mut ImportReport) {
             command: m.value,
             group: None,
             enabled: true,
+            preset: None,
         }),
         None => report
             .unsupported
