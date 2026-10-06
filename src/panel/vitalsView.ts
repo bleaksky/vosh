@@ -1,6 +1,7 @@
 import type { PromptShowState } from '../ipc/prompt';
-import type { VitalsMeter, VitalsValues } from '../ipc/uiConfig';
-import { vitalPercent } from '../stores/gmcp/vitalsStore';
+import type { Vital, VitalOff, VitalsMeter, VitalsValues } from '../ipc/uiConfig';
+import type { CombatOpponent } from '../stores/gmcp/combatStore';
+import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
 
 // How your vitals read in the panel footer and in the status line, from
 // the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
@@ -100,6 +101,50 @@ export function vitalsGeometry(meter: VitalsMeter): VitalsGeometry {
  *  moves nothing. */
 export function vitalsFooterHeight(geometry: VitalsGeometry, rows: number): number {
   return 1 + geometry.padTop + rows * geometry.row + geometry.padBottom;
+}
+
+/** The vitals you left on under Customize vitals, in your order. */
+export function vitalsOn(order: readonly Vital[], off: readonly VitalOff[]): Vital[] {
+  return order.filter((vital) => !off.includes(vital));
+}
+
+/** The vitals the footer draws of the ones you left on (vitalsOn).
+ *  Health always shows. Mana and Moves drop while the game sends no
+ *  max for them, except while it hides your vitals, when it sends every
+ *  max as 0. */
+export function shownVitals(vitals: Vitals, on: readonly Vital[]): Vital[] {
+  return on.filter((vital) => vitals.hidden || vital === 'hp' || vitals[maxOf(vital)] > 0);
+}
+
+/** The key of a vital's max in Char.Vitals. */
+export function maxOf(vital: Vital): 'maxhp' | 'maxmana' | 'maxmove' {
+  if (vital === 'hp') return 'maxhp';
+  if (vital === 'mana') return 'maxmana';
+  return 'maxmove';
+}
+
+/** How your opponent's health reads in the footer. */
+export interface OpponentHealth {
+  value: string;
+  /** The meter's fill, null for an empty meter. */
+  pct: number | null;
+  /** The game withholds it, so it reads a quiet `?`. */
+  hidden: boolean;
+}
+
+/** Your opponent's health: its percent, else the condition the game
+ *  sends, else `?`. A health the game hides or sends nothing for reads
+ *  `?` either way, so no style draws a blank. */
+export function opponentHealth(
+  combat: Pick<CombatOpponent, 'hp_pct' | 'condition' | 'hidden'>,
+): OpponentHealth {
+  if (!combat.hidden && combat.hp_pct !== null) {
+    return { value: `${combat.hp_pct}%`, pct: combat.hp_pct, hidden: false };
+  }
+  if (!combat.hidden && combat.condition) {
+    return { value: combat.condition, pct: null, hidden: false };
+  }
+  return { value: '?', pct: null, hidden: true };
 }
 
 /** The opponent Char.Combat names, as far as the status line needs it. */

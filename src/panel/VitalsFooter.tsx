@@ -8,15 +8,19 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from './panelFace';
-import type { VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
+import type { Vital, VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { useVitals, type Vitals, type VitalKey } from '../stores/gmcp/vitalsStore';
+import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
   formatVital,
   hiddenVital,
+  maxOf,
   meterFill,
+  opponentHealth,
+  shownVitals,
   vitalsFooterHeight,
+  vitalsOn,
   vitalsGeometry,
   vitalTone,
   widestVital,
@@ -46,27 +50,23 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // turns a vital warn under two thirds and danger under one third. The
 // rules live in vitalsView.ts.
 //
+// Customize vitals sets which vitals show and their order, and puts
+// your opponent's row on top or at the bottom, or drops it. The footer
+// holds the height of the vitals that show, and room for every vital
+// you left on only while it waits for your vitals at login.
+//
 // While the game hides your vitals (Char.Vitals with the hidden flag,
 // under lamented tears) each one reads `?` in its Values form, in
 // tertiary, over an empty meter, and nothing warns. The opponent's
-// health reads `?` the same way while Char.Combat withholds it.
+// health reads `?` the same way while Char.Combat withholds it or
+// sends neither a percent nor a condition.
 //
-// While your pinned prompt hides your vitals, the footer keeps only the
-// opponent row, so a fight still shows its health on the right. Out of
-// a fight it draws nothing.
+// While your pinned prompt hides your vitals, or you turned all three
+// off, the footer keeps only the opponent row, so a fight still shows
+// its health on the right. Out of a fight it draws nothing and the
+// panes take its room.
 
-const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
-  { key: 'hp', label: 'Health', max: 'maxhp' },
-  { key: 'mana', label: 'Mana', max: 'maxmana' },
-  { key: 'move', label: 'Moves', max: 'maxmove' },
-];
-
-/** The vitals the MUD sends. Health always shows. While the game hides
- *  your vitals it sends every max as 0, so all three show. */
-function shownRows(vitals: Vitals) {
-  if (vitals.hidden) return ROWS;
-  return ROWS.filter((r) => r.key === 'hp' || vitals[r.max] > 0);
-}
+const LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
  *  prompt hides your vitals. */
@@ -92,10 +92,10 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
     density === 'line' && vitals !== null
       ? vitalsLineFit(
           width,
-          shownRows(vitals).map((r) => ({
-            label: textWidth(r.label, `400 ${size}px ${face}`, faceVersion),
+          shownVitals(vitals, vitalsOn(options.order, options.off)).map((vital) => ({
+            label: textWidth(LABELS[vital], `400 ${size}px ${face}`, faceVersion),
             value: textWidth(
-              widestVital(options.values, vitals[r.max], vitals.hidden),
+              widestVital(options.values, vitals[maxOf(vital)], vitals.hidden),
               `500 ${size}px ${face}`,
               faceVersion,
             ),
@@ -124,7 +124,8 @@ export interface VitalsBlockProps {
   fit: VitalsLineFit;
   options: VitalsOptions;
   sectionRef?: Ref<HTMLElement>;
-  /** Only the opponent row, and nothing out of a fight. */
+  /** Only the opponent row, and nothing out of a fight, as when every
+   *  vital is off. */
   opponentOnly?: boolean;
 }
 
@@ -140,64 +141,48 @@ export function VitalsBlock({
   opponentOnly = false,
 }: VitalsBlockProps) {
   const { size } = usePaneText();
-  if (opponentOnly && !combat) return null;
-  const line = !opponentOnly && density === 'line' && fit !== 'rows';
-  const geometry = geometryAt(vitalsGeometry(options.meter), size);
-  const meter = geometry.meter > 0;
+  const on = opponentOnly ? [] : vitalsOn(options.order, options.off);
+  const foe = options.off.includes('opponent') ? null : combat;
   const rows =
     vitals === null
       ? []
-      : shownRows(vitals).map((r) =>
-          vitals.hidden
+      : shownVitals(vitals, on).map((key) => {
+          const max = vitals[maxOf(key)];
+          return vitals.hidden
             ? {
-                key: r.key,
-                label: r.label,
+                key,
                 value: hiddenVital(options.values),
                 pct: null,
                 tone: 'hidden' as const,
               }
             : {
-                key: r.key,
-                label: r.label,
-                value: formatVital(options.values, vitals[r.key], vitals[r.max]),
-                pct: meterFill(vitals[r.key], vitals[r.max]),
-                tone: vitalTone(
-                  vitals[r.key],
-                  vitals[r.max],
-                  vitals.low[r.key],
-                  options.warn_thirds,
-                ),
-              },
-        );
+                key,
+                value: formatVital(options.values, vitals[key], max),
+                pct: meterFill(vitals[key], max),
+                tone: vitalTone(vitals[key], max, vitals.low[key], options.warn_thirds),
+              };
+        });
+  // With no vital to draw, out of a fight, the panes take the room.
+  const mine = vitals === null ? on.length : rows.length;
+  if (mine === 0 && !foe) return null;
+  const line = mine > 0 && density === 'line' && fit !== 'rows';
+  const geometry = geometryAt(vitalsGeometry(options.meter), size);
+  const meter = geometry.meter > 0;
+  // Rows holds the vitals that show, and every vital you left on while
+  // it waits for your vitals, so logging in moves nothing. One line
+  // and the opponent alone hold one row.
+  const held = mine === 0 || density === 'line' ? 1 : mine;
+  const opponent = foe && <OpponentRow combat={foe} meter={meter} />;
 
   return (
     <section
       ref={sectionRef}
       className={`panel-vitals${line ? ' is-one-line' : ''}`}
-      // The footer holds one row for One line and three for Rows while
-      // it waits for your vitals, so logging in moves nothing.
-      style={footerStyle(geometry, opponentOnly || density === 'line' ? 1 : 3)}
-      aria-label={opponentOnly ? 'Opponent' : 'Vitals'}
+      style={footerStyle(geometry, held)}
+      aria-label={mine === 0 ? 'Opponent' : 'Vitals'}
     >
-      {combat &&
-        (combat.hidden ? (
-          <VitalRow
-            className="panel-vitals-row-combat panel-vitals-row-hidden"
-            label={combat.name}
-            value="?"
-            pct={null}
-            meter={meter}
-          />
-        ) : (
-          <VitalRow
-            className="panel-vitals-row-combat"
-            label={combat.name}
-            value={combat.hp_pct !== null ? `${combat.hp_pct}%` : (combat.condition ?? '')}
-            pct={combat.hp_pct}
-            meter={meter}
-          />
-        ))}
-      {opponentOnly ? null : vitals === null ? (
+      {options.opponent === 'top' && opponent}
+      {mine === 0 ? null : vitals === null ? (
         <div className="panel-vitals-row">
           <p className="panel-vitals-empty">Vitals appear when you log in.</p>
         </div>
@@ -206,7 +191,7 @@ export function VitalsBlock({
           {rows.map((r) => (
             <VitalItem
               key={r.key}
-              label={r.label}
+              label={LABELS[r.key]}
               showLabel={fit === 'labels'}
               value={r.value}
               pct={r.pct}
@@ -220,13 +205,14 @@ export function VitalsBlock({
           <VitalRow
             key={r.key}
             className={toneClass(r.tone)}
-            label={r.label}
+            label={LABELS[r.key]}
             value={r.value}
             pct={r.pct}
             meter={meter}
           />
         ))
       )}
+      {options.opponent === 'bottom' && opponent}
     </section>
   );
 }
@@ -329,6 +315,21 @@ function VitalRow({
       </div>
       {meter && <Meter pct={pct} />}
     </div>
+  );
+}
+
+/** Your opponent's name and health, in warn, or a quiet `?` while the
+ *  game withholds the health. */
+function OpponentRow({ combat, meter }: { combat: CombatOpponent; meter: boolean }) {
+  const health = opponentHealth(combat);
+  return (
+    <VitalRow
+      className={`panel-vitals-row-combat${health.hidden ? ' panel-vitals-row-hidden' : ''}`}
+      label={combat.name}
+      value={health.value}
+      pct={health.pct}
+      meter={meter}
+    />
   );
 }
 
