@@ -552,6 +552,60 @@ describe('the more menu and Install', () => {
     await m.unmount();
   });
 
+  it('asks once about a .zip you drop anywhere on the list page', async () => {
+    // The fake document keeps no listeners, so this one records them.
+    type Listener = (e: unknown) => void;
+    const listeners = new Map<string, Listener>();
+    const on = doc as unknown as {
+      addEventListener: (type: string, fn: Listener) => void;
+      removeEventListener: (type: string, fn: Listener) => void;
+    };
+    on.addEventListener = (type, fn) => void listeners.set(type, fn);
+    on.removeEventListener = (type, fn) => {
+      if (listeners.get(type) === fn) listeners.delete(type);
+    };
+    const check = { name: 'weather_pane', version: '0.2.0', author: 'Tolliver', existing: null };
+    calls.answer = () => Promise.resolve(check);
+    const m = await mount();
+    expect([...listeners.keys()].sort()).toEqual(['dragover', 'drop']);
+
+    // A drag that carries text passes by, and one with files takes the drop.
+    const event = (types: string[], items: unknown[] = []) => ({
+      dataTransfer: { types, items, dropEffect: 'none' },
+      preventDefault: vi.fn(),
+    });
+    const text = event(['text/plain']);
+    listeners.get('dragover')?.(text);
+    expect(text.preventDefault).not.toHaveBeenCalled();
+    const over = event(['Files']);
+    listeners.get('dragover')?.(over);
+    expect(over.preventDefault).toHaveBeenCalled();
+    expect(over.dataTransfer.dropEffect).toBe('copy');
+
+    const zip = new File(['PK'], 'weather_pane.zip');
+    const entry = {
+      isDirectory: false,
+      name: zip.name,
+      file: (resolve: (file: File) => void) => resolve(zip),
+    };
+    const drop = event(['Files'], [{ webkitGetAsEntry: () => entry }]);
+    await act(async () => listeners.get('drop')?.(drop));
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    expect(drop.preventDefault).toHaveBeenCalled();
+    expect(calls.invoked).toEqual([
+      {
+        cmd: 'plugin_install_check',
+        args: { fileName: 'weather_pane.zip', bytes: [80, 75] },
+      },
+    ]);
+    expect(m.dialog()).toMatchObject({ title: 'Install weather_pane?', tone: 'primary' });
+
+    await m.unmount();
+    expect([...listeners.keys()]).toEqual([]);
+    delete (doc as unknown as Record<string, unknown>).addEventListener;
+    delete (doc as unknown as Record<string, unknown>).removeEventListener;
+  });
+
   it('shows why Vosh refuses a plugin in the error line, and asks nothing', async () => {
     calls.answer = () => Promise.reject('Vosh found no manifest.toml in weather_pane.zip.');
     const m = await mount();

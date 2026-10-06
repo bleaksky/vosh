@@ -371,6 +371,95 @@ describe('a plugin page', () => {
   });
 });
 
+describe('Runs first', () => {
+  const DRAW = '-- draw\nreturn {}\n';
+  const FILES = ['lib/draw.lua', 'main.lua'];
+
+  beforeEach(() => {
+    calls.answers.plugin_read = (args) =>
+      folder('vitals_alert', args?.file === 'lib/draw.lua' ? DRAW : VITALS_ALERT_CODE, {
+        files: FILES,
+      });
+  });
+
+  /** Pick `file` under Runs first on the Manifest tab. */
+  const pick = (m: Mounted, file: string) =>
+    m.fire((el) => el.nodeName === 'SELECT', 'onChange', { target: { value: file } });
+
+  it('opens the file you pick, and Save writes it as the file the plugin runs first', async () => {
+    const m = await mount({ group: 'scripts', section: 'vitals_alert' });
+    await m.press('Manifest');
+    calls.invoked.length = 0;
+    await pick(m, 'lib/draw.lua');
+    expect(calls.invoked).toEqual([
+      { cmd: 'plugin_read', args: { name: 'vitals_alert', file: 'lib/draw.lua' } },
+    ]);
+    expect(seen.dialog).toBeNull();
+    // The tab takes the file's name, and the editor its code.
+    await m.press('lib/draw.lua');
+    expect(editor().value).toBe(DRAW);
+    const code = `${DRAW}-- more\n`;
+    await m.step(() => editor().onChange(code));
+    calls.invoked.length = 0;
+    await m.press('Save and reload');
+    expect(calls.invoked[0]).toEqual({
+      cmd: 'plugin_save',
+      args: {
+        name: 'vitals_alert',
+        manifest: {
+          name: 'vitals_alert',
+          version: '0.1.0',
+          description: '',
+          author: 'James Wright',
+          entry: 'lib/draw.lua',
+        },
+        code,
+      },
+    });
+    await m.unmount();
+  });
+
+  it('asks before a pick drops an edit to the file in the editor', async () => {
+    const m = await mount({ group: 'scripts', section: 'vitals_alert' });
+    const edited = `${VITALS_ALERT_CODE}-- more\n`;
+    await m.step(() => editor().onChange(edited));
+    await m.press('Manifest');
+    calls.invoked.length = 0;
+    await pick(m, 'lib/draw.lua');
+    // Nothing is read until you agree, so Save never writes the old
+    // file's code over the new one.
+    expect(calls.invoked).toEqual([]);
+    expect(seen.dialog?.title).toBe('Discard changes to main.lua?');
+    await m.step(() => (seen.dialog?.onCancel as () => void)());
+    await m.press('main.lua');
+    expect(editor().value).toBe(edited);
+    await m.press('Manifest');
+    await pick(m, 'lib/draw.lua');
+    await m.step(() => (seen.dialog?.onConfirm as () => void)());
+    expect(calls.invoked).toEqual([
+      { cmd: 'plugin_read', args: { name: 'vitals_alert', file: 'lib/draw.lua' } },
+    ]);
+    await m.press('lib/draw.lua');
+    expect(editor().value).toBe(DRAW);
+    await m.unmount();
+  });
+
+  it('goes back to the saved file without a read or a question', async () => {
+    const m = await mount({ group: 'scripts', section: 'vitals_alert' });
+    await m.press('Manifest');
+    await pick(m, 'lib/draw.lua');
+    seen.dialog = null;
+    calls.invoked.length = 0;
+    await pick(m, 'main.lua');
+    expect(calls.invoked).toEqual([]);
+    expect(seen.dialog).toBeNull();
+    await m.press('main.lua');
+    expect(editor().value).toBe(VITALS_ALERT_CODE);
+    expect(off(m.container, 'Save and reload')).toBe(true);
+    await m.unmount();
+  });
+});
+
 describe('a stopped plugin', () => {
   it('says why over a shorter editor and marks the line the stop names', async () => {
     const m = await mount({ group: 'scripts', section: 'wait_full' });
