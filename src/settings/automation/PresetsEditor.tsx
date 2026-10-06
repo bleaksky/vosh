@@ -2,26 +2,31 @@ import { useMemo } from 'react';
 import { countPhrase, draftValues } from '../../automation/automationDraft';
 import { searchText } from '../../automation/automationList';
 import {
+  keysYoursHold,
   presetSavePlan,
   presetToggles,
   storedPresetIds,
   type PresetToggle,
 } from '../../automation/automationRecords';
 import {
+  type Preset,
   PRESET_CATEGORIES,
   presetById,
   presetMacros,
   PRESETS,
   presetTriggers,
 } from '../../automation/presets';
-import { presetsInstall, presetsRemove } from '../../ipc/automation';
+import { presetsInstall, presetsRemove, type Macro } from '../../ipc/automation';
 import { getUiConfig, setUiFields } from '../../ipc/uiConfig';
+import { listJoin } from '../../lib/text';
+import { useMacroList } from '../../stores/config/macroListStore';
 import type { SetUiConfig } from '../pageTypes';
-import { Card, Row, Toggle } from '../../ui';
+import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
+const MACRO_NOUN = { one: 'macro', many: 'macros' };
 
 interface PresetsEditorProps {
   setConfig: SetUiConfig;
@@ -90,17 +95,61 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
   );
 }
 
-function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
+export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
   const preset = presetById(t.id);
   if (!preset) return null;
+  const binds = preset.macros ?? [];
+  const adds = listJoin([
+    ...(preset.triggers.length > 0 ? [countPhrase(preset.triggers.length, TRIGGER_NOUN)] : []),
+    ...(binds.length > 0 ? [countPhrase(binds.length, MACRO_NOUN)] : []),
+  ]);
   return (
     <Card className="st-auto-card">
       <Row label={preset.name} description={preset.description}>
         <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
       </Row>
       <Row label="Adds">
-        <span className="st-auto-value">{countPhrase(preset.triggers.length, TRIGGER_NOUN)}</span>
+        <span className="st-auto-value">{adds}</span>
       </Row>
+      {binds.length > 0 && <PresetKeys preset={preset} />}
     </Card>
   );
+}
+
+/** The keys a macro preset binds, as Scripts board 7 draws them, each
+ *  on a keycap before the command it sends, in the preset's order. The
+ *  card names the numpad, so a numpad key's cap holds its digit alone. A
+ *  key one of your macros uses stays yours, so its pair wears the warn
+ *  ring and a note closes the card. The note shows with the preset on or
+ *  off, since it is true either way. */
+function PresetKeys({ preset }: { preset: Preset }) {
+  const held = new Set(keysYoursHold(preset, useMacroList()));
+  const binds = preset.macros ?? [];
+  const waiting = binds.filter((m) => held.has(m.key));
+  return (
+    <>
+      <Row label="Keys">
+        <div className="st-auto-keys" role="group" aria-label="Keys this preset binds">
+          {binds.map((m) => (
+            <span key={m.key} className={cx('st-auto-keypair', held.has(m.key) && 'is-warn')}>
+              <Keycap>{m.key.replace(/^Numpad/, '')}</Keycap>
+              <span className="st-auto-keysend">{m.command}</span>
+            </span>
+          ))}
+        </div>
+      </Row>
+      {waiting.length > 0 && <CardNote tone="warn">{heldNote(waiting)}</CardNote>}
+    </>
+  );
+}
+
+/** What the card says when your macros keep keys the preset wants. No
+ *  board draws more than one such key, so two or more share one plural
+ *  sentence, the keys in the preset's order. */
+function heldNote(held: readonly Omit<Macro, 'preset'>[]): string {
+  const keys = listJoin(held.map((m) => m.key));
+  const sends = listJoin(held.map((m) => m.command));
+  return held.length === 1
+    ? `Your macro on ${keys} keeps the key, so ${sends} has none until you move it.`
+    : `Your macros on ${keys} keep their keys, so ${sends} have none until you move them.`;
 }
