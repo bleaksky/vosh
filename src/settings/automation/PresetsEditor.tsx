@@ -21,16 +21,13 @@ interface PresetsEditorProps {
   setConfig: SetUiConfig;
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
-  /** Each profile keeps its own list. In loadout mode every profile
-   *  shares one, next to the preset triggers in the shared catalog. */
-  profileScoped: boolean;
 }
 
 /** The trigger presets, one toggle each under its category. Save
  *  installs the presets you turned on, removes the ones you turned off,
  *  and stores the list in enabled_presets, which launch reads to put
  *  the ones that are on back and take the rest out. */
-export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: PresetsEditorProps) {
+export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProps) {
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
       id: 'presets',
@@ -38,20 +35,21 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
       filterLabel: 'Filter presets',
       emptyDetail: 'Choose a preset to see what it adds.',
       emptyList: 'Vosh has no presets.',
-      // Read the stored list fresh, so a profile switch loads the new
-      // profile's presets. In loadout mode the list is shared, and a
-      // switch keeps it.
-      load: async () => presetToggles((await getUiConfig()).enabled_presets),
-      save: async (draft) => {
+      // Read the stored list fresh, so Settings moving to another
+      // profile loads its presets. Each profile keeps its own list, and
+      // in loadout mode every profile shares one, next to the preset
+      // triggers in the shared catalog.
+      load: async (profile) => presetToggles((await getUiConfig(profile)).enabled_presets),
+      save: async (draft, _written, profile) => {
         const plan = presetSavePlan(draft);
-        for (const id of plan.remove) await presetsRemove(id);
+        for (const id of plan.remove) await presetsRemove(id, profile);
         const install = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(presetTriggers);
-        if (install.length > 0) await presetsInstall(install);
+        if (install.length > 0) await presetsInstall(install, profile);
         // Keep the ids this page has no preset for, such as the alert
         // presets, as the profile holds them now.
-        const stored = (await getUiConfig()).enabled_presets;
+        const stored = (await getUiConfig(profile)).enabled_presets;
         const enabled_presets = storedPresetIds(draftValues(draft), stored);
-        await setUiFields({ enabled_presets });
+        await setUiFields({ enabled_presets }, profile);
         setConfig((prev) => (prev ? { ...prev, enabled_presets } : prev));
       },
       entry: (t) => {
@@ -71,14 +69,7 @@ export function PresetsEditor({ setConfig, onDirty, onError, profileScoped }: Pr
   );
 
   return (
-    <DraftEditor
-      spec={spec}
-      json={false}
-      onJson={() => {}}
-      onDirty={onDirty}
-      onError={onError}
-      profileScoped={profileScoped}
-    />
+    <DraftEditor spec={spec} json={false} onJson={() => {}} onDirty={onDirty} onError={onError} />
   );
 }
 

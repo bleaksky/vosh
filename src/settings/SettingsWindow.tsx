@@ -10,8 +10,7 @@ import {
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
-import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
-import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
+import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {
@@ -34,6 +33,7 @@ import {
 } from '../lib/settingsNav';
 import { SETTINGS_PENDING_KEY } from '../lib/settingsLink';
 import { revealSettingsAnchor } from './revealAnchor';
+import { getShownProfile, isShownHeld, subscribeShownMoves } from './shownProfile';
 import { ShownSession } from './ShownSession';
 import { Sidebar } from './Sidebar';
 import { useSettingsClose } from './useSettingsClose';
@@ -169,12 +169,32 @@ export function SettingsWindow() {
   }, [nav]);
 
   const readPathB = () => {
-    loadoutsGetState()
+    loadoutsGetState(getShownProfile())
       .then((s) => setPathB(s.path_b_active))
       .catch(() => {});
   };
   useEffect(() => readPathB(), []);
   useTauriEvent(subscribeLoadoutsChanged, readPathB);
+
+  // Read the config of `profile`, the one Settings shows unless named.
+  // Only the newest read lands, so a read of a profile Settings has left
+  // never shows.
+  const readsRef = useRef(0);
+  const readConfig = useCallback((profile: string | undefined = getShownProfile()) => {
+    const mine = ++readsRef.current;
+    return fetchUiConfig(profile)
+      .then((cfg) => {
+        if (mine !== readsRef.current) return;
+        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+        setConfig(cfg);
+        // The main window owns sending OS appearance flips. This window
+        // follows them on its own listener.
+        applyThemePrefs(cfg);
+      })
+      .catch((e) => {
+        if (mine === readsRef.current) setError(String(e));
+      });
+  }, []);
 
   // Load current config and reveal the window once a frame with the
   // theme has gone out. The startup paint usually has it on screen
@@ -188,30 +208,21 @@ export function SettingsWindow() {
       void win.show().then(() => win.setFocus());
     };
     const fallback = window.setTimeout(reveal, 500);
-    getUiConfig()
-      .then((cfg) => {
-        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-        setConfig(cfg);
-        // The main window owns sending OS appearance flips. This window
-        // follows them on its own listener.
-        applyThemePrefs(cfg);
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => showAfterThemePaint(reveal));
+    void readConfig().finally(() => showAfterThemePaint(reveal));
     return () => window.clearTimeout(fallback);
-  }, []);
+  }, [readConfig]);
 
   // A profile switch, #profile load, #profile reset, and an import each
-  // replace the whole UI config in the backend. Read it again here, so
-  // the copy every page shows and edits is the new profile's.
-  useTauriEvent(
-    (cb) => followReplacedUiConfig(cb, (e) => setError(String(e))),
-    (cfg: UiConfig) => {
-      setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-      setConfig(cfg);
-      applyThemePrefs(cfg);
-    },
-  );
+  // replace the whole UI config of the profile in front. Read the one in
+  // front again here, so the copy every page shows and edits is the new
+  // one's. A login switch replaces it before the session list says the
+  // session moved, so the read names no profile. While a page holds
+  // another profile the replace is not this copy's, and Settings reads
+  // again when it moves.
+  useTauriEvent(subscribeUiConfigReplaced, () => {
+    if (!isShownHeld()) void readConfig(undefined);
+  });
+  useEffect(() => subscribeShownMoves((profile) => void readConfig(profile)), [readConfig]);
 
   // Turning the theme scope global folds the custom themes of every
   // other profile into the shared list. Take the new list, since a later
@@ -222,7 +233,7 @@ export function SettingsWindow() {
     let unsub: (() => void) | undefined;
     void subscribeProfilesChanged((changed) => {
       if (changed !== 'scope') return;
-      getUiConfig()
+      fetchUiConfig(getShownProfile())
         .then((cfg) => {
           if (cancelled) return;
           setCustomThemes(cfg.custom_themes.map(customToAppTheme));

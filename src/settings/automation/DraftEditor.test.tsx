@@ -150,6 +150,9 @@ async function mount(spec: KindSpec<Thing> = SPEC) {
   const groupSwitch = (group: string) =>
     findAll(container, (el) => el.getAttribute('data-group-switch') === group)[0] ?? null;
   return {
+    /** The button that reads `label`, such as Save. */
+    button: (label: string) =>
+      findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === label)[0] ?? null,
     heading,
     row,
     groupSwitch,
@@ -401,5 +404,83 @@ describe('the switch on a group heading', () => {
     expect(list.selected()).toMatch(/^Flee below 20 percent/);
     await list.key('ArrowLeft', list.groupSwitch('idle'));
     expect(list.open('g:idle')).toBe(true);
+  });
+});
+
+// Board 7 of the Sessions review. Unsaved changes hold the profile
+// Settings shows while the selection moves to a session on another
+// profile, and the save lands on the profile it was made on. This runs
+// last, since the profile Settings shows stays at module scope.
+describe('a draft with unsaved changes', () => {
+  const ROWS = [
+    {
+      id: 1,
+      name: null,
+      character: 'Tolliver',
+      host: 'play.theforsakenlands.com',
+      port: 1848,
+      tls: false,
+      profile: 'default',
+      connected: true,
+      selected: true,
+    },
+    {
+      id: 2,
+      name: null,
+      character: 'Orla',
+      host: 'play.theforsakenlands.com',
+      port: 1825,
+      tls: false,
+      profile: 'Build',
+      connected: true,
+      selected: false,
+    },
+  ];
+  const ORLA_SELECTED = [
+    { ...ROWS[0], selected: false },
+    { ...ROWS[1], selected: true },
+  ];
+
+  /** Send every window the rows, as the app does after a step. */
+  const sessions = (rows: typeof ROWS) =>
+    act(async () => {
+      for (const [event, cb] of vi.mocked(listen).mock.calls) {
+        if (event === 'vosh://sessions-changed') (cb as (e: unknown) => void)({ payload: rows });
+      }
+    });
+
+  afterEach(() => {
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+  });
+
+  it("lands a held Save on Default while Orla's session is selected", async () => {
+    vi.mocked(invoke).mockImplementation(((cmd: string) =>
+      Promise.resolve(cmd === 'sessions_list' ? ROWS : undefined)) as typeof invoke);
+    const loaded: (string | undefined)[] = [];
+    const saved: (string | undefined)[] = [];
+    const spec: KindSpec<Thing> = {
+      ...SPEC,
+      load: (profile) => {
+        loaded.push(profile);
+        return Promise.resolve(things);
+      },
+      save: (_draft, _written, profile) => {
+        saved.push(profile);
+        return Promise.resolve();
+      },
+    };
+    const list = await mount(spec);
+    await sessions(ROWS);
+    await act(async () => detail?.update((t) => ({ ...t, name: `${t.name} again` })));
+    loaded.length = 0;
+
+    await sessions(ORLA_SELECTED);
+    expect(loaded).toEqual([]);
+    await list.click(list.button('Save'));
+
+    expect(saved).toEqual(['default']);
+    // The load after the save reads Default, and then Settings follows
+    // Orla to Build.
+    expect(loaded).toEqual(['default', 'Build']);
   });
 });

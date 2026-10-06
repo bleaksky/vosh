@@ -243,7 +243,7 @@ export async function subscribePromptCardOpen(
  *  game takes the design written from its codes. */
 export async function promptConfigSet(
   config: PromptConfig,
-  options?: { asIs?: boolean; session?: number },
+  options?: { asIs?: boolean; session?: number | undefined },
 ): Promise<void> {
   const session = options?.session;
   await invoke(

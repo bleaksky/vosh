@@ -363,11 +363,20 @@ export interface TriggerStoreApi {
   importTriggers: (json: string) => Promise<unknown>;
 }
 
-const TRIGGER_STORE: TriggerStoreApi = { exportTriggers, importTriggers };
+/** The trigger store of `profile`, or of the profile the selected
+ *  session plays when it names none. */
+export function triggerStore(profile?: string | null): TriggerStoreApi {
+  return {
+    exportTriggers: () => exportTriggers(profile),
+    importTriggers: (json) => importTriggers(json, profile),
+  };
+}
 
 /** Every trigger the store holds, for display. A reply that does not
  *  read shows as no triggers. */
-export async function loadTriggers(api: TriggerStoreApi = TRIGGER_STORE): Promise<TriggerRecord[]> {
+export async function loadTriggers(
+  api: TriggerStoreApi = triggerStore(),
+): Promise<TriggerRecord[]> {
   return parseJsonList(await api.exportTriggers(), normalizeTrigger) ?? [];
 }
 
@@ -379,7 +388,7 @@ export async function loadTriggers(api: TriggerStoreApi = TRIGGER_STORE): Promis
  *  the store wrote it. */
 export async function moveTriggerToPrompts(
   name: string,
-  api: TriggerStoreApi = TRIGGER_STORE,
+  api: TriggerStoreApi = triggerStore(),
 ): Promise<void> {
   let list: unknown;
   try {
@@ -406,7 +415,7 @@ export async function moveTriggerToPrompts(
  *  Save writes nothing, since writing would drop what it could not read. */
 export async function saveTriggerDraft(
   draft: Draft<TriggerRecord>,
-  api: TriggerStoreApi = TRIGGER_STORE,
+  api: TriggerStoreApi = triggerStore(),
 ): Promise<void> {
   await saveDraftOnto(
     draft,

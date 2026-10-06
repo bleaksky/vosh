@@ -161,7 +161,6 @@ export function AutomationPage({
             onJson={openJson}
             onDirty={onDirty}
             onError={onError}
-            profileScoped={!pathB}
           />
         );
         break;
@@ -173,7 +172,6 @@ export function AutomationPage({
             onJson={openJson}
             onDirty={onDirty}
             onError={onError}
-            profileScoped={!pathB}
           />
         );
         break;
@@ -185,7 +183,6 @@ export function AutomationPage({
             onJson={openJson}
             onDirty={onDirty}
             onError={onError}
-            profileScoped={!pathB}
           />
         );
         break;
@@ -203,13 +200,7 @@ export function AutomationPage({
         break;
       case 'presets':
         body = config ? (
-          <PresetsEditor
-            key="presets"
-            setConfig={setConfig}
-            onDirty={onDirty}
-            onError={onError}
-            profileScoped={!pathB}
-          />
+          <PresetsEditor key="presets" setConfig={setConfig} onDirty={onDirty} onError={onError} />
         ) : null;
         break;
       case 'loadouts':

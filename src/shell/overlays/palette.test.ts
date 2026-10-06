@@ -427,7 +427,9 @@ describe('alias rows', () => {
 
   it('shows the command each alias sends', async () => {
     const rows = await aliasRows();
-    expect(invoke).toHaveBeenCalledWith('aliases_export');
+    // The palette names no profile, so the app reads the selected
+    // session's.
+    expect(invoke).toHaveBeenCalledWith('aliases_export', { profile: undefined });
     expect(rows.map((r) => [r.title, r.meta ?? null])).toEqual([
       ['cs', 'cast %1'],
       ['k', 'kill %1'],

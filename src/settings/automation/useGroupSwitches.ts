@@ -9,6 +9,7 @@ import {
   type GroupSwitch,
 } from '../../ipc/automation';
 import { subscribeLoadoutsChanged } from '../../ipc/loadouts';
+import { getShownProfile } from '../shownProfile';
 
 /** The switches on one list's group headings, and how to turn one. */
 export interface GroupSwitches {
@@ -22,11 +23,11 @@ export interface GroupSwitches {
 
 const NONE: ReadonlyMap<string, GroupSwitch> = new Map();
 
-/** The group switches of `list`, or null for a list with none. They load
- *  again each time `loaded` changes, the list the editor last loaded or
- *  saved, and whenever a group turns or the loadouts change anywhere. A
- *  switch acts at once and never waits for Save, since a group's state
- *  lives apart from its items. */
+/** The group switches of `list` in the profile Settings shows, or null
+ *  for a list with none. They load again each time `loaded` changes, the
+ *  list the editor last loaded or saved, and whenever a group turns or
+ *  the loadouts change anywhere. A switch acts at once and never waits
+ *  for Save, since a group's state lives apart from its items. */
 export function useGroupSwitches(
   list: GroupList | null,
   loaded: unknown,
@@ -39,7 +40,7 @@ export function useGroupSwitches(
   const reload = useCallback(() => {
     if (!list) return;
     const mine = ++seq.current;
-    listGroupSwitches(list)
+    listGroupSwitches(list, getShownProfile())
       .then((next) => {
         if (seq.current === mine) setByName(switchesByName(next));
       })
@@ -75,7 +76,7 @@ export function useGroupSwitches(
       if (!list) return;
       const mine = ++seq.current;
       setByName((now) => withSwitch(now, group, enabled));
-      setGroupEnabled(list, group, enabled)
+      setGroupEnabled(list, group, enabled, getShownProfile())
         .then((next) => {
           if (seq.current === mine) setByName(switchesByName(next));
         })

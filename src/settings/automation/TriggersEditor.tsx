@@ -15,6 +15,7 @@ import {
   saveTriggerDraft,
   TRIGGER_STYLE_OPTIONS,
   triggerKey,
+  triggerStore,
   triggerStyle,
   validateTriggers,
   withEffect,
@@ -67,8 +68,8 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
   canDelete: (t) => !t.preset,
   emptyDetail: 'Choose a trigger to edit it.',
   emptyList: 'You have no triggers yet.',
-  load: () => loadTriggers(),
-  save: (draft) => saveTriggerDraft(draft),
+  load: (profile) => loadTriggers(triggerStore(profile)),
+  save: (draft, _written, profile) => saveTriggerDraft(draft, triggerStore(profile)),
   validate: validateTriggers,
   entry: (t) => ({
     name: t.name,

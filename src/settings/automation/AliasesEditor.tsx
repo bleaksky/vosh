@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import {
   aliasKey,
+  aliasStore,
   blankAlias,
   jsonListText,
   loadAliases,
@@ -27,8 +28,8 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
   deleteLabel: 'Delete alias',
   emptyDetail: 'Choose an alias to edit it.',
   emptyList: 'You have no aliases yet.',
-  load: () => loadAliases(),
-  save: (draft) => saveAliasDraft(draft),
+  load: (profile) => loadAliases(aliasStore(profile)),
+  save: (draft, _written, profile) => saveAliasDraft(draft, aliasStore(profile)),
   validate: validateAliases,
   entry: (a) => ({
     name: a.name,

@@ -329,6 +329,16 @@
   box-shadow: inset 1px 0 0 var(--divider);
 }
 
+/* A page holds the profile while the selected session plays another. */
+.st-who .shell-dot.is-held {
+  background: var(--warn);
+}
+
+.st-who-note {
+  margin-left: 8px;
+  color: var(--warn-text);
+}
+
 .st-window-controls {
   display: flex;
   align-items: center;

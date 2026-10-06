@@ -47,12 +47,18 @@ export interface TickConfig {
   warn_color: string | null;
 }
 
-export async function tickGetConfig(): Promise<TickConfig> {
-  return invoke('tick_get_config');
+/** A profile's tick settings, the selected session's profile's when it
+ *  names none. */
+export async function tickGetConfig(profile?: string | null): Promise<TickConfig> {
+  return invoke('tick_get_config', { profile });
 }
 
-export async function tickSetConfig(config: TickConfig): Promise<TickConfig> {
-  return invoke('tick_set_config', { config });
+/** Save a profile's tick settings, which every count on it follows. */
+export async function tickSetConfig(
+  config: TickConfig,
+  profile?: string | null,
+): Promise<TickConfig> {
+  return invoke('tick_set_config', { config, profile });
 }
 
 export async function subscribeTickConfigChanged(

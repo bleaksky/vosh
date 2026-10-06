@@ -3,6 +3,7 @@ import { groupKeyOf, searchText } from '../../automation/automationList';
 import {
   blankMacro,
   jsonListText,
+  macroStore,
   normalizeMacro,
   parseJsonList,
   saveMacroDraft,
@@ -28,10 +29,10 @@ const MACROS_SPEC: KindSpec<MacroRecord> = {
   deleteLabel: 'Delete macro',
   emptyDetail: 'Choose a macro to edit it.',
   emptyList: 'You have no macros yet.',
-  load: async () => (await listMacros()).map(normalizeMacro),
+  load: async (profile) => (await listMacros(profile)).map(normalizeMacro),
   // One call per binding, the way the old Macros tab saved rows.
   // Unbinding goes first, so a key another macro takes over stays bound.
-  save: (draft, written) => saveMacroDraft(draft, written),
+  save: (draft, written, profile) => saveMacroDraft(draft, written, macroStore(profile)),
   validate: validateMacros,
   entry: (m) => ({
     name: m.key ? labelForKey(m.key) : '',

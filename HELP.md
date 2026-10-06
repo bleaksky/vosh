@@ -109,6 +109,8 @@ The tick sound plays only for the session in front, and the `Connected` and `Con
 
 Settings edits the profile of the session in front. With two or more sessions open, its header names that session at the right, then the profile it plays in grey, such as `Orla` and `Build`. When another session plays the same profile, the header adds it, such as `Also in Tolliver`, since an edit reaches both.
 
+When you bring a session on another profile to the front while a list under Automation holds unsaved changes, Settings stays on the profile you were editing. Its header keeps naming that session and profile and reads `Save or discard to follow Orla`. Click `Save` or `Discard`, and Settings moves to the profile Orla plays. Each change you make in Settings saves to the profile it was made on, whichever session is in front by the time it lands.
+
 To close a session, point at its row and click the cross that takes the place of the port, press `Cmd+W`, or choose `Close session` from the row's right click menu, the Session menu on macOS or the `Cmd+K` palette. While the session is connected Vosh asks first, such as `Close Orla's session?`, and `Cancel` keeps it. A session that is not connected closes at once. Its row goes and the next row down comes to the front. Closing your last session closes the window.
 
 Closing the window ends every session and quits Vosh. While a session is connected Vosh asks first, whether you press `Cmd+Shift+W`, choose `Close window` in the Session menu on macOS, or click the close button at the top of the window. The question names each connected session, such as `Two sessions are connected, Tolliver on The Forsaken Lands and Orla on The Forsaken Lands 1825.`
@@ -665,6 +667,8 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 - Open a profile's more menu to `Switch to this profile`, or to choose `Rename…`, `Duplicate…`, `Export to Downloads`, or `Delete…`.
 
 `Duplicate…` copies a profile's whole setup but leaves its world and login behind. You cannot delete the profile in use, so switch away first.
+
+Settings edits the profile of the session in front and follows you to another session's profile. Unsaved changes to a list under Automation keep it on their profile until you save or discard them.
 
 Some settings can stay the same for every character. Under General, Keep the same for every character holds `Theme`, `Font and size`, `Keep last command`, and `Check for updates`. With a switch on, every character shares one value. Turn it off and each character keeps its own.
 

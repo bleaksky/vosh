@@ -71,8 +71,6 @@ export interface DebouncedWrite<T> {
   waiting: () => T | null;
   /** Send the waiting value now. Resolves once `send` has. */
   flush: () => Promise<void>;
-  /** Forget the waiting value. */
-  drop: () => void;
 }
 
 /** A DebouncedWrite over `send`, which should handle its own errors,
@@ -98,10 +96,6 @@ export function createDebouncedWrite<T>(send: (value: T) => Promise<void>): Debo
     },
     waiting: () => (waiting ? waiting.value : null),
     flush,
-    drop() {
-      stopTimer();
-      waiting = null;
-    },
   };
 }
 

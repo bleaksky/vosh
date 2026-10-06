@@ -165,32 +165,40 @@ export interface HighlightStyle {
   base?: boolean;
 }
 
-export async function exportTriggers(): Promise<string> {
-  return invoke('triggers_export');
+// Each call that reads or writes a profile's lists names the profile
+// it means, as Settings does, or names none and reaches the profile the
+// selected session plays. A name no session plays fails with the
+// sentence the app gives.
+
+export async function exportTriggers(profile?: string | null): Promise<string> {
+  return invoke('triggers_export', { profile });
 }
 
-export async function importTriggers(json: string): Promise<number> {
-  return invoke('triggers_import', { json });
+export async function importTriggers(json: string, profile?: string | null): Promise<number> {
+  return invoke('triggers_import', { json, profile });
 }
 
 export async function listTriggers(): Promise<TriggerRecord[]> {
   return invoke('triggers_list');
 }
 
-export async function exportAliases(): Promise<string> {
-  return invoke('aliases_export');
+export async function exportAliases(profile?: string | null): Promise<string> {
+  return invoke('aliases_export', { profile });
 }
 
-export async function importAliases(json: string): Promise<number> {
-  return invoke('aliases_import', { json });
+export async function importAliases(json: string, profile?: string | null): Promise<number> {
+  return invoke('aliases_import', { json, profile });
 }
 
-export async function presetsInstall(triggers: TriggerRecord[]): Promise<number> {
-  return invoke('presets_install', { triggers });
+export async function presetsInstall(
+  triggers: TriggerRecord[],
+  profile?: string | null,
+): Promise<number> {
+  return invoke('presets_install', { triggers, profile });
 }
 
-export async function presetsRemove(presetId: string): Promise<number> {
-  return invoke('presets_remove', { presetId });
+export async function presetsRemove(presetId: string, profile?: string | null): Promise<number> {
+  return invoke('presets_remove', { presetId, profile });
 }
 
 // Keyboard macro bindings. A Macro maps a canonical key string
@@ -216,8 +224,8 @@ export interface GroupToggle {
   enabled: boolean;
 }
 
-export async function listMacros(): Promise<Macro[]> {
-  return invoke('macros_list');
+export async function listMacros(profile?: string | null): Promise<Macro[]> {
+  return invoke('macros_list', { profile });
 }
 
 /** Bind or rebind a key. `enabled` turns the binding on or off. Leave
@@ -227,17 +235,19 @@ export async function setMacro(
   command: string,
   group: string | null = null,
   enabled?: boolean,
+  profile?: string | null,
 ): Promise<Macro[]> {
   return invoke('macros_set', {
     key,
     command,
     group: group && group.length > 0 ? group : null,
     enabled: enabled ?? null,
+    profile,
   });
 }
 
-export async function deleteMacro(key: string): Promise<Macro[]> {
-  return invoke('macros_delete', { key });
+export async function deleteMacro(key: string, profile?: string | null): Promise<Macro[]> {
+  return invoke('macros_delete', { key, profile });
 }
 
 /** One interval timer: fire `command` every `interval_secs` seconds while
@@ -253,8 +263,8 @@ export interface Timer {
   group?: string | null;
 }
 
-export async function timersList(): Promise<Timer[]> {
-  return invoke('timers_list');
+export async function timersList(profile?: string | null): Promise<Timer[]> {
+  return invoke('timers_list', { profile });
 }
 
 /** Create (id null) or update (existing id) a timer. A null group puts
@@ -266,12 +276,21 @@ export async function timersSet(
   command: string,
   enabled: boolean,
   group: string | null,
+  profile?: string | null,
 ): Promise<Timer[]> {
-  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled, group });
+  return invoke('timers_set', {
+    id: id ?? null,
+    name,
+    intervalSecs,
+    command,
+    enabled,
+    group,
+    profile,
+  });
 }
 
-export async function timersDelete(id: number): Promise<Timer[]> {
-  return invoke('timers_delete', { id });
+export async function timersDelete(id: number, profile?: string | null): Promise<Timer[]> {
+  return invoke('timers_delete', { id, profile });
 }
 
 // --- Group switches, one on each group heading in Settings, Automation ---
@@ -299,8 +318,11 @@ export interface GroupSwitch {
 }
 
 /** The switch of each group in one list, sorted by name. */
-export async function listGroupSwitches(list: GroupList): Promise<GroupSwitch[]> {
-  return invoke('groups_list', { list });
+export async function listGroupSwitches(
+  list: GroupList,
+  profile?: string | null,
+): Promise<GroupSwitch[]> {
+  return invoke('groups_list', { list, profile });
 }
 
 /** Turn a whole group of one list on or off. Returns every switch of the
@@ -309,8 +331,9 @@ export async function setGroupEnabled(
   list: GroupList,
   group: string,
   enabled: boolean,
+  profile?: string | null,
 ): Promise<GroupSwitch[]> {
-  return invoke('groups_set_enabled', { list, group, enabled });
+  return invoke('groups_set_enabled', { list, group, enabled, profile });
 }
 
 /** A group of any list turned on or off: #group, Lua, or a switch in
@@ -376,6 +399,10 @@ export async function detectImportFormat(text: string): Promise<string | null> {
   return invoke('import_detect', { text });
 }
 
-export async function applyImport(format: ImportFormat, text: string): Promise<ImportSummary> {
-  return invoke('import_apply', { format, text });
+export async function applyImport(
+  format: ImportFormat,
+  text: string,
+  profile?: string | null,
+): Promise<ImportSummary> {
+  return invoke('import_apply', { format, text, profile });
 }

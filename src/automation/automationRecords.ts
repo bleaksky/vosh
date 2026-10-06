@@ -76,11 +76,18 @@ export interface AliasStoreApi {
   importAliases: (json: string) => Promise<unknown>;
 }
 
-const ALIAS_STORE: AliasStoreApi = { exportAliases, importAliases };
+/** The alias store of `profile`, or of the profile the selected session
+ *  plays when it names none. */
+export function aliasStore(profile?: string | null): AliasStoreApi {
+  return {
+    exportAliases: () => exportAliases(profile),
+    importAliases: (json) => importAliases(json, profile),
+  };
+}
 
 /** Every alias the store holds, for display. A reply that does not read
  *  shows as no aliases. */
-export async function loadAliases(api: AliasStoreApi = ALIAS_STORE): Promise<AliasRecord[]> {
+export async function loadAliases(api: AliasStoreApi = aliasStore()): Promise<AliasRecord[]> {
   return parseJsonList(await api.exportAliases(), normalizeAlias) ?? [];
 }
 
@@ -89,7 +96,7 @@ export async function loadAliases(api: AliasStoreApi = ALIAS_STORE): Promise<Ali
  *  loaded survives, and a list that does not read stops the save. */
 export async function saveAliasDraft(
   draft: Draft<AliasRecord>,
-  api: AliasStoreApi = ALIAS_STORE,
+  api: AliasStoreApi = aliasStore(),
 ): Promise<void> {
   await saveDraftOnto(
     draft,
@@ -188,7 +195,14 @@ export interface MacroStoreApi {
   ) => Promise<unknown>;
 }
 
-const MACRO_STORE: MacroStoreApi = { deleteMacro, setMacro };
+/** The macros of `profile`, or of the profile the selected session
+ *  plays when it names none. */
+export function macroStore(profile?: string | null): MacroStoreApi {
+  return {
+    deleteMacro: (key) => deleteMacro(key, profile),
+    setMacro: (key, command, group, enabled) => setMacro(key, command, group, enabled, profile),
+  };
+}
 
 /** Save the Macros draft one call per binding, the way the old Macros
  *  tab saved rows. Each call the store takes goes to `written` as it
@@ -198,7 +212,7 @@ const MACRO_STORE: MacroStoreApi = { deleteMacro, setMacro };
 export async function saveMacroDraft(
   draft: Draft<MacroRecord>,
   written: (write: SavedWrite<MacroRecord>) => void,
-  api: MacroStoreApi = MACRO_STORE,
+  api: MacroStoreApi = macroStore(),
 ): Promise<void> {
   const plan = macroSavePlan(draft);
   for (const { key, uids } of plan.remove) {
@@ -302,7 +316,15 @@ export interface TimerStoreApi {
   ) => Promise<unknown[]>;
 }
 
-const TIMER_STORE: TimerStoreApi = { timersDelete, timersSet };
+/** The timers of `profile`, or of the profile the selected session
+ *  plays when it names none. */
+export function timerStore(profile?: string | null): TimerStoreApi {
+  return {
+    timersDelete: (id) => timersDelete(id, profile),
+    timersSet: (id, name, intervalSecs, command, enabled, group) =>
+      timersSet(id, name, intervalSecs, command, enabled, group, profile),
+  };
+}
 
 /** Save the Timers draft one call per timer, the way the old Timers tab
  *  saved cards. Each call the store takes goes to `written` as it lands,
@@ -313,7 +335,7 @@ const TIMER_STORE: TimerStoreApi = { timersDelete, timersSet };
 export async function saveTimerDraft(
   draft: Draft<TimerRecord>,
   written: (write: SavedWrite<TimerRecord>) => void,
-  api: TimerStoreApi = TIMER_STORE,
+  api: TimerStoreApi = timerStore(),
 ): Promise<void> {
   const plan = timerSavePlan(draft);
   for (const { uid, id } of plan.remove) {
