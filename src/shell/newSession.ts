@@ -1,7 +1,6 @@
-import { profilesList } from '../ipc/profiles';
+import { profileBeforeLogin, profilesList } from '../ipc/profiles';
 import { closeSession, openSession } from '../ipc/session';
 import { requestSessionMenu, type OpenedSession } from '../lib/appMenu';
-import { pickProfile } from '../lib/sessionProfile';
 import { errorText } from '../lib/text';
 import { getSelected, getSessions, select } from '../stores/session/sessionsStore';
 import { loadTarget } from '../stores/session/useConnection';
@@ -18,9 +17,9 @@ export async function openNewSession(): Promise<void> {
   const previous = getSelected();
   try {
     const saved = loadTarget();
-    const { active, profiles } = await profilesList();
+    const { active } = await profilesList();
     const front = getSessions().find((row) => row.id === previous)?.profile ?? active;
-    const profile = pickProfile(profiles, saved.host, saved.port, front);
+    const profile = (await profileBeforeLogin(saved.host, saved.port)) ?? front;
     const id = await openSession(profile);
     await select(id);
     const opened: OpenedSession = { id, previous, front, profile };

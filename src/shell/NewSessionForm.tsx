@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { profileSwitch, profilesList, type ProfileEntry } from '../ipc/profiles';
+import {
+  profileBeforeLogin,
+  profileSwitch,
+  profilesList,
+  type ProfileEntry,
+} from '../ipc/profiles';
 import type { ConnectionTarget } from '../ipc/session';
 import type { OpenedSession } from '../lib/appMenu';
 import { profileDisplayName } from '../lib/characterProfiles';
-import { pickProfile, profileLines, showsProfileRow } from '../lib/sessionProfile';
+import { profileLines, showsProfileRow } from '../lib/sessionProfile';
 import { useSessions } from '../stores/session/sessionsStore';
 import {
   loadTarget,
@@ -46,6 +51,9 @@ export function NewSessionForm({ opened, connection, onClose }: Props) {
   const chosen = useRef(false);
   const switching = useRef<Promise<void>>(Promise.resolve());
   const dialed = useRef(false);
+  // Counts each ask for a pick, so an answer for an address you have
+  // since changed picks nothing.
+  const asked = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -83,25 +91,31 @@ export function NewSessionForm({ opened, connection, onClose }: Props) {
     );
   };
 
-  /** The pick for `to`, while you have not chosen one. */
-  const repick = (to: ConnectionTarget) => {
-    if (!chosen.current && profiles) choose(pickProfile(profiles, to.host, to.port, opened.front));
+  /** Pick the profile for `to`, while you have not chosen one. */
+  const repick = async (to: ConnectionTarget) => {
+    if (chosen.current) return;
+    const mine = ++asked.current;
+    const name = await profileBeforeLogin(to.host, to.port).catch((e: unknown) => {
+      console.warn('[new session] profile_resolve_match', e);
+      return null;
+    });
+    if (mine === asked.current && !chosen.current) choose(name ?? opened.front);
   };
 
   const host = address?.host;
   const port = address?.port;
   useEffect(() => {
     if (host === undefined || port === undefined) return;
-    const timer = window.setTimeout(() => repick({ host, port, tls: false }), REPICK_MS);
+    const timer = window.setTimeout(() => void repick({ host, port, tls: false }), REPICK_MS);
     return () => window.clearTimeout(timer);
-    // The pick follows the address and the profile list alone.
+    // The pick follows the address alone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, port, profiles]);
+  }, [host, port]);
 
   const connect = async (target: ConnectionTarget) => {
     dialed.current = true;
     onClose();
-    repick(target);
+    await repick(target);
     await switching.current;
     await connection.connectNew(target, opened.id);
   };

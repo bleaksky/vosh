@@ -9,7 +9,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::ui::{default_true, is_true};
-use super::worlds::known_world;
+use super::worlds::{host_key, known_world};
 use crate::profile::set::{display_name, ProfileEntry, ProfileSet, ProfileSetError};
 
 #[derive(Debug, Clone, Serialize)]
@@ -94,6 +94,17 @@ pub(crate) struct LoginClaim {
     pub entry: ProfileEntry,
     pub released_from: Vec<String>,
     pub pinned: Vec<PinnedClaim>,
+}
+
+/// Whom a claim must name to match, see [`ProfileSet::resolve_match`].
+#[derive(Clone, Copy)]
+enum Claimant<'a> {
+    /// The character a login named, or none yet, when a claim that names
+    /// characters never matches.
+    Login(Option<&'a str>),
+    /// Whoever logs in, for a session that has not logged in yet, so a
+    /// claim that names characters counts as one on its host and port.
+    Anyone,
 }
 
 /// A claim on the host alone that Vosh pinned to its world's own port.
@@ -185,15 +196,30 @@ impl ProfileSet {
     ///
     /// So a profile pinned to (host, port, character) beats one pinned
     /// to (host, port) which beats one pinned to (host) alone. An entry
-    /// whose login toggle is off never matches.
+    /// whose login toggle is off never matches. Hosts compare through
+    /// [`host_key`], as the page compares them.
     pub(crate) fn resolve_match(
         &self,
         host: &str,
         port: u16,
         character: Option<&str>,
     ) -> Option<String> {
-        let host_l = host.trim().to_ascii_lowercase();
-        let character_l = character.map(str::trim).map(str::to_ascii_lowercase);
+        self.resolve(host, port, Claimant::Login(character))
+    }
+
+    /// The profile a new session on `host` and `port` starts on, before
+    /// anyone logs in: one whose claim is pinned to that host and port,
+    /// else one that claims the host on any port. A claim that names
+    /// characters counts too, since the New session form picks before a
+    /// character logs in (Sessions Q2). None leaves the profile in front.
+    pub(crate) fn resolve_before_login(&self, host: &str, port: u16) -> Option<String> {
+        self.resolve(host, port, Claimant::Anyone)
+    }
+
+    /// The best claim on `host` and `port` for `who`, see
+    /// [`ProfileSet::resolve_match`].
+    fn resolve(&self, host: &str, port: u16, who: Claimant<'_>) -> Option<String> {
+        let host_l = host_key(host);
         let mut best: Option<(&str, u8)> = None;
         for entry in &self.index.profiles {
             let Some(am) = &entry.auto_match else {
@@ -203,7 +229,7 @@ impl ProfileSet {
                 continue;
             }
             let Some(am_host) = &am.host else { continue };
-            if am_host.trim().to_ascii_lowercase() != host_l {
+            if host_key(am_host) != host_l {
                 continue;
             }
             if let Some(p) = am.port {
@@ -216,17 +242,21 @@ impl ProfileSet {
                 score += 1;
             }
             if !am.characters.is_empty() {
-                let Some(connect_char) = &character_l else {
-                    continue;
-                };
-                let any_match = am
-                    .characters
-                    .iter()
-                    .any(|name| name.trim().to_ascii_lowercase() == *connect_char);
-                if !any_match {
-                    continue;
+                match who {
+                    Claimant::Anyone => {}
+                    Claimant::Login(None) => continue,
+                    Claimant::Login(Some(character)) => {
+                        let character = character.trim().to_ascii_lowercase();
+                        let any_match = am
+                            .characters
+                            .iter()
+                            .any(|name| name.trim().to_ascii_lowercase() == character);
+                        if !any_match {
+                            continue;
+                        }
+                        score += 2;
+                    }
                 }
-                score += 2;
             }
             if best.map_or(true, |(_, b)| score > b) {
                 best = Some((entry.name.as_str(), score));
@@ -593,6 +623,43 @@ characters = ["Ilsabet", "Ondrevar"]
         assert_eq!(set.resolve_match("h", 1848, Some("Ilsabet")), None);
         // A host-only entry that is off is no fallback at connect.
         assert_eq!(set.resolve_match("h", 1848, None), None);
+    }
+
+    #[test]
+    fn before_login_a_claim_pinned_to_the_port_wins_then_one_on_the_host() {
+        let claim = |port, characters: &[&str], enabled| AutoMatch {
+            host: Some("play.theforsakenlands.com".into()),
+            port,
+            characters: characters.iter().map(|c| (*c).to_string()).collect(),
+            enabled,
+        };
+        let set = set_with_profiles(vec![
+            (DEFAULT_PROFILE_NAME, claim(Some(1848), &["Tolliver"], true)),
+            ("Build", claim(Some(1825), &["Orla"], true)),
+            ("Healer", claim(None, &["Maren"], true)),
+            ("Spare", claim(Some(1825), &[], false)),
+        ]);
+        let pick = |host: &str, port| set.resolve_before_login(host, port);
+        // A claim that names characters counts before anyone logs in.
+        assert_eq!(
+            pick("play.theforsakenlands.com", 1825).as_deref(),
+            Some("Build")
+        );
+        assert_eq!(
+            pick("Play.TheForsakenLands.com.", 1848).as_deref(),
+            Some(DEFAULT_PROFILE_NAME)
+        );
+        // Then a claim on the host on any port.
+        assert_eq!(
+            pick("play.theforsakenlands.com", 4000).as_deref(),
+            Some("Healer")
+        );
+        assert_eq!(pick("mud.example.org", 4000), None);
+        // At a login the same claims ask for the character.
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1825, None),
+            None
+        );
     }
 
     #[test]

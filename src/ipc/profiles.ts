@@ -63,6 +63,14 @@ export async function profileResolveMatch(
   return invoke('profile_resolve_match', { host, port, character });
 }
 
+/** The profile a new session on `host` and `port` starts on before
+ *  anyone logs in, one pinned to that host and port, then one that
+ *  claims the host on any port, or null to keep the profile in front. A
+ *  claim that names characters counts too (Sessions Q2). */
+export async function profileBeforeLogin(host: string, port: number): Promise<string | null> {
+  return invoke('profile_resolve_match', { host, port, character: null, anyCharacter: true });
+}
+
 /** Create a profile, starting as a copy of `copyFrom` when given, with
  *  `autoMatch` as its login claim. The claim takes nothing from other
  *  profiles, so follow with profileSetLogin to own the character. Does

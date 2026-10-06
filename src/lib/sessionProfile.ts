@@ -5,34 +5,18 @@ import { hostKey, knownWorld, worldLabel } from './knownWorlds';
 import { sessionLabel } from './sessionLabel';
 import { listJoin, possessive } from './text';
 
-// The profile a new session plays and what the New session form says
-// under its Profile row, by board 4 of the Sessions review. The pick
-// reads every claim, the ones that name characters too, since the form
-// chooses before any character logs in (Q2).
+// What the New session form says under its Profile row, by board 4 of
+// the Sessions review. Which profile the form picks comes from Rust,
+// through profileBeforeLogin, where ProfileSet::resolve_before_login
+// sits beside the claim matcher a login runs.
 
-/** Whether `profile`'s login claim names `host`, on `port` when `pinned`
- *  and on any port when not. A claim whose login is off never counts. */
-function claims(profile: ProfileEntry, host: string, port: number, pinned: boolean): boolean {
+/** Whether `profile`'s login claim is pinned to `host` and `port`, as
+ *  the hint under the Profile row says. A claim whose login is off never
+ *  counts. Hosts compare as Rust compares them. */
+function pinnedTo(profile: ProfileEntry, host: string, port: number): boolean {
   const claim = profile.auto_match;
-  if (!claim?.host || claim.enabled === false || hostKey(claim.host) !== hostKey(host))
-    return false;
-  return pinned ? claim.port === port : claim.port == null;
-}
-
-/** The profile a new session on `host` and `port` starts on: one pinned
- *  to that host and port, then one that claims the host on any port,
- *  then `front`, the profile in front. */
-export function pickProfile(
-  profiles: readonly ProfileEntry[],
-  host: string,
-  port: number,
-  front: string,
-): string {
-  return (
-    profiles.find((p) => claims(p, host, port, true))?.name ??
-    profiles.find((p) => claims(p, host, port, false))?.name ??
-    front
-  );
+  if (!claim?.host || claim.enabled === false) return false;
+  return hostKey(claim.host) === hostKey(host) && claim.port === port;
 }
 
 /** What the form says under its Profile row. `hint` names a profile
@@ -113,7 +97,7 @@ export function profileLines(
   const entry = profiles.find((p) => p.name === profile);
   let hint: string | null = null;
   if (others.length > 0) hint = sharedLine(others, rows, name);
-  else if (entry && claims(entry, host, port, true)) {
+  else if (entry && pinnedTo(entry, host, port)) {
     const place = knownWorld(host) ? worldLabel(host, port) : `${host.trim()}:${port}`;
     hint = `${name} is pinned to ${place}.`;
   }
