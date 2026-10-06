@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
 import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
+import { ALERT_PRESETS } from '../automation/alertPresets';
 import { SETTINGS_MENU } from '../terminal/settingsMenu';
 
 function body(id: string): string {
@@ -1288,5 +1289,19 @@ describe('the help on Numpad movement', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.macros');
     if (!found) throw new Error('no macros topic');
     expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+  });
+});
+
+describe('the help on the alert presets', () => {
+  it('names each preset as the Alerts category lists it', () => {
+    const text = body('automate.alerts');
+    for (const preset of ALERT_PRESETS) expect(text).toContain(`\`${preset.name}\``);
+    expect(text).toContain('All five start off.');
+    expect(text).toContain('at most once in 10 seconds');
+  });
+
+  it('points there from Reconnect and Create a trigger', () => {
+    expect(body('get-connected.reconnect')).toContain('in Get alerts at 3.9');
+    expect(body('automate.first-trigger')).toContain('as Get alerts at 3.9 shows');
   });
 });
