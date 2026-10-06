@@ -16,7 +16,7 @@ use crate::app::events::{broadcast, MIGRATION_APPLIED};
 use crate::app::state::{SharedState, NO_APP_DATA};
 use crate::disk::paths::{catalog_path, journal_path, legacy_dir, loadouts_path};
 use crate::disk::save::{active_profile_file, persist_state, PERSIST_LOCK};
-use crate::loadouts::presets::first_catalog_presets;
+use crate::loadouts::presets::{first_catalog_presets, hold_taken_keys};
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::set::SavedFile;
@@ -353,6 +353,9 @@ pub(crate) async fn apply_migration(
             ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
         }
     }
+    // A preset macro comes over on, and waits while the macro of yours you
+    // kept on its key holds the key, as it does after every macro change.
+    hold_taken_keys(&mut catalog.macros);
 
     // Every loadout starts off. An active loadout imposes its groups on
     // every profile, at launch and at every switch, so the loadout of the
