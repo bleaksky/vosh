@@ -915,6 +915,9 @@ describe('the help on Lua', () => {
     );
     expect(text).toContain('A plugin Vosh stopped reads `Stopped` there.');
     expect(text).toContain(
+      'A plugin folder you named by hand with other characters, like `weather-pane`, still loads and shows there, and its row asks you to rename the folder. Until you do, its switch only turns it off, and its page does not open.',
+    );
+    expect(text).toContain(
       'The Console under Scripts in Settings shows the same lines, each with its time, and runs the Lua you type in its field the way `#lua` does.',
     );
     // You no longer edit the profile file to turn a plugin on (Q29).

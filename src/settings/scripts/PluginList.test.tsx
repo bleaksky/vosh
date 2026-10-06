@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PluginRow } from '../../ipc/scripts';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
-import { NO_PLUGINS, PluginList } from './PluginList';
+import { MISNAMED_NOTE, NO_PLUGINS, PluginList } from './PluginList';
 
 // The Plugins section of Scripts, drawn as markup for what it shows and
 // mounted for the switch, the menu and Install.
@@ -61,6 +61,7 @@ const plugin = (patch: Partial<PluginRow> & Pick<PluginRow, 'name'>): PluginRow 
   entry: 'main.lua',
   on: true,
   stopped: null,
+  misnamed: false,
   ...patch,
 });
 
@@ -163,6 +164,27 @@ describe('the Plugins section', () => {
     ]);
   });
 
+  it('shows a plugin whose folder breaks the name rule, with no way to open it', () => {
+    const html = draw([
+      plugin({ name: 'weather-pane', description: 'Show the weather.', misnamed: true }),
+      plugin({ name: 'old-pane', on: false, misnamed: true }),
+    ]);
+    const [running, off] = html.split('<div class="st-row st-plugin-row">').slice(1);
+    // The note takes the description's place, and the row opens nothing.
+    expect(running).toContain(
+      `<div class="st-row-text"><span class="st-row-label">weather-pane</span><span class="st-row-desc">${MISNAMED_NOTE}</span></div>`,
+    );
+    expect(html).not.toContain('st-plugin-open');
+    expect(html).not.toContain('Show the weather.');
+    // A running one turns off, one that is off stays so, and neither
+    // menu opens.
+    expect(running).toMatch(/<input(?![^>]*disabled)[^>]*role="switch"[^>]*checked=""/);
+    expect(off).toMatch(/<input[^>]*disabled=""[^>]*role="switch"/);
+    for (const row of [running, off]) {
+      expect(row).toMatch(/<button[^>]*aria-haspopup="menu"[^>]*disabled=""/);
+    }
+  });
+
   it('draws no description line for a plugin without one', () => {
     const html = draw([plugin({ name: 'wait_full' })]);
     expect(html).not.toContain('st-row-desc');
@@ -193,7 +215,7 @@ describe('the On switch', () => {
 
   /** Mount the board's list, flip the switch of `name`, and say what
    *  the section handed back. */
-  async function flip(name: string, on: boolean) {
+  async function flip(name: string, on: boolean, plugins: PluginRow[] = BOARD) {
     calls.invoked.length = 0;
     const shown: PluginRow[][] = [];
     const errors: (string | null)[] = [];
@@ -204,7 +226,7 @@ describe('the On switch', () => {
     await act(async () => {
       root.render(
         createElement(PluginList, {
-          plugins: BOARD,
+          plugins,
           onPlugins: (list) => void shown.push(list),
           onError: (e) => void errors.push(e),
           onChanged: () => void reads++,
@@ -214,7 +236,7 @@ describe('the On switch', () => {
       );
     });
     const switches = findAll(container, (el) => el.getAttribute('role') === 'switch');
-    const row = BOARD.findIndex((p) => p.name === name);
+    const row = plugins.findIndex((p) => p.name === name);
     const input = switches[row] as FakeElement;
     const key = Object.keys(input).find((k) => k.startsWith('__reactProps$')) ?? '';
     const props = (input as unknown as Record<string, { onChange: (e: unknown) => void }>)[key];
@@ -240,6 +262,18 @@ describe('the On switch', () => {
     expect(shown).toEqual([after, after]);
     expect(errors).toEqual([null]);
     expect(reads).toBe(0);
+  });
+
+  it('turns off a plugin whose folder breaks the name rule', async () => {
+    calls.answer = () => Promise.resolve([]);
+    const { errors } = await flip('weather-pane', false, [
+      ...BOARD,
+      plugin({ name: 'weather-pane', misnamed: true }),
+    ]);
+    expect(calls.invoked).toEqual([
+      { cmd: 'plugin_set_enabled', args: { name: 'weather-pane', on: false } },
+    ]);
+    expect(errors).toEqual([null]);
   });
 
   it('shows the refusal and reads the list again when the change fails', async () => {

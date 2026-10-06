@@ -121,6 +121,7 @@ const row = (name: string, patch: Partial<PluginRow> = {}): PluginRow => ({
   entry: 'main.lua',
   on: true,
   stopped: null,
+  misnamed: false,
   ...patch,
 });
 

@@ -24,7 +24,11 @@ import { switchPlugin } from './switchPlugin';
 // description, with Stopped while Vosh holds it off, the switch that
 // turns it on or off for the profile you play, and its more button. A
 // press on the row opens the plugin's page, as a profile row does in
-// Characters, and New plugin asks for the name of a new one.
+// Characters, and New plugin asks for the name of a new one. A plugin
+// whose folder you named by hand outside the rule still loads, so its
+// row shows too and says how to make it one the page can open. Its
+// switch only turns it off, and its menu stays shut, since every other
+// Scripts command holds a plugin name to the rule.
 //
 // Install takes a .zip you pick or a folder you drop anywhere on the
 // list page, and asks once. Each row's menu reloads, shows, exports and
@@ -34,6 +38,10 @@ import { switchPlugin } from './switchPlugin';
 /** The card's line before you have a plugin. */
 export const NO_PLUGINS =
   'You have no plugins yet. A plugin is a folder of Lua that runs while you play.';
+
+/** The line under a plugin whose folder name breaks the rule. */
+export const MISNAMED_NOTE =
+  'Rename its folder with only letters, digits and underscores to open it or turn it on here.';
 
 interface Props {
   /** Your plugins, or null until the list arrives. */
@@ -216,19 +224,26 @@ export function PluginList({ plugins, onPlugins, onError, onChanged, onNew, onOp
             className="st-row st-plugin-row"
             onContextMenu={(e) => {
               e.preventDefault();
-              openMenu(plugin.name, null, { x: e.clientX, y: e.clientY });
+              if (!plugin.misnamed) openMenu(plugin.name, null, { x: e.clientX, y: e.clientY });
             }}
           >
-            <button
-              type="button"
-              className="st-row-text st-plugin-open"
-              onClick={() => onOpen(plugin.name)}
-            >
-              <span className="st-row-label">{plugin.name}</span>
-              {plugin.description !== '' && (
-                <span className="st-row-desc">{plugin.description}</span>
-              )}
-            </button>
+            {plugin.misnamed ? (
+              <div className="st-row-text">
+                <span className="st-row-label">{plugin.name}</span>
+                <span className="st-row-desc">{MISNAMED_NOTE}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="st-row-text st-plugin-open"
+                onClick={() => onOpen(plugin.name)}
+              >
+                <span className="st-row-label">{plugin.name}</span>
+                {plugin.description !== '' && (
+                  <span className="st-row-desc">{plugin.description}</span>
+                )}
+              </button>
+            )}
             <div className="st-row-control">
               {plugin.stopped && (
                 <span className="st-meta" data-tone="warn">
@@ -237,6 +252,7 @@ export function PluginList({ plugins, onPlugins, onError, onChanged, onNew, onOp
               )}
               <Toggle
                 checked={plugin.on}
+                disabled={plugin.misnamed && !plugin.on}
                 aria-label={plugin.name}
                 onChange={(on) =>
                   switchPlugin(plugins, plugin.name, on, { onPlugins, onError, onChanged })
@@ -247,6 +263,7 @@ export function PluginList({ plugins, onPlugins, onError, onChanged, onNew, onOp
                 icon={<MoreIcon />}
                 aria-haspopup="menu"
                 aria-expanded={menu?.name === plugin.name}
+                disabled={plugin.misnamed}
                 onClick={(e) => {
                   if (menu?.name === plugin.name) setMenu(null);
                   else openMenu(plugin.name, e.currentTarget);

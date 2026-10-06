@@ -30,6 +30,10 @@ export interface PluginRow {
   on: boolean;
   /** Why Vosh stopped it in the session, while it holds it off. */
   stopped: PluginStop | null;
+  /** Its folder name breaks the rule New plugin shows, which only a
+   *  folder named by hand can do. It loads all the same, and the page
+   *  cannot open it but can turn it off. */
+  misnamed: boolean;
 }
 
 /** Your plugins, sorted by name. */

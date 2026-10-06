@@ -4,7 +4,8 @@
 //! so a name from the page can only ever name one folder inside the
 //! plugins folder.
 //! The loader in [`super`] reads a folder you made by hand with a looser
-//! rule, so it still loads at launch, but the Scripts page leaves it out.
+//! rule, so it still loads at launch. The Scripts page lists it as one
+//! it cannot open, and can turn it off.
 //!
 //! Each file goes in whole through [`swap_in`], with no backup beside it,
 //! since a backup in the folder would ride along when you export the
