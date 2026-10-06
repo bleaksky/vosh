@@ -29,6 +29,10 @@ import { getSelected, subscribeSelected } from './sessionsStore';
 // The link follows session://state and session://reconnect. Until an
 // event of the session names it, a row reads the link from the session
 // list, connected or not, and the login from the character it names.
+// The list keeps naming the character a session played through a drop,
+// every try of a redial and a disconnect, and forgets it at a connect
+// you start, so a redial that reached the game shows the hand on a row
+// that still names its character.
 
 /** Where a session's link stands, as its events last said. `failed`
  *  needs you to connect again yourself. */
@@ -167,7 +171,8 @@ export function rowLook(state: SessionRowState, row: SessionRow, selected: boole
   const link = state.link ?? (row.connected ? 'live' : 'down');
   const busy = state.redialing || link === 'dialing';
   const knows = state.reached || (row.host !== null && knownWorld(row.host) !== undefined);
-  const login = link === 'live' && !state.playing && row.character === null && knows;
+  const login =
+    link === 'live' && !state.playing && (state.reached || row.character === null) && knows;
   const glyph: RowGlyph | null =
     link === 'failed'
       ? 'triangle'

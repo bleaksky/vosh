@@ -244,7 +244,9 @@ impl SessionHandle {
 /// in place of the connection it runs, if any, and in place of a series
 /// of redials it waits on. The new connection starts without the session
 /// variables, the character and the affects of the last one, and every
-/// window hears who the session is for once it connects or fails to.
+/// window hears who the session is for once it connects or fails to. The
+/// row forgets the character the session played, so it names the world
+/// until you log in, where each try of a redial keeps it.
 pub(crate) async fn connect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -260,6 +262,7 @@ pub(crate) async fn connect<R: tauri::Runtime>(
         handle.shutdown().await;
     }
     reconnect::cancel(app, session).await;
+    session.forget_played();
     dial(app, state, session, host, port, tls, false).await
 }
 
@@ -396,8 +399,8 @@ pub(crate) async fn dial<R: tauri::Runtime>(
 
 /// End the connection `session` runs, if any, and the series of redials
 /// it waits on, and forget the connection and its character. Every
-/// window hears that no connection is live, and the rows without the
-/// character.
+/// window hears that no connection is live, and the rows, where the
+/// session's row still names the character it played.
 pub(crate) async fn disconnect<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,

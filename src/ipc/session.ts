@@ -33,7 +33,8 @@ export interface SessionRow {
   id: number;
   /** The name you gave it. */
   name: string | null;
-  /** The character logged in on its live connection. */
+  /** The character it plays, or once the link is gone the one it
+   *  played last, which a connect you start forgets until you log in. */
   character: string | null;
   /** Where it dials, null before its first connect or address. */
   host: string | null;

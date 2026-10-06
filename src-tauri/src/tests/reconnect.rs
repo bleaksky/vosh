@@ -160,15 +160,19 @@ async fn eight_failed_tries_stop_and_say_so() {
     );
     h.until("the alert", |h| rang(h).len() == 2).await;
     assert_eq!(rang(&h), ["Connection lost", "Vosh stopped trying"]);
-    // Each banner names the session as its row reads, by the character
-    // at the drop and by the world once the tries forgot it.
+    // The tries forgot the character on the live connection, and the row
+    // still names the character Orla played, so two sessions that redial
+    // on one world read apart (Sessions Q10, board 3). Each banner names
+    // the session as its row reads.
+    assert_eq!(character_of(&h, h.first), None);
+    let row = h.state.session_rows().into_iter().find(|r| r.id == h.first);
+    assert_eq!(row.and_then(|r| r.character).as_deref(), Some("Orla"));
     let labels: Vec<Json> = h
         .events_of(h.first, "session://alert")
         .iter()
         .map(|a| a["label"].clone())
         .collect();
-    let world = format!("127.0.0.1 {}", h.servers[0].port);
-    assert_eq!(labels, [json!("Orla"), json!(world)]);
+    assert_eq!(labels, [json!("Orla"), json!("Orla")]);
     clock.stays_quiet().await;
     h.finish(grid).await;
 }

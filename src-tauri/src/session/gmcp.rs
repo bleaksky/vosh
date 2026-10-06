@@ -190,6 +190,7 @@ async fn character_named<R: tauri::Runtime>(
     if !is_new {
         return;
     }
+    session.note_played(character);
     // A login on this link ends what the redial followed of the last play.
     session.connection.lock().link.logged_in();
     // The affect gauges read this character's saved fulls.

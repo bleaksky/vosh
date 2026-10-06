@@ -81,7 +81,7 @@ While another session is connected to the world's own port, such as `1848` for T
 Each row names its session by the first of these it has.
 
 - A name you gave it, such as `Builder`.
-- The character logged in on it, such as `Tolliver`.
+- The character it plays, such as `Tolliver`. The row keeps it through a drop, every try to dial again and a disconnect, until you connect again yourself.
 - Before you log in, the world it plays, such as `The Forsaken Lands`.
 - `New session` while it has no world yet.
 
