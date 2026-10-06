@@ -2373,6 +2373,49 @@ async fn a_trigger_list_that_names_build_saves_build_and_tells_no_window_while_d
 
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alert_preset_that_names_build_saves_build_while_default_shows() {
+    use crate::alert::presets::TELLS;
+    use crate::ipc::alerts::{alert_presets_get, alert_presets_set};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = tolliver_and_orla().await;
+    let two = open_session_on(&h, "Build").await;
+    assert_eq!(h.state.selected_session().id, h.first);
+    let parts = crate::alert::AlertParts {
+        sound: Some("bell".into()),
+        ..crate::alert::AlertParts::default()
+    };
+    let set = |alert, profile: &str| {
+        let profile = Some(profile.to_string());
+        alert_presets_set(
+            h.app.handle().clone(),
+            h.app.state(),
+            TELLS.into(),
+            alert,
+            profile,
+        )
+    };
+    assert_eq!(set(Some(parts.clone()), "Build").await, Ok(()));
+
+    let build = h.state.session(Some(two)).expect("the Build session");
+    assert_eq!(build.lock_profile().await.alerts.get(TELLS), Some(&parts));
+    assert!(!h.state.selected_profile().await.alerts.contains_key(TELLS));
+    let read =
+        |profile: Option<&str>| alert_presets_get(h.app.state(), profile.map(str::to_string));
+    let named = read(Some("Build")).await.expect("Build's presets");
+    assert_eq!(named.alerts.get(TELLS), Some(&parts));
+    let shown = read(None).await.expect("Default's presets");
+    assert!(!shown.alerts.contains_key(TELLS));
+
+    // Healer is a profile no session plays, so nothing changes.
+    assert_eq!(
+        set(None, "Healer").await,
+        Err("Healer closed before Vosh could save this change.".to_string())
+    );
+    h.finish(grid).await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tick_settings_that_name_build_reach_every_count_on_build_alone() {
     use crate::app::events::TICK_CONFIG_CHANGED;
     let grid = crate::native::grid::lock_shared_grid_for_test();

@@ -1,5 +1,5 @@
 //! The commands for alerts (the Alerts and Scenes review, Q1 to Q5): what
-//! the alert presets of the selected session's profile do, whether the
+//! the alert presets of a profile do, whether the
 //! system lets Vosh post banners, the system's own question, and the
 //! system page where you turn banners on. The Alerts category of the
 //! Presets page calls the two preset commands, and the Alert row the
@@ -28,12 +28,14 @@ pub(crate) struct AlertPresets {
     pub(crate) on: Vec<String>,
 }
 
-/// What the alert presets of the selected session's profile do.
+/// What the alert presets of `profile` do, the profile Settings shows,
+/// or of the selected session's profile when it names none.
 #[tauri::command]
 pub(crate) async fn alert_presets_get(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<AlertPresets, String> {
-    let p = state.selected_session().lock_profile().await;
+    let p = state.lock_named(profile).await?;
     let on = PRESETS
         .iter()
         .filter(|id| crate::alert::presets::parts(&p, id).is_some())
@@ -46,8 +48,9 @@ pub(crate) async fn alert_presets_get(
     })
 }
 
-/// Set what the alert preset `id` does in the selected session's
-/// profile, or with none, forget it so it posts a banner alone, and save.
+/// Set what the alert preset `id` does in `profile`, or in the selected
+/// session's profile when it names none, or with no `alert`, forget it so
+/// it posts a banner alone, and save.
 /// Whether it rings stays with the presets list, which Save in the
 /// Presets card writes as for any preset.
 #[tauri::command]
@@ -56,12 +59,13 @@ pub(crate) async fn alert_presets_set<R: tauri::Runtime>(
     state: State<'_, SharedState>,
     id: String,
     alert: Option<AlertParts>,
+    profile: Option<String>,
 ) -> Result<(), String> {
     if !PRESETS.contains(&id.as_str()) {
         return Err(format!("Vosh has no alert preset named {id}."));
     }
     let open = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         match alert {
             Some(parts) => p.alerts.insert(id, parts),
             None => p.alerts.remove(&id),
@@ -124,10 +128,13 @@ mod tests {
             app.state(),
             "alert_tells".into(),
             Some(tells.clone()),
+            None,
         )
         .await
         .expect("a preset Vosh knows");
-        let got = alert_presets_get(app.state()).await.expect("the presets");
+        let got = alert_presets_get(app.state(), None)
+            .await
+            .expect("the presets");
         assert_eq!(got.alerts, BTreeMap::from([("alert_tells".into(), tells)]));
         assert_eq!(got.on, ["alert_tells"]);
         assert_eq!(got.ids.len(), 5);
@@ -135,6 +142,7 @@ mod tests {
             app.handle().clone(),
             app.state(),
             "healing_basics".into(),
+            None,
             None,
         )
         .await;
