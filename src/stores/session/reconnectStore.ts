@@ -1,4 +1,9 @@
-import { onReconnect, type ReconnectPayload, type StatePayload } from '../../ipc/session';
+import {
+  onReconnect,
+  type ConnectionTarget,
+  type ReconnectPayload,
+  type StatePayload,
+} from '../../ipc/session';
 import { createSessionStore } from '../sessionStore';
 
 // Where the redial of each session stands after a drop, for the
@@ -9,7 +14,10 @@ import { createSessionStore } from '../sessionStore';
 // since the next wait or the end of the series follows. A try that
 // reaches the game, your Cancel and a drop Vosh does not redial clear
 // it. A stopped notice clears at the session's next connect, so Try
-// again or Cmd+R takes it away.
+// again or Cmd+R takes it away. The store also keeps where the session
+// last dialed, which is where a series that drop starts dials each try,
+// since Rust keeps the address the drop left and not the one you save
+// after it.
 
 export type Reconnect =
   | { kind: 'none' }
@@ -19,6 +27,13 @@ export type Reconnect =
   | { kind: 'stopped'; tries: number };
 
 const NONE: Reconnect = { kind: 'none' };
+
+interface Redial {
+  redial: Reconnect;
+  /** Where the session last dialed, from its connecting and connected
+   *  states. */
+  at: ConnectionTarget | null;
+}
 
 function redialed(now: Reconnect, payload: ReconnectPayload): Reconnect {
   switch (payload.kind) {
@@ -44,15 +59,26 @@ function redialed(now: Reconnect, payload: ReconnectPayload): Reconnect {
 
 /** Each try dials as a connect does, so only a stopped notice clears at
  *  a connect, and a drop changes nothing. */
-const connected = (now: Reconnect, payload: StatePayload): Reconnect =>
-  payload.kind === 'connecting' && now.kind === 'stopped' ? NONE : now;
+function connected(now: Redial, payload: StatePayload): Redial {
+  if (payload.kind === 'disconnected') return now;
+  const { host, port, tls } = payload;
+  const redial = payload.kind === 'connecting' && now.redial.kind === 'stopped' ? NONE : now.redial;
+  return { redial, at: { host, port, tls } };
+}
 
-const store = createSessionStore<Reconnect>({
-  state: NONE,
+const store = createSessionStore<Redial, Reconnect>({
+  state: { redial: NONE, at: null },
   connection: connected,
   events: [
-    (apply) => onReconnect((payload, session) => apply(session, (now) => redialed(now, payload))),
+    (apply) =>
+      onReconnect((payload, session) =>
+        apply(session, (now) => {
+          const redial = redialed(now.redial, payload);
+          return redial === now.redial ? now : { ...now, redial };
+        }),
+      ),
   ],
+  view: (state) => state.redial,
 });
 
 export const startReconnectStore = store.start;
@@ -61,4 +87,10 @@ export const startReconnectStore = store.start;
 export const useReconnect = store.use;
 
 /** Where the redial of `session` stands. */
-export const reconnectOf = store.stateOf;
+export const reconnectOf = (session: number): Reconnect => store.stateOf(session).redial;
+
+/** Where the waiting try of `session` dials, or null while no try
+ *  waits. */
+export function waitingTarget(session: number): ConnectionTarget | null {
+  return reconnectOf(session).kind === 'waiting' ? store.stateOf(session).at : null;
+}
