@@ -49,8 +49,10 @@ export async function profileDuplicate(source: string, newName: string): Promise
   return invoke('profile_duplicate', { source, new: newName });
 }
 
-export async function profileSwitch(name: string): Promise<void> {
-  return invoke('profile_switch', { name });
+/** Switch a session to the profile `name`, the selected session when it
+ *  names none. */
+export async function profileSwitch(name: string, session?: number): Promise<void> {
+  return invoke('profile_switch', { name, session });
 }
 
 export async function profileResolveMatch(

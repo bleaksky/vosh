@@ -4,28 +4,23 @@ import {
   connectSession,
   disconnectSession,
   emitConnectionTargetChanged,
-  onGmcpPackage,
-  onState,
   subscribeConnectionTargetChanged,
   type ConnectionTarget,
 } from '../../ipc/session';
-import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { worldName } from '../../lib/knownWorlds';
 import { errorText } from '../../lib/text';
 import { pushToast } from '../toasts';
+import { useSessionConnection, type ConnectionStatus } from './connectionStore';
+import { getSelected, getSessions } from './sessionsStore';
 
-// The session the title band shows and the session menu drives, with
-// the saved target Connect dials.
-// MainWindow mounts the hook once, so the connection state lives as long
-// as the window and not only while the session menu or another control
-// that shows it is mounted. The palette's connect entry and the Cmd+R
-// shortcut call it through MainWindow.
-
-export type ConnectionStatus =
-  | { kind: 'idle' }
-  | { kind: 'connecting'; host: string; port: number; tls: boolean }
-  | { kind: 'connected'; host: string; port: number; tls: boolean }
-  | { kind: 'error'; message: string };
+// The session the title band shows and the session menu drives, which
+// is the selected session, with the saved target Connect dials.
+// MainWindow mounts the hook once. The connection store keeps each
+// session's state, so it lives as long as the window and not only while
+// the session menu or another control that shows it is mounted. The
+// palette's connect entry and the Cmd+R shortcut call it through
+// MainWindow. Each action names the session selected as it starts, so a
+// selection the app has not heard yet never sends to another session.
 
 export const DEFAULT_TARGET: ConnectionTarget = {
   host: 'play.theforsakenlands.com',
@@ -119,20 +114,24 @@ export function profileSwitchErrorMessage(error: unknown): string {
   return text || 'Vosh could not switch profiles, so you connect with the profile you were using.';
 }
 
-/** Switch to the profile that matches the host, then connect. Profiles
- *  pinned to a character soft skip here because the character is
- *  unknown until the MUD sends Char.Status after login, and the
- *  session's GMCP handler swaps to them then. A switch that fails
- *  leaves you on the profile you were using, says so in a toast, and
- *  connects under that profile. */
-export async function connectTo(target: ConnectionTarget): Promise<void> {
+/** The profile `session` plays, as its row names it, or the profile in
+ *  front before the list names it. */
+async function profileOf(session: number): Promise<string | null> {
+  const row = getSessions().find((r) => r.id === session);
+  return row?.profile ?? (await profilesList()).active;
+}
+
+/** Switch `session` to the profile that matches the host, then connect
+ *  it. Profiles pinned to a character soft skip here because the
+ *  character is unknown until the MUD sends Char.Status after login, and
+ *  the session's GMCP handler swaps to them then. A switch that fails
+ *  leaves the session on the profile it was using, says so in a toast,
+ *  and connects under that profile. */
+export async function connectTo(target: ConnectionTarget, session: number): Promise<void> {
   let switchTo: string | null = null;
   try {
     const matchName = await profileResolveMatch(target.host, target.port, null);
-    if (matchName) {
-      const current = await profilesList();
-      if (matchName !== current.active) switchTo = matchName;
-    }
+    if (matchName && matchName !== (await profileOf(session))) switchTo = matchName;
   } catch (matchErr) {
     // Profile resolve is best effort. A profile system error never
     // blocks a connect.
@@ -140,30 +139,13 @@ export async function connectTo(target: ConnectionTarget): Promise<void> {
   }
   if (switchTo) {
     try {
-      await profileSwitch(switchTo);
+      await profileSwitch(switchTo, session);
     } catch (switchErr) {
       console.warn('[profile switch]', switchErr);
       pushToast({ kind: 'error', message: profileSwitchErrorMessage(switchErr) });
     }
   }
-  await connectSession(target.host, target.port, target.tls);
-}
-
-/** The logged in character from Char.Status or Char.Name, cleared when
- *  the session ends. */
-export function useCharacterName(): string | null {
-  const [name, setName] = useState<string | null>(null);
-  const take = (data: { name?: unknown }) => {
-    if (typeof data?.name === 'string' && data.name.trim().length > 0) {
-      setName(data.name.trim());
-    }
-  };
-  useTauriEvent((cb) => onGmcpPackage('Char.Status', cb), take);
-  useTauriEvent((cb) => onGmcpPackage('Char.Name', cb), take);
-  useTauriEvent(onState, (payload) => {
-    if (payload.kind === 'disconnected') setName(null);
-  });
-  return name;
+  await connectSession(target.host, target.port, target.tls, session);
 }
 
 export interface Connection {
@@ -185,14 +167,13 @@ export interface Connection {
   saveTarget: (target: ConnectionTarget) => void;
 }
 
-/** Connection state and actions for the title band, the session menu,
- *  the palette, and Cmd+R. Mount it once, in MainWindow. */
-export function useConnection(
-  status: ConnectionStatus,
-  onError: (message: string) => void,
-): Connection {
+/** The selected session's connection state, and actions for the title
+ *  band, the session menu, the palette, and Cmd+R. `onError` hears an
+ *  action that failed, with the session it was for. Mount it once, in
+ *  MainWindow. */
+export function useConnection(onError: (message: string, session: number) => void): Connection {
   const [target, setTarget] = useState<ConnectionTarget>(loadTarget);
-  const character = useCharacterName();
+  const { status, character } = useSessionConnection();
   const live = status.kind === 'connecting' || status.kind === 'connected';
 
   // The actions read the newest values through refs, so they never
@@ -222,10 +203,11 @@ export function useConnection(
   );
 
   const dial = useCallback(async (to: ConnectionTarget) => {
+    const session = getSelected();
     try {
-      await connectTo(to);
+      await connectTo(to, session);
     } catch (e) {
-      onErrorRef.current(String(e));
+      onErrorRef.current(String(e), session);
     }
   }, []);
 
@@ -240,10 +222,11 @@ export function useConnection(
   );
 
   const disconnect = useCallback(async () => {
+    const session = getSelected();
     try {
-      await disconnectSession();
+      await disconnectSession(session);
     } catch (e) {
-      onErrorRef.current(String(e));
+      onErrorRef.current(String(e), session);
     }
   }, []);
 

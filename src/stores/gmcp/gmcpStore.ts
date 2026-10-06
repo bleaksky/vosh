@@ -29,7 +29,9 @@ import {
 //
 // Another store can read one session's state with stateOf and hear each
 // change that moves it with subscribeStates, as the stores that lay the
-// hidden flags over their own read the flags of the same session.
+// hidden flags over their own read the flags of the same session. The
+// page changes a session's state itself through apply, as an error a
+// connect met marks the session it was for.
 //
 // A store with a snapshot asks the backend for the last value it kept
 // for a session the first time that session is selected, once every
@@ -122,6 +124,8 @@ export function createGmcpStore<S, V = S>({
     store.set(view(slot(session).state, store.get(), session));
   }
 
+  /** Apply a change to the state of the session it names, and publish
+   *  it when that session shows. */
   function apply(session: number, change: Change<S>): void {
     const held = slot(session);
     const before = held.state;
@@ -220,5 +224,5 @@ export function createGmcpStore<S, V = S>({
     };
   }
 
-  return { start, get: store.get, subscribe, use, stateOf, subscribeStates };
+  return { start, get: store.get, subscribe, use, apply, stateOf, subscribeStates };
 }
