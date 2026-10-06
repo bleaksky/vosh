@@ -3,8 +3,13 @@
 // live one, so you read back while the live pane keeps its tail. The
 // native grid splits its own display, so on the native surface each path
 // hands off to it or leaves the split closed.
+//
+// Each session keeps its split open or closed, and a find match that
+// waits for its history pane, while another session shows. The split
+// shows the selected session's, and its history pane mounts afresh for
+// each selection, since the host keys it by session.
 
-import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { nativeSurfaceScroll } from '../ipc/nativeSurface';
 import { noteReader } from '../terminal/readerBusy';
 import { listenSplitDrag, SplitDrag } from '../terminal/splitDrag';
@@ -12,7 +17,7 @@ import type { FindOptions, TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 
 interface SplitPanes {
-  /** The selected session, which hears that you read back. */
+  /** The selected session, whose split shows. */
   session: number;
   /** The live pane. */
   termRef: RefObject<TerminalHandle>;
@@ -59,12 +64,27 @@ export function useScrollbackSplit({
 }: SplitPanes): ScrollbackSplit {
   // splitOpen state needs to be read inside the wheel handler. The
   // handler is registered once and runs many times, so we mirror the
-  // state into a ref to avoid stale closures.
+  // state into a ref to avoid stale closures. So is the session.
   const splitOpenRef = useRef(false);
-  // Split-scrollback state. When true, a second xterm appears above the
-  // live one and shows the same buffer scrolled back so you can read
-  // earlier output while live combat keeps streaming below.
-  const [splitOpen, setSplitOpen] = useState(false);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  // Split-scrollback state, the sessions whose split is open. When the
+  // selected session's is, a second xterm appears above the live one
+  // and shows the same buffer scrolled back so you can read earlier
+  // output while live combat keeps streaming below.
+  const [openSplits, setOpenSplits] = useState<ReadonlySet<number>>(() => new Set());
+  const splitOpen = openSplits.has(session);
+  // Open or close the split of the session that shows now.
+  const setSplitOpen = useCallback((open: boolean) => {
+    const id = sessionRef.current;
+    setOpenSplits((now) => {
+      if (now.has(id) === open) return now;
+      const next = new Set(now);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
   // History pane readiness: flips true once the history Terminal has
   // finished loading scrollback after its mount. We queue any pending
   // mirror search through pendingFindRef until the history is ready,
@@ -79,11 +99,10 @@ export function useScrollbackSplit({
   // unreliable: that callback may fire before or after the live pane
   // refits, and the answer is different in each case.
   const preSplitLiveRowsRef = useRef(0);
-  const pendingFindRef = useRef<{
-    query: string;
-    opts: FindOptions;
-    direction: 'next' | 'previous';
-  } | null>(null);
+  // A find match waiting for the history pane, by session.
+  const pendingFindRef = useRef(
+    new Map<number, { query: string; opts: FindOptions; direction: 'next' | 'previous' }>(),
+  );
   // History pane scroll depth, driven by the Terminal's onScrollPosition
   // callback. Drives the "↑ N / max" indicator in the top-right of the
   // history pane.
@@ -93,22 +112,26 @@ export function useScrollbackSplit({
   } | null>(null);
 
   // Reset the history-pane scroll-depth indicator whenever the split
-  // closes. The history Terminal unmounts and the next mount will fire
-  // its own onScrollPosition; keeping the prior value here would flash
-  // stale numbers for one paint before being overwritten.
+  // closes or another session's shows. The history Terminal unmounts and
+  // the next mount will fire its own onScrollPosition; keeping the prior
+  // value here would flash stale numbers for one paint before being
+  // overwritten.
   useEffect(() => {
-    if (!splitOpen) setHistoryScrollPos(null);
+    setHistoryScrollPos(null);
     splitOpenRef.current = splitOpen;
-    // Reading back in the split leaves your prompt's clock as it is.
+    // Reading back in the split leaves your prompt's clock as it is. A
+    // session's split opens and closes only while it shows, so the
+    // session that shows is the one to tell.
     noteReader('split', splitOpen, session);
   }, [splitOpen, session]);
 
-  // Reset history readiness whenever the split closes. The next time
-  // the split opens, the history Terminal remounts and the
-  // onScrollbackLoaded callback will set this back to true.
+  // Reset history readiness whenever the split closes or another
+  // session's shows. The next time a split shows, the history Terminal
+  // mounts again and the onScrollbackLoaded callback will set this back
+  // to true.
   useEffect(() => {
-    if (!splitOpen) setHistoryReady(false);
-  }, [splitOpen]);
+    setHistoryReady(false);
+  }, [splitOpen, session]);
 
   // Reveal the split as soon as its scrollback lands, not on a fixed
   // timer. The history pane's xterm is held at `visibility: hidden` (the
@@ -157,7 +180,7 @@ export function useScrollbackSplit({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [splitOpen, historyTermRef]);
+  }, [splitOpen, session, historyTermRef]);
 
   // Drain a queued search once the split has opened and the history
   // pane finishes loading scrollback. showHistoryMatch enqueues here
@@ -168,14 +191,14 @@ export function useScrollbackSplit({
   // does not clear the live selection that find iterates from.
   useEffect(() => {
     if (!splitOpen || !historyReady) return;
-    const pending = pendingFindRef.current;
+    const pending = pendingFindRef.current.get(session);
     if (!pending) return;
-    pendingFindRef.current = null;
+    pendingFindRef.current.delete(session);
     const handle = historyTermRef.current;
     if (!handle) return;
     if (pending.direction === 'next') handle.findNext(pending.query, pending.opts);
     else handle.findPrevious(pending.query, pending.opts);
-  }, [splitOpen, historyReady, historyTermRef]);
+  }, [splitOpen, historyReady, session, historyTermRef]);
 
   // Sync selections between the live and history panes so only one
   // can be active at a time. Without this, dragging a selection in
@@ -226,7 +249,7 @@ export function useScrollbackSplit({
       stop();
       splitDragRef.current = null;
     };
-  }, [termRef, historyTermRef]);
+  }, [termRef, historyTermRef, setSplitOpen]);
 
   // Wheel listener attached in capture phase with passive:false so we
   // fire BEFORE the xterm canvas inside terminal-area sees the event.
@@ -294,7 +317,7 @@ export function useScrollbackSplit({
     };
     el.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => el.removeEventListener('wheel', onWheel, { capture: true });
-  }, [terminalAreaRef, termRef, historyTermRef]);
+  }, [terminalAreaRef, termRef, historyTermRef, setSplitOpen]);
 
   // Open or close the scrollback split, the keyboard twin of a middle
   // click. The native grid splits itself when it scrolls back, so it
@@ -302,7 +325,7 @@ export function useScrollbackSplit({
   // history pane above the live one.
   const toggleSplit = () => {
     if (nativeSurfaceEnabled()) {
-      void nativeSurfaceScroll('toggle').catch(() => {});
+      void nativeSurfaceScroll('toggle', session).catch(() => {});
       return;
     }
     if (splitOpenRef.current) {
@@ -402,14 +425,14 @@ export function useScrollbackSplit({
   // runs the search once its history is ready.
   const showHistoryMatch = (query: string, opts: FindOptions, direction: 'next' | 'previous') => {
     if (!splitOpen) {
-      pendingFindRef.current = { query, opts, direction };
+      pendingFindRef.current.set(session, { query, opts, direction });
       preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
       setSplitOpen(true);
     } else if (historyTermRef.current && historyReady) {
       if (direction === 'next') historyTermRef.current.findNext(query, opts);
       else historyTermRef.current.findPrevious(query, opts);
     } else {
-      pendingFindRef.current = { query, opts, direction };
+      pendingFindRef.current.set(session, { query, opts, direction });
     }
   };
 
@@ -421,7 +444,7 @@ export function useScrollbackSplit({
   };
 
   const clearQueuedSearch = () => {
-    pendingFindRef.current = null;
+    pendingFindRef.current.delete(session);
   };
 
   return {

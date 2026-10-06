@@ -1,6 +1,11 @@
 // Find in scrollback, from the toolbar that Mod+F, the palette and the
 // terminal menu open. On the native surface the grid finds, scrolls to
 // and highlights each match itself.
+//
+// Each session keeps its find bar open or closed, with its query and its
+// match count, while another session shows. The host keeps the bar of
+// each session that has one open mounted, and shows the selected
+// session's.
 
 import { useRef, useState, type RefObject } from 'react';
 import type { ISearchResultChangeEvent } from '@xterm/addon-search';
@@ -15,6 +20,8 @@ interface FindPanes extends Pick<
   ScrollbackSplit,
   'showHistoryMatch' | 'hideHistoryMatch' | 'clearQueuedSearch'
 > {
+  /** The selected session, whose find bar shows. */
+  session: number;
   /** The live pane, which owns iteration. */
   termRef: RefObject<TerminalHandle>;
   /** The history pane, while the split shows. */
@@ -23,20 +30,32 @@ interface FindPanes extends Pick<
   focusInput: () => void;
 }
 
+/** The active match and the match count, for the toolbar badge. */
+export interface FindResults {
+  index: number;
+  count: number;
+}
+
 export interface ScrollbackFind {
+  /** The selected session's find bar is open. */
   findOpen: boolean;
   openFind: () => void;
+  /** The selected session's find bar. */
   findToolbarRef: RefObject<FindToolbarHandle>;
-  /** The active match and the match count, for the toolbar badge. */
-  findResults: { index: number; count: number };
+  /** Each session whose find bar is open, with its match count. */
+  finds: ReadonlyMap<number, FindResults>;
   closeFind: () => void;
   /** Run a find from the toolbar. Returns whether it found a match. */
   submitFind: (query: string, opts: FindOptions, direction: 'next' | 'previous') => boolean;
-  /** The live pane's onResultsChanged. */
-  onFindResults: (event: ISearchResultChangeEvent) => void;
+  /** The onResultsChanged of the live pane of `session`. */
+  onFindResults: (session: number, event: ISearchResultChangeEvent) => void;
 }
 
+/** The count before a search runs. */
+const NO_RESULTS: FindResults = { index: -1, count: 0 };
+
 export function useFind({
+  session,
   termRef,
   historyTermRef,
   focusInput,
@@ -52,25 +71,31 @@ export function useFind({
   // visible highlight up top while the live pane stays anchored to
   // its tail. A search whose match lands inside the live viewport
   // skips the split entirely.
-  const [findOpen, setFindOpen] = useState(false);
+  //
+  // Each open bar's match count, by session, from its live pane's
+  // SearchAddon. Drives the "3 / 12" badge in the find toolbar. `index`
+  // of -1 means the active match was lost (e.g. after the toolbar opened
+  // but before the first search ran).
+  const [finds, setFinds] = useState<ReadonlyMap<number, FindResults>>(() => new Map());
+  const findOpen = finds.has(session);
   const findToolbarRef = useRef<FindToolbarHandle | null>(null);
-  // Match count from live's SearchAddon. Drives the "3 / 12" badge in
-  // the find toolbar. `index` of -1 means the active match was lost
-  // (e.g. after the toolbar opened but before the first search ran).
-  const [findResults, setFindResults] = useState<{ index: number; count: number }>({
-    index: -1,
-    count: 0,
-  });
+
+  /** Set the count of the open bar of `id`. A closed bar takes none. */
+  const setResults = (id: number, results: FindResults) =>
+    setFinds((now) => (now.has(id) ? new Map(now).set(id, results) : now));
 
   const closeFind = () => {
     termRef.current?.clearSearch();
     historyTermRef.current?.clearSearch();
     if (nativeSurfaceEnabled()) {
-      void nativeSurfaceFindClear().catch(() => {});
+      void nativeSurfaceFindClear(session).catch(() => {});
     }
     clearQueuedSearch();
-    setFindResults({ index: -1, count: 0 });
-    setFindOpen(false);
+    setFinds((now) => {
+      const next = new Map(now);
+      next.delete(session);
+      return next;
+    });
     focusInput();
   };
 
@@ -107,15 +132,19 @@ export function useFind({
     // highlight. Route to the native command and feed the count back to
     // the toolbar; no xterm split is involved.
     if (nativeSurfaceEnabled()) {
-      void nativeSurfaceFind({
-        query,
-        regex: opts.regex ?? false,
-        caseSensitive: opts.caseSensitive ?? false,
-        wholeWord: opts.wholeWord ?? false,
-        forward: direction === 'next',
-      })
+      const id = session;
+      void nativeSurfaceFind(
+        {
+          query,
+          regex: opts.regex ?? false,
+          caseSensitive: opts.caseSensitive ?? false,
+          wholeWord: opts.wholeWord ?? false,
+          forward: direction === 'next',
+        },
+        id,
+      )
         .then(([current, total]) => {
-          setFindResults({ index: total > 0 ? current - 1 : -1, count: total });
+          setResults(id, { index: total > 0 ? current - 1 : -1, count: total });
         })
         .catch(() => {});
       return true;
@@ -148,14 +177,17 @@ export function useFind({
     return true;
   };
 
-  const onFindResults = (event: ISearchResultChangeEvent) =>
-    setFindResults({ index: event.resultIndex, count: event.resultCount });
+  const onFindResults = (id: number, event: ISearchResultChangeEvent) =>
+    setResults(id, { index: event.resultIndex, count: event.resultCount });
+
+  const openFind = () =>
+    setFinds((now) => (now.has(session) ? now : new Map(now).set(session, NO_RESULTS)));
 
   return {
     findOpen,
-    openFind: () => setFindOpen(true),
+    openFind,
     findToolbarRef,
-    findResults,
+    finds,
     closeFind,
     submitFind,
     onFindResults,

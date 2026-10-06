@@ -362,8 +362,9 @@ function MainWindow() {
   }, []);
 
   // Find in scrollback. A match up in scrollback shows in the split.
-  const { findOpen, openFind, findToolbarRef, findResults, closeFind, submitFind, onFindResults } =
+  const { findOpen, openFind, findToolbarRef, finds, closeFind, submitFind, onFindResults } =
     useFind({
+      session: selected,
       termRef,
       historyTermRef,
       focusInput,
@@ -470,6 +471,7 @@ function MainWindow() {
 
   // Keep the native surface under the page in step with this window.
   useNativeSurfaceBridge({
+    session: selected,
     blinkText,
     promptLifted,
     cardBand,
@@ -566,15 +568,21 @@ function MainWindow() {
         setTerminalMenu({ x: event.clientX, y: event.clientY });
       }}
     >
-      {findOpen && (
-        <FindToolbar
-          ref={findToolbarRef}
-          results={findResults}
-          onFindNext={(query, opts) => submitFind(query, opts, 'next')}
-          onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
-          onClose={closeFind}
-        />
-      )}
+      {/* Each opened session with its find bar open keeps it, with its
+          query, and the selected session's shows. */}
+      {[...finds]
+        .filter(([id]) => opened.includes(id))
+        .map(([id, results]) => (
+          <FindToolbar
+            key={id}
+            ref={id === selected ? findToolbarRef : undefined}
+            hidden={id !== selected}
+            results={results}
+            onFindNext={(query, opts) => submitFind(query, opts, 'next')}
+            onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
+            onClose={closeFind}
+          />
+        ))}
       <ScrollDepth findOpen={findOpen} />
       {/* The containing block for the scrollback split, where the well
           splits wrapper was. It never changes, so opening the split or
@@ -651,7 +659,7 @@ function MainWindow() {
                   ? () => void showLaunchNotices((text) => writeTo(id, text))
                   : undefined
               }
-              onResultsChanged={onFindResults}
+              onResultsChanged={(event) => onFindResults(id, event)}
               onCellSize={setCellSize}
               lifted={promptLifted}
               lentRows={dockLent}

@@ -389,6 +389,12 @@
   color: var(--text);
 }
 
+/* The find bar of a session that does not show keeps its query for when
+   it shows again. */
+.ov-find[hidden] {
+  display: none;
+}
+
 .ov-find-glyph {
   display: flex;
   flex: none;
