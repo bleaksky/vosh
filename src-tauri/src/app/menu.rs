@@ -81,13 +81,14 @@ enum SessionRow {
 /// Sessions review draws it. Disconnect follows on its own while a
 /// session is connected.
 #[cfg(target_os = "macos")]
-const SESSION_ROWS: [SessionRow; 9] = [
+const SESSION_ROWS: [SessionRow; 10] = [
     SessionRow::Item("session-edit", "Edit connection…"),
     SessionRow::Separator,
     SessionRow::Item("session-new", "New session…"),
     SessionRow::Item("session-next", "Next session"),
     SessionRow::Item("session-previous", "Previous session"),
     SessionRow::Separator,
+    SessionRow::Item("session-rename", "Rename session…"),
     SessionRow::Item("session-close", "Close session"),
     SessionRow::Item("close-window", "Close window"),
     SessionRow::Item("profile-save", "Save profile"),

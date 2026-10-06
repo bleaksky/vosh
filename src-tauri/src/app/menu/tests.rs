@@ -98,6 +98,7 @@ fn the_session_menu_follows_board_4() {
             "Next session Cmd+Shift+]",
             "Previous session Cmd+Shift+[",
             "-",
+            "Rename session…",
             "Close session Cmd+W",
             "Close window Cmd+Shift+W",
             "Save profile",

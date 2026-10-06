@@ -223,7 +223,7 @@ describe('paletteSections', () => {
   it('lists the session rows and every session to go to, as board 4 draws them', () => {
     const two = sessions();
     const entries = buildPaletteEntries(
-      deps({ newSession: vi.fn(), closeSession: vi.fn(), sessions: two }),
+      deps({ newSession: vi.fn(), renameSession: vi.fn(), closeSession: vi.fn(), sessions: two }),
     );
     // Nothing typed, the palette opens as before.
     expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).toEqual([
@@ -239,6 +239,7 @@ describe('paletteSections', () => {
       ['New session…', 'Mod+T'],
       ['Next session', 'Mod+Shift+]'],
       ['Previous session', 'Mod+Shift+['],
+      ['Rename session…', undefined],
       ['Close session', 'Mod+W'],
       ['Hide sessions', undefined],
       ['Disconnect', undefined],
@@ -274,13 +275,29 @@ describe('paletteSections', () => {
     expect(titles('1825')).toEqual(['Orla']);
   });
 
+  it('lists Rename session… once you type, and runs it through the shell', () => {
+    const renameSession = vi.fn();
+    const entries = buildPaletteEntries(deps({ renameSession }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('session-rename');
+    const row = paletteSections(entries, 'rename', [])
+      .find((s) => s.label === 'Session')
+      ?.rows.find((r) => r.id === 'session-rename');
+    expect(row).toMatchObject({ title: 'Rename session…' });
+    expect(row?.keys).toBeUndefined();
+    void row?.run();
+    expect(renameSession).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'session-rename')).toBe(false);
+  });
+
   it('leaves the rows between sessions out with one session', () => {
     const one = { ...sessions(), rows: [sessionRow(1, 'Tolliver', 1848)] };
     const entries = buildPaletteEntries(
-      deps({ newSession: vi.fn(), closeSession: vi.fn(), sessions: one }),
+      deps({ newSession: vi.fn(), renameSession: vi.fn(), closeSession: vi.fn(), sessions: one }),
     );
     const ids = entries.map((e) => e.id);
     expect(ids).toContain('session-new');
+    // Rename session… shows whenever the shell passes it.
+    expect(ids).toContain('session-rename');
     expect(ids).toContain('session-close');
     for (const id of ['session-next', 'session-previous', 'sessions-sidebar', 'session-goto-1']) {
       expect(ids).not.toContain(id);

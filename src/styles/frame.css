@@ -553,6 +553,45 @@
   visibility: hidden;
 }
 
+/* While you rename a session the row has no close button, so its meta
+   and its glyph stay under the pointer (board 9). */
+.shell-sessions-row.is-edit .shell-sessions-meta,
+.shell-sessions-row.is-edit .shell-sessions-glyph {
+  visibility: visible;
+}
+
+/* The name as a field. Its text starts at the name's own x, so the
+   field reaches 6 past it on each side, 26 high in the control fill
+   with an accent ring, at the regular weight even on the selected row.
+   Its selection takes the accent tint the frame draws. */
+.shell-sessions-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  margin: 0 0 0 -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  outline: none;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.shell-sessions-field::selection {
+  background: var(--mark-tint);
+  color: var(--text);
+}
+
+.shell-sessions-field::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
+}
+
 .shell-sessions-glyph.is-dot {
   color: var(--accent);
 }

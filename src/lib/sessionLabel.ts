@@ -51,6 +51,16 @@ function placeOf(
   return { world, port: label === world ? null : String(port) };
 }
 
+/** The name a rename field gives a session that read `reads` as the
+ *  field opened on it. Undefined while the text still reads the same,
+ *  so a Return on it changes nothing, null for a blank field, which
+ *  clears the name, and else the text without its outer spaces. */
+export function typedName(text: string, reads: string): string | null | undefined {
+  const name = text.trim();
+  if (name === reads) return undefined;
+  return name || null;
+}
+
 /** The label of `session` among the open sessions in `rows`. */
 export function sessionLabel(session: LabelSource, rows: readonly LabelSource[]): SessionLabel {
   const character = session.character?.trim() || null;
