@@ -195,15 +195,22 @@ export function CodeEditor({
 }
 
 /** The page surface over the shared theme. The line numbers keep the
- *  width CodeMirror means them to have. An error mark draws no wavy
- *  underline and tints its whole line instead, the line the caret is on
- *  included. A mark on an empty line is a point, which drops its
- *  corner. Its message floats on the menu recipe in the UI font. */
+ *  width CodeMirror means them to have, and the fold column takes the
+ *  width frame b1 gives it, so the code starts where the frame draws
+ *  it. An error mark draws no wavy underline and tints its whole line
+ *  instead, the line the caret is on included. A mark on an empty line
+ *  is a point, which drops its corner. Its message floats on the menu
+ *  recipe in the UI font. */
 const PAGE_SURFACE = {
   // CodeMirror sizes the number column for a content box, and the app
   // sizes every box by its border, which took 8 px from it.
   '.cm-lineNumbers .cm-gutterElement': {
     minWidth: '28px',
+  },
+  // CodeMirror sizes the fold column to its fold glyph, under 10 px in
+  // the bundled font, and frame b1 draws it 11 px wide.
+  '.cm-foldGutter .cm-gutterElement': {
+    minWidth: '11px',
   },
   '.cm-lintRange-error': {
     backgroundImage: 'none',
