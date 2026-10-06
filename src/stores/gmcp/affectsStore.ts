@@ -1,16 +1,18 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../../lib/affects';
 import { affectsSnapshotGet } from '../../ipc/affects';
-import { onGmcpPackage, onState } from '../../ipc/session';
+import { createGmcpStore } from './gmcpStore';
 import { getHidden, subscribeHidden } from './hiddenStore';
-import { asNumber, asText, createStore, isHiddenFlag } from '../store';
+import { asNumber, asText, isHiddenFlag } from '../store';
 
 // Your current affects from Char.Affects, one row per affect name.
 // Aabahran sends one entry per (affect, modifier) pair, resends the
 // whole list every tick, on each add or remove, and at login. Duration
 // is ticks left and -1 means permanent. Lifted from AffectsBar, which
 // held this in component state and went empty on every remount until
-// the next tick.
+// the next tick. A window that opens between ticks, Settings among
+// them, reads the last list the backend kept instead of waiting for the
+// next one.
 //
 // Under lamented tears the list comes empty with `"hidden": true`. The
 // store is then hidden until a list without the flag arrives, so the
@@ -102,38 +104,17 @@ function outlasts(next: number | null, prev: number | null): boolean {
 }
 
 const EMPTY: AffectsState = { list: null, hidden: false };
-const store = createStore<AffectsState>(EMPTY);
-let started = false;
-// Bumped by every list and every disconnect. The snapshot applies only
-// when neither arrived after it was asked for, so it never replaces a
-// newer list or brings back a stale one.
-let generation = 0;
 
-export function startAffectsStore(): void {
-  if (started) return;
-  started = true;
-  const lists = onGmcpPackage<unknown>('Char.Affects', (data) => {
-    generation += 1;
-    store.set(parseAffectsPacket(data));
-  });
-  const states = onState((payload) => {
-    if (payload.kind !== 'disconnected') return;
-    generation += 1;
-    store.set(EMPTY);
-  });
-  // A window that opens between ticks, Settings among them, reads the
-  // last list the backend kept instead of waiting for the next one.
-  // Asked once both listeners are in, so a list that lands meanwhile
-  // is either in the snapshot or newer than it.
-  void Promise.all([lists, states])
-    .then(() => {
-      const mine = generation;
-      return affectsSnapshotGet().then((data) => {
-        if (mine === generation && data != null) store.set(parseAffectsPacket(data));
-      });
-    })
-    .catch(() => undefined);
-}
+const store = createGmcpStore<AffectsState>({
+  state: EMPTY,
+  packages: { 'Char.Affects': (_, data) => parseAffectsPacket(data) },
+  snapshot: {
+    ask: affectsSnapshotGet,
+    take: (state, data) => (data == null ? state : parseAffectsPacket(data)),
+  },
+});
+
+export const startAffectsStore = store.start;
 
 export function getAffects(): CurrentAffect[] | null {
   return store.get().list;
@@ -145,8 +126,8 @@ export function getAffectsHidden(): boolean {
   return store.get().hidden || getHidden().affects;
 }
 
-export function subscribeAffects(cb: () => void): () => void {
-  startAffectsStore();
+/** Hear the list and the hidden state the backend works out. */
+function subscribe(cb: () => void): () => void {
   const lists = store.subscribe(cb);
   const hidden = subscribeHidden(cb);
   return () => {
@@ -157,10 +138,10 @@ export function subscribeAffects(cb: () => void): () => void {
 
 /** Current affects, or null until the server has sent the list. */
 export function useAffects(): CurrentAffect[] | null {
-  return useSyncExternalStore(subscribeAffects, getAffects);
+  return useSyncExternalStore(subscribe, getAffects);
 }
 
 /** True while the game hides your affects. */
 export function useAffectsHidden(): boolean {
-  return useSyncExternalStore(subscribeAffects, getAffectsHidden);
+  return useSyncExternalStore(subscribe, getAffectsHidden);
 }
