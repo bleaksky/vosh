@@ -23,6 +23,14 @@ function draw(shown: HelpTopic, query = '', current = 0): string {
   );
 }
 
+const luaTopic: HelpTopic = {
+  id: 'test.lua',
+  number: '0.1',
+  title: 'A pane',
+  section: 'Automate',
+  body: 'Read the weather.\n\n```lua\n-- weather\nlocal pane = mud.pane("weather", "Weather")\n```',
+};
+
 describe('a help topic', () => {
   it('draws the prompt codes as a card with a head and a row per code', () => {
     const html = draw(topic('reference.prompt-codes'));
@@ -48,6 +56,21 @@ describe('a help topic', () => {
     expect(send).toContain(
       '<kbd class="hp-keys"><kbd class="st-keycap">Shift</kbd><kbd class="st-keycap">Enter</kbd></kbd>',
     );
+  });
+
+  it('draws a Lua block in the colors of the code editor', () => {
+    const html = draw(luaTopic);
+    expect(html).toContain(
+      '<pre class="hp-codeblock"><code><span class="tok-comment">-- weather</span>\n<span class="tok-keyword">local</span>',
+    );
+    expect(html).toContain('<span class="tok-string">&quot;Weather&quot;</span>');
+    expect(helpCss).toMatch(/\.hp-codeblock \.tok-keyword \{\s*color: var\(--accent\);/);
+  });
+
+  it('marks a match inside a code block as it counts it', () => {
+    const html = draw(luaTopic, 'weather');
+    expect(html.match(/<mark class="hp-mark"/g)).toHaveLength(countMatches(luaTopic, 'weather'));
+    expect(countMatches(luaTopic, 'weather')).toBe(4);
   });
 
   it('marks every match, and rings the one you are on', () => {

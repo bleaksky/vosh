@@ -110,6 +110,7 @@ describe('a backticked span in help', () => {
     // Every backtick opens a span that closes on the same line.
     for (const topic of HELP_TOPICS) {
       for (const block of parseHelpBody(topic.body)) {
+        if (block.kind === 'code') continue;
         const lines =
           block.kind === 'paragraph'
             ? [block.text]

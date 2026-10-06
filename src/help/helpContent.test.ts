@@ -850,6 +850,16 @@ describe('the help body format', () => {
   });
 });
 
+describe('the help code block', () => {
+  it('reads a fenced block whole, blank lines and all', () => {
+    expect(parseHelpBody('Say it.\n\n```lua\nlocal a = 1\n\nend\n```\n\n- after')).toEqual([
+      { kind: 'paragraph', text: 'Say it.' },
+      { kind: 'code', lang: 'lua', text: 'local a = 1\n\nend' },
+      { kind: 'list', items: ['after'] },
+    ]);
+  });
+});
+
 describe('the help on folding groups in Automation', () => {
   it('says how a heading folds its group and what the list remembers', () => {
     const text = body('automate.first-alias');

@@ -243,6 +243,44 @@
   font: inherit;
 }
 
+/* A code block sits on the band a table does, in your terminal font at
+   13/18, and keeps its lines as written. Lua takes the colors of the
+   code editor (src/ui/codeEditorStyle.ts), by the classes the lezer
+   class highlighter gives (src/help/helpCode.ts). */
+.hp-codeblock {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--r-card);
+  background: var(--inputband);
+  color: var(--text);
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.hp-codeblock code {
+  font: inherit;
+}
+
+.hp-codeblock .tok-keyword {
+  color: var(--accent);
+}
+
+.hp-codeblock .tok-string {
+  color: var(--success);
+}
+
+.hp-codeblock :is(.tok-number, .tok-bool, .tok-atom) {
+  color: var(--warn);
+}
+
+.hp-codeblock .tok-comment {
+  color: var(--tertiary);
+  font-style: italic;
+}
+
 /* ── On this page ──────────────────────────────────────────────────── */
 
 /* Beside the article from y 40, and it stays there as you scroll. A

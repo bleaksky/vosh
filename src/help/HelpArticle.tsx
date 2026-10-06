@@ -1,4 +1,5 @@
 import { forwardRef, Fragment, type CSSProperties, type ReactNode } from 'react';
+import { codePieces } from './helpCode';
 import { parseHelpBody, type HelpTopic } from './helpContent';
 import { inlinePieces, keyGlyph, keyParts, type InlinePiece } from './helpInline';
 import { helpItemId, matchRanges, type OutlineEntry } from './helpNav';
@@ -6,8 +7,9 @@ import { Keycap } from '../ui';
 
 // One help topic as the approved Help boards draw it: the H1 at 26/32,
 // prose and lists on a 528 measure at 14/22, a table as a Settings
-// card, and each backticked span as a mono chip, an SF 600 label, or
-// keycaps (src/help/helpInline.ts). While the search holds words every
+// card, a code block on the same band in your terminal font, and each
+// backticked span as a mono chip, an SF 600 label, or keycaps
+// (src/help/helpInline.ts). While the search holds words every
 // match is marked the way the session logs page marks one, and the
 // match you are on carries a ring.
 
@@ -136,6 +138,23 @@ export const HelpArticle = forwardRef<HTMLHeadingElement, Props>(function HelpAr
   const blocks = parseHelpBody(topic.body).map((block, b) => {
     if (block.kind === 'paragraph') {
       return <p key={b}>{line(block.text, marker)}</p>;
+    }
+    if (block.kind === 'code') {
+      return (
+        <pre key={b} className="hp-codeblock">
+          <code>
+            {codePieces(block.text, block.lang).map((p, i) =>
+              p.cls ? (
+                <span key={i} className={p.cls}>
+                  {marker.text(p.text)}
+                </span>
+              ) : (
+                <Fragment key={i}>{marker.text(p.text)}</Fragment>
+              ),
+            )}
+          </code>
+        </pre>
+      );
     }
     if (block.kind === 'list') {
       return (
