@@ -7,6 +7,7 @@ import {
   keepsProfileName,
   loginCharacter,
   loginLabel,
+  loginSentence,
   movedSentence,
   newProfileClaim,
   newProfileName,
@@ -24,7 +25,7 @@ import {
   worldSources,
 } from './characterProfiles';
 import { possessive } from './text';
-import type { SessionIdentity } from '../ipc/characters';
+import type { LoginClaim, SessionIdentity } from '../ipc/characters';
 import type { ProfileEntry } from '../ipc/profiles';
 import type { SessionRow } from '../ipc/session';
 
@@ -364,5 +365,53 @@ describe('the line under the Characters list', () => {
     expect(sessionsSentence(BOARD, [TOLLIVER, shared])).toBe(
       'Default plays in two sessions, Tolliver and one on The Forsaken Lands 1825.',
     );
+  });
+});
+
+describe('the line after a login pin', () => {
+  // Board 7: Tolliver claimed for Build on the build port, where Default
+  // held him on the host alone.
+  const build = { name: 'Build', auto_match: { host: TFL, port: 1825, characters: ['Tolliver'] } };
+  const claim = (pinned: LoginClaim['pinned'], released: string[] = []): LoginClaim => ({
+    entry: build,
+    released_from: released,
+    pinned,
+  });
+
+  it('says where each profile plays the character and where the claim moved', () => {
+    const pin = { profile: 'default', port: 1848, characters: ['Tolliver'] };
+    expect(loginSentence('Tolliver', claim([pin]), 'Build')).toBe(
+      "Tolliver plays Default on 1848 and Build on 1825. Default's claim now sits on 1848.",
+    );
+  });
+
+  it('names every other character the pinned claim carried', () => {
+    const one = { profile: 'default', port: 1848, characters: ['Tolliver', 'Maren'] };
+    expect(loginSentence('Tolliver', claim([one]), 'Build')).toBe(
+      "Tolliver plays Default on 1848 and Build on 1825. Default's claim now sits on 1848, and Maren moved with it.",
+    );
+    const two = { profile: 'default', port: 1848, characters: ['tolliver', 'Maren', 'Orla'] };
+    expect(loginSentence('Tolliver', claim([two]), 'Build')).toBe(
+      "Tolliver plays Default on 1848 and Build on 1825. Default's claim now sits on 1848, and Maren and Orla moved with it.",
+    );
+  });
+
+  it('names every profile a pin moved, then any it took the character from', () => {
+    const pins = [
+      { profile: 'default', port: 1848, characters: ['Tolliver'] },
+      { profile: 'Healer', port: 1848, characters: ['Tolliver', 'Orla'] },
+    ];
+    expect(loginSentence('Tolliver', claim(pins, ['Spare']), 'Build')).toBe(
+      'Tolliver plays Default and Healer on 1848 and Build on 1825. ' +
+        "Default's claim now sits on 1848. Healer's claim now sits on 1848, and Orla moved with it. " +
+        'Vosh moved Tolliver from Spare to Build.',
+    );
+  });
+
+  it('says only what a toggle with no pin did', () => {
+    expect(loginSentence('Tolliver', claim([], ['default']), 'Build')).toBe(
+      'Vosh moved Tolliver from Default to Build.',
+    );
+    expect(loginSentence('Tolliver', claim([]), 'Build')).toBeNull();
   });
 });

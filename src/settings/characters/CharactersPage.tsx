@@ -4,7 +4,7 @@ import {
   hasWorld,
   loginCharacter,
   loginLabel,
-  movedSentence,
+  loginSentence,
   profileDisplayName,
   worldKey,
   worldOptions,
@@ -193,7 +193,7 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
     profileSetLogin(name, character, on)
       .then((claim) => {
         onError(null);
-        setStatus(on ? movedSentence(character, claim.released_from, name) : null);
+        setStatus(on ? loginSentence(character, claim, name) : null);
       })
       .catch((e: unknown) => onError(String(e)))
       .finally(reloadAll);
