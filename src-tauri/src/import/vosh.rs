@@ -314,8 +314,8 @@ fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> C
     );
     // A launch installs the catalog's own preset macros from its
     // enabled_presets, so the file's stay out. The file's macros meet only
-    // yours in the catalog. A preset macro there waits for one of yours on
-    // its key, so it is no clash, and a catalog with Numpad movement on
+    // yours in the catalog. A preset macro there is held off by one of
+    // yours on its key, so it is no clash, and a catalog with Numpad movement on
     // lists none on its keys.
     let yours = |macros: &[Macro]| -> Vec<Macro> {
         macros

@@ -3,7 +3,7 @@ import { groupKeyOf, searchText } from '../../automation/automationList';
 import {
   blankMacro,
   jsonListText,
-  keysYoursHoldNote,
+  keptKeyNote,
   normalizeMacro,
   parseJsonList,
   saveMacroDraft,
@@ -65,8 +65,8 @@ export function MacrosEditor(props: EditorProps) {
 
 /** Each of your macros whose key a preset macro wants, by its row name,
  *  with what its ring and its card say. Read from the store, so a key
- *  you move shows once you save. The preset macro on that key waits off
- *  (hold_taken_keys in src-tauri/src/loadouts/presets.rs). */
+ *  you move shows once you save. Rust holds the preset macro on that key
+ *  off (hold_taken_keys in src-tauri/src/loadouts/presets.rs). */
 function useKeptKeyNotes(): ReadonlyMap<string, string> {
   const macros = useMacroList();
   return useMemo(() => keptKeyNotes(macros), [macros]);
@@ -92,9 +92,9 @@ function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<Macr
   // A preset macro changes only its group here, as a preset trigger does.
   const locked = Boolean(m.preset);
   // Your macro keeps a key a preset macro wants, and says so. The preset
-  // macro on that key waits, and says the same as the preset's card.
+  // macro held off on that key says the same as the preset's card.
   const kept = useKeptKeyNotes().get(labelForKey(m.key));
-  const warn = kept !== undefined && locked ? keysYoursHoldNote([m]) : kept;
+  const warn = kept !== undefined && locked ? keptKeyNote([m]) : kept;
 
   useEffect(() => {
     if (fresh) keyRef.current?.focus();

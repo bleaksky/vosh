@@ -71,7 +71,7 @@ const mine = (key: string, command: string): Macro => ({ key, command });
 const NUMPAD_MOVEMENT = ['Numpad8', 'Numpad6', 'Numpad2', 'Numpad4', 'Numpad9', 'Numpad3'];
 const LETTERS = ['n', 'e', 's', 'w', 'u', 'd'];
 /** The six macros Numpad movement adds, as the store sends them once
- *  your `rec` holds Numpad3. */
+ *  your `rec` keeps Numpad3. */
 const INSTALLED: Macro[] = NUMPAD_MOVEMENT.map((key, n) => ({
   key,
   command: LETTERS[n],
@@ -194,7 +194,7 @@ describe('the Numpad movement card', () => {
     expect(card.note()).toBeUndefined();
 
     // Macros saves your rec on Numpad3 and gate on Numpad9, and the
-    // backend sends the new list. A preset macro on a key never holds it.
+    // backend sends the new list. A preset macro on a key never keeps it.
     await fire('vosh://macros-changed', [
       mine('Numpad3', 'rec'),
       mine('Numpad9', 'gate'),

@@ -559,7 +559,7 @@ fn full_macros() -> Vec<Macro> {
             preset: None,
         },
         // A preset macro on a key no macro of yours uses is on, and one
-        // on a key yours uses waits off (Scripts board 7).
+        // on a key yours uses is held off (Scripts board 7).
         Macro {
             key: "Numpad8".into(),
             command: "n".into(),
@@ -1286,8 +1286,8 @@ fn every_golden_still_reads_in_0_8_1_and_your_macro_keeps_its_key() {
         if old.macros.is_empty() {
             continue;
         }
-        // Your Numpad3 keeps the key the preset's d waits for, and the
-        // preset's n sends on Numpad8.
+        // Your Numpad3 keeps the key, so the preset's d is held off, and
+        // the preset's n sends on Numpad8.
         let fired = old.fired();
         assert_eq!(
             fired,

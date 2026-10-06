@@ -12,7 +12,7 @@ import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 const NUMPAD_MOVEMENT = ['Numpad8', 'Numpad6', 'Numpad2', 'Numpad4', 'Numpad9', 'Numpad3'];
 const LETTERS = ['n', 'e', 's', 'w', 'u', 'd'];
 /** The store as board 7 has it. Your rec keeps Numpad3, so the preset's
- *  d on it waits off. */
+ *  d on it is held off. */
 const B7: Macro[] = [
   { key: 'F1', command: 'score', group: 'info' },
   { key: 'F2', command: 'flee', enabled: false },
@@ -180,7 +180,7 @@ describe('the Macros list with Numpad movement on', () => {
     expect(list.rowNote('F2flee')).toBeNull();
   });
 
-  it('says on the card of your macro what waits for its key', async () => {
+  it('says on the card of your macro which preset macro is held off', async () => {
     const list = await mount();
     await list.pick('Numpad3rec');
     expect(list.notes()).toEqual([`! ${WANTS}`]);
@@ -190,7 +190,7 @@ describe('the Macros list with Numpad movement on', () => {
     expect(list.deletes()).toBe(true);
   });
 
-  it('changes only the group of a preset macro, and says the held one waits for yours', async () => {
+  it('changes only the group of a preset macro, and says yours keeps the key of the held one', async () => {
     const list = await mount();
     await list.pick('Numpad3d');
     expect(list.notes()).toEqual([

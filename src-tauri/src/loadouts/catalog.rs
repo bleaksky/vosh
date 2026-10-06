@@ -71,7 +71,7 @@ impl GlobalCatalog {
 /// profile file still holds go on top, so a switch keeps them the way a
 /// restart does. An item of the file wins over the catalog item of the
 /// same name, or for a macro the same key and preset, so your macro on a
-/// key sits beside the preset macro there, which then waits, see
+/// key sits beside the preset macro there, which is then held off, see
 /// [`hold_taken_keys`]. The group state of `set` then applies to the
 /// result.
 pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Option<&LoadoutSet>) {
@@ -359,7 +359,7 @@ mod tests {
         let mut p = Profile::default();
         p.macros.push(bind("Numpad3", "rec", None));
         lay_catalog_over(&mut p, &numpad_catalog(), None);
-        // The preset's d stays, and waits while rec keeps the key.
+        // The preset's d stays, held off while rec keeps the key.
         assert_eq!(sends(&p), [("n", true), ("d", false), ("rec", true)]);
     }
 

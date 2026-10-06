@@ -416,7 +416,7 @@ async fn gate_of(state: &SharedState, name: Option<&str>) -> Option<LoadoutSet> 
 /// plays, whose save writes them to catalog.toml. An item `p` has by
 /// then, for a macro one of yours on its key, stays as it is, like each
 /// one the clash list names. A preset macro on the key of a macro that
-/// joined waits, see [`hold_taken_keys`]. Returns how many joined.
+/// joined is held off, see [`hold_taken_keys`]. Returns how many joined.
 fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
     let mut joined = 0;
     for trigger in join.triggers {

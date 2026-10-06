@@ -353,8 +353,8 @@ pub(crate) async fn apply_migration(
             ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
         }
     }
-    // A preset macro comes over on, and waits while the macro of yours you
-    // kept on its key holds the key, as it does after every macro change.
+    // A preset macro comes over on, and is held off while a macro of yours
+    // you kept on its key keeps the key, as after every macro change.
     hold_taken_keys(&mut catalog.macros);
 
     // Every loadout starts off. An active loadout imposes its groups on

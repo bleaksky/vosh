@@ -494,20 +494,20 @@ export function presetLaunchPlan(
 }
 
 /** The keys of `preset` that one of your macros uses, in the preset's
- *  order. Yours keeps such a key, and the preset's macro on it waits off
- *  (hold_taken_keys in src-tauri/src/loadouts/presets.rs). `macros` is
+ *  order. Yours keeps such a key, and Rust holds the preset's macro on it
+ *  off (hold_taken_keys in src-tauri/src/loadouts/presets.rs). `macros` is
  *  every macro the store holds, and a macro a preset added keeps no
  *  key. */
-export function keysYoursHold(preset: Preset, macros: readonly Macro[]): string[] {
+export function keysYourMacrosKeep(preset: Preset, macros: readonly Macro[]): string[] {
   const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
   return (preset.macros ?? []).map((m) => m.key).filter((key) => yours.has(key));
 }
 
 /** What a preset's card says when your macros keep keys the preset
- *  wants, and the card of a preset macro that waits for yours. No board
+ *  wants, and the card of a preset macro held off by yours. No board
  *  draws more than one such key, so two or more share one plural
  *  sentence, the keys in the order given. */
-export function keysYoursHoldNote(held: readonly Omit<Macro, 'preset'>[]): string {
+export function keptKeyNote(held: readonly Omit<Macro, 'preset'>[]): string {
   const keys = listJoin(held.map((m) => m.key));
   const sends = listJoin(held.map((m) => m.command));
   return held.length === 1
