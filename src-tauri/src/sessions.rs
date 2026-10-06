@@ -631,6 +631,9 @@ pub(crate) struct Sessions {
     profiles: Vec<Arc<OpenProfile>>,
     /// The place the next profile to open takes in that order.
     next_profile: u64,
+    /// The profile Settings holds unsaved edits on, which stays open
+    /// when its last session leaves it, until Save or Discard lets go.
+    edit_hold: Option<Arc<OpenProfile>>,
 }
 
 impl Sessions {
@@ -678,7 +681,8 @@ impl Sessions {
         Ok(closed)
     }
 
-    /// The open profile named `name`, while a session plays it.
+    /// The open profile named `name`, while a session plays it or
+    /// Settings holds unsaved edits on it.
     pub(crate) fn profile(&self, name: &str) -> Option<Arc<OpenProfile>> {
         self.profiles
             .iter()
@@ -712,15 +716,38 @@ impl Sessions {
             .count()
     }
 
-    /// Close `open` when no session plays it. Returns whether it closed,
-    /// which a profile a restored session waits on never does, since it
-    /// never opened.
+    /// Close `open` when no session plays it and Settings holds no
+    /// unsaved edits on it. Returns whether it closed, which a profile a
+    /// restored session waits on never does, since it never opened.
     pub(crate) fn close_unplayed(&mut self, open: &Arc<OpenProfile>) -> bool {
-        if self.players(open) > 0 || !self.is_open(open) {
+        if self.players(open) > 0 || !self.is_open(open) || self.holds_edits(open) {
             return false;
         }
         self.profiles.retain(|kept| !Arc::ptr_eq(kept, open));
         true
+    }
+
+    /// Whether Settings holds unsaved edits on `open`.
+    pub(crate) fn holds_edits(&self, open: &Arc<OpenProfile>) -> bool {
+        self.edit_hold
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, open))
+    }
+
+    /// The profile Settings holds unsaved edits on, see
+    /// [`Sessions::hold_edits`].
+    pub(crate) fn edit_hold(&self) -> Option<Arc<OpenProfile>> {
+        self.edit_hold.clone()
+    }
+
+    /// Hold the open profile named `name` for the unsaved edits Settings
+    /// keeps on it, or let go with None. A name no open profile has holds
+    /// nothing. Returns the profile let go when no session plays it, which
+    /// closes here.
+    pub(crate) fn hold_edits(&mut self, name: Option<&str>) -> Option<Arc<OpenProfile>> {
+        let next = name.and_then(|name| self.profile(name));
+        let left = std::mem::replace(&mut self.edit_hold, next)?;
+        self.close_unplayed(&left).then_some(left)
     }
 
     /// Whether `open` is one of the profiles the sessions play, rather
@@ -844,6 +871,7 @@ impl Default for Sessions {
             next: 2,
             profiles: vec![defaults],
             next_profile: 1,
+            edit_hold: None,
         }
     }
 }

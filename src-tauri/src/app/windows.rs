@@ -321,7 +321,16 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
                     state.banners.forget_newest();
                 }
             }
-            tauri::WindowEvent::Destroyed => state.focus.set(window.label(), false),
+            tauri::WindowEvent::Destroyed => {
+                state.focus.set(window.label(), false);
+                // Settings closed, so no page holds unsaved edits.
+                if window.label() == "settings" {
+                    let state = state.inner().clone();
+                    tauri::async_runtime::spawn(async move {
+                        crate::ipc::profiles::hold_edits(&state, None).await;
+                    });
+                }
+            }
             _ => {}
         }
     }

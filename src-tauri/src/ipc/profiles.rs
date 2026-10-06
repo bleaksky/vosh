@@ -164,6 +164,35 @@ pub(crate) async fn profile_resolve_match(
     })
 }
 
+/// Keep the profile `profile` names open while a Settings page holds
+/// unsaved edits on it, so a Save still finds it after its last session
+/// leaves it. With no profile, Save or Discard lets go, and the profile
+/// that held saves and closes when no session plays it.
+#[tauri::command]
+pub(crate) async fn profile_hold_edits(
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<(), String> {
+    hold_edits(state.inner(), profile.as_deref()).await;
+    Ok(())
+}
+
+/// The body of [`profile_hold_edits`], which the Settings window also
+/// runs with no profile as it closes.
+pub(crate) async fn hold_edits(state: &SharedState, profile: Option<&str>) {
+    // Under the save lock, as every step that opens or closes a profile.
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    if let Some(left) = state.edit_hold() {
+        let keeps = profile.is_some_and(|name| left.name().as_deref() == Some(name));
+        if !keeps && state.players(&left) == 0 && state.is_open(&left) && !left.held() {
+            persist_state(state, &left).await;
+        }
+    }
+    if let Some(left) = state.hold_edits(profile) {
+        crate::profile::switch::leave_file(state, &left).await;
+    }
+}
+
 /// Switch the session to the profile `name`.
 #[tauri::command]
 pub(crate) async fn profile_switch(

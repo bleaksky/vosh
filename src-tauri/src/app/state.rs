@@ -186,7 +186,8 @@ impl AppState {
         Ok(closed)
     }
 
-    /// The open profile named `name`, while a session plays it.
+    /// The open profile named `name`, while a session plays it or
+    /// Settings holds unsaved edits on it.
     pub(crate) fn open_profile(&self, name: &str) -> Option<Arc<OpenProfile>> {
         self.sessions().profile(name)
     }
@@ -197,11 +198,11 @@ impl AppState {
     /// command that takes the loadouts before the profile finds it here
     /// first.
     ///
-    /// A name no session plays is an error, in a sentence. Settings names
-    /// only a profile it showed, so the profile closed as its last session
-    /// left it, such as a login that moved that session to the profile
-    /// that claims its character, while a page held unsaved edits. The
-    /// sentence says the change did not save.
+    /// A name no open profile has is an error, in a sentence. Settings
+    /// names only a profile it showed, and a profile it holds unsaved
+    /// edits on stays open after its last session leaves, see
+    /// [`AppState::hold_edits`], so the profile closed before the page
+    /// held it. The sentence says the change did not save.
     pub(crate) fn edited_profile(&self, profile: Option<String>) -> Result<EditedProfile, String> {
         match profile {
             None => Ok(EditedProfile::Selected(self.selected_session())),
@@ -242,6 +243,17 @@ impl AppState {
     /// [`Sessions::close_unplayed`].
     pub(crate) fn close_unplayed(&self, open: &Arc<OpenProfile>) -> bool {
         self.sessions().close_unplayed(open)
+    }
+
+    /// Hold the open profile `name` names for the unsaved edits Settings
+    /// keeps on it, or let go with None, see [`Sessions::hold_edits`].
+    pub(crate) fn hold_edits(&self, name: Option<&str>) -> Option<Arc<OpenProfile>> {
+        self.sessions().hold_edits(name)
+    }
+
+    /// The profile Settings holds unsaved edits on.
+    pub(crate) fn edit_hold(&self) -> Option<Arc<OpenProfile>> {
+        self.sessions().edit_hold()
     }
 
     /// Whether `open` is one of the profiles the sessions play, see
