@@ -1,5 +1,5 @@
 {
-  "about": "The low latch on a vital, which the vitals panes draw and the Low health alert rings on. nextLow in src/lib/stores/vitalsStore.ts and next_low in src-tauri/src/alert/presets.rs both read this file. Each step is one call from the latch it was in. Each run feeds Char.Vitals values in turn, and a hidden one is the zeros lamented tears sends, which no view reads as low and which starts the latch over.",
+  "about": "The low latch on a vital, which the vitals panes draw and the Low health alert rings on. nextLow in src/stores/gmcp/vitalsStore.ts and next_low in src-tauri/src/alert/presets.rs both read this file. Each step is one call from the latch it was in. Each run feeds Char.Vitals values in turn, and a hidden one is the zeros lamented tears sends, which no view reads as low and which starts the latch over.",
   "steps": [
     { "was": false, "current": 20, "max": 100, "low": false },
     { "was": false, "current": 19, "max": 100, "low": true },
