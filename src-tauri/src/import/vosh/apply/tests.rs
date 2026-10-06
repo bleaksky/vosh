@@ -90,7 +90,9 @@ async fn a_new_profile_takes_the_world_and_a_character_no_profile_has_with_its_l
     let (app, state) = app_over(dir.path(), &["Maren"]).await;
     let global = std::fs::read_to_string(paths::global_path(dir.path())).unwrap();
 
-    let result = import(&app, AddAs::New, "Healer 2", &[]).await.unwrap();
+    let result = import(&app, AddAs::New, "Healer 2", &["orla"])
+        .await
+        .unwrap();
     assert_eq!(
         result,
         ImportResult {
@@ -128,6 +130,24 @@ async fn a_new_profile_takes_the_world_and_a_character_no_profile_has_with_its_l
         (vec!["Maren".into()], true)
     );
     assert_eq!(state.selected_profile().await.ui.theme, defaults.theme);
+}
+
+#[tokio::test]
+async fn a_character_no_profile_has_that_you_turned_off_stays_off_the_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let (app, state) = app_over(dir.path(), &["Maren"]).await;
+
+    let result = import(&app, AddAs::New, "Healer 2", &[]).await.unwrap();
+    assert_eq!(
+        (result.moved_from, result.kept_with),
+        (Vec::new(), Vec::new())
+    );
+    // The new profile keeps the world with no character and its login
+    // off, so it never takes every login there.
+    let am = entry(&state, "Healer 2").await.auto_match.unwrap();
+    assert_eq!((am.host.as_deref(), am.port), (Some(WORLD), Some(1848)));
+    assert_eq!(claim_of(&state, "Healer 2").await, (Vec::new(), false));
+    assert!(!login_on(&state, "Healer 2").await);
 }
 
 #[tokio::test]
