@@ -22,11 +22,16 @@ import {
   vitalsFooterHeight,
   vitalsOn,
   vitalsGeometry,
+  vitalInks,
   vitalTone,
   widestVital,
+  type VitalInks,
   type VitalsGeometry,
   type VitalTone,
 } from './vitalsView';
+import { usePlayPalette } from '../theme/fitGameColors';
+import { themeTokens } from '../theme/themes';
+import { useActiveTheme } from '../theme/useActiveTheme';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
 import { textPx, usePaneText } from './paneTextSize';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
@@ -66,6 +71,11 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // its health on the right. Out of a fight it draws nothing and the
 // panes take its room.
 
+// A color you pick for a vital under Customize vitals is a slot of the
+// play palette, so it follows Color vision, lifted to 3:1 on the panel.
+// It colors the vital's label and its meter, never the number, and low
+// and warn still turn the meter and the value.
+
 const LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
@@ -74,6 +84,12 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   const vitals = useVitals();
   const combat = useCombat();
   const options = useVitalsOptions();
+  const theme = useActiveTheme();
+  const palette = usePlayPalette();
+  const inks = useMemo(
+    () => vitalInks(options.colors, palette, themeTokens(theme)),
+    [options.colors, palette, theme],
+  );
   // The footer draws One line, and Rows for every other style.
   const density: VitalsDensity = options.style === 'line' ? 'line' : 'rows';
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -111,6 +127,7 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
       density={density}
       fit={fit}
       options={options}
+      inks={inks}
       opponentOnly={opponentOnly}
     />
   );
@@ -123,6 +140,8 @@ export interface VitalsBlockProps {
   /** How One line fits the panel. Rows ignores it. */
   fit: VitalsLineFit;
   options: VitalsOptions;
+  /** The color of each vital you gave one, lifted (vitalInks). */
+  inks?: VitalInks;
   sectionRef?: Ref<HTMLElement>;
   /** Only the opponent row, and nothing out of a fight, as when every
    *  vital is off. */
@@ -137,6 +156,7 @@ export function VitalsBlock({
   density,
   fit,
   options,
+  inks = {},
   sectionRef,
   opponentOnly = false,
 }: VitalsBlockProps) {
@@ -192,6 +212,7 @@ export function VitalsBlock({
             <VitalItem
               key={r.key}
               label={LABELS[r.key]}
+              ink={inks[r.key]}
               showLabel={fit === 'labels'}
               value={r.value}
               pct={r.pct}
@@ -206,6 +227,7 @@ export function VitalsBlock({
             key={r.key}
             className={toneClass(r.tone)}
             label={LABELS[r.key]}
+            ink={inks[r.key]}
             value={r.value}
             pct={r.pct}
             meter={meter}
@@ -294,21 +316,33 @@ function textWidth(text: string, font: string, faceVersion: number): number {
   return width;
 }
 
+/** A vital's color on its row or One line item, as panel.css reads it. */
+function inkProps(ink: string | undefined, className: string) {
+  return ink
+    ? {
+        className: `${className} panel-vitals-swatch`,
+        style: { '--vital-ink': ink } as CSSProperties,
+      }
+    : { className };
+}
+
 function VitalRow({
   label,
   value,
   pct,
   meter,
   className,
+  ink,
 }: {
   label: string;
   value: string;
   pct: number | null;
   meter: boolean;
   className?: string | undefined;
+  ink?: string | undefined;
 }) {
   return (
-    <div className={`panel-vitals-row${className ? ` ${className}` : ''}`}>
+    <div {...inkProps(ink, `panel-vitals-row${className ? ` ${className}` : ''}`)}>
       <div className="panel-vitals-line">
         <span className="panel-vitals-label">{label}</span>
         <span className="panel-vitals-value">{value}</span>
@@ -343,8 +377,10 @@ function VitalItem({
   pct,
   tone,
   meter,
+  ink,
 }: {
   label: string;
+  ink: string | undefined;
   showLabel: boolean;
   value: string;
   pct: number | null;
@@ -353,7 +389,12 @@ function VitalItem({
 }) {
   const toned = toneClass(tone);
   return (
-    <div className={`panel-vitals-item${showLabel ? '' : ' is-bare'}${toned ? ` ${toned}` : ''}`}>
+    <div
+      {...inkProps(
+        ink,
+        `panel-vitals-item${showLabel ? '' : ' is-bare'}${toned ? ` ${toned}` : ''}`,
+      )}
+    >
       <div className="panel-vitals-line">
         <span className={showLabel ? 'panel-vitals-label' : 'panel-vitals-label-hidden'}>
           {label}

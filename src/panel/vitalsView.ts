@@ -1,7 +1,11 @@
 import type { PromptShowState } from '../ipc/prompt';
-import type { Vital, VitalOff, VitalsMeter, VitalsValues } from '../ipc/uiConfig';
+import type { Vital, VitalOff, VitalsColors, VitalsMeter, VitalsValues } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
+import { ANSI_SLOTS } from '../theme/baseAnsi';
+import type { ChromeTokens } from '../theme/chrome';
+import { liftAtHue, parseHex, toHex } from '../theme/color';
+import type { XtermPalette } from '../theme/themes';
 
 // How your vitals read in the panel footer and in the status line, from
 // the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
@@ -145,6 +149,38 @@ export function opponentHealth(
     return { value: combat.condition, pct: null, hidden: false };
   }
   return { value: '?', pct: null, hidden: true };
+}
+
+/** The contrast a vital's color holds on the panel, as a chat line's
+ *  does (chatColors.ts). */
+export const VITAL_COLOR_CONTRAST = 3;
+
+/** The color each vital's label and mark draw in, for the vitals you
+ *  gave one. A vital left out keeps the footer's own tones. */
+export type VitalInks = Partial<Record<Vital, string>>;
+
+/** The ground the footer draws on, from the theme's chrome tokens. */
+export type VitalsGround = Pick<ChromeTokens, 'panel' | 'appearance'>;
+
+/** Each color you picked under Customize vitals, the play palette's
+ *  slot lifted to 3:1 on the panel at its own hue, lighter on a dark
+ *  theme and darker on a light one. Numbers never take it, so every
+ *  value keeps the text color. A slot or panel that does not parse as
+ *  hex draws as given. */
+export function vitalInks(
+  colors: VitalsColors,
+  palette: XtermPalette,
+  ground: VitalsGround,
+): VitalInks {
+  const panel = parseHex(ground.panel);
+  const dir = ground.appearance === 'dark' ? 1 : -1;
+  const inks: VitalInks = {};
+  for (const [vital, slot] of Object.entries(colors) as [Vital, number][]) {
+    const color = palette[ANSI_SLOTS[slot]];
+    const rgb = parseHex(color);
+    inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
+  }
+  return inks;
 }
 
 /** The opponent Char.Combat names, as far as the status line needs it. */
