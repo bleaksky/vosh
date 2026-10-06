@@ -1205,6 +1205,17 @@ describe('the help on importing a profile', () => {
     expect(text).toContain('Vosh names each one under a warning');
   });
 
+  it('says where loadout mode puts the items, and that a clash keeps yours', () => {
+    // Scripts Q26 and the loadout mode note of board 5.
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain(
+      'In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file.',
+    );
+    expect(text).toContain(
+      'When the catalog already has one of the same name, or a macro on the same key, yours stays, and the line under the list says so.',
+    );
+  });
+
   it('says how characters come with the file, and that an export names them only by choice', () => {
     const text = body('characters-and-data.profiles');
     expect(text).toContain('A character no other profile has starts on and joins the new profile.');
@@ -1225,6 +1236,7 @@ describe('the help on importing a profile', () => {
     for (const start of [
       '`Export to Downloads`',
       'To bring in',
+      'In loadout mode',
       'Plugins the file',
       'A new profile',
     ]) {

@@ -610,6 +610,8 @@ A profile carries its own aliases, triggers, macros, and variables, its tracked 
 
 To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened.
 
+In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro on the same key, yours stays, and the line under the list says so.
+
 Plugins the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning, since Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
 
 A new profile takes the world the file names, with a switch for each character the file names. A character no other profile has starts on and joins the new profile. One another profile has starts off and stays there. Turn it on to move it, and when that leaves the other profile with no character, its login turns off. A new profile with no character starts with its login off.
