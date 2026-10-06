@@ -6,6 +6,7 @@ import { sessionLabel } from '../lib/sessionLabel';
 import { shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
+import { returnToCommandLine } from '../panel/paneActions';
 import { goTo, useSelected, useSessions } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import { CheckIcon, CloseIcon } from '../ui/icons';
@@ -77,6 +78,12 @@ export function SessionMenu({
   const run = (action: () => Promise<void> | void) => {
     onClose();
     void action();
+  };
+  // Picking a session puts you back on its command line, once the
+  // popover has handed focus back.
+  const pick = (id: number) => {
+    goTo(id);
+    setTimeout(returnToCommandLine, 0);
   };
 
   if (request.mode === 'new') {
@@ -157,7 +164,7 @@ export function SessionMenu({
                 rows={rows}
                 place={i + 1}
                 current={row.id === selected}
-                onSelect={() => run(() => goTo(row.id))}
+                onSelect={() => run(() => pick(row.id))}
                 onCloseSession={() => run(() => onCloseSession?.(row.id))}
               />
             ))}
