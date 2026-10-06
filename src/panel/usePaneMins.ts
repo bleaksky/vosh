@@ -19,10 +19,6 @@ import { affectsMinIn, affectsStyleMinH, groupMinH, type PaneMins } from './pane
 // at that size, and layoutPanes gives the rest their stock minimum at
 // it.
 
-function subscribeMembers(cb: () => void): () => void {
-  return subscribeGroupState(() => cb());
-}
-
 // A number, so it reads the same between pushes.
 function memberCount(): number {
   const { group } = getGroupState();
@@ -41,7 +37,7 @@ export function usePaneMins(root: PaneSplit | null, width: number, size: number)
   // The chips pack with the pane's own measure, so the minimum holds
   // the lines the pane draws.
   const measure = useChipMeasure(size);
-  const members = useSyncExternalStore(subscribeMembers, memberCount);
+  const members = useSyncExternalStore(subscribeGroupState, memberCount);
   const rows = useMemo(
     () => affectsPaneRows(current, tracked, hidden, thresholds),
     [current, tracked, hidden, thresholds],

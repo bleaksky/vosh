@@ -140,6 +140,4 @@ export function getGroupState(): GroupState {
   return store.get();
 }
 
-export function subscribeGroupState(cb: (state: GroupState) => void): () => void {
-  return store.subscribe(() => cb(store.get()));
-}
+export const subscribeGroupState = store.subscribe;
