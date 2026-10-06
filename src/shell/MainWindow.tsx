@@ -52,7 +52,7 @@ import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
 import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
-import { notePageWrite, usePinnedDockRows } from '../stores/session/pinnedPromptStore';
+import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
 import { useAppCommands } from './useAppCommands';
 import { useFind } from './useFind';
@@ -113,7 +113,6 @@ function MainWindow() {
   // output the renderer that shows took: xterm names it here, and the
   // native grid names its own as it takes the text.
   const writeLive = (text: string) => {
-    notePageWrite(text);
     const term = termRef.current;
     term?.write(text);
     const after = nativeSurfaceEnabled() ? null : (term?.outputTaken() ?? 0);
