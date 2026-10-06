@@ -127,14 +127,29 @@ export function useMinuteClock(): number {
  *  renders to markup too. */
 const both = <T>(get: () => T): [() => T, () => T] => [get, get];
 
+/** What a session shows on its row and its card: its row state, room,
+ *  fight and vitals, and the minute clock. */
+export interface SessionView {
+  state: SessionRowState;
+  room: RoomInfoBase | null;
+  combat: CombatOpponent | null;
+  vitals: Vitals | null;
+  now: number;
+}
+
+/** What `session` shows, which follows it as it plays. */
+export function useSessionView(session: number): SessionView {
+  const state = useSessionRow(session);
+  const room = useSyncExternalStore(subscribeRoomOf, ...both(() => getRoomOf(session)));
+  const combat = useSyncExternalStore(subscribeCombatOf, ...both(() => getCombatOf(session)));
+  const vitals = useSyncExternalStore(subscribeVitalsOf, ...both(() => getVitalsOf(session)));
+  const now = useMinuteClock();
+  return useMemo(() => ({ state, room, combat, vitals, now }), [state, room, combat, vitals, now]);
+}
+
 /** The second line of `row`, which follows its session as it plays. */
 export function useSessionLine(row: SessionRow): SessionLine {
-  const id = row.id;
-  const state = useSessionRow(id);
-  const room = useSyncExternalStore(subscribeRoomOf, ...both(() => getRoomOf(id)));
-  const combat = useSyncExternalStore(subscribeCombatOf, ...both(() => getCombatOf(id)));
-  const vitals = useSyncExternalStore(subscribeVitalsOf, ...both(() => getVitalsOf(id)));
-  const now = useMinuteClock();
+  const { state, room, combat, vitals, now } = useSessionView(row.id);
   return useMemo(
     () => secondLine(row, state, room, combat, vitals, now),
     [row, state, room, combat, vitals, now],

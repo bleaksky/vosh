@@ -34,6 +34,13 @@ vi.mock('./sessionLine', async (actual) => {
   const { getSessionRow } = await import('../stores/session/sessionRowStore');
   return {
     ...line,
+    useSessionView: (session: number) => ({
+      state: { ...getSessionRow(session), ...states.get(session) },
+      room: null,
+      combat: null,
+      vitals: null,
+      now: 0,
+    }),
     useSessionLine: (row: SessionRow) =>
       lines.get(row.id) ??
       line.secondLine(
@@ -126,9 +133,15 @@ describe('the sessions sidebar', () => {
   });
 
   it('lists every session in order, the selected one current', () => {
-    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    const html = draw(rows, 1);
+    const [tolliver, orla, build] = buttons(html);
     expect(tolliver).toContain('aria-current="true"');
-    expect(tolliver).toContain('title="Tolliver on The Forsaken Lands"');
+    // The card's words describe the row, which keeps no tooltip.
+    expect(tolliver).toContain('aria-describedby="shell-sessions-card-1"');
+    expect(tolliver).not.toContain('title=');
+    expect(html).toContain(
+      '<span id="shell-sessions-card-1" hidden="">The Forsaken Lands, profile Default. Double click the name to rename.</span>',
+    );
     expect(tolliver).toContain(
       '<span class="shell-sessions-name"><span class="shell-sessions-name-text">Tolliver</span></span>',
     );
@@ -147,7 +160,7 @@ describe('the sessions sidebar', () => {
     expect(slots).toHaveLength(3);
     for (const slot of slots) {
       expect(slot).toMatch(
-        /<\/button><button type="button" class="shell-sessions-close" aria-label="Close session" tabindex="-1"><svg[^]*<\/button><\/li>$/,
+        /<\/button><button type="button" class="shell-sessions-close" aria-label="Close session" tabindex="-1"><svg[^]*<\/button><span id="shell-sessions-card-\d" hidden="">[^<]*<\/span><\/li>$/,
       );
     }
   });
@@ -290,7 +303,11 @@ const hasClass = (name: string) => (el: FakeElement) =>
 describe('renaming and moving a session in its row', () => {
   const doc = new FakeDocument();
   /** The escape stack's keydown listener, which the window holds. */
-  const windowListeners = new Map<string, Handler>();
+  const windowListeners = new Map<string, Handler[]>();
+  /** Hand `e` to every listener the window holds for `type`. */
+  const fire = (type: string, e: unknown) => {
+    for (const fn of windowListeners.get(type) ?? []) fn(e);
+  };
   const rows = [row(1, { character: 'Tolliver' }), row(2, { character: 'Tolliver', port: 1825 })];
   let createRoot: typeof import('react-dom/client').createRoot;
   const cleanups: (() => Promise<void>)[] = [];
@@ -304,8 +321,13 @@ describe('renaming and moving a session in its row', () => {
       innerHeight: 800,
       location: { protocol: 'about:' },
       HTMLIFrameElement: class {},
-      addEventListener: (type: string, fn: Handler) => void windowListeners.set(type, fn),
-      removeEventListener() {},
+      addEventListener: (type: string, fn: Handler) =>
+        void windowListeners.set(type, [...(windowListeners.get(type) ?? []), fn]),
+      removeEventListener: (type: string, fn: Handler) =>
+        void windowListeners.set(
+          type,
+          (windowListeners.get(type) ?? []).filter((had) => had !== fn),
+        ),
     });
     vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: '' });
     vi.stubGlobal('Node', FakeNode);
@@ -386,7 +408,7 @@ describe('renaming and moving a session in its row', () => {
         ),
       escape: () =>
         run(() =>
-          windowListeners.get('keydown')?.({
+          fire('keydown', {
             key: 'Escape',
             isComposing: false,
             target: field(),
@@ -636,8 +658,7 @@ describe('renaming and moving a session in its row', () => {
 
   it('lifts a row you drag, parts the others, and moves it where you let go', async () => {
     const m = await mount([rows[0], { ...rows[1], character: 'Orla' }, row(3, { port: 1825 })]);
-    const pointer = (type: string, clientY?: number) =>
-      m.run(() => windowListeners.get(type)?.({ clientY }));
+    const pointer = (type: string, clientY?: number) => m.run(() => fire(type, { clientY }));
     const third = findAll(m.container, hasClass('shell-sessions-row'))[2];
     await m.run(() => on(third).onPointerDown({ button: 0, clientY: 154 }));
     // A press that moves less than 4 px lifts nothing.
@@ -660,7 +681,7 @@ describe('renaming and moving a session in its row', () => {
     // Letting go moves the session, and the click it ends in, which comes
     // in the same task, selects nothing.
     await m.run(() => {
-      windowListeners.get('pointerup')?.({});
+      fire('pointerup', {});
       on(third).onClick({ currentTarget: third });
     });
     expect(m.calls.onMove).toHaveBeenCalledWith(3, 1);
@@ -673,13 +694,13 @@ describe('renaming and moving a session in its row', () => {
     const m = await mount();
     const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
     await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
-    await m.run(() => windowListeners.get('pointerup')?.({}));
+    await m.run(() => fire('pointerup', {}));
     await m.run(() => on(second).onClick({ currentTarget: second }));
     expect(m.calls.onSelect).toHaveBeenCalledWith(2);
 
     await m.run(() => on(second).onPointerDown({ button: 0, clientY: 116 }));
-    await m.run(() => windowListeners.get('pointermove')?.({ clientY: 126 }));
-    await m.run(() => windowListeners.get('pointerup')?.({}));
+    await m.run(() => fire('pointermove', { clientY: 126 }));
+    await m.run(() => fire('pointerup', {}));
     expect(m.calls.onMove).not.toHaveBeenCalled();
   });
 });
