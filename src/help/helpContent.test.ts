@@ -1128,14 +1128,28 @@ describe('the help on auto reconnect and Lua alerts', () => {
   it('says what a Mac waits for and that only macOS takes banners back', () => {
     const text = body('automate.lua-scripts');
     expect(text).toContain('on macOS turning a plugin off takes back the banners it posted');
-    expect(text).toContain('Vosh asks for that from the Alerts settings, which have yet to land');
+    expect(text).toContain(
+      'Vosh asks for that the first time you turn on a `Banner` in Settings, as Get alerts at 3.9 shows.',
+    );
+    expect(text).not.toContain('yet to land');
     expect(text).toContain(
       'It also needs a signed Vosh, so a dev build you run from the source shows none there.',
     );
   });
 
+  it('says how Vosh asks to post banners and how to turn them back on', () => {
+    const text = body('automate.alerts');
+    expect(text).toContain('Vosh asks before macOS does');
+    expect(text).toContain(
+      '`Not now` keeps `Banner` on and asks no more until you close Settings.',
+    );
+    expect(text).toContain('`Banner` wears a warning ring on every `Alert` row');
+    expect(text).toContain('`Open notification settings`');
+    expect(text).toContain('A dev build you run from the source shows no banners');
+  });
+
   it('reads the same in HELP.md', () => {
-    for (const id of ['get-connected.reconnect', 'automate.lua-scripts']) {
+    for (const id of ['get-connected.reconnect', 'automate.lua-scripts', 'automate.alerts']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
       expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
