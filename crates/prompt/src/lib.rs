@@ -34,6 +34,8 @@
 //!   edits, reports what a capture compiles to, offers the presets, writes
 //!   the sentences you read and groups the candidates.
 //! - [`legacy`] rewrites your 0.7 vitals template in today's codes.
+//! - [`vitals`] draws your vitals text for a footer or the status line,
+//!   live and at full values, and says which of its rows read a fight.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does, plays a fake Aabahran for tests and scripted runs, and
 //!   holds the designs and clocks many tests share.
@@ -56,6 +58,7 @@ pub mod stage;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod values;
+pub mod vitals;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig, PromptShow, DEFAULT_DESIGN, DEFAULT_VITALS_TEXT};
