@@ -1,5 +1,5 @@
-//! The commands for the pane layout. The main window reads the active
-//! profile's tree and writes it back as you split, resize and close
+//! The commands for the pane layout. The main window reads the tree of
+//! the profile in front and writes it back as you split, resize and close
 //! panes. The command palette and Settings > Characters put a profile's
 //! panes back to the stock tree.
 
@@ -15,19 +15,23 @@ use crate::profile::inactive::{
 };
 use crate::profile::panes::PaneLayoutPersist;
 
-/// Read the active profile's pane layout. A profile that has never
+/// Read the pane layout of the profile `profile` names, which a session
+/// must play, or of the selected session's. A profile that has never
 /// saved one gets a tree migrated from its dock layout (or the
 /// default), with nothing written to disk until the first edit.
 #[tauri::command]
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<PaneLayoutEnvelope, String> {
-    let p = state.selected_session().lock_profile().await;
+    let p = state.lock_named(profile).await?;
     Ok(pane_layout_envelope(&state, &p))
 }
 
-/// Replace the active profile's pane layout and broadcast the
-/// sanitized tree as `vosh://pane-layout-changed` to every window.
+/// Replace the pane layout of the profile `profile` names, which a
+/// session must play, or of the selected session's, and broadcast the
+/// sanitized tree as `vosh://pane-layout-changed` to every window while
+/// that profile is in front.
 /// Splitter drags land here several times a second even after the
 /// frontend debounce, so the disk write goes through the debounced
 /// `schedule_profile_persist` rather than rotating a backup per drag step.
@@ -43,11 +47,12 @@ pub(crate) async fn pane_layout_set(
     state: State<'_, SharedState>,
     layout: PaneLayoutPersist,
     generation: Option<u64>,
+    profile: Option<String>,
 ) -> Result<bool, String> {
     let mut layout = layout;
     layout.sanitize();
     let (open, current) = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         let current = state.panes_generation();
         if generation.is_some_and(|g| g != current) {
             return Ok(false);

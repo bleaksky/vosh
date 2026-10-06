@@ -192,23 +192,25 @@ pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
 
 /// The part of [`loadouts_set_active`] that runs under the loadout and
 /// profile locks: take the new active list as the stack of the profile
-/// the selected session plays, see [`LoadoutSet::set_stack`], lay the
-/// group state it imposes over that profile, and save loadouts.toml in
-/// the app data folder. Returns that profile, for the command to queue its
-/// save, so a test can run this against a mock app and a scratch folder.
-/// When the switch turned a macro group on or off, every window hears it
-/// once the locks are released, since the command line keeps its own map
-/// of the macro keys that fire.
+/// `profile` names, which a session must play, or else of the one the
+/// selected session plays, see [`LoadoutSet::set_stack`], lay the group
+/// state it imposes over that profile, and save loadouts.toml in the app
+/// data folder. Returns that profile, for the command to queue its save,
+/// so a test can run this against a mock app and a scratch folder. When
+/// the switch turned a macro group on or off in the profile in front,
+/// every window hears it once the locks are released, since the command
+/// line keeps its own map of the macro keys that fire.
 ///
 /// [`loadouts_set_active`]: crate::ipc::loadouts::loadouts_set_active
 pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
     app: &AppHandle<R>,
     active: Vec<String>,
+    profile: Option<String>,
 ) -> Result<Arc<OpenProfile>, String> {
     let state: SharedState = app.state::<SharedState>().inner().clone();
     let app_data = state.app_data.get().ok_or(NO_APP_DATA)?;
-    let session = state.selected_session();
     // Read from the session map before the loadouts lock.
+    let edited = state.edited_profile(profile)?;
     let open: Vec<String> = state
         .open_profiles()
         .iter()
@@ -235,7 +237,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
             dormant: active.is_empty(),
             active,
         };
-        let mut p = session.lock_profile().await;
+        let mut p = edited.lock().await;
         let name = p.name.clone();
         set.set_stack(name.as_deref(), &open, stack);
         let macro_groups_before = p.disabled_macro_groups.clone();
@@ -248,7 +250,7 @@ pub(crate) async fn set_active_loadouts<R: tauri::Runtime>(
             p.disabled_macro_groups != macro_groups_before,
         )
     };
-    if macro_groups_changed {
+    if macro_groups_changed && state.in_front(&open) {
         broadcast(app, MACRO_GROUPS_CHANGED, &"");
     }
     Ok(open)

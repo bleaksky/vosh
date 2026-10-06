@@ -1,7 +1,10 @@
 //! The commands for loadout mode. Settings reads your loadouts and which
-//! of them are on, and the Loadouts editor turns them on and off.
+//! of them are on, and the Loadouts editor turns them on and off. Each
+//! profile keeps its own stack of loadouts that are on (Sessions Q22), so
+//! both commands take the `profile` they mean, which a session must play,
+//! and act on the selected session's when they name none.
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::app::events::LOADOUTS_CHANGED;
 use crate::app::state::SharedState;
@@ -35,12 +38,13 @@ pub(crate) struct LoadoutsState {
 /// profile mode returns `loadout_mode: false` plus empty lists so the
 /// frontend can hide the Loadouts tab. In loadout mode every loadout's
 /// summary comes from the `state.loadout_set` mutex, with the active list
-/// of the profile the selected session plays.
+/// of the profile.
 #[tauri::command]
 pub(crate) async fn loadouts_get_state(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<LoadoutsState, String> {
-    let profile = state.selected_session().profile().name();
+    let profile = state.edited_profile(profile)?.name();
     let guard = state.loadout_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Ok(LoadoutsState {
@@ -65,21 +69,27 @@ pub(crate) async fn loadouts_get_state(
     })
 }
 
-/// Replace the active-loadouts list of the selected session's profile
-/// and reapply group state: the union rule while loadouts are active,
-/// full dormancy when the user deactivates everything. Persists the
-/// loadout set to disk and emits a state-changed event so other windows,
-/// such as the Loadouts editor in Settings, see the update.
+/// Replace the active-loadouts list of the profile and reapply group
+/// state: the union rule while loadouts are active, full dormancy when
+/// the user deactivates everything. Persists the loadout set to disk and,
+/// while the profile is in front, emits a state-changed event so other
+/// windows, such as the Loadouts editor in Settings, see the update.
 #[tauri::command]
-pub(crate) async fn loadouts_set_active(app: AppHandle, active: Vec<String>) -> Result<(), String> {
-    let open = set_active_loadouts(&app, active).await?;
+pub(crate) async fn loadouts_set_active(
+    app: AppHandle,
+    active: Vec<String>,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let open = set_active_loadouts(&app, active, profile).await?;
     // The recomputed (or dormant) disabled lists live in the profile
     // snapshot on disk; queue a persist so a crash before the exit
     // flush cannot leave loadouts.toml and per-profile state
     // disagreeing. Also clears any stale persist suppression — this is
     // a durable change the user asked for.
     mark_profile_dirty(&app, &open);
-    let _ = app.emit(LOADOUTS_CHANGED, &());
+    if app.state::<SharedState>().in_front(&open) {
+        let _ = app.emit(LOADOUTS_CHANGED, &());
+    }
     Ok(())
 }
 

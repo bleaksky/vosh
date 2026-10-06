@@ -2,7 +2,9 @@
 //! through them, saves only the fields it names, and lists the system
 //! fonts for the font picker. The main window's palette saves a theme
 //! pick, and the chat pane's menu its channel colors, without the rest of
-//! the config.
+//! the config. Each command that reads or changes a profile takes the
+//! `profile` it means, which a session must play, and acts on the
+//! selected session's when it names none.
 
 use std::sync::Arc;
 
@@ -125,8 +127,9 @@ impl UiConfigPayload {
 #[tauri::command]
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<UiConfigPayload, String> {
-    let p = state.selected_session().lock_profile().await;
+    let p = state.lock_named(profile).await?;
     Ok(UiConfigPayload::from_ui(&p.ui))
 }
 
@@ -277,8 +280,8 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
         cfg::coerce_affects_thresholds(ui.affects_running_out_hours, ui.affects_almost_gone_hours);
 }
 
-/// Replace the active profile's theme choice without touching the rest
-/// of the UI config, for the main window's palette. The caller applies
+/// Replace a profile's theme choice without touching the rest of the UI
+/// config, for the main window's palette. The caller applies
 /// and broadcasts the theme itself. While follow system
 /// appearance is on, a pick fills the light or dark slot instead, so the
 /// caller also sends the pair.
@@ -288,9 +291,10 @@ pub(crate) async fn ui_set_theme(
     theme: String,
     light_theme: Option<String>,
     dark_theme: Option<String>,
+    profile: Option<String>,
 ) -> Result<(), String> {
     let open = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
             return Ok(());
         }
@@ -357,12 +361,13 @@ const CHAT_COLOR_SLOTS: [&str; 16] = [
     "brightWhite",
 ];
 
-/// The chat pane's channel colors for the live profile.
+/// The chat pane's channel colors.
 #[tauri::command]
 pub(crate) async fn ui_get_chat_colors(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let p = state.selected_session().lock_profile().await;
+    let p = state.lock_named(profile).await?;
     Ok(p.ui.chat_colors.clone())
 }
 
@@ -376,9 +381,10 @@ pub(crate) async fn ui_set_chat_color(
     state: State<'_, SharedState>,
     channel: String,
     color: Option<String>,
+    profile: Option<String>,
 ) -> Result<(), String> {
     let (open, changed) = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         let changed = apply_chat_color(&mut p.ui, channel, color);
         (p.open().clone(), changed)
     };
@@ -391,9 +397,10 @@ pub(crate) async fn ui_set_chat_color(
 pub(crate) async fn ui_reset_chat_colors(
     app: AppHandle,
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<(), String> {
     let (open, changed) = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         let changed = reset_chat_colors(&mut p.ui);
         (p.open().clone(), changed)
     };
@@ -401,7 +408,8 @@ pub(crate) async fn ui_reset_chat_colors(
     Ok(())
 }
 
-/// Save `open` and tell every window, when a chat color moved.
+/// Save `open` and tell every window, when a chat color moved and `open`
+/// is in front.
 async fn send_chat_colors(
     app: &AppHandle,
     state: &SharedState,
@@ -552,6 +560,48 @@ mod tests {
             super::set_fields(&state, game_time(), Some("Maren".into())).await,
             Err("No session plays the profile Maren.".to_string())
         );
+    }
+
+    #[test]
+    fn a_theme_pick_that_names_a_profile_writes_that_profile() {
+        use std::sync::Arc;
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::Manager;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+        use crate::profile::shared::{Scope, ScopeConfig};
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        // Each profile keeps a theme of its own, since a shared one would
+        // reach every open profile through global.toml.
+        let scope = ScopeConfig {
+            theme: Scope::Profile,
+            ..*set.scope()
+        };
+        set.set_scope(scope).unwrap();
+        let orla_file = set.profile_path("Orla");
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        tauri::async_runtime::block_on(async {
+            state.set_profiles(set).await;
+            let orla = state.add_open_profile("Orla", Profile::default());
+            state.open_session(orla.clone());
+            let shown = state.selected_profile().await.ui.theme.clone();
+
+            super::ui_set_theme(app.state(), "nord".into(), None, None, Some("Orla".into()))
+                .await
+                .unwrap();
+            assert_eq!(orla.lock().await.ui.theme, "nord");
+            assert_eq!(state.selected_profile().await.ui.theme, shown);
+            let saved = ProfileConfig::from_toml(&std::fs::read_to_string(&orla_file).unwrap());
+            assert_eq!(saved.unwrap().ui.theme, "nord");
+        });
     }
 
     #[test]

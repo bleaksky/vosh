@@ -524,8 +524,8 @@ pub(crate) struct PaneLayoutEnvelope {
     pub(crate) generation: Option<u64>,
 }
 
-/// The active profile's pane layout and its generation in `state`. Call
-/// with the profile lock held.
+/// The pane layout of `p`, a profile a session plays, and the panes
+/// generation in `state`. Call with the profile lock held.
 pub(crate) fn pane_layout_envelope(state: &AppState, p: &Profile) -> PaneLayoutEnvelope {
     PaneLayoutEnvelope {
         layout: p.ui.pane_layout(),

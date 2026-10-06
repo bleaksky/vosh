@@ -84,9 +84,11 @@ pub(crate) struct AffectsDisplayPick {
 /// Change how the Affects pane draws without touching the rest of the
 /// UI config, for the picks in the pane's own menu. The main window
 /// holds no config copy to tell the other windows from, so unlike
-/// `ui_set_fields` this sends the new display itself. Only what is
-/// given changes, and the two thresholds stay in order. Nothing is
-/// saved or sent when the pick changes nothing.
+/// `ui_set_fields` this sends the new display itself, while the profile
+/// is in front. Only what is given changes, and the two thresholds stay
+/// in order. Nothing is saved or sent when the pick changes nothing. It
+/// writes the profile `profile` names, which a session must play, or the
+/// selected session's.
 #[tauri::command]
 pub(crate) async fn ui_set_affects_display(
     app: AppHandle,
@@ -96,6 +98,7 @@ pub(crate) async fn ui_set_affects_display(
     tint: Option<bool>,
     running_out: Option<u32>,
     almost_gone: Option<u32>,
+    profile: Option<String>,
 ) -> Result<(), String> {
     let pick = AffectsDisplayPick {
         style,
@@ -105,7 +108,7 @@ pub(crate) async fn ui_set_affects_display(
         almost_gone,
     };
     let (open, changed) = {
-        let mut p = state.selected_session().lock_profile().await;
+        let mut p = state.lock_named(profile).await?;
         let changed = apply_affects_display(&mut p.ui, pick);
         (p.open().clone(), changed)
     };

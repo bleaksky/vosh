@@ -384,6 +384,15 @@ impl EditedProfile {
             Self::Named(open) => open.lock().await,
         }
     }
+
+    /// The profile's name in the profile set, None before launch loads
+    /// one.
+    pub(crate) fn name(&self) -> Option<String> {
+        match self {
+            Self::Selected(session) => session.profile().name(),
+            Self::Named(open) => open.name(),
+        }
+    }
 }
 
 impl Default for AppState {
