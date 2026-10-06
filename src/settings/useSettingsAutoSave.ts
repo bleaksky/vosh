@@ -9,7 +9,7 @@ import {
 } from '../ipc/uiConfig';
 import { broadcastUiConfigChanges } from '../ipc/uiConfigSave';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { applyThemePrefs } from '../theme/theme';
+import { applyThemePrefs, getThemePrefs } from '../theme/theme';
 import type { SetUiConfig } from './pageTypes';
 
 export interface AutoSaveOptions {
@@ -57,9 +57,15 @@ const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
   try {
     await setUiFields(job.fields);
     await broadcastUiConfigChanges(job.after, { ...job.after, ...job.before });
-    // The copy a save holds can be older than a theme the palette picked
-    // since, and applying it would put the old theme back on Settings.
-    if (THEME_FIELDS.some((field) => field in job.fields)) applyThemePrefs(job.after);
+    // Repaint Settings so an edited custom theme shows. A save of the
+    // theme fields shows them, since Settings keeps its own while the
+    // save holds them. A save of the custom themes alone shows the
+    // theme Settings shows now, since its copy can be older than a
+    // theme the palette picked since.
+    if (THEME_FIELDS.some((field) => field in job.fields)) {
+      const ownPrefs = THEME_PREFS_FIELDS.some((field) => field in job.fields);
+      applyThemePrefs(ownPrefs ? job.after : (getThemePrefs() ?? job.after));
+    }
     job.saved();
   } catch (e) {
     job.failed(e);

@@ -15,7 +15,7 @@ import {
 } from '../ipc/uiConfig';
 import { pendingWrites } from '../lib/pendingWrites';
 import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
-import { applyThemePrefs } from '../theme/theme';
+import { applyThemePrefs, getThemePrefs, themePrefsOf } from '../theme/theme';
 import { queueSettingsChange, settingsSaveHolds, useSettingsAutoSave } from './useSettingsAutoSave';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -23,10 +23,12 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
-// Applying a theme paints a page, and a test has none.
+// Applying a theme paints a page, and a test has none. So the test
+// says which theme fields the window shows.
 vi.mock('../theme/theme', async (actual) => ({
   ...(await actual<typeof import('../theme/theme')>()),
   applyThemePrefs: vi.fn(),
+  getThemePrefs: vi.fn(() => null),
 }));
 
 const opened: RawUiConfig = {
@@ -79,9 +81,10 @@ describe('a Settings change', () => {
     async (field) => {
       const backend = fakeBackend(opened);
       const copy = await getUiConfig();
-      // The palette pick lands after Settings read its copy, and the
-      // pane menu pick while the save waits.
+      // The palette pick lands after Settings read its copy, and Settings
+      // shows it. The pane menu pick lands while the save waits.
       await setUiTheme('dracula');
+      vi.mocked(getThemePrefs).mockReturnValue({ ...themePrefsOf(copy), theme: 'dracula' });
       const saved = vi.fn();
       const failed = vi.fn();
       queueSettingsChange(copy, { [field]: values[field] } as UiFields, 250, { saved, failed });
@@ -109,6 +112,16 @@ describe('a Settings change', () => {
         expect(events).not.toContain('vosh://affects-display-changed');
       }
       expect(applyThemePrefs).toHaveBeenCalledTimes(themeFields.includes(field) ? 1 : 0);
+      // A theme field you set shows as you set it. A custom themes save
+      // keeps the palette pick Settings shows.
+      if (themePrefsFields.includes(field)) {
+        expect(applyThemePrefs).toHaveBeenCalledWith(
+          expect.objectContaining({ [field]: values[field] }),
+        );
+      }
+      if (field === 'custom_themes') {
+        expect(applyThemePrefs).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dracula' }));
+      }
     },
   );
 
