@@ -120,24 +120,24 @@ describe('the marks on a session row', () => {
     expect(rows.getSessionRow(ORLA).lines).toBe(false);
   });
 
-  it('show the dot for an alert that rang in a session behind', async () => {
+  it('count an alert that rang in a session behind', async () => {
     const { rows, look } = await load();
     alert(ORLA);
     expect(rows.getSessionRow(ORLA)).toMatchObject({
       lines: false,
       waiting: ['preset:alert_tells'],
     });
-    expect(look(row())).toEqual({ glyph: 'dot', tone: null });
+    expect(look(row())).toEqual({ mark: 'live', count: 1, tone: null });
   });
 
-  it('show the dot for something an alert that is off would ring', async () => {
+  it('count something an alert that is off would ring', async () => {
     const { rows, look } = await load();
     mark(ORLA, 'preset:alert_tells');
     expect(rows.getSessionRow(ORLA)).toMatchObject({
       lines: false,
       waiting: ['preset:alert_tells'],
     });
-    expect(look(row())).toEqual({ glyph: 'dot', tone: null });
+    expect(look(row())).toEqual({ mark: 'live', count: 1, tone: null });
     mark(TOLLIVER, 'preset:alert_tells');
     expect(rows.getSessionRow(TOLLIVER).waiting).toEqual([]);
   });
@@ -153,12 +153,12 @@ describe('the marks on a session row', () => {
     const { sessions, rows, look } = await load();
     output(ORLA, 'The Bank of Aabahran\n\r');
     alert(ORLA);
-    expect(look(row())).toEqual({ glyph: 'dot', tone: 'new' });
+    expect(look(row())).toEqual({ mark: 'live', count: 1, tone: 'new' });
     sessions.select(ORLA);
     expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, waiting: [] });
     output(ORLA, '[Exits: south]\n\r');
     alert(ORLA);
-    expect(look(row())).toEqual({ glyph: null, tone: null });
+    expect(look(row())).toEqual({ mark: 'live', count: 0, tone: null });
     // Tolliver went behind, so his lines mark him now.
     output(TOLLIVER, '[Exits: south]\n\r');
     expect(rows.getSessionRow(TOLLIVER).lines).toBe(true);
@@ -271,23 +271,23 @@ describe('the link of a session row', () => {
   });
 });
 
-describe('the glyph of a session row', () => {
+describe('the mark of a session row', () => {
   it('reads the list until the session says more', async () => {
     const { look } = await load();
-    expect(look(row())).toEqual({ glyph: null, tone: null });
-    expect(look(LOGIN)).toEqual({ glyph: 'hand', tone: null });
+    expect(look(row())).toEqual({ mark: 'live', count: 0, tone: null });
+    expect(look(LOGIN)).toEqual({ mark: 'hand', count: 0, tone: null });
     // A session launch restored, or one never connected, dims.
-    expect(look(row({ connected: false }))).toEqual({ glyph: null, tone: 'off' });
+    expect(look(row({ connected: false }))).toEqual({ mark: 'off', count: 0, tone: 'off' });
   });
 
   it('turns while Vosh dials, then shows the hand until Char.Status', async () => {
     const { look } = await load();
     connecting(ORLA);
-    expect(look()).toEqual({ glyph: 'spinner', tone: null });
+    expect(look()).toEqual({ mark: 'spinner', count: 0, tone: null });
     connected(ORLA);
-    expect(look()).toEqual({ glyph: 'hand', tone: null });
+    expect(look()).toEqual({ mark: 'hand', count: 0, tone: null });
     gmcp(ORLA, 'Char.Status', { name: 'Orla', level: 51 });
-    expect(look()).toEqual({ glyph: null, tone: null });
+    expect(look()).toEqual({ mark: 'live', count: 0, tone: null });
   });
 
   it('shows no hand on a world Vosh does not know sends Char.Status', async () => {
@@ -295,7 +295,8 @@ describe('the glyph of a session row', () => {
     connecting(ORLA, 'mud.example.org');
     connected(ORLA, 'mud.example.org');
     expect(look(row({ character: null, host: 'mud.example.org' }))).toEqual({
-      glyph: null,
+      mark: 'live',
+      count: 0,
       tone: null,
     });
   });
@@ -304,11 +305,11 @@ describe('the glyph of a session row', () => {
     const { look } = await load();
     connecting(ORLA);
     disconnected(ORLA, 'io error: Connection refused (os error 61)');
-    expect(look()).toEqual({ glyph: 'triangle', tone: null });
+    expect(look()).toEqual({ mark: 'triangle', count: 0, tone: null });
     connecting(ORLA);
     connected(ORLA);
     disconnected(ORLA, null);
-    expect(look()).toEqual({ glyph: null, tone: 'off' });
+    expect(look()).toEqual({ mark: 'off', count: 0, tone: 'off' });
   });
 
   it('turns through every try of a redial, a failed one included', async () => {
@@ -317,15 +318,15 @@ describe('the glyph of a session row', () => {
     gmcp(ORLA, 'Char.Status', { name: 'Orla' });
     disconnected(ORLA, 'server closed connection');
     redial(ORLA, { kind: 'waiting', try: 1, tries: 8, seconds: 3 });
-    expect(look(row())).toEqual({ glyph: 'spinner', tone: null });
+    expect(look(row())).toEqual({ mark: 'spinner', count: 0, tone: null });
     redial(ORLA, { kind: 'dialing', try: 1, tries: 8 });
     connecting(ORLA);
     disconnected(ORLA, null);
-    expect(look()).toEqual({ glyph: 'spinner', tone: null });
+    expect(look()).toEqual({ mark: 'spinner', count: 0, tone: null });
     redial(ORLA, { kind: 'failed', try: 1, tries: 8, reason: 'connection refused' });
-    expect(look()).toEqual({ glyph: 'spinner', tone: null });
+    expect(look()).toEqual({ mark: 'spinner', count: 0, tone: null });
     redial(ORLA, { kind: 'waiting', try: 2, tries: 8, seconds: 6 });
-    expect(look()).toEqual({ glyph: 'spinner', tone: null });
+    expect(look()).toEqual({ mark: 'spinner', count: 0, tone: null });
   });
 
   it('names the character it played through a redial, then shows the hand at the game', async () => {
@@ -340,13 +341,13 @@ describe('the glyph of a session row', () => {
     // The list keeps Orla on her row through every try, so two sessions
     // that redial on one world read apart.
     const kept = row({ connected: false });
-    expect(look(kept)).toEqual({ glyph: 'spinner', tone: null });
+    expect(look(kept)).toEqual({ mark: 'spinner', count: 0, tone: null });
     expect(sessionLabel(kept, [kept]).name).toBe('Orla');
     connected(ORLA);
     redial(ORLA, { kind: 'reached', try: 1 });
-    expect(look(row())).toEqual({ glyph: 'hand', tone: null });
+    expect(look(row())).toEqual({ mark: 'hand', count: 0, tone: null });
     gmcp(ORLA, 'Char.Status', { name: 'Orla' });
-    expect(look(row())).toEqual({ glyph: null, tone: null });
+    expect(look(row())).toEqual({ mark: 'live', count: 0, tone: null });
   });
 
   it('shows the hand once a redial reached the game, on any world, until you play', async () => {
@@ -356,23 +357,23 @@ describe('the glyph of a session row', () => {
     connecting(ORLA, 'mud.example.org');
     connected(ORLA, 'mud.example.org');
     redial(ORLA, { kind: 'reached', try: 2 });
-    expect(look(there)).toEqual({ glyph: 'hand', tone: null });
+    expect(look(there)).toEqual({ mark: 'hand', count: 0, tone: null });
     // A character left link dead takes you back with no Char.Status, and
     // the vitals say you play.
     gmcp(ORLA, 'Char.Vitals', { hp: 850, maxhp: 900 });
-    expect(look(there)).toEqual({ glyph: null, tone: null });
+    expect(look(there)).toEqual({ mark: 'live', count: 0, tone: null });
   });
 
   it('shows the triangle when the tries run out or Reconnect is off', async () => {
     const { look } = await load();
     redial(ORLA, { kind: 'waiting', try: 8, tries: 8, seconds: 60 });
     redial(ORLA, { kind: 'stopped', tries: 8 });
-    expect(look()).toEqual({ glyph: 'triangle', tone: null });
+    expect(look()).toEqual({ mark: 'triangle', count: 0, tone: null });
     connecting(ORLA);
     connected(ORLA);
     disconnected(ORLA, 'server closed connection');
     redial(ORLA, { kind: 'declined', why: 'off' });
-    expect(look(row({ connected: false }))).toEqual({ glyph: 'triangle', tone: null });
+    expect(look(row({ connected: false }))).toEqual({ mark: 'triangle', count: 0, tone: null });
   });
 
   it('dims the name when a drop is expected or the redial is cancelled', async () => {
@@ -381,17 +382,17 @@ describe('the glyph of a session row', () => {
       connected(ORLA);
       disconnected(ORLA, 'server closed connection');
       redial(ORLA, { kind: 'declined', why });
-      expect(look(row({ connected: false }))).toEqual({ glyph: null, tone: 'off' });
+      expect(look(row({ connected: false }))).toEqual({ mark: 'off', count: 0, tone: 'off' });
     }
     // A cancel can cut a try short as it dials, with no state after it.
     redial(ORLA, { kind: 'dialing', try: 3, tries: 8 });
     connecting(ORLA);
     redial(ORLA, { kind: 'cancelled' });
-    expect(look()).toEqual({ glyph: null, tone: 'off' });
+    expect(look()).toEqual({ mark: 'off', count: 0, tone: 'off' });
   });
 });
 
-describe('which glyph a row shows', () => {
+describe('which mark a row shows', () => {
   const quiet = {
     link: null,
     redialing: false,
@@ -403,29 +404,75 @@ describe('which glyph a row shows', () => {
     try: null,
     tries: null,
   } as const;
+  const tells = ['preset:alert_tells'];
 
-  it('puts the triangle first, then the hand, then the spinner, then the dot', async () => {
+  it('puts the triangle first, then the hand, then the spinner, then the dot or the ring', async () => {
     const { rows } = await load();
-    const glyph = (state: object, of = LOGIN, selected = false) =>
-      rows.rowLook({ ...quiet, ...state }, of, selected).glyph;
-    expect(glyph({ link: 'failed', redialing: true, waiting: ['preset:alert_tells'] })).toBe(
-      'triangle',
-    );
-    expect(glyph({ link: 'live', redialing: true, waiting: ['preset:alert_tells'] })).toBe('hand');
-    expect(glyph({ link: 'dialing', waiting: ['preset:alert_tells'] })).toBe('spinner');
-    expect(glyph({ link: 'live', waiting: ['preset:alert_tells'] }, row())).toBe('dot');
+    const mark = (state: object, of = LOGIN) =>
+      rows.rowLook({ ...quiet, ...state }, of, false).mark;
+    expect(mark({ link: 'failed', redialing: true, waiting: tells })).toBe('triangle');
+    expect(mark({ link: 'live', redialing: true, waiting: tells })).toBe('hand');
+    expect(mark({ link: 'dialing', waiting: tells })).toBe('spinner');
+    expect(mark({ link: 'live', waiting: tells }, row())).toBe('live');
+    expect(mark({ link: 'down', waiting: tells })).toBe('off');
   });
 
-  it('never shows the dot or a tone on the selected row, and still shows its link', async () => {
+  it('draws each state of board 02 with its mark, its words, its count and its tone', async () => {
     const { rows } = await load();
-    const marked = { ...quiet, lines: true, waiting: ['preset:alert_tells'] };
-    expect(rows.rowLook(marked, row(), true)).toEqual({ glyph: null, tone: null });
+    const two = ['preset:alert_attacked', 'preset:alert_low_health'];
+    const states: [string, object, SessionRow, boolean, object][] = [
+      ['selected, playing', { link: 'live', playing: true }, row(), true, { mark: 'live' }],
+      ['playing', { link: 'live', playing: true }, row(), false, { mark: 'live' }],
+      ['new lines', { link: 'live', lines: true }, row(), false, { mark: 'live', tone: 'new' }],
+      ['waiting', { link: 'live', waiting: two }, row(), false, { mark: 'live', count: 2 }],
+      ['logging in', { link: 'live' }, LOGIN, false, { mark: 'hand' }],
+      ['connecting', { link: 'dialing' }, LOGIN, false, { mark: 'spinner' }],
+      [
+        'reconnecting',
+        { link: 'dialing', redialing: true, try: 3, tries: 8 },
+        row(),
+        false,
+        { mark: 'spinner' },
+      ],
+      ['dropped', { link: 'failed', downAt: 1000 }, row(), false, { mark: 'triangle' }],
+      ['could not connect', { link: 'failed' }, row(), false, { mark: 'triangle' }],
+      ['not connected', { link: 'down' }, row(), false, { mark: 'off', tone: 'off' }],
+      [
+        'not connected, from the list',
+        {},
+        row({ connected: false }),
+        false,
+        { mark: 'off', tone: 'off' },
+      ],
+    ];
+    for (const [, state, of, selected, want] of states) {
+      expect(rows.rowLook({ ...quiet, ...state }, of, selected)).toEqual({
+        count: 0,
+        tone: null,
+        ...want,
+      });
+    }
+    expect(rows.MARK_WORDS).toEqual({
+      live: 'Playing',
+      off: 'Not connected',
+      hand: 'Logging in',
+      spinner: 'Connecting',
+      triangle: 'Connect again',
+    });
+  });
+
+  it('gives the selected row its mark and no tone', async () => {
+    const { rows } = await load();
+    const marked = { ...quiet, lines: true };
+    expect(rows.rowLook(marked, row(), true)).toEqual({ mark: 'live', count: 0, tone: null });
     expect(rows.rowLook({ ...marked, link: 'dialing' }, row(), true)).toEqual({
-      glyph: 'spinner',
+      mark: 'spinner',
+      count: 0,
       tone: null,
     });
     expect(rows.rowLook({ ...quiet, link: 'down' }, row(), true)).toEqual({
-      glyph: null,
+      mark: 'off',
+      count: 0,
       tone: null,
     });
   });

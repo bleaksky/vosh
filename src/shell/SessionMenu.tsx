@@ -14,6 +14,7 @@ import { ConnectionForm } from './ConnectionForm';
 import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
+import { rowGlyph } from './rowGlyph';
 import { RowGlyphMark } from './SessionSidebar';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
@@ -217,7 +218,7 @@ interface ItemProps {
  *  it, with the port in quiet meta, and its close button beside it. */
 function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
   const label = sessionLabel(row, rows);
-  const { glyph } = rowLook(useSessionRow(row.id), row, current);
+  const glyph = rowGlyph(rowLook(useSessionRow(row.id), row, current), current);
   return (
     <div className="shell-menu-session-slot">
       <ShellMenuItem
