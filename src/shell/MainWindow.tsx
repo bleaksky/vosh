@@ -6,6 +6,7 @@ import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
 import { Resizable } from '../terminal/Resizable';
+import { ReconnectNotice } from './overlays/ReconnectNotice';
 import { UpdateNotice } from './overlays/UpdateNotice';
 import { Toasts } from './overlays/Toasts';
 import { FindToolbar } from '../terminal/FindToolbar';
@@ -709,6 +710,11 @@ function MainWindow() {
       statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} />}
     >
+      <ReconnectNotice
+        session={selected}
+        onTryAgain={() => void connection.connect()}
+        onError={handleError}
+      />
       <UpdateNotice />
       <Toasts />
       {terminalMenu && (
