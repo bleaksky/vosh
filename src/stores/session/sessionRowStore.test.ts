@@ -126,10 +126,10 @@ describe('the marks on a session row', () => {
 
   it('show the dot for something an alert that is off would ring', async () => {
     const { rows, look } = await load();
-    fire('session://mark', { session: ORLA });
+    fire('session://mark', { session: ORLA, source: 'preset:alert_tells' });
     expect(rows.getSessionRow(ORLA)).toMatchObject({ lines: false, alert: true });
     expect(look(row())).toEqual({ glyph: 'dot', tone: null });
-    fire('session://mark', { session: TOLLIVER });
+    fire('session://mark', { session: TOLLIVER, source: 'preset:alert_tells' });
     expect(rows.getSessionRow(TOLLIVER).alert).toBe(false);
   });
 

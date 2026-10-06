@@ -14,7 +14,8 @@
 //!   bounces the Dock or flashes the taskbar, and tells the page through
 //!   `session://alert`, which plays the tone. An alert that rings nothing
 //!   still tells the page through `session://mark` in a session you are
-//!   not looking at, so its row takes the dot (Sessions Q9).
+//!   not looking at, once for each such alert with its source, so its row
+//!   counts and names what waits (Sessions Q9, S4).
 //! - [`presets`] matches the five presets from GMCP, the text and the
 //!   link, and keeps the low latch, the Rust twin of `nextLow`. A preset
 //!   that is off still raises its alerts, with nothing on, so they mark.
@@ -155,15 +156,18 @@ pub(crate) fn of_lua(
 }
 
 /// `session://mark`: something for you happened in a session behind and
-/// rang nothing. The payload is the session alone.
+/// rang nothing. One goes out for each such alert, so the row counts them.
 #[derive(Serialize)]
-struct Mark {}
+struct Mark {
+    /// Where the alert came from, as [`Alert::source`] reads.
+    source: String,
+}
 
 /// Ring each of `alerts` that `session` raised, with no lock held. Each
 /// one follows the focus rule, then the 10 second cap, and what rings
 /// posts its banner, asks for attention and tells the page. In a session
-/// other than the selected one, an alert that rings nothing, since it is
-/// off or quiet or the cap holds it back, still marks the row.
+/// other than the selected one, each alert that rings nothing, since it
+/// is off or quiet or the cap holds it back, still marks the row.
 pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, alerts: Vec<Alert>) {
     if alerts.is_empty() {
         return;
@@ -175,13 +179,12 @@ pub(crate) fn ring<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, ale
     let behind = state.selected_session().id != session.id;
     let label = session.label(&state.other_sessions(session.id));
     let now = Instant::now();
-    let mut marked = false;
     for alert in alerts {
         let fate = focus::fate(&alert.parts, seen).filter(|_| session.allow_alert(&alert.cap, now));
         let Some(fate) = fate else {
-            if behind && !marked {
-                session.emit(app, events::MARK, &Mark {});
-                marked = true;
+            if behind {
+                let source = alert.source;
+                session.emit(app, events::MARK, &Mark { source });
             }
             continue;
         };

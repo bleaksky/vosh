@@ -205,9 +205,12 @@ async fn a_session_counts_as_in_front_only_while_vosh_is_and_its_row_is_selected
     h.finish(grid).await;
 }
 
-/// How many times `session://mark` marked the row of `session`.
-fn marks(h: &Harness, session: SessionId) -> usize {
-    h.events_of(session, "session://mark").len()
+/// Where each `session://mark` on the row of `session` came from.
+fn marks(h: &Harness, session: SessionId) -> Vec<String> {
+    h.events_of(session, "session://mark")
+        .iter()
+        .map(|mark| mark["source"].as_str().expect("a source").to_string())
+        .collect()
 }
 
 #[allow(clippy::await_holding_lock)]
@@ -215,6 +218,19 @@ fn marks(h: &Harness, session: SessionId) -> usize {
 async fn with_every_preset_off_a_tell_behind_still_marks_its_row_and_rings_nothing() {
     let grid = crate::native::grid::lock_shared_grid_for_test();
     let h = Harness::new(orla()).await;
+    // A trigger on `$n looks at $N.`, from act_info.c:1054, whose alert
+    // has nothing on.
+    let looks = Trigger {
+        alert: Some(AlertParts::default()),
+        ..Trigger::new(
+            "looks",
+            r"^\w+ looks at \w+\.$",
+            TriggerAction::Route {
+                pane: "chat".into(),
+            },
+        )
+    };
+    set_up(&h, &[], looks).await;
     let (one, two) = (h.first, h.open_session().await);
     h.connect_to(one, &h.servers[0]).await;
     h.connect_to(two, &h.servers[1]).await;
@@ -225,29 +241,41 @@ async fn with_every_preset_off_a_tell_behind_still_marks_its_row_and_rings_nothi
     })
     .await;
     h.state.focus.set("main", true);
-    // Every preset ships off. A tell to the session behind marks its row
-    // (Sessions Q9), and the one to the session you look at marks
+    // Every preset ships off. The welcome named Orla, and a tell to the
+    // session behind marks its row again (Sessions Q9), each mark with
+    // the alert it stands for. The one to the session you look at marks
     // nothing.
     h.servers[0].push(&tell_from("Tolliver"));
     // A line after the tell shows once the session read the tell.
     h.servers[0].push(&line("Maren walks in."));
     h.servers[1].push(&tell_from("Tolliver"));
-    h.until("the mark behind", |h| marks(h, two) == 1).await;
+    let named = "preset:alert_name".to_string();
+    let tell = "preset:alert_tells".to_string();
+    h.until("the mark behind", |h| marks(h, two).len() == 2)
+        .await;
+    assert_eq!(marks(&h, two), [named.clone(), tell.clone()]);
     h.until("the line after the tell", |h| {
         h.screen_of(one)
             .iter()
             .any(|r| r.contains("Maren walks in."))
     })
     .await;
-    assert_eq!(marks(&h, one), 0);
+    assert_eq!(marks(&h, one), Vec::<String>::new());
     assert_eq!(alerts(&h, one), Vec::<Json>::new());
     assert_eq!(alerts(&h, two), Vec::<Json>::new());
     assert_eq!(h.state.banners.recorded().len(), 0);
-    // With Vosh in the background too, nothing rings and the row behind
-    // takes its mark again.
+    // With Vosh in the background too, nothing rings and the second tell
+    // adds a mark of its own.
     h.state.focus.set("main", false);
     h.servers[1].push(&tell_from("Maren"));
-    h.until("the second mark", |h| marks(h, two) == 2).await;
+    h.until("the second mark", |h| marks(h, two).len() == 3)
+        .await;
+    assert_eq!(marks(&h, two), [named.clone(), tell.clone(), tell]);
+    // A line that names you and that the trigger matches marks the row
+    // once for each alert.
+    h.servers[1].push(&line("Maren looks at Orla."));
+    h.until("the look", |h| marks(h, two).len() == 5).await;
+    assert_eq!(marks(&h, two)[3..], ["trigger:looks".to_string(), named]);
     assert_eq!(h.state.banners.recorded().len(), 0);
     h.disconnect_session(two).await;
     h.finish(grid).await;
