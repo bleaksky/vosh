@@ -55,20 +55,28 @@ export interface PromptRenderRequest {
   placeholders?: boolean;
 }
 
-/** Draw a design. */
-export async function promptRender(request: PromptRenderRequest): Promise<PromptRendered> {
+/** Draw a design, with the values of a session, the selected one when
+ *  it names none. */
+export async function promptRender(
+  request: PromptRenderRequest,
+  session?: number,
+): Promise<PromptRendered> {
   return invoke('prompt_render', {
     template: request.template,
     values: request.values ?? 'live',
     preview: request.preview ?? null,
     overrides: request.overrides ?? null,
     placeholders: request.placeholders ?? false,
+    session,
   });
 }
 
 /** Draw several designs at once, such as the start list. */
-export async function promptRenderMany(requests: PromptRenderRequest[]): Promise<PromptRendered[]> {
-  return invoke('prompt_render_many', { requests });
+export async function promptRenderMany(
+  requests: PromptRenderRequest[],
+  session?: number,
+): Promise<PromptRendered[]> {
+  return invoke('prompt_render_many', { requests, session });
 }
 
 /** What the open card shows on your prompt in place of the live render:
@@ -82,11 +90,14 @@ export interface PromptPreview {
   raw?: boolean;
 }
 
-/** Show a preview on your prompt, or the live render again with null.
- *  The open row carries the live render as its restore, so only live
- *  renders reach history. Nothing saves or goes to the game. */
-export async function promptPreviewSet(preview: PromptPreview | null): Promise<void> {
-  await invoke('prompt_preview_set', { preview });
+/** Show a preview on your prompt in a session, or the live render again
+ *  with null. The open row carries the live render as its restore, so
+ *  only live renders reach history. Nothing saves or goes to the game. */
+export async function promptPreviewSet(
+  preview: PromptPreview | null,
+  session?: number,
+): Promise<void> {
+  await invoke('prompt_preview_set', { preview, session });
 }
 
 export type PromptFormatName =
@@ -185,8 +196,12 @@ export interface PromptEdited {
 
 /** Apply one edit to a design. Every other piece keeps its look. Save
  *  the result with promptConfigSet. */
-export async function promptEdit(template: string, op: PromptEditOp): Promise<PromptEdited> {
-  return invoke('prompt_edit', { template, op });
+export async function promptEdit(
+  template: string,
+  op: PromptEditOp,
+  session?: number,
+): Promise<PromptEdited> {
+  return invoke('prompt_edit', { template, op, session });
 }
 
 /** What a piece of a design holds, as the card names it. */
@@ -275,8 +290,9 @@ export async function promptDescribe(
   template: string,
   preview: PromptPreviewName | null = null,
   overrides: PromptOverrides | null = null,
+  session?: number,
 ): Promise<PromptDescribed> {
-  return invoke('prompt_describe', { template, preview, overrides });
+  return invoke('prompt_describe', { template, preview, overrides, session });
 }
 
 /** The forms a field takes, `hp` or `aff:sanctuary`, each drawn as the
@@ -284,6 +300,7 @@ export async function promptDescribe(
 export async function promptForms(
   field: string,
   preview: PromptPreviewName | null = null,
+  session?: number,
 ): Promise<PromptForm[]> {
-  return invoke('prompt_forms', { field, preview });
+  return invoke('prompt_forms', { field, preview, session });
 }

@@ -130,7 +130,7 @@ describe('events', () => {
     expect(seen).toEqual([identity, null]);
 
     tauri.invoke.mockResolvedValueOnce(null);
-    expect(await sessionIdentityGet()).toBeNull();
-    expect(tauri.invoke).toHaveBeenLastCalledWith('session_identity_get');
+    expect(await sessionIdentityGet(2)).toBeNull();
+    expect(tauri.invoke).toHaveBeenLastCalledWith('session_identity_get', { session: 2 });
   });
 });

@@ -38,6 +38,8 @@ const LAYOUT_HELP: Record<LayoutId, { help: string; sample: string }> = {
 };
 
 interface PromptPickerProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   state: PromptState;
   preview: PromptPreviewName;
   env: BandEnv;
@@ -51,6 +53,7 @@ interface PromptPickerProps {
 }
 
 export function PromptPicker({
+  session,
   state,
   preview,
   env,
@@ -98,7 +101,7 @@ export function PromptPicker({
       return;
     }
     let alive = true;
-    void promptForms(name, preview === 'now' ? null : preview)
+    void promptForms(name, preview === 'now' ? null : preview, session)
       .then((next) => {
         if (alive) setForms(next);
       })
@@ -108,7 +111,7 @@ export function PromptPicker({
     return () => {
       alive = false;
     };
-  }, [name, preview, refresh]);
+  }, [name, preview, refresh, session]);
 
   // A new field asks for its own name.
   useEffect(() => setParam(''), [field?.name]);

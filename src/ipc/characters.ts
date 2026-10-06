@@ -110,8 +110,8 @@ export interface SessionIdentity {
 }
 
 /** The current session identity, or null while no connection is up. */
-export async function sessionIdentityGet(): Promise<SessionIdentity | null> {
-  return (await invoke<SessionIdentity | null>('session_identity_get')) ?? null;
+export async function sessionIdentityGet(session?: number): Promise<SessionIdentity | null> {
+  return (await invoke<SessionIdentity | null>('session_identity_get', { session })) ?? null;
 }
 
 /** Hear the session identity change after a connect, a disconnect, or

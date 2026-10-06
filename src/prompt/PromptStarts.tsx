@@ -40,10 +40,11 @@ function sampleOf(live: string, fight: string): Sample {
   };
 }
 
-/** Each design drawn, by its template, with live values or samples.
- *  A design in `fought` adds the lines it draws only in a fight, as
- *  Detailed does on P4. */
+/** Each design drawn, by its template, with the live values of `session`
+ *  or samples. A design in `fought` adds the lines it draws only in a
+ *  fight, as Detailed does on P4. */
 function useSamples(
+  session: number,
   templates: readonly string[],
   fought: ReadonlySet<string>,
   values: 'live' | 'sample',
@@ -56,8 +57,14 @@ function useSamples(
     const drawn = templates.filter((t) => t.length > 0);
     if (drawn.length === 0) return;
     void Promise.all([
-      promptRenderMany(drawn.map((template) => ({ template, values }))),
-      promptRenderMany(drawn.map((template) => ({ template, values, preview: 'fight' as const }))),
+      promptRenderMany(
+        drawn.map((template) => ({ template, values })),
+        session,
+      ),
+      promptRenderMany(
+        drawn.map((template) => ({ template, values, preview: 'fight' as const })),
+        session,
+      ),
     ])
       .then(([live, fight]) => {
         if (!alive) return;
@@ -74,7 +81,7 @@ function useSamples(
     };
     // The key stands for the templates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, values, refresh]);
+  }, [key, values, refresh, session]);
   return samples;
 }
 
@@ -207,6 +214,8 @@ const MENU_SAMPLE_PX = 410;
 const LIST_ROW_PX = 498;
 
 interface StartsProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   mode: 'start' | 'rest';
   config: PromptConfig;
   presets: readonly PromptPreset[];
@@ -235,6 +244,7 @@ interface StartsProps {
 /** P4's body: the start list on first use, or the card at rest with
  *  Insert value… and the Presets menu. */
 export function Starts({
+  session,
   mode,
   config,
   presets,
@@ -259,7 +269,7 @@ export function Starts({
     () => new Set(list.rows.filter((r) => r.id === 'detailed').map((r) => r.template)),
     [list],
   );
-  const samples = useSamples(templates, fought, values, refresh);
+  const samples = useSamples(session, templates, fought, values, refresh);
   // A fight line leaves room for its tag, 8 px after it.
   const measure = useLabelMeasure(11);
   const tagRoom = 8 + measure('in a fight');

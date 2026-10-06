@@ -72,14 +72,21 @@ export interface GamePromptSeenPayload {
 }
 
 export async function onGamePromptSeen(
-  cb: (payload: GamePromptSeenPayload) => void,
+  cb: (payload: GamePromptSeenPayload, session: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<GamePromptSeenPayload>(GAME_PROMPT_SEEN, (event) => {
-    const lost = (event.payload as { lost?: unknown }).lost;
-    cb({
-      ...event.payload,
-      lost: Array.isArray(lost) ? lost.filter((n): n is string => typeof n === 'string') : [],
-    });
+  return listen<GamePromptSeenPayload & { session?: number }>(GAME_PROMPT_SEEN, (event) => {
+    const { kind, text, applied, lost } = event.payload as GamePromptSeenPayload & {
+      lost?: unknown;
+    };
+    cb(
+      {
+        kind,
+        text,
+        applied,
+        lost: Array.isArray(lost) ? lost.filter((n): n is string => typeof n === 'string') : [],
+      },
+      sessionOf(event.payload),
+    );
   });
 }
 
@@ -99,8 +106,8 @@ export interface PromptLastSeen {
 }
 
 /** Where Vosh last saw your prompt settings, or null when it has not. */
-export async function promptLastSeen(): Promise<PromptLastSeen | null> {
-  return invoke('prompt_last_seen');
+export async function promptLastSeen(session?: number): Promise<PromptLastSeen | null> {
+  return invoke('prompt_last_seen', { session });
 }
 
 /** What the backend last reported on session://hidden for a session,
@@ -186,15 +193,20 @@ export function normalizePromptConfig(raw: RawPromptConfig | null): PromptConfig
   };
 }
 
-/** The active profile's `[prompt]` table. */
-export async function promptConfigGet(): Promise<PromptConfig> {
-  return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_config_get'));
+/** The `[prompt]` table of a session, the selected one when it names
+ *  none. */
+export async function promptConfigGet(session?: number): Promise<PromptConfig> {
+  return normalizePromptConfig(
+    await invoke<RawPromptConfig | null>('prompt_config_get', { session }),
+  );
 }
 
 /** Tell the backend the card opened, which keeps the design it found
  *  among the earlier designs, and read the table as it now stands. */
-export async function promptCardOpen(): Promise<PromptConfig> {
-  return normalizePromptConfig(await invoke<RawPromptConfig | null>('prompt_card_open'));
+export async function promptCardOpen(session?: number): Promise<PromptConfig> {
+  return normalizePromptConfig(
+    await invoke<RawPromptConfig | null>('prompt_card_open', { session }),
+  );
 }
 
 /** What the main window opens the card on: where it would open, Edit as
@@ -231,9 +243,13 @@ export async function subscribePromptCardOpen(
  *  game takes the design written from its codes. */
 export async function promptConfigSet(
   config: PromptConfig,
-  options?: { asIs?: boolean },
+  options?: { asIs?: boolean; session?: number },
 ): Promise<void> {
-  await invoke('prompt_config_set', options?.asIs ? { config, asIs: true } : { config });
+  const session = options?.session;
+  await invoke(
+    'prompt_config_set',
+    options?.asIs ? { config, asIs: true, session } : { config, session },
+  );
 }
 
 /** A design another profile holds. */
@@ -355,8 +371,11 @@ export interface PromptLegendRow {
 }
 
 /** What a capture compiles to. It changes nothing. */
-export async function promptCompile(capture: PromptCompileRequest): Promise<PromptCompileReport> {
-  return invoke('prompt_compile', { capture });
+export async function promptCompile(
+  capture: PromptCompileRequest,
+  session?: number,
+): Promise<PromptCompileReport> {
+  return invoke('prompt_compile', { capture, session });
 }
 
 /** One entry of the candidates ring: what came right before a send or a
@@ -380,8 +399,8 @@ export interface PromptCandidateGroup {
 }
 
 /** The candidates ring grouped by shape, the largest group first. */
-export async function promptCandidates(): Promise<PromptCandidateGroup[]> {
-  return invoke('prompt_candidates');
+export async function promptCandidates(session?: number): Promise<PromptCandidateGroup[]> {
+  return invoke('prompt_candidates', { session });
 }
 
 /** How a capture matches the ring and your scrollback, with the match
@@ -428,21 +447,25 @@ export interface PromptCheckRead {
 export async function promptCaptureFromLine(
   id: number,
   names?: string[],
+  session?: number,
 ): Promise<PromptCompileReport> {
-  return invoke('prompt_capture_from_line', { id, names: names ?? null });
+  return invoke('prompt_capture_from_line', { id, names: names ?? null, session });
 }
 
 /** Check a capture against the candidates ring and your scrollback. */
-export async function promptCaptureCheck(capture: PromptCapture): Promise<PromptCaptureCheck> {
-  return invoke('prompt_capture_check', { capture });
+export async function promptCaptureCheck(
+  capture: PromptCapture,
+  session?: number,
+): Promise<PromptCaptureCheck> {
+  return invoke('prompt_capture_check', { capture, session });
 }
 
 /** The open card chose Aabahran's code reader on a host Vosh does not
  *  know (More > Use Forsaken Lands prompt codes…), or lets it go. While
  *  it holds, the Forsaken Lands rules hold, so the game's reply to prompt
  *  fills the card's fields on an older build (D17). */
-export async function promptCodeReaderSet(on: boolean): Promise<void> {
-  await invoke('prompt_code_reader_set', { on });
+export async function promptCodeReaderSet(on: boolean, session?: number): Promise<void> {
+  await invoke('prompt_code_reader_set', { on, session });
 }
 
 /** A Line trigger that matched your prompt as a line (D6). `preset` says
@@ -455,8 +478,11 @@ export interface PromptLineTrigger {
 
 /** The Line triggers that match a prompt `capture` reads in the
  *  candidates ring, which no longer see it once the profile reads it. */
-export async function promptLineTriggers(capture: PromptCapture): Promise<PromptLineTrigger[]> {
-  return invoke('prompt_line_triggers', { capture });
+export async function promptLineTriggers(
+  capture: PromptCapture,
+  session?: number,
+): Promise<PromptLineTrigger[]> {
+  return invoke('prompt_line_triggers', { capture, session });
 }
 
 export type PromptFieldGroup =
@@ -564,28 +590,34 @@ export interface PromptState {
 
 /** The catalog with live states and sources, the status, the new build
  *  sign and the open row. */
-export async function promptStateGet(): Promise<PromptState> {
-  return invoke('prompt_state_get');
+export async function promptStateGet(session?: number): Promise<PromptState> {
+  return invoke('prompt_state_get', { session });
 }
 
-/** While on, session://prompt-state follows each prompt Vosh reads. */
-export async function promptWatch(on: boolean): Promise<void> {
-  await invoke('prompt_watch', { on });
+/** While on, session://prompt-state follows each prompt Vosh reads in a
+ *  session. */
+export async function promptWatch(on: boolean, session?: number): Promise<void> {
+  await invoke('prompt_watch', { on, session });
 }
 
-/** The prompt state after each prompt, while the card watches. */
-export async function onPromptState(cb: (payload: PromptState) => void): Promise<UnlistenFn> {
-  return listen<PromptState>(PROMPT_STATE, (event) => {
-    cb(event.payload);
+/** The prompt state after each prompt, while the card watches, with the
+ *  session it is about. */
+export async function onPromptState(
+  cb: (payload: PromptState, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<PromptState & { session?: number }>(PROMPT_STATE, (event) => {
+    cb(event.payload, sessionOf(event.payload));
   });
 }
 
-/** Whether Vosh reads your prompt, each time that changes. */
+/** Whether Vosh reads your prompt, each time that changes, with the
+ *  session it is about. */
 export async function onPromptStatus(
-  cb: (payload: PromptStatusPayload) => void,
+  cb: (payload: PromptStatusPayload, session: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<PromptStatusPayload>(PROMPT_STATUS, (event) => {
-    cb(event.payload);
+  return listen<PromptStatusPayload & { session?: number }>(PROMPT_STATUS, (event) => {
+    const { status, last_match_at } = event.payload;
+    cb({ status, last_match_at }, sessionOf(event.payload));
   });
 }
 
@@ -658,8 +690,12 @@ export function normalizePromptShowState(raw: RawPromptShowState | null): Prompt
   };
 }
 
-export async function promptShowGet(): Promise<PromptShowState> {
-  return normalizePromptShowState(await invoke<RawPromptShowState | null>('prompt_show_get'));
+/** Where a session's prompt shows, the selected session's when it
+ *  names none. */
+export async function promptShowGet(session?: number): Promise<PromptShowState> {
+  return normalizePromptShowState(
+    await invoke<RawPromptShowState | null>('prompt_show_get', { session }),
+  );
 }
 
 /** The payload of vosh://prompt-config-changed: the active profile

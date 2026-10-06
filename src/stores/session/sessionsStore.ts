@@ -114,6 +114,11 @@ export function useSessions(): SessionRow[] {
   return useSyncExternalStore(subscribeSessions, getSessions);
 }
 
+/** The selected session's id, which a view keys what it shows by. */
+export function useSelected(): number {
+  return useSyncExternalStore(subscribeSessions, getSelected);
+}
+
 /** The selected session's row, or null until a list names it. */
 export function useSelectedRow(): SessionRow | null {
   return useSyncExternalStore(subscribeSessions, selectedRow);

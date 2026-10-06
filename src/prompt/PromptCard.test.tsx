@@ -171,7 +171,13 @@ describe('the match line', () => {
 describe('telling Vosh your prompt (P2)', () => {
   it('asks for your setting with the game default as a hint while Vosh has none', () => {
     const html = renderToStaticMarkup(
-      <CodesEntry initial={null} onRead={() => {}} onPoint={() => {}} onGameSent={() => {}} />,
+      <CodesEntry
+        session={1}
+        initial={null}
+        onRead={() => {}}
+        onPoint={() => {}}
+        onGameSent={() => {}}
+      />,
     );
     expect(html).toContain('What is your prompt setting?');
     expect(html).toContain(
@@ -190,6 +196,7 @@ describe('telling Vosh your prompt (P2)', () => {
   it('shows the codes the profile holds for Change codes…', () => {
     const html = renderToStaticMarkup(
       <CodesEntry
+        session={1}
         initial={{ prompt: '<%hhp> ', fprompt: '' }}
         onRead={() => {}}
         onPoint={() => {}}

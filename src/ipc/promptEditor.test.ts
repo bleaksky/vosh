@@ -107,8 +107,8 @@ describe('the prompt editor commands', () => {
       Promise.resolve(
         command === 'prompt_config_get' ? { draw: true, template: '%hp' } : undefined,
       )) as typeof invoke);
-    const config = await promptConfigGet();
-    expect(invoke).toHaveBeenCalledWith('prompt_config_get');
+    const config = await promptConfigGet(2);
+    expect(invoke).toHaveBeenCalledWith('prompt_config_get', { session: 2 });
     expect(config.capture).toEqual({ kind: 'none' });
     const next: PromptConfig = { ...config, template: '[%hp]' };
     await promptConfigSet(next);
@@ -128,7 +128,9 @@ describe('the prompt editor commands', () => {
       capture: { kind: 'aabahran', prompt: '[%h/%Hhp]', typed: true },
     });
     await promptCandidates();
-    expect(sent).toHaveBeenLastCalledWith('prompt_candidates');
+    expect(sent).toHaveBeenLastCalledWith('prompt_candidates', {});
+    await promptCandidates(2);
+    expect(sent).toHaveBeenLastCalledWith('prompt_candidates', { session: 2 });
     await promptCaptureFromLine(7);
     expect(sent).toHaveBeenLastCalledWith('prompt_capture_from_line', { id: 7, names: null });
     await promptCaptureFromLine(7, ['health', '']);
@@ -201,10 +203,12 @@ describe('the prompt editor commands', () => {
     expect(sent).toHaveBeenLastCalledWith('prompt_forms', { field: 'hp', preview: 'low_health' });
     await promptLineTriggers({ kind: 'none' });
     expect(sent).toHaveBeenLastCalledWith('prompt_line_triggers', { capture: { kind: 'none' } });
-    await promptStateGet();
-    expect(sent).toHaveBeenLastCalledWith('prompt_state_get');
+    await promptStateGet(2);
+    expect(sent).toHaveBeenLastCalledWith('prompt_state_get', { session: 2 });
     await promptWatch(true);
     expect(sent).toHaveBeenLastCalledWith('prompt_watch', { on: true });
+    await promptWatch(false, 2);
+    expect(sent).toHaveBeenLastCalledWith('prompt_watch', { on: false, session: 2 });
   });
 });
 
@@ -266,8 +270,8 @@ describe('opening the prompt card', () => {
           ? { draw: true, template: '%hp', previous_templates: ['%hp'] }
           : undefined,
       )) as typeof invoke);
-    const config = await promptCardOpen();
-    expect(invoke).toHaveBeenLastCalledWith('prompt_card_open');
+    const config = await promptCardOpen(2);
+    expect(invoke).toHaveBeenLastCalledWith('prompt_card_open', { session: 2 });
     expect(config.previous_templates).toEqual(['%hp']);
     expect(config.capture).toEqual({ kind: 'none' });
   });

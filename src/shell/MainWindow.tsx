@@ -47,7 +47,7 @@ import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import { noteConnectionError } from '../stores/session/connectionStore';
-import { getSelected } from '../stores/session/sessionsStore';
+import { getSelected, useSelected } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
@@ -85,6 +85,8 @@ function MainWindow() {
   const promptShow = usePromptShow();
   const promptPinned = promptShow?.show === 'pinned' && promptShow.capture;
   const promptLifted = promptShow?.show === 'lifted' && promptShow.capture;
+  // The session the window shows, whose prompt the card works on.
+  const selected = useSelected();
   // The cell the live terminal draws at, which the pinned band lays its
   // characters out on.
   const [cellSize, setCellSize] = useState<CellSize | null>(null);
@@ -400,8 +402,9 @@ function MainWindow() {
     openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
-      void promptConfigGet()
-        .then((config) => promptConfigSet({ ...config, draw: on }))
+      const session = getSelected();
+      void promptConfigGet(session)
+        .then((config) => promptConfigSet({ ...config, draw: on }, { session }))
         .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
     },
   });
@@ -678,7 +681,12 @@ function MainWindow() {
         />
       )}
       {promptCard && (
+        // A selection mounts the card again for the session it brings to
+        // the front, and the card it leaves puts that session's live
+        // prompt back as it goes.
         <PromptCard
+          key={selected}
+          session={selected}
           opening={promptCard}
           onBand={setCardBand}
           host={promptCardHost}

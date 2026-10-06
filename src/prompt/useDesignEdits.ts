@@ -18,12 +18,14 @@ import { caretAfter, moveBack, moveOp, type MoveMade, type Pointing } from './pr
 
 const UNDO_DEPTH = 50;
 
-/** The table the card shows and the changes it makes to it. The card
- *  puts a table it reads in with take, bumps opens each time it opens,
- *  and calls forgetEdits as it opens again for another profile. An edit
- *  hands the parts of the new design to `setDescribed`, in the preview
- *  `previewRef` names, and the part it follows to `setPointing`. */
+/** The table the card shows for `session` and the changes it makes to
+ *  it. The card puts a table it reads in with take, bumps opens each time
+ *  it opens, and calls forgetEdits as it opens again for another profile.
+ *  An edit hands the parts of the new design to `setDescribed`, in the
+ *  preview `previewRef` names, and the part it follows to
+ *  `setPointing`. */
 export function useDesignEdits(
+  session: number,
   setDescribed: (described: { template: string; data: PromptDescribed }) => void,
   setPointing: (pointing: Pointing) => void,
   previewRef: { readonly current: PromptPreviewName },
@@ -64,7 +66,7 @@ export function useDesignEdits(
     const entry = keepUndo ? undoEntry(before, next) : null;
     if (entry) undo.current = [...undo.current, entry].slice(-UNDO_DEPTH);
     take(next);
-    void promptConfigSet(next, { asIs }).catch((e: unknown) => {
+    void promptConfigSet(next, { asIs, session }).catch((e: unknown) => {
       if (at === opens.current) take(before);
       pushToast({ kind: 'error', message: String(e) });
     });
@@ -107,14 +109,19 @@ export function useDesignEdits(
             if (op.op === 'insert_text') placed = { ...op, at: landed + 1 };
             else if ('piece' in op) placed = { ...op, piece: landed };
           }
-          const result = await promptEdit(text, placed);
+          const result = await promptEdit(text, placed, session);
           text = result.template;
           if (i === 0 || placed.op !== 'insert_text') landed = result.piece;
         }
         // The parts of the new design come with it, so the card shows
         // the part it follows at once.
         const shown = previewRef.current;
-        const data = await promptDescribe(text, shown === 'now' ? null : shown).catch(() => null);
+        const data = await promptDescribe(
+          text,
+          shown === 'now' ? null : shown,
+          null,
+          session,
+        ).catch(() => null);
         // Another profile became active meanwhile, so the edit was for a
         // table the card no longer shows.
         if (at !== opens.current) return;
@@ -147,9 +154,12 @@ export function useDesignEdits(
       const at = opens.current;
       if (!base || base.template !== back.after) return;
       const shown = previewRef.current;
-      const data = await promptDescribe(back.before, shown === 'now' ? null : shown).catch(
-        () => null,
-      );
+      const data = await promptDescribe(
+        back.before,
+        shown === 'now' ? null : shown,
+        null,
+        session,
+      ).catch(() => null);
       if (at !== opens.current) return;
       save(movedBackTable(base, latest.current, back));
       if (data) setDescribed({ template: back.before, data });

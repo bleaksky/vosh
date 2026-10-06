@@ -14,6 +14,7 @@ import {
   promptCaptureCheck,
   promptCompile,
   promptLastSeen,
+  type GamePromptSeenPayload,
   type PromptCapture,
   type PromptCaptureCheck,
   type PromptCaptureSource,
@@ -45,6 +46,8 @@ export interface CodesRequest {
 }
 
 interface CodesEntryProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   /** The codes the profile holds, for Change codes…. */
   initial: { prompt: string; fprompt: string } | null;
   onRead: (codes: CodesRequest) => void;
@@ -56,7 +59,7 @@ interface CodesEntryProps {
 /** P2: your prompt setting, as Vosh saw it when you typed prompt, from
  *  your log, or as you type or paste it. The game's answers fill the
  *  fields while the step is open. */
-export function CodesEntry({ initial, onRead, onPoint, onGameSent }: CodesEntryProps) {
+export function CodesEntry({ session, initial, onRead, onPoint, onGameSent }: CodesEntryProps) {
   const promptId = useId();
   const fightId = useId();
   const [prompt, setPrompt] = useState(initial?.prompt ?? '');
@@ -70,7 +73,7 @@ export function CodesEntry({ initial, onRead, onPoint, onGameSent }: CodesEntryP
   useEffect(() => {
     if (initial) return;
     let alive = true;
-    void promptLastSeen()
+    void promptLastSeen(session)
       .then((last) => {
         if (!alive || !last?.prompt || last.source === 'gmcp') return;
         setPrompt(last.prompt);
@@ -85,20 +88,27 @@ export function CodesEntry({ initial, onRead, onPoint, onGameSent }: CodesEntryP
     // The step reads where the codes came from once, as it opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useTauriEvent(onGamePromptSeen, (payload) => {
-    if (payload.kind === 'gmcp') {
-      onGameSent();
-      return;
-    }
-    const now = new Date();
-    if (payload.kind === 'prompt') {
-      setPrompt(payload.text);
-      setSeen(`Vosh saw it when you typed prompt at ${clockTime(now)}.`);
-      origin.current = { source: 'session', at: localStamp(now) };
-    } else if (payload.kind === 'fprompt') {
-      setFprompt(payload.text);
-    }
-  });
+  // What the game says of your prompt settings, in the card's session
+  // only.
+  useTauriEvent(
+    (cb: (seen: [GamePromptSeenPayload, number]) => void) =>
+      onGamePromptSeen((payload, from) => cb([payload, from])),
+    ([payload, from]) => {
+      if (from !== session) return;
+      if (payload.kind === 'gmcp') {
+        onGameSent();
+        return;
+      }
+      const now = new Date();
+      if (payload.kind === 'prompt') {
+        setPrompt(payload.text);
+        setSeen(`Vosh saw it when you typed prompt at ${clockTime(now)}.`);
+        origin.current = { source: 'session', at: localStamp(now) };
+      } else if (payload.kind === 'fprompt') {
+        setFprompt(payload.text);
+      }
+    },
+  );
 
   // What you type is yours, though the copy keeps saying where the codes
   // came from, so the card does not change its question under you.
@@ -164,6 +174,8 @@ export function CodesEntry({ initial, onRead, onPoint, onGameSent }: CodesEntryP
 }
 
 interface CodesReadProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   request: CodesRequest;
   /** Where the codes came from, on the new build. */
   sourceLine: string | null;
@@ -184,6 +196,7 @@ interface CodesReadProps {
 /** P3: what Vosh reads from your codes, shown on your newest prompt with
  *  the codes they come from. */
 export function CodesRead({
+  session,
   request,
   sourceLine,
   capture,
@@ -201,12 +214,15 @@ export function CodesRead({
 
   useEffect(() => {
     let alive = true;
-    void promptCompile({
-      kind: 'aabahran',
-      prompt: request.prompt,
-      fprompt: request.fprompt,
-      typed: request.typed,
-    })
+    void promptCompile(
+      {
+        kind: 'aabahran',
+        prompt: request.prompt,
+        fprompt: request.fprompt,
+        typed: request.typed,
+      },
+      session,
+    )
       .then((next) => {
         if (alive) setReport(next);
       })
@@ -214,7 +230,7 @@ export function CodesRead({
     return () => {
       alive = false;
     };
-  }, [request.prompt, request.fprompt, request.typed]);
+  }, [request.prompt, request.fprompt, request.typed, session]);
 
   useEffect(() => {
     if (!report?.ok) {
@@ -222,12 +238,15 @@ export function CodesRead({
       return;
     }
     let alive = true;
-    void promptCaptureCheck({
-      kind: 'aabahran',
-      prompt: report.prompt,
-      fprompt: report.fprompt,
-      follow_game: true,
-    })
+    void promptCaptureCheck(
+      {
+        kind: 'aabahran',
+        prompt: report.prompt,
+        fprompt: report.fprompt,
+        follow_game: true,
+      },
+      session,
+    )
       .then((next) => {
         if (!alive) return;
         setCheck(next);
@@ -237,7 +256,7 @@ export function CodesRead({
     return () => {
       alive = false;
     };
-  }, [report, refresh]);
+  }, [report, refresh, session]);
 
   const read = check?.reads[index] ?? null;
   const newest = check?.reads[0] ?? null;

@@ -70,6 +70,7 @@ import { useBandEnv } from './useBandEnv';
 import { useCaptureSteps } from './useCaptureSteps';
 import { useCardPlace } from './useCardPlace';
 import { useDesignEdits } from './useDesignEdits';
+import { getSessions } from '../stores/session/sessionsStore';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
 import { knownWorld } from '../lib/knownWorlds';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -106,6 +107,12 @@ import { PromptText } from './PromptText';
 // At its foot, beside Draw your prompt, a button picks where your prompt
 // shows, and the card moves with your prompt to the place you pick. A
 // menu before Done picks the preview while drawing is on (DesignFoot).
+//
+// The card works on one session's prompt, the selected session's, and
+// names that session on every call, so an edit or a save still under
+// way when you select another session lands on the session it began in.
+// MainWindow mounts the card again for each session a selection brings
+// to the front.
 
 /** Where the card reaches the terminal it sits over. */
 export interface PromptCardHost {
@@ -121,6 +128,8 @@ export interface PromptCardHost {
 export type CardView = 'design' | 'picker' | 'text';
 
 interface PromptCardProps {
+  /** The session whose prompt the card works on. */
+  session: number;
   host: PromptCardHost;
   show: PromptShowState | null;
   cell: CellSize | null;
@@ -145,6 +154,7 @@ const LAMENT_NOTE =
   "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
 
 export function PromptCard({
+  session,
   host,
   show,
   cell,
@@ -184,6 +194,7 @@ export function PromptCard({
   // Where the caret was in Edit as text, kept while Insert value… is open.
   const textCaret = useRef<{ start: number; end: number } | null>(null);
   const { config, take, opens, forgetEdits, save, takeBack, edit, movePicked } = useDesignEdits(
+    session,
     setDescribed,
     setPointing,
     previewRef,
@@ -207,6 +218,7 @@ export function PromptCard({
     chooseCodeReader,
     forget,
   } = useCaptureSteps({
+    session,
     step,
     setStep,
     state,
@@ -250,14 +262,17 @@ export function PromptCard({
         setConfirmForget(false);
       }
       void Promise.all([
-        promptCardOpen(),
-        promptStateGet(),
-        sessionIdentityGet().catch(() => null),
+        promptCardOpen(session),
+        promptStateGet(session),
+        sessionIdentityGet(session).catch(() => null),
         profilesList().catch(() => null),
       ])
         .then(([opened, now, who, list]) => {
           if (!alive || at !== opens.current) return;
-          const name = list?.active ?? who?.profile ?? 'default';
+          // The profile the session's row names, which the app may not
+          // have made active yet when you just selected the session.
+          const played = getSessions().find((row) => row.id === session)?.profile;
+          const name = played ?? list?.active ?? who?.profile ?? 'default';
           const entry = list?.profiles.find((p) => p.name === name);
           const host = who?.host ?? entry?.auto_match?.host ?? '';
           const known = knownWorld(host) !== undefined;
@@ -278,7 +293,7 @@ export function PromptCard({
         .catch((e: unknown) => console.error('[prompt card] opening failed', e));
     };
     open(true);
-    void promptWatch(true).catch(() => {});
+    void promptWatch(true, session).catch(() => {});
     const unlisteners: (() => void)[] = [];
     const keep = (p: Promise<() => void>) =>
       void p.then((fn) => (alive ? unlisteners.push(fn) : fn())).catch(() => {});
@@ -289,7 +304,8 @@ export function PromptCard({
       }),
     );
     keep(
-      onPromptState((next) => {
+      onPromptState((next, from) => {
+        if (from !== session) return;
         setState(next);
         setRefresh((n) => n + 1);
       }),
@@ -297,13 +313,13 @@ export function PromptCard({
     // Whether Vosh reads your prompt changes between prompts too, such as
     // when three in a row did not match.
     keep(
-      onPromptStatus((status) => {
-        setState((now) => (now ? { ...now, status } : now));
+      onPromptStatus((status, from) => {
+        if (from === session) setState((now) => (now ? { ...now, status } : now));
       }),
     );
     keep(
       subscribePromptConfigChanged(() => {
-        void promptConfigGet()
+        void promptConfigGet(session)
           .then((next) => {
             if (alive) take(next);
           })
@@ -313,11 +329,11 @@ export function PromptCard({
     return () => {
       alive = false;
       for (const fn of unlisteners) fn();
-      void promptWatch(false).catch(() => {});
+      void promptWatch(false, session).catch(() => {});
       // Your live prompt comes back as the card closes.
-      void promptPreviewSet(null).catch(() => {});
+      void promptPreviewSet(null, session).catch(() => {});
     };
-  }, [forgetEdits, opens, resetSteps, take]);
+  }, [session, forgetEdits, opens, resetSteps, take]);
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
@@ -337,9 +353,9 @@ export function PromptCard({
   // rules while the card stays open, so the game's reply to prompt fills
   // P2's fields (D17). Closing the card lets it go.
   useEffect(() => {
-    void promptCodeReaderSet(codesChosen).catch(() => {});
-  }, [codesChosen]);
-  useEffect(() => () => void promptCodeReaderSet(false).catch(() => {}), []);
+    void promptCodeReaderSet(codesChosen, session).catch(() => {});
+  }, [codesChosen, session]);
+  useEffect(() => () => void promptCodeReaderSet(false, session).catch(() => {}), [session]);
 
   // While the card reads your codes your prompt shows the line the game
   // sent, so its marks sit on it. Once it draws your design, each value
@@ -349,8 +365,9 @@ export function PromptCard({
     if (step === null) return;
     void promptPreviewSet(
       reading ? { raw: true } : { placeholders: true, preview: drawn === 'now' ? null : drawn },
+      session,
     ).catch(() => {});
-  }, [step, reading, drawn]);
+  }, [step, reading, drawn, session]);
 
   // Past the capture steps the card works on your design: as text even
   // with drawing off (P11), and on your prompt while drawing is on.
@@ -375,12 +392,18 @@ export function PromptCard({
     let alive = true;
     const request =
       capture.kind === 'aabahran'
-        ? promptCompile({ kind: 'aabahran', prompt: capture.prompt, fprompt: capture.fprompt })
-        : promptCompile({
-            kind: 'regex',
-            lines: capture.kind === 'regex' ? capture.lines : [],
-            names: capture.kind === 'regex' ? (capture.names ?? {}) : {},
-          });
+        ? promptCompile(
+            { kind: 'aabahran', prompt: capture.prompt, fprompt: capture.fprompt },
+            session,
+          )
+        : promptCompile(
+            {
+              kind: 'regex',
+              lines: capture.kind === 'regex' ? capture.lines : [],
+              names: capture.kind === 'regex' ? (capture.names ?? {}) : {},
+            },
+            session,
+          );
     void Promise.all([request, promptDesignsList().catch(() => [])])
       .then(([report, others]) => {
         if (!alive) return;
@@ -391,14 +414,14 @@ export function PromptCard({
     return () => {
       alive = false;
     };
-  }, [capture, step]);
+  }, [capture, step, session]);
 
   // What each part of your design is, with what it reads in the preview.
   const template = config?.template ?? '';
   useEffect(() => {
     if (step !== 'start' && step !== 'rest') return;
     let alive = true;
-    void promptDescribe(template, drawn === 'now' ? null : drawn)
+    void promptDescribe(template, drawn === 'now' ? null : drawn, null, session)
       .then((data) => {
         if (alive) setDescribed({ template, data });
       })
@@ -406,7 +429,7 @@ export function PromptCard({
     return () => {
       alive = false;
     };
-  }, [template, step, drawn, refresh]);
+  }, [template, step, drawn, refresh, session]);
 
   // The parts as last described. Right after a change they can trail the
   // design for a moment, and the card keeps showing them meanwhile, so the
@@ -507,7 +530,7 @@ export function PromptCard({
   const insertValue = (field: string, format: PromptFormatChoice) => {
     if (pickerFor === 'text') {
       setView('text');
-      void promptEdit('', { op: 'insert_field', at: 0, field, format })
+      void promptEdit('', { op: 'insert_field', at: 0, field, format }, session)
         .then((result) => insertRef.current?.(result.template))
         .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
       return;
@@ -617,6 +640,7 @@ export function PromptCard({
         } else if (view === 'picker' && state) {
           content = (
             <PromptPicker
+              session={session}
               state={state}
               preview={drawn}
               env={env}
@@ -655,6 +679,7 @@ export function PromptCard({
         } else {
           content = (
             <Starts
+              session={session}
               mode={step}
               config={config}
               presets={presets}

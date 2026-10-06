@@ -1,9 +1,11 @@
-// The prompt card saves for one profile, the active one. When another
-// profile becomes active, by a switch, the auto switch when you log in
-// as a character it claims, or a config that replaces the live one
-// (#profile load or reset, an import), the card opens again for it, so
-// it never saves one profile's table over another's. A login names the
-// character the header saves for.
+// The prompt card saves for one profile, the one its session plays. When
+// that session's profile changes, by a switch, the auto switch when you
+// log in as a character it claims, or a config that replaces the live
+// one (#profile load or reset, an import), the card opens again for it,
+// so it never saves one profile's table over another's. A login names
+// the character the header saves for. These events speak for the
+// selected session, which is the card's, since MainWindow mounts the
+// card again for each session a selection brings to the front.
 
 import { subscribeSessionIdentity, type SessionIdentity } from '../ipc/characters';
 import { subscribeProfileSwitched } from '../ipc/profiles';
