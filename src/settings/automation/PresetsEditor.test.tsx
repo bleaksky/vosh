@@ -8,12 +8,19 @@ import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 // the Keys row and the note when a macro of yours keeps a key. This
 // mounts the card over a fake event bus and a fake macros_list, so the
 // macro list store loads, follows each list the backend sends and asks
-// again on a profile switch, as it does in the app.
+// again on a profile switch, as it does in the app. Then the Alerts
+// category of board 2 of the Alerts review, in the whole editor over a
+// fake profile.
 
 type Handler = (event: { payload: unknown }) => void;
 const bus = vi.hoisted(() => ({
   handlers: new Map<string, Set<Handler>>(),
   macros: [] as unknown[],
+  /** What ui_get_config and alert_presets_get answer. */
+  enabled: [] as string[],
+  alerts: {} as unknown,
+  /** Every command the editor sent, with its arguments, but the reads. */
+  calls: [] as [string, unknown][],
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -26,15 +33,29 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: async () => undefined,
 }));
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async (cmd: string) => {
-    if (cmd !== 'macros_list') throw new Error(`no fake for ${cmd}`);
-    return bus.macros;
+  invoke: async (cmd: string, args?: unknown) => {
+    if (cmd === 'macros_list') return bus.macros;
+    if (cmd === 'ui_get_config') return { enabled_presets: bus.enabled };
+    if (cmd === 'alert_presets_get') return bus.alerts;
+    if (['alert_presets_set', 'ui_set_fields', 'presets_install', 'presets_remove'].includes(cmd)) {
+      bus.calls.push([cmd, args]);
+      // Keep what a set writes, so a load after Save reads it back.
+      if (cmd === 'alert_presets_set') {
+        const { id, alert } = args as { id: string; alert: unknown };
+        const table = (bus.alerts as { alerts: Record<string, unknown> }).alerts;
+        if (alert) table[id] = alert;
+        else delete table[id];
+      }
+      return 0;
+    }
+    throw new Error(`no fake for ${cmd}`);
   },
 }));
 
 const doc = new FakeDocument();
 let createRoot: typeof import('react-dom/client').createRoot;
 let PresetDetail: typeof import('./PresetsEditor').PresetDetail;
+let PresetsEditor: typeof import('./PresetsEditor').PresetsEditor;
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -50,7 +71,7 @@ beforeAll(async () => {
   });
   vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
   ({ createRoot } = await import('react-dom/client'));
-  ({ PresetDetail } = await import('./PresetsEditor'));
+  ({ PresetDetail, PresetsEditor } = await import('./PresetsEditor'));
 });
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -218,5 +239,189 @@ describe('the Numpad movement card', () => {
     expect(card.keys()).toEqual([]);
     expect(card.value('Keys')).toBeUndefined();
     expect(card.note()).toBeUndefined();
+  });
+});
+
+const ALERT_IDS = [
+  'alert_tells',
+  'alert_name',
+  'alert_attacked',
+  'alert_low_health',
+  'alert_connection',
+];
+
+/** The handlers React keeps on an element. */
+function reactProps(el: FakeElement): Record<string, (e?: unknown) => void> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, (e?: unknown) => void>>)[key];
+}
+
+/** The whole Presets editor over a profile with `enabled` stored and
+ *  the alert presets `on` with `alerts` for parts. */
+async function mountEditor(enabled: string[], on: string[], alerts: Record<string, unknown>) {
+  bus.enabled = enabled;
+  bus.alerts = { ids: ALERT_IDS, on, alerts };
+  bus.calls = [];
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const errors: (string | null)[] = [];
+  await act(async () => {
+    root.render(
+      <PresetsEditor
+        setConfig={() => {}}
+        onDirty={() => {}}
+        onError={(e) => errors.push(e)}
+        profileScoped={false}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  cleanups.push(async () => {
+    await act(async () => root.unmount());
+    doc.body.removeChild(container);
+  });
+  const click = (el: FakeElement | undefined) =>
+    act(async () => {
+      if (!el) throw new Error('nothing to click');
+      reactProps(el).onClick({ currentTarget: el, preventDefault() {} });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const card = () => findAll(container, (el) => hasClass(el, 'st-auto-card'))[0];
+  return {
+    errors,
+    /** The headings of the list, in order. */
+    headings: () =>
+      findAll(container, (el) => hasClass(el, 'st-auto-fold-name')).map((el) => el.textContent),
+    pick: (name: string) =>
+      click(
+        findAll(
+          container,
+          (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+        )[0],
+      ),
+    click: (text: string) =>
+      click(
+        findAll(
+          card() ?? container,
+          (el) => el.nodeName === 'BUTTON' && el.textContent === text,
+        )[0],
+      ),
+    save: () =>
+      click(findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === 'Save')[0]),
+    /** The labels of the card's rows, in order. */
+    rows: () => findAll(card(), isLabel).map((el) => el.textContent),
+    value: (label: string) => {
+      const row = findAll(card(), (el) => el.getAttribute('class') === 'st-row').find((r) =>
+        findAll(r, isLabel).some((l) => l.textContent === label),
+      );
+      return row?.textContent.replace(label, '');
+    },
+    /** The parts of the Alert row, `+` before a pressed one. */
+    parts: () =>
+      findAll(
+        findAll(card(), (el) => el.getAttribute('aria-label') === 'Alert with')[0],
+        (el) => el.nodeName === 'BUTTON',
+      ).map((b) => `${b.getAttribute('aria-pressed') === 'true' ? '+' : ''}${b.textContent}`),
+    status: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-savebar-status')[0]?.textContent,
+  };
+}
+
+const TELLS = {
+  banner: true,
+  sound: 'chime',
+  attention: 'once',
+  background: true,
+  words: false,
+};
+
+describe('the Alerts category', () => {
+  it('lists the five first under Alerts and fills each card from the profile', async () => {
+    const editor = await mountEditor(
+      ['alert_tells', 'alert_attacked'],
+      ['alert_tells', 'alert_attacked'],
+      { alert_tells: TELLS },
+    );
+    expect(editor.headings()[0]).toBe('Alerts');
+    await editor.pick('Tells you get');
+    expect(editor.parts()).toEqual(['+Banner', '+Sound', '+Bounce']);
+    expect(editor.rows()).toEqual([
+      'Tells you get',
+      'Listens to',
+      'Alert',
+      'Sound',
+      'Bounce',
+      'Banner shows',
+      'Only while you are not looking at its session',
+      'Adds',
+    ]);
+    expect(editor.value('Listens to')).toBe("The game's word that a tell reached you");
+    expect(editor.value('Adds')).toBe('1 alert');
+
+    // A preset the [alerts] table leaves out posts a banner alone.
+    await editor.pick('Your name');
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+    expect(editor.rows()).toEqual([
+      'Your name',
+      'Listens to',
+      'Alert',
+      'Banner shows',
+      'Only while you are not looking at its session',
+      'Adds',
+    ]);
+  });
+
+  it('shows no Banner shows row for Low health, whose banner holds no words', async () => {
+    const editor = await mountEditor([], [], {});
+    await editor.pick('Low health');
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+    expect(editor.rows()).not.toContain('Banner shows');
+  });
+
+  it('saves the parts of the preset you changed, then the list', async () => {
+    const editor = await mountEditor(['alert_tells'], ['alert_tells'], { alert_tells: TELLS });
+    await editor.pick('Tells you get');
+    expect(editor.status()).toBe('');
+    await editor.click('Bounce');
+    expect(editor.parts()).toEqual(['+Banner', '+Sound', 'Bounce']);
+    expect(editor.rows()).not.toContain('Bounce');
+    expect(editor.status()).toBe('Unsaved changes');
+
+    await editor.pick('Being attacked');
+    await editor.click('Sound');
+    await editor.click('Sound');
+    await editor.save();
+    expect(editor.errors.filter(Boolean)).toEqual([]);
+    const names = bus.calls.map(([cmd]) => cmd);
+    expect(names).toEqual(['alert_presets_set', 'ui_set_fields']);
+    expect(bus.calls[0][1]).toEqual({
+      id: 'alert_tells',
+      alert: { banner: true, sound: 'chime', background: true, words: false },
+    });
+    const fields = (bus.calls[1][1] as { fields: { field: string; value: string[] }[] }).fields;
+    expect(fields).toEqual([{ field: 'enabled_presets', value: ['alert_tells'] }]);
+  });
+
+  it('forgets the parts that match the default, and keeps alert ids out of install and remove', async () => {
+    const editor = await mountEditor([], [], {});
+    await editor.pick('Connection');
+    await editor.click('Sound');
+    await editor.save();
+    await editor.click('Sound');
+    await editor.save();
+    const sets = bus.calls.filter(([cmd]) => cmd === 'alert_presets_set').map(([, a]) => a);
+    expect(sets).toEqual([
+      {
+        id: 'alert_connection',
+        alert: { banner: true, sound: 'chime', background: true, words: false },
+      },
+      { id: 'alert_connection', alert: null },
+    ]);
+    const installs = bus.calls.filter(
+      ([cmd]) => cmd === 'presets_install' || cmd === 'presets_remove',
+    );
+    expect(JSON.stringify(installs)).not.toContain('alert_');
   });
 });

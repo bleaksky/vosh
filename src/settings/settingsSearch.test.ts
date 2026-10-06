@@ -101,10 +101,17 @@ describe('searchSettingsRows', () => {
   it('finds Triggers by the parts of an alert', () => {
     expect(labels('bounce')).toEqual(['Triggers']);
     expect(labels('flash')).toContain('Triggers');
-    expect(labels('alert banner')).toEqual(['Triggers']);
-    expect(labels('notification')).toEqual(['Triggers']);
+    expect(labels('alert banner')).toEqual(['Triggers', 'Presets']);
+    expect(labels('notification')).toEqual(['Triggers', 'Presets']);
     expect(labels('alert tone')).toEqual(['Triggers']);
     expect(labels('chime')).toEqual(['Triggers']);
+  });
+
+  it('finds Presets by the alert presets', () => {
+    expect(labels('tells')).toContain('Presets');
+    expect(labels('attacked')).toEqual(['Presets']);
+    expect(labels('health')).toContain('Presets');
+    expect(labels('connection')).toContain('Presets');
   });
 
   it('shows loadouts only in loadout mode', () => {

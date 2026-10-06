@@ -71,3 +71,7 @@ const IDS = new Set(ALERT_PRESETS.map((p) => p.id));
 export function isAlertPresetId(id: string): boolean {
   return IDS.has(id);
 }
+
+export function alertPresetById(id: string): AlertPreset | undefined {
+  return ALERT_PRESETS.find((p) => p.id === id);
+}

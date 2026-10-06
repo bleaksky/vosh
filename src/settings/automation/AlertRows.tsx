@@ -84,62 +84,77 @@ function toneOptions(current: string): readonly SelectOption[] {
   return [...ALERT_TONES, { value: current, label: current }];
 }
 
+/** One of the four rows under the Alert row, by the key it sets. */
+export type AlertDetail = 'sound' | 'attention' | 'words' | 'background';
+
 /** The four rows that tune an alert, which close the card under Advanced
  *  (board 1). They show whatever parts are pressed. A part that is off
  *  shows what pressing it would use, Chime and Once, and a pick there
- *  turns it on. Play sounds the tone shown, on or off. `onChange` gets
- *  the keys a row sets. */
+ *  turns it on. Play sounds the tone shown, on or off. `only` keeps the
+ *  rows it names, in this order, as the card of an alert preset does
+ *  (board 2). `onChange` gets the keys a row sets. */
 export function AlertDetailRows({
   alert,
   disabled,
+  only,
   onChange,
 }: {
   alert: AlertParts | undefined;
   disabled: boolean;
+  only?: readonly AlertDetail[];
   onChange: (patch: Partial<AlertParts>) => void;
 }) {
   const tone = alert?.sound ?? FIRST_TONE;
   const options = toneOptions(tone);
   const toneLabel = options.find((o) => o.value === tone)?.label ?? tone;
+  const has = (row: AlertDetail) => !only || only.includes(row);
   return (
     <>
-      <Row label="Sound">
-        <IconButton
-          className="st-auto-play"
-          label={`Play ${toneLabel}`}
-          icon={<PlayIcon />}
-          disabled={disabled}
-          onClick={() => playAlertTone(tone)}
-        />
-        <Select
-          width={128}
-          value={tone}
-          options={options}
-          disabled={disabled}
-          onChange={(sound) => onChange({ sound })}
-        />
-      </Row>
-      <Row label={attentionLabel()}>
-        <Segmented
-          options={ATTENTION_OPTIONS.map((o) => ({ ...o, disabled }))}
-          value={alert?.attention ?? FIRST_ATTENTION}
-          onChange={(attention) => onChange({ attention })}
-        />
-      </Row>
-      <Row label="Banner shows">
-        <Segmented
-          options={BANNER_OPTIONS.map((o) => ({ ...o, disabled }))}
-          value={alert?.words ? 'words' : 'title'}
-          onChange={(shows) => onChange({ words: shows === 'words' })}
-        />
-      </Row>
-      <Row label="Only while you are not looking at its session">
-        <Toggle
-          checked={alert?.background ?? true}
-          disabled={disabled}
-          onChange={(background) => onChange({ background })}
-        />
-      </Row>
+      {has('sound') && (
+        <Row label="Sound">
+          <IconButton
+            className="st-auto-play"
+            label={`Play ${toneLabel}`}
+            icon={<PlayIcon />}
+            disabled={disabled}
+            onClick={() => playAlertTone(tone)}
+          />
+          <Select
+            width={128}
+            value={tone}
+            options={options}
+            disabled={disabled}
+            onChange={(sound) => onChange({ sound })}
+          />
+        </Row>
+      )}
+      {has('attention') && (
+        <Row label={attentionLabel()}>
+          <Segmented
+            options={ATTENTION_OPTIONS.map((o) => ({ ...o, disabled }))}
+            value={alert?.attention ?? FIRST_ATTENTION}
+            onChange={(attention) => onChange({ attention })}
+          />
+        </Row>
+      )}
+      {has('words') && (
+        <Row label="Banner shows">
+          <Segmented
+            options={BANNER_OPTIONS.map((o) => ({ ...o, disabled }))}
+            value={alert?.words ? 'words' : 'title'}
+            onChange={(shows) => onChange({ words: shows === 'words' })}
+          />
+        </Row>
+      )}
+      {has('background') && (
+        <Row label="Only while you are not looking at its session">
+          <Toggle
+            checked={alert?.background ?? true}
+            disabled={disabled}
+            onChange={(background) => onChange({ background })}
+          />
+        </Row>
+      )}
     </>
   );
 }
