@@ -153,11 +153,6 @@ const UNHEARD: &[Unheard] = &[
               It is no event.",
     },
     Unheard {
-        name: "session://alert",
-        why: "An alert rang. The page half of the alerts plays its tone, shows \
-              its notice and marks the row, after R18 (Alerts Q18).",
-    },
-    Unheard {
         name: "session://alerts-ended",
         why: "A plugin's alerts ended. The page half drops its notices, after \
               R18 (Alerts Q19).",

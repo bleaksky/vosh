@@ -112,6 +112,23 @@ export async function onOutput(
   });
 }
 
+/** Hear each session whose terminal took a line from the game. A write
+ *  counts when the prompt stage made it, so it carries an id, and its
+ *  bytes end a line. A prompt alone ends none, and Vosh's own echoes
+ *  come from elsewhere with no id. `wants` says whether a session still
+ *  needs to hear it, so the writes of one marked already decode nothing. */
+export async function onGameLine(
+  wants: (session: number) => boolean,
+  cb: (session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<OutputPayload>(OUTPUT, (event) => {
+    const { payload } = event;
+    if (typeof payload.id !== 'number') return;
+    const session = sessionOf(payload);
+    if (wants(session) && atob(payload.b64).includes('\n')) cb(session);
+  });
+}
+
 /** Write text the webview drew itself, such as your typed echo or an
  *  error notice, into the native grid too, and tell the session, which
  *  closes the open row, since the text now follows it. `after` is the

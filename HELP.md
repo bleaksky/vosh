@@ -68,6 +68,8 @@ A port that is not the world's own shows in grey at the right of the row, so Orl
 
 The selected row is the filled one. The title band and the window title follow it and add the port after the world the same way, so the band reads `Orla` and `The Forsaken Lands 1825`.
 
+A row tells you when something happens in a session you are not looking at. Its name turns brighter once the game prints a new line there, and a prompt alone does not count. An accent dot takes the place of the port once an alert rings there, such as one a trigger or a script raises. Bringing the session to the front clears both.
+
 The tick sound plays only for the session in front, and the `Connected` and `Connection lost` notices speak for it alone.
 
 ## Play

@@ -14,6 +14,7 @@ import { startHiddenStore } from './gmcp/hiddenStore';
 import { startInputModeStore } from './session/inputModeStore';
 import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startRoomStore } from './gmcp/roomStore';
+import { startSessionRowStore } from './session/sessionRowStore';
 import { startSessionsStore } from './session/sessionsStore';
 import { startTargetStore } from './session/targetStore';
 import { startTickCountStore } from './config/tickCountStore';
@@ -35,6 +36,7 @@ export function startStores(): void {
   // finds the list on its way.
   startSessionsStore();
   startConnectionStore();
+  startSessionRowStore();
   // Then the hidden state, so every store that ORs it in finds it
   // listening.
   startHiddenStore();

@@ -1,12 +1,23 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRow } from '../ipc/session';
+import type { SessionRowState } from '../stores/session/sessionRowStore';
 import { SessionSidebar } from './SessionSidebar';
 
-// The sessions sidebar of board 2. Each row reads its session as
+// The sessions sidebar of boards 2 and 3. Each row reads its session as
 // sessionLabel names it, the selected one marked current, a port that is
 // not the world port in quiet meta, and a row with neither a name nor a
-// character named by its world with the port kept apart.
+// character named by its world with the port kept apart. A row takes the
+// look the row store gives it, faked here for each session.
+
+/** What the row store says of each session, by id. A session it names
+ *  nothing for reads quiet. */
+const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
+
+vi.mock('../stores/session/sessionRowStore', async (actual) => ({
+  ...(await actual<typeof import('../stores/session/sessionRowStore')>()),
+  useSessionRow: (id: number) => ({ lines: false, alert: false, ...states.get(id) }),
+}));
 
 const PLAY = 'play.theforsakenlands.com';
 
@@ -40,7 +51,9 @@ function draw(rows: SessionRow[], selected: number): string {
 
 /** Each row button, in order. */
 const buttons = (html: string) =>
-  html.match(/<button[^>]*class="shell-sessions-row"[^]*?<\/button>/g) ?? [];
+  html.match(/<button[^>]*class="shell-sessions-row[^"]*"[^]*?<\/button>/g) ?? [];
+
+afterEach(() => states.clear());
 
 describe('the sessions sidebar', () => {
   const rows = [
@@ -77,5 +90,22 @@ describe('the sessions sidebar', () => {
     const [tolliver, orla] = buttons(draw(rows, 2));
     expect(tolliver).not.toContain('aria-current');
     expect(orla).toContain('aria-current="true"');
+  });
+
+  it('marks a row behind for new lines and alerts, with the dot in the meta place', () => {
+    states.set(1, { lines: true, alert: true });
+    states.set(2, { lines: true, alert: true });
+    states.set(3, { lines: true });
+    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    // The selected row shows neither.
+    expect(tolliver).toContain('class="shell-sessions-row"');
+    expect(tolliver).not.toContain('shell-sessions-glyph');
+    expect(orla).toContain('class="shell-sessions-row is-new"');
+    expect(orla).toContain(
+      '<span class="shell-sessions-name">Orla</span><span class="shell-sessions-glyph is-dot" role="img" aria-label="Something for you"><svg',
+    );
+    expect(orla).not.toContain('shell-sessions-meta');
+    expect(build).toContain('class="shell-sessions-row is-new"');
+    expect(build).not.toContain('shell-sessions-glyph');
   });
 });
