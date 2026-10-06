@@ -520,3 +520,68 @@ fn every_change_to_the_plugins_tells_every_window_once() {
     });
     assert_eq!(heard, want);
 }
+
+#[test]
+fn an_import_tells_every_window_once() {
+    use crate::app::events::{MACROS_CHANGED, PROFILES_CHANGED};
+    use crate::import::vosh::apply::{apply_import, AddAs};
+    use crate::profile::set::{ProfileSet, DEFAULT_PROFILE_NAME};
+    let app = app_with_settings_open();
+    let handle = app.handle();
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    let dir = tempfile::tempdir().unwrap();
+    state.app_data.set(dir.path().to_path_buf()).unwrap();
+    let export = include_str!("../../../fixtures/config/export.full.toml");
+    let mut heard = Report::new();
+    let mut want = Report::new();
+    tauri::async_runtime::block_on(async {
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        state.set_profiles(set).await;
+
+        // A new profile changes the list and that profile.
+        let listening = Heard::listen(&app, &[PROFILES_CHANGED, PROFILE_CHANGED]);
+        apply_import(
+            handle,
+            &state,
+            "Healer profile.toml",
+            export,
+            AddAs::New,
+            "Healer",
+            &[],
+        )
+        .await
+        .unwrap();
+        listening.finish("an import as a new profile", &mut heard, &mut want);
+
+        // A replace of the profile the selected session plays hands every
+        // window its settings and its lists, as `#profile load` does.
+        let mut events: Vec<&'static str> =
+            crate::app::events::profile_ui_events(&state, &Profile::default())
+                .events()
+                .into_iter()
+                .map(|(event, _)| event)
+                .collect();
+        events.extend([
+            TRIGGERS_CHANGED,
+            ALIASES_CHANGED,
+            PROMPT_CONFIG_CHANGED,
+            MACROS_CHANGED,
+            PROFILES_CHANGED,
+            PROFILE_CHANGED,
+        ]);
+        let listening = Heard::listen(&app, &events);
+        apply_import(
+            handle,
+            &state,
+            "Healer profile.toml",
+            export,
+            AddAs::Replace,
+            DEFAULT_PROFILE_NAME,
+            &[],
+        )
+        .await
+        .unwrap();
+        listening.finish("an import over the selected profile", &mut heard, &mut want);
+    });
+    assert_eq!(heard, want);
+}

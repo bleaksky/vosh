@@ -1,7 +1,7 @@
 //! The commands for Settings > Characters. The page reads any profile
 //! through them, active or not, turns a character's login on or off,
 //! points a profile at a world, saves a profile's settings to your
-//! Downloads folder and reads a profile export you pick to import.
+//! Downloads folder, and reads and imports a profile export you pick.
 //! Settings and the prompt card also ask who is logged in.
 
 use serde::Serialize;
@@ -10,6 +10,7 @@ use tracing::warn;
 
 use crate::app::events::{broadcast, PROFILES_CHANGED};
 use crate::app::state::SharedState;
+use crate::import::vosh::apply::{apply_import, AddAs, ImportResult};
 use crate::import::vosh::{preview, ImportPreview};
 use crate::profile::inactive::{export_path, export_text, profile_detail, ProfileDetail};
 use crate::profile::login_match::LoginClaim;
@@ -126,6 +127,32 @@ pub(crate) async fn profile_import_read(
 ) -> Result<ImportPreview, String> {
     let set = state.loaded_profile_set().await?;
     preview(&set, &file_name, &text)
+}
+
+/// Import `text`, the Vosh profile export you picked as `file_name`, as a
+/// new profile named `name` or over your profile `name`, and say what
+/// happened. `logins` names each character another profile has that you
+/// turned on, which moves to the new profile. See [`apply_import`].
+#[tauri::command]
+pub(crate) async fn profile_import_apply<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    file_name: String,
+    text: String,
+    add_as: AddAs,
+    name: String,
+    logins: Vec<String>,
+) -> Result<ImportResult, String> {
+    apply_import(
+        &app,
+        state.inner(),
+        &file_name,
+        &text,
+        add_as,
+        &name,
+        &logins,
+    )
+    .await
 }
 
 /// Who is logged in on the session: the connection, the character once

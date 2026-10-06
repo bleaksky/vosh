@@ -1,8 +1,11 @@
 //! A Vosh profile export, read for the import under Characters (Scripts
 //! Q9, Q10 and Q26). [`preview`] says what the file holds and where it
 //! would go, and changes nothing. [`plan`] works out what the import
-//! writes before anything is written. Files from other clients go through
-//! the importers beside this one, under Automation.
+//! writes before anything is written, and [`apply`] writes it. Files from
+//! other clients go through the importers beside this one, under
+//! Automation.
+
+pub(crate) mod apply;
 
 use serde::Serialize;
 use tracing::warn;
@@ -80,7 +83,6 @@ pub(crate) struct ImportCharacter {
 
 /// What an import writes, planned from the export before anything is
 /// written.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
 pub(crate) struct ImportPlan {
     /// The profile file to write. Its `[plugins]` list is empty, since an
@@ -99,7 +101,6 @@ pub(crate) struct ImportPlan {
 /// The triggers, aliases and macros of an export as the catalog takes
 /// them in loadout mode (Q26). A profile file's own items lay over the
 /// catalog at every launch, so they go to the catalog instead.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, PartialEq)]
 pub(crate) struct CatalogJoin {
     /// The group each item joins, named for the file, like
@@ -115,7 +116,6 @@ pub(crate) struct CatalogJoin {
 /// An item of the file that the catalog already holds, a trigger or an
 /// alias by its name and a macro by its key. Yours stays and the file's
 /// is left out.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Clash {
     pub kind: ClashKind,
@@ -123,7 +123,6 @@ pub(crate) struct Clash {
     pub name: String,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum ClashKind {
@@ -267,7 +266,6 @@ pub(crate) fn preview(
 /// loadout mode the file's triggers, aliases and macros move to the
 /// catalog in a group named for the file, and the alert presets the
 /// catalog keeps stay yours.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn plan(
     file_name: &str,
     text: &str,
@@ -294,7 +292,6 @@ pub(crate) fn plan(
 
 /// The triggers, aliases and macros of `file` that `catalog` lacks, each
 /// moved into `group`, with a clash for each one it has.
-#[cfg_attr(not(test), allow(dead_code))]
 fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> CatalogJoin {
     let mut clashes = Vec::new();
     let triggers = join(
@@ -332,7 +329,6 @@ fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> C
 
 /// The items of `file` whose `key` no item of `kept` has, each changed by
 /// `regroup`. Each one `kept` has adds a clash of `kind` to `clashes`.
-#[cfg_attr(not(test), allow(dead_code))]
 fn join<T: Clone>(
     kind: ClashKind,
     file: &[T],

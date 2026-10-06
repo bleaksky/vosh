@@ -194,6 +194,16 @@ pub(crate) async fn edit_inactive_profile<R>(
     edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R + Send,
 ) -> Result<Stored<R>, String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
+    edit_inactive_locked(state, name, edit).await
+}
+
+/// [`edit_inactive_profile`] for a step that holds [`PERSIST_LOCK`]
+/// already, such as an import.
+pub(crate) async fn edit_inactive_locked<R>(
+    state: &SharedState,
+    name: &str,
+    edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R + Send,
+) -> Result<Stored<R>, String> {
     if let Some(open) = state.open_profile(name) {
         return Ok(Stored::Open(open));
     }

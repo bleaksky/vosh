@@ -181,8 +181,9 @@ pub(crate) const PLUGINS_CHANGED: &str = "vosh://plugins-changed";
 
 // Profiles.
 
-/// Sent to every window when a profile was made, renamed, duplicated or
-/// deleted, its login or world changed, or the sharing scope changed.
+/// Sent to every window when a profile was made, renamed, duplicated,
+/// deleted or imported, its login or world changed, or the sharing scope
+/// changed.
 /// The payload is the profile's name, or `"scope"` after a scope change.
 /// `subscribeProfilesChanged` hears it.
 pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
@@ -191,10 +192,11 @@ pub(crate) const PROFILES_CHANGED: &str = "vosh://profiles-changed";
 /// name. `subscribeProfileSwitched` and the pane layout's
 /// `ensureListening` hear it.
 pub(crate) const PROFILE_SWITCHED: &str = "vosh://profile-switched";
-/// Sent after an edit to one profile's detail, active or not, naming
-/// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
-/// `vosh://pane-layout-changed` it carries no data, so an edit to an
-/// inactive profile can never reach the main window's stores.
+/// Sent after an edit to one profile's detail, or an import to it,
+/// active or not, naming it as `{ name }`. Unlike
+/// `vosh://tracked-affects-changed` and `vosh://pane-layout-changed` it
+/// carries no data, so an edit to an inactive profile can never reach the
+/// main window's stores.
 /// `subscribeProfileChanged` hears it.
 pub(crate) const PROFILE_CHANGED: &str = "vosh://profile-changed";
 /// Sent with the new [`crate::session::identity::SessionIdentity`], or null,

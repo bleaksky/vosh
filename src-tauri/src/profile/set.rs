@@ -419,6 +419,37 @@ impl ProfileSet {
         Ok(entry)
     }
 
+    /// Create `name` from `file`, a profile file an import planned, which
+    /// goes to disk through the safe write, with `auto_match` as its login
+    /// claim. As with [`Self::create_from`], the claim takes nothing from
+    /// other profiles and nothing switches. When the profile list does not
+    /// save, the file goes again, so the name stays free.
+    pub(crate) fn create_from_file(
+        &mut self,
+        name: &str,
+        file: &ProfileConfig,
+        auto_match: Option<AutoMatch>,
+    ) -> Result<ProfileEntry, ProfileSetError> {
+        let name = sanitize_name(name)?;
+        self.check_free(&name, None)?;
+        let path = self.profile_path(&name);
+        crate::disk::atomic::write_with_backup(&path, &toml::to_string_pretty(file)?)?;
+        let entry = ProfileEntry {
+            name,
+            description: None,
+            auto_match: auto_match.map(AutoMatch::cleaned),
+        };
+        let before = self.index.profiles.clone();
+        self.index.profiles.push(entry.clone());
+        if let Err(e) = self.save_profiles_or_restore(before) {
+            if let Err(removed) = std::fs::remove_file(&path) {
+                tracing::error!(error = %removed, path = %path.display(), "imported profile file stayed after the list did not save");
+            }
+            return Err(e);
+        }
+        Ok(entry)
+    }
+
     /// Delete a non-active profile's entry + per-profile file.
     pub(crate) fn delete(&mut self, name: &str) -> Result<(), ProfileSetError> {
         if name == self.index.active {

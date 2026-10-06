@@ -141,6 +141,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         prompt::prompt_gags_without_reader,
         characters::profile_export_file,
         characters::profile_import_read,
+        characters::profile_import_apply,
         ui_config::ui_set_theme,
         affects::ui_set_affects_display,
         ui_config::ui_get_chat_colors,

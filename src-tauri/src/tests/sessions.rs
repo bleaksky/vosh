@@ -1609,6 +1609,77 @@ async fn a_profile_reset_and_load_in_one_session_reach_every_session_on_the_prof
     h.finish(grid).await;
 }
 
+/// The characters Default lists.
+async fn default_characters(h: &Harness) -> Option<Vec<String>> {
+    let set = h.state.loaded_profile_set().await.expect("the set");
+    let entry = set.get(DEFAULT_PROFILE_NAME).expect("Default");
+    entry.auto_match.as_ref().map(|am| am.characters.clone())
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_import_over_the_profile_two_sessions_play_reaches_both_and_prints_no_line() {
+    use crate::import::vosh::apply::AddAs;
+    use crate::profile::file::ProfileConfig;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.state
+        .app_data
+        .set(h.dir.path().to_path_buf())
+        .expect("the app data folder");
+    // A running tick stays on whatever a profile laid over it saved, so
+    // the tick goes off first and the import turns it on again.
+    h.type_in(one, "#tick disable").await;
+    assert_eq!((last_tick(&h, one), last_tick(&h, two)), (None, None));
+    let draw = draws(&h, one);
+
+    // An export of Default with an alias, the tick on and the prompt
+    // drawn the other way.
+    let mut export = ProfileConfig::default();
+    export
+        .aliases
+        .push(vosh_automation::alias::Alias::new("ww", "spam 3"));
+    let mut prompt = export.prompt_config();
+    prompt.draw = !draw;
+    export.set_prompt(prompt);
+    let text = export.to_toml().expect("the export");
+    let result = crate::ipc::characters::profile_import_apply(
+        h.app.handle().clone(),
+        h.app.state(),
+        "Default profile.toml".into(),
+        text,
+        AddAs::Replace,
+        DEFAULT_PROFILE_NAME.into(),
+        Vec::new(),
+    )
+    .await
+    .expect("the import");
+    assert_eq!(result.name, DEFAULT_PROFILE_NAME);
+
+    // Each session takes the tick settings and the prompt table, and
+    // neither prints the line a `#profile load` prints.
+    for session in [one, two] {
+        assert!(last_tick(&h, session).is_some(), "{session:?}");
+        assert_eq!(draws(&h, session), !draw, "{session:?}");
+        assert!(!shows(&h, session, "this profile"), "{session:?}");
+        assert!(!shows(&h, session, "profile loaded"), "{session:?}");
+    }
+    // The alias expands in the second session, the file saved it, and
+    // Default keeps its claim on Tester.
+    h.type_in(two, "ww").await;
+    h.until("the alias", |h| shows(h, two, "Line 3 of 3 of the spam."))
+        .await;
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    assert_eq!(saved_aliases(&file, "ww"), 1);
+    assert_eq!(
+        default_characters(&h).await,
+        Some(vec!["Tester".to_string()])
+    );
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
 /// The harness in loadout mode. The catalog holds `kk` in the combat
 /// group and `hh` in heals, Melee turns combat on and Heals turns heals
 /// on, and the first session plays Default.
