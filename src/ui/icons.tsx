@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 
 // The SPEC 6 icon set that Settings, Help, the prompt card, the panes,
-// the terminal menu and the title band draw: 16 unit strokes at 1.25,
-// round caps and joins, drawn in currentColor so each control sets the
-// tone. At 12 px the stroke keeps its 1.25 px weight through
-// vector-effect, the way the boards draw the chevrons and the chip close
-// icon. shell/icons.tsx draws the panel glyph and the status line
-// glyphs on the same Glyph.
+// the terminal menu, the title band and the sessions sidebar draw: 16
+// unit strokes at 1.25, round caps and joins, drawn in currentColor so
+// each control sets the tone. At 12 px the stroke keeps its 1.25 px
+// weight through vector-effect, the way the boards draw the chevrons
+// and the chip close icon. shell/icons.tsx draws the panel glyph and
+// the status line glyphs on the same Glyph.
 
 interface IconProps {
   /** Rendered size in px. 16 unless a recipe says 12. */
@@ -266,5 +266,27 @@ export function BookIcon(props: IconProps) {
     <Glyph {...props}>
       <path d="M2.25 3.25h4A1.75 1.75 0 0 1 8 5v8.25a1.5 1.5 0 0 0-1.5-1.5H2.25zM13.75 3.25h-4A1.75 1.75 0 0 0 8 5v8.25a1.5 1.5 0 0 1 1.5-1.5h4.25z" />
     </Glyph>
+  );
+}
+
+// The glyphs a session's row in the sessions sidebar shows at its right,
+// after otty's badges (Sessions Q8, board 3). Each draws in a 16 square
+// in currentColor, so the row sets its tone.
+
+/** Something for you waits unseen: otty's unread dot, 8 across. */
+export function DotIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      stroke="none"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <circle cx="8" cy="8" r="4" />
+    </svg>
   );
 }

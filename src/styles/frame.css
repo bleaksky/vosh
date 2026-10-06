@@ -426,6 +426,11 @@
   white-space: nowrap;
 }
 
+/* A row behind brightens once the game prints a line there (Q9). */
+.shell-sessions-row.is-new {
+  color: var(--text);
+}
+
 /* A row under the pointer lights and its name takes the text tone. */
 .shell-sessions-row:hover {
   background: var(--hover);
@@ -475,6 +480,25 @@
   font-weight: 400;
   color: var(--tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* A glyph takes the meta's place in a 16 square centered at x 195, as
+   otty draws its badges (Q8, board 3). */
+.shell-sessions-glyph {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 -3px 0 8px;
+  color: var(--tertiary);
+}
+
+.shell-sessions-glyph svg {
+  display: block;
+}
+
+.shell-sessions-glyph.is-dot {
+  color: var(--accent);
 }
 
 /* ── Status line ───────────────────────────────────────────────────── */
