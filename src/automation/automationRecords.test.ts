@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
 import keptKeys from '../../fixtures/macros/kept-keys.json';
 import type { Macro } from '../ipc/automation';
+import { PRESET_ALERT_DEFAULT } from './alertPresets';
 import {
   addDraftItem,
   createDraft,
@@ -626,13 +627,38 @@ describe('presets', () => {
     expect(presetToggles(stored).every((t) => !t.enabled)).toBe(true);
   });
 
-  it('keeps the ids the page has no preset for, as the alert presets', () => {
-    const stored = [PRESETS[0].id, 'alert_tells'];
+  it('keeps the ids no preset of this build knows', () => {
+    const stored = [PRESETS[0].id, 'later_preset'];
     const off = presetToggles(stored).map((t) => ({ ...t, enabled: false }));
-    expect(storedPresetIds(off, stored)).toEqual(['alert_tells']);
+    expect(storedPresetIds(off, stored)).toEqual(['later_preset']);
     const on = presetToggles(stored);
-    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'alert_tells']);
+    expect(storedPresetIds(on, stored)).toEqual([PRESETS[0].id, 'later_preset']);
     expect(storedPresetIds(off, [PRESETS_OFF_MARKER])).toEqual([PRESETS_OFF_MARKER]);
+  });
+
+  it('keeps or drops an alert preset by its toggle', () => {
+    const stored = [PRESETS[0].id, 'alert_tells', 'alert_name'];
+    const library = presetToggles(stored);
+    const alerts = [
+      { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_name', enabled: false, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_attacked', enabled: true, alert: PRESET_ALERT_DEFAULT },
+    ];
+    expect(storedPresetIds([...library, ...alerts], stored)).toEqual([
+      PRESETS[0].id,
+      'alert_tells',
+      'alert_attacked',
+    ]);
+  });
+
+  it('drops the marker when an alert preset is all that is on', () => {
+    const library = presetToggles([PRESETS_OFF_MARKER]);
+    const tells = { id: 'alert_tells', enabled: true, alert: PRESET_ALERT_DEFAULT };
+    const stored = storedPresetIds([...library, tells], [PRESETS_OFF_MARKER]);
+    expect(stored).toEqual(['alert_tells']);
+    expect(enabledPresetIds(stored)).toEqual([]);
+    const off = { ...tells, enabled: false };
+    expect(storedPresetIds([...library, off], stored)).toEqual([PRESETS_OFF_MARKER]);
   });
 
   it('round trips a partial pick in library order', () => {
@@ -649,6 +675,19 @@ describe('presets', () => {
     draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
     draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: true }));
     expect(isDraftDirty(draft)).toBe(false);
+  });
+
+  it('leaves the alert presets out of installs and removals', () => {
+    let draft = createDraft([
+      ...presetToggles([PRESETS[0].id]),
+      { id: 'alert_tells', enabled: false, alert: PRESET_ALERT_DEFAULT },
+      { id: 'alert_name', enabled: true, alert: PRESET_ALERT_DEFAULT },
+    ]);
+    const uid = (id: string) => draft.items.find((i) => i.value.id === id)?.uid ?? '';
+    draft = updateDraftItem(draft, uid('alert_tells'), (t) => ({ ...t, enabled: true }));
+    draft = updateDraftItem(draft, uid('alert_name'), (t) => ({ ...t, enabled: false }));
+    draft = updateDraftItem(draft, uid(PRESETS[1].id), (t) => ({ ...t, enabled: true }));
+    expect(presetSavePlan(draft)).toEqual({ install: [PRESETS[1].id], remove: [] });
   });
 
   it('installs the presets that are on at launch, in library order', () => {
