@@ -1,7 +1,7 @@
 import type { SessionRow } from '../ipc/session';
 import { worldName } from '../lib/knownWorlds';
 import { sessionLabel, type LabelSource } from '../lib/sessionLabel';
-import { listJoin, possessive } from '../lib/text';
+import { countWord, listJoin, possessive } from '../lib/text';
 
 // The words Vosh asks with before it closes a session, the main window
 // or the app, by Q13 and board 6 of the Sessions review. Close session
@@ -21,14 +21,6 @@ export interface CloseQuestion {
   body: string;
   /** The button that closes, in the danger tone. */
   confirm: string;
-}
-
-/** How many sessions, as a sentence opens with the count. */
-const COUNTS = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
-
-/** `Two`, `Three`, and past ten the number itself. */
-function countWord(n: number): string {
-  return COUNTS[n - 2] ?? String(n);
 }
 
 /** What a close ends, `both` or `all three`. */

@@ -13,8 +13,10 @@ import {
   NO_WORLD,
   parseCharacterNames,
   parsePort,
+  playedProfiles,
   profileDisplayName,
   profileWorld,
+  sessionsSentence,
   takenProfileName,
   takenSentence,
   worldKey,
@@ -24,6 +26,7 @@ import {
 import { possessive } from './text';
 import type { SessionIdentity } from '../ipc/characters';
 import type { ProfileEntry } from '../ipc/profiles';
+import type { SessionRow } from '../ipc/session';
 
 const TFL = 'play.theforsakenlands.com';
 
@@ -253,5 +256,113 @@ describe('typed values', () => {
     expect(parsePort('0')).toBeUndefined();
     expect(parsePort('70000')).toBeUndefined();
     expect(parsePort('18a')).toBeUndefined();
+  });
+});
+
+// Board 7 and board 9 of the Sessions review: Default, Build on the build
+// port and Healer, with Tolliver on the play port.
+const BOARD: ProfileEntry[] = [
+  { name: 'default', auto_match: { host: TFL, port: 1848, characters: ['Tolliver'] } },
+  { name: 'Build', auto_match: { host: TFL, port: 1825, characters: ['Orla'] } },
+  { name: 'Healer', auto_match: { host: TFL, port: null, characters: ['Maren'] } },
+];
+
+const session = (id: number, patch: Partial<SessionRow>): SessionRow => ({
+  id,
+  name: null,
+  character: 'Tolliver',
+  host: TFL,
+  port: 1848,
+  tls: false,
+  profile: 'default',
+  connected: true,
+  selected: id === 1,
+  ...patch,
+});
+const TOLLIVER = session(1, {});
+const ORLA = session(2, { character: 'Orla', port: 1825, profile: 'Build' });
+const BUILDER = session(2, { name: 'Builder', port: 1825 });
+
+describe('the profiles the sessions play', () => {
+  it('marks each profile a session plays and dims Switch for the selected one', () => {
+    const played = playedProfiles([TOLLIVER, ORLA], 2, 'Build');
+    expect([...played.all]).toEqual(['default', 'Build']);
+    expect(played.selected).toBe('Build');
+    expect(playedProfiles([TOLLIVER, ORLA], 1, 'default').selected).toBe('default');
+  });
+
+  it('marks a shared profile once', () => {
+    const played = playedProfiles([TOLLIVER, BUILDER], 2, 'default');
+    expect([...played.all]).toEqual(['default']);
+    expect(played.selected).toBe('default');
+  });
+
+  it('marks the profile in use before the first session list', () => {
+    const played = playedProfiles([], 1, 'Healer');
+    expect([...played.all]).toEqual(['Healer']);
+    expect(played.selected).toBe('Healer');
+  });
+});
+
+describe('the line under the Characters list', () => {
+  it('says nothing with one session', () => {
+    expect(sessionsSentence(BOARD, [TOLLIVER])).toBeNull();
+    expect(sessionsSentence(BOARD, [])).toBeNull();
+  });
+
+  it('names the session on each profile, as board 7 draws it', () => {
+    expect(sessionsSentence(BOARD, [TOLLIVER, ORLA])).toBe(
+      "Default plays in Tolliver's session, Build in Orla's.",
+    );
+  });
+
+  it('names every session on a shared profile, as board 9 draws it', () => {
+    expect(sessionsSentence(BOARD, [TOLLIVER, BUILDER])).toBe(
+      'Default plays in two sessions, Tolliver and Builder.',
+    );
+  });
+
+  it('follows the list order of the profiles and the sidebar order of the sessions', () => {
+    const maren = session(3, { character: 'Maren', port: 1848, profile: 'Healer' });
+    expect(sessionsSentence(BOARD, [maren, ORLA, TOLLIVER])).toBe(
+      "Default plays in Tolliver's session, Build in Orla's, Healer in Maren's.",
+    );
+  });
+
+  it('gives each profile a sentence once one is shared', () => {
+    const maren = session(3, { character: 'Maren', port: 1848 });
+    expect(sessionsSentence(BOARD, [TOLLIVER, ORLA, maren])).toBe(
+      "Default plays in two sessions, Tolliver and Maren. Build plays in Orla's session.",
+    );
+    const three = [TOLLIVER, maren, session(4, { character: 'Orla' })];
+    expect(sessionsSentence(BOARD, three)).toBe(
+      'Default plays in three sessions, Tolliver, Maren, and Orla.',
+    );
+  });
+
+  it('adds the port where two sessions go by one name, as their rows do', () => {
+    const build = session(2, { port: 1825, profile: 'Build' });
+    expect(sessionsSentence(BOARD, [TOLLIVER, build])).toBe(
+      "Default plays in Tolliver's session, Build in Tolliver's on 1825.",
+    );
+    const unnamed = session(2, { port: 1825 });
+    expect(sessionsSentence(BOARD, [TOLLIVER, unnamed])).toBe(
+      'Default plays in two sessions, Tolliver and Tolliver on 1825.',
+    );
+  });
+
+  it('names a session at the login by where it plays', () => {
+    const login = session(2, { character: null, port: 1825, profile: 'Build' });
+    expect(sessionsSentence(BOARD, [TOLLIVER, login])).toBe(
+      "Default plays in Tolliver's session, Build in a session on The Forsaken Lands 1825.",
+    );
+    const fresh = session(2, { character: null, host: null, port: null });
+    expect(sessionsSentence(BOARD, [TOLLIVER, fresh])).toBe(
+      'Default plays in two sessions, Tolliver and a new one.',
+    );
+    const shared = session(2, { character: null, port: 1825 });
+    expect(sessionsSentence(BOARD, [TOLLIVER, shared])).toBe(
+      'Default plays in two sessions, Tolliver and one on The Forsaken Lands 1825.',
+    );
   });
 });

@@ -1099,7 +1099,8 @@
   outline-offset: -2px;
 }
 
-/* The profile in use. Every row keeps the slot so names line up. */
+/* A profile a session plays. Every row keeps the slot so names line
+   up. */
 .st-profile-dot {
   flex: none;
   width: 6px;

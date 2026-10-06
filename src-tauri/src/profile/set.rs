@@ -53,8 +53,12 @@ pub(crate) enum ProfileSetError {
     FileExists(String),
     #[error("Vosh cannot find a profile named {0}.")]
     NotFound(String),
-    #[error("You cannot delete the profile you are using. Switch to another profile first.")]
-    CannotDeleteActive(String),
+    /// A session plays the profile, the selected one or any other.
+    #[error(
+        "A session plays {name}. Switch that session to another profile or close it, then delete {name}.",
+        name = display_name(.0)
+    )]
+    CannotDeletePlayed(String),
     #[error("Give the profile a name.")]
     EmptyName,
     #[error(
@@ -422,7 +426,7 @@ impl ProfileSet {
     /// Delete a non-active profile's entry + per-profile file.
     pub(crate) fn delete(&mut self, name: &str) -> Result<(), ProfileSetError> {
         if name == self.index.active {
-            return Err(ProfileSetError::CannotDeleteActive(name.to_string()));
+            return Err(ProfileSetError::CannotDeletePlayed(name.to_string()));
         }
         let Some(idx) = self.index.profiles.iter().position(|p| p.name == name) else {
             return Err(ProfileSetError::NotFound(name.to_string()));
@@ -750,7 +754,7 @@ pub(crate) async fn rename_profile(
 pub(crate) async fn delete_profile(state: &SharedState, name: &str) -> Result<(), String> {
     let _persist_guard = PERSIST_LOCK.lock().await;
     if state.open_profile(name).is_some() {
-        return Err(ProfileSetError::CannotDeleteActive(name.to_string()).to_string());
+        return Err(ProfileSetError::CannotDeletePlayed(name.to_string()).to_string());
     }
     state
         .loaded_profile_set()
@@ -913,11 +917,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn cannot_delete_active() {
+    fn cannot_delete_the_profile_a_session_plays() {
         let dir = tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let err = set.delete(DEFAULT_PROFILE_NAME).unwrap_err();
-        assert!(matches!(err, ProfileSetError::CannotDeleteActive(_)));
+        assert!(matches!(err, ProfileSetError::CannotDeletePlayed(_)));
+        set.create("Build").unwrap();
+        set.switch("Build").unwrap();
+        assert_eq!(
+            set.delete("Build").unwrap_err().to_string(),
+            "A session plays Build. Switch that session to another profile or close it, then delete Build."
+        );
     }
 
     #[test]
@@ -926,7 +936,7 @@ pub(crate) mod tests {
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(
             set.delete(DEFAULT_PROFILE_NAME).unwrap_err().to_string(),
-            "You cannot delete the profile you are using. Switch to another profile first."
+            "A session plays Default. Switch that session to another profile or close it, then delete Default."
         );
         assert_eq!(
             set.create("with:colon").unwrap_err().to_string(),
