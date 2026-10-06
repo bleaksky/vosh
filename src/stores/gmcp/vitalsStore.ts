@@ -193,40 +193,62 @@ interface VitalsState {
   vars: PromptVarsPayload;
   /** The vital prompt vars held back since the game hid your vitals. */
   held: PromptVarsPayload;
-  /** The backend works out that the game hides your vitals. */
+  /** The backend works out that the game hides your vitals. The store
+   *  keeps its own copy of hiddenStore's `vitals`, since the change that
+   *  turns it on holds back the prompt vars. */
   hiddenByBackend: boolean;
-}
-
-/** Nothing heard yet, hidden as the backend says now. */
-function empty(): VitalsState {
-  return { packet: null, vars: {}, held: {}, hiddenByBackend: getHidden().vitals };
+  /** What the panes read. Each change works it out from the one before,
+   *  so the low latch of each vital stays with the rest of the state. */
+  shown: Vitals | null;
 }
 
 /** True while the game hides your vitals, by the packet's own flag or
  *  by what the backend worked out. */
-function hiddenNow(packet: VitalsPacket | null): boolean {
-  return packet?.hidden === true || getHidden().vitals;
+function hiddenNow({ packet, hiddenByBackend }: VitalsState): boolean {
+  return packet?.hidden === true || hiddenByBackend;
+}
+
+/** The state with what the panes read worked out again. Hidden vitals
+ *  stand alone. Prompt vars and GMCP never fill them in. */
+function show(state: VitalsState): VitalsState {
+  const { packet, vars, held, shown: last } = state;
+  const shown = hiddenNow(state)
+    ? nextVitals(last, ZERO, true)
+    : nextVitals(last, mergeVitals(packet?.values ?? null, withoutHeld(vars, held)));
+  return shown === last ? state : { ...state, shown };
+}
+
+/** Nothing heard yet, hidden as the backend says now. `last` is what
+ *  the panes read before, which they keep when the empty state shows
+ *  the same. */
+function empty(last: Vitals | null = null): VitalsState {
+  return show({
+    packet: null,
+    vars: {},
+    held: {},
+    hiddenByBackend: getHidden().vitals,
+    shown: last,
+  });
 }
 
 const store = createGmcpStore<VitalsState, Vitals | null>({
   state: empty,
   packages: {
     'Char.Vitals': (state, data) => {
-      const packet = parseVitalsPacket(data);
-      return hiddenNow(packet)
-        ? { ...state, packet, held: holdPromptVitals(state.vars) }
-        : { ...state, packet };
+      const next = { ...state, packet: parseVitalsPacket(data) };
+      return show(hiddenNow(next) ? { ...next, held: holdPromptVitals(state.vars) } : next);
     },
   },
+  connection: (state, { kind }) => (kind === 'disconnected' ? empty(state.shown) : state),
   events: [
     (apply) =>
       onPromptVars((payload) =>
         apply((state) => {
           const vars = payload && typeof payload === 'object' ? payload : {};
-          const held = hiddenNow(state.packet)
+          const held = hiddenNow(state)
             ? holdPromptVitals(vars)
             : releasePromptVitals(state.held, vars);
-          return { ...state, vars, held };
+          return show({ ...state, vars, held });
         }),
       ),
     (apply) =>
@@ -235,15 +257,11 @@ const store = createGmcpStore<VitalsState, Vitals | null>({
           const hiddenByBackend = getHidden().vitals;
           if (hiddenByBackend === state.hiddenByBackend) return state;
           const held = hiddenByBackend ? holdPromptVitals(state.vars) : state.held;
-          return { ...state, hiddenByBackend, held };
+          return show({ ...state, hiddenByBackend, held });
         }),
       ),
   ],
-  // Hidden vitals stand alone. Prompt vars and GMCP never fill them in.
-  view: ({ packet, vars, held }, last = null) =>
-    hiddenNow(packet)
-      ? nextVitals(last, ZERO, true)
-      : nextVitals(last, mergeVitals(packet?.values ?? null, withoutHeld(vars, held))),
+  view: ({ shown }) => shown,
 });
 
 export const startVitalsStore = store.start;
