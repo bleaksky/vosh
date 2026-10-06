@@ -53,23 +53,17 @@ export interface GroupState {
 // works out that it is hidden, and while hiddenStore's `group` holds,
 // the store reads as the hidden Group.Info the new build sends, so no
 // roster shows.
-interface GroupStoreState extends GroupState {
-  /** The backend works out that the game hides your group. */
-  hiddenByBackend: boolean;
-}
 
-/** Nothing heard yet, hidden as the backend says now. */
-function empty(): GroupStoreState {
-  return { group: {}, worth: {}, self: undefined, hiddenByBackend: getHidden().group };
-}
+/** Nothing heard yet. */
+const EMPTY: GroupState = { group: {}, worth: {}, self: undefined };
 
 /** The Group.Info a hidden group reads as. One object, so a pane that
  *  compares snapshots sees no change while the group stays hidden. */
 const HIDDEN_GROUP: GroupInfo = { hidden: true };
 
 /** The group the panes see, hidden while the backend says so. */
-function shownGroup({ group, hiddenByBackend }: GroupStoreState): GroupInfo {
-  return hiddenByBackend && group.hidden !== true ? HIDDEN_GROUP : group;
+function shownGroup(group: GroupInfo): GroupInfo {
+  return getHidden().group && group.hidden !== true ? HIDDEN_GROUP : group;
 }
 
 /** Dedupe key for a member. The server `id` when present, else the
@@ -110,15 +104,15 @@ export function parseGroupInfo(data: unknown): GroupInfo {
 }
 
 /** Your name from Char.Status or Char.Name, trimmed. */
-function takeName(state: GroupStoreState, data: unknown): GroupStoreState {
+function takeName(state: GroupState, data: unknown): GroupState {
   const name = (data as { name?: unknown } | null)?.name;
   return typeof name === 'string' && name.trim().length > 0
     ? { ...state, self: name.trim() }
     : state;
 }
 
-const store = createGmcpStore<GroupStoreState, GroupState>({
-  state: empty,
+const store = createGmcpStore<GroupState>({
+  state: EMPTY,
   packages: {
     'Group.Info': (state, data) => ({ ...state, group: parseGroupInfo(data) }),
     'Char.Worth': (state, data) =>
@@ -126,19 +120,13 @@ const store = createGmcpStore<GroupStoreState, GroupState>({
     'Char.Status': takeName,
     'Char.Name': takeName,
   },
-  events: [
-    (apply) =>
-      subscribeHidden(() =>
-        apply((state) => {
-          const hiddenByBackend = getHidden().group;
-          return hiddenByBackend === state.hiddenByBackend ? state : { ...state, hiddenByBackend };
-        }),
-      ),
-  ],
+  // The view reads the hidden store, so each report it makes runs the
+  // view again.
+  events: [(apply) => subscribeHidden(() => apply((state) => state))],
   // One snapshot while its parts stay the same, so a pane reads the same
   // value between pushes.
   view: (state, last) => {
-    const group = shownGroup(state);
+    const group = shownGroup(state.group);
     return last?.group === group && last.worth === state.worth && last.self === state.self
       ? last
       : { group, worth: state.worth, self: state.self };
