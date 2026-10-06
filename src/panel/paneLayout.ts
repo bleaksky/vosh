@@ -18,9 +18,32 @@ import { pendingWrites } from '../lib/pendingWrites';
 // are pure and always return a sanitized tree, so the panel can keep
 // the result in state and hand it straight back to setPaneLayout.
 
-/** Content a pane can show. The panel holds at most one of each. */
+/** The built-in content a pane can show. The panel holds at most one
+ *  of each. */
 export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
+
+/** The type of a pane a plugin draws with mud.pane. The panel holds
+ *  any number of them, one per `plugin` and `id` in the leaf's props.
+ *  The props also keep `title`, the last title the pane showed, so a
+ *  pane whose plugin is not running can still name itself. */
+export const LUA_PANE = 'lua';
+export type PaneKind = PaneType | typeof LUA_PANE;
+
+/** A pane as the tree tells it apart: its type, plus the props that
+ *  name a Lua pane. A leaf is one. */
+export interface PaneRef {
+  pane: PaneKind;
+  props: Record<string, string>;
+}
+
+/** What makes a pane one of a kind in the tree: its type for a
+ *  built-in pane, its plugin and id for a Lua pane. Mirrors PaneKey in
+ *  src-tauri/src/profile/panes.rs. */
+export function paneKey(ref: PaneRef): string {
+  if (ref.pane !== LUA_PANE) return ref.pane;
+  return `${LUA_PANE}:${JSON.stringify([ref.props.plugin ?? '', ref.props.id ?? ''])}`;
+}
 
 /** The pane header, the --pane-header token. */
 export const PANE_HEADER_PX = 28;
@@ -28,14 +51,16 @@ export const PANE_HEADER_PX = 28;
 export const PANE_ROW_PX = 22;
 
 /** The height each pane type needs to be read: Affects its header and
- *  six rows, Group and Staff queues their header and three rows, Chat
- *  a couple of messages, and the Map a drawing you can follow. */
-export const PANE_MIN_H: Record<PaneType, number> = {
+ *  six rows, Group, Staff queues and a Lua pane their header and three
+ *  rows, Chat a couple of messages, and the Map a drawing you can
+ *  follow. */
+export const PANE_MIN_H: Record<PaneKind, number> = {
   map: 180,
   affects: PANE_HEADER_PX + 6 * PANE_ROW_PX,
   group: PANE_HEADER_PX + 3 * PANE_ROW_PX,
   chat: 120,
   imm: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+  lua: PANE_HEADER_PX + 3 * PANE_ROW_PX,
 };
 
 /** `column` stacks children top to bottom (Split down), `row` sets
@@ -45,10 +70,11 @@ export type SplitDir = 'row' | 'column';
 export interface PaneLeaf {
   /** Stable id to key pane state on. Kept across every operation. */
   id: string;
-  pane: PaneType;
+  pane: PaneKind;
   /** Share of the parent split. Siblings sum to 1. */
   weight: number;
-  /** Per-pane settings, such as the chat pane's channel filter. */
+  /** Per-pane settings, such as the chat pane's channel filter, and
+   *  the plugin, id and title of a Lua pane. */
   props: Record<string, string>;
 }
 
@@ -174,7 +200,8 @@ interface SanitizeContext {
    *  one a later node already owns. */
   reserved: Set<string>;
   used: Set<string>;
-  panes: Set<PaneType>;
+  /** The paneKey of every leaf placed so far. */
+  panes: Set<string>;
 }
 
 function claimId(ctx: SanitizeContext, raw: string, base: string): string {
@@ -191,10 +218,13 @@ function claimId(ctx: SanitizeContext, raw: string, base: string): string {
   }
 }
 
-function paneType(raw: string): PaneType | null {
+function paneType(raw: string): PaneKind | null {
   const wanted = raw.trim().toLowerCase();
+  if (wanted === LUA_PANE) return LUA_PANE;
   return PANE_TYPES.find((t) => t === wanted) ?? null;
 }
+
+const blank = (value: string | undefined) => (value ?? '').trim().length === 0;
 
 function splitDir(raw: string | null): SplitDir {
   return raw !== null && raw.trim().toLowerCase() === 'row' ? 'row' : 'column';
@@ -237,8 +267,11 @@ function sanitizeNode(ctx: SanitizeContext, raw: RawNode, depth: number): PaneNo
   const weight = cleanWeight(raw.weight);
   if (raw.pane !== null) {
     const kind = paneType(raw.pane);
-    if (kind === null || ctx.panes.has(kind)) return null;
-    ctx.panes.add(kind);
+    if (kind === null) return null;
+    if (kind === LUA_PANE && (blank(raw.props.plugin) || blank(raw.props.id))) return null;
+    const key = paneKey({ pane: kind, props: raw.props });
+    if (ctx.panes.has(key)) return null;
+    ctx.panes.add(key);
     return { id: claimId(ctx, raw.id, kind), pane: kind, weight, props: sortedProps(raw.props) };
   }
   const dir = splitDir(raw.split);
@@ -279,7 +312,8 @@ function sanitizeChildren(
 }
 
 /** Repair a pane tree from disk, the wire, or a hand edit. Unknown
- *  pane types and repeat panes drop out, blank or clashing ids get
+ *  pane types, repeat panes and Lua panes without a plugin or an id
+ *  drop out, blank or clashing ids get
  *  fresh ones, a split with one child gives way to that child, a split
  *  inside a split of the same direction merges into it, splits nested
  *  past depth three flatten, weights become positive shares that sum
@@ -365,11 +399,11 @@ export function leafIdFor(node: PaneNode, pane: PaneType): string | null {
   return null;
 }
 
-/** Pane types in the tree, in reading order. */
+/** Built-in pane types in the tree, in reading order. */
 export function allPanes(tree: PaneSplit): PaneType[] {
   const out: PaneType[] = [];
   walk(tree, (n) => {
-    if (isLeaf(n)) out.push(n.pane);
+    if (isLeaf(n) && isPaneType(n.pane)) out.push(n.pane);
   });
   return out;
 }

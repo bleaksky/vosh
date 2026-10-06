@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { PaneLayout } from '../../panel/paneLayout';
 import { paneSchematic } from './paneSchematic';
-import { PANE_LABELS } from '../../panel/paneTypes';
+import { paneLabel } from '../../panel/paneTypes';
 import { Button, Card, Section } from '../../ui';
 
 // Panel layout on the Characters board: the schematic of the selected
@@ -17,10 +17,7 @@ interface Props {
 }
 
 export function PanelLayout({ owner, panes, onReset, resetting }: Props) {
-  const drawing = useMemo(
-    () => paneSchematic(panes.root, (pane) => PANE_LABELS[pane], owner),
-    [panes.root, owner],
-  );
+  const drawing = useMemo(() => paneSchematic(panes.root, paneLabel, owner), [panes.root, owner]);
   return (
     <Section id="layout" title="Panel layout" card={false}>
       <Card className="st-layout">

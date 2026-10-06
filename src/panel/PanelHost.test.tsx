@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { PromptShowState } from '../ipc/prompt';
 import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import { sanitizeLayout, type PaneLayout } from './paneLayout';
 import { PanelHost } from './PanelHost';
 
 // The stores behind the panel reach the Tauri bridge when they start.
@@ -16,11 +17,12 @@ vi.mock('../stores/config/vitalsOptionsStore', () => ({
   useVitalsOptions: () => options,
 }));
 
-// No panes, so only the footer can draw. The footer stands in as its
-// own section, since its stores need the running app, and says the
-// panel size it hears.
+// No panes unless a test sets some, so only the footer can draw. The
+// footer stands in as its own section, since its stores need the
+// running app, and says the panel size it hears.
+let layout: PaneLayout | null = null;
 vi.mock('./panelLayoutStore', () => ({
-  usePanelLayout: () => null,
+  usePanelLayout: () => layout,
   getPanelLayout: () => null,
   setPaneTree: vi.fn(),
 }));
@@ -88,5 +90,22 @@ describe('PanelHost', () => {
         '<section class="panel-vitals" data-size="12">',
       );
     }
+  });
+
+  it('draws one section per Lua pane, named by its title, in key order', () => {
+    options = DEFAULT_VITALS_OPTIONS;
+    const lua = (id: string, title: string) => ({
+      pane: 'lua',
+      props: { plugin: 'weather_pane', id, title },
+    });
+    layout = sanitizeLayout({
+      root: { split: 'column', children: [lua('weather', 'Weather'), lua('tides', 'Tides')] },
+    });
+    const html = renderToStaticMarkup(<PanelHost promptShow={null} />);
+    layout = null;
+    const labels = [...html.matchAll(/class="pane pane-lua" aria-label="([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(labels).toEqual(['Tides', 'Weather']);
   });
 });
