@@ -558,7 +558,7 @@ mod tests {
 
         assert_eq!(
             super::set_fields(&state, game_time(), Some("Maren".into())).await,
-            Err("No session plays the profile Maren.".to_string())
+            Err("Maren closed before Vosh could save this change.".to_string())
         );
     }
 

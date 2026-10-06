@@ -2284,7 +2284,7 @@ async fn a_trigger_list_that_names_build_saves_build_and_tells_no_window_while_d
     // Healer is a profile no session plays, so nothing changes.
     assert_eq!(
         import("Healer").await,
-        Err("No session plays the profile Healer.".to_string())
+        Err("Healer closed before Vosh could save this change.".to_string())
     );
     assert_eq!(std::fs::read_to_string(&healer_file).ok(), healer_before);
     h.finish(grid).await;
