@@ -90,10 +90,10 @@ pub(crate) struct AffectsDisplayPick {
 
 /// Change how the Affects pane draws without touching the rest of the
 /// UI config, for the picks in the pane's own menu. The main window
-/// holds no whole config to save, and Settings may hold one with newer
-/// fields, so a whole config write from either would put stale values
-/// back. Only what is given changes. Nothing is saved or sent when the
-/// pick changes nothing.
+/// holds no config copy to tell the other windows from, so unlike
+/// `ui_set_fields` this sends the new display itself. Only what is
+/// given changes, and the two thresholds stay in order. Nothing is
+/// saved or sent when the pick changes nothing.
 #[tauri::command]
 pub(crate) async fn ui_set_affects_display(
     app: AppHandle,
