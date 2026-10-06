@@ -1,4 +1,4 @@
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 import { asNumber, asText } from '../store';
 
 // The room you stand in, for the rows under the Map pane. Room.Info
@@ -259,7 +259,7 @@ interface RoomStoreState extends RoomState {
   tiles: MapTilesAreas | null;
 }
 
-const store = createGmcpStore<RoomStoreState, RoomState>({
+const store = createSessionStore<RoomStoreState, RoomState>({
   state: { base: null, tiles: null, info: null, people: [] },
   packages: {
     'Room.Info': (state, data) => {

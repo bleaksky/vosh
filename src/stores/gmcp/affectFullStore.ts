@@ -1,5 +1,5 @@
 import { affectFullGet, subscribeAffectFullChanged, type AffectFulls } from '../../ipc/affects';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // How full each affect was cast, for the Affects pane's gauges (the
 // Countdown meter and the Grouped chips). The backend decides full
@@ -30,7 +30,7 @@ function nextFulls(fulls: AffectFulls, raw: unknown): AffectFulls {
   return same ? fulls : next;
 }
 
-const store = createGmcpStore<AffectFulls>({
+const store = createSessionStore<AffectFulls>({
   state: EMPTY,
   events: [
     (apply) =>

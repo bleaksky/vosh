@@ -1,5 +1,5 @@
 import { getTarget, onTarget, type TargetPayload } from '../../ipc/session';
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // The client target you set with the target command, for the status
 // line and the target marker in the room rows, with the quick keys that
@@ -15,7 +15,7 @@ import { createGmcpStore } from '../gmcp/gmcpStore';
 
 const EMPTY: TargetPayload = { name: null, room_idx: null, quick_keys: [] };
 
-const store = createGmcpStore<TargetPayload>({
+const store = createSessionStore<TargetPayload>({
   state: EMPTY,
   events: [(apply) => onTarget((payload, session) => apply(session, () => payload))],
   // The backend sends its own clear, but only when a target was set.

@@ -1,5 +1,5 @@
 import type { MapTilesPayload } from '../../panel/map/mapTiles';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 export type TilesSnap = { payload: MapTilesPayload; json: string };
 
@@ -8,7 +8,7 @@ export type TilesSnap = { payload: MapTilesPayload; json: string };
 // shown again after you hide the panel) draws the last map at once
 // instead of a blank box until your next step. It also outlives a
 // disconnect, so the panel keeps showing where you logged out.
-const store = createGmcpStore<TilesSnap | null>({
+const store = createSessionStore<TilesSnap | null>({
   state: null,
   packages: {
     'Map.Tiles': (last, data) => {

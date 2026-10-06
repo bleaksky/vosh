@@ -1,4 +1,4 @@
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // Staff work-queue counters from the Imm.Queues GMCP package. The
 // server pushes a complete snapshot to immortals whenever any queue
@@ -148,7 +148,7 @@ function normalize(data: unknown): ImmQueues {
 // duty counts are worse than none. The next login gets a fresh
 // snapshot, and a mortal alt should not inherit the imm board from the
 // previous character.
-const store = createGmcpStore<ImmState>({
+const store = createSessionStore<ImmState>({
   state: { queues: ZERO_QUEUES, received: false, strikes: ZERO_STRIKES },
   packages: {
     'Imm.Queues': (state, data) => {

@@ -1,4 +1,4 @@
-import { createGmcpStore } from '../gmcp/gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // Where each session's connection stands and who is logged in on it,
 // for the title band, the window title, the status line and the macOS
@@ -29,7 +29,7 @@ function named(now: SessionConnection, data: unknown): SessionConnection {
   return character === now.character ? now : { ...now, character };
 }
 
-const store = createGmcpStore<SessionConnection>({
+const store = createSessionStore<SessionConnection>({
   state: IDLE,
   packages: { 'Char.Status': named, 'Char.Name': named },
   connection: (now, payload) => {

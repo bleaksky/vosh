@@ -1,5 +1,5 @@
 import { hiddenGet, onHidden, type HiddenPayload } from '../../ipc/prompt';
-import { createGmcpStore } from './gmcpStore';
+import { createSessionStore } from '../sessionStore';
 
 // Which values the game hides right now, from session://hidden. The
 // prompt engine in the backend works it out on every server build from
@@ -58,7 +58,7 @@ function report(state: HiddenState, payload: unknown): HiddenState {
   return same(state, next) ? state : next;
 }
 
-const store = createGmcpStore<HiddenState>({
+const store = createSessionStore<HiddenState>({
   state: NOTHING_HIDDEN,
   events: [
     (apply) => onHidden((payload, session) => apply(session, (state) => report(state, payload))),
