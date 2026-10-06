@@ -1,0 +1,49 @@
+{
+  "notes": "Hand written. Each case is a macros store as Rust leaves it, with the six macros of the Numpad movement preset, and kept names the keys of that preset a macro of yours keeps, in the preset's order. A test in src-tauri/src/loadouts/presets.rs runs hold_taken_keys over every case, which leaves it as it is, with a preset macro off exactly on those keys. src/automation/automationRecords.test.ts holds keysYourMacrosKeep to the same keys and the preset rows to the library. src/settings/automation/MacrosEditor.test.tsx mounts the first case, the store Scripts board 7 draws.",
+  "preset": "numpad_movement",
+  "cases": [
+    {
+      "about": "Scripts board 7. Your rec keeps Numpad3, so the preset's d is held off. Your flee is off.",
+      "macros": [
+        { "key": "F1", "command": "score", "group": "info" },
+        { "key": "F2", "command": "flee", "enabled": false },
+        { "key": "Numpad3", "command": "rec" },
+        { "key": "Numpad8", "command": "n", "preset": "numpad_movement" },
+        { "key": "Numpad6", "command": "e", "preset": "numpad_movement" },
+        { "key": "Numpad2", "command": "s", "preset": "numpad_movement" },
+        { "key": "Numpad4", "command": "w", "preset": "numpad_movement" },
+        { "key": "Numpad9", "command": "u", "preset": "numpad_movement" },
+        { "key": "Numpad3", "command": "d", "enabled": false, "preset": "numpad_movement" }
+      ],
+      "kept": ["Numpad3"]
+    },
+    {
+      "about": "Yours keeps its key while it is off or in a group, and a preset macro in a group of yours is held off all the same.",
+      "macros": [
+        { "key": "Numpad3", "command": "rec", "enabled": false },
+        { "key": "Numpad9", "command": "gate", "group": "travel" },
+        { "key": "Numpad8", "command": "n", "group": "travel", "preset": "numpad_movement" },
+        { "key": "Numpad6", "command": "e", "preset": "numpad_movement" },
+        { "key": "Numpad2", "command": "s", "preset": "numpad_movement" },
+        { "key": "Numpad4", "command": "w", "preset": "numpad_movement" },
+        { "key": "Numpad9", "command": "u", "enabled": false, "preset": "numpad_movement" },
+        { "key": "Numpad3", "command": "d", "enabled": false, "group": "travel", "preset": "numpad_movement" }
+      ],
+      "kept": ["Numpad9", "Numpad3"]
+    },
+    {
+      "about": "No macro of yours sits on a key of the preset, so every preset macro is on.",
+      "macros": [
+        { "key": "F1", "command": "score" },
+        { "key": "Numpad5", "command": "look" },
+        { "key": "Numpad8", "command": "n", "preset": "numpad_movement" },
+        { "key": "Numpad6", "command": "e", "preset": "numpad_movement" },
+        { "key": "Numpad2", "command": "s", "preset": "numpad_movement" },
+        { "key": "Numpad4", "command": "w", "preset": "numpad_movement" },
+        { "key": "Numpad9", "command": "u", "preset": "numpad_movement" },
+        { "key": "Numpad3", "command": "d", "preset": "numpad_movement" }
+      ],
+      "kept": []
+    }
+  ]
+}

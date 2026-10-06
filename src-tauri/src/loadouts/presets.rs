@@ -790,6 +790,41 @@ mod tests {
         assert_eq!(remove_preset_macros(&mut p, "numpad_movement"), 0);
     }
 
+    /// The cases in fixtures/macros/kept-keys.json, which the page reads
+    /// too.
+    #[derive(serde::Deserialize)]
+    struct KeptKeys {
+        preset: String,
+        cases: Vec<KeptCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct KeptCase {
+        about: String,
+        macros: Vec<Macro>,
+        kept: Vec<String>,
+    }
+
+    #[test]
+    fn the_hold_holds_off_the_keys_the_page_says_your_macros_keep() {
+        // keysYourMacrosKeep in src/automation/automationRecords.ts names
+        // the same keys for the Presets card, and the Macros page reads
+        // the preset macros this leaves off, so the three agree here.
+        let file: KeptKeys =
+            serde_json::from_str(include_str!("../../../fixtures/macros/kept-keys.json")).unwrap();
+        for case in file.cases {
+            let mut held = case.macros.clone();
+            hold_taken_keys(&mut held);
+            assert_eq!(held, case.macros, "{}", case.about);
+            let off: Vec<&str> = held
+                .iter()
+                .filter(|m| m.preset.as_deref() == Some(file.preset.as_str()) && !m.enabled)
+                .map(|m| m.key.as_str())
+                .collect();
+            assert_eq!(off, case.kept, "{}", case.about);
+        }
+    }
+
     /// A macro as (key, command, group, on, preset).
     type MacroRow<'a> = (&'a str, &'a str, Option<&'a str>, bool, Option<&'a str>);
 

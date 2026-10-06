@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
+import keptKeys from '../../fixtures/macros/kept-keys.json';
+import type { Macro } from '../ipc/automation';
 import {
   addDraftItem,
   createDraft,
@@ -714,6 +716,23 @@ describe('presets', () => {
     const heals = presetById('healing_basics');
     if (!heals) throw new Error('no healing_basics preset');
     expect(keysYourMacrosKeep(heals, [{ key: 'Numpad3', command: 'rec' }])).toEqual([]);
+  });
+
+  it('names the keys the Rust hold holds off, over the cases both sides read', () => {
+    // A test in src-tauri/src/loadouts/presets.rs holds hold_taken_keys to
+    // the same cases, so the Presets card and Rust agree on every key.
+    const preset = presetById(keptKeys.preset);
+    if (!preset) throw new Error(`no ${keptKeys.preset} preset`);
+    for (const c of keptKeys.cases) {
+      const macros: readonly Macro[] = c.macros;
+      expect(keysYourMacrosKeep(preset, macros), c.about).toEqual(c.kept);
+      // The rows carry the library's own macros, in its order.
+      const theirs = macros.filter((m) => m.preset === preset.id);
+      expect(
+        theirs.map(({ key, command }) => ({ key, command })),
+        c.about,
+      ).toEqual(preset.macros);
+    }
   });
 });
 

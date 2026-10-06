@@ -2,6 +2,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Macro } from '../../ipc/automation';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
+import keptKeys from '../../../fixtures/macros/kept-keys.json';
 
 // The Macros list of Scripts board 7: the six macros Numpad movement
 // adds under From presets, the warn ring on your macro that keeps
@@ -9,21 +10,10 @@ import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 // editor over a fake macros_list and drives it through the handlers
 // React keeps on each element, since this DOM sends no events.
 
-const NUMPAD_MOVEMENT = ['Numpad8', 'Numpad6', 'Numpad2', 'Numpad4', 'Numpad9', 'Numpad3'];
-const LETTERS = ['n', 'e', 's', 'w', 'u', 'd'];
-/** The store as board 7 has it. Your rec keeps Numpad3, so the preset's
- *  d on it is held off. */
-const B7: Macro[] = [
-  { key: 'F1', command: 'score', group: 'info' },
-  { key: 'F2', command: 'flee', enabled: false },
-  { key: 'Numpad3', command: 'rec' },
-  ...NUMPAD_MOVEMENT.map((key, n) => ({
-    key,
-    command: LETTERS[n],
-    preset: 'numpad_movement',
-    ...(key === 'Numpad3' ? { enabled: false } : {}),
-  })),
-];
+/** The store as board 7 has it, the first case Rust holds to
+ *  hold_taken_keys. Your rec keeps Numpad3, so the preset's d on it is
+ *  held off. */
+const B7: Macro[] = keptKeys.cases[0].macros;
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
