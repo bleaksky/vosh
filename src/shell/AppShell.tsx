@@ -10,22 +10,27 @@ import {
 import { isMacPlatform } from '../lib/shortcuts';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
 
-// The One Window frame (SPEC 1). A CSS grid with the terminal column
-// and the panel column. Rows are the 32 px title band, the terminal,
-// the input band (at least 40, taller while you compose several
-// lines), and the 28 px status line. The band spans both columns and
-// the panel spans every row, so both grounds run to the top edge.
+// The One Window frame (SPEC 1). A CSS grid with the sessions column,
+// the terminal column and the panel column. Rows are the 32 px title
+// band, the terminal, the input band (at least 40, taller while you
+// compose several lines), and the 28 px status line. The band spans
+// the terminal and panel columns, and the sessions sidebar and the
+// panel span every row, so all three grounds run to the top edge.
 //
 // Every slot renders at a fixed position in a fixed parent, and the
-// panel toggle and the width drag only change the column template
-// through two custom properties on the root. So showing, hiding, or
-// resizing the panel never moves the Terminal or the Input to a new
-// parent, and neither remounts. A remount would reload the scrollback,
-// drop the underlay's pointer forwarding, and lose command history.
+// panel toggle, the width drag and the sessions sidebar only change the
+// column template through custom properties on the root. So showing,
+// hiding, or resizing the panel or the sidebar never moves the Terminal
+// or the Input to a new parent, and neither remounts. A remount would
+// reload the scrollback, drop the underlay's pointer forwarding, and
+// lose command history.
 //
 // The root also publishes --panel-w (the panel's width, open or not)
 // and --panel-col (the width the panel takes, 0 while hidden) for the
-// panel and for overlays that keep clear of it.
+// panel and for overlays that keep clear of it. While the sessions
+// sidebar shows it publishes --sessions-col, its column, which the
+// panel's clamp counts. With one session the sidebar is gone, the first
+// column takes 0, and the frame is the one it was before sessions.
 //
 // On Windows and Linux the panel draws at least 248 px wide, so the
 // title band's buttons and window controls all sit over it. A saved
@@ -36,6 +41,9 @@ import { PANEL_WIDTH_MAX, panelWidthFloor } from '../panel/paneLayout';
 const MIN_TERMINAL_WIDTH = 320;
 /** Arrow keys on the panel edge move it this far. */
 const KEY_STEP = 8;
+/** The sessions sidebar's column, 220 of rows and its 1 px line, as
+ *  otty draws its tab sidebar. */
+const SESSIONS_COLUMN = 221;
 
 interface Props {
   panelOpen: boolean;
@@ -45,6 +53,9 @@ interface Props {
   /** Save a panel width after a drag or a key press. Null goes back to
    *  the stock width. */
   onPanelWidth: (px: number | null) => void;
+  /** The sessions sidebar while it shows, which takes the first column,
+   *  or null. */
+  sessions?: ReactNode;
   titleBand: ReactNode;
   terminal: ReactNode;
   input: ReactNode;
@@ -55,16 +66,26 @@ interface Props {
   children?: ReactNode;
 }
 
-function clampWidth(px: number, floor: number): number {
-  const room = window.innerWidth - MIN_TERMINAL_WIDTH;
+/** The panel width a drag or a key lands on, past the sessions column
+ *  `side` and the terminal's floor. */
+function clampWidth(px: number, floor: number, side: number): number {
+  const room = window.innerWidth - side - MIN_TERMINAL_WIDTH;
   const max = Math.max(floor, Math.min(PANEL_WIDTH_MAX, room));
   return Math.round(Math.min(max, Math.max(floor, px)));
+}
+
+/** The panel column for a panel `px` wide, which never squeezes the
+ *  terminal under its floor past the sessions column `side`, even when
+ *  the window shrinks below a width saved on a bigger screen. */
+function panelColumn(px: number, side: number): string {
+  return `min(${px}px, calc(100vw - ${side + MIN_TERMINAL_WIDTH}px))`;
 }
 
 export function AppShell({
   panelOpen,
   panelWidth,
   onPanelWidth,
+  sessions = null,
   titleBand,
   terminal,
   input,
@@ -75,6 +96,7 @@ export function AppShell({
 }: Props) {
   const floor = panelWidthFloor(isMacPlatform());
   const width = Math.max(floor, panelWidth);
+  const side = sessions === null ? 0 : SESSIONS_COLUMN;
   const rootRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; start: number; last: number } | null>(
@@ -94,7 +116,7 @@ export function AppShell({
     const root = rootRef.current;
     if (!root) return;
     root.style.setProperty('--panel-w', `${px}px`);
-    root.style.setProperty('--panel-col', `min(${px}px, calc(100vw - ${MIN_TERMINAL_WIDTH}px))`);
+    root.style.setProperty('--panel-col', panelColumn(px, side));
     window.dispatchEvent(new CustomEvent('vosh:resize-progress', { detail: { size: px } }));
   };
 
@@ -114,7 +136,7 @@ export function AppShell({
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    const next = clampWidth(drag.start + drag.startX - e.clientX, floor);
+    const next = clampWidth(drag.start + drag.startX - e.clientX, floor, side);
     if (next === drag.last) return;
     drag.last = next;
     preview(next);
@@ -136,16 +158,15 @@ export function AppShell({
     const delta = e.key === 'ArrowLeft' ? KEY_STEP : e.key === 'ArrowRight' ? -KEY_STEP : 0;
     if (delta === 0) return;
     e.preventDefault();
-    const next = clampWidth(width + delta, floor);
+    const next = clampWidth(width + delta, floor, side);
     preview(next);
     onPanelWidth(next);
   };
 
-  // The column never squeezes the terminal under its floor, even when
-  // the window shrinks below a width saved on a bigger screen.
   const frame = {
     '--panel-w': `${width}px`,
-    '--panel-col': panelOpen ? `min(${width}px, calc(100vw - ${MIN_TERMINAL_WIDTH}px))` : '0px',
+    '--panel-col': panelOpen ? panelColumn(width, side) : '0px',
+    ...(side > 0 && { '--sessions-col': `${side}px` }),
   } as CSSProperties;
 
   return (
@@ -156,6 +177,7 @@ export function AppShell({
       style={frame}
       onMouseUp={onMouseUp}
     >
+      {sessions !== null && <div className="shell-slot-sessions">{sessions}</div>}
       <div className="shell-slot-band">{titleBand}</div>
       <div className="shell-slot-term">{terminal}</div>
       <div className="shell-slot-input">{input}</div>

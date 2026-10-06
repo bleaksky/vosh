@@ -5,12 +5,12 @@
 
 /* ── Frame ─────────────────────────────────────────────────────────── */
 
-/* Columns: the terminal, then the panel (--panel-col, 0 while hidden).
-   Rows: title band, terminal, input band (auto, at least 40), status
-   line. */
+/* Columns: the sessions sidebar (--sessions-col, 0 unless it shows),
+   the terminal, then the panel (--panel-col, 0 while hidden). Rows:
+   title band, terminal, input band (auto, at least 40), status line. */
 .shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--panel-col, var(--panel-w));
+  grid-template-columns: var(--sessions-col, 0px) minmax(0, 1fr) var(--panel-col, var(--panel-w));
   grid-template-rows: var(--band) minmax(0, 1fr) auto var(--status-line);
   position: relative;
   width: 100vw;
@@ -57,9 +57,21 @@
   display: none;
 }
 
+/* The sessions sidebar spans every row of the first column, so its
+   ground runs to the top edge under the traffic lights (Q17). */
+.shell-slot-sessions {
+  grid-row: 1 / -1;
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .shell-slot-band {
   grid-row: 1;
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   position: relative;
   z-index: 3;
   min-width: 0;
@@ -67,7 +79,7 @@
 
 .shell-slot-term {
   grid-row: 2;
-  grid-column: 1;
+  grid-column: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -76,7 +88,7 @@
 
 .shell-slot-input {
   grid-row: 3;
-  grid-column: 1;
+  grid-column: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -85,7 +97,7 @@
 
 .shell-slot-status {
   grid-row: 4;
-  grid-column: 1;
+  grid-column: 2;
   min-width: 0;
 }
 
@@ -93,7 +105,7 @@
    band, and its panes start just below the band (SPEC 9). */
 .shell-slot-panel {
   grid-row: 1 / -1;
-  grid-column: 2;
+  grid-column: 3;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -117,7 +129,7 @@
    is also the width handle. The hit area reaches 3 px each side. */
 .shell-panel-edge {
   grid-row: 1 / -1;
-  grid-column: 2;
+  grid-column: 3;
   justify-self: start;
   position: relative;
   z-index: 2;
@@ -229,7 +241,8 @@
 }
 
 .shell-icon-button:focus-visible,
-.shell-title-button:focus-visible {
+.shell-title-button:focus-visible,
+.shell-sessions-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -316,6 +329,152 @@
   flex: none;
   margin-left: 4px;
   color: var(--tertiary);
+}
+
+/* ── Sessions sidebar ──────────────────────────────────────────────── */
+
+/* Board 2 of the Sessions review, on otty's measures (otty-measure.md).
+   220 of rows on the panel ground, then a 1 px --sep line at x 220,
+   drawn inset the way the Settings sidebar draws its own. */
+.shell-sessions {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--panel);
+  box-shadow: inset -1px 0 0 var(--sep);
+  font-family: var(--font-ui);
+  color: var(--secondary);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The top 32 drags the window and holds the lights on macOS. New
+   session and Hide sessions end 16 in from the line, at otty's centers
+   x 162 and 190 on y 16, and stay in view where otty shows them only on
+   hover, since the plus is how you open a session. */
+.shell-sessions-top {
+  position: relative;
+  flex: none;
+  height: var(--band);
+}
+
+.shell-sessions-actions {
+  position: absolute;
+  top: 4px;
+  right: 17px;
+  display: flex;
+}
+
+.shell-sessions-actions .shell-icon-button {
+  color: var(--tertiary);
+}
+
+.shell-sessions-actions .shell-icon-button:hover {
+  color: var(--secondary);
+}
+
+/* SESSIONS in the caps label style at x 20, its line centered at y 49,
+   so the first row's slot starts at 59. */
+.shell-sessions-head {
+  flex: none;
+  height: 27px;
+  margin: 0;
+  padding: 10px 15px 0 20px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+/* The list stops 1 px short of the line, so the pill runs 8 to 212 and
+   clears it, as otty's does. */
+.shell-sessions-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 1px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+/* Rows on a 38 pitch, the pill 36 high and inset 8 with Vosh's row
+   radius, the name 12 inside it at x 20 and the meta ending at 200. */
+.shell-sessions-slot {
+  height: 38px;
+  padding: 1px 8px;
+}
+
+.shell-sessions-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* A row under the pointer lights and its name takes the text tone. */
+.shell-sessions-row:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* The selected row is the filled pill, its name in the text tone, at
+   600 on a dark theme and 400 on a light one as otty draws Nord and
+   Paper. A light theme rings it through .st-controls, as Settings does. */
+.shell-sessions-row[aria-current='true'] {
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
+  color: var(--text);
+  font-weight: 600;
+}
+
+:root[data-appearance='light'] .shell-sessions-row[aria-current='true'] {
+  font-weight: 400;
+}
+
+.shell-sessions-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A row named by its world keeps the port whole, and the world ends in
+   an ellipsis first. */
+.shell-sessions-name.is-world {
+  display: flex;
+  gap: 0.3em;
+}
+
+.shell-sessions-world {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-sessions-meta {
+  flex: none;
+  margin-left: 8px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Status line ───────────────────────────────────────────────────── */
