@@ -61,6 +61,12 @@ Each session is one connection to a game, with its own terminal, command line an
 - Click `Hide sessions` at the top right of the sidebar to fold it away in this window. `Show sessions` in the `Cmd+K` palette brings it back, and on macOS so does `Show sessions` in the View menu.
 - Right click a row for its menu, with `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each acts on that row's session. `Rename session…` and `Edit connection…` bring it to the front first.
 
+More rows than fit scroll under the `Sessions` header, which draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
+
+Drag the line at the sidebar's right edge to make it wider or narrower, from 180 to 320 pixels, and double click the line to go back to 220. Vosh keeps the width for your next launch.
+
+When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. While the sidebar is folded, in a narrow window or after `Hide sessions`, the session button's menu lists every session at its top under `Sessions`. The session in front has a check, and each other one shows its port, any glyph its row would show and its key, such as `Cmd+2`. Click one to bring it to the front.
+
 To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
 
 - `Host` and `Port` start from the world you last saved or dialed from a form. The caret waits in `Port`, so you can type the build port and keep the host.
