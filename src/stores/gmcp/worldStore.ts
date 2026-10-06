@@ -1,6 +1,5 @@
-import { useSyncExternalStore } from 'react';
-import { onGmcpPackage, onState } from '../../ipc/session';
-import { asNumber, asText, createStore } from '../store';
+import { asNumber, asText } from '../store';
+import { createGmcpStore } from './gmcpStore';
 
 // Game time and the moons for the status line. Aabahran sends
 // World.Time `{hour, day, month, year, sunlight, sky}` at login and on
@@ -134,38 +133,28 @@ export function moonLabel(moons: Moons | null): string | null {
   return word ? `${moon.name} ${word}` : moon.name;
 }
 
-const store = createStore<WorldState>({ time: null, moons: null });
-let started = false;
+const store = createGmcpStore<WorldState>({
+  state: { time: null, moons: null },
+  packages: {
+    'World.Time': (world, data) => {
+      const time = parseWorldTime(data);
+      return time ? { ...world, time } : world;
+    },
+    'World.Moons': (world, data) => {
+      const moons = parseMoons(data);
+      return moons ? { ...world, moons } : world;
+    },
+  },
+  // The status line keeps the last game time after the link drops,
+  // next to Not connected. The moons go, and a new connection starts
+  // from nothing since it may reach another world.
+  connection: (world, payload) => {
+    if (payload.kind === 'disconnected') return { ...world, moons: null };
+    if (payload.kind === 'connecting') return { time: null, moons: null };
+    return world;
+  },
+});
 
-export function startWorldStore(): void {
-  if (started) return;
-  started = true;
-  void onGmcpPackage<unknown>('World.Time', (data) => {
-    const time = parseWorldTime(data);
-    if (time) store.set({ ...store.get(), time });
-  });
-  void onGmcpPackage<unknown>('World.Moons', (data) => {
-    const moons = parseMoons(data);
-    if (moons) store.set({ ...store.get(), moons });
-  });
-  void onState((payload) => {
-    // The status line keeps the last game time after the link drops,
-    // next to Not connected. The moons go, and a new connection starts
-    // from nothing since it may reach another world.
-    if (payload.kind === 'disconnected') store.set({ ...store.get(), moons: null });
-    if (payload.kind === 'connecting') store.set({ time: null, moons: null });
-  });
-}
-
-export function getWorld(): WorldState {
-  return store.get();
-}
-
-export function subscribeWorld(cb: () => void): () => void {
-  startWorldStore();
-  return store.subscribe(cb);
-}
-
-export function useWorld(): WorldState {
-  return useSyncExternalStore(subscribeWorld, getWorld);
-}
+export const startWorldStore = store.start;
+export const getWorld = store.get;
+export const useWorld = store.use;
