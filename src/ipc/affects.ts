@@ -166,15 +166,17 @@ export const DEFAULT_AFFECTS_DISPLAY: AffectsDisplay = {
   almost_gone: CRITICAL_TICKS,
 };
 
-/** The fields of a config that hold the affects display. */
-export type AffectsDisplayFields = Pick<
-  UiConfig,
-  | 'affects_style'
-  | 'affects_marker'
-  | 'affects_tint'
-  | 'affects_running_out_hours'
-  | 'affects_almost_gone_hours'
->;
+/** The config fields that hold the affects display. */
+export const AFFECTS_DISPLAY_FIELDS = [
+  'affects_style',
+  'affects_marker',
+  'affects_tint',
+  'affects_running_out_hours',
+  'affects_almost_gone_hours',
+] as const;
+
+/** Those fields of a config. */
+export type AffectsDisplayFields = Pick<UiConfig, (typeof AFFECTS_DISPLAY_FIELDS)[number]>;
 
 /** The affects display a config holds. */
 export function affectsDisplayOf(config: AffectsDisplayFields): AffectsDisplay {

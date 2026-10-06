@@ -3,8 +3,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import uiFields from '../../fixtures/ui-config/fields.json';
-import { setAffectsDisplay } from '../ipc/affects';
+import { AFFECTS_DISPLAY_FIELDS, setAffectsDisplay } from '../ipc/affects';
 import { UI_CONFIG_REPLACED } from '../ipc/events';
+import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import {
   getUiConfig,
   normalizeUiConfig,
@@ -70,14 +71,8 @@ function fakeBackend(initial: RawUiConfig) {
 // in the Affects pane menu.
 describe('a Settings change', () => {
   const values: Record<string, unknown> = uiFields.fields;
-  const themeFields = [
-    'theme',
-    'follow_system_appearance',
-    'light_theme',
-    'dark_theme',
-    'custom_themes',
-  ];
-  const themePrefsFields = themeFields.filter((field) => field !== 'custom_themes');
+  const themePrefsFields: readonly string[] = THEME_PREFS_FIELDS;
+  const themeFields = [...themePrefsFields, 'custom_themes'];
 
   it.each(Object.keys(values))(
     'saves %s alone and keeps what the main window picked',
@@ -144,19 +139,6 @@ describe('a Settings change', () => {
 // Settings hears its own theme and affects display broadcasts, and the
 // window leaves a field alone while a save of its own holds it.
 describe('what a Settings save holds', () => {
-  const themePrefs: (keyof UiFields)[] = [
-    'theme',
-    'follow_system_appearance',
-    'light_theme',
-    'dark_theme',
-  ];
-  const affectsDisplay: (keyof UiFields)[] = [
-    'affects_style',
-    'affects_marker',
-    'affects_tint',
-    'affects_running_out_hours',
-    'affects_almost_gone_hours',
-  ];
   const copy = normalizeUiConfig(opened);
 
   /** Hold the next ui_set_fields until the test answers it. */
@@ -175,16 +157,16 @@ describe('what a Settings save holds', () => {
   it('holds the theme fields while a theme pick waits and while it sends', async () => {
     const report = { saved: vi.fn(), failed: vi.fn() };
     queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
-    expect(settingsSaveHolds(themePrefs)).toBe(true);
-    expect(settingsSaveHolds(affectsDisplay)).toBe(false);
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
+    expect(settingsSaveHolds(AFFECTS_DISPLAY_FIELDS)).toBe(false);
     const answer = answerLater();
     const landed = pendingWrites.flushAll();
-    expect(settingsSaveHolds(themePrefs)).toBe(true);
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
     answer('saved');
     await landed;
 
     expect(report.saved).toHaveBeenCalledTimes(1);
-    expect(settingsSaveHolds(themePrefs)).toBe(false);
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(false);
   });
 
   it('holds the theme until the last of two picks lands', async () => {
@@ -199,12 +181,12 @@ describe('what a Settings save holds', () => {
     // second pick.
     answerFirst('saved');
     await firstLanded;
-    expect(settingsSaveHolds(themePrefs)).toBe(true);
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
     answerSecond('saved');
     await secondLanded;
 
     expect(report.saved).toHaveBeenCalledTimes(2);
-    expect(settingsSaveHolds(themePrefs)).toBe(false);
+    expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(false);
   });
 
   it('lets go of the fields a failed save held', async () => {
@@ -212,12 +194,12 @@ describe('what a Settings save holds', () => {
     queueSettingsChange(copy, { affects_tint: true }, 250, report);
     const answer = answerLater();
     const landed = pendingWrites.flushAll();
-    expect(settingsSaveHolds(affectsDisplay)).toBe(true);
+    expect(settingsSaveHolds(AFFECTS_DISPLAY_FIELDS)).toBe(true);
     answer('failed');
     await landed;
 
     expect(report.failed).toHaveBeenCalledTimes(1);
-    expect(settingsSaveHolds(affectsDisplay)).toBe(false);
+    expect(settingsSaveHolds(AFFECTS_DISPLAY_FIELDS)).toBe(false);
   });
 
   // The window drops the save waiting when the backend replaces the
@@ -269,9 +251,9 @@ describe('what a Settings save holds', () => {
       vi.mocked(invoke).mockClear();
       const report = { saved: vi.fn(), failed: vi.fn() };
       queueSettingsChange(copy, { theme: 'dracula' }, 250, report);
-      expect(settingsSaveHolds(themePrefs)).toBe(true);
+      expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(true);
       replace();
-      expect(settingsSaveHolds(themePrefs)).toBe(false);
+      expect(settingsSaveHolds(THEME_PREFS_FIELDS)).toBe(false);
       await act(async () => root.unmount());
 
       expect(invoke).not.toHaveBeenCalledWith('ui_set_fields', expect.anything());

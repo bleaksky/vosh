@@ -17,8 +17,9 @@ import {
   emitThemePrefsChanged,
   subscribeThemeChanged,
   subscribeThemePrefsChanged,
+  type THEME_PREFS_FIELDS,
 } from '../ipc/theme';
-import { getUiConfig } from '../ipc/uiConfig';
+import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
 import { windowBackdropSet } from '../ipc/windows';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toHex, toRgba } from './color';
@@ -66,14 +67,8 @@ let lastStandsFor: string | null = null;
  *  answers after a later pick leaves the later pick on screen. */
 let lastChoice: string | null = null;
 
-/** The saved fields that decide which theme Vosh shows. UiConfig
- *  carries all four. */
-export interface ThemePrefs {
-  theme: string;
-  follow_system_appearance: boolean;
-  light_theme: string;
-  dark_theme: string;
-}
+/** The saved fields that decide which theme Vosh shows. */
+export type ThemePrefs = Pick<UiConfig, (typeof THEME_PREFS_FIELDS)[number]>;
 
 /** Just the four theme fields, so a whole UiConfig can be passed in. */
 export function themePrefsOf(ui: ThemePrefs): ThemePrefs {
