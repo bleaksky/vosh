@@ -129,9 +129,12 @@ pub(crate) fn read(
         format!("Vosh could not read plugin {name}.")
     };
     let plugin = read_plugin(plugins_dir, name).map_err(|e| could_not(&e))?;
-    let mut files = Vec::new();
-    lua_files(&dir, "", &mut files).map_err(|e| could_not(&e))?;
-    files.sort();
+    let mut files = regular_files(&dir).map_err(|e| could_not(&e))?;
+    files.retain(|file| {
+        Path::new(file)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
+    });
     let code = match file {
         None => plugin.code,
         // Only a regular Lua file the walk found, so no link and no
@@ -153,10 +156,20 @@ pub(crate) fn read(
     })
 }
 
-/// Add every regular `.lua` file under `dir` to `files`, by its path
-/// inside the plugin folder, which `prefix` begins. A link is no regular
-/// file and leads nowhere, so a link never offers a file from elsewhere.
-fn lua_files(dir: &Path, prefix: &str, files: &mut Vec<String>) -> std::io::Result<()> {
+/// Every regular file under `dir`, by its path inside it with `/`
+/// between parts, sorted, for Runs first and for Export. A link is no
+/// regular file and is never followed, so a link never offers or carries
+/// a file from elsewhere. A name that is not UTF-8 is left out.
+pub(crate) fn regular_files(dir: &Path) -> std::io::Result<Vec<String>> {
+    let mut files = Vec::new();
+    walk(dir, "", &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+/// Add each regular file under `dir` to `files`, by its path inside the
+/// folder [`regular_files`] walks, which `prefix` begins.
+fn walk(dir: &Path, prefix: &str, files: &mut Vec<String>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let kind = entry.file_type()?;
@@ -165,12 +178,8 @@ fn lua_files(dir: &Path, prefix: &str, files: &mut Vec<String>) -> std::io::Resu
         };
         let path = format!("{prefix}{file}");
         if kind.is_dir() {
-            lua_files(&entry.path(), &format!("{path}/"), files)?;
-        } else if kind.is_file()
-            && Path::new(&file)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
-        {
+            walk(&entry.path(), &format!("{path}/"), files)?;
+        } else if kind.is_file() {
             files.push(path);
         }
     }
