@@ -84,6 +84,7 @@ import { useClosing } from './useClosing';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
 import { useScrollbackSplit } from './useScrollbackSplit';
+import { useSessionsSidebar } from './useSessionsSidebar';
 import { useUiConfigFollow } from './useUiConfigFollow';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
@@ -116,12 +117,11 @@ function MainWindow() {
   const opened = useOpened();
   // Every open session, which the sessions sidebar lists. It shows while
   // two or more are open, until Hide sessions folds it for this window
-  // (Q17).
+  // (Q17) or the window grows too narrow to hold it (board 8).
   const sessions = useSessions();
-  const [sessionsHidden, setSessionsHidden] = useState(false);
-  const sessionsShown = sessions.length >= 2 && !sessionsHidden;
-  // Hide sessions, and Show sessions in the palette and the View menu.
-  const toggleSessions = () => setSessionsHidden((hidden) => !hidden);
+  const panelOpen = panelLayout?.panel_open ?? true;
+  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen);
+  const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
   // sidebar shows (Q7), and in the session popover's own form while it
   // does not, as with one session.
@@ -145,7 +145,6 @@ function MainWindow() {
   const dockShown = usePinnedDockRows(promptShow?.zone ?? 1, promptShow?.promptsOff ?? false);
   const dockShows = promptPinned && cellSize !== null;
   const dockLent = dockShows ? lentRows(dockShown) : 0;
-  const panelOpen = panelLayout?.panel_open ?? true;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
   // Each opened session's live terminal, and the selected session's,
@@ -303,7 +302,7 @@ function MainWindow() {
       historyTermRef.current?.fit();
     });
     return () => cancelAnimationFrame(id);
-  }, [panelOpen, panelWidth, sessionsShown]);
+  }, [panelOpen, panelWidth, sessionsShown, sessionsSidebar.width]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -461,10 +460,10 @@ function MainWindow() {
     sessions: {
       rows: sessions,
       selected,
-      shown: sessionsShown,
+      shown: sessionsSidebar.wanted,
       goTo,
       step: (step) => goTo(sessionStep(step)),
-      toggleShown: toggleSessions,
+      toggleShown: sessionsSidebar.toggle,
     },
     disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
@@ -498,8 +497,8 @@ function MainWindow() {
     panelOpen,
     shownPanes,
     sessionCount: sessions.length,
-    sessionsShown,
-    toggleSessions,
+    sessionsShown: sessionsSidebar.wanted,
+    toggleSessions: sessionsSidebar.toggle,
     termRef,
     historyTermRef,
     writeLive,
@@ -750,6 +749,8 @@ function MainWindow() {
       panelWidth={panelWidth}
       onPanelWidth={setPanelWidth}
       onMouseUp={handleAppMouseUp}
+      sessionsWidth={sessionsSidebar.width}
+      onSessionsWidth={sessionsSidebar.setWidth}
       sessions={
         sessionsShown ? (
           <SessionSidebar
@@ -759,7 +760,7 @@ function MainWindow() {
             onSelect={select}
             onNewSession={() => void openNewSession()}
             onClose={closing.closeSession}
-            onHide={() => setSessionsHidden(true)}
+            onHide={sessionsSidebar.hide}
             onCaret={focusInput}
             onRename={(session, name) => void rename(session, name)}
             onEditConnection={() => requestSessionMenu({ mode: 'edit' })}
@@ -781,6 +782,7 @@ function MainWindow() {
           onAddPane={addPaneType}
           onMenuClosed={focusInput}
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
+          listSessions={sessionsSidebar.folded}
         />
       }
       terminal={terminalAreaElement}

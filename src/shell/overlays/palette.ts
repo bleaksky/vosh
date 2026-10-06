@@ -78,7 +78,8 @@ export interface PaletteSessions {
   /** Every open session, in the sidebar's order. */
   rows: readonly SessionRow[];
   selected: number;
-  /** Whether the sidebar shows them. */
+  /** Whether you keep the sidebar showing them, though a narrow window
+   *  can fold it. */
   shown: boolean;
   /** Bring a session to the front. */
   goTo: (session: number) => void;

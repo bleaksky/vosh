@@ -191,7 +191,8 @@ export interface MenuState {
   /** How many sessions are open. Next session, Previous session and
    *  Show sessions show dimmed with one. */
   sessions: number;
-  /** The sessions sidebar shows, checked in View. */
+  /** You keep the sessions sidebar showing, checked in View, though a
+   *  narrow window can fold it. */
   sessionsShown: boolean;
 }
 

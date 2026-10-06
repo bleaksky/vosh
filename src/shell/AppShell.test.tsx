@@ -19,6 +19,7 @@ function draw(
   panelWidth: number,
   panelOpen = true,
   sessions: ReactNode = null,
+  sessionsWidth = 220,
 ): string {
   vi.stubGlobal('document', { documentElement: { dataset: { platform } } });
   try {
@@ -28,6 +29,8 @@ function draw(
         panelWidth={panelWidth}
         onPanelWidth={() => undefined}
         sessions={sessions}
+        sessionsWidth={sessionsWidth}
+        onSessionsWidth={() => undefined}
         titleBand={null}
         terminal={null}
         input={null}
@@ -134,5 +137,25 @@ describe('the sessions column', () => {
       '--panel-col': '0px',
       '--sessions-col': '221px',
     });
+  });
+
+  it('takes the width you gave the sidebar and its line', () => {
+    const html = draw('macos', 300, true, sidebar, 180);
+    expect(vars(html)).toEqual({
+      '--panel-w': '300px',
+      '--panel-col': 'min(300px, calc(100vw - 501px))',
+      '--sessions-col': '181px',
+    });
+  });
+
+  it('makes the sidebar line its width handle, 180 to 320, only while it shows', () => {
+    const edge = (html: string) =>
+      html.match(/<div role="separator"[^>]*aria-label="Sessions width"[^>]*>/)?.[0] ?? null;
+    expect(edge(draw('macos', 300))).toBeNull();
+    const tag = edge(draw('macos', 300, true, sidebar, 260)) ?? '';
+    expect(tag).toContain('aria-valuemin="180"');
+    expect(tag).toContain('aria-valuemax="320"');
+    expect(tag).toContain('aria-valuenow="260"');
+    expect(tag).toContain('class="shell-sessions-edge"');
   });
 });

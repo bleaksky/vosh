@@ -65,7 +65,8 @@ interface CommandInputs
   panelOpen: boolean;
   /** The panes the panel tree holds. */
   shownPanes: readonly PaneType[];
-  /** How many sessions are open, and whether the sidebar shows them. */
+  /** How many sessions are open, and whether you keep the sidebar
+   *  showing them, though a narrow window can fold it. */
   sessionCount: number;
   sessionsShown: boolean;
   /** Hide the sessions sidebar in this window, or show it again. */
