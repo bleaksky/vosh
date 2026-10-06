@@ -234,6 +234,7 @@ pub(crate) async fn prompt_render(
         preview,
         overrides,
         placeholders: placeholders.unwrap_or(false),
+        cols: None,
     };
     let p = session.lock_profile().await;
     let c = session.connection.lock();
