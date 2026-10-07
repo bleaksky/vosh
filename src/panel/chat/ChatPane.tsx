@@ -239,7 +239,7 @@ function ChannelSelect({
         aria-label={`Channel, ${label}`}
         onClick={() => setOpen((v) => !v)}
       >
-        {label}
+        <span className="pane-select-text">{label}</span>
         <ChevronDownIcon size={12} className="pane-select-chevron" />
       </button>
       {open && anchor && rect && (

@@ -248,9 +248,25 @@
   display: block;
 }
 
-/* The chat pane's channel filter, a select set as header meta. */
+/* The chat pane's channel filter, a select set as header meta. It
+   gives way as a count does, a million times faster than the label,
+   so a narrow pane cuts its words to an ellipsis before the more
+   button. The chevron stays whole, with room for one letter or the
+   ellipsis beside it, and only then does the label give way. */
+.pane-label:has(+ .pane-select) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-label + .pane-select {
+  min-width: calc(round(up, 1ch, 1px) + 16px);
+}
+
 .pane-select {
   display: inline-flex;
+  flex-shrink: 1000000;
   align-items: center;
   min-width: 0;
   height: round(15px * var(--mud-scale), 1px);
@@ -268,6 +284,13 @@
 
 .pane-select:hover {
   color: var(--text);
+}
+
+.pane-select-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pane-select-chevron {

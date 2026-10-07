@@ -265,6 +265,25 @@ describe('the chat line in panel.css', () => {
   });
 });
 
+describe('the pane select', () => {
+  it('gives way before the more button and ends its words in an ellipsis', () => {
+    const select = rule('.pane-select');
+    expect(select).toContain('flex-shrink: 1000000;');
+    const text = rule('.pane-select-text');
+    expect(text).toContain('min-width: 0;');
+    expect(text).toContain('overflow: hidden;');
+    expect(text).toContain('text-overflow: ellipsis;');
+    expect(rule('.pane-label:has(+ .pane-select)')).toContain('flex: 0 1 auto;');
+  });
+
+  it('keeps the chevron whole', () => {
+    expect(rule('.pane-select-chevron')).toContain('flex: none;');
+    expect(rule('.pane-label + .pane-select')).toContain(
+      'min-width: calc(round(up, 1ch, 1px) + 16px);',
+    );
+  });
+});
+
 describe('ChatPane', () => {
   const header = (props: Record<string, string>) =>
     renderToStaticMarkup(
