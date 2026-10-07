@@ -65,6 +65,7 @@ import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
+import { PROMPT_BINDING } from '../prompt/cardBinding';
 import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
@@ -748,6 +749,7 @@ function MainWindow() {
         <PromptCard
           key={selected}
           session={selected}
+          binding={PROMPT_BINDING}
           opening={promptCard}
           onBand={setCardBand}
           host={promptCardHost}

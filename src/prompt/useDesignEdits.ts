@@ -2,7 +2,7 @@
 // Command Z to take a change back.
 
 import { useCallback, useRef, useState } from 'react';
-import { promptConfigSet, type PromptConfig } from '../ipc/prompt';
+import type { PromptConfig } from '../ipc/prompt';
 import {
   promptDescribe,
   promptEdit,
@@ -13,19 +13,21 @@ import {
 } from '../ipc/promptDesign';
 import { errorText } from '../lib/text';
 import { pushToast } from '../stores/toasts';
+import type { CardBinding } from './cardBinding';
 import { editedTable, movedBackTable, takeBackOnto, undoEntry, type UndoEntry } from './cardRules';
 import { caretAfter, moveBack, moveOp, type MoveMade, type Pointing } from './promptPieces';
 
 const UNDO_DEPTH = 50;
 
 /** The table the card shows for `session` and the changes it makes to
- *  it. The card puts a table it reads in with take, bumps opens each time
+ *  it, which `write` saves. The card puts a table it reads in with take, bumps opens each time
  *  it opens, and calls forgetEdits as it opens again for another profile.
  *  An edit hands the parts of the new design to `setDescribed`, in the
  *  preview `previewRef` names, and the part it follows to
  *  `setPointing`. */
 export function useDesignEdits(
   session: number,
+  write: CardBinding['write'],
   setDescribed: (described: { template: string; data: PromptDescribed }) => void,
   setPointing: (pointing: Pointing) => void,
   previewRef: { readonly current: PromptPreviewName },
@@ -66,7 +68,7 @@ export function useDesignEdits(
     const entry = keepUndo ? undoEntry(before, next) : null;
     if (entry) undo.current = [...undo.current, entry].slice(-UNDO_DEPTH);
     take(next);
-    void promptConfigSet(next, { asIs, session }).catch((e: unknown) => {
+    void write(next, { asIs, session }).catch((e: unknown) => {
       if (at === opens.current) take(before);
       pushToast({ kind: 'error', message: String(e) });
     });
