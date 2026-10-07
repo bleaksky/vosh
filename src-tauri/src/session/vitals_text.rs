@@ -12,7 +12,7 @@ use chrono::Timelike;
 use tauri::AppHandle;
 use tokio::time::Instant;
 use vosh_prompt::vitals::{self, VitalsText};
-use vosh_prompt::{Template, DEFAULT_VITALS_TEXT};
+use vosh_prompt::Template;
 
 use crate::app::events;
 use crate::profile::live::Profile;
@@ -73,12 +73,7 @@ pub(crate) fn render(
     now: Instant,
 ) -> Option<VitalsText> {
     let cols = session.vitals_watch.get().cols?;
-    let text = if p.ui.vitals_text.is_empty() {
-        DEFAULT_VITALS_TEXT
-    } else {
-        &p.ui.vitals_text
-    };
-    let template = Template::parse(text);
+    let template = Template::parse(&p.ui.vitals_text_drawn());
     let client = crate::prompt::client_values(p, c, now);
     let live = c.prompt.vars.resolver(&client);
     let clock = chrono::Local::now().naive_local();

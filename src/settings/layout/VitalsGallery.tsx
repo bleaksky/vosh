@@ -19,7 +19,7 @@ import {
   type VitalsOptions,
   type VitalsStyle,
 } from '../../ipc/uiConfig';
-import { VOSH_VITALS_TEXT } from '../../ipc/vitals';
+import { drawnVitalsText } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';
 import { panelWidthOf, usePanelLayout } from '../../panel/panelLayoutStore';
@@ -148,7 +148,7 @@ export function VitalsGallery({
     [config.vitals_colors, config.fit_game_colors, config.color_vision, theme],
   );
   const { cols, env } = usePanelText(config, width);
-  const text = useGalleryText(config.vitals_text || VOSH_VITALS_TEXT, data, cols);
+  const text = useGalleryText(drawnVitalsText(config), data, cols);
   const face = family === null ? readPanelFace() : measurable(family);
   const measure: MeasureText = (t, px, weight) =>
     textWidth(t, `${weight} ${px}px ${face}`, faceVersion);

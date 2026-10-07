@@ -47,7 +47,7 @@ import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles'
 // draws no meter, and they keep your picks for the panel. Gauges and
 // Pips draw their own mark, so Meter goes quiet for them too. Under Text
 // your text decides all of it, so the section holds your text and its
-// preview, and Reset to default puts back Vosh's text.
+// preview, and Reset to default puts back the text Text starts from.
 
 /** The rows' pitch, a 40 px row with no gap. */
 const ROW_PITCH = 40;
@@ -85,7 +85,9 @@ export function CustomizeVitalsSection({
   update: (patch: UiFields) => void;
 }) {
   const text = shownStyle(config) === 'text';
-  const differs = text ? textDiffers(config.vitals_text) : customDiffers(config);
+  const differs = text
+    ? textDiffers(config.vitals_text, config.vitals_legacy_text)
+    : customDiffers(config);
   const reset = () =>
     update(
       text

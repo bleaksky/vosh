@@ -19,7 +19,7 @@ import {
   type VitalsTextChange,
 } from '../ipc/uiConfig';
 import { broadcastVitalsText } from '../ipc/uiConfigBroadcast';
-import { VOSH_VITALS_TEXT } from '../ipc/vitals';
+import { startVitalsText } from '../ipc/vitals';
 
 /** The table the card works on, for one session. */
 export interface CardBinding {
@@ -50,14 +50,19 @@ export const PROMPT_BINDING: CardBinding = {
   write: (next, options) => promptConfigSet(next, options),
 };
 
-/** Your vitals text as the card's table: the text, or Vosh's while you
- *  have none, drawn and yours, reading no prompt. `earlier` are the
- *  earlier texts, newest first, which its Presets offer as Yours and
- *  Your text before that. */
-export function vitalsTable(text: string, earlier: readonly string[]): PromptConfig {
+/** Your vitals text as the card's table: the text, or while you have
+ *  none the one Text starts from, your 0.7 template `legacy` or Vosh's,
+ *  drawn and yours, reading no prompt. `earlier` are the earlier texts,
+ *  newest first, which its Presets offer as Yours and Your text before
+ *  that. */
+export function vitalsTable(
+  text: string,
+  earlier: readonly string[],
+  legacy: string | null,
+): PromptConfig {
   return {
     draw: true,
-    template: text || VOSH_VITALS_TEXT,
+    template: text || startVitalsText(legacy),
     previous_templates: normalizeVitalsTextPrevious(earlier),
     capture: { kind: 'none' },
     show: normalizePromptShow(null),
@@ -65,15 +70,15 @@ export function vitalsTable(text: string, earlier: readonly string[]): PromptCon
   };
 }
 
-/** What the card saves of `table`: the text, empty for Vosh's so it
- *  follows Vosh's, and the earlier texts it opened with. The setter
+/** What the card saves of `table`: the text, empty for the one Text
+ *  starts from so it keeps following that one, and the earlier texts it opened with. The setter
  *  puts the text it replaces among the earlier ones, so the earlier
  *  texts go after it and keep the text you opened with as Yours, as the
  *  prompt card keeps the design it opened with, rather than each step
  *  of an edit. */
-export function vitalsTextSave(table: PromptConfig): VitalsTextChange {
+export function vitalsTextSave(table: PromptConfig, legacy: string | null): VitalsTextChange {
   return {
-    vitals_text: table.template === VOSH_VITALS_TEXT ? '' : table.template,
+    vitals_text: table.template === startVitalsText(legacy) ? '' : table.template,
     vitals_text_previous: table.previous_templates,
   };
 }
@@ -86,16 +91,24 @@ export const VITALS_TEXT_BINDING: CardBinding = {
   kind: 'vitals',
   open: async () => {
     const config = await fetchUiConfig();
-    return vitalsTable(config.vitals_text, [config.vitals_text, ...config.vitals_text_previous]);
+    return vitalsTable(
+      config.vitals_text,
+      [config.vitals_text, ...config.vitals_text_previous],
+      config.vitals_legacy_text,
+    );
   },
   follow: (_session, take) =>
     subscribeVitalsTextChanged(() => {
       void fetchUiConfig()
-        .then((config) => take(vitalsTable(config.vitals_text, config.vitals_text_previous)))
+        .then((config) =>
+          take(
+            vitalsTable(config.vitals_text, config.vitals_text_previous, config.vitals_legacy_text),
+          ),
+        )
         .catch(() => {});
     }),
   write: async (next) => {
-    const change = vitalsTextSave(next);
+    const change = vitalsTextSave(next, await vitalsLegacyText());
     await setUiFields(change);
     await broadcastVitalsText(change);
   },

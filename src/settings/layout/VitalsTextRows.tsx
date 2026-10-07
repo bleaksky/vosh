@@ -6,7 +6,7 @@ import {
   type PromptRendered,
 } from '../../ipc/promptDesign';
 import type { UiConfig } from '../../ipc/uiConfig';
-import { VOSH_VITALS_TEXT } from '../../ipc/vitals';
+import { drawnVitalsText } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';
 import { panelWidthOf, usePanelLayout } from '../../panel/panelLayoutStore';
@@ -86,13 +86,7 @@ export function VitalsTextRows({ config }: { config: UiConfig }) {
   const forsaken = useForsaken(session);
   const [preview, setPreview] = useState<PromptPreviewName>('now');
   const shown = shownPreview(preview, forsaken);
-  const rendered = usePreviewText(
-    config.vitals_text || VOSH_VITALS_TEXT,
-    live,
-    shown,
-    cols,
-    session,
-  );
+  const rendered = usePreviewText(drawnVitalsText(config), live, shown, cols, session);
   const lines: TextLine[] = rendered
     ? textRows(rendered, []).map((row) => ({ left: row.cells, right: null }))
     : [];
