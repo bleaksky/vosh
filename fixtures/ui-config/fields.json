@@ -69,6 +69,7 @@
     "vitals_colors": { "mana": 4 },
     "vitals_text": "%hp/%maxhp %mn/%maxmn %mv/%maxmv",
     "vitals_text_previous": ["%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v"],
+    "vitals_hit": true,
     "chip_style": "icon_value",
     "tick_count": "down",
     "game_time": "12h",

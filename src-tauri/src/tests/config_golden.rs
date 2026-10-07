@@ -405,6 +405,7 @@ fn full_ui() -> UiConfig {
         vitals_colors: BTreeMap::new(),
         vitals_text: String::new(),
         vitals_text_previous: Vec::new(),
+        vitals_hit: false,
         moons_position: "before-time".into(),
         chip_style: "icon_value".into(),
         tick_count: "down_past_zero".into(),

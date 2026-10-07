@@ -359,7 +359,8 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_true")]
     pub vitals_hide_when_pinned: bool,
     /// The vitals style you picked from the gallery: `ledger`, `gauges`,
-    /// `pips` or `text`. None for Rows and One line, which stay in
+    /// `pips`, `bands`, `ladders`, `blocks`, `traces`, `dials`, `vials`,
+    /// `orbs`, `candles` or `text`. None for Rows and One line, which stay in
     /// `vitals_density`, so a build without styles reads your look. The
     /// keys from here to `vitals_text_previous` are written only once
     /// they differ from the default, so a profile that never picks saves
@@ -409,6 +410,11 @@ pub(crate) struct UiConfig {
     /// keeps `previous_templates`, so a reset never loses one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vitals_text_previous: Vec<String>,
+    /// Show each hit: the part a hit took stays pale for a moment on
+    /// every style with a fill, then drains. Off by default and written
+    /// only once you turn it on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub vitals_hit: bool,
     /// Where the old status bar drew the moons. The status line places
     /// them itself, so nothing reads this. Every save writes back the
     /// value it loaded, so 0.7.2 keeps it on a downgrade (D12, D14).
@@ -1032,6 +1038,7 @@ impl Default for UiConfig {
             vitals_colors: BTreeMap::new(),
             vitals_text: String::new(),
             vitals_text_previous: Vec::new(),
+            vitals_hit: false,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),
@@ -1165,7 +1172,10 @@ pub(crate) fn coerce_vitals_meter(value: String) -> String {
 
 /// The vitals styles the gallery adds to Rows and One line. Anything
 /// else saves as None, which draws `vitals_density`.
-pub(crate) const VITALS_STYLES: [&str; 4] = ["ledger", "gauges", "pips", "text"];
+pub(crate) const VITALS_STYLES: [&str; 12] = [
+    "ledger", "gauges", "pips", "bands", "ladders", "blocks", "traces", "dials", "vials", "orbs",
+    "candles", "text",
+];
 
 /// Keep a known style and turn anything else into None.
 pub(crate) fn coerce_vitals_style(value: Option<String>) -> Option<String> {
@@ -1682,6 +1692,22 @@ name = "haste"
         assert_eq!(back.vitals_colors, ui.vitals_colors);
         assert_eq!(back.vitals_text, ui.vitals_text);
         assert_eq!(back.vitals_text_previous, ui.vitals_text_previous);
+    }
+
+    #[test]
+    fn show_each_hit_stays_out_of_the_file_until_you_turn_it_on() {
+        let written = ProfileConfig::default().to_toml().unwrap();
+        assert!(!written.contains("vitals_hit"), "{written}");
+        assert!(!ProfileConfig::from_toml("[ui]\n").unwrap().ui.vitals_hit);
+
+        let ui = UiConfig {
+            vitals_hit: true,
+            vitals_style: Some("candles".into()),
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert!(back.vitals_hit);
+        assert_eq!(back.vitals_style.as_deref(), Some("candles"));
     }
 
     #[test]

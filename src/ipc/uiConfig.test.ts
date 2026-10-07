@@ -554,6 +554,7 @@ describe('vitals options', () => {
     expect(ui.vitals_colors).toEqual({ mana: 4 });
     expect(ui.vitals_text_previous).toEqual(['a', 'b']);
     expect(normalizeUiConfig(raw({ vitals_style: 'pips' })).vitals_style).toBe('pips');
+    expect(normalizeUiConfig(raw({ vitals_hit: true })).vitals_hit).toBe(true);
   });
 
   it('coerces anything else to the defaults', () => {
@@ -572,6 +573,7 @@ describe('vitals options', () => {
       meter: 'line',
       warn_thirds: false,
       hide_when_pinned: true,
+      hit: false,
     });
     expect(normalizeVitalsOptions(null)).toEqual(DEFAULT_VITALS_OPTIONS);
     expect(
@@ -586,6 +588,7 @@ describe('vitals options', () => {
         meter: 'bar',
         warn_thirds: 'yes',
         hide_when_pinned: 'no',
+        hit: 'on',
       }),
     ).toEqual({
       style: 'rows',
@@ -598,6 +601,7 @@ describe('vitals options', () => {
       meter: 'bar',
       warn_thirds: false,
       hide_when_pinned: true,
+      hit: false,
     });
     expect(normalizeVitalsOptions({ hide_when_pinned: false }).hide_when_pinned).toBe(false);
     expect(normalizeVitalsOptions({ style: 'text', place: 'status' })).toMatchObject({
