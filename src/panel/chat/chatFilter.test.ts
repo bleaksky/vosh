@@ -8,6 +8,7 @@ import {
   chatFilterIn,
   chatFilterLabel,
   chatFilterOf,
+  menuChannels,
   chatFilterProps,
   checkedChannels,
   restPaneId,
@@ -244,5 +245,18 @@ describe('chatLinesFor', () => {
       'yell',
     ]);
     expect(panes(chatLinesFor(lines, { kind: 'rest' }, new Set()))).toEqual(panes(lines));
+  });
+});
+
+describe('menuChannels', () => {
+  it('offers every game channel before anyone talks, with heard and checked ones', () => {
+    const none = menuChannels([], []);
+    expect(none).toContain('tell');
+    expect(none).toContain('gtell');
+    expect(none).toContain('say');
+    const more = menuChannels(['ooc'], ['routed']);
+    expect(more).toContain('ooc');
+    expect(more).toContain('routed');
+    expect(more).toEqual([...more].sort());
   });
 });
