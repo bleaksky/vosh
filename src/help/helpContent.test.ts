@@ -782,7 +782,7 @@ describe('the help on the Room, time and weather colors preset', () => {
       'The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
     );
     expect(text).toContain(
-      'The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so give it a group in Triggers and turn the group off to keep your target yellow.',
+      'The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset.',
     );
     expect(text).toContain(
       'The magenta covers the WiZNET tag alone, so the message after it keeps its colors too.',
@@ -1373,10 +1373,10 @@ describe('the help on importing a profile', () => {
     expect(text).toContain(
       'When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so.',
     );
-    // A preset macro waits for yours on its key, and the presets on in
-    // loadout mode add their own, so the file's stay out (B2 chunk 3).
+    // The presets of the catalog serve every character, so the file's
+    // stay out, its preset macros among them (Presets board 5).
     expect(text).toContain(
-      'The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.',
+      'The presets of the file stay out, the triggers and macros they added, the list of those that are on and the changes to them, since the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.',
     );
   });
 
@@ -1458,5 +1458,39 @@ describe('the help on the alert presets', () => {
   it('points there from Reconnect and Create a trigger', () => {
     expect(body('get-connected.reconnect')).toContain('in Get alerts at 3.9');
     expect(body('automate.first-trigger')).toContain('as Get alerts at 3.9 shows');
+  });
+});
+
+describe('the help on preset edits', () => {
+  // The Presets review, Q1 to Q11 and boards 1 to 5.
+  it('names the swatches, Your changes and Reset to preset', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain('shows a swatch under `Colors` for each color it paints');
+    expect(text).toContain('Its card closes with `Your changes`');
+    expect(text).toContain(
+      '`Reset to preset` under the card takes back every color and trigger you changed in that preset.',
+    );
+  });
+
+  it('says what a fix does to your change, and the notice', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain('When a fix lands on a row you changed, your change stays.');
+    expect(text).toContain('`Take the fix` and `Keep mine`');
+    expect(text).toContain('`A preset fix changed a row you edited`');
+    expect(text).toContain('`A preset fix removed a trigger you edited`');
+  });
+
+  it('says you edit a preset trigger in Triggers, all but its name', () => {
+    const text = body('automate.first-trigger');
+    expect(text).toContain('every row but `Name`');
+    expect(text).toContain('A preset trigger has no `Delete`, so turn off `Enabled` to stop it.');
+  });
+
+  it('says what export, New profile, the profile commands and 0.8.1 do with them', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain('The file carries the presets you have on and your changes to them');
+    expect(text).toContain('`New profile` copies both from the profile you play.');
+    expect(text).toContain('`#profile reset` turns every preset off and clears your changes');
+    expect(text).toContain('An older version, such as 0.8.1, runs the presets as they ship');
   });
 });
