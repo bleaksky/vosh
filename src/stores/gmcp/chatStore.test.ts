@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranChatFixtureNames, aabahranChatPacket } from '../../test/aabahranGmcp';
 import { getChatLines, parseCommChannel, parseRoutedLine, type ChatLine } from './chatStore';
-import type { RoutedPayload } from '../../ipc/session';
+import { connectSession, type RoutedPayload } from '../../ipc/session';
 
 // The store reaches the Tauri bridge when it starts. The parsers under
 // test never do.
@@ -276,6 +276,29 @@ describe('the chat store through a redial', () => {
     redial({ kind: 'waiting', try: 1, tries: 5, seconds: 3 });
     redial({ kind: 'cancelled' });
     state({ kind: 'disconnected', reason: null });
+    expect(getChatLines()).toEqual([]);
+  });
+
+  it('keeps the lines through a Connect to the same world while the link is live', async () => {
+    // The backend ends the live link first, which says it is down with
+    // no reason, as your Disconnect does.
+    const asked = connectSession('play.theforsakenlands.com', 1848, false, 1);
+    state({ kind: 'disconnected', reason: null });
+    dial('play.theforsakenlands.com');
+    state({ kind: 'connected', host: 'play.theforsakenlands.com', port: 1848, tls: false });
+    await asked;
+    expect(speakers()).toEqual(['Tolliver']);
+    // The mark goes with that dial, so your next Disconnect empties them.
+    state({ kind: 'disconnected', reason: null });
+    expect(getChatLines()).toEqual([]);
+  });
+
+  it('empties the lines at a Connect to another world while the link is live', async () => {
+    const asked = connectSession('mud.example.org', 1825, false, 1);
+    state({ kind: 'disconnected', reason: null });
+    expect(speakers()).toEqual(['Tolliver']);
+    dial('mud.example.org', 1825);
+    await asked;
     expect(getChatLines()).toEqual([]);
   });
 

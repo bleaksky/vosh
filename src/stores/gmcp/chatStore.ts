@@ -1,4 +1,5 @@
 import {
+  onConnectAsked,
   onReconnect,
   onRouted,
   type ReconnectPayload,
@@ -125,14 +126,16 @@ interface World {
 }
 
 /** A session's chat lines and the world they came from, null until the
- *  page sees the session dial, and whether a series of redials runs. */
+ *  page sees the session dial, whether a series of redials runs, and
+ *  whether a Connect you chose has yet to dial. */
 interface ChatState {
   lines: ChatLine[];
   world: World | null;
   redialing: boolean;
+  connectAsked: boolean;
 }
 
-const EMPTY: ChatState = { lines: [], world: null, redialing: false };
+const EMPTY: ChatState = { lines: [], world: null, redialing: false, connectAsked: false };
 
 /** The state with `line` added. */
 function addLine(state: ChatState, line: ChatLine | null): ChatState {
@@ -144,17 +147,29 @@ function addLine(state: ChatState, line: ChatLine | null): ChatState {
  *  carries no reason, empties the lines, and so does a dial to another
  *  world. A drop keeps them, and so does a try of a redial that fails,
  *  which carries no reason either, so the tells you got stay through
- *  every try. Lines heard before the page saw the session dial stay
- *  through its next dial, since their world is unknown. */
+ *  every try. A Connect you choose while the link runs ends that link
+ *  with no reason too, and keeps them until its dial says where it
+ *  goes. Lines heard before the page saw the session dial stay through
+ *  its next dial, since their world is unknown. */
 function onConnection(state: ChatState, payload: StatePayload): ChatState {
   if (payload.kind === 'disconnected') {
-    return payload.reason === null && !state.redialing ? EMPTY : state;
+    if (payload.reason !== null) {
+      // A Connect that failed to dial says why, and has no dial to come.
+      return state.connectAsked ? { ...state, connectAsked: false } : state;
+    }
+    return state.redialing || state.connectAsked ? state : EMPTY;
   }
+  const dialed = state.connectAsked ? { ...state, connectAsked: false } : state;
   const { host, port } = payload;
-  const { world } = state;
-  if (world?.host === host && world.port === port) return state;
+  const { world } = dialed;
+  if (world?.host === host && world.port === port) return dialed;
   const elsewhere = payload.kind === 'connecting' && world !== null;
-  return { ...state, lines: elsewhere ? [] : state.lines, world: { host, port } };
+  return { ...dialed, lines: elsewhere ? [] : dialed.lines, world: { host, port } };
+}
+
+/** The state as you choose Connect, before the backend ends the link. */
+function onConnect(state: ChatState): ChatState {
+  return state.connectAsked ? state : { ...state, connectAsked: true };
 }
 
 /** The state after a step of a redial. A series runs from its first
@@ -184,6 +199,7 @@ const store = createSessionStore<ChatState, ChatLine[]>({
       ),
     (apply) =>
       onReconnect((payload, session) => apply(session, (state) => onRedial(state, payload))),
+    (apply) => onConnectAsked((session) => apply(session, onConnect)),
   ],
   view: (state) => state.lines,
 });
