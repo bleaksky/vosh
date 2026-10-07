@@ -142,6 +142,7 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   pips: 'Pips',
   bands: 'Bands',
   ladders: 'Ladders',
+  blocks: 'Blocks',
   text: 'Text',
 };
 

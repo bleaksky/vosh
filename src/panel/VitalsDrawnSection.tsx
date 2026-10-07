@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import type { Fight } from '../stores/gmcp/combatStore';
 import { VitalsBands } from './VitalsBands';
+import { VitalsBlocks } from './VitalsBlocks';
 import type { DrawnVitalsProps } from './VitalsDrawn';
 import { bandsHeight } from './vitalsDrawnFit';
 import type { DrawnFit } from './vitalsFit';
@@ -39,6 +40,11 @@ export function DrawnSection({
       break;
     case 'ladders':
       body = <VitalsLadders {...props} fit={fit.fit} />;
+      height = marksHeight(size, mine);
+      under = fit.fit === 'under';
+      break;
+    case 'blocks':
+      body = <VitalsBlocks {...props} fit={fit.fit} />;
       height = marksHeight(size, mine);
       under = fit.fit === 'under';
       break;

@@ -119,6 +119,7 @@ describe('vitals menu', () => {
       'Pips',
       'Bands',
       'Ladders',
+      'Blocks',
       'Text',
     ]);
     expect(rows.filter((row) => isValidElement(row.trailing)).map((row) => row.children)).toEqual([

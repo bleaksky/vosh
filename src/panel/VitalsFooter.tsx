@@ -7,7 +7,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
-import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
+import { readPanelFace, readPanelGameFace, textWidth, usePanelFaceVersion } from './panelFace';
 import type { Vital, VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, useFight, type CombatOpponent, type Fight } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
@@ -122,6 +122,8 @@ export function VitalsFooter({
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const gameFace = useMemo(() => readPanelGameFace(), [faceVersion]);
   // Only the vitals the footer draws, none while it keeps the opponent
   // alone.
   const rows =
@@ -152,7 +154,9 @@ export function VitalsFooter({
   // new face moves it.
   const measure: MeasureText = (text, px, weight) =>
     textWidth(text, `${weight} ${px}px ${face}`, faceVersion);
-  const fit = vitalsFitOf(style, width, size, rows, foe, options.values, measure);
+  const measureGame: MeasureText = (text, px, weight) =>
+    textWidth(text, `${weight} ${px}px ${gameFace}`, faceVersion);
+  const fit = vitalsFitOf(style, width, size, rows, foe, options.values, measure, measureGame);
 
   return (
     <VitalsBlock

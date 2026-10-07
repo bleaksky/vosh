@@ -170,6 +170,21 @@ describe('Ladders', () => {
   });
 });
 
+describe('Blocks', () => {
+  it('draws each bar in the game face between its label and value', () => {
+    const html = draw({ style: 'blocks', fit: 'beside' });
+    expect(html).toContain('vitals-drawn is-blocks');
+    expect(html).toContain('vitals-marks is-blocks"');
+    expect(all(html, /<span class="(vitals-blocks)">/g)).toHaveLength(4);
+    expect(draw({ style: 'blocks', fit: 'under' })).toContain('vitals-marks is-blocks is-under');
+  });
+
+  it('holds the height of your vitals while it waits for them', () => {
+    const html = draw({ style: 'blocks', fit: 'beside' }, {}, { vitals: null, combat: null });
+    expect(html).toContain(`--vitals-min-height:${marksHeight(12, 3)}px`);
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

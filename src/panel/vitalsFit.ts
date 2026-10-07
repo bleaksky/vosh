@@ -17,20 +17,31 @@ export type VitalsFit =
   | { style: 'gauges'; fit: GaugesFit }
   | { style: 'pips'; fit: PipsFit }
   | { style: 'bands' }
-  | { style: 'ladders'; fit: RowMarkFit };
+  | { style: RowStyle; fit: RowMarkFit };
+
+/** The row styles of the More Vitals Styles review, each vital's mark
+ *  between its label and its value, or under both. */
+const ROW_STYLES = ['ladders', 'blocks'] as const;
+type RowStyle = (typeof ROW_STYLES)[number];
 
 /** The styles of the More Vitals Styles review, which DrawnSection
  *  draws. */
-export type DrawnFit = Extract<VitalsFit, { style: 'bands' | 'ladders' }>;
+export type DrawnFit = Extract<VitalsFit, { style: 'bands' | RowStyle }>;
 
-const DRAWN: readonly string[] = ['bands', 'ladders'] satisfies DrawnFit['style'][];
+const DRAWN: readonly string[] = ['bands', ...ROW_STYLES] satisfies DrawnFit['style'][];
+
+function isRowStyle(style: string): style is RowStyle {
+  return (ROW_STYLES as readonly string[]).includes(style);
+}
 
 export function isDrawnFit(fit: VitalsFit): fit is DrawnFit {
   return DRAWN.includes(fit.style);
 }
 
 /** How `style` fits a footer `width` px wide at panel size `size`.
- *  The gallery in Settings fits its tiles with it too. */
+ *  `measureGame` measures in the game face, which Blocks draws its
+ *  labels and values in. The gallery in Settings fits its tiles with it
+ *  too. */
 export function vitalsFitOf(
   style: VitalsFit['style'],
   width: number,
@@ -39,6 +50,7 @@ export function vitalsFitOf(
   combat: CombatOpponent | null,
   values: VitalsValues,
   measure: MeasureText,
+  measureGame: MeasureText,
 ): VitalsFit {
   if (style === 'line') {
     const items = rows.map((row) => ({
@@ -59,7 +71,7 @@ export function vitalsFitOf(
       ? { style, fit: gaugesFit(width, size, labels, values, measure) }
       : { style, fit: pipsFit(width, size, labels, values, measure) };
   }
-  if (style === 'ladders') {
+  if (isRowStyle(style)) {
     const labels = rows.map((row) => VITAL_LABELS[row.key]);
     return {
       style,
@@ -68,7 +80,7 @@ export function vitalsFitOf(
         size,
         labels,
         rows.map((row) => row.widest),
-        measure,
+        style === 'blocks' ? measureGame : measure,
       ),
     };
   }

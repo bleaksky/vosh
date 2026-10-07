@@ -52,6 +52,7 @@ function draw(patch: Partial<UiConfig> = {}, vitals: Vitals = SAMPLE_VITALS): st
       size={12}
       family={null}
       measure={(text) => text.length * 7}
+      measureGame={(text) => text.length * 7}
       onPick={() => undefined}
     />,
   );
@@ -82,6 +83,7 @@ describe('the Style gallery', () => {
       'Pips',
       'Bands',
       'Ladders',
+      'Blocks',
       'Text',
     ]);
     expect(html).toContain('data-st-anchor="style"');
@@ -99,6 +101,7 @@ describe('the Style gallery', () => {
       'pips',
       'bands',
       'ladders',
+      'blocks',
       'text',
     ]);
   });
@@ -113,6 +116,7 @@ describe('the Style gallery', () => {
       'Pips',
       'Bands',
       'Ladders',
+      'Blocks',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');

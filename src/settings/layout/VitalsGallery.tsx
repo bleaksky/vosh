@@ -23,7 +23,12 @@ import { drawnVitalsText } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';
 import { panelWidthOf, usePanelLayout } from '../../panel/panelLayoutStore';
-import { readPanelFace, textWidth, usePanelFaceVersion } from '../../panel/panelFace';
+import {
+  readPanelFace,
+  readPanelGameFace,
+  textWidth,
+  usePanelFaceVersion,
+} from '../../panel/panelFace';
 import { panelFontFamily } from '../../panel/panelFont';
 import { resolvePanelSize } from '../../panel/panelSize';
 import { PaneTextSizeContext } from '../../panel/paneTextSize';
@@ -152,6 +157,9 @@ export function VitalsGallery({
   const face = family === null ? readPanelFace() : measurable(family);
   const measure: MeasureText = (t, px, weight) =>
     textWidth(t, `${weight} ${px}px ${face}`, faceVersion);
+  const gameFace = family === null ? readPanelGameFace() : measurable(family);
+  const measureGame: MeasureText = (t, px, weight) =>
+    textWidth(t, `${weight} ${px}px ${gameFace}`, faceVersion);
   return (
     <VitalsTiles
       config={config}
@@ -165,6 +173,7 @@ export function VitalsGallery({
       size={size}
       family={family}
       measure={measure}
+      measureGame={measureGame}
       tileRef={tileRef}
       onPick={onPick}
     />
@@ -187,6 +196,8 @@ export interface VitalsTilesProps {
   size: number;
   family: string | null;
   measure: MeasureText;
+  /** Measures in the game face, which Blocks draws in. */
+  measureGame: MeasureText;
   /** Lands on the first tile, which the gallery measures. */
   tileRef?: ((el: HTMLSpanElement | null) => void) | undefined;
   onPick: (fields: UiFields) => void;
@@ -205,6 +216,7 @@ export function VitalsTiles({
   size,
   family,
   measure,
+  measureGame,
   tileRef,
   onPick,
 }: VitalsTilesProps) {
@@ -276,6 +288,7 @@ export function VitalsTiles({
                         width={width}
                         size={size}
                         measure={measure}
+                        measureGame={measureGame}
                       />
                     )}
                   </PaneTextSizeContext.Provider>
@@ -305,6 +318,7 @@ function StyleTile({
   width,
   size,
   measure,
+  measureGame,
 }: {
   style: Exclude<VitalsStyle, 'text'>;
   vitals: Vitals;
@@ -313,8 +327,9 @@ function StyleTile({
   width: number;
   size: number;
   measure: MeasureText;
+  measureGame: MeasureText;
 }): ReactNode {
   const rows = shownRows(vitals, vitalsOn(options.order, options.off), options);
-  const fit = vitalsFitOf(style, width, size, rows, null, options.values, measure);
+  const fit = vitalsFitOf(style, width, size, rows, null, options.values, measure, measureGame);
   return <VitalsBlock vitals={vitals} combat={null} fit={fit} options={options} inks={inks} />;
 }

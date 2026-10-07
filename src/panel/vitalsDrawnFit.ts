@@ -59,6 +59,26 @@ export function litSegments(pct: number | null, count: number): number {
   return pct === null ? 0 : Math.round((pct * count) / 100);
 }
 
+/** The full block, the cell Blocks draws for each whole share. */
+export const FULL_BLOCK = '█';
+
+/** The left eighths of a block, one to seven, for Blocks' last cell. */
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+/** How many cells of `cell` px fit a Blocks bar `width` px wide, at
+ *  least one, or none before either is measured. */
+export function blockCells(width: number, cell: number): number {
+  return width > 0 && cell > 0 ? Math.max(1, Math.floor(width / cell)) : 0;
+}
+
+/** A Blocks bar at `pct` percent of `cells` cells: a full block for
+ *  each whole cell and an eighth for the last, as btop draws a meter. */
+export function blockRun(pct: number, cells: number): string {
+  const exact = (pct * cells) / 100;
+  const whole = Math.floor(exact);
+  return FULL_BLOCK.repeat(whole) + EIGHTHS[Math.floor((exact - whole) * 8)];
+}
+
 /** The segment of `count` a Ladders peak at `peak` percent holds lit,
  *  the one the vital reached into, or -1 for none. */
 export function ladderPeak(peak: number | null, count: number): number {

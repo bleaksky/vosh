@@ -66,6 +66,8 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   bands:
     'Bands. Each vital fills a bar over quiet bands that mark low and worn, with a tick where a fight began.',
   ladders: 'Ladders. Each vital lights a row of segments, the way a level meter does.',
+  blocks:
+    'Blocks. Each vital is a bar of block characters in your game font, the way a terminal tool draws one.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 

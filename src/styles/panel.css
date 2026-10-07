@@ -1119,6 +1119,8 @@
 }
 
 .vitals-drawn .vitals-marks {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 10px;
   padding: 0;
 }
 
@@ -1227,14 +1229,10 @@
 }
 
 /* The row styles: each vital's label, its mark and its value on a pane
-   row, the Gauges grid, the marks starting together after the longest
-   label and ending together before the widest value. Under them each
-   mark sits under its label and value. */
-.vitals-marks.is-ladders {
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
-  column-gap: 10px;
-}
-
+   row, the Gauges grid (.vitals-drawn .vitals-marks above), the marks
+   starting together after the longest label and ending together before
+   the widest value. Under them each mark sits under its label and
+   value. */
 .vitals-mark {
   display: block;
   min-width: 0;
@@ -1263,6 +1261,54 @@
 
 .vitals-ladder-seg.is-lit {
   background: var(--vital-mark);
+}
+
+/* Blocks. The bar in the game face, a full block for each whole cell
+   and an eighth for the last over the same cells at a fifth of the
+   tone, as btop draws its meters. The label and value share the face,
+   a cell apart. The bar keeps the middle 10 px of the face's full
+   block, so it sits with the other marks. */
+.vitals-drawn.is-blocks {
+  font-family: var(--font-panel-game);
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+.vitals-drawn .vitals-marks.is-blocks {
+  column-gap: 1ch;
+}
+
+.vitals-blocks {
+  position: relative;
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  white-space: pre;
+  line-height: var(--mud-line);
+}
+
+.vitals-blocks > span {
+  position: absolute;
+  top: -3px;
+  left: 0;
+}
+
+.vitals-blocks-unlit {
+  color: var(--vital-soft);
+}
+
+.vitals-blocks-gone {
+  color: var(--vital-ghost);
+}
+
+.vitals-blocks-lit {
+  color: var(--vital-mark);
+}
+
+.is-blocks .vitals-foe-mark {
+  margin-top: 2px;
 }
 
 /* Show each hit. The part a hit took holds pale beside the fill, then

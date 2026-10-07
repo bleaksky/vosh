@@ -69,15 +69,20 @@ const METERS: readonly SegmentedOption<VitalsMeter>[] = [
   { value: 'none', label: 'None' },
 ];
 
+/** Why Meter goes quiet for each style that draws its own mark. */
+const OWN_MARKS: Partial<Record<VitalsStyle, string>> = {
+  gauges: 'Gauges draw their own pill, so they take no meter.',
+  pips: 'Pips draw their own discs, so they take no meter.',
+  bands: 'Bands draw their own bars, so they take no meter.',
+  ladders: 'Ladders draw their own segments, so they take no meter.',
+  blocks: 'Blocks draw their own cells, so they take no meter.',
+};
+
 /** Why Meter goes quiet for a style or the status line, or null where it
  *  draws. */
 function meterQuiet(style: VitalsStyle, status: boolean): string | null {
   if (status) return 'The status line draws no meter.';
-  if (style === 'gauges') return 'Gauges draw their own pill, so they take no meter.';
-  if (style === 'pips') return 'Pips draw their own discs, so they take no meter.';
-  if (style === 'bands') return 'Bands draw their own bars, so they take no meter.';
-  if (style === 'ladders') return 'Ladders draw their own segments, so they take no meter.';
-  return null;
+  return OWN_MARKS[style] ?? null;
 }
 
 export function CustomizeVitalsSection({
