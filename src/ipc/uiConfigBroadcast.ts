@@ -40,6 +40,7 @@ import {
   vitalsOptionsOf,
   type FontChange,
   type UiConfig,
+  type VitalsOptions,
 } from './uiConfig';
 
 function fontChangeOf(config: UiConfig): FontChange {
@@ -170,6 +171,13 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     before?.tracked_affects,
     deepEqual,
   );
+}
+
+/** Tell every window, this one included, your vitals options after
+ *  the vitals menu saved a pick, so the footer, the status line and
+ *  Settings follow at once. */
+export async function broadcastVitalsOptions(options: VitalsOptions): Promise<void> {
+  await emitChanged(VITALS_OPTIONS_CHANGED, options, undefined);
 }
 
 /** How followReplacedUiConfig hands a window the replaced config. */

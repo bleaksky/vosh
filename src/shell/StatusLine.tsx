@@ -39,6 +39,7 @@ import { formatGameTime } from './gameTime';
 import { StatusClock, type ClockMoons, type ClockTick, type ClockTime } from './StatusClock';
 import { FIT_ALL, statusLineFit, type StatusLineFit } from './statusLineFit';
 import { statusMoons } from './statusMoons';
+import { useVitalsMenu } from '../panel/useVitalsMenu';
 
 // The quiet line under the input band (SPEC 10 G4): your vitals when
 // the line carries them, your opponent, your target, then the tick, the
@@ -69,6 +70,9 @@ import { statusMoons } from './statusMoons';
 // While the game hides your vitals (lamented tears) each one reads `?`
 // in its Values form in tertiary and never warns. Your opponent's
 // health reads a quiet `?` while Char.Combat withholds it.
+//
+// A right click on your vitals, your opponent or your vitals text opens
+// the vitals menu (VitalsMenu.tsx), as on the panel footer.
 //
 // The tick, the game time, and the moons share one item, the way the
 // old input row chip kept the tick and the time, 8 px apart inside it.
@@ -104,9 +108,18 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
   const clock = useClock(connected);
   const lineRef = useRef<HTMLDivElement | null>(null);
   const fit = useStatusFit(lineRef, items, clock, connected);
+  const vitalsMenu = useVitalsMenu();
 
   return (
-    <div ref={lineRef} className="shell-statusline" role="group" aria-label="Status">
+    <div
+      ref={lineRef}
+      className="shell-statusline"
+      role="group"
+      aria-label="Status"
+      onContextMenu={(e) => {
+        if (e.target instanceof Element && e.target.closest(VITALS_ITEMS)) vitalsMenu.open(e);
+      }}
+    >
       {!connected && <span>{NOT_CONNECTED}</span>}
       <StatusItemsView items={items} fit={fit} />
       <StatusClock
@@ -115,11 +128,16 @@ export function StatusLine({ connected, showVitals, textColors }: Props) {
         time={fit.time ? clock.time : null}
         moons={fit.moons ? clock.moons : null}
       />
+      {vitalsMenu.menu}
     </div>
   );
 }
 
 const NOT_CONNECTED = 'Not connected';
+
+/** The items a right click opens the vitals menu on: your vitals, your
+ *  opponent and your vitals text. */
+const VITALS_ITEMS = '.shell-status-vital, .shell-status-foe, .shell-status-text';
 
 /** How the line fits while it carries your quiet form: the widths
  *  statusLineFit weighs, measured in the panel face at your panel size
@@ -327,7 +345,7 @@ function StatusItemsView({ items, fit }: { items: StatusItems; fit: StatusLineFi
         </span>
       )}
       {rows.map((row) => (
-        <span key={row.key}>
+        <span key={row.key} className="shell-status-vital">
           <Hideable shown={fit.labels}>{VITAL_LABELS[row.key]}</Hideable>
           <span className={toneClass(row.tone, !fit.labels)}>
             {!fit.current

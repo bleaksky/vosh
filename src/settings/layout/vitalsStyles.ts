@@ -1,4 +1,4 @@
-import type { UiConfig, UiFields, Vital, VitalsStyle } from '../../ipc/uiConfig';
+import type { UiConfig, Vital, VitalsStyle } from '../../ipc/uiConfig';
 import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfig';
 import { VOSH_VITALS_TEXT, type VitalsSnapshot } from '../../ipc/vitals';
 import { VITAL_LABELS } from '../../panel/vitalsView';
@@ -37,15 +37,6 @@ export function galleryVitals(snapshot: VitalsSnapshot | null): GalleryVitals {
   const packet = parseVitalsPacket(snapshot.vitals);
   const vitals = nextVitals(null, packet.values, packet.hidden);
   return vitals ? { vitals, live: true } : OFFLINE;
-}
-
-/** What a pick of `style` saves. Rows and One line live in
- *  vitals_density, so an older build still reads them, and clear any
- *  style you picked before (Q15). */
-export function vitalsStylePick(style: VitalsStyle): UiFields {
-  return style === 'rows' || style === 'line'
-    ? { vitals_density: style, vitals_style: null }
-    : { vitals_style: style };
 }
 
 const STEPS: Readonly<Record<string, 1 | -1>> = {

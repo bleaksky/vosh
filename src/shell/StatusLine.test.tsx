@@ -75,7 +75,7 @@ function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOpt
 function items(html: string): string[] {
   return [
     ...html.matchAll(
-      /<span class="shell-status-(?:value( is-(?:low|warn|hidden))?|name)">([^<]*)<\/span>|<span>(Health|Mana|Moves)(?=<)|>(Target)(?=<)/g,
+      /<span class="shell-status-(?:value( is-(?:low|warn|hidden))?|name)">([^<]*)<\/span>|<span class="shell-status-vital">(Health|Mana|Moves)(?=<)|>(Target)(?=<)/g,
     ),
   ].map((m) => m[3] ?? m[4] ?? (m[1] ? `${m[2]} ${m[1].trim()}` : m[2]));
 }
@@ -223,7 +223,7 @@ describe('StatusVitals', () => {
 
     it('keeps each label for a screen reader once it goes', () => {
       expect(at({ labels: false })).toContain(
-        '<span><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
+        '<span class="shell-status-vital"><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
       );
     });
 

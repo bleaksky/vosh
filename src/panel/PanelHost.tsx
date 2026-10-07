@@ -23,6 +23,7 @@ import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { PANE_LABELS } from './paneTypes';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
+import { useVitalsMenu } from './useVitalsMenu';
 import type { TextColors } from './VitalsText';
 
 // The right-hand panel (SPEC 9): the active profile's pane tree from
@@ -53,6 +54,11 @@ import type { TextColors } from './VitalsText';
 // their box, header and all for the map, whose drawing has no list of
 // its own to scroll.
 
+// A right click anywhere on the footer, whatever its style, opens the
+// vitals menu (VitalsMenu.tsx). The footer has no header, so it takes
+// no more button.
+const FOOTER = '.panel-vitals, .panel-vitals-text';
+
 // Arrow keys move a focused handle this far, Shift for bigger steps.
 const KEY_STEP = 8;
 const KEY_STEP_BIG = 32;
@@ -82,6 +88,7 @@ export function PanelHost({
   const textSize = paneTextSize(size);
   const layout = usePanelLayout();
   const footer = panelVitals(promptShow, useVitalsOptions());
+  const vitalsMenu = useVitalsMenu();
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -116,7 +123,12 @@ export function PanelHost({
 
   return (
     <PaneTextSizeContext.Provider value={textSize}>
-      <div className="panel-host">
+      <div
+        className="panel-host"
+        onContextMenu={(e) => {
+          if (e.target instanceof Element && e.target.closest(FOOTER)) vitalsMenu.open(e);
+        }}
+      >
         <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
@@ -144,6 +156,7 @@ export function PanelHost({
           )}
         </div>
         {footer && <VitalsFooter opponentOnly={footer === 'opponent'} textColors={textColors} />}
+        {vitalsMenu.menu}
       </div>
     </PaneTextSizeContext.Provider>
   );

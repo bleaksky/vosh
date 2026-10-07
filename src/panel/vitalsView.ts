@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { PromptShowState } from '../ipc/prompt';
 import type {
+  UiFields,
   Vital,
   VitalOff,
   VitalsColors,
@@ -141,6 +142,23 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   pips: 'Pips',
   text: 'Text',
 };
+
+/** Each Values form's name, as Customize vitals and the vitals menu
+ *  write it. */
+export const VITALS_VALUES_LABELS: Readonly<Record<VitalsValues, string>> = {
+  'current-max': 'Current and max',
+  current: 'Current',
+  percent: 'Percent',
+};
+
+/** What a pick of `style` saves. Rows and One line live in
+ *  vitals_density, so an older build still reads them, and clear any
+ *  style you picked before (Q15). */
+export function vitalsStylePick(style: VitalsStyle): UiFields {
+  return style === 'rows' || style === 'line'
+    ? { vitals_density: style, vitals_style: null }
+    : { vitals_style: style };
+}
 
 /** One vital as every footer style draws it. */
 export interface ShownVital {
