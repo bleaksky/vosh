@@ -767,17 +767,20 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
 }
 
 /** Save the theme choice alone, from a window that keeps no copy of
- *  the other fields, like the palette. Pass the light and dark pair too
- *  when the pick came from pickTheme, which fills one of them while
- *  follow system appearance is on. */
+ *  the other fields, like the palette. Pass the slots too when the pick
+ *  came from pickTheme, which fills the light or dark one while the
+ *  theme follows the system and the day or night one while it follows
+ *  the game. */
 export async function setUiTheme(
   theme: string,
-  pair?: { light_theme: string; dark_theme: string },
+  slots?: Pick<UiConfig, 'light_theme' | 'dark_theme' | 'day_theme' | 'night_theme'>,
 ): Promise<void> {
   await invoke('ui_set_theme', {
     theme,
-    lightTheme: pair?.light_theme ?? null,
-    darkTheme: pair?.dark_theme ?? null,
+    lightTheme: slots?.light_theme ?? null,
+    darkTheme: slots?.dark_theme ?? null,
+    dayTheme: slots?.day_theme ?? null,
+    nightTheme: slots?.night_theme ?? null,
   });
 }
 

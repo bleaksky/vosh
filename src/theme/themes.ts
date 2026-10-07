@@ -2405,7 +2405,7 @@ export function freeBuiltinThemeIds(cfg: RawUiConfig): RawUiConfig {
     return { ...t, id };
   });
   const out: RawUiConfig = { ...cfg, custom_themes };
-  for (const key of ['theme', 'light_theme', 'dark_theme'] as const) {
+  for (const key of ['theme', 'light_theme', 'dark_theme', 'day_theme', 'night_theme'] as const) {
     const id = cfg[key];
     const to = typeof id === 'string' ? moved.get(id) : undefined;
     if (to !== undefined) out[key] = to;

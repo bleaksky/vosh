@@ -24,6 +24,9 @@ const prefs = (patch: Partial<ThemePrefs> = {}): ThemePrefs => ({
   follow_system_appearance: false,
   light_theme: 'rubric',
   dark_theme: 'tokyo-night',
+  theme_follow: 'off',
+  day_theme: '',
+  night_theme: '',
   ...patch,
 });
 
@@ -281,7 +284,7 @@ describe('the paint cache', () => {
     if (paint?.follow !== false) throw new Error('no manual paint');
     expect(paint.manual.vars['--danger']).toBe(deutan.danger);
     expect(paint.manual.vars['--success']).toBe(deutan.success);
-    // The four fields another window sends keep the vision.
+    // The seven fields another window sends keep the vision.
     theme.applyThemePrefs(prefs({ theme: 'kanso-zen' }));
     expect(theme.getColorVision()).toBe('deuteranopia');
     // A new vision paints the theme on screen again at once.

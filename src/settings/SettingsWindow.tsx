@@ -292,7 +292,7 @@ export function SettingsWindow() {
     );
   });
 
-  // The four theme fields another window saved. A palette pick while
+  // The seven theme fields another window saved. A palette pick while
   // follow is on fills the light or dark entry, and the config copy
   // takes it the same way.
   useTauriEvent(subscribeThemePrefs, (prefs) => {

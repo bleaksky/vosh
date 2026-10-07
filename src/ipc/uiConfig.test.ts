@@ -205,6 +205,17 @@ describe('a custom theme on a built-in id', () => {
     });
   });
 
+  it('points the day and night themes at the moved custom theme too', () => {
+    const out = freeBuiltinThemeIds(
+      raw({
+        day_theme: 'srcery',
+        night_theme: 'nord',
+        custom_themes: [custom('srcery', '#000000')],
+      }),
+    );
+    expect(out).toMatchObject({ day_theme: 'srcery-2', night_theme: 'nord' });
+  });
+
   it('frees the id of every built-in theme', () => {
     const ids = BUILTIN_THEMES.map((t) => t.id);
     const out = freeBuiltinThemeIds(raw({ custom_themes: ids.map((id) => custom(id, '#000000')) }));
@@ -270,9 +281,12 @@ describe('a custom theme on a built-in id', () => {
     expect(Object.keys(saves[0]).sort()).toEqual([
       'custom_themes',
       'dark_theme',
+      'day_theme',
       'follow_system_appearance',
       'light_theme',
+      'night_theme',
       'theme',
+      'theme_follow',
     ]);
     expect(saves[0]).toMatchObject({
       theme: 'solarized-light-2',

@@ -157,11 +157,6 @@ const UNHEARD: &[Unheard] = &[
         why: "A plugin's alerts ended. The page half drops its notices, after \
               R18 (Alerts Q19).",
     },
-    Unheard {
-        name: "vosh://daylight-changed",
-        why: "The game turned to day or night. Switch themes With the game \
-              reads it in the page half, after R18 (Alerts Q16).",
-    },
 ];
 
 /// A name argument, as far as the source tells it.

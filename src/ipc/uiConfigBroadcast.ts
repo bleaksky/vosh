@@ -87,7 +87,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   // Custom themes go out first so any other window's theme registry is
   // current by the time `theme-changed` points at a custom theme id.
   await emitChanged(CUSTOM_THEMES_CHANGED, config.custom_themes, before?.custom_themes, deepEqual);
-  // The four theme fields go out whole so Settings and the palette keep
+  // The seven theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
   // is `theme` unless follow is on.
   const prefs = themePrefsOf(config);

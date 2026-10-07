@@ -24,7 +24,7 @@ import {
   subscribeThemePrefsChanged,
   type THEME_PREFS_FIELDS,
 } from '../ipc/theme';
-import { getUiConfig, type UiConfig } from '../ipc/uiConfig';
+import { getUiConfig, THEME_FOLLOWS, type UiConfig } from '../ipc/uiConfig';
 import { windowBackdropSet } from '../ipc/windows';
 import { createStore } from '../stores/store';
 import { tokensToCssVars, type Appearance } from './chrome';
@@ -79,13 +79,16 @@ const visionStore = createStore<ColorVision>('typical');
 /** The saved fields that decide which theme Vosh shows. */
 export type ThemePrefs = Pick<UiConfig, (typeof THEME_PREFS_FIELDS)[number]>;
 
-/** Just the four theme fields, so a whole UiConfig can be passed in. */
+/** Just the seven theme fields, so a whole UiConfig can be passed in. */
 export function themePrefsOf(ui: ThemePrefs): ThemePrefs {
   return {
     theme: ui.theme,
     follow_system_appearance: ui.follow_system_appearance,
     light_theme: ui.light_theme,
     dark_theme: ui.dark_theme,
+    theme_follow: ui.theme_follow,
+    day_theme: ui.day_theme,
+    night_theme: ui.night_theme,
   };
 }
 
@@ -472,7 +475,10 @@ function isThemePrefs(value: unknown): value is ThemePrefs {
     typeof v.theme === 'string' &&
     typeof v.follow_system_appearance === 'boolean' &&
     typeof v.light_theme === 'string' &&
-    typeof v.dark_theme === 'string'
+    typeof v.dark_theme === 'string' &&
+    THEME_FOLLOWS.some((mode) => mode === v.theme_follow) &&
+    typeof v.day_theme === 'string' &&
+    typeof v.night_theme === 'string'
   );
 }
 

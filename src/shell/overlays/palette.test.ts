@@ -559,6 +559,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'obsidian-ember',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     vi.unstubAllGlobals();
   });
@@ -570,6 +573,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'nord',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('gruvbox');
     expect(getCurrentThemeId()).toBe('gruvbox');
@@ -578,6 +584,8 @@ describe('chooseTheme', () => {
       theme: 'gruvbox',
       lightTheme: 'rubric',
       darkTheme: 'nord',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 
@@ -588,6 +596,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: true,
       light_theme: 'rubric',
       dark_theme: 'tokyo-night',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('rose-pine');
     expect(getCurrentThemeId()).toBe('rose-pine');
@@ -612,6 +623,8 @@ describe('chooseTheme', () => {
       theme: 'nord',
       lightTheme: 'paper',
       darkTheme: 'rose-pine',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 });

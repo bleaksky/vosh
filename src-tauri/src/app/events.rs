@@ -264,9 +264,9 @@ pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 pub(crate) const SESSIONS_CHANGED: &str = "vosh://sessions-changed";
 /// Sent to every window when the game of a session turns to day or
 /// night, from World.Time (Alerts Q16). The payload is a
-/// [`crate::tick::DaylightPayload`] with the session beside it. Switch
-/// themes With the game reads it in the page half. No page listener
-/// hears it yet.
+/// [`crate::tick::DaylightPayload`] with the session beside it.
+/// `subscribeDaylightChanged` hears it, and the daylight store keeps the
+/// selected session's for Switch themes With the game.
 pub(crate) const DAYLIGHT_CHANGED: &str = "vosh://daylight-changed";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of

@@ -149,7 +149,7 @@ command ui_reset_chat_colors(profile?)
 command ui_set_affects_display(style?, marker?, tint?, runningOut?, almostGone?, profile?)
 command ui_set_chat_color(channel, color?, profile?)
 command ui_set_fields(fields, profile?)
-command ui_set_theme(theme, lightTheme?, darkTheme?, profile?)
+command ui_set_theme(theme, lightTheme?, darkTheme?, dayTheme?, nightTheme?, profile?)
 command updater_check()
 command updater_install_and_relaunch()
 command vitals_snapshot_get(session?)
@@ -186,7 +186,7 @@ event vosh://chip-style-changed app page heard
 event vosh://color-vision-changed page heard
 event vosh://connection-target-changed page heard
 event vosh://custom-themes-changed app page heard
-event vosh://daylight-changed app unheard
+event vosh://daylight-changed app heard
 event vosh://echo-macros-changed page heard
 event vosh://fit-game-colors-changed page heard
 event vosh://flush-pending-writes app heard
