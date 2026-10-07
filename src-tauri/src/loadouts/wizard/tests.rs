@@ -153,6 +153,40 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
+/// Your edits to the presets move to catalog.toml with the list of
+/// presets that are on, leave the profile file, and reach every
+/// character (Presets Q2).
+#[tokio::test]
+async fn a_loadout_save_keeps_the_preset_edits_in_the_catalog() {
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    loadout_mode(&set, dir.path());
+    let edits = crate::loadouts::preset_edits::PresetEdits::from([(
+        "disarm_buff_fade".to_string(),
+        crate::loadouts::preset_edits::PresetEdit {
+            colors: std::collections::BTreeMap::from([(
+                "line".to_string(),
+                crate::loadouts::preset_edits::EditRow {
+                    value: "#c3a6ff".into(),
+                    was: "fg:178".into(),
+                    seen: None,
+                },
+            )]),
+            ..Default::default()
+        },
+    )]);
+    let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
+    state.selected_profile().await.preset_edits = edits.clone();
+    persist(&state).await;
+    let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
+    assert_eq!(saved.preset_edits, edits);
+    let text = read(&set.active_path());
+    assert!(!text.contains("preset_edits"), "{text}");
+
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert_eq!(state.selected_profile().await.preset_edits, edits);
+}
+
 #[tokio::test]
 async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
     let dir = tempfile::tempdir().unwrap();

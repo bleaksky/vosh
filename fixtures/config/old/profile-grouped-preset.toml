@@ -1,0 +1,87 @@
+aliases = []
+macros = []
+
+[profile_vars]
+
+[[triggers]]
+name = "buff.sanctuary"
+pattern = '^The white aura around (.+) fades\.$'
+priority = 5
+enabled = true
+preset = "disarm_buff_fade"
+group = "fights"
+
+[[triggers.patterns]]
+pattern = '^The white aura around (.+) fades\.$'
+enabled = true
+
+[[triggers.actions]]
+kind = "replace"
+template = "\u001B[1;31m##\u001B[0m \u001B[38;5;178mThe white aura around $1 fades.\u001B[0m"
+
+[tick]
+enabled = true
+interval_secs = 30
+sound = true
+
+[ui]
+theme = "obsidian-ember"
+follow_system_appearance = false
+light_theme = "vellum"
+dark_theme = ""
+auto_update = false
+font_family = "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace"
+font_size = 14
+terminal_line_height = "default"
+tracked_affects = []
+enabled_presets = ["disarm_buff_fade"]
+dock_layout = []
+keep_last_command = false
+bright_bold = false
+custom_themes = []
+echo_macros = true
+input_echo_caret = true
+side_panels_fill_height = false
+paste_line_delay_ms = 500
+spellcheck_prompt = false
+input_cursor_style = "block"
+prompt_template_enabled = false
+prompt_template = ""
+vitals_density = "rows"
+vitals_values = "current-max"
+vitals_meter = "line"
+vitals_warn_thirds = false
+vitals_hide_when_pinned = true
+moons_position = "right-edge"
+chip_style = "value_only"
+tick_count = "up"
+affects_style = "timers"
+affects_marker = "dot"
+affects_tint = false
+
+[ui.vitals]
+show_bar = true
+show_percent = true
+show_numeric = true
+show_delta = true
+bar_filled = "▰"
+bar_empty = "▱"
+bar_width = 20
+bar_style = "solid"
+bar_layout = "plain"
+layout = "ember"
+inline_style = "plain"
+percent_color_mode = "drain"
+pct_chip_style = "none"
+percent_color = "fill"
+template_enabled = false
+template = "%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time"
+hp_color = ""
+mn_color = ""
+mv_color = ""
+use_color_ramp = true
+bar_font = ""
+low_hp_vignette = false
+
+[plugins]
+enabled = []

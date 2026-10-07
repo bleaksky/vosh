@@ -38,6 +38,7 @@ use crate::app::state::{AppState, SharedState};
 use crate::disk::paths::{catalog_path, loadouts_path};
 use crate::disk::save::PERSIST_LOCK;
 use crate::loadouts::catalog::{load_global_catalog, save_global_catalog, GlobalCatalog};
+use crate::loadouts::preset_edits::{EditRow, PresetEdit, PresetEdits};
 use crate::loadouts::set::{load_loadout_set, save_loadout_set, Loadout, LoadoutSet};
 use crate::profile::export::{self, VoshExport};
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig};
@@ -81,7 +82,7 @@ const GOLDENS: [&str; 17] = [
 /// Every old input, by its path under `fixtures/config`, with the FNV-1a
 /// digest of its bytes. An old input never changes, so its digest never
 /// does either.
-const OLD_INPUTS: [(&str, u64); 7] = [
+const OLD_INPUTS: [(&str, u64); 8] = [
     (
         "old/profile-bare-tracked-affects.toml",
         0x69a9_7976_173d_2eb4,
@@ -92,6 +93,7 @@ const OLD_INPUTS: [(&str, u64); 7] = [
     ("old/profile-no-prompt.toml", 0xf0ec_4748_02e9_8e84),
     ("old/profile-dock-no-panes.toml", 0xfbb5_fe86_4607_e7bd),
     ("old/catalog-no-presets.toml", 0x14b5_7fe9_05dc_d105),
+    ("old/profile-grouped-preset.toml", 0x331a_f4ec_0d11_5763),
 ];
 
 fn writing() -> bool {
@@ -641,6 +643,7 @@ fn full_profile() -> ProfileConfig {
         },
         prompt: None,
         alerts: full_alerts(),
+        preset_edits: full_preset_edits(),
         // Reconnect when the link drops, turned off (Alerts Q14).
         reconnect: OnSwitch(false),
     };
@@ -670,6 +673,46 @@ fn full_alerts() -> BTreeMap<String, AlertParts> {
             },
         ),
     ])
+}
+
+/// Your edits to Disarms and fading buffs, the `[preset_edits]` table of
+/// the Presets review's board 5: a color, a trigger switch, a Replace
+/// with, and a Then send a later fix flagged.
+fn full_preset_edits() -> PresetEdits {
+    let row = |value: toml::Value, was: toml::Value| EditRow {
+        value,
+        was,
+        seen: None,
+    };
+    let trigger = |name: &str, key: &str, edit: EditRow| {
+        (name.to_string(), BTreeMap::from([(key.to_string(), edit)]))
+    };
+    BTreeMap::from([(
+        "disarm_buff_fade".into(),
+        PresetEdit {
+            colors: BTreeMap::from([("line".into(), row("#c3a6ff".into(), "fg:178".into()))]),
+            triggers: BTreeMap::from([
+                trigger("buff.sanctuary", "enabled", row(false.into(), true.into())),
+                trigger(
+                    "disarm.secondary",
+                    "send",
+                    EditRow {
+                        seen: Some("get 1.;dual 1.".into()),
+                        ..row("".into(), "get 1.;wield 1.".into())
+                    },
+                ),
+                trigger(
+                    "buff.spell_turning",
+                    "replace",
+                    row(
+                        "{line}Your shield of spell turning collapses.{reset}".into(),
+                        "{mark}##{reset} {line}Your shield of spell turning collapses.{reset}"
+                            .into(),
+                    ),
+                ),
+            ]),
+        },
+    )])
 }
 
 /// The full profile with a regex capture in place of Aabahran's codes,
@@ -746,6 +789,7 @@ fn full_catalog() -> GlobalCatalog {
         macros: full_macros(),
         enabled_presets: Some(vec!["healing_basics".into(), "sent_tells".into()]),
         alerts: full_alerts(),
+        preset_edits: full_preset_edits(),
     }
 }
 
@@ -1159,6 +1203,21 @@ fn a_dock_layout_with_no_panes_still_loads_its_panel() {
             },
         }
     );
+}
+
+/// A 0.8.1 profile file, from before the presets took your edits, keeps
+/// the group you gave a preset trigger and reads with no edits.
+#[test]
+fn a_grouped_preset_trigger_with_no_edits_still_loads() {
+    let config = load_old_profile("old/profile-grouped-preset.toml");
+    assert_eq!(config.ui.enabled_presets, ["disarm_buff_fade"]);
+    assert_eq!(config.triggers.len(), 1);
+    let sanctuary = &config.triggers[0];
+    assert_eq!(sanctuary.name, "buff.sanctuary");
+    assert_eq!(sanctuary.preset.as_deref(), Some("disarm_buff_fade"));
+    assert_eq!(sanctuary.group.as_deref(), Some("fights"));
+    let edits = &config.preset_edits;
+    assert!(edits.is_empty(), "{edits:?}");
 }
 
 #[test]
