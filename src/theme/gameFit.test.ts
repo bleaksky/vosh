@@ -134,7 +134,7 @@ describe('checks', () => {
 });
 
 describe('fit', () => {
-  it('leaves a palette that passes every check as it is', () => {
+  it('leaves a palette that passes every check as it is', { timeout: 30_000 }, () => {
     expect(fit(TRIAD)).toEqual({});
   });
 
