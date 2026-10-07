@@ -1,11 +1,9 @@
 import type { ReactNode } from 'react';
 import type { VitalsOpponent } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
-import { MarkValue } from './VitalsMarks';
+import { MarkRow, MarkValue } from './VitalsMarks';
 import {
   opponentHealth,
-  toneProps,
-  VITAL_LABELS,
   widestOpponentHealth,
   type OpponentHealth,
   type ShownVital,
@@ -111,13 +109,11 @@ export function MarkRows({
   return (
     <div className={`vitals-marks is-${kind}${under ? ' is-under' : ''}`}>
       {rows.map((row) => (
-        <div key={row.key} {...toneProps(row.tone, inks[row.key], 'vitals-mark-row')}>
-          <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+        <MarkRow key={row.key} row={row} ink={inks[row.key]}>
           <span className="vitals-mark" aria-hidden="true">
             {mark(row)}
           </span>
-          <MarkValue value={row.value} widest={row.widest} />
-        </div>
+        </MarkRow>
       ))}
     </div>
   );

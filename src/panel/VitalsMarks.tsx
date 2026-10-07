@@ -48,13 +48,31 @@ export function VitalsMarks({
       {place === 'top' && foe}
       {waiting && <p className="panel-vitals-empty">Vitals appear when you log in.</p>}
       {rows.map((row) => (
-        <div key={row.key} {...toneProps(row.tone, inks[row.key], 'vitals-mark-row')}>
-          <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+        <MarkRow key={row.key} row={row} ink={inks[row.key]}>
           {mark(row)}
-          <MarkValue value={row.value} widest={row.widest} />
-        </div>
+        </MarkRow>
       ))}
       {place === 'bottom' && foe}
+    </div>
+  );
+}
+
+/** One vital's row: its label, `children` for its mark, and its value.
+ *  Every row style draws its vitals with it. */
+export function MarkRow({
+  row,
+  ink,
+  children,
+}: {
+  row: ShownVital;
+  ink: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div {...toneProps(row.tone, ink, 'vitals-mark-row')}>
+      <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+      {children}
+      <MarkValue value={row.value} widest={row.widest} />
     </div>
   );
 }
