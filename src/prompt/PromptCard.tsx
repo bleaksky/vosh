@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { moveTriggerToPrompts } from '../automation/automationTriggers';
+import type { CardBinding } from './cardBinding';
 import type { CellSize } from './pinnedDock';
 import {
   type CardRequest,
@@ -41,14 +42,11 @@ import { profilesList } from '../ipc/profiles';
 import {
   onPromptState,
   onPromptStatus,
-  promptCardOpen,
   promptCodeReaderSet,
   promptCompile,
-  promptConfigGet,
   promptDesignsList,
   promptStateGet,
   promptWatch,
-  subscribePromptConfigChanged,
   type PromptDesign,
   type PromptPreset,
   type PromptState,
@@ -130,6 +128,8 @@ export type CardView = 'design' | 'picker' | 'text';
 interface PromptCardProps {
   /** The session whose prompt the card works on. */
   session: number;
+  /** The table the card edits and saves. */
+  binding: CardBinding;
   host: PromptCardHost;
   show: PromptShowState | null;
   cell: CellSize | null;
@@ -155,6 +155,7 @@ const LAMENT_NOTE =
 
 export function PromptCard({
   session,
+  binding,
   host,
   show,
   cell,
@@ -195,6 +196,7 @@ export function PromptCard({
   const textCaret = useRef<{ start: number; end: number } | null>(null);
   const { config, take, opens, forgetEdits, save, takeBack, edit, movePicked } = useDesignEdits(
     session,
+    binding.write,
     setDescribed,
     setPointing,
     previewRef,
@@ -262,7 +264,7 @@ export function PromptCard({
         setConfirmForget(false);
       }
       void Promise.all([
-        promptCardOpen(session),
+        binding.open(session),
         promptStateGet(session),
         sessionIdentityGet(session).catch(() => null),
         profilesList().catch(() => null),
@@ -318,12 +320,8 @@ export function PromptCard({
       }),
     );
     keep(
-      subscribePromptConfigChanged(() => {
-        void promptConfigGet(session)
-          .then((next) => {
-            if (alive) take(next);
-          })
-          .catch(() => {});
+      binding.follow(session, (next) => {
+        if (alive) take(next);
       }),
     );
     return () => {
@@ -333,7 +331,7 @@ export function PromptCard({
       // Your live prompt comes back as the card closes.
       void promptPreviewSet(null, session).catch(() => {});
     };
-  }, [session, forgetEdits, opens, resetSteps, take]);
+  }, [session, binding, forgetEdits, opens, resetSteps, take]);
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
