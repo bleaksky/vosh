@@ -18,13 +18,7 @@ import {
   subscribeProfileSwitched,
   subscribeProfilesChanged,
 } from '../../ipc/profiles';
-import {
-  shownStyle,
-  type UiConfig,
-  type VitalsMeter,
-  type VitalsPlace,
-  type VitalsValues,
-} from '../../ipc/uiConfig';
+import { shownStyle, type UiConfig, type VitalsPlace } from '../../ipc/uiConfig';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import {
   panelWidthOf,
@@ -37,6 +31,7 @@ import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
+import { CustomizeVitalsSection } from './VitalsCustomize';
 import { VitalsGallery } from './VitalsGallery';
 import {
   ColorField,
@@ -149,6 +144,8 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
       {config && <AffectsSection config={config} update={update} />}
 
       {config && <VitalsSection config={config} update={update} />}
+
+      {config && <CustomizeVitalsSection config={config} update={update} />}
 
       {config && (
         <Section id="split" title="Split terminal">
@@ -339,26 +336,15 @@ const PLACES: readonly SegmentedOption<VitalsPlace>[] = [
   { value: 'status', label: 'Status line' },
 ];
 
-const VALUES: readonly SegmentedOption<VitalsValues>[] = [
-  { value: 'current-max', label: 'Current and max' },
-  { value: 'current', label: 'Current' },
-  { value: 'percent', label: 'Percent' },
-];
-
-const METERS: readonly SegmentedOption<VitalsMeter>[] = [
-  { value: 'line', label: 'Line' },
-  { value: 'bar', label: 'Bar' },
-  { value: 'none', label: 'None' },
-];
-
 /** Your vitals (VitalsOptions.dc.html, then board 2 of the Vitals
  *  Styles review). The Style gallery draws each style with your numbers
  *  and picks one, and Show your vitals in moves them to the status line.
  *  Each default is the panel you had before these rows, so nothing
  *  changes until you pick something, except the pinned switch. It starts
  *  on and drops the vitals while your prompt is pinned above the command
- *  line, which usually shows them, and you can turn it off. Values and
- *  the warning also shape the status line. Exported for its test. */
+ *  line, which usually shows them, and you can turn it off. What every
+ *  style shares sits under Customize vitals below. Exported for its
+ *  test. */
 export function VitalsSection({
   config,
   update,
@@ -393,38 +379,6 @@ export function VitalsSection({
         <Toggle
           checked={config.vitals_hide_when_pinned}
           onChange={(on) => update({ vitals_hide_when_pinned: on })}
-        />
-      </Row>
-      <Row
-        label="Values"
-        description="Current drops the maximum. Percent matches the Group pane."
-        anchor="values"
-      >
-        <Segmented
-          options={VALUES}
-          value={config.vitals_values}
-          onChange={(values) => update({ vitals_values: values })}
-        />
-      </Row>
-      <Row
-        label="Meter"
-        description="Bar is easier to read in a fight. None keeps only the numbers."
-        anchor="meter"
-      >
-        <Segmented
-          options={METERS}
-          value={config.vitals_meter}
-          onChange={(meter) => update({ vitals_meter: meter })}
-        />
-      </Row>
-      <Row
-        label="Warn before you run low"
-        description="Vitals turn yellow under two thirds and red under one third, like your group's health."
-        anchor="warn-low"
-      >
-        <Toggle
-          checked={config.vitals_warn_thirds}
-          onChange={(on) => update({ vitals_warn_thirds: on })}
         />
       </Row>
     </Section>

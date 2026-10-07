@@ -257,10 +257,23 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'vitals', 'hide-pinned'),
   },
   {
+    label: 'Vitals and their order',
+    description: 'Drag a vital to move it, give it a color, or turn it off.',
+    keywords:
+      'customize vitals order drag move reorder color colour swatch hide show off reset health mana moves',
+    target: at('layout', 'customize-vitals', 'vitals-order'),
+  },
+  {
+    label: 'Your opponent',
+    description: 'In a fight, its name and its health in warn, in every style.',
+    keywords: 'customize vitals opponent enemy mob fight top bottom health',
+    target: at('layout', 'customize-vitals', 'opponent'),
+  },
+  {
     label: 'Values',
     description: 'Current drops the maximum. Percent matches the Group pane.',
     keywords: 'vitals numbers current max maximum percent percentage health mana moves',
-    target: at('layout', 'vitals', 'values'),
+    target: at('layout', 'customize-vitals', 'values'),
   },
   {
     label: 'Meter',
@@ -268,14 +281,14 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     // Not `line`, which would pull Meter into a search for One line
     // through the `one` in None.
     keywords: 'vitals bar gauge thick thin health mana moves',
-    target: at('layout', 'vitals', 'meter'),
+    target: at('layout', 'customize-vitals', 'meter'),
   },
   {
     label: 'Warn before you run low',
     description:
       "Vitals turn yellow under two thirds and red under one third, like your group's health.",
     keywords: 'vitals low warning danger thirds yellow red color health mana moves',
-    target: at('layout', 'vitals', 'warn-low'),
+    target: at('layout', 'customize-vitals', 'warn-low'),
   },
   {
     label: 'Divider color',

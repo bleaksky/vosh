@@ -19,23 +19,18 @@ import {
   type VitalsOptions,
   type VitalsStyle,
 } from '../../ipc/uiConfig';
-import { vitalsSnapshotGet, VOSH_VITALS_TEXT } from '../../ipc/vitals';
+import { VOSH_VITALS_TEXT } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';
 import { panelWidthOf, usePanelLayout } from '../../panel/panelLayoutStore';
-import {
-  readPanelFace,
-  readPanelGameFace,
-  textWidth,
-  usePanelFaceVersion,
-} from '../../panel/panelFace';
+import { readPanelFace, textWidth, usePanelFaceVersion } from '../../panel/panelFace';
 import { panelFontFamily } from '../../panel/panelFont';
 import { resolvePanelSize } from '../../panel/panelSize';
 import { PaneTextSizeContext } from '../../panel/paneTextSize';
 import { VitalsBlock } from '../../panel/VitalsFooter';
 import { vitalsFitOf } from '../../panel/vitalsFit';
 import { VitalsTextBlock } from '../../panel/VitalsText';
-import { textCols, textRows, type TextLine } from '../../panel/vitalsTextFit';
+import { textRows, type TextLine } from '../../panel/vitalsTextFit';
 import {
   shownRows,
   vitalInks,
@@ -44,21 +39,18 @@ import {
   type VitalInks,
 } from '../../panel/vitalsView';
 import type { MeasureText } from '../../panel/vitalsLedgerFit';
-import { useBandEnv } from '../../prompt/useBandEnv';
 import type { Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
-import { nativeSurfaceEnabled } from '../../terminal/terminalRenderer';
-import { playPalette, resolveThemeTerminalColors, themeTokens } from '../../theme/themes';
+import { playPalette, themeTokens } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
 import {
   arrowPick,
   galleryCaption,
-  galleryVitals,
-  OFFLINE,
   tileFit,
   vitalsStylePick,
   type GalleryVitals,
 } from './vitalsStyles';
+import { measurable, useGalleryVitals, usePanelText } from './usePanelVitals';
 
 // The Style gallery under Settings, Layout, Vitals (board 2 of the
 // Vitals Styles review, Q17). Six tiles, two a row, as the theme
@@ -79,29 +71,6 @@ import {
 // The pick rings in the accent, the arrow keys move it as in any radio
 // group, and the caption under the tiles says what the picked style
 // does. The style your 0.7 vitals grew into carries Yours in 0.7.
-
-/** The face a CSS font list draws in, for a canvas to measure: a
- *  `var()` read off the root, or the list itself. */
-function measurable(family: string): string {
-  const name = /^var\((--[\w-]+)\)$/.exec(family)?.[1];
-  if (!name || typeof document === 'undefined') return family;
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || family;
-}
-
-/** The vitals the tiles draw, your live ones once the snapshot answers. */
-function useGalleryVitals(): GalleryVitals {
-  const [data, setData] = useState<GalleryVitals>(OFFLINE);
-  useEffect(() => {
-    let open = true;
-    vitalsSnapshotGet()
-      .then((snapshot) => open && setData(galleryVitals(snapshot)))
-      .catch(() => undefined);
-    return () => {
-      open = false;
-    };
-  }, []);
-  return data;
-}
 
 /** Your vitals text at `cols` cells with the gallery's numbers and no
  *  fight, or null until it renders. */
@@ -183,19 +152,8 @@ export function VitalsGallery({
       ),
     [config.vitals_colors, config.fit_game_colors, config.color_vision, theme],
   );
-  const cols = useMemo(
-    () => textCols(width, family === null ? readPanelGameFace() : measurable(family), size),
-    // faceVersion marks a face that loaded or changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [width, family, size, faceVersion],
-  );
+  const { cols, env } = usePanelText(config, width);
   const text = useGalleryText(config.vitals_text || VOSH_VITALS_TEXT, data, cols);
-  const env = useBandEnv(
-    resolveThemeTerminalColors(config.theme_terminal_colors),
-    config.bright_bold,
-    nativeSurfaceEnabled() ? 'native' : 'xterm',
-    config.fit_game_colors,
-  );
   const face = family === null ? readPanelFace() : measurable(family);
   const measure: MeasureText = (t, px, weight) =>
     textWidth(t, `${weight} ${px}px ${face}`, faceVersion);

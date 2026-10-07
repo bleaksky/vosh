@@ -1,0 +1,308 @@
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  DEFAULT_VITALS_CUSTOM,
+  normalizeVitalsOff,
+  shownStyle,
+  type UiConfig,
+  type UiFields,
+  type Vital,
+  type VitalsMeter,
+  type VitalsOpponent,
+  type VitalsStyle,
+  type VitalsValues,
+} from '../../ipc/uiConfig';
+import { partShift, useRowDrag } from '../../lib/useRowDrag';
+import { VITAL_LABELS } from '../../panel/vitalsView';
+import { ANSI_SLOTS } from '../../theme/baseAnsi';
+import { playPalette, type XtermPalette } from '../../theme/themes';
+import { useActiveTheme } from '../../theme/useActiveTheme';
+import {
+  Button,
+  cx,
+  GripIcon,
+  Row,
+  Section,
+  Segmented,
+  Toggle,
+  VisuallyHidden,
+  type SegmentedOption,
+} from '../../ui';
+import { VitalsTextRows } from './VitalsTextRows';
+import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles';
+
+// Customize vitals under Settings, Layout (boards 2 to 5 of the Vitals
+// Styles review, Q3). One set of choices every drawn style shares: which
+// vitals show and their order, a color for each, where your opponent
+// sits, Values, Meter and the warning. Each pick saves alone, and Reset
+// to default puts the set back and leaves your style, Show your vitals
+// in and the pinned switch alone. It rests until something differs.
+//
+// The list moves a vital with its grip, by the pointer or from the
+// keyboard, as the Sessions list moves a session. Under Status line the
+// swatches and Meter go quiet, since the line keeps quiet labels and
+// draws no meter, and they keep your picks for the panel. Gauges and
+// Pips draw their own mark, so Meter goes quiet for them too. Under Text
+// your text decides all of it, so the section holds your text and its
+// preview, and Reset to default puts back Vosh's text.
+
+/** The rows' pitch, a 40 px row with no gap. */
+const ROW_PITCH = 40;
+
+const OPPONENT_PLACES: readonly SegmentedOption<VitalsOpponent>[] = [
+  { value: 'top', label: 'On top' },
+  { value: 'bottom', label: 'At the bottom' },
+];
+
+const VALUES: readonly SegmentedOption<VitalsValues>[] = [
+  { value: 'current-max', label: 'Current and max' },
+  { value: 'current', label: 'Current' },
+  { value: 'percent', label: 'Percent' },
+];
+
+const METERS: readonly SegmentedOption<VitalsMeter>[] = [
+  { value: 'line', label: 'Line' },
+  { value: 'bar', label: 'Bar' },
+  { value: 'none', label: 'None' },
+];
+
+/** Why Meter goes quiet for a style or the status line, or null where it
+ *  draws. */
+function meterQuiet(style: VitalsStyle, status: boolean): string | null {
+  if (status) return 'The status line draws no meter.';
+  if (style === 'gauges') return 'Gauges draw their own pill, so they take no meter.';
+  if (style === 'pips') return 'Pips draw their own discs, so they take no meter.';
+  return null;
+}
+
+export function CustomizeVitalsSection({
+  config,
+  update,
+}: {
+  config: UiConfig;
+  update: (patch: UiFields) => void;
+}) {
+  const text = shownStyle(config) === 'text';
+  const differs = text ? textDiffers(config.vitals_text) : customDiffers(config);
+  const reset = () =>
+    update(
+      text
+        ? { vitals_text: '' }
+        : { ...DEFAULT_VITALS_CUSTOM, vitals_order: [...DEFAULT_VITALS_CUSTOM.vitals_order] },
+    );
+  return (
+    <Section
+      id="customize-vitals"
+      title="Customize vitals"
+      actions={
+        <Button disabled={!differs} onClick={reset}>
+          Reset to default
+        </Button>
+      }
+    >
+      {text ? <VitalsTextRows config={config} /> : <CustomRows config={config} update={update} />}
+    </Section>
+  );
+}
+
+/** The rows a drawn style shares: the list, your opponent, Values, Meter
+ *  and the warning. */
+function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFields) => void }) {
+  const status = config.vitals_place === 'status';
+  const quiet = meterQuiet(shownStyle(config), status);
+  const opponentOn = !config.vitals_off.includes('opponent');
+  return (
+    <>
+      <div className="st-block st-vitals-head" data-st-anchor="vitals-order">
+        <div className="st-row-text">
+          <span className="st-row-label">Vitals and their order</span>
+          <span className="st-row-desc">
+            {status
+              ? 'Drag a vital to move it. Turn one off to drop it from the status line. The status line keeps its quiet labels, so your colors wait for the panel.'
+              : 'Drag a vital to move it. Turn one off to drop it from the panel.'}
+          </span>
+        </div>
+      </div>
+      <VitalsList config={config} quietColors={status} update={update} />
+      <Row
+        label="Your opponent"
+        description="In a fight, its name and its health in warn, in every style."
+        anchor="opponent"
+      >
+        <Segmented
+          options={OPPONENT_PLACES}
+          value={config.vitals_opponent}
+          onChange={(place) => update({ vitals_opponent: place })}
+        />
+        <Toggle
+          checked={opponentOn}
+          aria-label="Show your opponent"
+          onChange={(on) => update({ vitals_off: switched(config.vitals_off, 'opponent', on) })}
+        />
+      </Row>
+      <Row
+        label="Values"
+        description="Current drops the maximum. Percent matches the Group pane."
+        anchor="values"
+      >
+        <Segmented
+          options={VALUES}
+          value={config.vitals_values}
+          onChange={(values) => update({ vitals_values: values })}
+        />
+      </Row>
+      <Row
+        label="Meter"
+        description={quiet ?? 'Bar is easier to read in a fight. None keeps only the numbers.'}
+        anchor="meter"
+      >
+        <Segmented
+          options={quiet ? METERS.map((option) => ({ ...option, disabled: true })) : METERS}
+          value={config.vitals_meter}
+          onChange={(meter) => update({ vitals_meter: meter })}
+        />
+      </Row>
+      <Row
+        label="Warn before you run low"
+        description="Vitals turn yellow under two thirds and red under one third, like your group's health."
+        anchor="warn-low"
+      >
+        <Toggle
+          checked={config.vitals_warn_thirds}
+          onChange={(on) => update({ vitals_warn_thirds: on })}
+        />
+      </Row>
+    </>
+  );
+}
+
+/** `off` with `name` turned on or off. */
+function switched<T extends string>(off: readonly T[], name: T, on: boolean) {
+  return normalizeVitalsOff(on ? off.filter((n) => n !== name) : [...off, name]);
+}
+
+/** Vitals and their order: a row for each vital with its grip, its name,
+ *  its color and its switch. Exported for its test. */
+export function VitalsList({
+  config,
+  quietColors,
+  update,
+}: {
+  config: UiConfig;
+  /** The swatches rest while the status line shows your vitals. */
+  quietColors: boolean;
+  update: (patch: UiFields) => void;
+}) {
+  const theme = useActiveTheme();
+  const palette = playPalette(theme, config.fit_game_colors, config.color_vision);
+  const list = useRef<HTMLUListElement | null>(null);
+  const order = config.vitals_order;
+  const [said, setSaid] = useState('');
+  const { drag, press, keyDown, putBack } = useRowDrag(
+    list,
+    order,
+    (vital, to) => {
+      update({ vitals_order: movedTo(order, vital, to) });
+      setSaid(movedWords(vital, to, order.length));
+    },
+    ROW_PITCH,
+  );
+  return (
+    <>
+      <ul
+        ref={list}
+        className={drag ? 'st-vitals-list is-dragging' : 'st-vitals-list'}
+        aria-label="Vitals and their order"
+      >
+        {order.map((vital, i) => (
+          <VitalRow
+            key={vital}
+            vital={vital}
+            on={!config.vitals_off.includes(vital)}
+            slot={config.vitals_colors[vital]}
+            palette={palette}
+            quietColor={quietColors}
+            lifted={drag?.id === vital}
+            offset={
+              drag ? (drag.id === vital ? drag.dy : partShift(i, drag.from, drag.to, ROW_PITCH)) : 0
+            }
+            onPress={(e) => press(e, vital)}
+            onKeyDown={(e) => keyDown(e, vital)}
+            onBlur={putBack}
+            onSwitch={(on) => update({ vitals_off: switched(config.vitals_off, vital, on) })}
+          />
+        ))}
+        {drag && drag.to !== drag.from && (
+          <li
+            className="st-vitals-drop"
+            aria-hidden="true"
+            // The line sits between the place the row lands on and the
+            // rows that part for it.
+            style={{ top: (drag.to < drag.from ? drag.to + 1 : drag.to) * ROW_PITCH }}
+          />
+        )}
+      </ul>
+      <span aria-live="polite">
+        <VisuallyHidden>{said}</VisuallyHidden>
+      </span>
+    </>
+  );
+}
+
+function VitalRow({
+  vital,
+  on,
+  slot,
+  palette,
+  quietColor,
+  lifted,
+  offset,
+  onPress,
+  onKeyDown,
+  onBlur,
+  onSwitch,
+}: {
+  vital: Vital;
+  on: boolean;
+  /** The ANSI slot you picked, or undefined for Default. */
+  slot: number | undefined;
+  palette: XtermPalette;
+  quietColor: boolean;
+  lifted: boolean;
+  offset: number;
+  onPress: (e: PointerEvent) => void;
+  onKeyDown: (e: KeyboardEvent) => void;
+  onBlur: () => void;
+  onSwitch: (on: boolean) => void;
+}) {
+  const label = VITAL_LABELS[vital];
+  const color = slot === undefined ? null : palette[ANSI_SLOTS[slot]];
+  return (
+    <li
+      className={cx('st-vital', !on && 'is-off', lifted && 'is-lifted')}
+      style={offset ? { transform: `translateY(${offset}px)` } : undefined}
+    >
+      <span
+        className="st-vital-grip"
+        role="button"
+        tabIndex={0}
+        aria-label={`Move ${label}`}
+        onPointerDown={onPress}
+        onKeyDown={onKeyDown}
+        onBlur={onBlur}
+      >
+        <GripIcon />
+      </span>
+      <span className="st-vital-name">{label}</span>
+      <span
+        className={cx(
+          'st-vital-swatch',
+          color === null && 'is-default',
+          (quietColor || !on) && 'is-quiet',
+        )}
+        style={color === null ? undefined : ({ '--swatch': color } as CSSProperties)}
+        aria-hidden="true"
+      />
+      <Toggle checked={on} aria-label={`Show ${label}`} onChange={onSwitch} />
+    </li>
+  );
+}

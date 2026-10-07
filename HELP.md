@@ -559,10 +559,13 @@ The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Mo
 - Open Settings and choose Layout.
 - Under Vitals, pick a style from the gallery. Each tile draws your own vitals in its style, so you see the look before you pick it. `Rows` gives each vital a row, `One line` fits Health, Mana, and Moves on a single row, `Ledger` sets them in columns, `Gauges` fills a pill for each, `Pips` lights ten discs, and `Text` writes them with your prompt's codes. Use the arrow keys to move through the styles.
 - Set `Show your vitals in` to `Status line` to move them under the terminal, and the panes take the room at the foot of the panel.
-- Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
-- Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows.
-- Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
 - Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. In a fight your opponent keeps its row at the foot of the panel. Turn it off to keep them, or pick another place for your prompt, and they come back at once. They also come back while you have prompts off in the game, since the band then has no prompt to show.
+- Under `Customize vitals`, drag a vital by its grip to change the order every style draws them in. From the keyboard, press Space on a grip, move the vital with the Up and Down arrow keys, and press Space again to drop it, or Escape to put it back. Turn a vital's switch off to drop it from your vitals.
+- Pick `On top` or `At the bottom` beside `Your opponent` for where your opponent's row sits in a fight, in every style. Turn its switch off to leave it out.
+- Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
+- Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows. Gauges and Pips draw their own marks, so they take no meter.
+- Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
+- `Reset to default` puts every vital back on in the usual order, with your opponent on top, `Current and max`, `Line`, and the warning off. The button stays dimmed until you change something, and it leaves your style and where your vitals show alone. Under `Text`, your text decides all of this, so `Customize vitals` holds your text and a preview of it, and `Reset to default` puts back Vosh's text.
 
 Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 

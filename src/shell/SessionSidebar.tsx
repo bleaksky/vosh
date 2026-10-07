@@ -21,7 +21,7 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import { SessionMark, SessionRowBody, WaitingCount } from './SessionRowBody';
 import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
-import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
+import { partShift, useRowDrag } from '../lib/useRowDrag';
 
 // The sessions sidebar on the left of the main window, board 2 of the
 // Sessions review, drawn to otty's measures (Q17), with the two line
@@ -62,7 +62,7 @@ import { partShift, ROW_PITCH, useRowDrag } from './useRowDrag';
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
 // into view as ⌘1 to ⌘9 or a step reach it (board 8). Drag a row to move
-// it, see useRowDrag.
+// it, see lib/useRowDrag.
 //
 // WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
 // sessions, the caret would take your next Space and press it again, so
@@ -99,6 +99,10 @@ export interface SessionSidebarHandle {
 /** The row menu's width, as board 9 draws it. */
 const ROW_MENU_WIDTH = 212;
 
+/** The rows' pitch, a 44 pill in a 46 slot (S1 of the Sessions Sidebar
+ *  review). */
+const ROW_PITCH = 46;
+
 /** Whether a click left the caret on the button it pressed. */
 const held = (e: MouseEvent<HTMLButtonElement>) => document.activeElement === e.currentTarget;
 
@@ -127,6 +131,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     list,
     rows.map((row) => row.id),
     onMove,
+    ROW_PITCH,
   );
   const card = useHoverCard(drag !== null);
   // The session whose name is a field, and the row whose menu is open,
@@ -223,9 +228,13 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             current={row.id === selected}
             keys={numbered && i < 9 ? shortcutLabel(`Mod+${i + 1}`) : null}
             renaming={row.id === renaming}
-            lifted={drag?.session === row.id}
+            lifted={drag?.id === row.id}
             offset={
-              drag ? (drag.session === row.id ? drag.dy : partShift(i, drag.from, drag.to)) : 0
+              drag
+                ? drag.id === row.id
+                  ? drag.dy
+                  : partShift(i, drag.from, drag.to, ROW_PITCH)
+                : 0
             }
             onPress={(e) => press(e, row.id)}
             onRest={(slot) => card.rest(row.id, slot)}

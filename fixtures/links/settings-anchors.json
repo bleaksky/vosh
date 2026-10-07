@@ -38,9 +38,11 @@
     "layout:vitals#style",
     "layout:vitals#place",
     "layout:vitals#hide-pinned",
-    "layout:vitals#values",
-    "layout:vitals#meter",
-    "layout:vitals#warn-low",
+    "layout:customize-vitals#vitals-order",
+    "layout:customize-vitals#opponent",
+    "layout:customize-vitals#values",
+    "layout:customize-vitals#meter",
+    "layout:customize-vitals#warn-low",
     "layout:split#divider-color",
     "layout:status#tick-time",
     "layout:status#game-time",
@@ -139,7 +141,10 @@
     },
     "moved rows": {
       "input:advanced#prompt": "input:prompt",
-      "input:advanced#prompt-show": "input:prompt#prompt-show"
+      "input:advanced#prompt-show": "input:prompt#prompt-show",
+      "layout:vitals#values": "layout:customize-vitals#values",
+      "layout:vitals#meter": "layout:customize-vitals#meter",
+      "layout:vitals#warn-low": "layout:customize-vitals#warn-low"
     },
     "from other pages and windows": {
       "characters#tracked": "characters#tracked",
@@ -210,10 +215,12 @@
       "affects-running-out",
       "affects-style",
       "affects-tint",
+      "customize-vitals",
       "divider-color",
       "game-time",
       "hide-pinned",
       "meter",
+      "opponent",
       "panel",
       "panel-width",
       "panes",
@@ -226,6 +233,7 @@
       "tick-time",
       "values",
       "vitals",
+      "vitals-order",
       "warn-low"
     ],
     "input": [
