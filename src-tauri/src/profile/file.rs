@@ -19,7 +19,9 @@ use crate::loadouts::preset_edits::PresetEdits;
 use crate::profile::live::{Macro, Profile, Timer};
 use crate::profile::set::ProfileSet;
 use crate::profile::shared::GlobalConfig;
-use crate::profile::ui::{coerce_affects_thresholds, UiConfig};
+use crate::profile::ui::{
+    coerce_affects_thresholds, read_theme_follow, set_theme_follow, UiConfig,
+};
 use crate::tick::{TickConfig, TickSettings};
 
 #[derive(Debug, Error)]
@@ -432,6 +434,8 @@ impl ProfileConfig {
     pub(crate) fn from_toml(text: &str) -> Result<Self, ConfigError> {
         let mut config: ProfileConfig = toml::from_str(text)?;
         config.merge_legacy_prompt();
+        let mode = read_theme_follow(config.ui.follow_system_appearance, &config.ui.theme_follow);
+        set_theme_follow(&mut config.ui, mode);
         // A hand edit can set almost gone above running out. Read it as
         // running out, as a save would write it.
         (

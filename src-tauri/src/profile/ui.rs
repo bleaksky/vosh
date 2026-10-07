@@ -110,6 +110,27 @@ pub(crate) struct UiConfig {
     /// current theme when that theme is dark, else Obsidian Ember.
     #[serde(default)]
     pub dark_theme: String,
+    /// What switches the theme by itself, the Switch themes row: `off`,
+    /// `system` for `light_theme` and `dark_theme` by the OS appearance,
+    /// or `game` for `day_theme` and `night_theme` by the game's dawn and
+    /// dusk. Written only once it is not `off`, and
+    /// `follow_system_appearance` stays true only for `system`, so 0.8.1
+    /// reads `game` as off. A file without the key reads it from
+    /// `follow_system_appearance` (see [`read_theme_follow`]). Part of the
+    /// `theme` scope category. Unknown values coerce back to `off`.
+    #[serde(
+        default = "default_theme_follow",
+        skip_serializing_if = "is_default_theme_follow"
+    )]
+    pub theme_follow: String,
+    /// The theme shown by day while the theme follows the game. Empty
+    /// until you pick one, and left out of the file while empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub day_theme: String,
+    /// The theme shown by night while the theme follows the game. Empty
+    /// until you pick one, and left out of the file while empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub night_theme: String,
     /// Opt in to background update checks. Off by default.
     #[serde(default)]
     pub auto_update: bool,
@@ -986,6 +1007,9 @@ impl Default for UiConfig {
             follow_system_appearance: false,
             light_theme: default_light_theme(),
             dark_theme: String::new(),
+            theme_follow: default_theme_follow(),
+            day_theme: String::new(),
+            night_theme: String::new(),
             auto_update: false,
             font_family: default_font_family(),
             font_size: default_font_size(),
@@ -1074,6 +1098,58 @@ pub(crate) fn coerce_light_theme(value: String) -> String {
 /// as the current theme.
 pub(crate) fn normalize_dark_theme(value: String) -> String {
     value.trim().to_string()
+}
+
+/// The modes of the Switch themes row. Anything else saves as `off`.
+pub(crate) const THEME_FOLLOWS: [&str; 3] = ["off", "system", "game"];
+
+fn default_theme_follow() -> String {
+    "off".to_string()
+}
+
+fn is_default_theme_follow(value: &str) -> bool {
+    value == "off"
+}
+
+/// Keep a known Switch themes mode and turn anything else into `off`.
+pub(crate) fn coerce_theme_follow(value: String) -> String {
+    if THEME_FOLLOWS.contains(&value.as_str()) {
+        value
+    } else {
+        default_theme_follow()
+    }
+}
+
+/// The Switch themes mode a file reads as. `follow_system_appearance`
+/// true is `system` whatever `theme_follow` says, so a file without the
+/// key keeps the choice 0.8.1 saved, and an older Vosh that turns it on
+/// in a file that says `game` wins. Else `game` stays, and anything else
+/// is `off`, since `system` without the switch means an older Vosh turned
+/// it off.
+pub(crate) fn read_theme_follow(follow_system_appearance: bool, theme_follow: &str) -> String {
+    match (follow_system_appearance, theme_follow) {
+        (true, _) => "system".to_string(),
+        (false, "game") => "game".to_string(),
+        _ => default_theme_follow(),
+    }
+}
+
+/// Set the Switch themes mode and keep `follow_system_appearance` true
+/// only for `system`.
+pub(crate) fn set_theme_follow(ui: &mut UiConfig, value: String) {
+    ui.theme_follow = coerce_theme_follow(value);
+    ui.follow_system_appearance = ui.theme_follow == "system";
+}
+
+/// Turn Follow system appearance on or off, which is the `system` mode
+/// of Switch themes. Off leaves `game` as it is.
+pub(crate) fn set_follow_system_appearance(ui: &mut UiConfig, on: bool) {
+    let mode = match (on, ui.theme_follow.as_str()) {
+        (true, _) => "system".to_string(),
+        (false, "system") => default_theme_follow(),
+        (false, kept) => kept.to_string(),
+    };
+    set_theme_follow(ui, mode);
 }
 
 /// The line height ids the terminal knows. Anything else saves as the
@@ -1597,6 +1673,83 @@ name = "haste"
             ..UiConfig::default()
         };
         assert_eq!(through_toml(&ui).dark_theme, "nord");
+    }
+
+    #[test]
+    fn the_switch_themes_keys_round_trip_and_stay_out_of_the_file_at_their_defaults() {
+        let written = ProfileConfig::default().to_toml().unwrap();
+        for key in ["theme_follow", "day_theme", "night_theme"] {
+            assert!(!written.contains(key), "{key}: {written}");
+        }
+        let mut ui = UiConfig::default();
+        set_theme_follow(&mut ui, "game".into());
+        ui.day_theme = "classic-vivid".into();
+        ui.night_theme = "nord".into();
+        let back = through_toml(&ui);
+        assert_eq!(back.theme_follow, "game");
+        assert_eq!(back.day_theme, "classic-vivid");
+        assert_eq!(back.night_theme, "nord");
+        set_theme_follow(&mut ui, "system".into());
+        assert_eq!(through_toml(&ui).theme_follow, "system");
+    }
+
+    #[test]
+    fn a_file_from_0_8_1_reads_its_switch_as_the_mode() {
+        for (text, mode) in [
+            ("[ui]\nfollow_system_appearance = true\n", "system"),
+            ("[ui]\nfollow_system_appearance = false\n", "off"),
+            ("[ui]\ntheme = \"nord\"\n", "off"),
+            // An older Vosh turned the switch on in a file that says game.
+            (
+                "[ui]\nfollow_system_appearance = true\ntheme_follow = \"game\"\n",
+                "system",
+            ),
+            // An older Vosh turned the switch off in a file that says system.
+            (
+                "[ui]\nfollow_system_appearance = false\ntheme_follow = \"system\"\n",
+                "off",
+            ),
+            ("[ui]\ntheme_follow = \"dusk\"\n", "off"),
+        ] {
+            let ui = ProfileConfig::from_toml(text).unwrap().ui;
+            assert_eq!(ui.theme_follow, mode, "{text}");
+            assert_eq!(ui.follow_system_appearance, mode == "system", "{text}");
+        }
+    }
+
+    #[test]
+    fn game_writes_the_switch_off_so_0_8_1_reads_it_as_off() {
+        let mut ui = UiConfig::default();
+        set_follow_system_appearance(&mut ui, true);
+        set_theme_follow(&mut ui, "game".into());
+        assert!(!ui.follow_system_appearance);
+        let text = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(text.contains("follow_system_appearance = false"), "{text}");
+        assert!(text.contains("theme_follow = \"game\""), "{text}");
+    }
+
+    #[test]
+    fn the_follow_system_switch_moves_between_system_and_off_and_leaves_game() {
+        let mut ui = UiConfig::default();
+        set_follow_system_appearance(&mut ui, true);
+        assert_eq!(
+            (ui.theme_follow.as_str(), ui.follow_system_appearance),
+            ("system", true)
+        );
+        set_follow_system_appearance(&mut ui, false);
+        assert_eq!(
+            (ui.theme_follow.as_str(), ui.follow_system_appearance),
+            ("off", false)
+        );
+        set_theme_follow(&mut ui, "game".into());
+        set_follow_system_appearance(&mut ui, false);
+        assert_eq!(ui.theme_follow, "game");
+        assert_eq!(coerce_theme_follow("Game".into()), "off");
     }
 
     #[test]

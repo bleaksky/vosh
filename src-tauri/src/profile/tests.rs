@@ -32,6 +32,9 @@ pub(crate) fn styled_profile() -> Profile {
     profile.ui.follow_system_appearance = true;
     profile.ui.light_theme = "classic-vivid".into();
     profile.ui.dark_theme = "night-ink".into();
+    profile.ui.theme_follow = "system".into();
+    profile.ui.day_theme = "classic-vivid".into();
+    profile.ui.night_theme = "night-ink".into();
     profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
     profile.ui.font_size = 16;
     profile.ui.terminal_line_height = "loose".into();

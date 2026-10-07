@@ -290,7 +290,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
     for field in fields {
         match field {
             UiField::Theme(v) => ui.theme = v,
-            UiField::FollowSystemAppearance(v) => ui.follow_system_appearance = v,
+            UiField::FollowSystemAppearance(v) => cfg::set_follow_system_appearance(ui, v),
             UiField::LightTheme(v) => ui.light_theme = cfg::coerce_light_theme(v),
             UiField::DarkTheme(v) => ui.dark_theme = cfg::normalize_dark_theme(v),
             UiField::AutoUpdate(v) => ui.auto_update = v,
