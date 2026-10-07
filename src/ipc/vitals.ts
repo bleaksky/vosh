@@ -42,6 +42,9 @@ export interface VitalsText {
   full: PromptRendered;
   /** For each live row, whether it reads your fight. */
   fight: boolean[];
+  /** The pieces that are a `%{right}`, so the footer finds in the spans
+   *  where a row pushes and keeps what follows whole. */
+  right: number[];
 }
 
 /** Hear each render of your vitals text, with the session that drew it. */
