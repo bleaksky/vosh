@@ -26,7 +26,7 @@ describe('Show each hit', () => {
     });
     expect(hitView(trail, 1000 + HIT_HOLD)).toEqual({
       fill: AFTER,
-      ghost: AFTER,
+      ghost: BEFORE,
       draining: true,
       peak: BEFORE,
     });

@@ -23,8 +23,9 @@ export function VitalsPips({
       kind="pips"
       under={fit === 'under'}
       mark={(row) => {
-        const { fill, ghost } = hitFill(row.pct, hits[row.key]);
-        const pale = ghost === null ? null : pipLights(ghost, count);
+        // A disc cannot drain, so the pale ones go as the drain starts.
+        const { fill, ghost, draining } = hitFill(row.pct, hits[row.key]);
+        const pale = ghost === null || draining ? null : pipLights(ghost, count);
         return (
           <span className="vitals-pips" aria-hidden="true">
             {pipLights(fill, count).map((light, i) => (

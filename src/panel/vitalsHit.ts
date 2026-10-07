@@ -42,7 +42,8 @@ export interface Trail {
 }
 
 /** What a mark draws now: its fill, the far end of the pale part or
- *  null for none, whether the pale part drains, and the Ladders peak. */
+ *  null for none, whether the pale part drains toward the fill, which
+ *  each mark draws in its own way, and the Ladders peak. */
 export interface HitView {
   fill: number;
   ghost: number | null;
@@ -86,7 +87,7 @@ export function hitView(trail: Trail, now: number): HitView | null {
   let view: HitView = { fill: trail.to, ghost: null, draining: false, peak };
   if (trail.kind === 'hit') {
     if (since < HIT_HOLD) view = { ...view, ghost: trail.from };
-    else if (since < HIT_HOLD + HIT_DRAIN) view = { ...view, ghost: trail.to, draining: true };
+    else if (since < HIT_HOLD + HIT_DRAIN) view = { ...view, ghost: trail.from, draining: true };
   } else if (since < HEAL_LEAD) {
     view = { ...view, fill: trail.from, ghost: trail.to };
   } else if (since < HEAL_LEAD + FILL_EASE) {
