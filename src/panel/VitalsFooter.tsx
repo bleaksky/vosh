@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from './panelFace';
-import type { VitalsOptions, VitalsPlace, VitalsStyle, VitalsValues } from '../ipc/uiConfig';
+import type { VitalsOptions, VitalsValues } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
@@ -85,9 +85,7 @@ import { VitalsText, type TextColors } from './VitalsText';
 // It colors the vital's label and its meter, never the number, and low
 // and warn still turn the meter and the value.
 
-// Text writes your vitals with your prompt's codes (VitalsText.tsx),
-// in the panel only. With your vitals in the status line it draws Rows
-// here until the status line draws them.
+// Text writes your vitals with your prompt's codes (VitalsText.tsx).
 
 // Ledger draws columns of figures under the pane label caps
 // (VitalsLedger.tsx). Meter sets the line under each column there.
@@ -111,7 +109,7 @@ export function VitalsFooter({
     () => vitalInks(options.colors, palette, themeTokens(theme)),
     [options.colors, palette, theme],
   );
-  const style = drawnStyle(options.style, options.place);
+  const style = options.style;
   const sectionRef = useRef<HTMLElement | null>(null);
   const width = useFooterWidth(sectionRef, style !== 'rows');
   const { size } = usePaneText();
@@ -161,14 +159,6 @@ export type VitalsFit =
   | { style: 'ledger'; fit: LedgerFit }
   | { style: 'gauges'; fit: GaugesFit }
   | { style: 'pips'; fit: PipsFit };
-
-/** The footer styles drawn so far. */
-type DrawnStyle = VitalsFit['style'] | 'text';
-
-/** Text draws in the panel only, and Rows stands in for it elsewhere. */
-function drawnStyle(style: VitalsStyle, place: VitalsPlace): DrawnStyle {
-  return style === 'text' && place !== 'panel' ? 'rows' : style;
-}
 
 /** The terminal's colors as they start, for a footer handed none. */
 const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: false };

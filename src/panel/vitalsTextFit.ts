@@ -112,3 +112,24 @@ export function vitalsTextLines(text: VitalsText, cols: number, fightOnly: boole
     !fightOnly || text.fight[r] ? lines : [],
   );
 }
+
+/** The pieces the status line writes of `text` on its one line: each
+ *  row, split in two where its %{right} pushes, with the push and the
+ *  spaces round each piece dropped and blank pieces left out. The line
+ *  sets a 20 px gap between pieces. */
+export function vitalsTextPieces(text: VitalsText): Cell[][] {
+  return textRows(text.live, text.right)
+    .flatMap(({ cells, push }) =>
+      push ? [cells.slice(0, push.col), cells.slice(push.col + push.width)] : [cells],
+    )
+    .map(trimSpaces)
+    .filter((piece) => piece.length > 0);
+}
+
+function trimSpaces(cells: Cell[]): Cell[] {
+  let start = 0;
+  let end = cells.length;
+  while (start < end && cells[start].ch === ' ') start += 1;
+  while (end > start && cells[end - 1].ch === ' ') end -= 1;
+  return cells.slice(start, end);
+}

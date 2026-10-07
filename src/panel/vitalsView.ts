@@ -146,14 +146,25 @@ export interface ShownVital {
 }
 
 /** The vitals the footer draws (shownVitals), each in the Values form
- *  and the tone `options` ask for. A hidden vital reads `?` over an
- *  empty mark and never warns. */
+ *  and the tone `options` ask for (vitalRows). */
 export function shownRows(
   vitals: Vitals,
   on: readonly Vital[],
   options: Pick<VitalsOptions, 'values' | 'warn_thirds'>,
 ): ShownVital[] {
-  return shownVitals(vitals, on).map((key) => {
+  return vitalRows(vitals, shownVitals(vitals, on), options);
+}
+
+/** Each of `keys` in the Values form and the tone `options` ask for. A
+ *  hidden vital reads `?` over an empty mark and never warns. The
+ *  status line draws every vital you left on this way, with or without
+ *  a max. */
+export function vitalRows(
+  vitals: Vitals,
+  keys: readonly Vital[],
+  options: Pick<VitalsOptions, 'values' | 'warn_thirds'>,
+): ShownVital[] {
+  return keys.map((key) => {
     const current = vitals[key];
     const max = vitals[maxOf(key)];
     const widest = widestVital(options.values, max, vitals.hidden);
@@ -256,44 +267,25 @@ export function toneProps(
     : { className: classes };
 }
 
-/** The opponent Char.Combat names, as far as the status line needs it. */
-export interface CombatHealth {
-  name: string;
-  hp_pct: number | null;
-  /** The game withholds the opponent's health. */
-  hidden?: boolean;
-}
-
-/** The target's health for the status line with the panel hidden. It
- *  shows only when the target you set is the one you are fighting, the
- *  Char.Combat opponent, with the names compared without case. Null
- *  otherwise, while the server sends no percent, and while the game
- *  withholds it. */
-export function targetHealthPercent(
-  target: string | null,
-  opponent: CombatHealth | null,
-): number | null {
-  if (!target || opponent === null || opponent.hidden === true || opponent.hp_pct === null) {
-    return null;
-  }
-  return sameName(target, opponent.name) ? opponent.hp_pct : null;
-}
-
-function sameName(a: string, b: string): boolean {
+/** Whether two names call the same mob, compared without case, as a
+ *  target you set and the opponent Char.Combat names. */
+export function sameMob(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-/** Whether the panel draws its vitals under the panes. While your
- *  prompt is pinned above the command line and Hide vitals while your
- *  prompt is pinned is on, the footer goes and the panes take its room,
- *  all but the opponent row in a fight.
- *  Turning either off brings it back. So does a pinned band with no
- *  prompt to show, with no capture or with prompts off in the game,
+/** What the panel draws under its panes: every vital you left on, only
+ *  your opponent's row in a fight, or nothing. With Show your vitals in
+ *  on Status line it draws nothing and the panes reach the window's
+ *  foot. While your prompt is pinned above the command line and Hide
+ *  vitals while your prompt is pinned is on, it keeps the opponent row.
+ *  Turning either off brings the vitals back. So does a pinned band with
+ *  no prompt to show, with no capture or with prompts off in the game,
  *  since your vitals would then show nowhere. */
-export function panelShowsVitals(
+export function panelVitals(
   prompt: Pick<PromptShowState, 'show' | 'capture' | 'promptsOff'> | null,
-  hideWhenPinned: boolean,
-): boolean {
+  options: Pick<VitalsOptions, 'place' | 'hide_when_pinned'>,
+): 'vitals' | 'opponent' | null {
+  if (options.place === 'status') return null;
   const pinnedPrompt = prompt?.show === 'pinned' && prompt.capture && !prompt.promptsOff;
-  return !(pinnedPrompt && hideWhenPinned);
+  return pinnedPrompt && options.hide_when_pinned ? 'opponent' : 'vitals';
 }

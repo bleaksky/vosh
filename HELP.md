@@ -565,9 +565,9 @@ The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Mo
 
 Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 
-Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. When the target you set is the one you are fighting, its health follows its name in yellow.
+Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. In a fight your opponent follows them with its health in yellow. When the target you set is the mob you fight, the two share one item, and a target on another mob keeps its own after it.
 
-When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health or sends none, and the status line drops the health of your target.
+When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health or sends none, and so does its health on the status line.
 
 ### 4.5 Watch your group and affects
 
@@ -647,7 +647,7 @@ The game time takes a tint from your theme for the part of the day. Each moon in
 Set a target with `tar` and Vosh keeps it in the status line. Quick keys pair a short name with a verb, so typing the name acts on your target.
 
 - Type `tar` to list the people in the room, and `tar 2` or `tar drag` to pick one by number or by part of the name. `tarn` and `tarp` step to the next or previous person, and `tarclear` clears the target.
-- Read the status line under the command line. Once a target is set it shows `Target` and the name. While you fight that target with the panel hidden, its health follows the name in yellow.
+- Read the status line under the command line. Once a target is set it shows `Target` and the name. While you fight that target with the panel hidden, the line names it once, with its health in yellow.
 - Look at the room. With the `Room, time and weather colors` preset on, the line of your target turns bright red while the room lists them.
 - Read the vitals at the foot of the panel. In a fight your opponent gets a row on top with its health.
 - Set a quick key with `#qkey <name> <verb>`, like `#qkey gg backstab`. Then type `gg` as the first word of a command and Vosh sends `backstab` and your target. Vosh skips its own echo, because the backend echoes the expansion instead.

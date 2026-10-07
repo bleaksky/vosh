@@ -1,42 +1,66 @@
-import { useMemo } from 'react';
-import { usePlayPalette } from '../theme/fitGameColors';
+import { useEffect, useMemo } from 'react';
+import { vitalsTextWatch } from '../ipc/vitals';
 import type { VitalsOptions } from '../ipc/uiConfig';
+import { useBandEnv } from '../prompt/useBandEnv';
+import { usePlayPalette } from '../theme/fitGameColors';
 import { useChipStyle } from '../stores/config/chipStyleStore';
-import { useCombat } from '../stores/gmcp/combatStore';
+import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useGameTime } from '../stores/config/gameTimeStore';
+import { useSelected } from '../stores/session/sessionsStore';
 import { useTarget } from '../stores/session/targetStore';
 import { useTickCount } from '../stores/config/tickCountStore';
 import { shownTick, useTick } from '../stores/session/tickStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { useVitals, type Vitals, type VitalKey } from '../stores/gmcp/vitalsStore';
+import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
+import { useVitalsText } from '../stores/session/vitalsTextStore';
 import { useWorld } from '../stores/gmcp/worldStore';
+import type { BandEnv } from '../terminal/bandCells';
+import type { Cell } from '../terminal/sgrCells';
+import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { themeTokens } from '../theme/themes';
 import { useActiveTheme } from '../theme/useActiveTheme';
 import {
-  formatVital,
-  hiddenVital,
-  targetHealthPercent,
-  vitalTone,
-  type CombatHealth,
+  opponentHealth,
+  sameMob,
+  vitalRows,
+  vitalsOn,
+  VITAL_LABELS,
   type VitalTone,
 } from '../panel/vitalsView';
+import { TextRuns, type TextColors } from '../panel/VitalsText';
+import { vitalsTextPieces } from '../panel/vitalsTextFit';
 import { daylightTint, isDaytime } from './daylight';
 import { formatGameTime } from './gameTime';
 import { StatusClock } from './StatusClock';
 import { statusMoons } from './statusMoons';
 
-// The quiet line under the input band (SPEC 10 G4): your target, then
-// the tick, the game time, and the moons together, 20 px apart in the
-// panel face, the Panel font, with tabular numbers. With the panel
-// hidden, the vitals it pins lead the line so you never lose them. They
-// follow Values and Warn before you run low from Settings, Layout,
-// Vitals, and never draw a meter (VitalsOptions.dc.html). While you
-// fight the target you set, its health follows its name in the warn
-// tone.
+// The quiet line under the input band (SPEC 10 G4): your vitals when
+// the line carries them, your opponent, your target, then the tick, the
+// game time, and the moons together, 20 px apart in the panel face, the
+// Panel font, with tabular numbers.
+//
+// The line carries your vitals with the panel hidden, or with Show your
+// vitals in on Status line, which takes them out of the panel (Vitals
+// Styles Q6). Every drawn style but Text shows one quiet form here,
+// labels and values with no mark and no color. It follows the order,
+// the vitals you turned off, Values and Warn before you run low from
+// Customize vitals, keeps every vital you leave on with or without a
+// max, and ignores Hide vitals while your prompt is pinned. In a fight
+// your opponent follows your vitals with its health in the warn tone,
+// wherever Customize vitals places its row in the panel. A target you
+// set on the same mob joins that item, and a target on another mob
+// keeps its own Target item after it. Out of a fight, or while the line
+// leaves your vitals to the panel, your target shows by name alone.
+//
+// Text writes your vitals text here on one line, in the terminal face,
+// with a 20 px gap for each new line and each %{right}, and ends in an
+// ellipsis where the line runs out. The line watches the text itself
+// only while the panel draws no footer, since the footer watches it
+// otherwise.
 //
 // While the game hides your vitals (lamented tears) each one reads `?`
-// in its Values form in tertiary and never warns. The target health
-// leaves the line while Char.Combat withholds it.
+// in its Values form in tertiary and never warns. Your opponent's
+// health reads a quiet `?` while Char.Combat withholds it.
 //
 // The tick, the game time, and the moons share one item, the way the
 // old input row chip kept the tick and the time, 8 px apart inside it.
@@ -48,24 +72,26 @@ import { statusMoons } from './statusMoons';
 // triad, or a near alignment. The chip style in Settings shows each
 // value alone, after a caption, or after an icon.
 
-const VITAL_ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
-  { key: 'hp', label: 'Health', max: 'maxhp' },
-  { key: 'mana', label: 'Mana', max: 'maxmana' },
-  { key: 'move', label: 'Moves', max: 'maxmove' },
-];
+/** The line splits each row of your text at its push, so the push
+ *  needs no room and the session renders the text one cell wide. */
+const LINE_COLS = 1;
 
 interface Props {
   connected: boolean;
-  /** Lead with your vitals, for when the panel that pins them is
-   *  hidden. */
+  /** The line carries your vitals, since the panel is hidden or Show
+   *  your vitals in is Status line. */
   showVitals: boolean;
+  /** The terminal settings the Text style draws its colors with. */
+  textColors: TextColors;
 }
 
-export function StatusLine({ connected, showVitals }: Props) {
+export function StatusLine({ connected, showVitals, textColors }: Props) {
   const target = useTarget();
   const vitals = useVitals();
   const combat = useCombat();
   const options = useVitalsOptions();
+  const writes = showVitals && options.style === 'text';
+  const text = useLineText(writes, writes && options.place === 'status', textColors);
 
   return (
     <div className="shell-statusline" role="group" aria-label="Status">
@@ -76,57 +102,114 @@ export function StatusLine({ connected, showVitals }: Props) {
         target={target.name}
         combat={combat}
         options={options}
+        text={text}
       />
       <ClockItem connected={connected} />
     </div>
   );
 }
 
+/** Your vitals text as the line writes it, while `active`, and a watch
+ *  on it while `watch`, for when no footer watches it. */
+function useLineText(active: boolean, watch: boolean, colors: TextColors): LineText | null {
+  const session = useSelected();
+  const rendered = useVitalsText();
+  useEffect(() => {
+    if (!watch) return;
+    void vitalsTextWatch(LINE_COLS, session).catch(() => undefined);
+    return () => {
+      void vitalsTextWatch(null, session).catch(() => undefined);
+    };
+  }, [watch, session]);
+  const env = useBandEnv(
+    colors.themeTerminalColors,
+    colors.brightBold,
+    nativeSurfaceEnabled() ? 'native' : 'xterm',
+  );
+  const pieces = useMemo(
+    () => (active && rendered ? vitalsTextPieces(rendered) : null),
+    [active, rendered],
+  );
+  return pieces && rendered ? { pieces, fight: rendered.fight.some(Boolean), env } : null;
+}
+
+/** Your vitals text on the line: its pieces, whether a row reads your
+ *  fight, and the colors it draws in. */
+export interface LineText {
+  pieces: Cell[][];
+  fight: boolean;
+  env: BandEnv;
+}
+
 export interface StatusVitalsProps {
-  /** The panel is hidden, so the line carries your vitals. */
+  /** The line carries your vitals. */
   showVitals: boolean;
   vitals: Vitals | null;
   /** The target you set, or null. */
   target: string | null;
   /** The Char.Combat opponent, or null out of a fight. */
-  combat: CombatHealth | null;
+  combat: CombatOpponent | null;
   options: VitalsOptions;
+  /** Your vitals text, while the line writes it in the Text style. */
+  text?: LineText | null;
 }
 
-/** Your vitals and your target, drawn from plain values so a test can
- *  render every case. The target's health shows only with the panel
- *  hidden, since the panel's combat row carries it otherwise. */
-export function StatusVitals({ showVitals, vitals, target, combat, options }: StatusVitalsProps) {
-  const targetPct = showVitals ? targetHealthPercent(target, combat) : null;
+/** Your vitals, your opponent and your target, drawn from plain values
+ *  so a test can render every case. */
+export function StatusVitals({
+  showVitals,
+  vitals,
+  target,
+  combat,
+  options,
+  text = null,
+}: StatusVitalsProps) {
+  const writes = showVitals && options.style === 'text';
+  const foe = showVitals && !writes && !options.off.includes('opponent') ? combat : null;
+  // The fight your text writes, or the opponent item, names the mob, so
+  // a target on it adds nothing.
+  const named = writes ? (text?.fight ? combat : null) : foe;
+  const ownTarget = target && !(named && sameMob(target, named.name)) ? target : null;
+  const rows =
+    showVitals && !writes && vitals
+      ? vitalRows(vitals, vitalsOn(options.order, options.off), options)
+      : [];
   return (
     <>
-      {showVitals &&
-        vitals &&
-        VITAL_ROWS.map(({ key, label, max }) => (
-          <span key={key}>
-            {label}
-            {vitals.hidden ? (
-              <span className={toneClass('hidden')}>{hiddenVital(options.values)}</span>
-            ) : (
-              <span
-                className={toneClass(
-                  vitalTone(vitals[key], vitals[max], vitals.low[key], options.warn_thirds),
-                )}
-              >
-                {formatVital(options.values, vitals[key], vitals[max])}
-              </span>
-            )}
-          </span>
-        ))}
-      {target && (
+      {writes && text && text.pieces.length > 0 && (
+        <span className="shell-status-text" style={{ color: text.env.fg }}>
+          {text.pieces.map((cells, i) => (
+            <span key={i} className="shell-status-text-piece">
+              <TextRuns cells={cells} env={text.env} />
+            </span>
+          ))}
+        </span>
+      )}
+      {rows.map((row) => (
+        <span key={row.key}>
+          {VITAL_LABELS[row.key]}
+          <span className={toneClass(row.tone)}>{row.value}</span>
+        </span>
+      ))}
+      {foe && <FoeItem combat={foe} />}
+      {ownTarget && (
         <span className="shell-status-target">
-          Target<span className="shell-status-value">{target}</span>
-          {targetPct !== null && (
-            <span className="shell-status-value is-warn">{`${targetPct}%`}</span>
-          )}
+          Target<span className="shell-status-value">{ownTarget}</span>
         </span>
       )}
     </>
+  );
+}
+
+/** Your opponent's name, then its health in the warn tone, or a quiet
+ *  `?` while the game withholds it. The name gives way first. */
+function FoeItem({ combat }: { combat: CombatOpponent }) {
+  const health = opponentHealth(combat);
+  return (
+    <span className="shell-status-foe">
+      <span className="shell-status-name">{combat.name}</span>
+      <span className={toneClass(health.hidden ? 'hidden' : 'warn')}>{health.value}</span>
+    </span>
   );
 }
 

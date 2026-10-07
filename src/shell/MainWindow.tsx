@@ -61,6 +61,7 @@ import {
   useSessions,
 } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
+import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
@@ -111,6 +112,10 @@ function MainWindow() {
   // (Q17) or the window grows too narrow to hold it (board 8).
   const sessions = useSessions();
   const panelOpen = panelLayout?.panel_open ?? true;
+  // The status line carries your vitals with the panel hidden, or with
+  // Show your vitals in on Status line.
+  const vitalsPlace = useVitalsOptions().place;
+  const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
   const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen);
   const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
@@ -479,6 +484,12 @@ function MainWindow() {
     brightBold,
     blinkText,
   } = useUiConfigFollow({ onThemesChanged: themesChanged });
+  // The terminal settings the Text style of your vitals draws with, in
+  // the footer or the status line.
+  const textColors = useMemo(
+    () => ({ themeTerminalColors, brightBold }),
+    [themeTerminalColors, brightBold],
+  );
 
   // Keep the native surface under the page in step with this window.
   useNativeSurfaceBridge({
@@ -707,14 +718,14 @@ function MainWindow() {
       }
       terminal={terminalAreaElement}
       input={inputElement}
-      statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
-      panel={
-        <PanelHost
-          promptShow={promptShow}
-          textSize={panelTextPx}
-          textColors={{ themeTerminalColors, brightBold }}
+      statusLine={
+        <StatusLine
+          connected={connection.live}
+          showVitals={lineShowsVitals}
+          textColors={textColors}
         />
       }
+      panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
       <UpdateNotice />
       <Toasts />

@@ -74,6 +74,17 @@ describe('PanelHost', () => {
     expect(drawsVitals({ ...PINNED, promptsOff: true }, true)).toBe(true);
   });
 
+  it('draws no footer with your vitals in the status line, so the panes reach the foot', () => {
+    for (const hide of [true, false]) {
+      options = { ...DEFAULT_VITALS_OPTIONS, place: 'status', hide_when_pinned: hide };
+      for (const show of [PINNED, null]) {
+        const html = renderToStaticMarkup(<PanelHost promptShow={show} />);
+        expect(html).not.toContain('panel-vitals');
+        expect(html).not.toContain('panel-opponent');
+      }
+    }
+  });
+
   it('hands your panel size to every pane and the vitals', () => {
     options = DEFAULT_VITALS_OPTIONS;
     // The main window writes the size on the root for panel.css, so the

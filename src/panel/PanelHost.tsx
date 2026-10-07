@@ -10,7 +10,7 @@ import {
 import { PANE_TYPES, setWeights, type PaneType } from './paneLayout';
 import type { PromptShowState } from '../ipc/prompt';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { panelShowsVitals } from './vitalsView';
+import { panelVitals } from './vitalsView';
 import { AffectsPane } from './affects/AffectsPane';
 import { ChatPane } from './chat/ChatPane';
 import { GroupPane } from './group/GroupPane';
@@ -29,9 +29,11 @@ import type { TextColors } from './VitalsText';
 // the title band down, then the vitals pinned at the bottom. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room
-// (see panelShowsVitals), all but your opponent's row in a fight. The lines
-// between panes are handles you drag to share the space. The shell
-// owns the panel's column, its left edge drag, and its label.
+// (see panelVitals), all but your opponent's row in a fight. With Show
+// your vitals in on Status line the footer goes and the panes reach the
+// window's foot. The lines between panes are handles you drag to share
+// the space. The shell owns the panel's column, its left edge drag, and
+// its label.
 //
 // Every pane renders as a flat, absolutely placed sibling keyed by its
 // pane type, which the tree holds at most once. Splitting, closing, or
@@ -79,7 +81,7 @@ export function PanelHost({
 }) {
   const textSize = paneTextSize(size);
   const layout = usePanelLayout();
-  const { hide_when_pinned: hideWhenPinned } = useVitalsOptions();
+  const footer = panelVitals(promptShow, useVitalsOptions());
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -141,11 +143,7 @@ export function PanelHost({
             </p>
           )}
         </div>
-        {panelShowsVitals(promptShow, hideWhenPinned) ? (
-          <VitalsFooter textColors={textColors} />
-        ) : (
-          <VitalsFooter opponentOnly textColors={textColors} />
-        )}
+        {footer && <VitalsFooter opponentOnly={footer === 'opponent'} textColors={textColors} />}
       </div>
     </PaneTextSizeContext.Provider>
   );
