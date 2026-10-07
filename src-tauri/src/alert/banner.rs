@@ -43,6 +43,8 @@ impl Banner {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Permission {
     Granted,
+    /// Linux always allows banners, so only macOS and Windows deny.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     Denied,
     /// Vosh has not asked yet, so the next ask shows the system's
     /// question. Only macOS asks.
@@ -50,11 +52,14 @@ pub(crate) enum Permission {
     NotAsked,
     /// This build cannot post banners, such as a dev build with no
     /// bundle on macOS or a Windows Vosh that is not installed.
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     Unavailable,
 }
 
 /// `vosh://session-selected`: Vosh selected a session itself, as a click
-/// on a banner does, so every window follows.
+/// on a banner does, so every window follows. Linux banners take no
+/// click, so only macOS and Windows send it.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SessionSelected {
     pub(crate) session: SessionId,
@@ -315,6 +320,7 @@ pub(crate) fn open_settings() -> Result<(), String> {
 
 /// Select `session` and bring the main window to the front, as a click
 /// on its banner does. Every window hears the selection.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 pub(crate) fn show_session<R: tauri::Runtime>(app: &AppHandle<R>, session: SessionId) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
