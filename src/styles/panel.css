@@ -1049,6 +1049,124 @@
   margin-top: 4px;
 }
 
+/* The styles of the More Vitals Styles review. Each mark rests in the
+   secondary tone, as Gauges and Pips do, or your color, and each vital
+   carries mixes of it: --vital-soft for an empty unit, as an unlit Pips
+   disc is, and --vital-rim for the glass of Vials and Orbs. Your
+   opponent draws its name and health on one line across the footer and
+   the style's own mark under them in warn, 10 above your vitals or 10
+   under them. */
+.vitals-drawn {
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-drawn .vitals-tone {
+  --vital-soft: color-mix(in oklab, var(--vital-mark) 20%, transparent);
+  --vital-rim: color-mix(in oklab, var(--vital-mark) 55%, transparent);
+}
+
+.vitals-drawn .vitals-marks {
+  padding: 0;
+}
+
+.vitals-foe.is-top {
+  margin-bottom: round(10px * var(--mud-scale), 1px);
+}
+
+.vitals-foe.is-bottom {
+  margin-top: round(10px * var(--mud-scale), 1px);
+}
+
+.vitals-foe-line {
+  display: flex;
+  align-items: center;
+  height: var(--mud-line);
+  min-width: 0;
+}
+
+.vitals-foe-line .vitals-mark-label {
+  flex: 1 1 auto;
+}
+
+.vitals-foe-line .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-foe-mark {
+  margin-top: round(4px * var(--mud-scale), 1px);
+}
+
+/* Bands. Stephen Few's bullet graph laid flat under each label and
+   value: two quiet bands under a quarter and under two thirds, a 4 px
+   bar through the middle, and in a fight a 2 px tick where the vital
+   stood as the fight began. */
+.vitals-band + .vitals-band {
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-band-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--mud-line);
+}
+
+.vitals-band-text .vitals-mark-value {
+  margin-left: 8px;
+}
+
+.vitals-band-graph {
+  position: relative;
+  height: 8px;
+  margin-top: round(3px * var(--mud-scale), 1px);
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--text) 5%, transparent);
+}
+
+.vitals-band-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-band-zone.is-low {
+  left: 0;
+  width: 25%;
+  background: color-mix(in oklab, var(--text) 17%, transparent);
+}
+
+.vitals-band-zone.is-mid {
+  left: 25%;
+  width: 42%;
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+}
+
+.vitals-band-bar {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 4px;
+  background: var(--vital-mark);
+}
+
+.vitals-band-tick {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 8px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.vitals-band-tick.is-end {
+  margin-left: -2px;
+}
+
 /* Text. Your vitals text in the game face at your panel size, on the
    footer's 18 and 12 px sides and chat's line, each cell in the color
    VitalsText.tsx gives it. A row with %{right} sets its right part at

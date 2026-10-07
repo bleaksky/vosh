@@ -111,7 +111,7 @@ describe('vitals menu', () => {
       values: 'percent',
     };
     const rows = styleRows(options);
-    expect(labels(rows)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Text']);
+    expect(labels(rows)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Bands', 'Text']);
     expect(rows.filter((row) => isValidElement(row.trailing)).map((row) => row.children)).toEqual([
       'Gauges',
     ]);

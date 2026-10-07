@@ -71,10 +71,10 @@ const names = (html: string) =>
   );
 
 describe('the Style gallery', () => {
-  it('draws six tiles in the board order, named under each', () => {
+  it('draws a tile for each style in the board order, named under each', () => {
     const html = draw();
     expect(radios(html).map((r) => r.split(' ')[0])).toEqual([...VITALS_STYLES]);
-    expect(names(html)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Text']);
+    expect(names(html)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Bands', 'Text']);
     expect(html).toContain('data-st-anchor="style"');
     expect(html).toContain('<legend class="st-visually-hidden">Style</legend>');
   });
@@ -88,6 +88,7 @@ describe('the Style gallery', () => {
       'ledger',
       'gauges checked',
       'pips',
+      'bands',
       'text',
     ]);
   });
@@ -100,6 +101,7 @@ describe('the Style gallery', () => {
       'Ledger',
       'Gauges',
       'Pips',
+      'Bands',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');

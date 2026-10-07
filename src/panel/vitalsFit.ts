@@ -14,7 +14,8 @@ export type VitalsFit =
   | { style: 'line'; fit: VitalsLineFit }
   | { style: 'ledger'; fit: LedgerFit }
   | { style: 'gauges'; fit: GaugesFit }
-  | { style: 'pips'; fit: PipsFit };
+  | { style: 'pips'; fit: PipsFit }
+  | { style: 'bands' };
 
 /** How `style` fits a footer `width` px wide at panel size `size`.
  *  The gallery in Settings fits its tiles with it too. */

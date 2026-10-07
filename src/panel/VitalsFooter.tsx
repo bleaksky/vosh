@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
 import type { VitalsOptions } from '../ipc/uiConfig';
-import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
+import { useCombat, useFight, type CombatOpponent, type Fight } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
@@ -33,6 +33,8 @@ import { ledgerHeight, type MeasureText } from './vitalsLedgerFit';
 import { VitalsLedger } from './VitalsLedger';
 import { VitalsGauges } from './VitalsGauges';
 import { VitalsPips } from './VitalsPips';
+import { VitalsBands } from './VitalsBands';
+import { bandsHeight } from './vitalsDrawnFit';
 import { marksHeight } from './vitalsMarksFit';
 import { VitalsText, type TextColors } from './VitalsText';
 import { vitalsFitOf, type VitalsFit } from './vitalsFit';
@@ -83,7 +85,8 @@ import { vitalsFitOf, type VitalsFit } from './vitalsFit';
 // (VitalsLedger.tsx). Meter sets the line under each column there.
 // Gauges and Pips draw a pill or discs between each label and value
 // (VitalsGauges.tsx, VitalsPips.tsx), their own marks, so Meter goes
-// quiet for them.
+// quiet for them. So do the styles of the More Vitals Styles review,
+// Bands (VitalsBands.tsx), which stands a tick where a fight began.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
  *  prompt hides your vitals. `textColors` are the terminal settings the
@@ -94,6 +97,7 @@ export function VitalsFooter({
 }: { opponentOnly?: boolean; textColors?: TextColors | undefined } = {}) {
   const vitals = useVitals();
   const combat = useCombat();
+  const fight = useFight();
   const options = useVitalsOptions();
   const theme = useActiveTheme();
   const palette = usePlayPalette();
@@ -136,6 +140,7 @@ export function VitalsFooter({
       sectionRef={sectionRef}
       vitals={vitals}
       combat={combat}
+      fight={fight}
       fit={fit}
       options={options}
       inks={inks}
@@ -150,6 +155,8 @@ const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: fal
 export interface VitalsBlockProps {
   vitals: Vitals | null;
   combat: CombatOpponent | null;
+  /** The fight so far, for the tick Bands stands where it began. */
+  fight?: Fight | null;
   /** The style the footer draws and how it fits the panel. */
   fit: VitalsFit;
   options: VitalsOptions;
@@ -166,6 +173,7 @@ export interface VitalsBlockProps {
 export function VitalsBlock({
   vitals,
   combat,
+  fight = null,
   fit,
   options,
   inks = {},
@@ -224,6 +232,25 @@ export function VitalsBlock({
         ) : (
           <VitalsPips {...marked} fit={fit.fit} />
         )}
+      </section>
+    );
+  }
+  if (fit.style === 'bands') {
+    return (
+      <section
+        ref={sectionRef}
+        className="panel-vitals panel-vitals-marks"
+        style={waitingStyle(waiting ? bandsHeight(size, mine) : 0)}
+        aria-label={label}
+      >
+        <VitalsBands
+          rows={rows}
+          waiting={waiting}
+          combat={foe}
+          place={options.opponent}
+          inks={inks}
+          fight={fight}
+        />
       </section>
     );
   }

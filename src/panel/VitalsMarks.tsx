@@ -60,7 +60,7 @@ export function VitalsMarks({
 }
 
 /** A value over its widest form, which holds the column. */
-function MarkValue({ value, widest }: { value: string; widest: string }) {
+export function MarkValue({ value, widest }: { value: string; widest: string }) {
   return (
     <span className="vitals-mark-value">
       <span className="vitals-mark-widest" aria-hidden="true">

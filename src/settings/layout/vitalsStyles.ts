@@ -63,6 +63,8 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   gauges:
     'Gauges. Each vital fills a pill between its label and its value, as the Group pane shows your group.',
   pips: 'Pips. Ten discs beside each value light up a tenth at a time, the way the moons light up the status line.',
+  bands:
+    'Bands. Each vital fills a bar over quiet bands that mark low and worn, with a tick where a fight began.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 

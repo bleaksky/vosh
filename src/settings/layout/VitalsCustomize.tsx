@@ -74,6 +74,7 @@ function meterQuiet(style: VitalsStyle, status: boolean): string | null {
   if (status) return 'The status line draws no meter.';
   if (style === 'gauges') return 'Gauges draw their own pill, so they take no meter.';
   if (style === 'pips') return 'Pips draw their own discs, so they take no meter.';
+  if (style === 'bands') return 'Bands draw their own bars, so they take no meter.';
   return null;
 }
 
