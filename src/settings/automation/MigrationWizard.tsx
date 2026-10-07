@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { type TriggerPattern } from '../../ipc/automation';
+import type { PresetEdit } from '../../ipc/presetEdits';
 import { appQuit } from '../../ipc/windows';
 import {
   migrationAnalyze,
@@ -9,7 +10,8 @@ import {
   type MigrationPlan,
 } from '../../ipc/wizard';
 import { patternSource } from '../../automation/automationTriggers';
-import { PRESETS } from '../../automation/presets';
+import { changesLine } from '../../automation/presetEdits';
+import { PRESETS, presetById } from '../../automation/presets';
 import { presetChanges } from '../../automation/wizardPresets';
 
 /** The id of every preset in the library this build installs from. */
@@ -266,7 +268,7 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
                           </span>
                         </label>
                         <span className="migration-variant-body">
-                          {summarizeVariant(c.kind, v)}
+                          {summarizeVariant(c.kind, c.name, v)}
                         </span>
                       </li>
                     ))}
@@ -397,6 +399,7 @@ function conflictKey(kind: MigrationItemKind, name: string): string {
 
 function summarizeVariant(
   kind: MigrationItemKind,
+  name: string,
   v: { item: { kind: MigrationItemKind; item: Record<string, unknown> } },
 ): string {
   const item = v.item.item;
@@ -409,6 +412,16 @@ function summarizeVariant(
     const first = patterns.length > 0 ? patternSource(patterns[0]) : '';
     return first.length > 80 ? `${first.slice(0, 80)}…` : first;
   }
+  if (kind === 'preset') return versionChanges(name, item as PresetEdit);
   const command = (item.command ?? '') as string;
   return command.length > 80 ? `${command.slice(0, 80)}…` : command;
+}
+
+/** What a version of a preset changed, as the Your changes line of the
+ *  preset's card names it, like `The line color, buff.sanctuary`. */
+function versionChanges(id: string, edit: PresetEdit): string {
+  const preset = presetById(id);
+  const line = preset && changesLine(preset, edit);
+  if (!line) return '';
+  return 'count' in line ? line.count : [...line.colors, ...line.triggers].join(', ');
 }

@@ -15,9 +15,9 @@ import {
 } from '../../automation/automationRecords';
 import { setTriggerGroups, triggerStore } from '../../automation/automationTriggers';
 import {
+  changesLine,
   editColors,
   editsToSave,
-  editSummary,
   flagCount,
   groupsReset,
   hasEdits,
@@ -53,7 +53,6 @@ import { useBannerPermission } from './useBannerPermission';
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 const MACRO_NOUN = { one: 'macro', many: 'macros' };
 const ALERT_NOUN = { one: 'alert', many: 'alerts' };
-const COLOR_NOUN = { one: 'color', many: 'colors' };
 const ALERTS_CATEGORY = 'Alerts';
 
 interface PresetsEditorProps {
@@ -320,28 +319,18 @@ function joined(parts: readonly ReactNode[], between: string): ReactNode {
   ));
 }
 
-/** What Your changes says: each color and trigger you changed, as `The
- *  line color, buff.sanctuary`, each trigger a link, or past two, how
- *  many, as `2 colors and 3 triggers`. Null while you changed nothing. */
+/** What Your changes says, changesLine with each trigger a link. Null
+ *  while you changed nothing. */
 function yourChanges(
   preset: Preset,
   edit: PresetEdit | undefined,
   link: (text: string, to: Omit<TriggersLink, 'seq'>) => ReactNode,
 ): ReactNode {
-  const { colors, triggers } = editSummary(preset, edit);
-  const count = colors.length + triggers.length;
-  if (count === 0) return null;
-  if (count > 2) {
-    return listJoin([
-      ...(colors.length > 0 ? [countPhrase(colors.length, COLOR_NOUN)] : []),
-      ...(triggers.length > 0 ? [countPhrase(triggers.length, TRIGGER_NOUN)] : []),
-    ]);
-  }
+  const line = changesLine(preset, edit);
+  if (!line) return null;
+  if ('count' in line) return line.count;
   return joined(
-    [
-      ...colors.map((key) => `${preset.colors[key].label} color`),
-      ...triggers.map((name) => link(name, { select: name })),
-    ],
+    [...line.colors, ...line.triggers.map((name) => link(name, { select: name }))],
     ', ',
   );
 }

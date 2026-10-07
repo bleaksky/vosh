@@ -31,7 +31,9 @@ import {
   type HighlightPatch,
   type TriggerStyle,
 } from './automationTriggers';
+import { countPhrase } from './automationDraft';
 import { fillColors, presetById, type Preset, type PresetTrigger } from './presets';
+import { listJoin } from '../lib/text';
 import { indexedRgb, toHex } from '../theme/color';
 import type {
   AlertParts,
@@ -44,6 +46,8 @@ import type {
 import type { EditRow, EditValue, PresetEdit } from '../ipc/presetEdits';
 
 const PATTERN = 'pattern:';
+const COLOR_NOUN = { one: 'color', many: 'colors' };
+const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 const ALSO = 'also:';
 
 /** The key of the pattern row whose text the preset holds as `text`. */
@@ -716,6 +720,28 @@ export function editSummary(preset: Preset, edit: PresetEdit | undefined): EditS
     ...edited.filter((n) => !order.includes(n)),
   ];
   return { colors, triggers };
+}
+
+/** What the Your changes line of `preset` says for `edit`: each color
+ *  you changed, as `The line color`, and each trigger you edited by name,
+ *  or past two, how many, as `2 colors and 3 triggers`. */
+export type ChangesLine = { count: string } | { colors: string[]; triggers: string[] };
+
+/** The Your changes line of `preset` for `edit`, the card's and the
+ *  shared catalog wizard's. Null while you changed nothing. */
+export function changesLine(preset: Preset, edit: PresetEdit | undefined): ChangesLine | null {
+  const { colors, triggers } = editSummary(preset, edit);
+  const count = colors.length + triggers.length;
+  if (count === 0) return null;
+  if (count > 2) {
+    return {
+      count: listJoin([
+        ...(colors.length > 0 ? [countPhrase(colors.length, COLOR_NOUN)] : []),
+        ...(triggers.length > 0 ? [countPhrase(triggers.length, TRIGGER_NOUN)] : []),
+      ]),
+    };
+  }
+  return { colors: colors.map((key) => `${preset.colors[key].label} color`), triggers };
 }
 
 /** Whether `edit` holds any edit, the pencil in the list. */
