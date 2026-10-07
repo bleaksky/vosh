@@ -2,7 +2,7 @@ import type { Vital } from '../ipc/uiConfig';
 import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { textPx } from './paneTextSize';
 import { maxOf } from './vitalsView';
-import type { MeasureText } from './vitalsLedgerFit';
+import { FOOTER_INSETS, LEDGER_GAP, type MeasureText } from './vitalsLedgerFit';
 import { markRoom } from './vitalsMarksFit';
 
 // How the styles of the More Vitals Styles review fit the panel and
@@ -80,6 +80,34 @@ export function traceSeries(history: readonly VitalSample[], vital: Vital, now: 
     return max > 0 ? Math.max(0, Math.min(1, values[vital] / max)) : 0;
   });
   return series.length === 0 ? [now / 100] : series;
+}
+
+/** How a column style fits the panel. It keeps its columns at every
+ *  width: in full, without the max, or with a smaller instrument and no
+ *  max (Q24). */
+export type ColumnFit = 'full' | 'bare' | 'narrow';
+
+/** The width of each of `count` columns a footer `width` px wide holds,
+ *  16 apart, as Ledger lays them. */
+export function columnWidth(width: number, count: number): number {
+  return (width - FOOTER_INSETS - LEDGER_GAP * (count - 1)) / Math.max(1, count);
+}
+
+/** A dial's size in full and on a narrow panel. */
+export const DIAL = 60;
+export const DIAL_NARROW = 44;
+
+/** Dials draws each dial at 60 while its column holds one, else at 44
+ *  without the max, which sits in the dial's opening. */
+export function dialsFit(width: number, count: number): ColumnFit {
+  return count === 0 || columnWidth(width, count) >= DIAL ? 'full' : 'narrow';
+}
+
+/** The footer's height for Dials, the 1 px line on top included: the
+ *  caps, 5 under them the dial, between the column pads. */
+export function dialsHeight(size: number, fit: ColumnFit): number {
+  const dial = fit === 'narrow' ? DIAL_NARROW : DIAL;
+  return 1 + textPx(10, size) + textPx(12, size) + textPx(5, size) + dial + textPx(12, size);
 }
 
 /** The full block, the cell Blocks draws for each whole share. */

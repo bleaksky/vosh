@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   blockCells,
   blockRun,
+  columnWidth,
+  dialsFit,
   FOE_LADDER,
   LADDER,
   litSegments,
@@ -64,6 +66,19 @@ describe('Traces', () => {
 
   it('holds 26 for each row while it waits', () => {
     expect(tracesHeight(12, 3)).toBe(1 + 9 + 78 + 11);
+  });
+});
+
+describe('the column styles', () => {
+  it('split the footer into columns 16 apart, between its sides', () => {
+    expect(columnWidth(300, 3)).toBeCloseTo(79.33, 2);
+    expect(columnWidth(200, 3)).toBe(46);
+  });
+
+  it('draw Dials at 60 while a column holds one, else at 44', () => {
+    expect(dialsFit(300, 3)).toBe('full');
+    expect(dialsFit(200, 3)).toBe('narrow');
+    expect(dialsFit(200, 2)).toBe('full');
   });
 });
 

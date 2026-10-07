@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 import type { VitalsOpponent } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { MarkRow, MarkValue } from './VitalsMarks';
-import type { HitViews } from './vitalsHit';
+import { HitGhost } from './HitGhost';
+import { hitFill, type HitView, type HitViews } from './vitalsHit';
 import {
   opponentHealth,
+  toneProps,
   widestOpponentHealth,
   type OpponentHealth,
   type ShownVital,
@@ -90,6 +92,44 @@ export function DrawnVitals({
       {children}
       {place === 'bottom' && foe}
     </div>
+  );
+}
+
+/** The column styles' columns, one for each vital, as Ledger lays
+ *  them. */
+export function Columns({
+  rows,
+  inks,
+  cell,
+}: {
+  rows: readonly ShownVital[];
+  inks: VitalInks;
+  cell: (row: ShownVital) => ReactNode;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="vitals-cols">
+      {rows.map((row) => (
+        <div key={row.key} {...toneProps(row.tone, inks[row.key], 'vitals-col')}>
+          {cell(row)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A 2 px line across the footer at `pct`, with the part Show each hit
+ *  leaves pale, the mark your opponent takes where the style's own
+ *  mark cannot stretch. */
+export function LineMark({ pct, hit }: { pct: number | null; hit: HitView | undefined }) {
+  const { fill, ghost, draining } = hitFill(pct, hit);
+  return (
+    <span className="vitals-line-mark">
+      {fill !== null && ghost !== null && (
+        <HitGhost className="vitals-line-gone" fill={fill} ghost={ghost} draining={draining} />
+      )}
+      {fill !== null && <span className="vitals-line-fill" style={{ width: `${fill}%` }} />}
+    </span>
   );
 }
 

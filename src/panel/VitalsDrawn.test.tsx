@@ -204,6 +204,28 @@ describe('Traces', () => {
   });
 });
 
+describe('Dials', () => {
+  it('fills an arc for each vital with its figure inside and its max at the foot', () => {
+    const html = draw({ style: 'dials', fit: 'full' });
+    expect(html).toContain('panel-vitals panel-vitals-marks is-cols');
+    expect(all(html, /vitals-caps">([^<]+)/g)).toEqual(['Health', 'Mana', 'Moves']);
+    expect(all(html, /vitals-dial-figure">([^<]+)/g)).toEqual(['744', '590', '402']);
+    expect(all(html, /vitals-dial-max">([^<]+)/g)).toEqual(['1038', '870', '521']);
+    expect(
+      all(html, /class="vitals-dial-arc"[^>]*stroke-dasharray:([\d.]+) 200/g).map(Number),
+    ).toEqual([71.68, 67.82, 77.16]);
+    // Your opponent draws a line, since a dial cannot stretch.
+    expect(html).toContain('vitals-line-fill" style="width:54%"');
+  });
+
+  it('draws at 44 without the max on a narrow panel, in Percent its percent', () => {
+    const html = draw({ style: 'dials', fit: 'narrow' }, { values: 'percent' });
+    expect(html).toContain('<svg width="44" height="44"');
+    expect(html).not.toContain('vitals-dial-max');
+    expect(all(html, /vitals-dial-figure">([^<]+)/g)).toEqual(['72%', '68%', '77%']);
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

@@ -294,6 +294,7 @@ export function VitalsBlock({
         hits={hits}
         fight={fight}
         history={history}
+        values={options.values}
       />
     );
   }

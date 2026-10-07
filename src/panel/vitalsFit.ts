@@ -3,7 +3,7 @@ import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 import { ledgerFigure, ledgerFit, type LedgerFit, type MeasureText } from './vitalsLedgerFit';
 import { gaugesFit, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
-import { rowMarkFit, type RowMarkFit } from './vitalsDrawnFit';
+import { dialsFit, rowMarkFit, type ColumnFit, type RowMarkFit } from './vitalsDrawnFit';
 import { opponentHealth, widestOpponentHealth, VITAL_LABELS, type ShownVital } from './vitalsView';
 
 // How each drawn style fits a footer's width, for the footer under the
@@ -17,7 +17,8 @@ export type VitalsFit =
   | { style: 'gauges'; fit: GaugesFit }
   | { style: 'pips'; fit: PipsFit }
   | { style: 'bands' }
-  | { style: RowStyle; fit: RowMarkFit };
+  | { style: RowStyle; fit: RowMarkFit }
+  | { style: 'dials'; fit: ColumnFit };
 
 /** The row styles of the More Vitals Styles review, each vital's mark
  *  between its label and its value, or under both. */
@@ -26,9 +27,9 @@ type RowStyle = (typeof ROW_STYLES)[number];
 
 /** The styles of the More Vitals Styles review, which DrawnSection
  *  draws. */
-export type DrawnFit = Extract<VitalsFit, { style: 'bands' | RowStyle }>;
+export type DrawnFit = Extract<VitalsFit, { style: 'bands' | RowStyle | 'dials' }>;
 
-const DRAWN: readonly string[] = ['bands', ...ROW_STYLES] satisfies DrawnFit['style'][];
+const DRAWN: readonly string[] = ['bands', ...ROW_STYLES, 'dials'] satisfies DrawnFit['style'][];
 
 function isRowStyle(style: string): style is RowStyle {
   return (ROW_STYLES as readonly string[]).includes(style);
@@ -84,5 +85,6 @@ export function vitalsFitOf(
       ),
     };
   }
+  if (style === 'dials') return { style, fit: dialsFit(width, rows.length) };
   return { style };
 }

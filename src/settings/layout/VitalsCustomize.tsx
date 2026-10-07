@@ -77,6 +77,7 @@ const OWN_MARKS: Partial<Record<VitalsStyle, string>> = {
   ladders: 'Ladders draw their own segments, so they take no meter.',
   blocks: 'Blocks draw their own cells, so they take no meter.',
   traces: 'Traces draw their own line, so they take no meter.',
+  dials: 'Dials draw their own arc, so they take no meter.',
 };
 
 /** What Show each hit does. */

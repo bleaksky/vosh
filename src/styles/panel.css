@@ -1363,6 +1363,143 @@
   background: var(--vital-mark);
 }
 
+/* The column styles stand your vitals in columns 16 apart, as Ledger
+   does, each under the pane label caps, on Ledger's pads. Your
+   opponent takes a 2 px line in warn where a style's mark cannot
+   stretch across the footer. */
+.panel-vitals-marks.is-cols {
+  padding: round(10px * var(--mud-scale), 1px) 0 round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 16px;
+}
+
+.vitals-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.vitals-caps {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vital-ink, var(--tertiary));
+}
+
+.vitals-line-mark {
+  position: relative;
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--divider);
+}
+
+.vitals-line-fill,
+.vitals-line-gone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-line-fill {
+  left: 0;
+  background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-line-gone {
+  background: var(--vital-ghost);
+}
+
+/* Dials. A 270 degree arc 60 across and 4 wide on the divider track,
+   the figure inside, the max in the opening at the foot. At 44 the
+   figure takes the text size and the max goes. */
+.vitals-dial {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-dial.is-narrow {
+  width: 44px;
+  height: 44px;
+}
+
+.vitals-dial svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.vitals-dial-track,
+.vitals-dial-arc,
+.vitals-dial-gone {
+  fill: none;
+  stroke-width: 4;
+}
+
+.vitals-dial-track {
+  stroke: var(--divider);
+  stroke-linecap: round;
+}
+
+.vitals-dial-arc {
+  stroke: var(--vital-mark);
+  stroke-linecap: round;
+  transition: stroke-dasharray 160ms ease-out;
+}
+
+.vitals-dial-gone {
+  stroke: var(--vital-ghost);
+}
+
+.vitals-dial-gone.is-draining {
+  transition: stroke-dasharray 400ms linear;
+}
+
+.vitals-dial-figure {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-size: round(14px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--vital-value);
+}
+
+.vitals-dial.is-narrow .vitals-dial-figure {
+  font-size: var(--mud-text);
+}
+
+.vitals-dial-max {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  text-align: center;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--tertiary);
+}
+
 /* Show each hit. The part a hit took holds pale beside the fill, then
    drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
    every fill jumps and the pale part just goes. */
