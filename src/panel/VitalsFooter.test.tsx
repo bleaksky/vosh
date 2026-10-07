@@ -6,7 +6,8 @@ import type { Vitals } from '../stores/gmcp/vitalsStore';
 import panelCss from '../styles/panel.css?raw';
 import { PaneTextSizeContext } from './paneTextSize';
 import type { VitalsLineFit } from './vitalsLine';
-import { VitalsBlock, type VitalsFit } from './VitalsFooter';
+import { VitalsBlock } from './VitalsFooter';
+import type { VitalsFit } from './vitalsFit';
 
 // The stores behind VitalsFooter reach the Tauri bridge. VitalsBlock,
 // under test, draws from plain values and never calls it.

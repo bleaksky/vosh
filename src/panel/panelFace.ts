@@ -109,8 +109,9 @@ export function textWidth(text: string, font: string, faceVersion: number): numb
   const key = `${faceVersion}|${font}|${shape}`;
   const known = widths.get(key);
   if (known !== undefined) return known;
+  if (typeof document === 'undefined') return shape.length * 7;
   measureCanvas ??= document.createElement('canvas');
-  const ctx = measureCanvas.getContext('2d');
+  const ctx = measureCanvas.getContext?.('2d');
   if (!ctx) return shape.length * 7;
   ctx.font = font;
   const width = Math.ceil(ctx.measureText(shape).width);

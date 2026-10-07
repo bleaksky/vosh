@@ -824,11 +824,24 @@ describe('the UI config defaults Rust sends', () => {
 describe('setUiFields', () => {
   const values: Record<string, unknown> = uiFields.fields;
 
+  // The tracked affects have a setter of their own, and the 0.7 style
+  // is read only, as READ_ONLY in the Rust test says.
+  const readOnly = ['tracked_affects', 'vitals_legacy_style'];
+
   it('can send every field Rust has a setter for', () => {
     const keys = Object.keys(normalizeUiConfig({} as RawUiConfig));
-    expect(keys.filter((key) => key !== 'tracked_affects').sort()).toEqual(
+    expect(keys.filter((key) => !readOnly.includes(key)).sort()).toEqual(
       Object.keys(values).sort(),
     );
+  });
+
+  it('reads the style your 0.7 vitals grew into, and nothing it does not know', () => {
+    const read = (style: unknown) =>
+      normalizeUiConfig({ vitals_legacy_style: style } as RawUiConfig).vitals_legacy_style;
+    expect(read('text')).toBe('text');
+    expect(read('line')).toBe('line');
+    expect(read(undefined)).toBeNull();
+    expect(read('ember')).toBeNull();
   });
 
   it('sends each field it names to its setter, for the profile it names', async () => {

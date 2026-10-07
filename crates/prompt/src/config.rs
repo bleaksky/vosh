@@ -592,6 +592,13 @@ mod tests {
     use crate::testkit::designs::JAMES;
 
     #[test]
+    fn the_vitals_text_is_the_one_the_settings_gallery_draws() {
+        // src/ipc/vitals.test.ts holds the page's copy to the same file.
+        let shared = include_str!("../../../fixtures/ui-config/vitals-text.txt");
+        assert_eq!(DEFAULT_VITALS_TEXT, shared);
+    }
+
+    #[test]
     fn the_vitals_text_draws_your_vitals_and_your_opponent_in_a_fight() {
         use crate::render::{render_str, RenderOptions};
         use crate::values::overrides::{Overridden, Overrides, Preview};

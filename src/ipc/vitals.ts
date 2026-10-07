@@ -15,6 +15,15 @@ export interface VitalsSnapshot {
   combat: unknown;
 }
 
+/** Vosh's vitals text, which a profile that sets no vitals_text draws.
+ *  Mirrors DEFAULT_VITALS_TEXT in crates/prompt/src/config.rs, and both
+ *  are held to fixtures/ui-config/vitals-text.txt. */
+export const VOSH_VITALS_TEXT =
+  '%{if:fight}%opponent%{right}%c_yellow%{opponent_hp:pct}%%%c_default%nl%{end}' +
+  '%{c:hp:game}%hp%c_gray/%{maxhp}hp%c_default ' +
+  '%mana%c_gray/%{maxmana}mn%c_default ' +
+  '%move%c_gray/%{maxmove}mv%c_default';
+
 /** Read the last vitals and fight of a session, the selected one when it
  *  names none, so the gallery in Settings draws your numbers as it
  *  opens (Vitals Styles Q17). */

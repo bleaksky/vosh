@@ -557,7 +557,8 @@ The buffer holds a rolling 500 lines, survives closing and reopening the pane, a
 The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.
 
 - Open Settings and choose Layout.
-- Under Vitals, set `Density` to `Rows` for one row per vital, or to `One line` to fit Health, Mana, and Moves on a single row.
+- Under Vitals, pick a style from the gallery. Each tile draws your own vitals in its style, so you see the look before you pick it. `Rows` gives each vital a row, `One line` fits Health, Mana, and Moves on a single row, `Ledger` sets them in columns, `Gauges` fills a pill for each, `Pips` lights ten discs, and `Text` writes them with your prompt's codes. Use the arrow keys to move through the styles.
+- Set `Show your vitals in` to `Status line` to move them under the terminal, and the panes take the room at the foot of the panel.
 - Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
 - Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows.
 - Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.

@@ -136,6 +136,10 @@ fixtures/
              ui_set_fields takes, read by the setter tests in
              src-tauri/src/ipc/ui_config.rs and src/ipc/uiConfig.test.ts.
              Hand written.
+             vitals-text.txt, Vosh's vitals text, which a profile that sets
+             no vitals_text draws, held to DEFAULT_VITALS_TEXT in
+             crates/prompt and to the copy the Settings gallery draws by
+             their tests. Hand written.
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
              TypeScript WordWrapper, so both renderers break lines alike.
 ```
