@@ -225,6 +225,7 @@ fn custom_themes_follow_a_separator() {
 fn menu_state() -> MenuState {
     MenuState {
         connected: true,
+        redialing: false,
         world_name: None,
         panel_open: true,
         split_open: false,
@@ -249,9 +250,21 @@ fn staff_queues_waits_for_the_offer() {
 }
 
 #[test]
+fn disconnect_shows_while_a_redial_runs() {
+    let mut state = menu_state();
+    assert!(shows_disconnect(&state));
+    state.connected = false;
+    assert!(!shows_disconnect(&state));
+    // A try that waits has no link, and Disconnect still ends the tries.
+    state.redialing = true;
+    assert!(shows_disconnect(&state));
+}
+
+#[test]
 fn state_reads_camel_case() {
     let json = r#"{
         "connected": true,
+        "redialing": true,
         "worldName": "The Forsaken Lands",
         "panelOpen": true,
         "splitOpen": false,
@@ -263,6 +276,7 @@ fn state_reads_camel_case() {
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
     assert!(state.connected);
+    assert!(state.redialing);
     assert_eq!(state.world_name.as_deref(), Some("The Forsaken Lands"));
     assert!(state.panel_open);
     assert_eq!(state.panes[0].pane, "map");

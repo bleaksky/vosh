@@ -190,6 +190,7 @@ describe('shared shortcut table', () => {
 describe('buildMenuState', () => {
   const input = (over: Partial<MenuStateInput> = {}): MenuStateInput => ({
     live: false,
+    redialing: false,
     worldName: 'The Forsaken Lands',
     panelOpen: true,
     splitOpen: false,
@@ -247,6 +248,14 @@ describe('buildMenuState', () => {
     ]);
   });
 
+  it('carries a redial, which shows Disconnect while a try waits', () => {
+    expect(buildMenuState(input())).toMatchObject({ connected: false, redialing: false });
+    expect(buildMenuState(input({ redialing: true }))).toMatchObject({
+      connected: false,
+      redialing: true,
+    });
+  });
+
   it('carries how many sessions are open and whether the sidebar shows', () => {
     expect(buildMenuState(input())).toMatchObject({ sessions: 1, sessionsShown: false });
     expect(buildMenuState(input({ sessions: 3, sessionsShown: true }))).toMatchObject({
@@ -270,6 +279,7 @@ describe('setAppMenuState', () => {
   it('sends a snapshot once and skips one the menu already has', () => {
     const state = buildMenuState({
       live: false,
+      redialing: false,
       worldName: null,
       panelOpen: true,
       splitOpen: false,

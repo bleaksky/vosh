@@ -301,6 +301,7 @@ export function useAppCommands({
     setAppMenuState(
       buildMenuState({
         live: connection.live,
+        redialing: connection.redialing,
         worldName: connection.world,
         panelOpen,
         splitOpen: splitOpen || nativeScrolled,
@@ -318,6 +319,7 @@ export function useAppCommands({
     );
   }, [
     connection.live,
+    connection.redialing,
     connection.world,
     panelOpen,
     splitOpen,

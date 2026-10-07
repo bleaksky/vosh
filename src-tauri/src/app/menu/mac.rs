@@ -8,9 +8,9 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tracing::warn;
 
 use super::{
-    accelerator, between_sessions, connect_label, is_check_id, quit_asks, route, staff_listed,
-    theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow, PANE_ROWS, QUIT_ACCELERATOR,
-    SESSION_ROWS,
+    accelerator, between_sessions, connect_label, is_check_id, quit_asks, route, shows_disconnect,
+    staff_listed, theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow, PANE_ROWS,
+    QUIT_ACCELERATOR, SESSION_ROWS,
 };
 use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
 use crate::app::state::SharedState;
@@ -38,7 +38,8 @@ pub(super) struct MenuHandles {
 
 /// What the menu shows now, so a snapshot only touches what changed.
 struct Applied {
-    connected: bool,
+    /// The Session menu ends on Disconnect, see `shows_disconnect`.
+    disconnect: bool,
     connect_label: String,
     staff_listed: bool,
     themes: Vec<MenuTheme>,
@@ -204,7 +205,7 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         panes,
         themes,
         applied: Mutex::new(Applied {
-            connected: false,
+            disconnect: false,
             connect_label: connect_label(None),
             staff_listed: false,
             themes: Vec::new(),
@@ -316,8 +317,9 @@ pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
         log_err(h.connect.set_text(&label), "connect label");
         applied.connect_label = label;
     }
-    if applied.connected != state.connected {
-        if state.connected {
+    let disconnect = shows_disconnect(state);
+    if applied.disconnect != disconnect {
+        if disconnect {
             // Disconnect takes the last row, on its own.
             log_err(h.session.remove(&h.connect), "remove connect");
             log_err(h.session.append(&h.disconnect_sep), "add separator");
@@ -327,7 +329,7 @@ pub(crate) fn apply_state(app: &AppHandle, state: &MenuState) {
             log_err(h.session.remove(&h.disconnect_sep), "remove separator");
             log_err(h.session.prepend(&h.connect), "add connect");
         }
-        applied.connected = state.connected;
+        applied.disconnect = disconnect;
     }
 
     let between = between_sessions(state);
