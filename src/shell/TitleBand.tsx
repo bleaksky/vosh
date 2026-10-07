@@ -246,7 +246,7 @@ function AddPaneMenu({
           key={pane}
           trailing={
             pane === 'chat' && chatOnTell ? (
-              <span className="shell-menu-kbd">starts on tell</span>
+              <span className="shell-menu-kbd">starts on Tell</span>
             ) : undefined
           }
           onSelect={() => onAdd(paneRef(pane))}

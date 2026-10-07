@@ -295,8 +295,10 @@ describe('ChatPane', () => {
   it('names its filter on the select and says what will show here', () => {
     const rest = header({ rest: '1' });
     expect(rest).toContain('aria-label="Channel, Everything else"');
-    expect(rest).toContain('Messages on other channels appear here.');
-    expect(header({ channel: 'tell' })).toContain('aria-label="Channel, tell"');
+    expect(rest).toContain('Messages on every channel show up here as they come in.');
+    const tell = header({ channel: 'tell' });
+    expect(tell).toContain('aria-label="Channel, Tell"');
+    expect(tell).toContain('Tell messages show up here as they come in.');
     expect(header({})).toContain('aria-label="Channel, All"');
   });
 });

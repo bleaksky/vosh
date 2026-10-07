@@ -140,7 +140,7 @@ describe('PanelHost', () => {
       return [...html.matchAll(/class="pane pane-chat" aria-label="([^"]*)"/g)].map((m) => m[1]);
     };
     expect(chatLabels({ channel: 'tell' }, { rest: '1' })).toEqual([
-      'Chat, tell',
+      'Chat, Tell',
       'Chat, Everything else',
     ]);
     expect(chatLabels({ channel: 'tell' })).toEqual(['Chat']);
