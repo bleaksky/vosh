@@ -216,10 +216,22 @@ describe('searchSettingsRows', () => {
       (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
     );
     expect(targets).toEqual([
-      { group: 'layout', section: 'vitals', anchor: 'values' },
-      { group: 'layout', section: 'vitals', anchor: 'meter' },
-      { group: 'layout', section: 'vitals', anchor: 'warn-low' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'values' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
     ]);
+  });
+
+  it('finds Customize vitals by its list, its colors and your opponent', () => {
+    expect(labels('order')[0]).toBe('Vitals and their order');
+    expect(labels('vitals color')[0]).toBe('Vitals and their order');
+    expect(labels('opponent')).toContain('Your opponent');
+    const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
+    expect(order?.target).toEqual({
+      group: 'layout',
+      section: 'customize-vitals',
+      anchor: 'vitals-order',
+    });
   });
 
   it('finds the affects style and marker under Layout', () => {

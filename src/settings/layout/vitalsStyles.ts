@@ -1,12 +1,14 @@
-import type { UiFields, VitalsStyle } from '../../ipc/uiConfig';
-import { VITALS_STYLES } from '../../ipc/uiConfig';
-import type { VitalsSnapshot } from '../../ipc/vitals';
+import type { UiConfig, UiFields, Vital, VitalsStyle } from '../../ipc/uiConfig';
+import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfig';
+import { VOSH_VITALS_TEXT, type VitalsSnapshot } from '../../ipc/vitals';
+import { VITAL_LABELS } from '../../panel/vitalsView';
 import { nextVitals, parseVitalsPacket, type Vitals } from '../../stores/gmcp/vitalsStore';
 
-// What the Style gallery under Settings, Layout, Vitals works out, kept
-// apart from VitalsGallery.tsx for its tests: the numbers its tiles
-// draw, what a pick saves, where the arrow keys move it, the width and
-// scale of a tile, and the caption under the tiles.
+// What the Style gallery under Settings, Layout, Vitals and the
+// Customize vitals section under it work out, kept apart from their
+// components for their tests: the numbers the tiles draw, what a pick
+// saves, where the arrow keys move it, the width and scale of a tile,
+// the caption under the tiles, and when Reset to default wakes.
 
 /** The narrowest a tile scales a footer, as a share of its width. */
 const TILE_MIN_SCALE = 0.75;
@@ -89,4 +91,41 @@ export function tileFit(panel: number, tile: number): { width: number; scale: nu
   if (!(tile > 0)) return { width: panel, scale: 1 };
   const width = Math.min(panel, tile / TILE_MIN_SCALE);
   return { width, scale: Math.min(1, tile / width) };
+}
+
+/** The Customize vitals fields Reset to default puts back. */
+type CustomFields = keyof typeof DEFAULT_VITALS_CUSTOM;
+
+/** Whether anything under Customize vitals differs from what Reset to
+ *  default puts back, every vital on in today's order on Default, your
+ *  opponent on top, Current and max, Line and the warning off. */
+export function customDiffers(config: Pick<UiConfig, CustomFields>): boolean {
+  const d = DEFAULT_VITALS_CUSTOM;
+  return (
+    config.vitals_order.some((vital, i) => vital !== VITALS[i]) ||
+    config.vitals_off.length > 0 ||
+    Object.keys(config.vitals_colors).length > 0 ||
+    config.vitals_opponent !== d.vitals_opponent ||
+    config.vitals_values !== d.vitals_values ||
+    config.vitals_meter !== d.vitals_meter ||
+    config.vitals_warn_thirds !== d.vitals_warn_thirds
+  );
+}
+
+/** Whether your vitals text differs from Vosh's, which Reset to default
+ *  puts back under Text. */
+export function textDiffers(text: string): boolean {
+  return text !== '' && text !== VOSH_VITALS_TEXT;
+}
+
+/** `order` with `vital` moved to place `to`. */
+export function movedTo(order: readonly Vital[], vital: Vital, to: number): Vital[] {
+  const rest = order.filter((v) => v !== vital);
+  return [...rest.slice(0, to), vital, ...rest.slice(to)];
+}
+
+/** What a screen reader hears once a vital lands, like `Moves, moved
+ *  to 1 of 3`. */
+export function movedWords(vital: Vital, to: number, count: number): string {
+  return `${VITAL_LABELS[vital]}, moved to ${to + 1} of ${count}`;
 }

@@ -1077,6 +1077,169 @@
   color: var(--tertiary);
 }
 
+/* Customize vitals (boards 2 to 5 of the Vitals Styles review). The
+   head names the list, 10 over and 4 under. Each vital is a 40 px row:
+   the grip, the name, its color and its switch, 12 apart, with a
+   hairline between rows inset 16. A vital you turned off keeps its row,
+   its name tertiary. */
+.st-block.st-vitals-head {
+  padding: 10px 16px 4px;
+}
+
+.st-vitals-list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-vital {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 6px 16px 6px 10px;
+}
+
+.st-vital + .st-vital::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+
+.st-vital-grip {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 16px;
+  margin-right: -2px;
+  border-radius: var(--r-key);
+  color: var(--tertiary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.st-vital-grip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.st-vital-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-vital.is-off .st-vital-name {
+  color: var(--tertiary);
+}
+
+/* A vital's color: a 22 px swatch on the prompt card's recipe, the
+   color you picked, or a dashed ring while it takes Default. It rests at
+   45 percent while the status line shows your vitals or the vital is
+   off. */
+.st-vital-swatch {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-key);
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px var(--key-ring);
+}
+
+.st-vital-swatch.is-default {
+  background: none;
+  box-shadow: none;
+  outline: 1.25px dashed var(--tertiary);
+  outline-offset: -1.25px;
+}
+
+.st-vital-swatch.is-quiet {
+  opacity: 0.45;
+}
+
+/* A row you lift rises off the card in the selected row color, and the
+   rows round it part to make room. The accent line marks where it
+   lands. */
+.st-vitals-list.is-dragging .st-vital {
+  transition: transform 120ms ease;
+}
+
+.st-vitals-list.is-dragging .st-vital-grip {
+  cursor: grabbing;
+}
+
+.st-vital.is-lifted {
+  z-index: 3;
+  margin: 0 8px;
+  padding-left: 2px;
+  padding-right: 8px;
+  border-radius: var(--r-row);
+  background: var(--selrow);
+  box-shadow: var(--shadow-float);
+  transition: none;
+}
+
+.st-vital.is-lifted::before,
+.st-vital.is-lifted + .st-vital::before {
+  display: none;
+}
+
+.st-vitals-drop {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-vitals-list.is-dragging .st-vital {
+    transition: none;
+  }
+}
+
+/* Under Text: the preview of Settings, Input, Prompt, your text on the
+   panel ground at your panel's width, then where it draws. */
+.st-block.st-vitals-preview {
+  padding-bottom: 16px;
+}
+
+.st-vitals-preview-ground {
+  max-width: 100%;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: var(--r-row);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.st-vitals-preview-ground .panel-vitals-text {
+  border-top: 0;
+}
+
+.st-vitals-preview-meta {
+  margin: 8px 0 0;
+  white-space: normal;
+}
+
 /* Colors under a row, like the base palette and a custom theme's
    slots: labeled color fields in a grid, grouped under list headings. */
 .st-color-block {

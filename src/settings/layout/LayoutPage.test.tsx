@@ -42,17 +42,11 @@ const switches = (html: string) =>
   [...html.matchAll(/<input[^>]*role="switch"[^>]*>/g)].map((m) => m[0].includes('checked=""'));
 
 describe('VitalsSection', () => {
-  it('draws the gallery, then Show your vitals in, the pinned switch, Values, Meter and the warning', () => {
+  it('draws the gallery, then Show your vitals in and the pinned switch', () => {
     const html = draw();
     expect(html.indexOf('data-st-anchor="style"')).toBeLessThan(html.indexOf('st-row-label'));
     const labels = [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(labels).toEqual([
-      'Show your vitals in',
-      'Hide vitals while your prompt is pinned',
-      'Values',
-      'Meter',
-      'Warn before you run low',
-    ]);
+    expect(labels).toEqual(['Show your vitals in', 'Hide vitals while your prompt is pinned']);
     expect(html).not.toContain('Density');
     expect(html).toContain(
       'Status line moves them under the terminal in the line&#x27;s quiet form, and the panes take the footer&#x27;s room.',
@@ -60,11 +54,8 @@ describe('VitalsSection', () => {
     expect(html).toContain(
       'While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out.',
     );
-    expect(html).toContain('Current drops the maximum. Percent matches the Group pane.');
-    expect(html).toContain('Bar is easier to read in a fight. None keeps only the numbers.');
-    expect(html).toContain(
-      'Vitals turn yellow under two thirds and red under one third, like your group&#x27;s health.',
-    );
+    // Values, Meter and the warning sit under Customize vitals.
+    expect(html).not.toContain('Current drops the maximum.');
   });
 
   it('says under Text that only the rows reading your fight stay while your prompt is pinned', () => {
@@ -76,22 +67,16 @@ describe('VitalsSection', () => {
 
   it('presses the defaults, the panel you had before these rows', () => {
     const html = draw();
-    expect(pressed(html)).toEqual(['Panel', 'Current and max', 'Line']);
+    expect(pressed(html)).toEqual(['Panel']);
     // Hiding the vitals under a pinned prompt starts on, as the
-    // recommended choice you can turn off. The warning starts off.
-    expect(switches(html)).toEqual([true, false]);
+    // recommended choice you can turn off.
+    expect(switches(html)).toEqual([true]);
   });
 
   it('shows the saved choices', () => {
-    const html = draw({
-      vitals_place: 'status',
-      vitals_values: 'percent',
-      vitals_meter: 'none',
-      vitals_warn_thirds: true,
-      vitals_hide_when_pinned: false,
-    });
-    expect(pressed(html)).toEqual(['Status line', 'Percent', 'None']);
-    expect(switches(html)).toEqual([false, true]);
+    const html = draw({ vitals_place: 'status', vitals_hide_when_pinned: false });
+    expect(pressed(html)).toEqual(['Status line']);
+    expect(switches(html)).toEqual([false]);
   });
 
   it('saves the place and the pinned switch alone', () => {
@@ -112,7 +97,7 @@ describe('VitalsSection', () => {
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'vitals',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['style', 'place', 'hide-pinned', 'values', 'meter', 'warn-low']);
+    expect(anchors).toEqual(['style', 'place', 'hide-pinned']);
     for (const anchor of anchors) {
       expect(html).toContain(`data-st-anchor="${anchor}"`);
     }
