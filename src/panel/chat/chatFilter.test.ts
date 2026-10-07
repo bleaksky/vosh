@@ -3,6 +3,8 @@ import { parseCommChannel, type ChatLine } from '../../stores/gmcp/chatStore';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
 import { sanitize, type PaneSplit } from '../paneLayout';
 import {
+  channelName,
+  chatEmptyText,
   chatFilterLabel,
   chatFilterOf,
   chatLeaves,
@@ -51,13 +53,69 @@ describe('chatFilterOf', () => {
   });
 
   it('reads as the channel, Everything else, or All', () => {
-    expect(chatFilterLabel({ kind: 'channel', channel: 'tell' })).toBe('tell');
+    expect(chatFilterLabel({ kind: 'channel', channel: 'tell' })).toBe('Tell');
     expect(chatFilterLabel({ kind: 'rest' })).toBe('Everything else');
     expect(chatFilterLabel({ kind: 'all' })).toBe('All');
   });
 });
 
+describe('channelName', () => {
+  it('puts the first letter of the game name up and keeps the rest', () => {
+    expect(channelName('tell')).toBe('Tell');
+    expect(channelName('gtell')).toBe('Gtell');
+    expect(channelName('newbie')).toBe('Newbie');
+    expect(channelName('Tells')).toBe('Tells');
+    expect(channelName('')).toBe('');
+  });
+});
+
+describe('chatEmptyText', () => {
+  it('names the channel a pane shows', () => {
+    expect(chatEmptyText({ kind: 'channel', channel: 'tell' }, new Set())).toBe(
+      'Tell messages show up here as they come in.',
+    );
+  });
+
+  it('names the channels Everything else leaves to their own panes', () => {
+    expect(chatEmptyText({ kind: 'rest' }, new Set())).toBe(
+      'Messages on every channel show up here as they come in.',
+    );
+    expect(chatEmptyText({ kind: 'rest' }, new Set(['tell']))).toBe(
+      'Messages on every channel but Tell show up here as they come in.',
+    );
+    expect(chatEmptyText({ kind: 'rest' }, new Set(['tell', 'gtell', 'say']))).toBe(
+      'Messages on every channel but Gtell, Say and Tell show up here as they come in.',
+    );
+  });
+
+  it('keeps the All line', () => {
+    expect(chatEmptyText({ kind: 'all' }, new Set(['tell']))).toBe(
+      'Chat appears when someone talks on a channel.',
+    );
+  });
+});
+
 describe('ownPaneChannels', () => {
+  it('leaves out a pane on All, which shows no channel on its own', () => {
+    const three: PaneSplit = sanitize({
+      split: 'column',
+      children: [
+        { id: 'chat', ...chat({ rest: '1' }) },
+        { id: 'chat-2', ...chat({ channel: 'tell' }) },
+        { id: 'chat-3', ...chat({}) },
+      ],
+    });
+    expect([...ownPaneChannels(three, 'chat')]).toEqual(['tell']);
+    const withAll: PaneSplit = sanitize({
+      split: 'column',
+      children: [
+        { id: 'chat', ...chat({ rest: '1' }) },
+        { id: 'chat-3', ...chat({}) },
+      ],
+    });
+    expect([...ownPaneChannels(withAll, 'chat')]).toEqual([]);
+  });
+
   it('lists the channels the other Chat panes show on their own', () => {
     expect(chatLeaves(B4).map((l) => l.id)).toEqual(['chat', 'chat-2']);
     expect([...ownPaneChannels(B4, 'chat-2')]).toEqual(['tell']);

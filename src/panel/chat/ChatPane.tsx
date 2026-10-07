@@ -21,6 +21,8 @@ import { chatTime } from '../paneText';
 import { usePaneText } from '../paneTextSize';
 import {
   EVERYTHING_ELSE,
+  channelName,
+  chatEmptyText,
   chatFilterLabel,
   chatFilterOf,
   chatLinesFor,
@@ -119,13 +121,7 @@ export function ChatPane() {
         }}
       >
         {visible.length === 0 ? (
-          <p className="pane-empty">
-            {filter.kind === 'channel'
-              ? `Messages on ${filter.channel} appear here.`
-              : filter.kind === 'rest'
-                ? 'Messages on other channels appear here.'
-                : 'Chat appears when someone talks on a channel.'}
-          </p>
+          <p className="pane-empty">{chatEmptyText(filter, owned)}</p>
         ) : (
           <ChatLog lines={visible} palette={palette} ground={ground} colors={colors} />
         )}
@@ -201,7 +197,7 @@ function ChatMessage({ line, ink }: { line: ChatLine; ink: ChatInk }) {
 }
 
 // The filter menu: All, Everything else, then the channels heard plus
-// the one the pane names, sorted. A channel another Chat pane shows on
+// the one the pane names, sorted, each with a capital first letter. A channel another Chat pane shows on
 // its own says so.
 function ChannelSelect({
   filter,
@@ -278,7 +274,7 @@ function ChannelSelect({
                 ) : null
               }
             >
-              {c}
+              {channelName(c)}
             </MenuItem>
           ))}
         </MenuSurface>
