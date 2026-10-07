@@ -17,8 +17,10 @@ import {
   editColors,
   editsToSave,
   editSummary,
+  flagCount,
   hasEdits,
   withColorEdit,
+  withColorKept,
 } from '../../automation/presetEdits';
 import { runPresetPlan } from '../../automation/presetPlan';
 import { type Preset, PRESET_CATEGORIES, presetById } from '../../automation/presets';
@@ -190,6 +192,7 @@ export function PresetsEditor({
           anchor: presetAnchor(t.id),
           ...(world && preset?.suggest.includes(world) ? { dot: 'suggested' as const } : {}),
           ...(hasEdits(t.edit) ? { edited: true } : {}),
+          ...fixWarn(preset, t.edit),
         };
       },
       keyOf: (t) => t.id,
@@ -265,6 +268,7 @@ export function PresetDetail({
           onColor={(key, value) =>
             update((v) => withEdit(v, withColorEdit(preset, v.edit, key, value)))
           }
+          onKeep={(key) => update((v) => withEdit(v, v.edit && withColorKept(preset, v.edit, key)))}
         />
         {preset.suggest.length > 0 && (
           <Row label="Suggested">
@@ -287,6 +291,16 @@ export function PresetDetail({
       {hasEdits(t.edit) && <ResetToPreset onReset={() => update((v) => withEdit(v, undefined))} />}
     </>
   );
+}
+
+/** The warn ring of a preset a fix changed under your edits, with the
+ *  note a reader hears, on or off (board 4). */
+function fixWarn(preset: Preset | undefined, edit: PresetEdit | undefined): { warn?: string } {
+  const count = preset ? flagCount(preset, edit) : 0;
+  if (count === 0) return {};
+  return {
+    warn: `A fix to this preset changed ${count === 1 ? 'a row' : `${count} rows`} you edited.`,
+  };
 }
 
 /** `parts` with `between` between each two. */

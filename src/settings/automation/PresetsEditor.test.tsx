@@ -429,6 +429,17 @@ async function mountEditor(
           line.textContent +
           '|'.repeat(findAll(line, (el) => hasClass(el, 'st-auto-sample-bar')).length),
       ),
+    /** What a reader hears with the warn ring of the list row named
+     *  `name`, or null while it wears none. */
+    ring: (name: string) => {
+      const row = findAll(
+        container,
+        (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+      )[0];
+      if (!hasClass(row, 'is-warn')) return null;
+      const id = row.getAttribute('aria-describedby');
+      return findAll(container, (el) => el.getAttribute('id') === id)[0]?.textContent ?? '';
+    },
     /** The labels of the card's rows, in order. */
     rows: () => findAll(card(), isLabel).map((el) => el.textContent),
     value: (label: string) => {
@@ -732,6 +743,53 @@ describe('the Colors block', () => {
     });
     // The fake keeps no edits, so the plan builds the preset as it ships.
     expect(sentCalls()[1][0]).toBe('presets_install');
+  });
+
+  // Board 4: a fix to the line color Orla changed.
+  const FIXED = {
+    disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg:172', seen: 'fg:178' } } },
+  };
+
+  it('rings a swatch a fix changed, and the preset in the list, on or off', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', null, FIXED);
+    expect(editor.ring('Disarms and fading buffs')).toBe(
+      'A fix to this preset changed a row you edited.',
+    );
+    expect(editor.ring('Damage to you')).toBeNull();
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.swatches()).toEqual([
+      'The ## mark (Theme red)',
+      'The line #c3a6ff The preset now has 178Take the fixKeep mine',
+    ]);
+    const cells = findAll(doc.body, (el) => hasClass(el, 'st-color-cell'));
+    expect(cells.map((el) => hasClass(el, 'is-warn'))).toEqual([false, true]);
+  });
+
+  it('keeps your color at Save with the fix as its was', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, FIXED);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Keep mine');
+    expect(editor.swatches()[1]).toBe('The line #c3a6ff Back to 178');
+    expect(editor.ring('Disarms and fading buffs')).toBeNull();
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+
+  it('takes the fix at Save as a row Rust drops', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, FIXED);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Take the fix');
+    expect(editor.swatches()[1]).toBe('The line (178, #d7af00)');
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
   });
 
   it('folds a hex that is the preset color at Save', async () => {

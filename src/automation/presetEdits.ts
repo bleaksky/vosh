@@ -353,7 +353,7 @@ export function changedRows(card: TriggerRecord): Rows {
  *  it. `edits` are your edits as they loaded, so a flagged row keeps its
  *  seen. */
 export function cardEdits(
-  changed: readonly { before: TriggerRecord; after: TriggerRecord }[],
+  changed: readonly { before: TriggerCard; after: TriggerCard }[],
   edits: Readonly<Record<string, PresetEdit>>,
 ): Map<string, PresetEdit> {
   const out = new Map<string, PresetEdit>();
@@ -361,12 +361,16 @@ export function cardEdits(
     const from = libraryTrigger(after);
     if (!from) continue;
     const { preset, trigger } = from;
-    const rows = diff(
-      triggerRows(asPreset(before)),
-      triggerRows(asPreset(after)),
-      triggerRows(trigger),
-      edits[preset.id]?.triggers?.[trigger.name],
-    );
+    const left = triggerRows(asPreset(after));
+    const now = triggerRows(trigger);
+    const held = edits[preset.id]?.triggers?.[trigger.name];
+    const rows = diff(triggerRows(asPreset(before)), left, now, held);
+    // Keep mine sends the row with the preset's value now as its was and
+    // no seen, which clears the flag.
+    for (const key of after.kept ?? []) {
+      if (before.kept?.includes(key) || !held?.[key]) continue;
+      rows[key] = keepMine({ ...held[key], value: left[key] ?? NO_ROW }, nowOf(now, key) ?? NO_ROW);
+    }
     if (Object.keys(rows).length === 0) continue;
     const edit = out.get(preset.id) ?? {};
     out.set(preset.id, { triggers: { ...edit.triggers, [trigger.name]: rows } });
@@ -374,17 +378,78 @@ export function cardEdits(
   return out;
 }
 
-/** Take the fix of a flagged row: it says the preset's value `now`, so
- *  it folds away at Save. */
-export function takeFix(now: EditValue): EditRow {
-  return { value: now, was: now };
-}
-
 /** Keep mine on a flagged row: its `was` moves to the preset's value
  *  `now` and its `seen` clears, so the flag goes and a later fix to the
  *  row asks again. */
 export function keepMine(row: EditRow, now: EditValue): EditRow {
   return { value: row.value, was: now };
+}
+
+/** The rows of `trigger`, a preset trigger as the library builds it,
+ *  that a fix changed while `held`, your edits to it, keeps them yours
+ *  (board 4), each with the preset's value now. */
+export function flaggedRows(
+  trigger: PresetTrigger,
+  held: Readonly<Record<string, EditRow>> | undefined,
+): Rows {
+  const now = triggerRows(trigger);
+  const out: Rows = {};
+  for (const [key, row] of Object.entries(held ?? {})) {
+    const value = nowOf(now, key);
+    if (value !== undefined && hold(key, row, value) === 'flagged') out[key] = value;
+  }
+  return out;
+}
+
+/** The swatches of `preset` that a fix changed while `edit` keeps your
+ *  color, each with the preset's color now. */
+export function flaggedColors(
+  preset: Preset,
+  edit: PresetEdit | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, row] of Object.entries(edit?.colors ?? {})) {
+    const now = preset.colors[key]?.token;
+    if (now !== undefined && hold(key, row, now) === 'flagged') out[key] = now;
+  }
+  return out;
+}
+
+/** How many rows of `preset`, swatches and trigger rows, a fix changed
+ *  while `edit` keeps them yours. */
+export function flagCount(preset: Preset, edit: PresetEdit | undefined): number {
+  let count = Object.keys(flaggedColors(preset, edit)).length;
+  for (const t of preset.triggers) {
+    count += Object.keys(flaggedRows(t, edit?.triggers?.[t.name])).length;
+  }
+  return count;
+}
+
+/** A preset trigger's card in Triggers. `kept` names the flagged rows you
+ *  chose Keep mine on, a change in the page until Save. */
+export type TriggerCard = TriggerRecord & { kept?: string[] };
+
+/** The flagged rows `card` still shows, each with the preset's value
+ *  now: those of `held`, your edits to its trigger as they loaded, less
+ *  the rows you chose on in the page, Keep mine by `kept` and Take the
+ *  fix by holding the preset's value. */
+export function cardFlags(
+  card: TriggerCard,
+  held: Readonly<Record<string, EditRow>> | undefined,
+): Rows {
+  const from = libraryTrigger(card);
+  if (!from || !held) return {};
+  const mine = triggerRows(asPreset(card));
+  const out: Rows = {};
+  for (const [key, now] of Object.entries(flaggedRows(from.trigger, held))) {
+    if (!card.kept?.includes(key) && !same(mine[key] ?? NO_ROW, now)) out[key] = now;
+  }
+  return out;
+}
+
+/** `card` with its row `key` set to `value`. */
+export function withRow(card: TriggerCard, key: string, value: EditValue): TriggerCard {
+  return asRecord(applyRows(asPreset(card), { [key]: value }));
 }
 
 /** The row Rust drops at once, since its value is its was. */
@@ -513,10 +578,27 @@ export function withColorEdit(
   const held = colors[key];
   delete colors[key];
   if (value !== null && value !== token) {
-    colors[key] = { value, was: held?.was ?? token };
+    // A flagged swatch you change again stays flagged until you choose.
+    colors[key] =
+      held?.seen === undefined
+        ? { value, was: held?.was ?? token }
+        : { value, was: held.was, seen: held.seen };
   }
   return tidy({ ...edit, colors });
 }
+
+/** `edit` with Keep mine on its flagged swatch `key`: your color stays,
+ *  and its was moves to the preset's color now. */
+export function withColorKept(preset: Preset, edit: PresetEdit, key: string): PresetEdit {
+  const row = edit.colors?.[key];
+  if (!row) return edit;
+  return { ...edit, colors: { ...edit.colors, [key]: keepMine(row, preset.colors[key].token) } };
+}
+
+/** Whether two rows hold the same value, was and seen. Keep mine
+ *  changes only the was. */
+const sameRow = (a: EditRow, b: EditRow) =>
+  same(a.value, b.value) && same(a.was, b.was) && same(a.seen, b.seen);
 
 /** What Save sends to preset_edits_set for `preset` to turn `before`,
  *  your edits as they loaded, into `after`, the edits the card holds: each
@@ -534,7 +616,7 @@ export function editsToSave(
   for (const key of keys) {
     const was = before?.colors?.[key];
     const row = after?.colors?.[key];
-    if (row && was && same(row.value, was.value)) continue;
+    if (row && was && sameRow(row, was)) continue;
     const token = preset.colors[key]?.token ?? String((row ?? was)!.was);
     const folds =
       !row || (typeof row.value === 'string' && row.value.toLowerCase() === fixedColorHex(token));
@@ -554,7 +636,7 @@ export function editsToSave(
     for (const key of new Set([...Object.keys(from), ...Object.keys(to)])) {
       const was = from[key];
       const row = to[key];
-      if (row && was && same(row.value, was.value)) continue;
+      if (row && was && sameRow(row, was)) continue;
       rows[key] = row ?? dropped(was);
     }
     if (Object.keys(rows).length > 0) triggers[name] = rows;

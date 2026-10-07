@@ -99,6 +99,23 @@ describe('the warn ring in the Automation list', () => {
     expect(noteOf('c')).toBe('Second note.');
   });
 
+  // Presets board 4: a fix that changed a row you edited rings the row
+  // on or off, and its note wins over the prompt note.
+  it('rings a row a fix flagged while it is off too', () => {
+    const fix = 'A fix to Disarms and fading buffs changed Then send, a row you edited.';
+    const html = renderList({
+      sections: buildSections([
+        { ...entry('a', 'disarm.secondary', false), warn: fix },
+        { ...entry('b', 'my-capture', true), warn: fix },
+      ]),
+      warnNotes: new Map([['my-capture', HIDES_PROMPT_NOTE]]),
+    });
+    expect(rowClass(html, 'a')).toBe('st-auto-row is-warn');
+    expect(rowClass(html, 'b')).toBe('st-auto-row is-warn');
+    expect(html).toContain(`>${fix}<`);
+    expect(html).not.toContain('This trigger hides your prompt');
+  });
+
   it('says why a trigger carries it in plain sentences', () => {
     expect(HIDES_PROMPT_NOTE).toMatch(/^This trigger hides your prompt/);
     expect(HIDES_PROMPT_NOTE).not.toMatch(/[;:–—]| - /);

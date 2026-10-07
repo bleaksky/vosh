@@ -322,7 +322,9 @@ export function ItemList({
                     anchor={entry.anchor}
                     dot={entry.dot}
                     edited={entry.edited ?? false}
-                    warnNote={entry.enabled ? warnNotes?.get(entry.name) : undefined}
+                    warnNote={
+                      entry.warn ?? (entry.enabled ? warnNotes?.get(entry.name) : undefined)
+                    }
                     onSelect={onSelect}
                     onFocus={onRowFocus}
                   />

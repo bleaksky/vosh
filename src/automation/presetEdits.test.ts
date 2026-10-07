@@ -5,11 +5,15 @@ import {
   applyRows,
   buildPreset,
   cardEdits,
+  cardFlags,
   changedRows,
   diff,
   editColors,
   editsToSave,
   fixedColorHex,
+  flagCount,
+  flaggedColors,
+  flaggedRows,
   hold,
   keepMine,
   NO_ROW,
@@ -17,9 +21,10 @@ import {
   patternKey,
   presetCard,
   shippedCard,
-  takeFix,
   triggerRows,
   withColorEdit,
+  withColorKept,
+  withRow,
 } from './presetEdits';
 import { withReplaceTemplate } from './automationTriggers';
 import { drawSample } from './presetSample';
@@ -350,12 +355,8 @@ describe('diff', () => {
   });
 });
 
-describe('takeFix and keepMine', () => {
+describe('keepMine', () => {
   const flagged: EditRow = { value: '', was: WIELD, seen: DUAL };
-
-  it('take the fix as a row that folds', () => {
-    expect(takeFix(DUAL)).toEqual({ value: DUAL, was: DUAL });
-  });
 
   it('keep mine by moving was and clearing seen', () => {
     const kept = keepMine(flagged, DUAL);
@@ -400,6 +401,27 @@ describe('the swatches of the card', () => {
     expect(editsToSave(disarms, sanctuary, undefined)).toEqual({
       colors: { line: { value: 'fg:178', was: 'fg:178' } },
       triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } },
+    });
+  });
+
+  // Board 4: a fix that changes a swatch you changed.
+  it('flags a swatch a fix changed, and Keep mine or Take the fix clears it', () => {
+    const flagged: PresetEdit = {
+      colors: { line: { value: '#c3a6ff', was: 'fg:172', seen: 'fg:178' } },
+    };
+    expect(flaggedColors(disarms, flagged)).toEqual({ line: 'fg:178' });
+    expect(flaggedColors(disarms, lilac)).toEqual({});
+    const kept = withColorKept(disarms, flagged, 'line');
+    expect(kept).toEqual({ colors: { line: { value: '#c3a6ff', was: 'fg:178' } } });
+    expect(flaggedColors(disarms, kept)).toEqual({});
+    expect(editsToSave(disarms, flagged, kept)).toEqual(kept);
+    // Take the fix clears the swatch, which Rust drops.
+    expect(editsToSave(disarms, flagged, withColorEdit(disarms, flagged, 'line', null))).toEqual({
+      colors: { line: { value: 'fg:178', was: 'fg:178' } },
+    });
+    // A new color keeps the flag until you choose.
+    expect(withColorEdit(disarms, flagged, 'line', '#ffffff')).toEqual({
+      colors: { line: { value: '#ffffff', was: 'fg:172', seen: 'fg:178' } },
     });
   });
 
@@ -509,6 +531,52 @@ describe('the card of a preset trigger', () => {
         template: colorize('{#c3a6ff}Your shield of spell turning collapses.{reset}'),
       },
     ]);
+  });
+
+  // Board 4: Orla cleared Then send before the dual fix.
+  const cleared: PresetEdit = {
+    triggers: { [SECONDARY]: { send: { value: '', was: WIELD, seen: DUAL } } },
+  };
+
+  it('flags the row a fix changed under your edit, with the preset value now', () => {
+    expect(flaggedRows(trigger(disarms, SECONDARY), cleared.triggers![SECONDARY])).toEqual({
+      send: DUAL,
+    });
+    expect(flagCount(disarms, cleared)).toBe(1);
+    expect(flagCount(disarms, undefined)).toBe(0);
+    const card = presetCard(stored(SECONDARY, cleared), cleared)!;
+    expect(cardFlags(card, cleared.triggers![SECONDARY])).toEqual({ send: DUAL });
+    expect(cardFlags(card, undefined)).toEqual({});
+  });
+
+  it('drops the flag once the page takes the fix or keeps yours', () => {
+    const held = cleared.triggers![SECONDARY];
+    const card = presetCard(stored(SECONDARY, cleared), cleared)!;
+    expect(cardFlags(withRow(card, 'send', DUAL), held)).toEqual({});
+    expect(cardFlags({ ...card, kept: ['send'] }, held)).toEqual({});
+  });
+
+  it('sends Keep mine with the preset value now as its was and no seen', () => {
+    const before = presetCard(stored(SECONDARY, cleared), cleared)!;
+    const sent = cardEdits([{ before, after: { ...before, kept: ['send'] } }], {
+      disarm_buff_fade: cleared,
+    });
+    expect(sent.get('disarm_buff_fade')).toEqual({
+      triggers: { [SECONDARY]: { send: { value: '', was: DUAL } } },
+    });
+    // Keep mine and a new value of your own send that value.
+    const typed = { ...withRow(before, 'send', 'get 1.'), kept: ['send'] };
+    expect(
+      cardEdits([{ before, after: typed }], { disarm_buff_fade: cleared }).get('disarm_buff_fade'),
+    ).toEqual({ triggers: { [SECONDARY]: { send: { value: 'get 1.', was: DUAL } } } });
+  });
+
+  it('sends Take the fix as a row Rust drops', () => {
+    const before = presetCard(stored(SECONDARY, cleared), cleared)!;
+    const after = withRow(before, 'send', DUAL);
+    expect(
+      cardEdits([{ before, after }], { disarm_buff_fade: cleared }).get('disarm_buff_fade'),
+    ).toEqual({ triggers: { [SECONDARY]: { send: { value: DUAL, was: DUAL, seen: DUAL } } } });
   });
 
   it('skips a trigger the library does not build', () => {

@@ -31,6 +31,9 @@ export interface ListEntry {
   /** Holds your edits, as a preset you changed. The row wears a pencil
    *  beside its dot. */
   edited?: boolean;
+  /** Why the row wears the warn ring, on or off, as a fix that changed a
+   *  row you edited. A reader hears it with the row. */
+  warn?: string;
   /** Deep link and search anchor on the row, like `presets:herb_labels`. */
   anchor?: string;
 }

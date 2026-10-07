@@ -2272,6 +2272,39 @@
   line-height: 15px;
 }
 
+/* A row a preset fix changed under your edit (Presets board 4): what
+   the preset now has in warn, then Take the fix and Keep mine on the
+   24 px chip recipe. */
+.st-auto-fix {
+  display: block;
+}
+
+.st-auto-fix-line {
+  color: var(--warn-text);
+}
+
+/* A swatch's new color keeps its chip beside its name. */
+.st-auto-fix-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.st-auto-fix-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* A swatch a preset fix changed under your color wears the warn ring. */
+.st-color-cell.is-warn .st-color,
+.st-color-cell.is-warn .st-select-input {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
 .st-auto-link.is-back {
   display: inline-flex;
   align-items: center;

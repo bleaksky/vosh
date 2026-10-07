@@ -342,6 +342,20 @@ async function mountEditor(
      *  whole detail. */
     note: () =>
       findAll(container, (el) => el.getAttribute('class') === 'st-card-note')[0]?.textContent,
+    warnNote: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-card-note is-warn')[0]
+        ?.textContent,
+    /** Whether the list row named `name` wears the warn ring, and what a
+     *  reader hears with it. */
+    ring: (name: string) => {
+      const row = findAll(
+        container,
+        (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+      )[0];
+      if (!(row?.getAttribute('class') ?? '').includes('is-warn')) return null;
+      const id = row.getAttribute('aria-describedby');
+      return findAll(container, (el) => el.getAttribute('id') === id)[0]?.textContent ?? '';
+    },
     listRow: (name: string) =>
       findAll(container, (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name))[0]
         ?.textContent,
@@ -640,5 +654,104 @@ describe('editing a preset trigger', () => {
         { triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } } },
       ],
     ]);
+  });
+});
+
+// Presets board 4: a fix that lands on a row you edited. Your edit stays,
+// the row says what the preset now has, and Take the fix and Keep mine
+// wait for Save.
+describe('a fix to a row you edited', () => {
+  const DUAL = 'get 1.;dual 1.';
+  const SECONDARY = DISARMS.find((t) => t.name === 'disarm.secondary')!;
+  /** The store's copy, built with your Then send cleared. */
+  const cleared = {
+    ...SECONDARY,
+    actions: SECONDARY.actions.filter((a) => a.kind !== 'send'),
+  };
+  const FLAGGED: PresetEdits = {
+    disarm_buff_fade: {
+      triggers: {
+        'disarm.secondary': { send: { value: '', was: 'get 1.;wield 1.', seen: DUAL } },
+      },
+    },
+  };
+
+  it('flags the row, the note and the list row', async () => {
+    presetEdits = FLAGGED;
+    const editor = await mountEditor([VISITOR, cleared]);
+    await editor.pick('disarm.secondary');
+    expect(editor.warnNote()).toBe(
+      'A fix to Disarms and fading buffs changed Then send, a row you edited.',
+    );
+    expect(editor.note()).toBeUndefined();
+    expect(editor.row('Then send')).toBe(
+      `Then sendThe preset now sends ${DUAL}Take the fixKeep mine`,
+    );
+    expect(editor.ring('disarm.secondary')).toBe(
+      'A fix to Disarms and fading buffs changed Then send, a row you edited.',
+    );
+    expect(editor.ring('visitor')).toBeNull();
+  });
+
+  it('rings a trigger that is off as well', async () => {
+    presetEdits = {
+      disarm_buff_fade: {
+        triggers: {
+          'disarm.secondary': {
+            ...FLAGGED.disarm_buff_fade.triggers!['disarm.secondary'],
+            enabled: { value: false, was: true },
+          },
+        },
+      },
+    };
+    const editor = await mountEditor([{ ...cleared, enabled: false }]);
+    expect(editor.ring('disarm.secondary')).toContain('changed Then send');
+  });
+
+  it('takes the fix at Save, so the row folds away', async () => {
+    presetEdits = FLAGGED;
+    const editor = await mountEditor([cleared]);
+    await editor.pick('disarm.secondary');
+    await editor.click('Take the fix');
+    expect(editor.row('Then send')).toBe(`Then send${DUAL}`);
+    expect(editor.warnNote()).toBeUndefined();
+    expect(editor.ring('disarm.secondary')).toBeNull();
+    expect(editor.disabled('Reset to preset')).toBe(true);
+    await editor.click('Save');
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        { triggers: { 'disarm.secondary': { send: { value: DUAL, was: DUAL, seen: DUAL } } } },
+      ],
+    ]);
+  });
+
+  it('keeps yours at Save with the fix as its was and no seen', async () => {
+    presetEdits = FLAGGED;
+    const editor = await mountEditor([cleared]);
+    await editor.pick('disarm.secondary');
+    await editor.click('Keep mine');
+    expect(editor.row('Then send')).toBe(`Then sendChanged. The preset has ${DUAL}.`);
+    expect(editor.note()).toContain('From Disarms and fading buffs.');
+    expect(editor.status()).toBe('Unsaved changes');
+    await editor.click('Save');
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        { triggers: { 'disarm.secondary': { send: { value: '', was: DUAL } } } },
+      ],
+    ]);
+    // The store keeps its copy. The plan builds it again.
+    expect(JSON.parse(stored)).toEqual([JSON.parse(JSON.stringify(cleared))]);
+  });
+
+  it('puts the flag back with Discard', async () => {
+    presetEdits = FLAGGED;
+    const editor = await mountEditor([cleared]);
+    await editor.pick('disarm.secondary');
+    await editor.click('Keep mine');
+    await editor.click('Discard');
+    expect(editor.row('Then send')).toContain('Take the fixKeep mine');
+    expect(editor.ring('disarm.secondary')).not.toBeNull();
   });
 });
