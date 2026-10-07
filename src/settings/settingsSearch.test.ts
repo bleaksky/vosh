@@ -226,6 +226,9 @@ describe('searchSettingsRows', () => {
     expect(labels('order')[0]).toBe('Vitals and their order');
     expect(labels('vitals color')[0]).toBe('Vitals and their order');
     expect(labels('opponent')).toContain('Your opponent');
+    expect(labels('vitals colors')).toEqual(['Vitals and their order']);
+    expect(labels('ledger')).toEqual(['Style']);
+    expect(labels('vitals text')).toContain('Style');
     const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
     expect(order?.target).toEqual({
       group: 'layout',

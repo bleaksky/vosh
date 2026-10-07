@@ -260,7 +260,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     label: 'Vitals and their order',
     description: 'Drag a vital to move it, give it a color, or turn it off.',
     keywords:
-      'customize vitals order drag move reorder color colour swatch hide show off reset health mana moves',
+      'customize vitals order drag move reorder colors colours swatch hide show off reset health mana moves',
     target: at('layout', 'customize-vitals', 'vitals-order'),
   },
   {
