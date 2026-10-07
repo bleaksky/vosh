@@ -1,6 +1,6 @@
 import type { UiConfig, Vital, VitalsStyle } from '../../ipc/uiConfig';
 import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfig';
-import { VOSH_VITALS_TEXT, type VitalsSnapshot } from '../../ipc/vitals';
+import { startVitalsText, type VitalsSnapshot } from '../../ipc/vitals';
 import { VITAL_LABELS } from '../../panel/vitalsView';
 import { nextVitals, parseVitalsPacket, type Vitals } from '../../stores/gmcp/vitalsStore';
 
@@ -103,10 +103,11 @@ export function customDiffers(config: Pick<UiConfig, CustomFields>): boolean {
   );
 }
 
-/** Whether your vitals text differs from Vosh's, which Reset to default
- *  puts back under Text. */
-export function textDiffers(text: string): boolean {
-  return text !== '' && text !== VOSH_VITALS_TEXT;
+/** Whether your vitals text differs from the one Text starts from,
+ *  your 0.7 template `legacy` or Vosh's, which Reset to default puts
+ *  back under Text. */
+export function textDiffers(text: string, legacy: string | null): boolean {
+  return text !== '' && text !== startVitalsText(legacy);
 }
 
 /** `order` with `vital` moved to place `to`. */

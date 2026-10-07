@@ -67,7 +67,7 @@ describe('the vitals text card', () => {
   });
 
   it('rests on the parts with Insert value and Presets, and no prompt warning', () => {
-    const table = vitalsTable(MINE, [MINE]);
+    const table = vitalsTable(MINE, [MINE], null);
     const html = renderToStaticMarkup(
       <Starts
         session={1}
@@ -101,7 +101,7 @@ describe('the vitals text Presets', () => {
     vitalsStartRows(table, VOSH_VITALS_TEXT, legacy).rows.map((r) => [r.label, r.checked]);
 
   it("lists Vosh's text, yours, the one before it and your 0.7 text, yours checked", () => {
-    const list = vitalsStartRows(vitalsTable(MINE, [MINE, BEFORE]), VOSH_VITALS_TEXT, LEGACY);
+    const list = vitalsStartRows(vitalsTable(MINE, [MINE, BEFORE], null), VOSH_VITALS_TEXT, LEGACY);
     expect(list.rows.map((r) => [r.label, r.template, r.checked])).toEqual([
       ["Vosh's text", VOSH_VITALS_TEXT, false],
       ['Yours', MINE, true],
@@ -114,11 +114,18 @@ describe('the vitals text Presets', () => {
   });
 
   it("checks Vosh's text while you have none, and leaves out what is not there", () => {
-    expect(rows(vitalsTable('', []), null)).toEqual([["Vosh's text", true]]);
+    expect(rows(vitalsTable('', [], null), null)).toEqual([["Vosh's text", true]]);
+  });
+
+  it('checks your 0.7 text while you have none and it was on', () => {
+    expect(rows(vitalsTable('', [], LEGACY), LEGACY)).toEqual([
+      ["Vosh's text", false],
+      ['Your 0.7 text', true],
+    ]);
   });
 
   it('lists a text once, under the first row that holds it', () => {
-    expect(rows(vitalsTable(MINE, [MINE, VOSH_VITALS_TEXT]), MINE)).toEqual([
+    expect(rows(vitalsTable(MINE, [MINE, VOSH_VITALS_TEXT], null), MINE)).toEqual([
       ["Vosh's text", false],
       ['Yours', true],
     ]);
@@ -140,8 +147,10 @@ describe('what the vitals text card saves', () => {
   });
 
   it('writes vitals_text through its setter, and keeps the text you opened with as Yours', async () => {
-    vi.mocked(invoke).mockImplementation(() => Promise.resolve(null));
-    const edited = { ...vitalsTable(MINE, [MINE, BEFORE]), template: `${MINE} %move` };
+    vi.mocked(invoke).mockImplementation((cmd) =>
+      Promise.resolve(cmd === 'ui_get_config' ? {} : null),
+    );
+    const edited = { ...vitalsTable(MINE, [MINE, BEFORE], null), template: `${MINE} %move` };
     await VITALS_TEXT_BINDING.write(edited, { asIs: false, session: 1 });
     expect(invoke).toHaveBeenCalledWith('ui_set_fields', {
       fields: [
@@ -158,7 +167,25 @@ describe('what the vitals text card saves', () => {
   });
 
   it("saves Vosh's text as none, so it follows Vosh's", () => {
-    expect(vitalsTextSave(vitalsTable('', [MINE])).vitals_text).toBe('');
+    expect(vitalsTextSave(vitalsTable('', [MINE], null), null).vitals_text).toBe('');
+  });
+
+  it('starts on your 0.7 template while it was on, and saves that as none', async () => {
+    // Vitals Styles Q13: a profile whose 0.7 template was on starts its Text there.
+    const table = vitalsTable('', [], LEGACY);
+    expect(table.template).toBe(LEGACY);
+    expect(vitalsTextSave(table, LEGACY).vitals_text).toBe('');
+    // Picking Vosh's text then keeps it, rather than falling back to 0.7.
+    const vosh = { ...table, template: VOSH_VITALS_TEXT };
+    expect(vitalsTextSave(vosh, LEGACY).vitals_text).toBe(VOSH_VITALS_TEXT);
+    vi.mocked(invoke).mockImplementation((cmd) =>
+      Promise.resolve(
+        cmd === 'ui_get_config'
+          ? { vitals_text: '', vitals_text_previous: [], vitals_legacy_text: LEGACY }
+          : null,
+      ),
+    );
+    expect((await VITALS_TEXT_BINDING.open(1)).template).toBe(LEGACY);
   });
 });
 

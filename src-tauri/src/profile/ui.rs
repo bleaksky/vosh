@@ -5,6 +5,7 @@
 //! that turns a value Settings saves or a hand edit writes into one Vosh
 //! knows.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -680,6 +681,21 @@ impl VitalsConfig {
     pub(crate) fn legacy_text(&self) -> Option<String> {
         self.template_enabled
             .then(|| vosh_prompt::legacy::rewrite_07_vitals(&self.template, self.bar_width))
+    }
+}
+
+impl UiConfig {
+    /// The text the Text style draws. Yours, or while you have none the
+    /// 0.7 template that was on (Q13 of the Vitals Styles review), or
+    /// Vosh's.
+    pub(crate) fn vitals_text_drawn(&self) -> Cow<'_, str> {
+        if !self.vitals_text.is_empty() {
+            Cow::Borrowed(&self.vitals_text)
+        } else if let Some(legacy) = self.vitals.legacy_text() {
+            Cow::Owned(legacy)
+        } else {
+            Cow::Borrowed(vosh_prompt::DEFAULT_VITALS_TEXT)
+        }
     }
 }
 
@@ -1419,6 +1435,22 @@ fn is_false(on: &bool) -> bool {
 mod tests {
     use super::*;
     use crate::profile::file::ProfileConfig;
+
+    #[test]
+    fn text_draws_your_0_7_template_while_you_have_none() {
+        let full = include_str!("../../../fixtures/config/profile.full.toml");
+        let mut ui = ProfileConfig::from_toml(full).unwrap().ui;
+        assert_eq!(ui.vitals_text, "");
+        assert_eq!(
+            ui.vitals_text_drawn(),
+            "%hp/%maxhp %mana/%maxmn %move/%maxmv"
+        );
+        ui.vitals_text = "%hp hp".into();
+        assert_eq!(ui.vitals_text_drawn(), "%hp hp");
+        let default = include_str!("../../../fixtures/config/profile.default.toml");
+        let ui = ProfileConfig::from_toml(default).unwrap().ui;
+        assert_eq!(ui.vitals_text_drawn(), vosh_prompt::DEFAULT_VITALS_TEXT);
+    }
 
     #[test]
     fn tracked_affects_accept_legacy_bare_strings() {

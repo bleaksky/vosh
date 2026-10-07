@@ -24,6 +24,21 @@ export const VOSH_VITALS_TEXT =
   '%mana%c_gray/%{maxmana}mn%c_default ' +
   '%move%c_gray/%{maxmove}mv%c_default';
 
+/** The text Text starts from while you have none. Your 0.7 template,
+ *  in today's codes, while it was on (Vitals Styles Q13), or Vosh's. */
+export function startVitalsText(legacy: string | null): string {
+  return legacy ?? VOSH_VITALS_TEXT;
+}
+
+/** The text the Text style draws, yours or the one it starts from.
+ *  Mirrors UiConfig::vitals_text_drawn in src-tauri/src/profile/ui.rs. */
+export function drawnVitalsText(config: {
+  vitals_text: string;
+  vitals_legacy_text: string | null;
+}): string {
+  return config.vitals_text || startVitalsText(config.vitals_legacy_text);
+}
+
 /** Read the last vitals and fight of a session, the selected one when it
  *  names none, so the gallery in Settings draws your numbers as it
  *  opens (Vitals Styles Q17). */

@@ -212,6 +212,15 @@ describe('CustomizeVitalsSection', () => {
     expect(resting(html)).toBe(true);
     expect(resting(draw({ vitals_style: 'text', vitals_text: VOSH_VITALS_TEXT }))).toBe(true);
     expect(resting(draw({ vitals_style: 'text', vitals_text: '%hp %mana %move' }))).toBe(false);
+    // With a 0.7 template that was on, that template is the default, and
+    // Vosh's text is one you picked.
+    const legacy = '%hp/%maxhp %mana/%maxmn %move/%maxmv';
+    expect(resting(draw({ vitals_style: 'text', vitals_legacy_text: legacy }))).toBe(true);
+    expect(
+      resting(
+        draw({ vitals_style: 'text', vitals_legacy_text: legacy, vitals_text: VOSH_VITALS_TEXT }),
+      ),
+    ).toBe(false);
   });
 });
 
