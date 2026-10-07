@@ -1,4 +1,5 @@
 import type { ChatLine } from '../../stores/gmcp/chatStore';
+import { GAME_CHANNEL_SLOTS } from '../../theme/gameChannels';
 import { isLeaf, type PaneLeaf, type PaneNode, type PaneRef } from '../paneLayout';
 
 // What a Chat pane shows. A lone Chat pane shows All, or the channels
@@ -83,6 +84,13 @@ export function chatFilterIn(tree: PaneNode | null, leaf: PaneLeaf): ChatFilter 
   }
   if (stored.kind === 'channels') return stored;
   return restPaneId(tree) === leaf.id ? { kind: 'rest' } : { kind: 'none' };
+}
+
+/** The channels a filter menu offers. Every channel the game has, so
+ *  you can pick one before anyone talks on it, then the ones `heard`
+ *  and the ones the pane checks, such as a routed pane, sorted. */
+export function menuChannels(heard: readonly string[], checked: readonly string[]): string[] {
+  return [...new Set([...GAME_CHANNEL_SLOTS.keys(), ...heard, ...checked])].sort();
 }
 
 /** A channel as the pane names it. The game sends its channels in

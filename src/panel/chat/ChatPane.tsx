@@ -28,6 +28,7 @@ import {
   chatFilterProps,
   chatLeaves,
   chatLinesFor,
+  menuChannels,
   ownPaneChannels,
   restPaneId,
   toggleChannel,
@@ -69,7 +70,7 @@ export function ChatPane() {
 
   useEffect(() => subscribeChatLines(setLines), []);
 
-  const channels = Array.from(new Set(lines.map((l) => l.pane))).sort();
+  const channels = lines.map((l) => l.pane);
   const visible = chatLinesFor(lines, filter, owned);
 
   // Follow the newest line while you are at the bottom. A new terminal
@@ -202,8 +203,8 @@ function ChatMessage({ line, ink }: { line: ChatLine; ink: ChatInk }) {
 
 // The filter menu. A lone pane offers All, and beside other Chat panes
 // a pane offers Everything else, which only one pane shows at a time,
-// so another pane's menu shows it as taken. Then the channels heard
-// plus the ones the pane checks, sorted, each with a capital first
+// so another pane's menu shows it as taken. Then every channel the
+// game has, the ones heard and the ones the pane checks, sorted, each with a capital first
 // letter. A channel toggles as you pick it and the menu stays open,
 // so you can check several. A channel another Chat pane checks says so.
 function ChannelSelect({
@@ -225,7 +226,7 @@ function ChannelSelect({
   const [open, setOpen] = useState(false);
   const label = chatFilterLabel(filter);
   const checked = filter.kind === 'channels' ? filter.channels : [];
-  const options = [...new Set([...channels, ...checked])].sort();
+  const options = menuChannels(channels, checked);
   const lone = others === 0;
   const anchor = ref.current;
   const rect = open && anchor ? anchor.getBoundingClientRect() : null;
@@ -298,7 +299,7 @@ function ChannelSelect({
                 checked.includes(c) ? (
                   check
                 ) : owned.has(c) ? (
-                  <span className="shell-menu-kbd">own pane</span>
+                  <span className="shell-menu-kbd">in another pane</span>
                 ) : null
               }
             >
