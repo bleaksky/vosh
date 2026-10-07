@@ -372,20 +372,25 @@ mod tests {
         e.dispatch_gmcp("Char.Vitals", &serde_json::json!({}));
         // The load naps 90 ms inside the limit of one call. It is no
         // event, so its time leaves the replay the whole budget, and more
-        // than one new handler runs.
+        // than one new handler runs. Were it charged, the first 10 ms
+        // handler would use the rest and run alone. The short naps leave
+        // a busy machine 90 ms to wake the first handler late.
         let loaded = plugin(
             &mut e,
             "slow",
             &format!(
                 "os.nap({SLOW_MS}) os.nap({SLOW_MS}) os.nap({SLOW_MS}) \
-                 for i = 1, 10 do \
+                 for i = 1, 30 do \
                    mud.on_gmcp('Char.Vitals', function() \
-                     os.nap({SLOW_MS}) mud.echo('slow ' .. i) \
+                     os.nap(10) mud.echo('slow ' .. i) \
                    end) \
                  end"
             ),
         );
-        assert!(ran_the_first_few(&echoes_of(&loaded, "slow "), "slow ") > 1);
+        let ran = echoes_of(&loaded, "slow ");
+        assert!((2..30).contains(&ran.len()), "{ran:?}");
+        let first: Vec<String> = (1..=ran.len()).map(|i| format!("slow {i}")).collect();
+        assert_eq!(ran, first);
         assert_eq!(
             error_lines(&loaded),
             ["slow used its 100 ms on the last packets, so the rest of its new handlers wait for the next packet."]
