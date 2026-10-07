@@ -68,6 +68,8 @@ command plugin_reveal(name)
 command plugin_save(name, manifest, code, session?)
 command plugin_set_enabled(name, on, session?)
 command plugins_list(session?)
+command preset_edits_get(profile?)
+command preset_edits_set(id, edits, profile?)
 command presets_install(triggers, macros, profile?)
 command presets_remove(presetId, profile?)
 command profile_create(name, copyFrom?, autoMatch?)
@@ -207,6 +209,7 @@ event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
 event vosh://plugins-changed app heard
+event vosh://preset-edits-changed app unheard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard
 event vosh://profiles-changed app heard

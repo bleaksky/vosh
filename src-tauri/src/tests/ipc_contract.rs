@@ -162,6 +162,11 @@ const UNHEARD: &[Unheard] = &[
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",
     },
+    Unheard {
+        name: "vosh://preset-edits-changed",
+        why: "Your edits to a preset were saved. The Presets page and the \
+              trigger cards follow it once they edit presets (Presets Q10).",
+    },
 ];
 
 /// A name argument, as far as the source tells it.

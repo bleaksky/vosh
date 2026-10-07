@@ -9,6 +9,7 @@ pub(crate) mod loadouts;
 pub(crate) mod logs;
 pub(crate) mod native_surface;
 pub(crate) mod panes;
+pub(crate) mod preset_edits;
 pub(crate) mod profiles;
 pub(crate) mod prompt;
 pub(crate) mod scripts;
@@ -115,6 +116,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         alerts::alerts_permission,
         alerts::alerts_ask_permission,
         alerts::alerts_open_settings,
+        preset_edits::preset_edits_get,
+        preset_edits::preset_edits_set,
         profiles::profile_get_scope,
         profiles::profile_set_scope,
         windows::open_settings_window,

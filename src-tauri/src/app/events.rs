@@ -200,6 +200,10 @@ pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// the whole list of [`crate::profile::live::Timer`].
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
+/// Sent to every window when `preset_edits_set` saved your edits to a
+/// preset. The payload names the profile, `{profile}`, see
+/// [`PresetEditsChanged`]. In loadout mode every profile shares the edits.
+pub(crate) const PRESET_EDITS_CHANGED: &str = "vosh://preset-edits-changed";
 
 // Plugins.
 
@@ -376,6 +380,13 @@ pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 /// table changed, None before any profile loads.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct PromptConfigChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// The payload of [`PRESET_EDITS_CHANGED`]: the profile whose edits
+/// changed, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetEditsChanged {
     pub(crate) profile: Option<String>,
 }
 
