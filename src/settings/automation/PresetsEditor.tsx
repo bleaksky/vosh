@@ -13,11 +13,13 @@ import {
   presetToggles,
   type PresetToggle,
 } from '../../automation/automationRecords';
+import { setTriggerGroups, triggerStore } from '../../automation/automationTriggers';
 import {
   editColors,
   editsToSave,
   editSummary,
   flagCount,
+  groupsReset,
   hasEdits,
   withColorEdit,
   withColorKept,
@@ -83,8 +85,9 @@ function suggestedWorld(): string | undefined {
 
 /** The presets, one toggle each under its category, the five alert
  *  presets under Alerts. Save first writes your edits to each preset
- *  through preset_edits_set and the parts of each alert preset you
- *  changed, then runs the preset plan for the profile, which turns on and
+ *  through preset_edits_set, with the group of each trigger whose group
+ *  edit Reset to preset took back to the preset's in the trigger store,
+ *  and the parts of each alert preset you changed, then runs the preset plan for the profile, which turns on and
  *  off only the presets you flipped here, over the list as the profile
  *  holds it then, through presets_enabled_set (First Run Q17), and
  *  builds the presets in your colors. The page follows that command and
@@ -139,6 +142,10 @@ export function PresetsEditor({
           if (rows) {
             await presetEditsSet(after.id, rows, profile);
             edited = true;
+          }
+          const regroup = preset ? groupsReset(preset, before.edit, after.edit) : null;
+          if (regroup && regroup.size > 0) {
+            await setTriggerGroups(regroup, triggerStore(profile));
           }
           if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
             continue;

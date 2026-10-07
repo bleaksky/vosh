@@ -23,6 +23,8 @@ const bus = vi.hoisted(() => ({
   alerts: {} as unknown,
   /** What preset_edits_get answers, by preset id. */
   edits: {} as Record<string, unknown>,
+  /** The triggers triggers_export answers and triggers_import writes. */
+  stored: [] as { name: string; group?: string }[],
   /** What alerts_permission answers, and alerts_ask_permission after
    *  you choose. */
   permission: 'granted' as string,
@@ -56,6 +58,12 @@ vi.mock('@tauri-apps/api/core', () => ({
       return null;
     }
     if (cmd === 'triggers_list') return [];
+    if (cmd === 'triggers_export') return JSON.stringify(bus.stored);
+    if (cmd === 'triggers_import') {
+      bus.calls.push([cmd, args]);
+      bus.stored = JSON.parse((args as { json: string }).json) as typeof bus.stored;
+      return bus.stored.length;
+    }
     if (cmd === 'presets_enabled_set') {
       bus.calls.push([cmd, args]);
       // Land the switches on the list as it stands, as switch_presets does.
@@ -348,6 +356,7 @@ async function mountEditor(
   bus.enabled = enabled;
   bus.alerts = { ids: ALERT_IDS, on, alerts };
   bus.calls = [];
+  bus.stored = [];
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
@@ -882,6 +891,33 @@ describe('Your changes and Reset to preset', () => {
         profile: undefined,
       },
     ]);
+  });
+
+  it('takes a trigger out of the group you put it in, as its own Reset does', async () => {
+    const edits = {
+      disarm_buff_fade: {
+        triggers: { 'buff.sanctuary': { group: { value: 'buffs', was: '' } } },
+      },
+    };
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, edits);
+    bus.stored = [
+      { name: 'buff.sanctuary', group: 'buffs' },
+      { name: 'rest', group: 'mine' },
+    ];
+    await editor.pick('Disarms and fading buffs');
+    await editor.press('Reset to preset');
+    await editor.save();
+    expect(sentCalls().map(([cmd]) => cmd)).toEqual([
+      'preset_edits_set',
+      'triggers_import',
+      'presets_install',
+    ]);
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { triggers: { 'buff.sanctuary': { group: { value: '', was: '' } } } },
+      profile: undefined,
+    });
+    expect(bus.stored).toEqual([{ name: 'buff.sanctuary' }, { name: 'rest', group: 'mine' }]);
   });
 
   it('clears the parts of an alert preset you changed', async () => {

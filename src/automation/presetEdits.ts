@@ -679,6 +679,26 @@ export function editsToSave(
   return out.colors || out.triggers ? out : null;
 }
 
+/** The triggers of `preset` whose group edit went between `before`,
+ *  your edits as they loaded, and `after`, the edits the card holds, each
+ *  with the group the preset ships it in, blank for none. The store keeps
+ *  a trigger's group too, and the preset plan falls back to it, so Reset
+ *  to preset puts each of these back there as the trigger's own Reset
+ *  does. */
+export function groupsReset(
+  preset: Preset,
+  before: PresetEdit | undefined,
+  after: PresetEdit | undefined,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const t of preset.triggers) {
+    if (before?.triggers?.[t.name]?.group && !after?.triggers?.[t.name]?.group) {
+      out.set(t.name, t.group ?? '');
+    }
+  }
+  return out;
+}
+
 /** What Your changes on a preset's card names: the swatches you changed,
  *  by key in the preset's order, and the triggers you edited, by name in
  *  the preset's order, any it no longer builds last. */

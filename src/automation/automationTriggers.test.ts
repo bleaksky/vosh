@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   addDraftItem,
   createDraft,
@@ -15,6 +15,7 @@ import {
   blankTrigger,
   loadTriggers,
   moveTriggerToPrompts,
+  setTriggerGroups,
   saveTriggerDraft,
   effectOf,
   extraEffects,
@@ -605,5 +606,26 @@ describe('saving triggers', () => {
     const broken = { ...store.api, exportTriggers: () => Promise.resolve('not json') };
     await expect(moveTriggerToPrompts('rest', broken)).rejects.toThrow('changed nothing');
     expect(store.list()[0].target).toBeUndefined();
+  });
+
+  it('puts named triggers in their group and writes nothing when none moves', async () => {
+    const store = fakeStore([
+      { ...trigger('rest', 'sleep'), group: 'mine' },
+      { ...trigger('flee', 'flee'), group: 'mine' },
+    ]);
+    await setTriggerGroups(
+      new Map([
+        ['rest', ''],
+        ['gone', 'x'],
+      ]),
+      store.api,
+    );
+    expect(store.list().map((t) => [t.name, t.group])).toEqual([
+      ['rest', undefined],
+      ['flee', 'mine'],
+    ]);
+    const writes = vi.fn(store.api.importTriggers);
+    await setTriggerGroups(new Map([['flee', 'mine']]), { ...store.api, importTriggers: writes });
+    expect(writes).not.toHaveBeenCalled();
   });
 });
