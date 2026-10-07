@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
+import shippedTriggers from '../../fixtures/presets/triggers.json?raw';
 import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from '../stores/gmcp/chatStore';
+import { HIGHLIGHT_COLORS } from './automationTriggers';
+import { colorize } from './colorTokens';
 import { KNOWN_WORLDS } from '../lib/knownWorlds';
 import {
   defaultEnabledIds,
@@ -15,6 +18,7 @@ import {
   type PresetSampleLine,
   presetTriggerNames,
   presetTriggers,
+  type PresetTrigger,
 } from './presets';
 import type { HighlightStyle, TriggerTarget } from '../ipc/automation';
 
@@ -194,7 +198,9 @@ describe('the Room, time and weather colors preset', () => {
 
   it('leaves each weather line to this preset alone', () => {
     const weather = roomLines.lines.filter((l) => 'trigger' in l && l.trigger === 'weather.change');
-    const others = PRESETS.filter((p) => p.id !== 'room_and_time').flatMap(presetTriggers);
+    const others = PRESETS.filter((p) => p.id !== 'room_and_time').flatMap((p) =>
+      presetTriggers(p),
+    );
     expect(others.length).toBeGreaterThan(0);
     for (const entry of weather) {
       const text = plain(entry.line);
@@ -742,8 +748,138 @@ describe('the Disarms and fading buffs preset', () => {
 describe('the preset trigger names an import keeps', () => {
   it('names every trigger of every preset once, on or off', () => {
     const names = presetTriggerNames();
-    expect(names).toEqual(PRESETS.flatMap(presetTriggers).map((t) => t.name));
+    expect(names).toEqual(PRESETS.flatMap((p) => presetTriggers(p)).map((t) => t.name));
     expect(new Set(names).size).toBe(names.length);
     expect(names).toContain('disarm.secondary');
+  });
+});
+
+// Each preset names its colors once, by what they mark, and its templates
+// and highlights name them by key (Presets Q3, Q4). The swatch table of
+// board 1 gives each swatch, its color and the triggers it paints.
+describe('the colors each preset names', () => {
+  // The keys `trigger` names, each once, in the order it names them.
+  const keysOf = (trigger: PresetTrigger): string[] => {
+    const keys = trigger.actions.flatMap((a) =>
+      a.kind === 'highlight'
+        ? [a.style.fg]
+        : a.kind === 'replace'
+          ? [...a.template.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]).filter((k) => k !== 'reset')
+          : [],
+    );
+    return [...new Set(keys)];
+  };
+
+  it('installs every preset you never changed byte for byte as it shipped', () => {
+    const now = PRESETS.map((p) => ({ id: p.id, triggers: presetTriggers(p) }));
+    expect(`${JSON.stringify(now, null, 2)}\n`).toBe(shippedTriggers);
+    const none = PRESETS.map((p) => ({ id: p.id, triggers: presetTriggers(p, {}) }));
+    expect(none).toEqual(now);
+  });
+
+  it('gives 24 swatches over the 75 triggers, each painting the triggers of the table', () => {
+    const table = Object.fromEntries(
+      PRESETS.map((p) => [
+        p.id,
+        Object.entries(p.colors).map(([key, c]) => [
+          c.label,
+          c.token,
+          c.sits,
+          p.triggers.filter((t) => keysOf(t).includes(key)).length,
+        ]),
+      ]),
+    );
+    expect(table).toEqual({
+      healing_basics: [['The line', 'bright_green', 'highlight', 7]],
+      defensive_combat: [
+        ['Routine defenses', 'fg:240', 'template', 15],
+        ['Shadows envelop', 'fg:253', 'template', 1],
+      ],
+      disarm_buff_fade: [
+        ['The ## mark', 'bold_red', 'template', 7],
+        ['The line', 'fg:178', 'template', 7],
+      ],
+      terror_events: [['The line', 'bright_red', 'highlight', 1]],
+      combat_outgoing: [
+        ['The rest of the line', 'fg:253', 'template', 2],
+        ['The damage verb', 'fg:214', 'template', 1],
+        ['A miss', 'fg:152', 'template', 1],
+      ],
+      combat_incoming: [
+        ['The rest of the line', 'fg:244', 'template', 2],
+        ['The damage verb', 'fg:210', 'template', 1],
+        ['A miss', 'fg:152', 'template', 1],
+      ],
+      loot_progression: [
+        ['What you gain', 'fg:230', 'template', 4],
+        ['Skill and level lines', 'fg:120', 'template', 3],
+        ['The gold line', 'fg:249', 'template', 1],
+        ['The experience line', 'fg:248', 'template', 1],
+      ],
+      potion_labels: [['The spell', 'fg:248', 'template', 10]],
+      herb_labels: [['The spell', 'fg:248', 'template', 18]],
+      sent_tells: [],
+      room_and_time: [
+        ['Exits', 'green', 'highlight', 1],
+        ['What is in the room', 'yellow', 'highlight', 1],
+        ['Your target', 'bright_red', 'highlight', 1],
+        ['Time of day', 'blue', 'highlight', 1],
+        ['Weather change', '#8fa7d9', 'template', 1],
+        ['WiZNET tag', 'magenta', 'highlight', 1],
+      ],
+      numpad_movement: [],
+    });
+    expect(PRESETS.flatMap((p) => Object.keys(p.colors))).toHaveLength(24);
+    expect(PRESETS.flatMap((p) => p.triggers)).toHaveLength(75);
+  });
+
+  it('names in each template and highlight only keys its preset has, each where it sits', () => {
+    for (const preset of PRESETS) {
+      for (const trigger of preset.triggers) {
+        for (const action of trigger.actions) {
+          const keys =
+            action.kind === 'highlight'
+              ? [action.style.fg]
+              : action.kind === 'replace'
+                ? keysOf({ ...trigger, actions: [action] })
+                : [];
+          const sits = action.kind === 'highlight' ? 'highlight' : 'template';
+          for (const key of keys) {
+            expect(preset.colors[key]?.sits, `${trigger.name} ${key}`).toBe(sits);
+          }
+        }
+      }
+    }
+  });
+
+  it('keeps a highlight to the sixteen and never names a key a color token holds', () => {
+    const sixteen = HIGHLIGHT_COLORS.map((c) => c.value as string);
+    for (const preset of PRESETS) {
+      for (const [key, color] of Object.entries(preset.colors)) {
+        if (color.sits === 'highlight') expect(sixteen, key).toContain(color.token);
+        expect(colorize(`{${key}}`), key).toBe(`{${key}}`);
+        expect(colorize(`{${color.token}}`), key).not.toBe(`{${color.token}}`);
+      }
+    }
+  });
+
+  it('fills a key with your color over the preset, the mark keeping its bold', () => {
+    const preset = presetById('disarm_buff_fade')!;
+    const aura = (colors?: Record<string, string>) =>
+      presetTriggers(preset, colors).find((t) => t.name === 'buff.protective_aura')!.actions[0];
+    expect(aura({ line: '#c3a6ff' })).toEqual({
+      kind: 'replace',
+      template:
+        '\x1b[1;31m##\x1b[0m \x1b[38;2;195;166;255mThe protective aura around your body fades.\x1b[0m',
+    });
+    expect(aura({ mark: 'fg:141' })).toEqual({
+      kind: 'replace',
+      template:
+        '\x1b[1m\x1b[38;5;141m##\x1b[0m \x1b[38;5;178mThe protective aura around your body fades.\x1b[0m',
+    });
+    const cures = presetTriggers(presetById('healing_basics')!, { line: 'cyan' });
+    expect(
+      cures.every((t) => t.actions[0].kind === 'highlight' && t.actions[0].style.fg === 'cyan'),
+    ).toBe(true);
   });
 });

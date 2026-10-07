@@ -574,7 +574,7 @@ export async function installLaunchPresets(enabled: readonly string[]): Promise<
     }
   }
   const on = PRESETS.filter((p) => plan.install.includes(p.id));
-  const triggers = on.flatMap(presetTriggers);
+  const triggers = on.flatMap((p) => presetTriggers(p));
   const macros = on.flatMap(presetMacros);
   if (triggers.length > 0 || macros.length > 0) {
     try {

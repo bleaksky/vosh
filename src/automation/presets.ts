@@ -11,12 +11,23 @@
 // take a HighlightStyle and wrap matched text with ANSI on the way to
 // the terminal.
 //
+// Each preset names its colors once, by what they mark (Presets Q3). A
+// template or a highlight names a color by its key, and presetTriggers
+// fills the keys, so one swatch reaches every trigger that uses it.
+//
 // Seeded from the user's `~/tintin/highlights.tin`. Categories are
 // chosen so noise-heavy event groups (others' buff churn, others'
 // recall) can be toggled independently from must-see ones (your own
 // buffs falling, your own recall).
 
-import type { HighlightStyle, Macro, TriggerRecord, TriggerTarget } from '../ipc/automation';
+import type {
+  HighlightStyle,
+  Macro,
+  NamedColor,
+  TriggerAction,
+  TriggerRecord,
+  TriggerTarget,
+} from '../ipc/automation';
 import { colorize } from './colorTokens';
 
 export type PresetCategory =
@@ -48,11 +59,39 @@ export interface Preset {
    *  preset's own triggers and checks the colors it paints. A preset that
    *  only binds macros changes no line, so it has none. */
   sample: readonly PresetSampleLine[];
-  triggers: Omit<TriggerRecord, 'preset'>[];
+  /** The colors the preset paints, each once under a key its templates
+   *  and highlights name, in the order its card lists the swatches. Empty
+   *  when it paints none. */
+  colors: Readonly<Record<string, PresetColor>>;
+  triggers: PresetTrigger[];
   /** The keys the preset binds, each with the command it sends, in the
    *  order the preset's card lists them. Absent when it binds none. */
   macros?: readonly Omit<Macro, 'preset'>[];
 }
+
+/** A color a preset paints, named by what it marks. */
+export interface PresetColor {
+  /** What the color marks, as its swatch names it. */
+  label: string;
+  /** The color the preset ships, as a color token without its braces. A
+   *  theme color by name, as bright_green or bold_red, which follows the
+   *  theme, one of the 256 fixed colors as fg:178, or a true color as
+   *  #8fa7d9. */
+  token: string;
+  /** Where the color sits. A highlight holds only the theme's sixteen
+   *  named colors, and a template takes any color (Presets Q4). */
+  sits: 'highlight' | 'template';
+}
+
+/** A highlight as a preset holds it, its text color named by a key of
+ *  the preset's colors. */
+type PresetHighlight = { kind: 'highlight'; style: Omit<HighlightStyle, 'fg'> & { fg: string } };
+
+/** A trigger as a preset holds it. A Replace template names each color by
+ *  its key in braces, as {line}, and a highlight names its color by key. */
+export type PresetTrigger = Omit<TriggerRecord, 'preset' | 'actions'> & {
+  actions: (Exclude<TriggerAction, { kind: 'highlight' }> | PresetHighlight)[];
+};
 
 /** A line of a preset's sample. */
 export interface PresetSampleLine {
@@ -97,9 +136,9 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
 function highlight(
   name: string,
   pattern: string,
-  style: HighlightStyle,
+  style: PresetHighlight['style'],
   priority = 5,
-): Omit<TriggerRecord, 'preset'> {
+): PresetTrigger {
   return {
     name,
     patterns: [{ pattern, enabled: true }],
@@ -109,32 +148,18 @@ function highlight(
   };
 }
 
-// Replace trigger that injects ANSI directly into the substitution so
-// the resulting line carries its own coloring without a separate
-// highlight pass. Used for the Magick-style ///NAME RECALLED///
-// banners.
-function replace(
-  name: string,
-  pattern: string,
-  template: string,
-  priority = 5,
-): Omit<TriggerRecord, 'preset'> {
+// Replace trigger whose template carries its own coloring, so the
+// resulting line needs no separate highlight pass. presetTriggers turns
+// its color keys and tokens into ANSI.
+function replace(name: string, pattern: string, template: string, priority = 5): PresetTrigger {
   return {
     name,
     patterns: [{ pattern, enabled: true }],
     priority,
     enabled: true,
-    actions: [{ kind: 'replace', template: colorize(template) }],
+    actions: [{ kind: 'replace', template }],
   };
 }
-
-// Color shorthands. The trigger backend's HighlightStyle.fg only
-// accepts the 16 ANSI named colors (black, red, green, ...,
-// bright_white). The terminal theme maps those to the Kanso palette,
-// so using named colors here means presets pick up whatever theme is
-// active.
-const GREEN: HighlightStyle = { fg: 'bright_green' };
-const RED: HighlightStyle = { fg: 'bright_red', bold: true };
 
 // The exits line a room look prints with autoexit on (act_info.c
 // do_exits with "auto"). Each exit shows by its full name, in parentheses
@@ -197,11 +222,6 @@ const WEATHER_CHANGES = [
   'A thick fog rolls in, shrouding the area.',
   'The fog lifts, revealing the surroundings once more.',
 ];
-
-// The weather blue, a true color apart from the theme's cyan and blue, the
-// same on every theme. Keep highlight colors readable darkens it on a light
-// theme, where it would fade (crates/automation/src/trigger/readable.rs).
-const WEATHER_BLUE = '{#8fa7d9}';
 
 // `text` as a regex that matches it literally.
 function escapeRegex(text: string): string {
@@ -270,7 +290,21 @@ const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 const DAMAGE_VERB_WRAPPED = `(?:(?:[*=><]{3}|does|do) )?(?:${DAMAGE_VERB_ALT})(?: (?:[*=><]{3}|things))?`;
 
 // The color token table lives in src/automation/colorTokens.ts, so the
-// trigger form editor reads the same grammar and its inverse.
+// trigger form editor reads the same grammar and its inverse. A highlight
+// holds only the sixteen named colors, which the terminal theme maps, so
+// a preset that highlights follows whatever theme is active.
+
+// A color of a preset that sits in a template, and one in a highlight.
+const inTemplate = (label: string, token: string): PresetColor => ({
+  label,
+  token,
+  sits: 'template',
+});
+const inHighlight = (label: string, token: NamedColor): PresetColor => ({
+  label,
+  token,
+  sits: 'highlight',
+});
 
 export const PRESETS: Preset[] = [
   // ── Healing & Cure ────────────────────────────────────────────────
@@ -286,14 +320,15 @@ export const PRESETS: Preset[] = [
       { text: 'You feel less sick.', shows: 'cure.less_sick' },
     ],
     suggest: [FORSAKEN_LANDS],
+    colors: { line: inHighlight('The line', 'bright_green') },
     triggers: [
-      highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
-      highlight('cure.feel_better', 'You feel better\\.$', GREEN),
-      highlight('cure.feel_much_better', 'You feel much better!$', GREEN),
-      highlight('cure.righteous', 'You feel righteous\\.$', GREEN),
-      highlight('cure.less_sick', 'You feel less sick\\.$', GREEN),
-      highlight('cure.no_longer_poisoned', 'You are no longer poisoned\\.$', GREEN),
-      highlight('cure.less_tired', 'You feel less tired\\.$', GREEN),
+      highlight('cure.feel_lot_better', 'You feel a lot better!$', { fg: 'line' }),
+      highlight('cure.feel_better', 'You feel better\\.$', { fg: 'line' }),
+      highlight('cure.feel_much_better', 'You feel much better!$', { fg: 'line' }),
+      highlight('cure.righteous', 'You feel righteous\\.$', { fg: 'line' }),
+      highlight('cure.less_sick', 'You feel less sick\\.$', { fg: 'line' }),
+      highlight('cure.no_longer_poisoned', 'You are no longer poisoned\\.$', { fg: 'line' }),
+      highlight('cure.less_tired', 'You feel less tired\\.$', { fg: 'line' }),
     ],
   },
 
@@ -317,69 +352,73 @@ export const PRESETS: Preset[] = [
       { text: "You block a villager's attack with your shield.", shows: 'def.block_shield' },
     ],
     suggest: [],
+    colors: {
+      routine: inTemplate('Routine defenses', 'fg:240'),
+      shadows: inTemplate('Shadows envelop', 'fg:253'),
+    },
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
       // form in highlights.tin line 97. Lower priority so the more
       // specific "block / dual parry / reverse" replacements below
       // can win on lines they uniquely identify.
-      replace('def.dodge_or_parry', '^You (?:dodge|parry) .+\\.$', '{fg:240}$0{reset}'),
+      replace('def.dodge_or_parry', '^You (?:dodge|parry) .+\\.$', '{routine}$0{reset}'),
       // Redirect-momentum counter (ends in `!` so it's not caught by
       // the generic period-anchored pattern above). Same dim treatment
       // as a normal dodge.
-      replace('def.redirect_momentum', '^You .+ and redirect the momentum!$', '{fg:240}$0{reset}'),
+      replace('def.redirect_momentum', '^You .+ and redirect the momentum!$', '{routine}$0{reset}'),
       // Shadow-blend evade — assassin/thief flavor defense, ends in
       // `!` like the redirect.
       replace(
         'def.shadows_evade',
         '^You blend into the shadows, evading .+!$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
       ),
       // Parry with hand specified (highlights.tin line 93).
       replace(
         'def.parry_hand',
         '^You parry .+ attack with your (?:first|second) hand\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
         6,
       ),
-      replace('def.block_shield', '^You block .+ with your shield\\.$', '{fg:240}$0{reset}', 6),
+      replace('def.block_shield', '^You block .+ with your shield\\.$', '{routine}$0{reset}', 6),
       replace(
         'def.block_weapon',
         '^You block .+ attack with your weapon\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
         6,
       ),
       // Block and attempt to strike (highlights.tin line 89).
       replace(
         'def.block_attempt',
         '^You block .+ attack and attempt to strike at the brief opening\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
         6,
       ),
-      replace('def.dual_parry', '^You dual parry .+ attack\\.$', '{fg:240}$0{reset}', 6),
-      replace('def.reverse', '^You reverse .+ attack.*\\.$', '{fg:240}$0{reset}', 6),
+      replace('def.dual_parry', '^You dual parry .+ attack\\.$', '{routine}$0{reset}', 6),
+      replace('def.reverse', '^You reverse .+ attack.*\\.$', '{routine}$0{reset}', 6),
       // Stagger out of attack (highlights.tin line 95).
-      replace('def.stagger', '^You stagger wildly out of .+ attack\\.$', '{fg:240}$0{reset}', 6),
+      replace('def.stagger', '^You stagger wildly out of .+ attack\\.$', '{routine}$0{reset}', 6),
       replace(
         'def.swing_through',
         '^You swing right through .+ blurred image\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
         6,
       ),
-      replace('def.misses', '^.+ swings wildly and misses you by a mile\\.$', '{fg:240}$0{reset}'),
-      replace('def.shadows_envelop', '^Shadows envelop .+\\.$', '{fg:253}$0{reset}'),
+      replace('def.misses', '^.+ swings wildly and misses you by a mile\\.$', '{routine}$0{reset}'),
+      replace('def.shadows_envelop', '^Shadows envelop .+\\.$', '{shadows}$0{reset}'),
       replace(
         'def.terra_shield',
         '^Your Terra shield deflects the attack\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
       ),
       // Faith save (highlights.tin line 99).
       replace(
         'def.faith',
         '^Your faith holding fast, you stop the blow with .+ power\\.$',
-        '{fg:240}$0{reset}',
+        '{routine}$0{reset}',
       ),
       // Giant blade deflect (highlights.tin line 88).
-      replace('def.giant_blade', '^The giant blade deflects .+ attack\\.$', '{fg:240}$0{reset}'),
+      replace('def.giant_blade', '^The giant blade deflects .+ attack\\.$', '{routine}$0{reset}'),
     ],
   },
 
@@ -401,6 +440,10 @@ export const PRESETS: Preset[] = [
       { text: 'The protective aura around your body fades.', shows: 'buff.protective_aura' },
     ],
     suggest: [],
+    colors: {
+      mark: inTemplate('The ## mark', 'bold_red'),
+      line: inTemplate('The line', 'fg:178'),
+    },
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
       // multi-action support. Mirrors the user's tintin #ACTION at
@@ -419,9 +462,8 @@ export const PRESETS: Preset[] = [
         actions: [
           {
             kind: 'replace',
-            template: colorize(
-              '{bold_red}##{reset} {fg:178}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
-            ),
+            template:
+              '{mark}##{reset} {line}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
           },
           // The off hand takes its weapon back with dual (do_second,
           // interp.c), where wield would swap out the primary.
@@ -436,9 +478,8 @@ export const PRESETS: Preset[] = [
         actions: [
           {
             kind: 'replace',
-            template: colorize(
-              '{bold_red}##{reset} {fg:178}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
-            ),
+            template:
+              '{mark}##{reset} {line}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
           },
           { kind: 'send', template: 'get 1.;wield 1.' },
         ],
@@ -446,29 +487,29 @@ export const PRESETS: Preset[] = [
       replace(
         'buff.protective_shield',
         '^(.+) protective shield dissipates\\.$',
-        '{bold_red}##{reset} {fg:178}$1 protective shield dissipates.{reset}',
+        '{mark}##{reset} {line}$1 protective shield dissipates.{reset}',
       ),
       replace(
         'buff.protective_aura',
         '^The protective aura around your body fades\\.$',
-        '{bold_red}##{reset} {fg:178}The protective aura around your body fades.{reset}',
+        '{mark}##{reset} {line}The protective aura around your body fades.{reset}',
       ),
       replace(
         'buff.stoneskin',
         '^The shards of metal protecting you fall to the ground\\.$',
-        '{bold_red}##{reset} {fg:178}The shards of metal protecting you fall to the ground.{reset}',
+        '{mark}##{reset} {line}The shards of metal protecting you fall to the ground.{reset}',
       ),
       replace(
         'buff.sanctuary',
         // Sanctuary wearing off someone else (const.c, its msg_off2).
         // Your own fade is buff.protective_aura.
         '^The protective aura around (.+) fades\\.$',
-        '{bold_red}##{reset} {fg:178}The protective aura around $1 fades.{reset}',
+        '{mark}##{reset} {line}The protective aura around $1 fades.{reset}',
       ),
       replace(
         'buff.spell_turning',
         '^Your shield of spell turning collapses\\.$',
-        '{bold_red}##{reset} {fg:178}Your shield of spell turning collapses.{reset}',
+        '{mark}##{reset} {line}Your shield of spell turning collapses.{reset}',
       ),
     ],
   },
@@ -491,6 +532,7 @@ export const PRESETS: Preset[] = [
       },
     ],
     suggest: [],
+    colors: { line: inHighlight('The line', 'bright_red') },
     triggers: [
       {
         name: 'terror.drop',
@@ -503,7 +545,7 @@ export const PRESETS: Preset[] = [
         priority: 5,
         enabled: true,
         actions: [
-          { kind: 'highlight', style: RED },
+          { kind: 'highlight', style: { fg: 'line', bold: true } },
           { kind: 'send', template: 'get 1.;wield 1.' },
         ],
       },
@@ -525,6 +567,11 @@ export const PRESETS: Preset[] = [
     // area/fortblac.are.
     sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
     suggest: [FORSAKEN_LANDS],
+    colors: {
+      line: inTemplate('The rest of the line', 'fg:253'),
+      verb: inTemplate('The damage verb', 'fg:214'),
+      miss: inTemplate('A miss', 'fg:152'),
+    },
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
       // X" and "You LACERATE X" / "You miss X" lines fire — the
@@ -533,7 +580,7 @@ export const PRESETS: Preset[] = [
       replace(
         'combat.outgoing',
         `^(You(?:r .+?)? )(${DAMAGE_VERB_WRAPPED})( .+[!.])$`,
-        '{fg:253}$1{reset}{fg:214}$2{reset}{fg:253}$3{reset}',
+        '{line}$1{reset}{verb}$2{reset}{line}$3{reset}',
         7,
       ),
       // Outgoing miss — `<aee>` pale cyan on the verb, `<g21>` body
@@ -541,7 +588,7 @@ export const PRESETS: Preset[] = [
       replace(
         'combat.outgoing_miss',
         '^(You(?:r .+?)? )(misses|miss)( .+[!.])$',
-        '{fg:253}$1{reset}{fg:152}$2{reset}{fg:253}$3{reset}',
+        '{line}$1{reset}{miss}$2{reset}{line}$3{reset}',
         7,
       ),
     ],
@@ -565,18 +612,23 @@ export const PRESETS: Preset[] = [
       { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
     ],
     suggest: [FORSAKEN_LANDS],
+    colors: {
+      line: inTemplate('The rest of the line', 'fg:244'),
+      verb: inTemplate('The damage verb', 'fg:210'),
+      miss: inTemplate('A miss', 'fg:152'),
+    },
     triggers: [
       replace(
         'combat.incoming',
         `^(.+? )(${DAMAGE_VERB_WRAPPED})( you[!.])$`,
-        '{fg:244}$1{reset}{fg:210}$2{reset}{fg:244}$3{reset}',
+        '{line}$1{reset}{verb}$2{reset}{line}$3{reset}',
         7,
       ),
       // Incoming miss — `<aee>` pale cyan on the verb, `<g12>` body.
       replace(
         'combat.incoming_miss',
         '^(.+? )(misses|miss)( you[!.])$',
-        '{fg:244}$1{reset}{fg:152}$2{reset}{fg:244}$3{reset}',
+        '{line}$1{reset}{miss}$2{reset}{line}$3{reset}',
         7,
       ),
     ],
@@ -601,32 +653,38 @@ export const PRESETS: Preset[] = [
       { text: 'You raise a level!!', shows: 'loot.level' },
     ],
     suggest: [FORSAKEN_LANDS],
+    colors: {
+      gain: inTemplate('What you gain', 'fg:230'),
+      progress: inTemplate('Skill and level lines', 'fg:120'),
+      gold: inTemplate('The gold line', 'fg:249'),
+      xp: inTemplate('The experience line', 'fg:248'),
+    },
     triggers: [
       replace(
         'loot.gold',
         '^You get (\\d+) gold coins from (.+)\\.$',
-        '{fg:249}You get {fg:230}$1 {fg:249}gold coins from $2.{reset}',
+        '{gold}You get {gain}$1 {gold}gold coins from $2.{reset}',
       ),
       replace(
         'loot.skill_up',
         // check_improve in skills.c adds the percent you reach, as in
         // [78%]. A song gain (check_improve_song) prints none.
         '^You have become better at (.+)!( \\[\\d+%\\])?$',
-        '{fg:120}You have become better at {fg:230}$1{fg:120}!$2{reset}',
+        '{progress}You have become better at {gain}$1{progress}!$2{reset}',
       ),
       // The game prints the level and what you gain on two lines
       // (update.c gain_exp and advance_level), with hit point and
       // practice singular when one, so each line keeps its own words.
-      replace('loot.level', '^You raise a level!!$', '{fg:120}You raise a level!!{reset}'),
+      replace('loot.level', '^You raise a level!!$', '{progress}You raise a level!!{reset}'),
       replace(
         'loot.level_gain',
         '^You gain:  (\\d+)/(\\d+) hit point(s?), (\\d+)/(\\d+) mana, (\\d+)/(\\d+) move, and (\\d+) practice(s?)\\.$',
-        '{fg:120}You gain:  {fg:230}$1{fg:120}/$2 hit point$3, {fg:230}$4{fg:120}/$5 mana, {fg:230}$6{fg:120}/$7 move, and {fg:230}$8{fg:120} practice$9.{reset}',
+        '{progress}You gain:  {gain}$1{progress}/$2 hit point$3, {gain}$4{progress}/$5 mana, {gain}$6{progress}/$7 move, and {gain}$8{progress} practice$9.{reset}',
       ),
       replace(
         'loot.xp',
         '^You receive (\\d+) experience points\\.$',
-        '{fg:248}You receive {fg:230}$1 {fg:248}experience points.{reset}',
+        '{xp}You receive {gain}$1 {xp}experience points.{reset}',
       ),
     ],
   },
@@ -648,48 +706,49 @@ export const PRESETS: Preset[] = [
       { text: 'You quaff a bubbly pink potion.', shows: 'potion.pink' },
     ],
     suggest: [],
+    colors: { spell: inTemplate('The spell', 'fg:248') },
     triggers: [
-      replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {fg:248}(armor){reset}'),
+      replace('potion.blue', 'a bubbly blue potion', 'a bubbly blue potion {spell}(armor){reset}'),
       replace(
         'potion.brown',
         'a bubbly brown potion',
-        'a bubbly brown potion {fg:248}(cure serious){reset}',
+        'a bubbly brown potion {spell}(cure serious){reset}',
       ),
       replace(
         'potion.clear',
         'a bubbly clear potion',
-        'a bubbly clear potion {fg:248}(invisibility){reset}',
+        'a bubbly clear potion {spell}(invisibility){reset}',
       ),
       replace(
         'potion.crimson',
         'a bubbly crimson potion',
-        'a bubbly crimson potion {fg:248}(frenzy){reset}',
+        'a bubbly crimson potion {spell}(frenzy){reset}',
       ),
       replace(
         'potion.green',
         'a bubbly green potion',
-        'a bubbly green potion {fg:248}(haste){reset}',
+        'a bubbly green potion {spell}(haste){reset}',
       ),
-      replace('potion.grey', 'a bubbly grey potion', 'a bubbly grey potion {fg:248}(bless){reset}'),
+      replace('potion.grey', 'a bubbly grey potion', 'a bubbly grey potion {spell}(bless){reset}'),
       replace(
         'potion.orange',
         'a bubbly orange potion',
-        'a bubbly orange potion {fg:248}(fireball){reset}',
+        'a bubbly orange potion {spell}(fireball){reset}',
       ),
       replace(
         'potion.pink',
         'a bubbly pink potion',
-        'a bubbly pink potion {fg:248}(cure light){reset}',
+        'a bubbly pink potion {spell}(cure light){reset}',
       ),
       replace(
         'potion.red',
         'a bubbly red potion',
-        'a bubbly red potion {fg:248}(cure blind){reset}',
+        'a bubbly red potion {spell}(cure blind){reset}',
       ),
       replace(
         'potion.white',
         'a bubbly white potion',
-        'a bubbly white potion {fg:248}(sanctuary){reset}',
+        'a bubbly white potion {spell}(sanctuary){reset}',
       ),
     ],
   },
@@ -706,53 +765,50 @@ export const PRESETS: Preset[] = [
     // smoke casts protection.
     sample: [{ text: 'You light some rosemary and begin to smoke it.', shows: 'herb.rosemary' }],
     suggest: [],
+    colors: { spell: inTemplate('The spell', 'fg:248') },
     triggers: [
       replace(
         'herb.purple_seaweed',
         'a dried purple seaweed',
-        'a dried purple seaweed {fg:248}(fly){reset}',
+        'a dried purple seaweed {spell}(fly){reset}',
       ),
-      replace('herb.mandrake', 'a mandrake root', 'a mandrake root {fg:248}(stone skin){reset}'),
-      replace(
-        'herb.red_herb',
-        'a small red herb',
-        'a small red herb {fg:248}(detect invis){reset}',
-      ),
-      replace('herb.magenta', 'some Magenta Leaves', 'some Magenta Leaves {fg:248}(frenzy){reset}'),
-      replace('herb.cinnamon', 'some cinnamon', 'some cinnamon {fg:248}(armor){reset}'),
+      replace('herb.mandrake', 'a mandrake root', 'a mandrake root {spell}(stone skin){reset}'),
+      replace('herb.red_herb', 'a small red herb', 'a small red herb {spell}(detect invis){reset}'),
+      replace('herb.magenta', 'some Magenta Leaves', 'some Magenta Leaves {spell}(frenzy){reset}'),
+      replace('herb.cinnamon', 'some cinnamon', 'some cinnamon {spell}(armor){reset}'),
       replace(
         'herb.damiana',
         'some damiana leaves',
-        'some damiana leaves {fg:248}(cure serious){reset}',
+        'some damiana leaves {spell}(cure serious){reset}',
       ),
       replace(
         'herb.dark_black',
         'some dark black leaves',
-        'some dark black leaves {fg:248}(sanctuary){reset}',
+        'some dark black leaves {spell}(sanctuary){reset}',
       ),
-      replace('herb.catnip', 'some dried catnip', 'some dried catnip {fg:248}(frenzy){reset}'),
+      replace('herb.catnip', 'some dried catnip', 'some dried catnip {spell}(frenzy){reset}'),
       replace(
         'herb.raspberry',
         'some fermenting raspberry leaves',
-        'some fermenting raspberry leaves {fg:248}(shield){reset}',
+        'some fermenting raspberry leaves {spell}(shield){reset}',
       ),
       replace(
         'herb.opium',
         'some finely cut opium',
-        'some finely cut opium {fg:248}(frenzy){reset}',
+        'some finely cut opium {spell}(frenzy){reset}',
       ),
-      replace('herb.ginger', 'some ginger', 'some ginger {fg:248}(faerie fog){reset}'),
-      replace('herb.greyish', 'some greyish herbs', 'some greyish herbs {fg:248}(bless){reset}'),
-      replace('herb.mugwort', 'some mugwort', 'some mugwort {fg:248}(slow){reset}'),
-      replace('herb.mullein', 'some mullein', 'some mullein {fg:248}(pass door){reset}'),
-      replace('herb.coca', 'some purified coca', 'some purified coca {fg:248}(endorphins){reset}'),
-      replace('herb.rosemary', 'some rosemary', 'some rosemary {fg:248}(protection){reset}'),
+      replace('herb.ginger', 'some ginger', 'some ginger {spell}(faerie fog){reset}'),
+      replace('herb.greyish', 'some greyish herbs', 'some greyish herbs {spell}(bless){reset}'),
+      replace('herb.mugwort', 'some mugwort', 'some mugwort {spell}(slow){reset}'),
+      replace('herb.mullein', 'some mullein', 'some mullein {spell}(pass door){reset}'),
+      replace('herb.coca', 'some purified coca', 'some purified coca {spell}(endorphins){reset}'),
+      replace('herb.rosemary', 'some rosemary', 'some rosemary {spell}(protection){reset}'),
       replace(
         'herb.sand_leaves',
         'some sand colored leaves',
-        'some sand colored leaves {fg:248}(stone skin){reset}',
+        'some sand colored leaves {spell}(stone skin){reset}',
       ),
-      replace('herb.spearmint', 'some spearmint', 'some spearmint {fg:248}(giant strength){reset}'),
+      replace('herb.spearmint', 'some spearmint', 'some spearmint {spell}(giant strength){reset}'),
     ],
   },
 
@@ -776,6 +832,7 @@ export const PRESETS: Preset[] = [
     // in chatStore.ts gives as its text.
     sample: [{ text: "You tell Tolliver 'The day has begun.'", shows: 'chat.sent_tells' }],
     suggest: [FORSAKEN_LANDS],
+    colors: {},
     triggers: [
       {
         name: 'chat.sent_tells',
@@ -829,14 +886,26 @@ export const PRESETS: Preset[] = [
       { text: 'The day has begun.', shows: 'time.of_day' },
     ],
     suggest: [FORSAKEN_LANDS],
+    colors: {
+      exits: inHighlight('Exits', 'green'),
+      contents: inHighlight('What is in the room', 'yellow'),
+      target: inHighlight('Your target', 'bright_red'),
+      time: inHighlight('Time of day', 'blue'),
+      // The weather blue, a true color apart from the theme's cyan and
+      // blue, the same on every theme. Keep highlight colors readable
+      // darkens it on a light theme, where it would fade
+      // (crates/automation/src/trigger/readable.rs).
+      weather: inTemplate('Weather change', '#8fa7d9'),
+      wiznet: inHighlight('WiZNET tag', 'magenta'),
+    },
     triggers: [
-      highlight('room.exits', EXITS_LINE, { fg: 'green', base: true }, 6),
+      highlight('room.exits', EXITS_LINE, { fg: 'exits', base: true }, 6),
       {
-        ...highlight('room.contents', '^.+$', { fg: 'yellow', base: true }, 4),
+        ...highlight('room.contents', '^.+$', { fg: 'contents', base: true }, 4),
         target: 'room',
       },
       {
-        ...highlight('room.target', '^.+$', { fg: 'bright_red', base: true }, 5),
+        ...highlight('room.target', '^.+$', { fg: 'target', base: true }, 5),
         target: 'room_target',
       },
       {
@@ -847,7 +916,7 @@ export const PRESETS: Preset[] = [
         })),
         priority: 6,
         enabled: true,
-        actions: [{ kind: 'highlight', style: { fg: 'blue' } }],
+        actions: [{ kind: 'highlight', style: { fg: 'time' } }],
       },
       {
         name: 'weather.change',
@@ -857,9 +926,9 @@ export const PRESETS: Preset[] = [
         })),
         priority: 6,
         enabled: true,
-        actions: [{ kind: 'replace', template: colorize(`${WEATHER_BLUE}$0{reset}`) }],
+        actions: [{ kind: 'replace', template: '{weather}$0{reset}' }],
       },
-      highlight('wiznet.tag', '^WiZNET\\b', { fg: 'magenta', bold: true }, 6),
+      highlight('wiznet.tag', '^WiZNET\\b', { fg: 'wiznet', bold: true }, 6),
     ],
   },
   // The six directions the game has, on the numpad as the arrows sit
@@ -878,6 +947,7 @@ export const PRESETS: Preset[] = [
     description: 'Walk with the numpad. The game has six directions, so 7, 1 and 5 stay free.',
     suggest: [],
     sample: [],
+    colors: {},
     triggers: [],
     macros: [
       { key: 'Numpad8', command: 'n' },
@@ -911,8 +981,37 @@ export const PRESETS_ON_BY_DEFAULT: readonly string[] = [
   'room_and_time',
 ];
 
-export function presetTriggers(preset: Preset): TriggerRecord[] {
-  return preset.triggers.map((t) => ({ ...t, preset: preset.id }));
+/** The triggers of `preset` as the store holds them, each color key
+ *  filled from `colors`, yours by key, over the preset's own. With none of
+ *  yours they are the triggers the preset ships. A mark the preset paints
+ *  bold keeps its bold in any color you give it. */
+export function presetTriggers(
+  preset: Preset,
+  colors: Readonly<Record<string, string>> = {},
+): TriggerRecord[] {
+  const token = (key: string) => colors[key] ?? preset.colors[key].token;
+  const inBraces = (key: string) => {
+    const own = colors[key];
+    const bold =
+      own !== undefined && !own.startsWith('bold_') && preset.colors[key].token.startsWith('bold_');
+    return `${bold ? '{bold}' : ''}{${token(key)}}`;
+  };
+  const fill = (template: string) =>
+    colorize(
+      template.replace(/\{([a-z_]+)\}/g, (m, key: string) =>
+        Object.hasOwn(preset.colors, key) ? inBraces(key) : m,
+      ),
+    );
+  return preset.triggers.map((t) => ({
+    ...t,
+    actions: t.actions.map((a): TriggerAction => {
+      if (a.kind === 'highlight') {
+        return { ...a, style: { ...a.style, fg: token(a.style.fg) as NamedColor } };
+      }
+      return a.kind === 'replace' ? { ...a, template: fill(a.template) } : a;
+    }),
+    preset: preset.id,
+  }));
 }
 
 export function presetMacros(preset: Preset): Macro[] {

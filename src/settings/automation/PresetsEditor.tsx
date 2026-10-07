@@ -99,7 +99,7 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
         const plan = presetSavePlan(draft);
         for (const id of plan.remove) await presetsRemove(id, profile);
         const on = PRESETS.filter((p) => plan.install.includes(p.id));
-        const triggers = on.flatMap(presetTriggers);
+        const triggers = on.flatMap((p) => presetTriggers(p));
         const macros = on.flatMap(presetMacros);
         if (triggers.length > 0 || macros.length > 0) {
           await presetsInstall(triggers, macros, profile);

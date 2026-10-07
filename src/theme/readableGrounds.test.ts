@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../fixtures/readable/grounds.json';
-import { PRESETS } from '../automation/presets';
+import { PRESETS, presetTriggers } from '../automation/presets';
 import { BUILTIN_THEMES } from './themes';
 
 // fixtures/readable/grounds.json feeds the Rust tests of Keep highlight
@@ -12,7 +12,7 @@ import { BUILTIN_THEMES } from './themes';
 function presetTemplates(): string[] {
   const templates: string[] = [];
   for (const preset of PRESETS) {
-    for (const trigger of preset.triggers) {
+    for (const trigger of presetTriggers(preset)) {
       for (const action of trigger.actions) {
         if (action.kind === 'replace' && !templates.includes(action.template)) {
           templates.push(action.template);
