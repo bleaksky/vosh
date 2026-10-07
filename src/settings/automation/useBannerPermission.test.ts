@@ -40,6 +40,7 @@ beforeAll(async () => {
       if (name === 'focus') system.focus.delete(cb);
     },
   });
+  vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
   ({ createRoot } = await import('react-dom/client'));
   ({ useBannerPermission } = await import('./useBannerPermission'));
 });
