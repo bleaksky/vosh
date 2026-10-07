@@ -2221,6 +2221,49 @@
   border-radius: 2px;
 }
 
+/* A row of a preset trigger you changed says what the preset has, under
+   the label for a switch or a number and under the field for text
+   (Presets board 2). */
+.st-auto-changed {
+  display: block;
+}
+
+.st-auto-changed:not(:first-child) {
+  margin-top: 4px;
+}
+
+.st-auto-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.st-auto-card .st-row-control:has(> .st-auto-stack) {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.st-auto-stack > .st-auto-grow {
+  flex: none;
+}
+
+/* How many rows under a closed Advanced hold an edit. */
+.st-auto-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-auto-count > svg {
+  color: var(--tertiary);
+}
+
 /* The way back to a preset's color under a swatch you changed. */
 .st-auto-under {
   margin: 0;

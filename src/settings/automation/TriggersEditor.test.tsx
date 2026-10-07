@@ -251,6 +251,7 @@ async function mountEditor(
   list: TriggerRecord[],
   open: { select?: string; filter?: string; seq: number } | null = null,
   json = false,
+  onOpenPreset: (id: string) => void = () => {},
 ) {
   stored = JSON.stringify(list);
   const container = doc.createElement('div');
@@ -268,6 +269,7 @@ async function mountEditor(
           error = message;
         }}
         open={open}
+        onOpenPreset={onOpenPreset}
       />,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -284,6 +286,14 @@ async function mountEditor(
     });
   const button = (text: string) =>
     findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === text)[0];
+  /** The control the label `label` names. */
+  const labelled = (label: string) => {
+    const name = findAll(container, (el) => el.nodeName === 'LABEL' && el.textContent === label)[0];
+    const id = name?.getAttribute('for') ?? name?.getAttribute('htmlFor');
+    const el = findAll(container, (n) => n.getAttribute('id') === id)[0];
+    if (!el) throw new Error(`no ${label} control`);
+    return el;
+  };
   return {
     pick: (name: string) =>
       click(
@@ -296,19 +306,15 @@ async function mountEditor(
     /** Type `text` into the field the label `label` names, and leave
      *  it, as a Group field commits. */
     type: async (label: string, text: string) => {
-      const field = () => {
-        const name = findAll(
-          container,
-          (el) => el.nodeName === 'LABEL' && el.textContent === label,
-        )[0];
-        const id = name?.getAttribute('for') ?? name?.getAttribute('htmlFor');
-        const el = findAll(container, (n) => n.getAttribute('id') === id)[0];
-        if (!el) throw new Error(`no ${label} field`);
-        return el;
-      };
-      await act(async () => on(field()).onChange({ target: { value: text } }));
-      await act(async () => on(field()).onBlur?.());
+      await act(async () => on(labelled(label)).onChange({ target: { value: text } }));
+      await act(async () => on(labelled(label)).onBlur?.());
     },
+    /** Turn the switch the label `label` names. */
+    flip: (label: string) =>
+      act(async () => {
+        const props = on(labelled(label)) as unknown as { checked: boolean; onChange: Handler };
+        props.onChange({ target: { checked: !props.checked } });
+      }),
     /** The text of Edit all as JSON. */
     json: () => findAll(container, (el) => el.hasAttribute('data-code'))[0]?.value,
     /** Type `text` into Edit all as JSON, and wait out its pause. */
@@ -319,6 +325,29 @@ async function mountEditor(
         await new Promise((resolve) => setTimeout(resolve, 200));
       }),
     error: () => error,
+    /** The text of the card row the label `label` names. */
+    row: (label: string) => {
+      const name = findAll(
+        container,
+        (el) =>
+          (el.getAttribute('class') ?? '').includes('st-row-label') && el.textContent === label,
+      )[0];
+      let el = name?.parentNode as FakeElement | null;
+      while (el && !(el.getAttribute('class') ?? '').split(' ').includes('st-row')) {
+        el = el.parentNode as FakeElement | null;
+      }
+      return el?.textContent;
+    },
+    /** The text of the card's note, the list row named `name`, or the
+     *  whole detail. */
+    note: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-card-note')[0]?.textContent,
+    listRow: (name: string) =>
+      findAll(container, (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name))[0]
+        ?.textContent,
+    advanced: () =>
+      findAll(container, (el) => el.getAttribute('class') === 'st-disclosure')[0]?.textContent,
+    disabled: (text: string) => button(text)?.hasAttribute('disabled'),
     /** The names of the rows the list shows, `*` after the selected one. */
     rows: () =>
       findAll(container, (el) => el.hasAttribute('data-uid')).map(
@@ -499,5 +528,117 @@ describe('saving a preset trigger', () => {
       ],
     ]);
     expect(runPresetPlan).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Presets board 2: every row of a preset trigger edits as yours do, all
+// but its name. A changed row says what the preset has.
+describe('editing a preset trigger', () => {
+  const OFF: PresetEdits = {
+    disarm_buff_fade: { triggers: { 'buff.sanctuary': { enabled: { value: false, was: true } } } },
+  };
+  const offCopy = { ...SANCTUARY, enabled: false };
+
+  it('names its preset, marks the row you changed and the list row', async () => {
+    presetEdits = OFF;
+    const opened: string[] = [];
+    const editor = await mountEditor([VISITOR, offCopy], null, false, (id) => opened.push(id));
+    await editor.pick('buff.sanctuary');
+    expect(editor.note()).toBe(
+      'From Disarms and fading buffs. The rows you change here stay yours, and the fixes Vosh ships for the preset still reach the rest.',
+    );
+    expect(editor.row('Enabled')).toBe('EnabledChanged. The preset has it on.');
+    expect(editor.row('Replace with')).toBe(
+      'Replace with{mark} and {line} follow the preset’s card{mark}##{reset} {line}The protective aura around $1 fades.{reset}',
+    );
+    expect(editor.row('Then send')).toBe('Then send');
+    expect(editor.listRow('buff.sanctuary')).toContain(', edited');
+    expect(editor.listRow('visitor')).not.toContain(', edited');
+    expect(editor.advanced()).not.toContain('change');
+    expect(editor.disabled('Reset to preset')).toBe(false);
+    expect(editor.disabled('Delete trigger')).toBeUndefined();
+
+    await editor.click('Disarms and fading buffs');
+    expect(opened).toEqual(['disarm_buff_fade']);
+  });
+
+  it('folds a row you set back to the preset at Save', async () => {
+    presetEdits = OFF;
+    const editor = await mountEditor([offCopy]);
+    await editor.pick('buff.sanctuary');
+    await editor.flip('Enabled');
+    expect(editor.row('Enabled')).toBe('Enabled');
+    expect(editor.disabled('Reset to preset')).toBe(true);
+    await editor.click('Save');
+    expect(editor.error()).toBeNull();
+    // Its value is its was, so preset_edits_set drops it.
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        { triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } } },
+      ],
+    ]);
+    // The store keeps the preset trigger as it holds it. The plan builds
+    // it again.
+    expect(JSON.parse(stored)).toEqual([JSON.parse(JSON.stringify(offCopy))]);
+    expect(runPresetPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts the edits under a closed Advanced', async () => {
+    presetEdits = {
+      disarm_buff_fade: { triggers: { 'disarm.primary': { priority: { value: 7, was: 5 } } } },
+    };
+    const primary = DISARMS.find((t) => t.name === 'disarm.primary')!;
+    const editor = await mountEditor([{ ...primary, priority: 7 }]);
+    await editor.pick('disarm.primary');
+    expect(editor.advanced()).toBe(
+      'AdvancedSet priority, match prompts, send to a pane, run Lua, or tune alerts.1 change',
+    );
+    await editor.click(editor.advanced()!);
+    expect(editor.row('Priority')).toContain('Changed. The preset has 5.');
+  });
+
+  it('keeps the keys of Replace with, so a later swatch reaches it', async () => {
+    const editor = await mountEditor([SANCTUARY]);
+    await editor.pick('buff.sanctuary');
+    expect(editor.disabled('Reset to preset')).toBe(true);
+    const unmarked = '{line}The protective aura around $1 fades.{reset}';
+    await editor.type('Replace with', unmarked);
+    expect(editor.row('Replace with')).toContain(
+      'Changed. The preset has {mark}##{reset} {line}The protective aura around $1 fades.{reset}.',
+    );
+    await editor.click('Save');
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        {
+          triggers: {
+            'buff.sanctuary': {
+              replace: {
+                value: unmarked,
+                was: '{mark}##{reset} {line}The protective aura around $1 fades.{reset}',
+              },
+            },
+          },
+        },
+      ],
+    ]);
+  });
+
+  it('takes back this trigger rows only with Reset to preset', async () => {
+    presetEdits = OFF;
+    const editor = await mountEditor([offCopy]);
+    await editor.pick('buff.sanctuary');
+    await editor.type('Then send', 'look');
+    await editor.click('Reset to preset');
+    expect(editor.row('Enabled')).toBe('Enabled');
+    expect(editor.row('Then send')).toBe('Then send');
+    await editor.click('Save');
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        { triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } } },
+      ],
+    ]);
   });
 });

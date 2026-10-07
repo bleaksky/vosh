@@ -174,6 +174,14 @@ export function AutomationPage({
     },
     [go],
   );
+  const openPreset = useCallback(
+    (key: string) => {
+      const current = viewRef.current;
+      const seq = (current.preset?.seq ?? 0) + 1;
+      go({ ...current, kind: 'presets', panel: 'list', preset: { key, seq }, triggers: null });
+    },
+    [go],
+  );
   const openJson = useCallback(
     (open: boolean) => setView({ ...viewRef.current, panel: open ? 'json' : 'list' }),
     [setView],
@@ -198,6 +206,7 @@ export function AutomationPage({
             onDirty={onDirty}
             onError={onError}
             open={view.triggers}
+            onOpenPreset={openPreset}
           />
         );
         break;
