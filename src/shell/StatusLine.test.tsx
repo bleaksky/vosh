@@ -7,6 +7,7 @@ import type { BandEnv } from '../terminal/bandCells';
 import { parseSgrCells } from '../terminal/sgrCells';
 import frameCss from '../styles/frame.css?raw';
 import { StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
+import { FIT_ALL, type StatusLineFit } from './statusLineFit';
 
 // The stores behind StatusLine reach the Tauri bridge. StatusVitals,
 // under test, draws from plain values and never calls it.
@@ -196,6 +197,46 @@ describe('StatusVitals', () => {
       'a Blackwatch guard',
     ]);
     expect(draw({ showVitals: false })).toBe('');
+  });
+
+  describe('as the line gives way', () => {
+    const at = (fit: Partial<StatusLineFit>, props: Partial<StatusVitalsProps> = {}) =>
+      renderToStaticMarkup(
+        <StatusVitals
+          showVitals
+          vitals={LOW}
+          target="Orla"
+          combat={GUARD}
+          options={DEFAULT_VITALS_OPTIONS}
+          {...props}
+          fit={{ ...FIT_ALL, ...fit }}
+        />,
+      );
+
+    it('hides the name and drops a Target item on another mob', () => {
+      const html = at({ names: false });
+      expect(html).toContain(
+        '<span class="shell-status-foe"><span class="shell-sr">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
+      );
+      expect(html).not.toContain('Target');
+    });
+
+    it('keeps each label for a screen reader once it goes', () => {
+      expect(at({ labels: false })).toContain(
+        '<span><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
+      );
+    });
+
+    it('falls back to Current, and to ? while the game hides your vitals', () => {
+      expect(at({ current: true })).toContain('>159</span>');
+      expect(at({ current: true }, { vitals: HIDDEN })).toContain(
+        '<span class="shell-status-value is-hidden">?</span>',
+      );
+    });
+
+    it('starts a bare value at the item edge', () => {
+      expect(frameCss).toMatch(/\.shell-status-value\.is-bare \{\s*margin-left: 0;/);
+    });
   });
 
   describe('in the Text style', () => {

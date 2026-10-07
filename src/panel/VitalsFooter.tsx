@@ -7,7 +7,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
-import { readPanelFace, usePanelFaceVersion } from './panelFace';
+import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
 import type { VitalsOptions, VitalsValues } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
@@ -395,30 +395,6 @@ function useFooterWidth(el: RefObject<HTMLElement | null>, active: boolean): num
     return () => observer.disconnect();
   }, [el, active]);
   return width ?? saved;
-}
-
-let measureCanvas: HTMLCanvasElement | null = null;
-// Widths by font and text. The labels and maxes rarely change, so a
-// vitals update reads these instead of measuring again.
-const widths = new Map<string, number>();
-
-/** How wide `text` draws in `font`. Values use tabular numbers, where
- *  every digit is as wide as a zero, so digits measure as zeros. A
- *  width taken before a face loaded is its fallback's, so `faceVersion`
- *  keys each width to the faces loaded when it was taken. */
-function textWidth(text: string, font: string, faceVersion: number): number {
-  const shape = text.replace(/[0-9]/g, '0');
-  const key = `${faceVersion}|${font}|${shape}`;
-  const known = widths.get(key);
-  if (known !== undefined) return known;
-  measureCanvas ??= document.createElement('canvas');
-  const ctx = measureCanvas.getContext('2d');
-  if (!ctx) return shape.length * 7;
-  ctx.font = font;
-  const width = Math.ceil(ctx.measureText(shape).width);
-  if (widths.size > 64) widths.clear();
-  widths.set(key, width);
-  return width;
 }
 
 /** A vital's color on its row or One line item, as panel.css reads it. */
