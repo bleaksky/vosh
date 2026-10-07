@@ -419,6 +419,12 @@
   color: var(--text);
 }
 
+/* A value whose label or name gave way, which a screen reader still
+   hears, starts the item. */
+.shell-status-value.is-bare {
+  margin-left: 0;
+}
+
 .shell-status-value.is-low {
   color: var(--danger-text);
 }
