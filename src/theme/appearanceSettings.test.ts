@@ -288,7 +288,7 @@ describe('stepGalleryTheme', () => {
       id = stepGalleryTheme(themes, id, 1, 'dark');
       ui = pickTheme(ui, id);
       // The radio the arrow lands on is the one the gallery checks.
-      expect(resolveActiveTheme(ui, true)).toBe(id);
+      expect(resolveActiveTheme(ui, true, null)).toBe(id);
     }
     expect(ui.light_theme).toBe('rubric');
   });
