@@ -678,6 +678,153 @@
   white-space: nowrap;
 }
 
+/* Ledger, Gauges and Pips (Vitals Styles, board 1). Each vital carries
+   its tone as custom properties: the mark, the label and the value. The
+   mark rests in a quiet tone, a color you picked colors the mark and
+   the label, low turns the mark danger and the value danger text, warn
+   turns both warn, and your opponent draws its name in text and its
+   health in warn. A value the game hides reads a tertiary `?` over an
+   empty mark. Each style sets its quiet tone in --vital-quiet, secondary
+   unless it says otherwise. VitalsFooter sets --vitals-min-height only while it waits
+   for your vitals. */
+.vitals-tone {
+  --vital-mark: var(--vital-ink, var(--vital-quiet, var(--secondary)));
+  --vital-label: var(--vital-ink, var(--vital-quiet, var(--secondary)));
+  --vital-value: var(--text);
+}
+
+.vitals-tone.is-warn {
+  --vital-mark: var(--warn);
+  --vital-value: var(--warn);
+}
+
+.vitals-tone.is-low {
+  --vital-mark: var(--danger);
+  --vital-value: var(--danger-text);
+}
+
+.vitals-tone.is-foe {
+  --vital-mark: var(--warn);
+  --vital-label: var(--text);
+  --vital-value: var(--warn);
+}
+
+.vitals-tone.is-hidden {
+  --vital-value: var(--tertiary);
+}
+
+/* Ledger. Columns under the pane label recipe, 10 px caps as MAP and
+   AFFECTS head their panes, the figure at --vitals-figure, round(16 px
+   x scale) until vitalsLedger.ts steps it down, the max at the caps
+   size, and a line under each column on the Meter's px. The marks rest
+   in tertiary, as Rows draws its lines. */
+.panel-vitals-ledger {
+  min-height: var(--vitals-min-height, 0);
+  padding: round(10px * var(--mud-scale), 1px) 0 round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-ledger {
+  --vital-quiet: var(--tertiary);
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-ledger-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 16px;
+}
+
+.vitals-ledger-column {
+  min-width: 0;
+}
+
+.vitals-ledger-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vital-label);
+}
+
+.vitals-ledger-figure {
+  display: flex;
+  align-items: baseline;
+  height: round(20px * var(--mud-scale), 1px);
+  margin-top: round(3px * var(--mud-scale), 1px);
+  white-space: nowrap;
+}
+
+.vitals-ledger-current {
+  font-size: var(--vitals-figure);
+  line-height: round(20px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--vital-value);
+}
+
+.vitals-ledger-max {
+  margin-left: 3px;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--tertiary);
+}
+
+.vitals-ledger-line {
+  height: var(--vitals-meter, 2px);
+  margin-top: round(4px * var(--mud-scale), 1px);
+  border-radius: var(--vitals-meter-radius, 1px);
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.vitals-ledger-fill {
+  height: 100%;
+  background: var(--vital-mark);
+}
+
+/* Your opponent across the footer, its name and health on one line and
+   a line under both, 12 above your columns or 12 under them. */
+.vitals-ledger-opponent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  margin-bottom: round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-ledger-opponent.is-bottom {
+  margin: round(12px * var(--mud-scale), 1px) 0 0;
+}
+
+.vitals-ledger-opponent.is-alone {
+  margin: 0;
+}
+
+.vitals-ledger-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vital-label);
+}
+
+.vitals-ledger-opponent .vitals-ledger-figure {
+  margin-top: 0;
+}
+
+.vitals-ledger-opponent .vitals-ledger-line {
+  grid-column: 1 / -1;
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 /* Menus keep the system face whatever the Panel font, like every other

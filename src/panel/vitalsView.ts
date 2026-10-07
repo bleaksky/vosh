@@ -1,5 +1,13 @@
+import type { CSSProperties } from 'react';
 import type { PromptShowState } from '../ipc/prompt';
-import type { Vital, VitalOff, VitalsColors, VitalsMeter, VitalsValues } from '../ipc/uiConfig';
+import type {
+  Vital,
+  VitalOff,
+  VitalsColors,
+  VitalsMeter,
+  VitalsOptions,
+  VitalsValues,
+} from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
 import { ANSI_SLOTS } from '../theme/baseAnsi';
@@ -120,6 +128,49 @@ export function shownVitals(vitals: Vitals, on: readonly Vital[]): Vital[] {
   return on.filter((vital) => vitals.hidden || vital === 'hp' || vitals[maxOf(vital)] > 0);
 }
 
+/** Each vital's name in the footer. */
+export const VITAL_LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
+
+/** One vital as every footer style draws it. */
+export interface ShownVital {
+  key: Vital;
+  current: number;
+  max: number;
+  /** The value in its Values form. */
+  value: string;
+  /** The widest the value reads, the vital at its max (widestVital). */
+  widest: string;
+  /** The mark's fill, null for an empty mark. */
+  pct: number | null;
+  tone: VitalTone;
+}
+
+/** The vitals the footer draws (shownVitals), each in the Values form
+ *  and the tone `options` ask for. A hidden vital reads `?` over an
+ *  empty mark and never warns. */
+export function shownRows(
+  vitals: Vitals,
+  on: readonly Vital[],
+  options: Pick<VitalsOptions, 'values' | 'warn_thirds'>,
+): ShownVital[] {
+  return shownVitals(vitals, on).map((key) => {
+    const current = vitals[key];
+    const max = vitals[maxOf(key)];
+    const widest = widestVital(options.values, max, vitals.hidden);
+    return vitals.hidden
+      ? { key, current, max, value: hiddenVital(options.values), widest, pct: null, tone: 'hidden' }
+      : {
+          key,
+          current,
+          max,
+          value: formatVital(options.values, current, max),
+          widest,
+          pct: meterFill(current, max),
+          tone: vitalTone(current, max, vitals.low[key], options.warn_thirds),
+        };
+  });
+}
+
 /** The key of a vital's max in Char.Vitals. */
 export function maxOf(vital: Vital): 'maxhp' | 'maxmana' | 'maxmove' {
   if (vital === 'hp') return 'maxhp';
@@ -181,6 +232,22 @@ export function vitalInks(
     inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
   }
   return inks;
+}
+
+/** A vital's tone and color as the classes and the custom property
+ *  the Ledger, Gauges and Pips rules in panel.css read: `is-low`,
+ *  `is-warn` or `is-hidden` on `vitals-tone`, and `--vital-ink` for a
+ *  color you picked. */
+export function toneProps(
+  tone: VitalTone,
+  ink: string | undefined,
+  className: string,
+): { className: string; style?: CSSProperties } {
+  const toned = tone === 'quiet' ? '' : ` is-${tone === 'danger' ? 'low' : tone}`;
+  const classes = `${className} vitals-tone${toned}`;
+  return ink
+    ? { className: classes, style: { '--vital-ink': ink } as CSSProperties }
+    : { className: classes };
 }
 
 /** The opponent Char.Combat names, as far as the status line needs it. */
