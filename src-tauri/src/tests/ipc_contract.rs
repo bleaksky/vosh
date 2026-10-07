@@ -167,6 +167,12 @@ const UNHEARD: &[Unheard] = &[
         why: "Your edits to a preset were saved. The Presets page and the \
               trigger cards follow it once they edit presets (Presets Q10).",
     },
+    Unheard {
+        name: "vosh://presets-changed",
+        why: "Presets turned on or off in one step. The Presets page and \
+              First Run follow it once they switch presets through \
+              presets_enabled_set (First Run Q17, Presets Q10).",
+    },
 ];
 
 /// A name argument, as far as the source tells it.

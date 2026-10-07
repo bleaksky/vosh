@@ -204,6 +204,10 @@ pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
 /// preset. The payload names the profile, `{profile}`, see
 /// [`PresetEditsChanged`]. In loadout mode every profile shares the edits.
 pub(crate) const PRESET_EDITS_CHANGED: &str = "vosh://preset-edits-changed";
+/// Sent to every window when `presets_enabled_set` turned presets on or
+/// off. The payload names the profile, `{profile}`, see
+/// [`PresetsChanged`]. In loadout mode every profile shares the list.
+pub(crate) const PRESETS_CHANGED: &str = "vosh://presets-changed";
 
 // Plugins.
 
@@ -387,6 +391,13 @@ pub(crate) struct PromptConfigChanged {
 /// changed, None before any profile loads.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct PresetEditsChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// The payload of [`PRESETS_CHANGED`]: the profile whose presets turned
+/// on or off, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetsChanged {
     pub(crate) profile: Option<String>,
 }
 

@@ -85,6 +85,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::aliases_import,
         automation::presets_install,
         automation::presets_remove,
+        automation::presets_enabled_set,
         logs::logs_list_sessions,
         logs::logs_search_page,
         logs::logs_export,

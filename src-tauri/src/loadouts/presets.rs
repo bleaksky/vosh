@@ -252,6 +252,43 @@ pub(crate) fn install_preset_triggers(
     Ok(removed)
 }
 
+/// One preset you turned on or off, as `presets_enabled_set` takes it.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct PresetSwitch {
+    pub(crate) id: String,
+    pub(crate) on: bool,
+}
+
+/// The `ui.enabled_presets` list once `switches` land on `list`, the
+/// list as stored. An empty list means the defaults, so it starts from
+/// them. Every id a switch does not name stays as it is, a preset of a
+/// newer build among them, and a list left empty stores [`PRESETS_OFF`].
+/// Mirrors `storedPresetIds` in src/automation/automationRecords.ts.
+pub(crate) fn switch_presets(list: &[String], switches: &[PresetSwitch]) -> Vec<String> {
+    let mut on: Vec<String> = if list.is_empty() {
+        PRESETS_ON_BY_DEFAULT
+            .iter()
+            .map(|id| (*id).to_string())
+            .collect()
+    } else {
+        list.iter()
+            .filter(|id| *id != PRESETS_OFF)
+            .cloned()
+            .collect()
+    };
+    for s in switches {
+        if !s.on {
+            on.retain(|id| *id != s.id);
+        } else if !on.contains(&s.id) {
+            on.push(s.id.clone());
+        }
+    }
+    if on.is_empty() {
+        on.push(PRESETS_OFF.to_string());
+    }
+    on
+}
+
 /// The macros half of [`presets_install`] over the live profile `p`.
 /// Each macro carries the id of its preset. It takes out every macro of
 /// those presets and adds `macros` in the order given, which for Numpad
@@ -988,5 +1025,36 @@ mod tests {
         let group = |name| p.triggers.get(name).and_then(|t| t.group.clone());
         assert_eq!(group("disarm.secondary").as_deref(), Some("combat"));
         assert_eq!(group("buff.sanctuary").as_deref(), Some("buffs"));
+    }
+
+    fn switch(id: &str, on: bool) -> PresetSwitch {
+        PresetSwitch { id: id.into(), on }
+    }
+
+    #[test]
+    fn a_switch_turns_its_preset_alone_and_keeps_ids_this_build_does_not_know() {
+        let stored = presets(&["sent_tells", "later_preset", "potion_labels"]);
+        let switches = [switch("potion_labels", false), switch("herb_labels", true)];
+        assert_eq!(
+            switch_presets(&stored, &switches),
+            ["sent_tells", "later_preset", "herb_labels"]
+        );
+        let on_again = [switch("sent_tells", true)];
+        assert_eq!(switch_presets(&stored, &on_again), stored);
+    }
+
+    #[test]
+    fn a_switch_starts_from_the_defaults_and_stores_none_when_every_preset_is_off() {
+        let mut list = switch_presets(&[], &[switch("herb_labels", false)]);
+        let mut defaults = presets(PRESETS_ON_BY_DEFAULT);
+        defaults.retain(|id| id != "herb_labels");
+        assert_eq!(list, defaults);
+        let off: Vec<PresetSwitch> = list.iter().map(|id| switch(id, false)).collect();
+        list = switch_presets(&list, &off);
+        assert_eq!(list, [PRESETS_OFF]);
+        assert_eq!(
+            switch_presets(&list, &[switch("sent_tells", true)]),
+            ["sent_tells"]
+        );
     }
 }

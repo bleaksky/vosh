@@ -14,7 +14,8 @@ use tauri::{AppHandle, State};
 use vosh_automation::trigger::Trigger;
 
 use crate::app::events::{
-    broadcast, broadcast_list_changes, ListChanges, ListRevisions, MACROS_CHANGED, TIMERS_CHANGED,
+    broadcast, broadcast_list_changes, ListChanges, ListRevisions, PresetsChanged, MACROS_CHANGED,
+    PRESETS_CHANGED, TIMERS_CHANGED,
 };
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
@@ -22,7 +23,7 @@ use crate::import::ImportFormat;
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::{
     delete_macro, import_macros, install_preset_macros, install_preset_triggers,
-    remove_preset_macros, set_macro,
+    remove_preset_macros, set_macro, switch_presets, PresetSwitch,
 };
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
@@ -479,6 +480,50 @@ pub(crate) async fn presets_install(
     if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
         broadcast(&app, MACROS_CHANGED, &macros);
     }
+    Ok(done)
+}
+
+/// Turn presets on and off in one step, for First Run's Get started and
+/// the Presets page (First Run Q17, Presets Q10). Each preset `changes`
+/// turns off loses its triggers and macros, and `triggers` and `macros`,
+/// which the page built for the presets it turns on, install as
+/// [`presets_install`] installs them. Then the switches land on the
+/// `enabled_presets` list as it stands now, see [`switch_presets`], and
+/// nothing else of the page's settings is written. Saves once and tells
+/// every window.
+#[tauri::command]
+pub(crate) async fn presets_enabled_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    changes: Vec<PresetSwitch>,
+    triggers: Vec<Trigger>,
+    macros: Vec<Macro>,
+    profile: Option<String>,
+) -> Result<PresetsInstalled, String> {
+    let (open, done, lists, macros) = {
+        let mut p = state.lock_named(profile).await?;
+        let lists_before = ListRevisions::of_lists(&p);
+        let macros_before = p.macros.clone();
+        let installed = triggers.len() + macros.len();
+        install_preset_macros(&mut p, macros)?;
+        for off in changes.iter().filter(|c| !c.on) {
+            p.triggers.remove_by_preset(&off.id);
+            remove_preset_macros(&mut p, &off.id);
+        }
+        let removed = install_preset_triggers(&mut p, triggers)?;
+        p.ui.enabled_presets = switch_presets(&p.ui.enabled_presets, &changes);
+        let lists = ListChanges::between(lists_before, ListRevisions::of_lists(&p));
+        let macros = (p.macros != macros_before).then(|| p.macros.clone());
+        let done = PresetsInstalled { installed, removed };
+        (p.open().clone(), done, lists, macros)
+    };
+    persist_profile(state.inner(), &open).await;
+    broadcast_list_changes(&app, &open, lists);
+    if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
+        broadcast(&app, MACROS_CHANGED, &macros);
+    }
+    let profile = open.name();
+    broadcast(&app, PRESETS_CHANGED, &PresetsChanged { profile });
     Ok(done)
 }
 
@@ -981,5 +1026,86 @@ mod tests {
                 Some("could not detect import format")
             );
         });
+    }
+
+    #[tokio::test]
+    async fn a_switch_turns_presets_on_and_off_saves_the_list_alone_and_tells_every_window() {
+        use std::sync::{Arc, Mutex};
+
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::{Listener, Manager};
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+
+        use super::{presets_enabled_set, PresetsInstalled};
+        use crate::app::events::PRESETS_CHANGED;
+        use crate::app::state::{AppState, SharedState};
+        use crate::loadouts::presets::PresetSwitch;
+
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let into = heard.clone();
+        app.listen_any(PRESETS_CHANGED, move |event| {
+            into.lock().unwrap().push(event.payload().to_string());
+        });
+        let trigger = |preset: &str, name: &str| Trigger {
+            preset: Some(preset.into()),
+            ..Trigger::new(name, "You quaff", TriggerAction::Gag)
+        };
+        let state = app.state::<SharedState>();
+        {
+            let mut p = state.selected_profile().await;
+            p.ui.enabled_presets = vec![
+                "sent_tells".into(),
+                "later_preset".into(),
+                "potion_labels".into(),
+            ];
+            p.ui.theme = "vellum".into();
+            p.triggers
+                .set(trigger("potion_labels", "potion.quaff"))
+                .unwrap();
+        }
+        let switch = |id: &str, on| PresetSwitch { id: id.into(), on };
+        let done = presets_enabled_set(
+            app.handle().clone(),
+            app.state(),
+            vec![switch("potion_labels", false), switch("herb_labels", true)],
+            vec![trigger("herb_labels", "herb.eat")],
+            Vec::new(),
+            None,
+        )
+        .await;
+        assert_eq!(
+            done,
+            Ok(PresetsInstalled {
+                installed: 1,
+                removed: Vec::new()
+            })
+        );
+        {
+            let p = state.selected_profile().await;
+            assert_eq!(
+                p.ui.enabled_presets,
+                ["sent_tells", "later_preset", "herb_labels"]
+            );
+            assert_eq!(p.ui.theme, "vellum", "the rest of the settings stay");
+            let names: Vec<String> = p.triggers.list().into_iter().map(|t| t.name).collect();
+            assert_eq!(names, ["herb.eat"]);
+        }
+        let off = ["sent_tells", "later_preset", "herb_labels"].map(|id| switch(id, false));
+        let done = presets_enabled_set(
+            app.handle().clone(),
+            app.state(),
+            off.to_vec(),
+            Vec::new(),
+            Vec::new(),
+            None,
+        )
+        .await;
+        assert_eq!(done.map(|d| d.installed), Ok(0));
+        let p = state.selected_profile().await;
+        assert_eq!(p.ui.enabled_presets, ["none"]);
+        assert!(p.triggers.is_empty());
+        assert_eq!(heard.lock().unwrap().len(), 2);
     }
 }
