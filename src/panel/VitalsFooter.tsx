@@ -15,6 +15,7 @@ import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
   opponentHealth,
   shownRows,
+  widestOpponentHealth,
   vitalsFooterHeight,
   vitalsOn,
   vitalsGeometry,
@@ -39,6 +40,9 @@ import {
   type MeasureText,
 } from './vitalsLedgerFit';
 import { VitalsLedger } from './VitalsLedger';
+import { VitalsGauges } from './VitalsGauges';
+import { VitalsPips } from './VitalsPips';
+import { gaugesFit, marksHeight, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -82,6 +86,9 @@ import { VitalsLedger } from './VitalsLedger';
 
 // Ledger draws columns of figures under the pane label caps
 // (VitalsLedger.tsx). Meter sets the line under each column there.
+// Gauges and Pips draw a pill or discs between each label and value
+// (VitalsGauges.tsx, VitalsPips.tsx), their own marks, so Meter goes
+// quiet for them.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
  *  prompt hides your vitals. */
@@ -116,7 +123,9 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
     vitals === null || opponentOnly
       ? []
       : shownRows(vitals, vitalsOn(options.order, options.off), options);
-  const fit = fitOf(style, width, size, rows, options.values, measure);
+  // Gauges and Pips measure your opponent's health with your values.
+  const foe = combat && !options.off.includes('opponent') ? combat : null;
+  const fit = fitOf(style, width, size, rows, foe, options.values, measure);
 
   return (
     <VitalsBlock
@@ -135,13 +144,15 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
 export type VitalsFit =
   | { style: 'rows' }
   | { style: 'line'; fit: VitalsLineFit }
-  | { style: 'ledger'; fit: LedgerFit };
+  | { style: 'ledger'; fit: LedgerFit }
+  | { style: 'gauges'; fit: GaugesFit }
+  | { style: 'pips'; fit: PipsFit };
 
 /** The footer styles drawn so far. Every other style draws Rows. */
 type DrawnStyle = VitalsFit['style'];
 
 function drawnStyle(style: VitalsStyle): DrawnStyle {
-  return style === 'line' || style === 'ledger' ? style : 'rows';
+  return style === 'text' ? 'rows' : style;
 }
 
 /** How `style` fits a footer `width` px wide at panel size `size`. */
@@ -150,6 +161,7 @@ function fitOf(
   width: number,
   size: number,
   rows: readonly ShownVital[],
+  combat: CombatOpponent | null,
   values: VitalsValues,
   measure: MeasureText,
 ): VitalsFit {
@@ -163,6 +175,14 @@ function fitOf(
   if (style === 'ledger') {
     const widest = rows.map((row) => ledgerFigure(values, row.max, row.max, row.tone === 'hidden'));
     return { style, fit: ledgerFit(width, size, widest, measure) };
+  }
+  if (style === 'gauges' || style === 'pips') {
+    const labels = rows.map((row) => VITAL_LABELS[row.key]);
+    const values = rows.map((row) => row.widest);
+    if (combat) values.push(widestOpponentHealth(opponentHealth(combat)));
+    return style === 'gauges'
+      ? { style, fit: gaugesFit(width, size, labels, values, measure) }
+      : { style, fit: pipsFit(width, size, labels, values, measure) };
   }
   return { style };
 }
@@ -221,6 +241,29 @@ export function VitalsBlock({
           meter={geometry.meter > 0}
           inks={inks}
         />
+      </section>
+    );
+  }
+  if (fit.style === 'gauges' || fit.style === 'pips') {
+    const marked = {
+      rows,
+      waiting,
+      combat: foe,
+      place: options.opponent,
+      inks,
+    };
+    return (
+      <section
+        ref={sectionRef}
+        className={`panel-vitals panel-vitals-marks${fit.fit === 'under' ? ' is-under' : ''}`}
+        style={waitingStyle(waiting ? marksHeight(size, mine) : 0)}
+        aria-label={label}
+      >
+        {fit.style === 'gauges' ? (
+          <VitalsGauges {...marked} fit={fit.fit} />
+        ) : (
+          <VitalsPips {...marked} fit={fit.fit} />
+        )}
       </section>
     );
   }
@@ -297,8 +340,14 @@ function ledgerStyle(geometry: VitalsGeometry, waiting: number): CSSProperties {
   return {
     '--vitals-meter': `${geometry.meter}px`,
     '--vitals-meter-radius': `${geometry.meterRadius}px`,
-    ...(waiting > 0 ? { '--vitals-min-height': `${waiting}px` } : {}),
+    ...waitingStyle(waiting),
   } as CSSProperties;
+}
+
+/** The height a footer holds while it waits for your vitals, none once
+ *  they show. */
+function waitingStyle(waiting: number): CSSProperties | undefined {
+  return waiting > 0 ? ({ '--vitals-min-height': `${waiting}px` } as CSSProperties) : undefined;
 }
 
 /** The geometry as custom properties panel.css reads. */
