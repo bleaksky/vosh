@@ -23,6 +23,7 @@ import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
 import { PANE_LABELS } from './paneTypes';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
+import type { TextColors } from './VitalsText';
 
 // The right-hand panel (SPEC 9): the active profile's pane tree from
 // the title band down, then the vitals pinned at the bottom. While your
@@ -65,13 +66,16 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
  *  vitals draw. `textSize` is your panel size in px, which every pane
- *  draws at, the terminal size when the panel follows it. */
+ *  draws at, the terminal size when the panel follows it. `textColors`
+ *  are the terminal settings the Text style of the vitals draws with. */
 export function PanelHost({
   promptShow,
   textSize: size,
+  textColors,
 }: {
   promptShow: PromptShowState | null;
   textSize?: number | undefined;
+  textColors?: TextColors;
 }) {
   const textSize = paneTextSize(size);
   const layout = usePanelLayout();
@@ -138,9 +142,9 @@ export function PanelHost({
           )}
         </div>
         {panelShowsVitals(promptShow, hideWhenPinned) ? (
-          <VitalsFooter />
+          <VitalsFooter textColors={textColors} />
         ) : (
-          <VitalsFooter opponentOnly />
+          <VitalsFooter opponentOnly textColors={textColors} />
         )}
       </div>
     </PaneTextSizeContext.Provider>

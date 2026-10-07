@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from './panelFace';
-import type { VitalsOptions, VitalsStyle, VitalsValues } from '../ipc/uiConfig';
+import type { VitalsOptions, VitalsPlace, VitalsStyle, VitalsValues } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
@@ -43,6 +43,7 @@ import { VitalsLedger } from './VitalsLedger';
 import { VitalsGauges } from './VitalsGauges';
 import { VitalsPips } from './VitalsPips';
 import { gaugesFit, marksHeight, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
+import { VitalsText, type TextColors } from './VitalsText';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -84,6 +85,10 @@ import { gaugesFit, marksHeight, pipsFit, type GaugesFit, type PipsFit } from '.
 // It colors the vital's label and its meter, never the number, and low
 // and warn still turn the meter and the value.
 
+// Text writes your vitals with your prompt's codes (VitalsText.tsx),
+// in the panel only. With your vitals in the status line it draws Rows
+// here until the status line draws them.
+
 // Ledger draws columns of figures under the pane label caps
 // (VitalsLedger.tsx). Meter sets the line under each column there.
 // Gauges and Pips draw a pill or discs between each label and value
@@ -91,8 +96,12 @@ import { gaugesFit, marksHeight, pipsFit, type GaugesFit, type PipsFit } from '.
 // quiet for them.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
- *  prompt hides your vitals. */
-export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean } = {}) {
+ *  prompt hides your vitals. `textColors` are the terminal settings the
+ *  Text style draws its colors with. */
+export function VitalsFooter({
+  opponentOnly = false,
+  textColors = NO_TEXT_COLORS,
+}: { opponentOnly?: boolean; textColors?: TextColors | undefined } = {}) {
   const vitals = useVitals();
   const combat = useCombat();
   const options = useVitalsOptions();
@@ -102,7 +111,7 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
     () => vitalInks(options.colors, palette, themeTokens(theme)),
     [options.colors, palette, theme],
   );
-  const style = drawnStyle(options.style);
+  const style = drawnStyle(options.style, options.place);
   const sectionRef = useRef<HTMLElement | null>(null);
   const width = useFooterWidth(sectionRef, style !== 'rows');
   const { size } = usePaneText();
@@ -111,6 +120,11 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
+  if (style === 'text') {
+    return (
+      <VitalsText width={width} hostRef={sectionRef} colors={textColors} fightOnly={opponentOnly} />
+    );
+  }
   // Fit by each vital at its max, the widest its value reads, so the
   // footer does not jump between forms as a value loses a digit in a
   // fight. Only a new max, a new Values form, a new panel width, or a
@@ -148,16 +162,20 @@ export type VitalsFit =
   | { style: 'gauges'; fit: GaugesFit }
   | { style: 'pips'; fit: PipsFit };
 
-/** The footer styles drawn so far. Every other style draws Rows. */
-type DrawnStyle = VitalsFit['style'];
+/** The footer styles drawn so far. */
+type DrawnStyle = VitalsFit['style'] | 'text';
 
-function drawnStyle(style: VitalsStyle): DrawnStyle {
-  return style === 'text' ? 'rows' : style;
+/** Text draws in the panel only, and Rows stands in for it elsewhere. */
+function drawnStyle(style: VitalsStyle, place: VitalsPlace): DrawnStyle {
+  return style === 'text' && place !== 'panel' ? 'rows' : style;
 }
+
+/** The terminal's colors as they start, for a footer handed none. */
+const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: false };
 
 /** How `style` fits a footer `width` px wide at panel size `size`. */
 function fitOf(
-  style: DrawnStyle,
+  style: VitalsFit['style'],
   width: number,
   size: number,
   rows: readonly ShownVital[],
