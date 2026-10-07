@@ -65,7 +65,7 @@ import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
-import { PROMPT_BINDING } from '../prompt/cardBinding';
+import { PROMPT_BINDING, VITALS_TEXT_BINDING, type CardBinding } from '../prompt/cardBinding';
 import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
@@ -170,9 +170,14 @@ function MainWindow() {
   // The prompt card (Customize prompt…), open over your prompt, and the
   // view it opens on, or `point` to open on pointing at your game's line.
   const [promptCard, setPromptCard] = useState<CardRequest | null>(null);
+  // What the card edits: your prompt, or your vitals text.
+  const [cardBinding, setCardBinding] = useState<CardBinding>(PROMPT_BINDING);
   // Every request counts, so the open card hears a repeat of one.
   const openPromptCard = useCallback(
-    (view: CardRequestView) => setPromptCard((prev) => nextCardRequest(prev, view)),
+    (view: CardRequestView, binding: CardBinding = PROMPT_BINDING) => {
+      setCardBinding(binding);
+      setPromptCard((prev) => nextCardRequest(prev, view));
+    },
     [],
   );
   // The card draws your design over the band of Lifted in the text.
@@ -208,9 +213,11 @@ function MainWindow() {
   };
 
   // Customize… in Settings, and anything else in another window, opens
-  // the card here and brings this window forward.
+  // the card here and brings this window forward. Edit… under Customize
+  // vitals and Edit your text… on the vitals menu open it on your
+  // vitals text.
   useTauriEvent(subscribePromptCardOpen, (request) => {
-    openPromptCard(request.view ?? 'design');
+    openPromptCard(request.view ?? 'design', request.vitals ? VITALS_TEXT_BINDING : PROMPT_BINDING);
     void getCurrentWindow()
       .setFocus()
       .catch(() => {});
@@ -745,11 +752,12 @@ function MainWindow() {
       {promptCard && (
         // A selection mounts the card again for the session it brings to
         // the front, and the card it leaves puts that session's live
-        // prompt back as it goes.
+        // prompt back as it goes. Turning from your prompt to your vitals
+        // text mounts it again too.
         <PromptCard
-          key={selected}
+          key={`${selected}:${cardBinding.kind}`}
           session={selected}
-          binding={PROMPT_BINDING}
+          binding={cardBinding}
           opening={promptCard}
           onBand={setCardBand}
           host={promptCardHost}

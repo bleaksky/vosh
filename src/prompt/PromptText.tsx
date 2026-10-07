@@ -39,6 +39,8 @@ interface PromptTextProps {
    *  it was, then calls `onFocusTaken`. */
   focusRequest?: number;
   onFocusTaken?: () => void;
+  /** What a reader hears the field named. */
+  fieldLabel?: string | undefined;
 }
 
 /** The caret's offset in `el`'s text, or null when the caret is not in it. */
@@ -92,6 +94,7 @@ export function PromptText({
   caretRef,
   focusRequest = 0,
   onFocusTaken,
+  fieldLabel = 'Prompt template',
 }: PromptTextProps) {
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState(template);
@@ -178,7 +181,7 @@ export function PromptText({
   return (
     <div className="pc-body pc-text">
       <span id="pc-template-label" className="st-visually-hidden">
-        Prompt template
+        {fieldLabel}
       </span>
       <div
         ref={fieldRef}

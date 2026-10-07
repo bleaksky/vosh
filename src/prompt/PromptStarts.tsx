@@ -85,10 +85,15 @@ function useSamples(
   return samples;
 }
 
-interface StartListProps {
+/** The rows of the start list or the Presets menu, the designs of
+ *  From another profile, and Start empty. */
+export interface StartChoices {
   rows: StartRow[];
   others: StartRow[];
   empty: StartRow | null;
+}
+
+interface StartListProps extends StartChoices {
   samples: Map<string, Sample>;
   env: BandEnv;
   cellW: number;
@@ -220,6 +225,9 @@ interface StartsProps {
   config: PromptConfig;
   presets: readonly PromptPreset[];
   designs: readonly PromptDesign[];
+  /** Rows of its own in place of the presets and designs, such as a
+   *  vitals text's Presets (vitalsStartRows). */
+  own?: StartChoices | undefined;
   values: 'live' | 'sample';
   refresh: number;
   env: BandEnv;
@@ -227,6 +235,8 @@ interface StartsProps {
   /** You picked a start, by its id and its design. */
   onPick: (row: StartRow) => void;
   onInsertValue: () => void;
+  /** The hint at rest. */
+  restHint?: string | undefined;
   /** A line under the hint at rest, such as what the Lament preview
    *  hides (P8c). */
   note?: string | null;
@@ -249,18 +259,23 @@ export function Starts({
   config,
   presets,
   designs,
+  own,
   values,
   refresh,
   env,
   cellW,
   onPick,
   onInsertValue,
+  restHint = 'Click any part of your prompt to change it.',
   note = null,
   promptsOff = false,
   notMatching = null,
   children,
 }: StartsProps) {
-  const list = useMemo(() => startRows(presets, config, designs), [presets, config, designs]);
+  const list = useMemo(
+    () => own ?? startRows(presets, config, designs),
+    [own, presets, config, designs],
+  );
   const templates = useMemo(() => list.rows.map((r) => r.template), [list]);
   // Detailed shows its fight line with the sample opponent, tagged, so
   // you see what it adds in a fight (P4). The other starts draw your
@@ -313,7 +328,7 @@ export function Starts({
           </span>
         </p>
       ) : (
-        <p className="pc-hint">Click any part of your prompt to change it.</p>
+        <p className="pc-hint">{restHint}</p>
       )}
       {note && <p className="pc-rest-note">{note}</p>}
       <div className="pc-actions">

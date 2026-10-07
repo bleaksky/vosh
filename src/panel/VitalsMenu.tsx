@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import { openVitalsTextCard } from '../ipc/prompt';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
@@ -19,7 +20,7 @@ import {
 // Q16). It opens at the pointer, as the terminal's menu does, with
 // Style and Values, each a submenu with a check on your pick, then
 // Customize vitals…, which opens Settings there. Under Text it adds Edit
-// your text…, and Values goes quiet, since your text writes its own
+// your text…, which opens the card for your text, and Values goes quiet, since your text writes its own
 // values. Colors stay in Customize vitals. A pick saves alone for the
 // profile, then tells every window, so the footer, the status line and
 // Settings follow at once. The footer and the status line take no
@@ -58,14 +59,8 @@ export function VitalsChoiceItems<T extends string>({
   );
 }
 
-const openSettingsAt = (anchor?: string) =>
-  openSettingsTab(
-    formatSettingsTarget({
-      group: 'layout',
-      section: 'customize-vitals',
-      ...(anchor !== undefined && { anchor }),
-    }),
-  );
+const openSettingsAt = () =>
+  openSettingsTab(formatSettingsTarget({ group: 'layout', section: 'customize-vitals' }));
 
 interface Props {
   /** The pointer, where the menu opens. */
@@ -167,8 +162,8 @@ export function VitalsMenu({ x, y, onClose }: Props) {
             onHover={closeSub}
             onFocus={closeSub}
             onSelect={() => {
-              done();
-              openSettingsAt('vitals-text');
+              onClose();
+              void openVitalsTextCard().catch(() => undefined);
             }}
           >
             Edit your text…

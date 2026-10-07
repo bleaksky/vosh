@@ -1043,6 +1043,21 @@
   padding-left: 1ch;
 }
 
+/* While the vitals text card is open each part of your text takes a
+   click, and the part you picked takes the ring the card draws round a
+   part of your prompt (board 5 of the Vitals Styles review). */
+.panel-vitals-text-part {
+  cursor: default;
+}
+
+.panel-vitals-text-part.is-picked {
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--mark-tint);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 /* Menus keep the system face whatever the Panel font, like every other

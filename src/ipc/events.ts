@@ -101,6 +101,9 @@ export const PASTE_LINE_DELAY_CHANGED = 'vosh://paste-line-delay-changed';
 export const SPELLCHECK_PROMPT_CHANGED = 'vosh://spellcheck-prompt-changed';
 export const INPUT_CURSOR_STYLE_CHANGED = 'vosh://input-cursor-style-changed';
 export const VITALS_OPTIONS_CHANGED = 'vosh://vitals-options-changed';
+/** Carries your vitals text and the earlier ones, saved from Settings
+ *  or the vitals text card, to every window. */
+export const VITALS_TEXT_CHANGED = 'vosh://vitals-text-changed';
 
 /** Takes an open Settings window to a target, from openSettingsTab. */
 export const SETTINGS_GOTO_TAB = 'vosh://settings-goto-tab';

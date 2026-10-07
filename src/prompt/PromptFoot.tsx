@@ -80,3 +80,29 @@ export function DesignFoot({
     </div>
   );
 }
+
+interface TextFootProps {
+  /** Where the text draws, such as Draws in your panel. */
+  note: string;
+  preview: PromptPreviewName;
+  forsaken: boolean;
+  onPreview: (preview: PromptPreviewName) => void;
+  onDone: () => void;
+}
+
+/** The foot under your vitals text (Vitals Styles Q10): where it draws
+ *  on the left, since Style and Show your vitals in say whether and
+ *  where, then the preview and Done. */
+export function TextFoot({ note, preview, forsaken, onPreview, onDone }: TextFootProps) {
+  return (
+    <div className="pc-foot">
+      <span className="pc-foot-note">{note}</span>
+      <div className="pc-foot-end">
+        <PreviewButton value={preview} forsaken={forsaken} onChange={onPreview} />
+        <Button variant="primary" className="pc-done" onClick={onDone}>
+          Done
+        </Button>
+      </div>
+    </div>
+  );
+}

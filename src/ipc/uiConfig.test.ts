@@ -825,8 +825,8 @@ describe('setUiFields', () => {
   const values: Record<string, unknown> = uiFields.fields;
 
   // The tracked affects have a setter of their own, and the 0.7 style
-  // is read only, as READ_ONLY in the Rust test says.
-  const readOnly = ['tracked_affects', 'vitals_legacy_style'];
+  // and text are read only, as READ_ONLY in the Rust test says.
+  const readOnly = ['tracked_affects', 'vitals_legacy_style', 'vitals_legacy_text'];
 
   it('can send every field Rust has a setter for', () => {
     const keys = Object.keys(normalizeUiConfig({} as RawUiConfig));

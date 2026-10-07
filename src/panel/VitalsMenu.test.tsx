@@ -99,7 +99,9 @@ describe('vitals menu', () => {
     const rows = menuRows({ ...DEFAULT_VITALS_OPTIONS, style: 'text' });
     expect(labels(rows)).toEqual(['Style', 'Values (off)', 'Edit your text…', 'Customize vitals…']);
     rows.find((row) => row.children === 'Edit your text…')?.onSelect?.();
-    expect(openSettingsTab).toHaveBeenCalledWith('layout:customize-vitals#vitals-text');
+    // It opens the card for your text over the terminal, not Settings.
+    expect(emit).toHaveBeenCalledWith('vosh://prompt-card-open', { view: null, vitals: true });
+    expect(openSettingsTab).not.toHaveBeenCalled();
   });
 
   it('checks your style and your Values form', () => {

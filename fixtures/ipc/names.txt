@@ -233,3 +233,4 @@ event vosh://tracked-affects-changed app page heard
 event vosh://triggers-changed app heard
 event vosh://ui-config-replaced app heard
 event vosh://vitals-options-changed page heard
+event vosh://vitals-text-changed page heard
