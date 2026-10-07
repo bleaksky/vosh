@@ -714,6 +714,19 @@ describe('presets', () => {
     expect(plan.remove).toEqual(['renamed_long_ago']);
   });
 
+  it('turns presets on and off over the stored list first', () => {
+    const [first, second] = [PRESETS[0].id, PRESETS[1].id];
+    const plan = presetLaunchPlan(
+      [first],
+      [first],
+      [
+        { id: first, on: false },
+        { id: second, on: true },
+      ],
+    );
+    expect(plan).toEqual({ install: [second], remove: [first] });
+  });
+
   it('removes nothing at launch while the store matches the list', () => {
     expect(presetLaunchPlan([], defaultEnabledIds()).remove).toEqual([]);
     expect(presetLaunchPlan([PRESETS_OFF_MARKER], [null, undefined]).remove).toEqual([]);

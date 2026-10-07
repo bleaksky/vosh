@@ -1,14 +1,16 @@
 // The main window's UI config: the fonts, the sizes, the theme and the
 // terminal settings it reads at launch, then every change a profile
 // switch or a Settings save sends. It shows the window once the launch
-// read applies, and brings the preset triggers in line with it. The
+// read applies, and brings the preset triggers in line with each profile
+// that opens. The
 // fonts, sizes and line height it caches let the next load paint in them
 // from the first frame.
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { installLaunchPresets } from '../automation/automationRecords';
+import { runPresetPlan } from '../automation/presetPlan';
 import { nativeSurfaceSetBrightBold, nativeSurfaceSetDividerColor } from '../ipc/nativeSurface';
+import { subscribeProfileSwitched } from '../ipc/profiles';
 import { subscribeCustomThemesChanged } from '../ipc/theme';
 import {
   getUiConfig,
@@ -202,8 +204,9 @@ export function useUiConfigFollow({
         // reach the Terminal and every other window.
         applyConfig(cfg, { broadcast: true, broadcastFlips: true });
 
-        // Bring the preset triggers in line with the presets that are on.
-        await installLaunchPresets(cfg.enabled_presets);
+        // Bring the preset triggers in line with the presets that are on
+        // and your edits to them.
+        await runPresetPlan();
       })
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(() => showAfterThemePaint(reveal));
@@ -226,8 +229,17 @@ export function useUiConfigFollow({
         (e) => console.error('[app] reading the replaced config failed', e),
         { broadcast: true },
       ),
-    (cfg: UiConfig) => applyConfig(cfg, { broadcast: true }),
+    (cfg: UiConfig) => {
+      applyConfig(cfg, { broadcast: true });
+      // The profile in front changed, or #profile load or an import
+      // brought it other presets and edits.
+      void runPresetPlan();
+    },
   );
+
+  // A switch opens another profile, whose stored preset triggers may be
+  // stale or carry another profile's edits until the plan runs for it.
+  useTauriEvent(subscribeProfileSwitched, (name) => void runPresetPlan(name));
 
   useEffect(() => {
     const root = document.documentElement;

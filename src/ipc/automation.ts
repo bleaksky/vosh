@@ -197,8 +197,8 @@ export async function importTriggers(json: string, profile?: string | null): Pro
   return invoke('triggers_import', { json, profile });
 }
 
-export async function listTriggers(): Promise<TriggerRecord[]> {
-  return invoke('triggers_list');
+export async function listTriggers(profile?: string | null): Promise<TriggerRecord[]> {
+  return invoke('triggers_list', { profile });
 }
 
 export async function exportAliases(profile?: string | null): Promise<string> {
@@ -225,6 +225,25 @@ export async function presetsInstall(
   profile?: string | null,
 ): Promise<PresetsInstalled> {
   return invoke('presets_install', { triggers, macros, profile });
+}
+
+/** One preset to turn on or off, as presets_enabled_set takes it. */
+export interface PresetSwitch {
+  id: string;
+  on: boolean;
+}
+
+/** Turn presets on and off in one step. Each preset `changes` turns off
+ *  loses its triggers and macros, `triggers` and `macros`, built for the
+ *  presets it turns on, install as presetsInstall installs them, and the
+ *  switches land on the stored list of presets that are on. */
+export async function presetsEnabledSet(
+  changes: readonly PresetSwitch[],
+  triggers: TriggerRecord[],
+  macros: Macro[],
+  profile?: string | null,
+): Promise<PresetsInstalled> {
+  return invoke('presets_enabled_set', { changes, triggers, macros, profile });
 }
 
 export async function presetsRemove(presetId: string, profile?: string | null): Promise<number> {
