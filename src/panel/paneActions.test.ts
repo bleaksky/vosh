@@ -4,6 +4,7 @@ import type { ToastInput } from '../stores/toasts';
 import {
   addPaneAtBottom,
   chatRefToAdd,
+  closeHere,
   paneToSplitIn,
   showHereInstead,
   splitHere,
@@ -114,7 +115,7 @@ function leaves(): string[] {
 }
 
 describe('a new Chat pane', () => {
-  it('starts on All alone, on tell beside another, and on All beside one on tell', () => {
+  it('starts on All alone, on tell beside another, then on Everything else or no channels', () => {
     expect(chatRefToAdd(null)).toEqual({ pane: 'chat', props: {} });
     lay('map', 'chat');
     expect(chatRefToAdd(state.layout!.root)).toEqual({ pane: 'chat', props: { channel: 'tell' } });
@@ -122,19 +123,67 @@ describe('a new Chat pane', () => {
       ...state.layout!.root.children[1],
       props: { channel: 'tell' },
     };
+    expect(chatRefToAdd(state.layout!.root)).toEqual({ pane: 'chat', props: { rest: '1' } });
+    lay('chat', 'chat');
+    state.layout!.root.children[1] = {
+      ...state.layout!.root.children[1],
+      props: { channel: 'gtell', channels: 'gtell,tell' },
+    };
+    // The first pane shows Everything else, so a third starts with no
+    // channels for you to pick.
     expect(chatRefToAdd(state.layout!.root)).toEqual({ pane: 'chat', props: {} });
   });
 
-  it('turns the pane on All to Everything else, says so, and Undo puts it back', () => {
+  it('turns the pane on All to Everything else and says so', () => {
     state.toasts = [];
     lay('map', 'chat');
     addPaneAtBottom(paneRef('chat'));
     expect(leaves()).toEqual(['map {}', 'chat {"rest":"1"}', 'chat-2 {"channel":"tell"}']);
     expect(state.toasts.map((t) => [t.message, t.action?.label])).toEqual([
-      ['Your other Chat pane now shows Everything else.', 'Undo'],
+      ['Your other Chat pane now shows Everything else.', undefined],
     ]);
-    state.toasts[0].action?.run();
-    expect(leaves()).toEqual(['map {}', 'chat {}', 'chat-2 {"channel":"tell"}']);
+  });
+
+  it('keeps Everything else on its pane as a third pane joins', () => {
+    state.toasts = [];
+    lay('chat', 'chat');
+    state.layout!.root.children[1] = {
+      ...state.layout!.root.children[1],
+      props: { channel: 'tell' },
+    };
+    showHereInstead('chat-2', paneRef('chat'));
+    addPaneAtBottom(paneRef('chat'));
+    expect(leaves()).toEqual(['chat {"rest":"1"}', 'chat-2 {"channel":"tell"}', 'chat-3 {}']);
+    expect(state.toasts).toEqual([]);
+  });
+
+  it('returns the last Chat pane to All as the others close', () => {
+    lay('map', 'chat', 'chat');
+    state.layout!.root.children[1] = {
+      ...state.layout!.root.children[1],
+      props: { channel: 'gtell', channels: 'gtell,tell' },
+    };
+    state.layout!.root.children[2] = {
+      ...state.layout!.root.children[2],
+      props: { rest: '1' },
+    };
+    closeHere('chat-2');
+    expect(leaves()).toEqual(['map {}', 'chat {}']);
+    lay('map', 'chat', 'chat');
+    state.layout!.root.children[1] = {
+      ...state.layout!.root.children[1],
+      props: { channel: 'tell' },
+    };
+    showHereInstead('chat-2', paneRef('group'));
+    // The leaf keeps its id as it turns to Group.
+    expect(leaves()).toEqual(['map {}', 'chat {}', 'chat-2 {}']);
+    lay('map', 'chat');
+    state.layout!.root.children[1] = {
+      ...state.layout!.root.children[1],
+      props: { channel: 'tell' },
+    };
+    closeHere('map');
+    expect(leaves()).toEqual(['chat {"channel":"tell"}']);
   });
 
   it('leaves a pane on a channel alone and raises no toast', () => {

@@ -809,6 +809,13 @@
   color: var(--accent);
 }
 
+/* A hint after a row's words, like own pane in the Chat filter, keeps
+   the gap the check keeps. */
+.pane-menu-item > .shell-menu-kbd {
+  flex: none;
+  margin-left: 16px;
+}
+
 /* The plugin that draws a Lua pane, after its title under Show here
    instead, as Add a pane shows it. */
 .pane-menu-plugin {

@@ -5,6 +5,7 @@ import { findTheme, themeTokens } from '../../theme/themes';
 import panelCss from '../../styles/panel.css?raw';
 import { aabahranChatPacket } from '../../test/aabahranGmcp';
 import { PaneLeafContext } from '../paneActions';
+import { sanitize, type PaneLayout } from '../paneLayout';
 import { ChatLog, ChatPane } from './ChatPane';
 import { CHAT_TAG_OPACITY, normalizeChatColors } from './chatColors';
 import { chatTime } from '../paneText';
@@ -19,9 +20,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 // The panel's tree, which a Chat pane reads for the channels the other
 // Chat panes show on their own, and the live theme it draws in.
+const panel = vi.hoisted(() => ({ layout: null as PaneLayout | null }));
 vi.mock('../panelLayoutStore', async (actual) => ({
   ...(await actual<typeof import('../panelLayoutStore')>()),
-  usePanelLayout: () => null,
+  usePanelLayout: () => panel.layout,
 }));
 vi.mock('../../theme/useActiveTheme', async () => {
   const { findTheme } = await import('../../theme/themes');
@@ -285,20 +287,43 @@ describe('the pane select', () => {
 });
 
 describe('ChatPane', () => {
-  const header = (props: Record<string, string>) =>
+  const header = (props: Record<string, string>, id = 'chat') =>
     renderToStaticMarkup(
-      <PaneLeafContext.Provider value={{ id: 'chat', pane: 'chat', weight: 1, props }}>
+      <PaneLeafContext.Provider value={{ id, pane: 'chat', weight: 1, props }}>
         <ChatPane />
       </PaneLeafContext.Provider>,
     );
+  const two = (first: Record<string, string>, second: Record<string, string>) => {
+    panel.layout = {
+      version: 1,
+      panel_open: true,
+      root: sanitize({
+        split: 'column',
+        children: [
+          { id: 'chat', pane: 'chat', props: first },
+          { id: 'chat-2', pane: 'chat', props: second },
+        ],
+      }),
+    } as PaneLayout;
+  };
 
   it('names its filter on the select and says what will show here', () => {
-    const rest = header({ rest: '1' });
-    expect(rest).toContain('aria-label="Channel, Everything else"');
-    expect(rest).toContain('Messages on every channel show up here as they come in.');
+    panel.layout = null;
+    expect(header({ rest: '1' })).toContain('aria-label="Channel, All"');
     const tell = header({ channel: 'tell' });
     expect(tell).toContain('aria-label="Channel, Tell"');
     expect(tell).toContain('Tell messages show up here as they come in.');
+    const both = header({ channel: 'gtell', channels: 'gtell,tell' });
+    expect(both).toContain('aria-label="Channel, Gtell, Tell"');
+    expect(both).toContain('Gtell and Tell messages show up here as they come in.');
     expect(header({})).toContain('aria-label="Channel, All"');
+  });
+
+  it('shows Everything else beside a pane on its own channels', () => {
+    two({}, { channel: 'tell' });
+    const rest = header({}, 'chat');
+    expect(rest).toContain('aria-label="Channel, Everything else"');
+    expect(rest).toContain('Messages on every channel but Tell show up here as they come in.');
+    panel.layout = null;
   });
 });

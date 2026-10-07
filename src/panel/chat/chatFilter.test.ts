@@ -5,8 +5,14 @@ import { sanitize, type PaneSplit } from '../paneLayout';
 import {
   channelName,
   chatEmptyText,
+  chatFilterIn,
   chatFilterLabel,
   chatFilterOf,
+  chatFilterProps,
+  checkedChannels,
+  restPaneId,
+  toggleChannel,
+  type ChatFilter,
   chatLeaves,
   chatLinesFor,
   ownPaneChannels,
@@ -39,23 +45,105 @@ const B4: PaneSplit = sanitize({
 });
 
 describe('chatFilterOf', () => {
-  it('reads a channel, Everything else, or All from the props', () => {
-    expect(chatFilterOf(chat({ channel: 'tell' }))).toEqual({ kind: 'channel', channel: 'tell' });
+  it('reads channels, Everything else, or All from the props', () => {
+    expect(chatFilterOf(chat({ channel: 'tell' }))).toEqual({
+      kind: 'channels',
+      channels: ['tell'],
+    });
+    expect(chatFilterOf(chat({ channel: 'gtell', channels: 'gtell,tell' }))).toEqual({
+      kind: 'channels',
+      channels: ['gtell', 'tell'],
+    });
     expect(chatFilterOf(chat({ rest: '1' }))).toEqual({ kind: 'rest' });
     expect(chatFilterOf(chat({}))).toEqual({ kind: 'all' });
   });
 
   it('lets a named channel win over rest', () => {
     expect(chatFilterOf(chat({ channel: 'say', rest: '1' }))).toEqual({
-      kind: 'channel',
-      channel: 'say',
+      kind: 'channels',
+      channels: ['say'],
     });
   });
 
-  it('reads as the channel, Everything else, or All', () => {
-    expect(chatFilterLabel({ kind: 'channel', channel: 'tell' })).toBe('Tell');
+  it('reads the channel alone once an older build picks another', () => {
+    // A3 and 0.8.1 write channel and leave channels as it was.
+    expect(checkedChannels(chat({ channel: 'say', channels: 'gtell,tell' }))).toEqual(['say']);
+  });
+
+  it('stores channels as the first beside the list, so older builds show the first', () => {
+    expect(chatFilterProps({ kind: 'channels', channels: ['tell', 'gtell'] })).toEqual({
+      channel: 'gtell',
+      channels: 'gtell,tell',
+      rest: '',
+    });
+    expect(chatFilterProps({ kind: 'channels', channels: ['tell'] })).toEqual({
+      channel: 'tell',
+      channels: '',
+      rest: '',
+    });
+    expect(chatFilterProps({ kind: 'rest' })).toEqual({ channel: '', channels: '', rest: '1' });
+    expect(chatFilterProps({ kind: 'all' })).toEqual({ channel: '', channels: '', rest: '' });
+  });
+
+  it('reads as the channels, Everything else, All, or a prompt to pick', () => {
+    expect(chatFilterLabel({ kind: 'channels', channels: ['tell'] })).toBe('Tell');
+    expect(chatFilterLabel({ kind: 'channels', channels: ['gtell', 'tell'] })).toBe('Gtell, Tell');
     expect(chatFilterLabel({ kind: 'rest' })).toBe('Everything else');
     expect(chatFilterLabel({ kind: 'all' })).toBe('All');
+    expect(chatFilterLabel({ kind: 'none' })).toBe('Pick channels');
+  });
+});
+
+describe('chatFilterIn', () => {
+  const tree = (...props: Record<string, string>[]): PaneSplit =>
+    sanitize({
+      split: 'column',
+      children: props.map((p, i) => ({ id: i === 0 ? 'chat' : `chat-${i + 1}`, ...chat(p) })),
+    });
+  const read = (t: PaneSplit) =>
+    chatLeaves(t).map((leaf) => chatFilterLabel(chatFilterIn(t, leaf)));
+
+  it('shows All on a lone pane, whatever older props say', () => {
+    expect(read(tree({}))).toEqual(['All']);
+    expect(read(tree({ rest: '1' }))).toEqual(['All']);
+    expect(read(tree({ channel: 'tell' }))).toEqual(['Tell']);
+  });
+
+  it('reads an All pane as Everything else beside another pane', () => {
+    expect(read(tree({}, { channel: 'tell' }))).toEqual(['Everything else', 'Tell']);
+  });
+
+  it('lets one pane show Everything else, the one that says so first', () => {
+    expect(read(tree({}, { rest: '1' }, { rest: '1' }))).toEqual([
+      'Pick channels',
+      'Everything else',
+      'Pick channels',
+    ]);
+    expect(read(tree({}, {}))).toEqual(['Everything else', 'Pick channels']);
+    expect(restPaneId(tree({}, { rest: '1' }))).toBe('chat-2');
+    expect(restPaneId(tree({ rest: '1' }))).toBeNull();
+  });
+});
+
+describe('toggleChannel', () => {
+  it('checks and unchecks channels, sorted', () => {
+    const one = toggleChannel({ kind: 'channels', channels: ['tell'] }, 'gtell', false, false);
+    expect(one).toEqual({ kind: 'channels', channels: ['gtell', 'tell'] });
+    expect(toggleChannel(one, 'gtell', false, false)).toEqual({
+      kind: 'channels',
+      channels: ['tell'],
+    });
+    expect(toggleChannel({ kind: 'rest' }, 'say', false, true)).toEqual({
+      kind: 'channels',
+      channels: ['say'],
+    });
+  });
+
+  it('leaves All, Everything else or no channels as the last one goes', () => {
+    const tell: ChatFilter = { kind: 'channels', channels: ['tell'] };
+    expect(toggleChannel(tell, 'tell', true, true)).toEqual({ kind: 'all' });
+    expect(toggleChannel(tell, 'tell', false, true)).toEqual({ kind: 'rest' });
+    expect(toggleChannel(tell, 'tell', false, false)).toEqual({ kind: 'none' });
   });
 });
 
@@ -71,8 +159,14 @@ describe('channelName', () => {
 
 describe('chatEmptyText', () => {
   it('names the channel a pane shows', () => {
-    expect(chatEmptyText({ kind: 'channel', channel: 'tell' }, new Set())).toBe(
+    expect(chatEmptyText({ kind: 'channels', channels: ['tell'] }, new Set())).toBe(
       'Tell messages show up here as they come in.',
+    );
+    expect(chatEmptyText({ kind: 'channels', channels: ['gtell', 'say', 'tell'] }, new Set())).toBe(
+      'Gtell, Say and Tell messages show up here as they come in.',
+    );
+    expect(chatEmptyText({ kind: 'none' }, new Set())).toBe(
+      'Pick the channels this pane shows from the menu up top.',
     );
   });
 
@@ -135,10 +229,13 @@ describe('chatLinesFor', () => {
       'yell',
       'tell',
     ]);
-    expect(panes(chatLinesFor(lines, { kind: 'channel', channel: 'tell' }, new Set()))).toEqual([
-      'tell',
-      'tell',
-    ]);
+    expect(panes(chatLinesFor(lines, { kind: 'channels', channels: ['tell'] }, new Set()))).toEqual(
+      ['tell', 'tell'],
+    );
+    expect(
+      panes(chatLinesFor(lines, { kind: 'channels', channels: ['say', 'tell'] }, new Set())),
+    ).toEqual(['tell', 'say', 'tell']);
+    expect(panes(chatLinesFor(lines, { kind: 'none' }, new Set()))).toEqual([]);
   });
 
   it('shows on Everything else each line no other pane shows on its own', () => {
