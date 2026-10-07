@@ -24,7 +24,8 @@ export type { MenuPlacement } from './menuPlacement';
 
 export type MenuCloseReason = 'escape' | 'outside' | 'left';
 
-const ITEM_SELECTOR = ':scope > li > [role="menuitem"]:not([aria-disabled="true"])';
+// Rows and checkable rows alike, menuitem and menuitemcheckbox.
+const ITEM_SELECTOR = ':scope > li > [role^="menuitem"]:not([aria-disabled="true"])';
 
 interface Props {
   label: string;
@@ -168,6 +169,8 @@ interface ItemProps {
   children: ReactNode;
   onSelect?: () => void;
   disabled?: boolean;
+  /** A row that toggles, read out as checked or not. */
+  checked?: boolean;
   /** Right aligned: a check, a chevron, a shortcut. */
   trailing?: ReactNode;
   /** Menu attributes for a row that opens a submenu. */
@@ -188,6 +191,7 @@ export function MenuItem({
   children,
   onSelect,
   disabled,
+  checked,
   trailing,
   submenu,
   onHover,
@@ -199,7 +203,8 @@ export function MenuItem({
       <button
         ref={itemRef}
         type="button"
-        role="menuitem"
+        role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+        aria-checked={checked}
         className="pane-menu-item"
         aria-disabled={disabled || undefined}
         aria-haspopup={submenu ? 'menu' : undefined}

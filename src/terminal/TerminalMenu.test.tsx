@@ -90,7 +90,7 @@ describe('the terminal menu', () => {
 // for the menu surface mark, and the selector the surface finds its
 // rows with.
 
-const ITEM_SELECTOR = ':scope > li > [role="menuitem"]:not([aria-disabled="true"])';
+const ITEM_SELECTOR = ':scope > li > [role^="menuitem"]:not([aria-disabled="true"])';
 
 // A 1280 by 800 window. The terminal menu is 232 by 274 and the
 // Settings list 160 by 398.

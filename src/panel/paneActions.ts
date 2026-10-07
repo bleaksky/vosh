@@ -18,7 +18,7 @@ import {
 } from './paneLayout';
 import { getPanelLayout, setPaneTree, updatePanelLayout } from './panelLayoutStore';
 import { luaPaneRef, luaPanesToAdd, paneTypesToAdd } from './paneTypes';
-import { chatFilterOf, chatLeaves } from './chat/chatFilter';
+import { chatFilterOf, chatFilterProps, chatLeaves, checkedChannels } from './chat/chatFilter';
 import { pushToast } from '../stores/toasts';
 
 // What a pane's header and menu, the palette and the title band can do
@@ -49,25 +49,34 @@ export function paneToSplitIn(id: string): PaneRef | null {
   return chat ? paneRef('chat') : null;
 }
 
-/** What a new Chat pane starts on: tell while another Chat pane shows
- *  and none shows tell yet, so tells land in a pane of their own, and
- *  All otherwise. */
+/** The Chat pane that turns to Everything else as another Chat pane
+ *  joins: the first that says rest, else the first with no channels
+ *  checked, which shows All while it is alone. */
+function restCandidate(tree: PaneNode | null): PaneLeaf | undefined {
+  const chats = chatLeaves(tree);
+  return (
+    chats.find((leaf) => chatFilterOf(leaf).kind === 'rest') ??
+    chats.find((leaf) => chatFilterOf(leaf).kind === 'all')
+  );
+}
+
+/** What a new Chat pane starts on. The first shows All. Another starts
+ *  on tell while no Chat pane checks tell, so tells land in a pane of
+ *  their own, then on Everything else while no pane shows it, and with
+ *  no channels otherwise, for you to pick. */
 export function chatRefToAdd(tree: PaneNode | null): PaneRef {
   const chats = chatLeaves(tree);
-  const onTell = chats.some((leaf) => {
-    const filter = chatFilterOf(leaf);
-    return filter.kind === 'channel' && filter.channel === 'tell';
-  });
-  return chats.length > 0 && !onTell
-    ? { pane: 'chat', props: { channel: 'tell' } }
-    : paneRef('chat');
+  if (chats.length === 0) return paneRef('chat');
+  const onTell = chats.some((leaf) => checkedChannels(leaf).includes('tell'));
+  if (!onTell) return { pane: 'chat', props: { channel: 'tell' } };
+  return restCandidate(tree) ? paneRef('chat') : { pane: 'chat', props: { rest: '1' } };
 }
 
 // Place `ref` in `root` with `put`. A new Chat pane starts on what
-// chatRefToAdd gives, and when that is tell, every Chat pane on All
-// turns to Everything else in the same write, so each tell lands in
-// one pane. A toast then says so and offers Undo, which puts those
-// panes back on All.
+// chatRefToAdd gives. The pane that shows Everything else from then
+// on says rest in the same write, so the new pane never takes it, and
+// when that pane was alone on All, a toast says it now shows
+// Everything else, since All is not offered beside another Chat pane.
 function placePane(
   root: PaneSplit,
   ref: PaneRef,
@@ -75,37 +84,22 @@ function placePane(
 ): PaneSplit {
   if (ref.pane !== 'chat') return put(root, ref);
   const chat = chatRefToAdd(root);
-  const turned =
-    chat.props.channel === 'tell'
-      ? chatLeaves(root)
-          .filter((leaf) => chatFilterOf(leaf).kind === 'all')
-          .map((leaf) => leaf.id)
-      : [];
-  const base = turned.reduce((tree, id) => setLeafProps(tree, id, { rest: '1' }), root);
+  const rest = chatLeaves(root).length > 0 ? restCandidate(root) : undefined;
+  const base = rest ? setLeafProps(root, rest.id, chatFilterProps({ kind: 'rest' })) : root;
   const next = put(base, chat);
   if (next === base) return root;
-  if (turned.length > 0) {
-    pushToast({
-      kind: 'info',
-      message:
-        turned.length === 1
-          ? 'Your other Chat pane now shows Everything else.'
-          : 'Your other Chat panes now show Everything else.',
-      action: { label: 'Undo', run: () => backToAll(turned) },
-    });
+  if (rest && chatLeaves(root).length === 1) {
+    pushToast({ kind: 'info', message: 'Your other Chat pane now shows Everything else.' });
   }
   return next;
 }
 
-// Undo for placePane: the panes it turned to Everything else go back
-// on All, where they still show it.
-function backToAll(ids: string[]): void {
-  const root = getPanelLayout()?.root;
-  if (!root) return;
-  const onRest = chatLeaves(root)
-    .filter((leaf) => ids.includes(leaf.id) && chatFilterOf(leaf).kind === 'rest')
-    .map((leaf) => leaf.id);
-  setPaneTree(onRest.reduce((tree, id) => setLeafProps(tree, id, { rest: '' }), root));
+// A Chat pane left alone shows All, whatever it showed beside the
+// others.
+function loneChatToAll(before: PaneSplit, next: PaneSplit): PaneSplit {
+  const chats = chatLeaves(next);
+  if (chats.length !== 1 || chatLeaves(before).length < 2) return next;
+  return setLeafProps(next, chats[0].id, chatFilterProps({ kind: 'all' }));
 }
 
 export function splitHere(id: string, dir: SplitDir): void {
@@ -117,12 +111,19 @@ export function splitHere(id: string, dir: SplitDir): void {
 
 export function showHereInstead(id: string, ref: PaneRef): void {
   const root = getPanelLayout()?.root;
-  if (root) setPaneTree(placePane(root, ref, (tree, r) => replacePane(tree, id, r)));
+  if (root) {
+    setPaneTree(
+      loneChatToAll(
+        root,
+        placePane(root, ref, (tree, r) => replacePane(tree, id, r)),
+      ),
+    );
+  }
 }
 
 export function closeHere(id: string): void {
   const root = getPanelLayout()?.root;
-  if (root) setPaneTree(closePane(root, id));
+  if (root) setPaneTree(loneChatToAll(root, closePane(root, id)));
 }
 
 /** Show or hide one pane type from the palette. Showing opens the
@@ -132,7 +133,9 @@ export function togglePane(pane: PaneType): void {
   updatePanelLayout((l) => {
     const ref = paneRef(pane);
     const leaf = leafIdFor(l.root, ref);
-    if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
+    if (leaf !== null && l.panel_open) {
+      return { ...l, root: loneChatToAll(l.root, closePane(l.root, leaf)) };
+    }
     return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, ref) };
   });
 }

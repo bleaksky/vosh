@@ -23,10 +23,14 @@ import {
   EVERYTHING_ELSE,
   channelName,
   chatEmptyText,
+  chatFilterIn,
   chatFilterLabel,
-  chatFilterOf,
+  chatFilterProps,
+  chatLeaves,
   chatLinesFor,
   ownPaneChannels,
+  restPaneId,
+  toggleChannel,
   type ChatFilter,
 } from './chatFilter';
 
@@ -44,9 +48,12 @@ import {
 export function ChatPane() {
   const leaf = usePaneLeaf();
   const tree = usePanelLayout()?.root ?? null;
-  const filter: ChatFilter = leaf ? chatFilterOf(leaf) : { kind: 'all' };
+  const filter: ChatFilter = leaf ? chatFilterIn(tree, leaf) : { kind: 'all' };
   const label = chatFilterLabel(filter);
   const owned = useMemo(() => ownPaneChannels(tree, leaf?.id ?? ''), [tree, leaf?.id]);
+  const others = Math.max(0, chatLeaves(tree).length - 1);
+  const restId = restPaneId(tree);
+  const restTaken = restId !== null && restId !== leaf?.id;
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const theme = useActiveTheme();
   const palette = usePlayPalette();
@@ -102,12 +109,9 @@ export function ChatPane() {
               filter={filter}
               channels={channels}
               owned={owned}
-              onPick={(next) =>
-                updateLeafProps(leaf.id, {
-                  channel: next.kind === 'channel' ? next.channel : '',
-                  rest: next.kind === 'rest' ? '1' : '',
-                })
-              }
+              others={others}
+              restTaken={restTaken}
+              onPick={(next) => updateLeafProps(leaf.id, chatFilterProps(next))}
             />
           ) : null
         }
@@ -196,25 +200,33 @@ function ChatMessage({ line, ink }: { line: ChatLine; ink: ChatInk }) {
   );
 }
 
-// The filter menu: All, Everything else, then the channels heard plus
-// the one the pane names, sorted, each with a capital first letter. A channel another Chat pane shows on
-// its own says so.
+// The filter menu. A lone pane offers All, and beside other Chat panes
+// a pane offers Everything else, which only one pane shows at a time,
+// so another pane's menu shows it as taken. Then the channels heard
+// plus the ones the pane checks, sorted, each with a capital first
+// letter. A channel toggles as you pick it and the menu stays open,
+// so you can check several. A channel another Chat pane checks says so.
 function ChannelSelect({
   filter,
   channels,
   owned,
+  others,
+  restTaken,
   onPick,
 }: {
   filter: ChatFilter;
   channels: string[];
   owned: ReadonlySet<string>;
+  others: number;
+  restTaken: boolean;
   onPick: (filter: ChatFilter) => void;
 }) {
   const ref = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const label = chatFilterLabel(filter);
-  const named = filter.kind === 'channel' ? filter.channel : '';
-  const options = named && !channels.includes(named) ? [...channels, named].sort() : channels;
+  const checked = filter.kind === 'channels' ? filter.channels : [];
+  const options = [...new Set([...channels, ...checked])].sort();
+  const lone = others === 0;
   const anchor = ref.current;
   const rect = open && anchor ? anchor.getBoundingClientRect() : null;
   const pick = (next: ChatFilter) => () => {
@@ -222,6 +234,8 @@ function ChannelSelect({
     onPick(next);
     returnToCommandLine();
   };
+  const toggle = (channel: string) => () =>
+    onPick(toggleChannel(filter, channel, lone, !restTaken));
   const check = <CheckIcon className="pane-menu-check" />;
 
   return (
@@ -233,6 +247,7 @@ function ChannelSelect({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Channel, ${label}`}
+        title={filter.kind === 'channels' && filter.channels.length > 1 ? label : undefined}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="pane-select-text">{label}</span>
@@ -249,25 +264,38 @@ function ChannelSelect({
             if (reason !== 'outside') returnToCommandLine();
           }}
         >
-          <MenuItem
-            onSelect={pick({ kind: 'all' })}
-            trailing={filter.kind === 'all' ? check : null}
-          >
-            All
-          </MenuItem>
-          <MenuItem
-            onSelect={pick({ kind: 'rest' })}
-            trailing={filter.kind === 'rest' ? check : null}
-          >
-            {EVERYTHING_ELSE}
-          </MenuItem>
+          {lone ? (
+            <MenuItem
+              onSelect={pick({ kind: 'all' })}
+              trailing={filter.kind === 'all' ? check : null}
+            >
+              All
+            </MenuItem>
+          ) : (
+            <MenuItem
+              onSelect={pick({ kind: 'rest' })}
+              disabled={restTaken}
+              trailing={
+                filter.kind === 'rest' ? (
+                  check
+                ) : restTaken ? (
+                  <span className="shell-menu-kbd">
+                    {others === 1 ? 'in your other pane' : 'in another pane'}
+                  </span>
+                ) : null
+              }
+            >
+              {EVERYTHING_ELSE}
+            </MenuItem>
+          )}
           {options.length > 0 && <MenuSeparator />}
           {options.map((c) => (
             <MenuItem
               key={c}
-              onSelect={pick({ kind: 'channel', channel: c })}
+              checked={checked.includes(c)}
+              onSelect={toggle(c)}
               trailing={
-                c === named ? (
+                checked.includes(c) ? (
                   check
                 ) : owned.has(c) ? (
                   <span className="shell-menu-kbd">own pane</span>
