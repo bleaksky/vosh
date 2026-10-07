@@ -1500,6 +1500,72 @@
   color: var(--tertiary);
 }
 
+/* Rings. Arcs 4 wide nested in one 56 pt glyph on the divider track,
+   the legend beside it on rows of 19, each label after a 6 px key in
+   the vital's tone. */
+.vitals-rings {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.vitals-rings svg {
+  flex: none;
+  overflow: visible;
+}
+
+.vitals-rings-legend {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vitals-ring-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: round(19px * var(--mud-scale), 1px);
+}
+
+.vitals-ring-row .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-ring-key {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 3px;
+  vertical-align: 1px;
+  background: var(--vital-mark);
+}
+
+.vitals-ring-track,
+.vitals-ring-arc,
+.vitals-ring-gone {
+  fill: none;
+  stroke-width: 4;
+}
+
+.vitals-ring-track {
+  stroke: var(--divider);
+}
+
+.vitals-ring-arc {
+  stroke: var(--vital-mark);
+  stroke-linecap: round;
+  transition: stroke-dasharray 160ms ease-out;
+}
+
+.vitals-ring-gone {
+  stroke: var(--vital-ghost);
+}
+
+.vitals-ring-gone.is-draining {
+  transition: stroke-dasharray 400ms linear;
+}
+
 /* Show each hit. The part a hit took holds pale beside the fill, then
    drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
    every fill jumps and the pale part just goes. */

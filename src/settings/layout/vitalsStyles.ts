@@ -78,6 +78,7 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
     'Blocks. Each vital is a bar of block characters in your game font, the way a terminal tool draws one.',
   traces: 'Traces. Each vital shows its last minute as a line, filled to where it stands now.',
   dials: 'Dials. Each vital fills an open dial with its figure in the middle.',
+  rings: 'Rings. Your vitals fill rings nested in one glyph, with the figures beside it.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 

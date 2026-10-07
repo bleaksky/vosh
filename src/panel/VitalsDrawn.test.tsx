@@ -5,7 +5,7 @@ import type { CombatOpponent, Fight } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import { PaneTextSizeContext } from './paneTextSize';
 import { VitalsBlock, type VitalsBlockProps } from './VitalsFooter';
-import { bandsHeight } from './vitalsDrawnFit';
+import { bandsHeight, ringsHeight } from './vitalsDrawnFit';
 import { marksHeight } from './vitalsMarksFit';
 import type { VitalsFit } from './vitalsFit';
 import type { HitViews } from './vitalsHit';
@@ -223,6 +223,32 @@ describe('Dials', () => {
     expect(html).toContain('<svg width="44" height="44"');
     expect(html).not.toContain('vitals-dial-max');
     expect(all(html, /vitals-dial-figure">([^<]+)/g)).toEqual(['72%', '68%', '77%']);
+  });
+});
+
+describe('Rings', () => {
+  it('nests an arc for each vital in your order, with the legend beside it', () => {
+    const html = draw({ style: 'rings', fit: 'labels' }, { order: ['mana', 'hp', 'move'] });
+    expect(all(html, /class="vitals-ring-track" cx="28" cy="28" r="(\d+)"/g)).toEqual([
+      '25',
+      '19',
+      '13',
+    ]);
+    expect(
+      all(html, /class="vitals-ring-arc"[^>]*stroke-dasharray:([\d.]+) 200/g).map(Number),
+    ).toEqual([67.82, 71.68, 77.16]);
+    expect(all(html, /vitals-ring-key"><\/i>([^<]+)/g)).toEqual(['Mana', 'Health', 'Moves']);
+    expect(html).toContain('vitals-line-fill" style="width:54%"');
+  });
+
+  it('keeps only the keys where a label would not fit, the label left to a screen reader', () => {
+    const html = draw({ style: 'rings', fit: 'keys' });
+    expect(all(html, /panel-vitals-label-hidden">([^<]+)/g)).toEqual(['Health', 'Mana', 'Moves']);
+  });
+
+  it('holds the taller of the glyph and the legend while it waits', () => {
+    expect(ringsHeight(12, 3)).toBe(1 + 10 + 57 + 12);
+    expect(ringsHeight(12, 1)).toBe(1 + 10 + 56 + 12);
   });
 });
 

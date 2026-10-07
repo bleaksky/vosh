@@ -110,6 +110,39 @@ export function dialsHeight(size: number, fit: ColumnFit): number {
   return 1 + textPx(10, size) + textPx(12, size) + textPx(5, size) + dial + textPx(12, size);
 }
 
+/** The Rings glyph's size, and the radius of each ring, outer to inner
+ *  in your order. */
+export const RINGS = 56;
+export const RING_RADII = [25, 19, 13] as const;
+
+/** How Rings fits the panel: its legend with each label, or with only
+ *  the key in each vital's tone, the label left to a screen reader. */
+export type RingsFit = 'labels' | 'keys';
+
+/** The room a legend row keeps beside the glyph for its key, the space
+ *  after it, and the space between its label and its value. */
+const RING_ROW_EXTRAS = 6 + 8 + 8;
+
+/** Rings keeps every label whole beside the widest value, else draws
+ *  only the keys. */
+export function ringsFit(
+  width: number,
+  size: number,
+  labels: readonly string[],
+  values: readonly string[],
+  measure: MeasureText,
+): RingsFit {
+  const room = markRoom(width, size, labels, values, measure) - RINGS - 16 - RING_ROW_EXTRAS;
+  return labels.length === 0 || room >= 0 ? 'labels' : 'keys';
+}
+
+/** The footer's height for Rings, the 1 px line on top included: the
+ *  glyph or the legend's `rows` rows of 19, whichever is taller,
+ *  between the column pads. */
+export function ringsHeight(size: number, rows: number): number {
+  return 1 + textPx(10, size) + Math.max(RINGS, rows * textPx(19, size)) + textPx(12, size);
+}
+
 /** The full block, the cell Blocks draws for each whole share. */
 export const FULL_BLOCK = '█';
 

@@ -3,7 +3,14 @@ import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 import { ledgerFigure, ledgerFit, type LedgerFit, type MeasureText } from './vitalsLedgerFit';
 import { gaugesFit, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
-import { dialsFit, rowMarkFit, type ColumnFit, type RowMarkFit } from './vitalsDrawnFit';
+import {
+  dialsFit,
+  ringsFit,
+  rowMarkFit,
+  type ColumnFit,
+  type RingsFit,
+  type RowMarkFit,
+} from './vitalsDrawnFit';
 import { opponentHealth, widestOpponentHealth, VITAL_LABELS, type ShownVital } from './vitalsView';
 
 // How each drawn style fits a footer's width, for the footer under the
@@ -18,7 +25,8 @@ export type VitalsFit =
   | { style: 'pips'; fit: PipsFit }
   | { style: 'bands' }
   | { style: RowStyle; fit: RowMarkFit }
-  | { style: 'dials'; fit: ColumnFit };
+  | { style: 'dials'; fit: ColumnFit }
+  | { style: 'rings'; fit: RingsFit };
 
 /** The row styles of the More Vitals Styles review, each vital's mark
  *  between its label and its value, or under both. */
@@ -27,16 +35,16 @@ type RowStyle = (typeof ROW_STYLES)[number];
 
 /** The styles of the More Vitals Styles review, which DrawnSection
  *  draws. */
-export type DrawnFit = Extract<VitalsFit, { style: 'bands' | RowStyle | 'dials' }>;
+const DRAWN = ['bands', ...ROW_STYLES, 'dials', 'rings'] as const;
 
-const DRAWN: readonly string[] = ['bands', ...ROW_STYLES, 'dials'] satisfies DrawnFit['style'][];
+export type DrawnFit = Extract<VitalsFit, { style: (typeof DRAWN)[number] }>;
 
 function isRowStyle(style: string): style is RowStyle {
   return (ROW_STYLES as readonly string[]).includes(style);
 }
 
 export function isDrawnFit(fit: VitalsFit): fit is DrawnFit {
-  return DRAWN.includes(fit.style);
+  return (DRAWN as readonly string[]).includes(fit.style);
 }
 
 /** How `style` fits a footer `width` px wide at panel size `size`.
@@ -86,5 +94,10 @@ export function vitalsFitOf(
     };
   }
   if (style === 'dials') return { style, fit: dialsFit(width, rows.length) };
+  if (style === 'rings') {
+    const labels = rows.map((row) => VITAL_LABELS[row.key]);
+    const widest = rows.map((row) => row.widest);
+    return { style, fit: ringsFit(width, size, labels, widest, measure) };
+  }
   return { style };
 }

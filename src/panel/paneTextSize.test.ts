@@ -236,6 +236,7 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-dial.is-narrow .vitals-dial-figure', 'font-size', '12px', '16px'],
   ['.vitals-dial-max', 'font-size', '10px', '13px'],
   ['.vitals-dial-max', 'line-height', '12px', '16px'],
+  ['.vitals-ring-row', 'height', '19px', '25px'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);

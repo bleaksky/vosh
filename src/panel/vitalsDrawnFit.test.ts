@@ -4,6 +4,7 @@ import {
   blockRun,
   columnWidth,
   dialsFit,
+  ringsFit,
   FOE_LADDER,
   LADDER,
   litSegments,
@@ -73,6 +74,11 @@ describe('the column styles', () => {
   it('split the footer into columns 16 apart, between its sides', () => {
     expect(columnWidth(300, 3)).toBeCloseTo(79.33, 2);
     expect(columnWidth(200, 3)).toBe(46);
+  });
+
+  it('keep the Rings labels while each fits whole beside its value', () => {
+    expect(ringsFit(300, 12, LABELS, VALUES, MEASURE)).toBe('labels');
+    expect(ringsFit(200, 12, LABELS, VALUES, MEASURE)).toBe('keys');
   });
 
   it('draw Dials at 60 while a column holds one, else at 44', () => {
