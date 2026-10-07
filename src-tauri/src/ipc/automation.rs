@@ -437,10 +437,20 @@ pub(crate) async fn timers_delete(
     Ok(updated)
 }
 
-/// Install the triggers and macros of the presets you turned on. Each
-/// one should already have its `preset` field set to the preset id; this
-/// command validates and inserts them so the engine starts matching and
-/// the keys start sending at once. Returns the number installed.
+/// What a preset install did: the number of triggers and macros it
+/// installed, and the names of the stored triggers of those presets it
+/// took out because the presets no longer build them.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetsInstalled {
+    pub(crate) installed: usize,
+    pub(crate) removed: Vec<String>,
+}
+
+/// Install the triggers and macros of the presets that are on. Each one
+/// should already have its `preset` field set to the preset id, and each
+/// preset comes whole, so a stored trigger of it the set does not name
+/// comes out. This command validates and inserts them so the engine
+/// starts matching and the keys start sending at once.
 #[tauri::command]
 pub(crate) async fn presets_install(
     app: AppHandle,
@@ -448,16 +458,18 @@ pub(crate) async fn presets_install(
     triggers: Vec<Trigger>,
     macros: Vec<Macro>,
     profile: Option<String>,
-) -> Result<usize, String> {
+) -> Result<PresetsInstalled, String> {
     let (triggers_came, macros_came) = (!triggers.is_empty(), !macros.is_empty());
-    let (open, installed, macros) = {
+    let (open, done, macros) = {
         let mut p = state.lock_named(profile).await?;
+        let installed = triggers.len() + macros.len();
         // The macros go first, since they refuse before they change
         // anything.
-        let mut installed = install_preset_macros(&mut p, macros)?;
-        installed += install_preset_triggers(&mut p, triggers)?;
+        install_preset_macros(&mut p, macros)?;
+        let removed = install_preset_triggers(&mut p, triggers)?;
         let macros = macros_came.then(|| p.macros.clone());
-        (p.open().clone(), installed, macros)
+        let done = PresetsInstalled { installed, removed };
+        (p.open().clone(), done, macros)
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&shared, &open).await;
@@ -467,7 +479,7 @@ pub(crate) async fn presets_install(
     if let Some(macros) = macros.filter(|_| state.in_front(&open)) {
         broadcast(&app, MACROS_CHANGED, &macros);
     }
-    Ok(installed)
+    Ok(done)
 }
 
 /// Remove every trigger and macro tagged with the given preset id.

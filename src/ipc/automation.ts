@@ -209,13 +209,21 @@ export async function importAliases(json: string, profile?: string | null): Prom
   return invoke('aliases_import', { json, profile });
 }
 
-/** Install the triggers and macros of the presets you turned on. Each
- *  carries its preset's id. */
+/** What a preset install did. `removed` names each stored trigger of
+ *  those presets that their built set no longer carries, which the
+ *  install took out. */
+export interface PresetsInstalled {
+  installed: number;
+  removed: string[];
+}
+
+/** Install the triggers and macros of the presets that are on. Each
+ *  carries its preset's id, and each preset comes whole. */
 export async function presetsInstall(
   triggers: TriggerRecord[],
   macros: Macro[],
   profile?: string | null,
-): Promise<number> {
+): Promise<PresetsInstalled> {
   return invoke('presets_install', { triggers, macros, profile });
 }
 

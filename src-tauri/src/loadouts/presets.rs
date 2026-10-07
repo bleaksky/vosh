@@ -208,29 +208,48 @@ pub(crate) fn hold_taken_keys(macros: &mut [Macro]) {
 /// so a test can run the preset install launch runs. Presets install the
 /// same way in both modes. Per profile mode saves the triggers to the
 /// profile file, and in loadout mode the live profile holds the catalog's
-/// triggers, so the save writes them to catalog.toml. Returns the number
-/// installed.
+/// triggers, so the save writes them to catalog.toml.
+///
+/// `triggers` holds each preset it names whole, so a stored trigger of
+/// one of those presets whose name it does not carry comes out. A trigger
+/// a preset fix renamed or removed then leaves the store (Presets board
+/// 3, step 5). Returns the names that came out, so the page can name one
+/// you edited.
 ///
 /// [`presets_install`]: crate::ipc::automation::presets_install
 pub(crate) fn install_preset_triggers(
     p: &mut Profile,
     triggers: Vec<Trigger>,
-) -> Result<usize, String> {
-    let mut installed = 0usize;
+) -> Result<Vec<String>, String> {
+    let presets: BTreeSet<&str> = triggers
+        .iter()
+        .filter_map(|t| t.preset.as_deref())
+        .collect();
+    let names: BTreeSet<&str> = triggers.iter().map(|t| t.name.as_str()).collect();
+    let removed: Vec<String> = p
+        .triggers
+        .list()
+        .into_iter()
+        .filter(|t| t.preset.as_deref().is_some_and(|id| presets.contains(id)))
+        .filter(|t| !names.contains(t.name.as_str()))
+        .map(|t| t.name)
+        .collect();
+    for name in &removed {
+        p.triggers.remove(name);
+    }
     for mut t in triggers {
-        // The startup re-install overwrites same-named presets so
-        // pattern/template updates land, but the group is the user's
-        // organization: carry it over so putting a preset into a group
-        // survives relaunch.
+        // Each install overwrites same-named presets so pattern and
+        // template fixes land, but the group is your organization. A
+        // built trigger with no group keeps the one its stored copy has,
+        // so putting a preset into a group survives relaunch.
         if t.group.is_none() {
             if let Some(existing) = p.triggers.get(&t.name) {
                 t.group.clone_from(&existing.group);
             }
         }
         p.triggers.set(t).map_err(|e| e.to_string())?;
-        installed += 1;
     }
-    Ok(installed)
+    Ok(removed)
 }
 
 /// The macros half of [`presets_install`] over the live profile `p`.
@@ -894,5 +913,80 @@ mod tests {
             macro_rows(&p),
             [("Numpad3", "d", Some("travel"), true, numpad)]
         );
+    }
+
+    /// A trigger of the preset `preset` in `group`.
+    fn preset_trigger(preset: &str, name: &str, group: Option<&str>) -> Trigger {
+        use vosh_automation::trigger::TriggerAction;
+        Trigger {
+            preset: Some(preset.into()),
+            group: group.map(str::to_string),
+            ..Trigger::new(
+                name,
+                "sends your SECONDARY weapon flying",
+                TriggerAction::Gag,
+            )
+        }
+    }
+
+    fn names(p: &Profile) -> Vec<String> {
+        p.triggers.list().into_iter().map(|t| t.name).collect()
+    }
+
+    #[test]
+    fn a_trigger_a_fix_renamed_leaves_the_store_at_install() {
+        let mut p = Profile::default();
+        let buff = "disarm_buff_fade";
+        let stored = [
+            preset_trigger(buff, "disarm.secondary", None),
+            preset_trigger(buff, "buff.sanctuary", None),
+            preset_trigger("terror_events", "terror.flee", None),
+            Trigger {
+                preset: None,
+                ..preset_trigger(buff, "my.disarm", None)
+            },
+        ];
+        for t in stored {
+            p.triggers.set(t).unwrap();
+        }
+        let built = vec![
+            preset_trigger(buff, "disarm.offhand", None),
+            preset_trigger(buff, "buff.sanctuary", None),
+        ];
+        assert_eq!(
+            install_preset_triggers(&mut p, built),
+            Ok(vec!["disarm.secondary".to_string()])
+        );
+        let mut now = names(&p);
+        now.sort();
+        assert_eq!(
+            now,
+            [
+                "buff.sanctuary",
+                "disarm.offhand",
+                "my.disarm",
+                "terror.flee"
+            ],
+            "another preset and yours stay"
+        );
+    }
+
+    #[test]
+    fn a_built_trigger_with_no_group_keeps_the_stored_group_and_one_with_a_group_takes_it() {
+        let mut p = Profile::default();
+        let buff = "disarm_buff_fade";
+        for name in ["disarm.secondary", "buff.sanctuary"] {
+            p.triggers
+                .set(preset_trigger(buff, name, Some("combat")))
+                .unwrap();
+        }
+        let built = vec![
+            preset_trigger(buff, "disarm.secondary", None),
+            preset_trigger(buff, "buff.sanctuary", Some("buffs")),
+        ];
+        assert_eq!(install_preset_triggers(&mut p, built), Ok(Vec::new()));
+        let group = |name| p.triggers.get(name).and_then(|t| t.group.clone());
+        assert_eq!(group("disarm.secondary").as_deref(), Some("combat"));
+        assert_eq!(group("buff.sanctuary").as_deref(), Some("buffs"));
     }
 }
