@@ -1152,6 +1152,12 @@ pub(crate) fn set_follow_system_appearance(ui: &mut UiConfig, on: bool) {
     set_theme_follow(ui, mode);
 }
 
+/// Trim a day or night theme pick. A blank one stays blank, which the
+/// page reads as the theme showing.
+pub(crate) fn normalize_day_night_theme(value: String) -> String {
+    value.trim().to_string()
+}
+
 /// The line height ids the terminal knows. Anything else saves as the
 /// default.
 pub(crate) const TERMINAL_LINE_HEIGHTS: [&str; 3] = ["compact", "default", "loose"];

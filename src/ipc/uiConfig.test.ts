@@ -835,6 +835,15 @@ describe('setUiFields', () => {
     );
   });
 
+  it('reads the Switch themes mode, and off for anything it does not know', () => {
+    const read = (mode: unknown) =>
+      normalizeUiConfig({ theme_follow: mode } as RawUiConfig).theme_follow;
+    expect(read('game')).toBe('game');
+    expect(read('system')).toBe('system');
+    expect(read('dusk')).toBe('off');
+    expect(read(undefined)).toBe('off');
+  });
+
   it('reads the style your 0.7 vitals grew into, and nothing it does not know', () => {
     const read = (style: unknown) =>
       normalizeUiConfig({ vitals_legacy_style: style } as RawUiConfig).vitals_legacy_style;
