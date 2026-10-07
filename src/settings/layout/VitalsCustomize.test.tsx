@@ -93,15 +93,15 @@ function draw(patch: Partial<UiConfig> = {}): string {
 const labels = (html: string) =>
   [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
 
-/** Each vital's row as `name on`, `name off`, with ` quiet` on a
- *  resting swatch and ` color` on a picked one. */
+/** Each vital's row as `name on`, `name off`, with ` color` on a
+ *  picked swatch and ` quiet` on one that rests. */
 const vitals = (html: string) =>
   [...html.matchAll(/<li class="st-vital([^"]*)"[^>]*>.*?<\/li>/g)].map(([row, classes]) => {
     const name = /class="st-vital-name">([^<]*)</.exec(row)?.[1];
-    const swatch = /class="st-vital-swatch([^"]*)"/.exec(row)?.[1] ?? '';
+    const swatch = /<button[^>]*class="st-vital-swatch[^>]*>/.exec(row)?.[0] ?? '';
     const on = classes.includes('is-off') ? 'off' : 'on';
     const color = swatch.includes('is-default') ? '' : ' color';
-    const quiet = swatch.includes('is-quiet') ? ' quiet' : '';
+    const quiet = swatch.includes('disabled=""') ? ' quiet' : '';
     return `${name} ${on}${color}${quiet}`;
   });
 
@@ -295,5 +295,13 @@ describe('moving a vital from the keyboard', () => {
     expect(saved).toEqual([]);
     expect(names(container)).toEqual(['Health', 'Mana', 'Moves']);
     await unmount();
+  });
+});
+
+describe('the color list', () => {
+  it('names each swatch and its color, as a screen reader hears it', () => {
+    const html = draw({ vitals_colors: { mana: 12 } });
+    expect(html).toContain('aria-label="Color for Health, Default"');
+    expect(html).toContain('aria-label="Color for Mana, Bright blue"');
   });
 });
