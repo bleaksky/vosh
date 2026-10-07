@@ -45,6 +45,11 @@ quick-xml = "0.36"
 # zip 4.6.1, and deflate-flate2 builds on the flate2 and miniz_oxide the
 # app has, where the deflate feature would add zopfli and zlib-rs.
 zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2"] }
+# zip takes flate2 with no backend. macOS and Linux get the miniz_oxide
+# backend from another crate, but the Windows build has none and fails to
+# compile, so the app asks for flate2's default backend itself. The
+# pinned split replays the tests store gzipped use it too.
+flate2 = "1"
 
 # Alert banners on Windows and Linux (Alerts Q1): WinRT toasts and the
 # freedesktop server, with no telemetry. macOS posts through a module of
@@ -128,10 +133,6 @@ vosh-script = { path = "../crates/script", features = ["testkit"] }
 # The mock runtime lets a test open windows and count what each event
 # reaches. The feature adds no new crate.
 tauri = { version = "2", features = ["test"] }
-# The pinned splits the webview test replays are stored gzipped. Tauri
-# already depends on flate2, so this adds no new crate.
-flate2 = "1"
-
 # The menu bar test parses every accelerator with the parser Tauri uses,
 # because Tauri drops one that fails without a word. Tauri already
 # depends on muda, so this adds no new crate.

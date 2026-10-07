@@ -250,6 +250,7 @@ pub(crate) const SESSION_IDENTITY_CHANGED: &str = "vosh://session-identity-chang
 /// on an alert banner does. The payload is a
 /// [`crate::alert::banner::SessionSelected`]. `onSessionSelected` hears
 /// it, and the sessions store reads the list again.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 /// Sent to every window with every session's row after a step that
 /// changed what a row shows: a session opened, closed, moved, was renamed
