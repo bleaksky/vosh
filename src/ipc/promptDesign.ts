@@ -53,6 +53,10 @@ export interface PromptRenderRequest {
   /** Draw each value with nothing to show as its label, as the open
    *  card does. */
   placeholders?: boolean;
+  /** The cells `%{right}` pushes the rest of its row against, such as a
+   *  vitals footer's width. Left out, it pushes by one space. Only
+   *  promptRenderMany sends it. */
+  cols?: number;
 }
 
 /** Draw a design, with the values of a session, the selected one when

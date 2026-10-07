@@ -431,6 +431,24 @@ fn a_ring_entry_becomes_a_capture_with_the_names_vosh_suggests() {
 }
 
 #[test]
+fn a_render_pushes_right_to_the_width_it_asks_for() {
+    let p = Profile::default();
+    let c = Connection::default();
+    let requests: Vec<RenderRequest> = serde_json::from_value(json!([
+        {"template": "%hp/%{maxhp}%{right}%mana", "values": "sample", "cols": 40},
+        {"template": "%hp/%{maxhp}%{right}%mana", "values": "sample"},
+    ]))
+    .unwrap();
+    let plain: Vec<String> = render_all(&p, &c, &requests)
+        .into_iter()
+        .map(|r| r.plain)
+        .collect();
+    assert_eq!(plain[0].chars().count(), 40);
+    assert_eq!(plain[0], format!("1020/1020{}800", " ".repeat(28)));
+    assert_eq!(plain[1], "1020/1020 800");
+}
+
+#[test]
 fn renders_draw_live_or_sample_values_with_overrides() {
     let p = Profile::default();
     let mut c = Connection::default();

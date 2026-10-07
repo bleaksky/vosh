@@ -44,8 +44,8 @@ import {
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
   UI_CONFIG_REPLACED,
-  VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
+  VITALS_TEXT_CHANGED,
 } from './events';
 import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
 
@@ -135,11 +135,123 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
   return value === 'bar' || value === 'none' ? value : 'line';
 }
 
-/** The vitals rows that join Density under Layout, Vitals, as one
- *  event payload. The panel footer reads the first three, and the panel
- *  reads the last to drop the footer. The status line reads the values
- *  and the warning, never the meter. */
+/** The six styles of the gallery, in its order. Rows and One line are
+ *  the two densities, and vitals_style holds the other four. */
+export const VITALS_STYLES = ['rows', 'line', 'ledger', 'gauges', 'pips', 'text'] as const;
+
+export type VitalsStyle = (typeof VITALS_STYLES)[number];
+
+/** The styles vitals_style saves. Rows and One line stay in
+ *  vitals_density, so a build without styles still reads your look. */
+const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
+
+export type SavedVitalsStyle = (typeof SAVED_VITALS_STYLES)[number];
+
+/** Coerce an unknown saved style back to null, which draws the
+ *  density. */
+export function normalizeVitalsStyle(value: unknown): SavedVitalsStyle | null {
+  return SAVED_VITALS_STYLES.find((style) => style === value) ?? null;
+}
+
+/** The style your vitals draw in, the one you picked or else your
+ *  density, so a player who never picks sees today's look (Vitals
+ *  Styles Q12). */
+export function shownStyle(config: Pick<UiConfig, 'vitals_style' | 'vitals_density'>): VitalsStyle {
+  return config.vitals_style ?? config.vitals_density;
+}
+
+/** Where your vitals show, under the panel's panes or in the status
+ *  line. */
+export const VITALS_PLACES = ['panel', 'status'] as const;
+
+export type VitalsPlace = (typeof VITALS_PLACES)[number];
+
+/** Coerce an unknown place back to the panel. */
+export function normalizeVitalsPlace(value: unknown): VitalsPlace {
+  return value === 'status' ? 'status' : 'panel';
+}
+
+/** Your vitals in today's order. */
+export const VITALS = ['hp', 'mana', 'move'] as const;
+
+export type Vital = (typeof VITALS)[number];
+
+/** Keep each known vital once, in the order given, and add any missing
+ *  after them in today's order. */
+export function normalizeVitalsOrder(value: unknown): Vital[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  const kept: Vital[] = [];
+  for (const name of [...given, ...VITALS]) {
+    const vital = VITALS.find((v) => v === name);
+    if (vital && !kept.includes(vital)) kept.push(vital);
+  }
+  return kept;
+}
+
+/** What vitals_off can hold, each vital and your opponent's row. */
+export const VITALS_OFF = [...VITALS, 'opponent'] as const;
+
+export type VitalOff = (typeof VITALS_OFF)[number];
+
+/** Keep each known name once, in the order of VITALS_OFF. */
+export function normalizeVitalsOff(value: unknown): VitalOff[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  return VITALS_OFF.filter((name) => given.includes(name));
+}
+
+/** Where your opponent's row sits in a fight. */
+export const VITALS_OPPONENT_PLACES = ['top', 'bottom'] as const;
+
+export type VitalsOpponent = (typeof VITALS_OPPONENT_PLACES)[number];
+
+/** Coerce an unknown opponent place back to the top. */
+export function normalizeVitalsOpponent(value: unknown): VitalsOpponent {
+  return value === 'bottom' ? 'bottom' : 'top';
+}
+
+/** Each vital's color as an ANSI slot from 0 to 15. A vital left out
+ *  takes Default. */
+export type VitalsColors = Partial<Record<Vital, number>>;
+
+/** Keep the colors of known vitals that name a slot from 0 to 15. */
+export function normalizeVitalsColors(value: unknown): VitalsColors {
+  const given = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const colors: VitalsColors = {};
+  for (const vital of VITALS) {
+    const slot = given[vital];
+    if (typeof slot === 'number' && Number.isInteger(slot) && slot >= 0 && slot <= 15) {
+      colors[vital] = slot;
+    }
+  }
+  return colors;
+}
+
+/** How many earlier vitals texts Vosh keeps. */
+const VITALS_TEXT_PREVIOUS = 2;
+
+/** Drop blank and repeated texts and keep the newest two. */
+export function normalizeVitalsTextPrevious(value: unknown): string[] {
+  const given = Array.isArray(value) ? (value as unknown[]) : [];
+  const kept: string[] = [];
+  for (const text of given) {
+    if (kept.length === VITALS_TEXT_PREVIOUS) break;
+    if (typeof text === 'string' && text.length > 0 && !kept.includes(text)) kept.push(text);
+  }
+  return kept;
+}
+
+/** Every vitals choice the footer, the status line and the menu draw
+ *  from, as one event payload, so a pick moves them together. The
+ *  status line reads the values and the warning, never the meter. Your
+ *  vitals text comes on its own event, rendered (src/ipc/vitals.ts). */
 export interface VitalsOptions {
+  /** The style shown, your pick or else your density. */
+  style: VitalsStyle;
+  place: VitalsPlace;
+  order: Vital[];
+  off: VitalOff[];
+  opponent: VitalsOpponent;
+  colors: VitalsColors;
   values: VitalsValues;
   meter: VitalsMeter;
   /** Warn under two thirds and turn danger under one third, like the
@@ -149,21 +261,53 @@ export interface VitalsOptions {
   hide_when_pinned: boolean;
 }
 
-export const DEFAULT_VITALS_OPTIONS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
+/** What Reset to default under Customize vitals puts back. Every vital
+ *  on in today's order with Default colors, your opponent on top,
+ *  Current and max, Line, and the warning off. Your style, where your
+ *  vitals show and Hide vitals while your prompt is pinned stay as they
+ *  are. */
+export const DEFAULT_VITALS_CUSTOM: Pick<
+  UiConfig,
+  | 'vitals_order'
+  | 'vitals_off'
+  | 'vitals_colors'
+  | 'vitals_opponent'
+  | 'vitals_values'
+  | 'vitals_meter'
+  | 'vitals_warn_thirds'
+> = {
+  vitals_order: [...VITALS],
+  vitals_off: [],
+  vitals_colors: {},
+  vitals_opponent: 'top',
+  vitals_values: 'current-max',
+  vitals_meter: 'line',
+  vitals_warn_thirds: false,
 };
 
+/** The fields of the config VitalsOptions reads. */
+type VitalsFields =
+  | 'vitals_style'
+  | 'vitals_density'
+  | 'vitals_place'
+  | 'vitals_order'
+  | 'vitals_off'
+  | 'vitals_opponent'
+  | 'vitals_colors'
+  | 'vitals_values'
+  | 'vitals_meter'
+  | 'vitals_warn_thirds'
+  | 'vitals_hide_when_pinned';
+
 /** The vitals options a config holds. */
-export function vitalsOptionsOf(
-  config: Pick<
-    UiConfig,
-    'vitals_values' | 'vitals_meter' | 'vitals_warn_thirds' | 'vitals_hide_when_pinned'
-  >,
-): VitalsOptions {
+export function vitalsOptionsOf(config: Pick<UiConfig, VitalsFields>): VitalsOptions {
   return {
+    style: shownStyle(config),
+    place: config.vitals_place,
+    order: config.vitals_order,
+    off: config.vitals_off,
+    opponent: config.vitals_opponent,
+    colors: config.vitals_colors,
     values: config.vitals_values,
     meter: config.vitals_meter,
     warn_thirds: config.vitals_warn_thirds,
@@ -171,11 +315,25 @@ export function vitalsOptionsOf(
   };
 }
 
+export const DEFAULT_VITALS_OPTIONS: VitalsOptions = vitalsOptionsOf({
+  ...DEFAULT_VITALS_CUSTOM,
+  vitals_style: null,
+  vitals_density: 'rows',
+  vitals_place: 'panel',
+  vitals_hide_when_pinned: true,
+});
+
 /** Read vitals options off the bus, filling anything missing or
  *  unknown with the defaults. */
 export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
+    style: VITALS_STYLES.find((style) => style === o.style) ?? 'rows',
+    place: normalizeVitalsPlace(o.place),
+    order: normalizeVitalsOrder(o.order),
+    off: normalizeVitalsOff(o.off),
+    opponent: normalizeVitalsOpponent(o.opponent),
+    colors: normalizeVitalsColors(o.colors),
     values: normalizeVitalsValues(o.values),
     meter: normalizeVitalsMeter(o.meter),
     warn_thirds: o.warn_thirds === true,
@@ -287,6 +445,31 @@ export interface UiConfig {
   /** Hide the panel's vitals while your prompt is pinned, so the panes
    *  take their room. On unless you turn it off. */
   vitals_hide_when_pinned: boolean;
+  /** The style you picked from the gallery, or null for Rows and One
+   *  line, which vitals_density holds. */
+  vitals_style: SavedVitalsStyle | null;
+  /** Where your vitals show, one of VITALS_PLACES. */
+  vitals_place: VitalsPlace;
+  /** The order every style draws your vitals in. */
+  vitals_order: Vital[];
+  /** The vitals you turned off, and `opponent` for your opponent's row. */
+  vitals_off: VitalOff[];
+  /** Where your opponent's row sits, one of VITALS_OPPONENT_PLACES. */
+  vitals_opponent: VitalsOpponent;
+  /** Each vital's ANSI slot. A vital left out takes Default. */
+  vitals_colors: VitalsColors;
+  /** The text the Text style writes your vitals with. */
+  vitals_text: string;
+  /** At most two earlier texts, newest first. Saving vitals_text puts
+   *  the one it replaces here. */
+  vitals_text_previous: string[];
+  /** The style your 0.7 vitals grew into, which the gallery marks
+   *  Yours in 0.7, or null when they give no clue. Read only, nothing
+   *  saves it. */
+  vitals_legacy_style: VitalsStyle | null;
+  /** Your 0.7 template in today's codes while it was on, which the
+   *  vitals text card offers among its Presets, or null. Read only. */
+  vitals_legacy_text: string | null;
   /** How the status line draws the tick, the game time, and the moons.
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
@@ -397,6 +580,16 @@ export interface RawUiConfig {
   vitals_meter?: string;
   vitals_warn_thirds?: boolean;
   vitals_hide_when_pinned?: boolean;
+  vitals_style?: string | null;
+  vitals_place?: string;
+  vitals_order?: unknown;
+  vitals_off?: unknown;
+  vitals_opponent?: string;
+  vitals_colors?: unknown;
+  vitals_text?: string;
+  vitals_text_previous?: unknown;
+  vitals_legacy_style?: string | null;
+  vitals_legacy_text?: unknown;
   chip_style?: string;
   tick_count?: string;
   game_time?: string;
@@ -505,6 +698,19 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
     vitals_warn_thirds: cfg.vitals_warn_thirds === true,
     vitals_hide_when_pinned: cfg.vitals_hide_when_pinned !== false,
+    vitals_style: normalizeVitalsStyle(cfg.vitals_style),
+    vitals_place: normalizeVitalsPlace(cfg.vitals_place),
+    vitals_order: normalizeVitalsOrder(cfg.vitals_order),
+    vitals_off: normalizeVitalsOff(cfg.vitals_off),
+    vitals_opponent: normalizeVitalsOpponent(cfg.vitals_opponent),
+    vitals_colors: normalizeVitalsColors(cfg.vitals_colors),
+    vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
+    vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
+    vitals_legacy_style: VITALS_STYLES.find((style) => style === cfg.vitals_legacy_style) ?? null,
+    vitals_legacy_text:
+      typeof cfg.vitals_legacy_text === 'string' && cfg.vitals_legacy_text !== ''
+        ? cfg.vitals_legacy_text
+        : null,
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
@@ -550,8 +756,10 @@ export async function setUiTheme(
 }
 
 /** The fields setUiFields can save. The tracked affects save through
- *  trackedAffectsSet. */
-export type UiFields = Partial<Omit<UiConfig, 'tracked_affects'>>;
+ *  trackedAffectsSet, and the 0.7 style and text are read only. */
+export type UiFields = Partial<
+  Omit<UiConfig, 'tracked_affects' | 'vitals_legacy_style' | 'vitals_legacy_text'>
+>;
 
 /** Save only the fields `fields` names, so two windows that each change
  *  a field keep both changes. It writes the profile `profile` names while
@@ -606,16 +814,6 @@ export async function subscribeTerminalLineHeightChanged(
   });
 }
 
-/** Hear a new vitals density saved from Settings, or the one a
- *  profile switch brings. */
-export async function subscribeVitalsDensityChanged(
-  cb: (value: VitalsDensity) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(VITALS_DENSITY_CHANGED, (event) => {
-    cb(normalizeVitalsDensity(event.payload));
-  });
-}
-
 /** The chat pane's channel colors for the live profile, as the backend
  *  holds them. chatColors.ts normalizeChatColors reads the table. */
 export async function getChatColorsTable(): Promise<unknown> {
@@ -643,13 +841,35 @@ export async function subscribeChatColorsChanged(
   });
 }
 
-/** Hear new vitals options (Values, Meter, Warn before you run low)
- *  saved from Settings, or the ones a profile switch brings. */
+/** Hear new vitals options, your style and every choice under Layout,
+ *  Vitals, saved from Settings or the menu, or the ones a profile
+ *  switch brings. */
 export async function subscribeVitalsOptionsChanged(
   cb: (value: VitalsOptions) => void,
 ): Promise<UnlistenFn> {
   return listen<unknown>(VITALS_OPTIONS_CHANGED, (event) => {
     cb(normalizeVitalsOptions(event.payload));
+  });
+}
+
+/** Your vitals text and the earlier ones, as one event payload. */
+export type VitalsTextChange = Pick<UiConfig, 'vitals_text' | 'vitals_text_previous'>;
+
+export function vitalsTextOf(config: VitalsTextChange): VitalsTextChange {
+  return { vitals_text: config.vitals_text, vitals_text_previous: config.vitals_text_previous };
+}
+
+/** Hear a new vitals text, saved from Settings or the vitals text card,
+ *  or the one a profile switch brings. */
+export async function subscribeVitalsTextChanged(
+  cb: (value: VitalsTextChange) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(VITALS_TEXT_CHANGED, (event) => {
+    const raw = event.payload as { vitals_text?: unknown; vitals_text_previous?: unknown } | null;
+    cb({
+      vitals_text: typeof raw?.vitals_text === 'string' ? raw.vitals_text : '',
+      vitals_text_previous: normalizeVitalsTextPrevious(raw?.vitals_text_previous),
+    });
   });
 }
 

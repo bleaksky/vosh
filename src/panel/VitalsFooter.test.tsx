@@ -1,12 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsDensity, type VitalsOptions } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import panelCss from '../styles/panel.css?raw';
 import { PaneTextSizeContext } from './paneTextSize';
 import type { VitalsLineFit } from './vitalsLine';
 import { VitalsBlock } from './VitalsFooter';
+import type { VitalsFit } from './vitalsFit';
 
 // The stores behind VitalsFooter reach the Tauri bridge. VitalsBlock,
 // under test, draws from plain values and never calls it.
@@ -36,12 +37,10 @@ const GUARD: CombatOpponent = {
   tank: null,
 };
 
-const DEFAULTS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
-};
+/** The footer's fit for a density and a One line fit. */
+function styleFit(density: VitalsDensity, fit: VitalsLineFit): VitalsFit {
+  return density === 'line' ? { style: 'line', fit } : { style: 'rows' };
+}
 
 function draw(
   options: Partial<VitalsOptions> = {},
@@ -61,9 +60,8 @@ function draw(
     <VitalsBlock
       vitals={vitals}
       combat={combat}
-      density={density}
-      fit={fit}
-      options={{ ...DEFAULTS, ...options }}
+      fit={styleFit(density, fit)}
+      options={{ ...DEFAULT_VITALS_OPTIONS, ...options }}
     />,
   );
 }
@@ -119,9 +117,8 @@ describe('VitalsBlock', () => {
         <VitalsBlock
           vitals={FIGHT}
           combat={combat}
-          density="rows"
-          fit="rows"
-          options={DEFAULTS}
+          fit={{ style: 'rows' }}
+          options={DEFAULT_VITALS_OPTIONS}
           opponentOnly
         />,
       );
@@ -291,6 +288,113 @@ describe('VitalsBlock', () => {
     );
   });
 
+  it('reads the guard as ? when Char.Combat sends neither a percent nor a condition', () => {
+    // char-combat-withheld.gmcp, the target alone with no flag.
+    const withheld: CombatOpponent = { ...GUARD, hp_pct: null };
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({}, { density, fit: 'labels', combat: withheld });
+      expect(values(html)[0]).toEqual({ value: '?', tone: 'hidden' });
+      expect(fills(html)).toBe(3);
+    }
+    // A condition with no percent still reads as the game words it.
+    expect(values(draw({}, { combat: { ...withheld, condition: 'awful' } }))[0]).toEqual({
+      value: 'awful',
+      tone: 'combat',
+    });
+  });
+
+  it('draws your vitals in your order without the ones you turned off', () => {
+    const html = draw({ order: ['move', 'hp', 'mana'], off: ['mana'] }, { combat: null });
+    expect(values(html).map((v) => v.value)).toEqual(['870 / 930', '186 / 1020']);
+    // Two rows hold two rows' height, with no empty band under them.
+    expect(html).toContain('--vitals-min-height:76px');
+    const line = draw(
+      { order: ['move', 'hp', 'mana'], off: ['mana'] },
+      { density: 'line', fit: 'labels', combat: null },
+    );
+    expect(values(line).map((v) => v.value)).toEqual(['870 / 930', '186 / 1020']);
+  });
+
+  it('holds the height of the vitals the game sends a max for', () => {
+    const html = draw({}, { vitals: { ...FIGHT, maxmana: 0, mana: 0 }, combat: null });
+    expect(values(html).map((v) => v.value)).toEqual(['186 / 1020', '870 / 930']);
+    expect(html).toContain('--vitals-min-height:76px');
+    // While it waits it holds every vital you left on.
+    expect(draw({ off: ['move'] }, { vitals: null, combat: null })).toContain(
+      '--vitals-min-height:76px',
+    );
+  });
+
+  it('puts your opponent at the bottom when you ask', () => {
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({ opponent: 'bottom' }, { density, fit: 'labels' });
+      expect(values(html).map((v) => v.value)).toEqual([
+        '186 / 1020',
+        '344 / 800',
+        '870 / 930',
+        '38%',
+      ]);
+    }
+  });
+
+  it('drops your opponent when its switch is off', () => {
+    expect(values(draw({ off: ['opponent'] })).map((v) => v.value)).toEqual([
+      '186 / 1020',
+      '344 / 800',
+      '870 / 930',
+    ]);
+    const only = renderToStaticMarkup(
+      <VitalsBlock
+        vitals={FIGHT}
+        combat={GUARD}
+        fit={{ style: 'rows' }}
+        options={{ ...DEFAULT_VITALS_OPTIONS, off: ['opponent'] }}
+        opponentOnly
+      />,
+    );
+    expect(only).toBe('');
+  });
+
+  it('keeps only your opponent with all three off, and nothing out of a fight', () => {
+    const off: VitalsOptions['off'] = ['hp', 'mana', 'move'];
+    for (const density of ['rows', 'line'] as const) {
+      const html = draw({ off }, { density, fit: 'labels' });
+      expect(values(html)).toEqual([{ value: '38%', tone: 'combat' }]);
+      expect(html).toContain('aria-label="Opponent"');
+      expect(html).toContain('--vitals-min-height:48px');
+      expect(draw({ off }, { density, combat: null })).toBe('');
+      expect(draw({ off }, { density, vitals: null, combat: null })).toBe('');
+    }
+  });
+
+  it('colors the label and the meter of a vital you gave a color, never its number', () => {
+    for (const [density, fit] of [
+      ['rows', 'rows'],
+      ['line', 'labels'],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        <VitalsBlock
+          vitals={FIGHT}
+          combat={GUARD}
+          fit={styleFit(density, fit)}
+          options={DEFAULT_VITALS_OPTIONS}
+          inks={{ mana: '#8cc2d8' }}
+        />,
+      );
+      expect(html.match(/panel-vitals-swatch/g)).toHaveLength(1);
+      expect(html).toMatch(/panel-vitals-swatch" style="--vital-ink:#8cc2d8"><div[^>]*>[^]*?Mana/);
+    }
+    expect(rule('.panel-vitals-swatch .panel-vitals-label')).toContain('color: var(--vital-ink)');
+    expect(rule('.panel-vitals-swatch .panel-vitals-fill')).toContain(
+      'background: var(--vital-ink)',
+    );
+    // Low and warn come after, so they still turn the meter.
+    expect(panelCss.indexOf('.panel-vitals-swatch .panel-vitals-fill {')).toBeLessThan(
+      panelCss.indexOf('.panel-vitals-row-low .panel-vitals-fill {'),
+    );
+    expect(panelCss).not.toMatch(/\.panel-vitals-swatch \.panel-vitals-value/);
+  });
+
   it('sets the hidden tone in panel.css after the warn and combat tones', () => {
     const hidden = rule('.panel-vitals-row-hidden .panel-vitals-value');
     expect(hidden).toContain('color: var(--tertiary)');
@@ -306,9 +410,8 @@ describe('VitalsBlock', () => {
           <VitalsBlock
             vitals={FIGHT}
             combat={null}
-            density="rows"
-            fit="rows"
-            options={{ ...DEFAULTS, meter }}
+            fit={{ style: 'rows' }}
+            options={{ ...DEFAULT_VITALS_OPTIONS, meter }}
           />
         </PaneTextSizeContext.Provider>,
       );

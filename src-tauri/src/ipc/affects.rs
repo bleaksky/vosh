@@ -167,7 +167,10 @@ pub(crate) async fn affects_snapshot_get(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
 ) -> Result<Option<Value>, String> {
-    Ok(state.session(session)?.last_affects.get())
+    Ok(state
+        .session(session)?
+        .last_packages
+        .get(crate::affects::AFFECTS_PACKAGE))
 }
 
 /// The live map of the session's connection, hours at full by affect

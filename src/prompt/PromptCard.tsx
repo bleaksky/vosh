@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { moveTriggerToPrompts } from '../automation/automationTriggers';
+import { vitalsLegacyText, type CardBinding } from './cardBinding';
 import type { CellSize } from './pinnedDock';
 import {
   type CardRequest,
@@ -16,6 +17,9 @@ import {
   moreItems,
   openingStep,
   savedForName,
+  cardNames,
+  vitalsStartRows,
+  VITALS_MORE,
   withDesign,
   withShow,
   withStart,
@@ -41,14 +45,11 @@ import { profilesList } from '../ipc/profiles';
 import {
   onPromptState,
   onPromptStatus,
-  promptCardOpen,
   promptCodeReaderSet,
   promptCompile,
-  promptConfigGet,
   promptDesignsList,
   promptStateGet,
   promptWatch,
-  subscribePromptConfigChanged,
   type PromptDesign,
   type PromptPreset,
   type PromptState,
@@ -65,6 +66,11 @@ import {
 import { useEscape } from '../lib/escapeStack';
 import { keepFocus, type FocusKeeper } from '../lib/focusKeeper';
 import { useGamePrompt } from '../stores/gmcp/gamePromptStore';
+import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
+import { setVitalsCardMarks } from '../stores/session/vitalsCardStore';
+import { VOSH_VITALS_TEXT } from '../ipc/vitals';
+import { openSettingsTab } from '../lib/settingsLink';
+import { formatSettingsTarget } from '../lib/settingsNav';
 import { pushToast } from '../stores/toasts';
 import { useBandEnv } from './useBandEnv';
 import { useCaptureSteps } from './useCaptureSteps';
@@ -81,7 +87,7 @@ import { LineTriggers } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
 import { PromptPieceBody } from './PromptPiece';
-import { DesignFoot } from './PromptFoot';
+import { DesignFoot, TextFoot } from './PromptFoot';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
@@ -108,6 +114,16 @@ import { PromptText } from './PromptText';
 // shows, and the card moves with your prompt to the place you pick. A
 // menu before Done picks the preview while drawing is on (DesignFoot).
 //
+// Bound to your vitals text (VITALS_TEXT_BINDING) it is titled Your
+// vitals text (Vitals Styles Q10). It reads no prompt, so it has no
+// capture steps and rests at once, and it keeps the parts, Insert
+// value…, Edit as text, Command Z, the Preview menu and Done. Its
+// Presets are Vosh's text, Yours, Your text before that and Your 0.7
+// text, and its foot says where the text draws in place of Draw your
+// prompt and where your prompt shows. It floats over the terminal 12 px
+// from the panel, its foot over the input band, and rings the part you
+// pick on the footer, where a click on a part turns the card to it.
+//
 // The card works on one session's prompt, the selected session's, and
 // names that session on every call, so an edit or a save still under
 // way when you select another session lands on the session it began in.
@@ -130,6 +146,8 @@ export type CardView = 'design' | 'picker' | 'text';
 interface PromptCardProps {
   /** The session whose prompt the card works on. */
   session: number;
+  /** The table the card edits and saves. */
+  binding: CardBinding;
   host: PromptCardHost;
   show: PromptShowState | null;
   cell: CellSize | null;
@@ -155,6 +173,7 @@ const LAMENT_NOTE =
 
 export function PromptCard({
   session,
+  binding,
   host,
   show,
   cell,
@@ -179,6 +198,9 @@ export function PromptCard({
   const [confirmForget, setConfirmForget] = useState(false);
   const [presets, setPresets] = useState<PromptPreset[]>([]);
   const [designs, setDesigns] = useState<PromptDesign[]>([]);
+  const vitals = binding.kind === 'vitals';
+  // Your 0.7 text, among the vitals text's Presets.
+  const [legacy, setLegacy] = useState<string | null>(null);
   const [view, setView] = useState<CardView>(opening.view === 'text' ? 'text' : 'design');
   // Edit prompt as text… asks for the text field, so what you type goes to
   // your design, as the card opens or while it is open.
@@ -195,6 +217,7 @@ export function PromptCard({
   const textCaret = useRef<{ start: number; end: number } | null>(null);
   const { config, take, opens, forgetEdits, save, takeBack, edit, movePicked } = useDesignEdits(
     session,
+    binding.write,
     setDescribed,
     setPointing,
     previewRef,
@@ -262,7 +285,7 @@ export function PromptCard({
         setConfirmForget(false);
       }
       void Promise.all([
-        promptCardOpen(session),
+        binding.open(session),
         promptStateGet(session),
         sessionIdentityGet(session).catch(() => null),
         profilesList().catch(() => null),
@@ -281,13 +304,16 @@ export function PromptCard({
           setIdentity(who);
           setActive(name);
           setKnownHost(known);
+          // A vitals text reads no prompt, so it rests at once.
           setStep(
-            (first ? opensOn.current : undefined) ??
-              openingStep({
-                capture: opened.capture,
-                forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
-                gameSent: now.new_build,
-              }),
+            vitals
+              ? 'rest'
+              : ((first ? opensOn.current : undefined) ??
+                  openingStep({
+                    capture: opened.capture,
+                    forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
+                    gameSent: now.new_build,
+                  })),
           );
         })
         .catch((e: unknown) => console.error('[prompt card] opening failed', e));
@@ -318,12 +344,8 @@ export function PromptCard({
       }),
     );
     keep(
-      subscribePromptConfigChanged(() => {
-        void promptConfigGet(session)
-          .then((next) => {
-            if (alive) take(next);
-          })
-          .catch(() => {});
+      binding.follow(session, (next) => {
+        if (alive) take(next);
       }),
     );
     return () => {
@@ -333,7 +355,7 @@ export function PromptCard({
       // Your live prompt comes back as the card closes.
       void promptPreviewSet(null, session).catch(() => {});
     };
-  }, [session, forgetEdits, opens, resetSteps, take]);
+  }, [session, binding, vitals, forgetEdits, opens, resetSteps, take]);
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
@@ -342,12 +364,13 @@ export function PromptCard({
   useEffect(() => {
     if (opening.at === firstRequest.current) return;
     if (asked === 'point') {
+      if (vitals) return;
       setStep((now) => (now === null ? now : 'point'));
       return;
     }
     setView(asked);
     if (asked === 'text') setTextFocus((n) => n + 1);
-  }, [opening.at, asked]);
+  }, [opening.at, asked, vitals]);
 
   // The code reader you chose on another host gives it the Forsaken Lands
   // rules while the card stays open, so the game's reply to prompt fills
@@ -361,23 +384,27 @@ export function PromptCard({
   // sent, so its marks sit on it. Once it draws your design, each value
   // with nothing to show draws its label, and the footer's preview runs.
   const reading = step === 'codes-entry' || step === 'codes' || step === 'point' || step === 'name';
+  // A vitals text leaves your prompt live and previews on the footer.
   useEffect(() => {
-    if (step === null) return;
+    if (step === null || vitals) return;
     void promptPreviewSet(
       reading ? { raw: true } : { placeholders: true, preview: drawn === 'now' ? null : drawn },
       session,
     ).catch(() => {});
-  }, [step, reading, drawn, session]);
+  }, [step, reading, drawn, session, vitals]);
 
   // Past the capture steps the card works on your design: as text even
   // with drawing off (P11), and on your prompt while drawing is on.
   const editing = step === 'start' || step === 'rest';
   const designing = editing && (config?.draw ?? false);
+  // Where the marks go: your prompt in the terminal, or for a vitals
+  // text the footer.
+  const marksOnPrompt = designing && !vitals;
 
   // The card draws your design over the band of Lifted in the text.
   useEffect(() => {
-    onBand?.(designing && (show?.show ?? 'text') === 'text');
-  }, [designing, show?.show, onBand]);
+    onBand?.(marksOnPrompt && (show?.show ?? 'text') === 'text');
+  }, [marksOnPrompt, show?.show, onBand]);
   useEffect(() => () => onBand?.(false), [onBand]);
 
   // The text view needs a design to work on.
@@ -388,7 +415,7 @@ export function PromptCard({
   // The designs to start from, for the capture the profile holds.
   const capture = config?.capture;
   useEffect(() => {
-    if (!capture || (step !== 'start' && step !== 'rest')) return;
+    if (vitals || !capture || (step !== 'start' && step !== 'rest')) return;
     let alive = true;
     const request =
       capture.kind === 'aabahran'
@@ -414,7 +441,19 @@ export function PromptCard({
     return () => {
       alive = false;
     };
-  }, [capture, step, session]);
+  }, [capture, step, session, vitals]);
+
+  // Your 0.7 text, for a vitals text's Presets.
+  useEffect(() => {
+    if (!vitals) return;
+    let alive = true;
+    void vitalsLegacyText()
+      .then((text) => alive && setLegacy(text))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [vitals]);
 
   // What each part of your design is, with what it reads in the preview.
   const template = config?.template ?? '';
@@ -450,7 +489,33 @@ export function PromptCard({
     [pieces, described, state?.catalog],
   );
 
-  const anchor = useCardPlace(host, cell, show, { step, refresh, view, template, drawn });
+  // A vitals text's own Presets.
+  const vitalsStarts = useMemo(
+    () => (vitals && config ? vitalsStartRows(config, VOSH_VITALS_TEXT, legacy) : undefined),
+    [vitals, config, legacy],
+  );
+
+  const anchor = useCardPlace(host, cell, show, vitals, { step, refresh, view, template, drawn });
+
+  // The footer rings the part you pick in a vitals text and draws the
+  // preview, and a click on a part there turns the card to it.
+  const pickRef = useRef<(piece: number) => void>(() => {});
+  pickRef.current = (piece) => {
+    setView('design');
+    setPointing({ picked: piece, caret: null });
+  };
+  const ringed = view === 'design' ? pointing.picked : null;
+  useEffect(() => {
+    if (!vitals || step === null) return;
+    setVitalsCardMarks({
+      template,
+      picked: ringed,
+      preview: drawn,
+      pick: (piece) => pickRef.current(piece),
+    });
+  }, [vitals, step, template, ringed, drawn]);
+  useEffect(() => () => setVitalsCardMarks(null), []);
+  const shownIn = useVitalsOptions().place;
 
   // Focus moves into the card so the keyboard reaches it, unless a field
   // in it took focus first.
@@ -487,8 +552,11 @@ export function PromptCard({
     onClose();
   });
 
-  const more =
-    config && step ? moreItems({ step, forsaken, gameSent, capture: config.capture }) : [];
+  const more = vitals
+    ? VITALS_MORE
+    : config && step
+      ? moreItems({ step, forsaken, gameSent, capture: config.capture })
+      : [];
   const buttons = step ? headerButtons(step, more) : { editAsText: false, more: false };
   const saved = savedForName(identity, active);
   const owner = saved.replace(/^Saved for /, '');
@@ -510,6 +578,9 @@ export function PromptCard({
         return;
       case 'forget':
         setConfirmForget(true);
+        return;
+      case 'customize-vitals':
+        openSettingsTab(formatSettingsTarget({ group: 'layout', section: 'customize-vitals' }));
         return;
     }
   };
@@ -664,6 +735,7 @@ export function PromptCard({
               caretRef={textCaret}
               focusRequest={textFocus}
               onFocusTaken={() => setTextFocus(0)}
+              fieldLabel={vitals ? 'Vitals text' : undefined}
             />
           );
         } else if (pickedPiece) {
@@ -684,14 +756,18 @@ export function PromptCard({
               config={config}
               presets={presets}
               designs={designs}
+              own={vitalsStarts}
               values={(state?.packages.length ?? 0) > 0 ? 'live' : 'sample'}
               refresh={refresh}
               env={env}
               cellW={cellW}
+              restHint={vitals ? 'Click any part of your vitals to change it.' : undefined}
               note={step === 'rest' && drawn === 'lament' ? LAMENT_NOTE : null}
-              promptsOff={state?.status.status === 'prompts_off' || (show?.promptsOff ?? false)}
+              promptsOff={
+                !vitals && (state?.status.status === 'prompts_off' || (show?.promptsOff ?? false))
+              }
               notMatching={
-                state?.status.status === 'not_matching'
+                !vitals && state?.status.status === 'not_matching'
                   ? notMatchingLine(state.status.last_match_at)
                   : null
               }
@@ -718,17 +794,27 @@ export function PromptCard({
           <>
             {content}
             <div className="pc-rule" aria-hidden="true" />
-            <DesignFoot
-              draw={config.draw}
-              onDraw={(draw) => save({ ...config, draw })}
-              show={config.show}
-              showState={cardShowState(show, config.capture)}
-              onShow={(place) => save(withShow(config, place))}
-              preview={drawn}
-              forsaken={forsaken}
-              onPreview={setPreview}
-              onDone={onClose}
-            />
+            {vitals ? (
+              <TextFoot
+                note={shownIn === 'status' ? 'Draws in your status line' : 'Draws in your panel'}
+                preview={drawn}
+                forsaken={forsaken}
+                onPreview={setPreview}
+                onDone={onClose}
+              />
+            ) : (
+              <DesignFoot
+                draw={config.draw}
+                onDraw={(draw) => save({ ...config, draw })}
+                show={config.show}
+                showState={cardShowState(show, config.capture)}
+                onShow={(place) => save(withShow(config, place))}
+                preview={drawn}
+                forsaken={forsaken}
+                onPreview={setPreview}
+                onDone={onClose}
+              />
+            )}
           </>
         );
         break;
@@ -736,6 +822,8 @@ export function PromptCard({
     }
   }
 
+  const names = cardNames(binding.kind);
+  const title = names.title;
   const header =
     view === 'picker' && editing ? (
       <div className="pc-head">
@@ -746,7 +834,7 @@ export function PromptCard({
       </div>
     ) : (
       <div className="pc-head">
-        <h2 className="pc-title">Customize prompt</h2>
+        <h2 className="pc-title">{title}</h2>
         <span className="pc-saved">{saved}</span>
         <span className="pc-spacer" />
         {buttons.editAsText && editing && (
@@ -756,7 +844,7 @@ export function PromptCard({
         )}
         {buttons.more && (
           <IconButton
-            label="Prompt options"
+            label={names.options}
             icon={<MoreIcon />}
             aria-haspopup="menu"
             aria-expanded={moreAt !== null}
@@ -769,15 +857,15 @@ export function PromptCard({
 
   return (
     <>
-      {step && (
+      {step && !vitals && (
         <PromptMarks
           host={host}
           show={show}
           cell={cell}
           openRow={openRow}
-          design={designing ? { pieces, pointing, warn } : null}
-          raw={designing ? null : raw}
-          screen={designing ? null : screen}
+          design={marksOnPrompt ? { pieces, pointing, warn } : null}
+          raw={marksOnPrompt ? null : raw}
+          screen={marksOnPrompt ? null : screen}
           refresh={refresh}
           onPoint={(next) => {
             if (view === 'text') setView('design');
@@ -790,10 +878,10 @@ export function PromptCard({
         ref={cardRef}
         className="pc-card st-controls"
         role="dialog"
-        aria-label="Customize prompt"
+        aria-label={title}
         tabIndex={-1}
         style={{
-          left: anchor?.left ?? 12,
+          ...(anchor && 'right' in anchor ? { right: anchor.right } : { left: anchor?.left ?? 12 }),
           bottom: anchor?.bottom ?? 0,
           maxHeight: anchor?.maxHeight,
           visibility: anchor && step ? 'visible' : 'hidden',
@@ -825,7 +913,7 @@ export function PromptCard({
           anchor={moreAt}
           place="below-end"
           width={forsaken ? 232 : 264}
-          label="Prompt options"
+          label={names.options}
           onClose={() => setMoreAt(null)}
         >
           {more.map((item, i) =>

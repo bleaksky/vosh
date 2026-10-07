@@ -429,6 +429,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 {
                     error!(error = %e, "settings timer firing failed");
                 }
+                super::vitals_text::on_poll(&conn.app, &conn.session).await;
             }
             _ = perf_report_interval.tick() => {
                 conn.perf.report_and_reset();
@@ -510,10 +511,11 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         conn.session.emit(&conn.app, events::TARGET, &payload);
     }
     let _ = conn.stream.shutdown().await;
-    // The affects list goes stale with the session, as the frontend
-    // store drops its copy on the disconnected state below. The affect
-    // fulls are written for the next login, then cleared.
-    conn.session.last_affects.clear();
+    // The affects, vitals and combat go stale with the session, as the
+    // affects and vitals stores on the page drop theirs on the
+    // disconnected state below.
+    // The affect fulls are written for the next login, then cleared.
+    conn.session.last_packages.clear();
     let shared = conn.app.state::<crate::app::state::SharedState>();
     crate::affects::full::disconnect(&conn.app, shared.inner(), &conn.session);
     // Reset password mode on disconnect so the next session starts with

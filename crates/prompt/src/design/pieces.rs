@@ -6,7 +6,7 @@ use std::ops::Range;
 use serde::Serialize;
 
 use super::tokens::{tokenize, Token, TokenKind};
-use super::tokens::{BarColor, Code, ColorSpec, FieldRef, Format, ValueRef};
+use super::tokens::{FieldRef, Format, ValueRef};
 
 /// What a piece holds after its leading codes. The card reads it by name,
 /// as `cur_max`.
@@ -103,31 +103,9 @@ impl Template {
     pub(crate) fn reads(&self) -> BTreeSet<FieldRef> {
         let mut out = BTreeSet::new();
         for token in &self.tokens {
-            match &token.kind {
-                TokenKind::Value(value) => {
-                    out.insert(value.field.clone());
-                    if let Format::Bar {
-                        color: BarColor::Color(ColorSpec::ByValue { field, .. }),
-                        ..
-                    } = &value.format
-                    {
-                        out.insert(field.clone());
-                    }
-                }
-                TokenKind::Code(
-                    Code::Fg(ColorSpec::ByValue { field, .. })
-                    | Code::Bg(ColorSpec::ByValue { field, .. })
-                    | Code::UnderlineColor(ColorSpec::ByValue { field, .. }),
-                )
-                | TokenKind::If(field)
-                | TokenKind::IfNot(field) => {
-                    out.insert(field.clone());
-                }
-                TokenKind::Raw => {
-                    out.insert(FieldRef::new("raw"));
-                }
-                _ => {}
-            }
+            token.kind.each_read(&mut |field| {
+                out.insert(field.clone());
+            });
         }
         out
     }

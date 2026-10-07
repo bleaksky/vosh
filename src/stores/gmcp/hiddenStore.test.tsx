@@ -90,8 +90,7 @@ function panes(s: Stores): { vitals: string; affects: string; group: string } {
       <VitalsBlock
         vitals={s.vitals.getVitals()}
         combat={s.combat.getCombat()}
-        density="rows"
-        fit="rows"
+        fit={{ style: 'rows' }}
         options={DEFAULT_VITALS_OPTIONS}
       />,
     ),

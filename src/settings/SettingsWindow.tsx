@@ -10,7 +10,15 @@ import {
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
-import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from '../ipc/uiConfig';
+import {
+  fetchUiConfig,
+  shownStyle,
+  subscribeUiConfigReplaced,
+  subscribeVitalsOptionsChanged,
+  subscribeVitalsTextChanged,
+  type UiConfig,
+  type UiFields,
+} from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {
@@ -39,6 +47,7 @@ import { ShownSession } from './ShownSession';
 import { Sidebar } from './Sidebar';
 import { useSettingsClose } from './useSettingsClose';
 import { settingsSaveHolds } from './useSettingsAutoSave';
+import { vitalsStylePick } from '../panel/vitalsView';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronRightIcon } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
@@ -101,6 +110,16 @@ function clearPendingTarget() {
     // Storage unavailable. Nothing was left there.
   }
 }
+
+/** The fields the vitals menu picks. */
+const VITALS_MENU_FIELDS: readonly (keyof UiFields)[] = [
+  'vitals_style',
+  'vitals_density',
+  'vitals_values',
+];
+
+/** The fields the vitals text card saves. */
+const VITALS_TEXT_FIELDS: readonly (keyof UiFields)[] = ['vitals_text', 'vitals_text_previous'];
 
 export function SettingsWindow() {
   const mac = isMacPlatform();
@@ -292,6 +311,32 @@ export function SettingsWindow() {
     setConfig((prev) =>
       prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
         ? { ...prev, ...affectsDisplayFields(display) }
+        : prev,
+    );
+  });
+
+  // The vitals menu picks a style or a Values form in the main window.
+  // The config copy takes them, so Layout shows the pick, and keeps
+  // yours while this window's own save holds them.
+  useTauriEvent(subscribeVitalsOptionsChanged, (options) => {
+    if (settingsSaveHolds(VITALS_MENU_FIELDS)) return;
+    setConfig((prev) =>
+      prev && (shownStyle(prev) !== options.style || prev.vitals_values !== options.values)
+        ? { ...prev, ...vitalsStylePick(options.style), vitals_values: options.values }
+        : prev,
+    );
+  });
+
+  // The vitals text card saves your text in the main window. The config
+  // copy takes it, so Customize vitals previews it, and keeps yours
+  // while this window's own save holds it.
+  useTauriEvent(subscribeVitalsTextChanged, (change) => {
+    if (settingsSaveHolds(VITALS_TEXT_FIELDS)) return;
+    setConfig((prev) =>
+      prev &&
+      (prev.vitals_text !== change.vitals_text ||
+        prev.vitals_text_previous.join('\u0000') !== change.vitals_text_previous.join('\u0000'))
+        ? { ...prev, ...change }
         : prev,
     );
   });

@@ -7,26 +7,35 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
-import { readPanelFace, usePanelFaceVersion } from './panelFace';
-import type { VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
+import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
+import type { VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
-import { useVitalsDensity } from '../stores/config/vitalsDensityStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { useVitals, type Vitals, type VitalKey } from '../stores/gmcp/vitalsStore';
+import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
-  formatVital,
-  hiddenVital,
-  meterFill,
+  opponentHealth,
+  shownRows,
   vitalsFooterHeight,
+  vitalsOn,
   vitalsGeometry,
-  vitalTone,
-  widestVital,
+  vitalInks,
+  VITAL_LABELS,
+  type VitalInks,
   type VitalsGeometry,
   type VitalTone,
 } from './vitalsView';
+import { usePlayPalette } from '../theme/fitGameColors';
+import { themeTokens } from '../theme/themes';
+import { useActiveTheme } from '../theme/useActiveTheme';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
 import { textPx, usePaneText } from './paneTextSize';
-import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
+import { ledgerHeight, type MeasureText } from './vitalsLedgerFit';
+import { VitalsLedger } from './VitalsLedger';
+import { VitalsGauges } from './VitalsGauges';
+import { VitalsPips } from './VitalsPips';
+import { marksHeight } from './vitalsMarksFit';
+import { VitalsText, type TextColors } from './VitalsText';
+import { vitalsFitOf, type VitalsFit } from './vitalsFit';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -47,84 +56,108 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // turns a vital warn under two thirds and danger under one third. The
 // rules live in vitalsView.ts.
 //
+// Customize vitals sets which vitals show and their order, and puts
+// your opponent's row on top or at the bottom, or drops it. The footer
+// holds the height of the vitals that show, and room for every vital
+// you left on only while it waits for your vitals at login.
+//
 // While the game hides your vitals (Char.Vitals with the hidden flag,
 // under lamented tears) each one reads `?` in its Values form, in
 // tertiary, over an empty meter, and nothing warns. The opponent's
-// health reads `?` the same way while Char.Combat withholds it.
+// health reads `?` the same way while Char.Combat withholds it or
+// sends neither a percent nor a condition.
 //
-// While your pinned prompt hides your vitals, the footer keeps only the
-// opponent row, so a fight still shows its health on the right. Out of
-// a fight it draws nothing.
+// While your pinned prompt hides your vitals, or you turned all three
+// off, the footer keeps only the opponent row, so a fight still shows
+// its health on the right. Out of a fight it draws nothing and the
+// panes take its room.
 
-const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
-  { key: 'hp', label: 'Health', max: 'maxhp' },
-  { key: 'mana', label: 'Mana', max: 'maxmana' },
-  { key: 'move', label: 'Moves', max: 'maxmove' },
-];
+// A color you pick for a vital under Customize vitals is a slot of the
+// play palette, so it follows Color vision, lifted to 3:1 on the panel.
+// It colors the vital's label and its meter, never the number, and low
+// and warn still turn the meter and the value.
 
-/** The vitals the MUD sends. Health always shows. While the game hides
- *  your vitals it sends every max as 0, so all three show. */
-function shownRows(vitals: Vitals) {
-  if (vitals.hidden) return ROWS;
-  return ROWS.filter((r) => r.key === 'hp' || vitals[r.max] > 0);
-}
+// Text writes your vitals with your prompt's codes (VitalsText.tsx).
+
+// Ledger draws columns of figures under the pane label caps
+// (VitalsLedger.tsx). Meter sets the line under each column there.
+// Gauges and Pips draw a pill or discs between each label and value
+// (VitalsGauges.tsx, VitalsPips.tsx), their own marks, so Meter goes
+// quiet for them.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
- *  prompt hides your vitals. */
-export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean } = {}) {
+ *  prompt hides your vitals. `textColors` are the terminal settings the
+ *  Text style draws its colors with. */
+export function VitalsFooter({
+  opponentOnly = false,
+  textColors = NO_TEXT_COLORS,
+}: { opponentOnly?: boolean; textColors?: TextColors | undefined } = {}) {
   const vitals = useVitals();
   const combat = useCombat();
-  const density = useVitalsDensity();
   const options = useVitalsOptions();
+  const theme = useActiveTheme();
+  const palette = usePlayPalette();
+  const inks = useMemo(
+    () => vitalInks(options.colors, palette, themeTokens(theme)),
+    [options.colors, palette, theme],
+  );
+  const style = options.style;
   const sectionRef = useRef<HTMLElement | null>(null);
-  const width = useFooterWidth(sectionRef, density === 'line');
+  const width = useFooterWidth(sectionRef, style !== 'rows');
   const { size } = usePaneText();
   // The vitals draw in the panel face at your panel size, so they
   // measure in it, again each time it changes or a face loads.
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
+  if (style === 'text') {
+    return (
+      <VitalsText width={width} hostRef={sectionRef} colors={textColors} fightOnly={opponentOnly} />
+    );
+  }
   // Fit by each vital at its max, the widest its value reads, so the
-  // line does not jump between forms as a value loses a digit in a
+  // footer does not jump between forms as a value loses a digit in a
   // fight. Only a new max, a new Values form, a new panel width, or a
   // new face moves it.
-  const fit =
-    density === 'line' && vitals !== null
-      ? vitalsLineFit(
-          width,
-          shownRows(vitals).map((r) => ({
-            label: textWidth(r.label, `400 ${size}px ${face}`, faceVersion),
-            value: textWidth(
-              widestVital(options.values, vitals[r.max], vitals.hidden),
-              `500 ${size}px ${face}`,
-              faceVersion,
-            ),
-          })),
-        )
-      : 'rows';
+  const measure: MeasureText = (text, px, weight) =>
+    textWidth(text, `${weight} ${px}px ${face}`, faceVersion);
+  // Only the vitals the footer draws, none while it keeps the opponent
+  // alone.
+  const rows =
+    vitals === null || opponentOnly
+      ? []
+      : shownRows(vitals, vitalsOn(options.order, options.off), options);
+  // Gauges and Pips measure your opponent's health with your values.
+  const foe = combat && !options.off.includes('opponent') ? combat : null;
+  const fit = vitalsFitOf(style, width, size, rows, foe, options.values, measure);
 
   return (
     <VitalsBlock
       sectionRef={sectionRef}
       vitals={vitals}
       combat={combat}
-      density={density}
       fit={fit}
       options={options}
+      inks={inks}
       opponentOnly={opponentOnly}
     />
   );
 }
 
+/** The terminal's colors as they start, for a footer handed none. */
+const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: false };
+
 export interface VitalsBlockProps {
   vitals: Vitals | null;
   combat: CombatOpponent | null;
-  density: VitalsDensity;
-  /** How One line fits the panel. Rows ignores it. */
-  fit: VitalsLineFit;
+  /** The style the footer draws and how it fits the panel. */
+  fit: VitalsFit;
   options: VitalsOptions;
+  /** The color of each vital you gave one, lifted (vitalInks). */
+  inks?: VitalInks;
   sectionRef?: Ref<HTMLElement>;
-  /** Only the opponent row, and nothing out of a fight. */
+  /** Only the opponent row, and nothing out of a fight, as when every
+   *  vital is off. */
   opponentOnly?: boolean;
 }
 
@@ -133,71 +166,84 @@ export interface VitalsBlockProps {
 export function VitalsBlock({
   vitals,
   combat,
-  density,
   fit,
   options,
+  inks = {},
   sectionRef,
   opponentOnly = false,
 }: VitalsBlockProps) {
   const { size } = usePaneText();
-  if (opponentOnly && !combat) return null;
-  const line = !opponentOnly && density === 'line' && fit !== 'rows';
+  const on = opponentOnly ? [] : vitalsOn(options.order, options.off);
+  const foe = options.off.includes('opponent') ? null : combat;
+  const rows = vitals === null ? [] : shownRows(vitals, on, options);
+  // With no vital to draw, out of a fight, the panes take the room.
+  const mine = vitals === null ? on.length : rows.length;
+  if (mine === 0 && !foe) return null;
   const geometry = geometryAt(vitalsGeometry(options.meter), size);
+  const label = mine === 0 ? 'Opponent' : 'Vitals';
+  const waiting = vitals === null && mine > 0;
+  if (fit.style === 'ledger') {
+    return (
+      <section
+        ref={sectionRef}
+        className="panel-vitals panel-vitals-ledger"
+        style={ledgerStyle(geometry, waiting ? ledgerHeight(size, geometry.meter) : 0)}
+        aria-label={label}
+      >
+        <VitalsLedger
+          rows={rows}
+          waiting={waiting}
+          combat={foe}
+          place={options.opponent}
+          values={options.values}
+          fit={fit.fit}
+          size={size}
+          meter={geometry.meter > 0}
+          inks={inks}
+        />
+      </section>
+    );
+  }
+  if (fit.style === 'gauges' || fit.style === 'pips') {
+    const marked = {
+      rows,
+      waiting,
+      combat: foe,
+      place: options.opponent,
+      inks,
+    };
+    return (
+      <section
+        ref={sectionRef}
+        className={`panel-vitals panel-vitals-marks${fit.fit === 'under' ? ' is-under' : ''}`}
+        style={waitingStyle(waiting ? marksHeight(size, mine) : 0)}
+        aria-label={label}
+      >
+        {fit.style === 'gauges' ? (
+          <VitalsGauges {...marked} fit={fit.fit} />
+        ) : (
+          <VitalsPips {...marked} fit={fit.fit} />
+        )}
+      </section>
+    );
+  }
+  const line = mine > 0 && fit.style === 'line' && fit.fit !== 'rows';
   const meter = geometry.meter > 0;
-  const rows =
-    vitals === null
-      ? []
-      : shownRows(vitals).map((r) =>
-          vitals.hidden
-            ? {
-                key: r.key,
-                label: r.label,
-                value: hiddenVital(options.values),
-                pct: null,
-                tone: 'hidden' as const,
-              }
-            : {
-                key: r.key,
-                label: r.label,
-                value: formatVital(options.values, vitals[r.key], vitals[r.max]),
-                pct: meterFill(vitals[r.key], vitals[r.max]),
-                tone: vitalTone(
-                  vitals[r.key],
-                  vitals[r.max],
-                  vitals.low[r.key],
-                  options.warn_thirds,
-                ),
-              },
-        );
+  // Rows holds the vitals that show, and every vital you left on while
+  // it waits for your vitals, so logging in moves nothing. One line
+  // and the opponent alone hold one row.
+  const held = mine === 0 || fit.style === 'line' ? 1 : mine;
+  const opponent = foe && <OpponentRow combat={foe} meter={meter} />;
 
   return (
     <section
       ref={sectionRef}
       className={`panel-vitals${line ? ' is-one-line' : ''}`}
-      // The footer holds one row for One line and three for Rows while
-      // it waits for your vitals, so logging in moves nothing.
-      style={footerStyle(geometry, opponentOnly || density === 'line' ? 1 : 3)}
-      aria-label={opponentOnly ? 'Opponent' : 'Vitals'}
+      style={footerStyle(geometry, held)}
+      aria-label={label}
     >
-      {combat &&
-        (combat.hidden ? (
-          <VitalRow
-            className="panel-vitals-row-combat panel-vitals-row-hidden"
-            label={combat.name}
-            value="?"
-            pct={null}
-            meter={meter}
-          />
-        ) : (
-          <VitalRow
-            className="panel-vitals-row-combat"
-            label={combat.name}
-            value={combat.hp_pct !== null ? `${combat.hp_pct}%` : (combat.condition ?? '')}
-            pct={combat.hp_pct}
-            meter={meter}
-          />
-        ))}
-      {opponentOnly ? null : vitals === null ? (
+      {options.opponent === 'top' && opponent}
+      {mine === 0 ? null : vitals === null ? (
         <div className="panel-vitals-row">
           <p className="panel-vitals-empty">Vitals appear when you log in.</p>
         </div>
@@ -206,8 +252,9 @@ export function VitalsBlock({
           {rows.map((r) => (
             <VitalItem
               key={r.key}
-              label={r.label}
-              showLabel={fit === 'labels'}
+              label={VITAL_LABELS[r.key]}
+              ink={inks[r.key]}
+              showLabel={fit.fit === 'labels'}
               value={r.value}
               pct={r.pct}
               tone={r.tone}
@@ -220,13 +267,15 @@ export function VitalsBlock({
           <VitalRow
             key={r.key}
             className={toneClass(r.tone)}
-            label={r.label}
+            label={VITAL_LABELS[r.key]}
+            ink={inks[r.key]}
             value={r.value}
             pct={r.pct}
             meter={meter}
           />
         ))
       )}
+      {options.opponent === 'bottom' && opponent}
     </section>
   );
 }
@@ -243,6 +292,22 @@ function geometryAt(geometry: VitalsGeometry, size: number): VitalsGeometry {
     padTop: textPx(geometry.padTop, size),
     padBottom: textPx(geometry.padBottom, size),
   };
+}
+
+/** Ledger's meter as custom properties panel.css reads, and the height
+ *  it holds while it waits for your vitals, 0 once they show. */
+function ledgerStyle(geometry: VitalsGeometry, waiting: number): CSSProperties {
+  return {
+    '--vitals-meter': `${geometry.meter}px`,
+    '--vitals-meter-radius': `${geometry.meterRadius}px`,
+    ...waitingStyle(waiting),
+  } as CSSProperties;
+}
+
+/** The height a footer holds while it waits for your vitals, none once
+ *  they show. */
+function waitingStyle(waiting: number): CSSProperties | undefined {
+  return waiting > 0 ? ({ '--vitals-min-height': `${waiting}px` } as CSSProperties) : undefined;
 }
 
 /** The geometry as custom properties panel.css reads. */
@@ -284,28 +349,14 @@ function useFooterWidth(el: RefObject<HTMLElement | null>, active: boolean): num
   return width ?? saved;
 }
 
-let measureCanvas: HTMLCanvasElement | null = null;
-// Widths by font and text. The labels and maxes rarely change, so a
-// vitals update reads these instead of measuring again.
-const widths = new Map<string, number>();
-
-/** How wide `text` draws in `font`. Values use tabular numbers, where
- *  every digit is as wide as a zero, so digits measure as zeros. A
- *  width taken before a face loaded is its fallback's, so `faceVersion`
- *  keys each width to the faces loaded when it was taken. */
-function textWidth(text: string, font: string, faceVersion: number): number {
-  const shape = text.replace(/[0-9]/g, '0');
-  const key = `${faceVersion}|${font}|${shape}`;
-  const known = widths.get(key);
-  if (known !== undefined) return known;
-  measureCanvas ??= document.createElement('canvas');
-  const ctx = measureCanvas.getContext('2d');
-  if (!ctx) return shape.length * 7;
-  ctx.font = font;
-  const width = Math.ceil(ctx.measureText(shape).width);
-  if (widths.size > 64) widths.clear();
-  widths.set(key, width);
-  return width;
+/** A vital's color on its row or One line item, as panel.css reads it. */
+function inkProps(ink: string | undefined, className: string) {
+  return ink
+    ? {
+        className: `${className} panel-vitals-swatch`,
+        style: { '--vital-ink': ink } as CSSProperties,
+      }
+    : { className };
 }
 
 function VitalRow({
@@ -314,21 +365,38 @@ function VitalRow({
   pct,
   meter,
   className,
+  ink,
 }: {
   label: string;
   value: string;
   pct: number | null;
   meter: boolean;
   className?: string | undefined;
+  ink?: string | undefined;
 }) {
   return (
-    <div className={`panel-vitals-row${className ? ` ${className}` : ''}`}>
+    <div {...inkProps(ink, `panel-vitals-row${className ? ` ${className}` : ''}`)}>
       <div className="panel-vitals-line">
         <span className="panel-vitals-label">{label}</span>
         <span className="panel-vitals-value">{value}</span>
       </div>
       {meter && <Meter pct={pct} />}
     </div>
+  );
+}
+
+/** Your opponent's name and health, in warn, or a quiet `?` while the
+ *  game withholds the health. */
+function OpponentRow({ combat, meter }: { combat: CombatOpponent; meter: boolean }) {
+  const health = opponentHealth(combat);
+  return (
+    <VitalRow
+      className={`panel-vitals-row-combat${health.hidden ? ' panel-vitals-row-hidden' : ''}`}
+      label={combat.name}
+      value={health.value}
+      pct={health.pct}
+      meter={meter}
+    />
   );
 }
 
@@ -342,8 +410,10 @@ function VitalItem({
   pct,
   tone,
   meter,
+  ink,
 }: {
   label: string;
+  ink: string | undefined;
   showLabel: boolean;
   value: string;
   pct: number | null;
@@ -352,7 +422,12 @@ function VitalItem({
 }) {
   const toned = toneClass(tone);
   return (
-    <div className={`panel-vitals-item${showLabel ? '' : ' is-bare'}${toned ? ` ${toned}` : ''}`}>
+    <div
+      {...inkProps(
+        ink,
+        `panel-vitals-item${showLabel ? '' : ' is-bare'}${toned ? ` ${toned}` : ''}`,
+      )}
+    >
       <div className="panel-vitals-line">
         <span className={showLabel ? 'panel-vitals-label' : 'panel-vitals-label-hidden'}>
           {label}

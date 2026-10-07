@@ -212,7 +212,7 @@ describe('a replaced UI config', () => {
     expect(payloads.get('vosh://spellcheck-prompt-changed')).toBe(true);
     expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');
     expect(payloads.get('vosh://input-echo-color-changed')).toBe('#ff8800');
-    expect(payloads.get('vosh://vitals-density-changed')).toBe('line');
+    expect(payloads.get('vosh://vitals-options-changed')).toMatchObject({ style: 'line' });
     // Your prompt travels through the prompt commands, not the config.
     expect(payloads.has('vosh://prompt-template-changed')).toBe(false);
   });

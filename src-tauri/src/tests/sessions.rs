@@ -350,6 +350,40 @@ async fn char_vitals_from_each_game_binds_the_hp_of_its_own_session() {
     h.finish(grid).await;
 }
 
+/// The last payload of `package` session `session` keeps.
+fn last(h: &Harness, session: SessionId, package: &str) -> Option<serde_json::Value> {
+    h.state
+        .session(Some(session))
+        .expect("an open session")
+        .last_packages
+        .get(package)
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_session_keeps_its_own_last_vitals_and_fight_until_it_disconnects() {
+    use crate::session::last_packages::{COMBAT_PACKAGE, VITALS_PACKAGE};
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let (h, one, two) = two_sessions_on_two_games().await;
+    h.type_in(one, "fight").await;
+    h.until("the fight in the first game", |h| {
+        last(h, one, VITALS_PACKAGE).is_some_and(|v| v["hp"] == 765)
+            && last(h, one, COMBAT_PACKAGE).is_some_and(|c| c["target"].is_string())
+    })
+    .await;
+    assert_eq!(last(&h, two, VITALS_PACKAGE).expect("vitals")["hp"], 1020);
+    // The second game sent its login's empty fight, and no other.
+    assert_eq!(last(&h, two, COMBAT_PACKAGE), Some(json!({})));
+
+    h.disconnect_session(one).await;
+    assert_eq!(last(&h, one, VITALS_PACKAGE), None);
+    assert_eq!(last(&h, one, COMBAT_PACKAGE), None);
+    assert!(last(&h, two, VITALS_PACKAGE).is_some());
+
+    h.disconnect_session(two).await;
+    h.finish(grid).await;
+}
+
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_var_stays_in_its_session_and_unvar_takes_the_profile_value_from_both() {

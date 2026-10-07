@@ -62,9 +62,11 @@ import {
   useSessions,
 } from '../stores/session/sessionsStore';
 import { useConnection } from '../stores/session/useConnection';
+import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
+import { PROMPT_BINDING, VITALS_TEXT_BINDING, type CardBinding } from '../prompt/cardBinding';
 import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
@@ -112,6 +114,10 @@ function MainWindow() {
   // (Q17) or the window grows too narrow to hold it (board 8).
   const sessions = useSessions();
   const panelOpen = panelLayout?.panel_open ?? true;
+  // The status line carries your vitals with the panel hidden, or with
+  // Show your vitals in on Status line.
+  const vitalsPlace = useVitalsOptions().place;
+  const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
   const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen);
   const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
@@ -165,9 +171,14 @@ function MainWindow() {
   // The prompt card (Customize prompt…), open over your prompt, and the
   // view it opens on, or `point` to open on pointing at your game's line.
   const [promptCard, setPromptCard] = useState<CardRequest | null>(null);
+  // What the card edits: your prompt, or your vitals text.
+  const [cardBinding, setCardBinding] = useState<CardBinding>(PROMPT_BINDING);
   // Every request counts, so the open card hears a repeat of one.
   const openPromptCard = useCallback(
-    (view: CardRequestView) => setPromptCard((prev) => nextCardRequest(prev, view)),
+    (view: CardRequestView, binding: CardBinding = PROMPT_BINDING) => {
+      setCardBinding(binding);
+      setPromptCard((prev) => nextCardRequest(prev, view));
+    },
     [],
   );
   // The card draws your design over the band of Lifted in the text.
@@ -203,9 +214,11 @@ function MainWindow() {
   };
 
   // Customize… in Settings, and anything else in another window, opens
-  // the card here and brings this window forward.
+  // the card here and brings this window forward. Edit… under Customize
+  // vitals and Edit your text… on the vitals menu open it on your
+  // vitals text.
   useTauriEvent(subscribePromptCardOpen, (request) => {
-    openPromptCard(request.view ?? 'design');
+    openPromptCard(request.view ?? 'design', request.vitals ? VITALS_TEXT_BINDING : PROMPT_BINDING);
     void getCurrentWindow()
       .setFocus()
       .catch(() => {});
@@ -481,6 +494,12 @@ function MainWindow() {
     brightBold,
     blinkText,
   } = useUiConfigFollow({ onThemesChanged: themesChanged });
+  // The terminal settings the Text style of your vitals draws with, in
+  // the footer or the status line.
+  const textColors = useMemo(
+    () => ({ themeTerminalColors, brightBold }),
+    [themeTerminalColors, brightBold],
+  );
 
   // Keep the native surface under the page in step with this window.
   useNativeSurfaceBridge({
@@ -709,8 +728,14 @@ function MainWindow() {
       }
       terminal={terminalAreaElement}
       input={inputElement}
-      statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
-      panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} />}
+      statusLine={
+        <StatusLine
+          connected={connection.live}
+          showVitals={lineShowsVitals}
+          textColors={textColors}
+        />
+      }
+      panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
       <ReconnectNotice
         session={selected}
@@ -734,10 +759,12 @@ function MainWindow() {
       {promptCard && (
         // A selection mounts the card again for the session it brings to
         // the front, and the card it leaves puts that session's live
-        // prompt back as it goes.
+        // prompt back as it goes. Turning from your prompt to your vitals
+        // text mounts it again too.
         <PromptCard
-          key={selected}
+          key={`${selected}:${cardBinding.kind}`}
           session={selected}
+          binding={cardBinding}
           opening={promptCard}
           onBand={setCardBand}
           host={promptCardHost}

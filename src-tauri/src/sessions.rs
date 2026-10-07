@@ -28,7 +28,6 @@ use tracing::warn;
 use vosh_automation::StopKey;
 
 use crate::affects::full::AffectFull;
-use crate::affects::snapshot::AffectsSnapshot;
 use crate::app::events::{broadcast, SESSIONS_CHANGED};
 use crate::app::state::AppState;
 use crate::logs::SharedScrollback;
@@ -38,6 +37,7 @@ use crate::profile::set::SessionEntry;
 use crate::profile::worlds::{host_key, known_world, world_label};
 use crate::script::SharedTimers;
 use crate::session::connection::{Connection, SharedConnection};
+use crate::session::last_packages::LastPackages;
 use crate::session::SessionHandle;
 
 /// What a command says when it names a session Vosh does not hold.
@@ -165,10 +165,10 @@ pub(crate) struct Session {
     /// sets it, and the end of the link clears it. A leaf lock, held for
     /// a copy.
     since: std::sync::Mutex<Option<u64>>,
-    /// The last Char.Affects list of the connection, for a window that
-    /// opens between ticks. Cleared on connect and when the connection
-    /// ends.
-    pub(crate) last_affects: AffectsSnapshot,
+    /// The last Char.Affects, Char.Vitals and Char.Combat of the
+    /// connection, for a window that opens between packets. Cleared on
+    /// connect and when the connection ends.
+    pub(crate) last_packages: LastPackages,
     /// How full each affect on the connection's character was cast, for
     /// the Affects pane's gauges. Forgotten on connect, and written to
     /// the file every session shares as the connection ends. See
@@ -177,6 +177,9 @@ pub(crate) struct Session {
     /// The prompt card watches your prompt, so `session://prompt-state`
     /// follows each prompt the session reads.
     pub(crate) prompt_watch: AtomicBool,
+    /// A footer or the status line draws your vitals text, and at what
+    /// width, so `session://vitals-text` follows what moves it.
+    pub(crate) vitals_watch: crate::session::vitals_text::VitalsWatch,
     /// You are selecting text in xterm or reading back in its split, as
     /// the webview last said. A clock repaint of your prompt waits while
     /// it holds, so the row you select or read never moves.
@@ -228,9 +231,10 @@ impl Session {
             current_character: std::sync::Mutex::new(None),
             played: std::sync::Mutex::new(None),
             since: std::sync::Mutex::new(None),
-            last_affects: AffectsSnapshot::default(),
+            last_packages: LastPackages::default(),
             affect_full: AffectFull::default(),
             prompt_watch: AtomicBool::new(false),
+            vitals_watch: crate::session::vitals_text::VitalsWatch::default(),
             reader_busy: AtomicBool::new(false),
             launch_lua_lines: std::sync::Mutex::new(Vec::new()),
             output_count: AtomicU64::new(0),

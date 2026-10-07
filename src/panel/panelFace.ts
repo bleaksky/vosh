@@ -94,3 +94,28 @@ export function panelFaceVersion(): number {
 export function usePanelFaceVersion(): number {
   return useSyncExternalStore(subscribePanelFace, panelFaceVersion, panelFaceVersion);
 }
+
+let measureCanvas: HTMLCanvasElement | null = null;
+// Widths by font and text. The labels and maxes rarely change, so a
+// vitals update reads these instead of measuring again.
+const widths = new Map<string, number>();
+
+/** How wide `text` draws in `font`. Values use tabular numbers, where
+ *  every digit is as wide as a zero, so digits measure as zeros. A
+ *  width taken before a face loaded is its fallback's, so `faceVersion`
+ *  keys each width to the faces loaded when it was taken. */
+export function textWidth(text: string, font: string, faceVersion: number): number {
+  const shape = text.replace(/[0-9]/g, '0');
+  const key = `${faceVersion}|${font}|${shape}`;
+  const known = widths.get(key);
+  if (known !== undefined) return known;
+  if (typeof document === 'undefined') return shape.length * 7;
+  measureCanvas ??= document.createElement('canvas');
+  const ctx = measureCanvas.getContext?.('2d');
+  if (!ctx) return shape.length * 7;
+  ctx.font = font;
+  const width = Math.ceil(ctx.measureText(shape).width);
+  if (widths.size > 256) widths.clear();
+  widths.set(key, width);
+  return width;
+}

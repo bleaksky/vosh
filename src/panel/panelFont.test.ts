@@ -145,17 +145,21 @@ describe('the panel faces in the stylesheets', () => {
     expect(declared(frameCss, '.shell-statusline', 'font-family')).toBe('var(--font-panel)');
     // The faces one-window drew each in before the Panel font: the
     // system face from the panel, the terminal face for the game text,
-    // and the bundled monospace face for the glyph map.
+    // and the bundled monospace face for the glyph map. The Text style
+    // of the vitals draws your text in the game face too, in the footer
+    // and on the status line.
     expect(namedFaces()).toEqual([
       '.pane-affect-hours: var(--font-panel-game)',
       '.pane-affect-name: var(--font-panel-game)',
       '.pane-countdown-line: var(--font-panel-game)',
       '.pane-chip: var(--font-panel-game)',
       '.shell-statusline: var(--font-panel)',
+      '.shell-statusline > .shell-status-text: var(--font-panel-game)',
       '.map-glyph-grid: var(--font-panel-glyph)',
       '.panel-host: var(--font-panel)',
       '.pane-lua-line: var(--font-panel-game)',
       '.pane-chat-log: var(--font-panel-game)',
+      '.panel-vitals-text: var(--font-panel-game)',
     ]);
   });
 

@@ -46,7 +46,7 @@ pub struct Clock {
 
 impl Clock {
     /// The clock pieces among the fields a design reads.
-    fn of(reads: &std::collections::BTreeSet<crate::design::FieldRef>) -> Self {
+    pub(crate) fn of(reads: &std::collections::BTreeSet<crate::design::FieldRef>) -> Self {
         let reads = |name: &str| reads.iter().any(|field| field.name == name);
         Self {
             tick: reads("tick"),

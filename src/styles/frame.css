@@ -373,9 +373,56 @@
   text-overflow: ellipsis;
 }
 
+/* Your opponent in a fight, its name then its health. The name gives
+   way first, ending in an ellipsis, and the health stays whole. */
+.shell-statusline > .shell-status-foe {
+  display: flex;
+  align-items: baseline;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shell-status-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-status-foe > .shell-status-value {
+  flex: none;
+}
+
+/* Your vitals text on one line in the terminal face, its colors drawn
+   cell by cell, 20 px between its pieces. Where the line runs out it
+   ends in an ellipsis. Each cell draws alone, so no ligature joins the
+   game's === into one glyph. */
+.shell-statusline > .shell-status-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-panel-game);
+  white-space: pre;
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+.shell-status-text-piece + .shell-status-text-piece {
+  margin-left: 20px;
+}
+
 .shell-status-value {
   margin-left: 6px;
   color: var(--text);
+}
+
+/* A value whose label or name gave way, which a screen reader still
+   hears, starts the item. */
+.shell-status-value.is-bare {
+  margin-left: 0;
 }
 
 .shell-status-value.is-low {

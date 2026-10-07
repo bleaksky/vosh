@@ -629,6 +629,17 @@
   background: var(--tertiary);
 }
 
+/* A color you picked for a vital (Customize vitals) on its label and its
+   meter, lifted to 3:1 on the panel in VitalsFooter. Low and warn
+   below still turn the meter. */
+.panel-vitals-swatch .panel-vitals-label {
+  color: var(--vital-ink);
+}
+
+.panel-vitals-swatch .panel-vitals-fill {
+  background: var(--vital-ink);
+}
+
 .panel-vitals-row-low .panel-vitals-value {
   color: var(--danger-text);
 }
@@ -715,6 +726,386 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* Ledger, Gauges and Pips (Vitals Styles, board 1). Each vital carries
+   its tone as custom properties: the mark, the label and the value. The
+   mark rests in a quiet tone, a color you picked colors the mark and
+   the label, low turns the mark danger and the value danger text, warn
+   turns both warn, and your opponent draws its name in text and its
+   health in warn. A value the game hides reads a tertiary `?` over an
+   empty mark. Each style sets its quiet tone in --vital-quiet, secondary
+   unless it says otherwise. VitalsFooter sets --vitals-min-height only while it waits
+   for your vitals. */
+.vitals-tone {
+  --vital-mark: var(--vital-ink, var(--vital-quiet, var(--secondary)));
+  --vital-label: var(--vital-ink, var(--vital-quiet, var(--secondary)));
+  --vital-value: var(--text);
+}
+
+.vitals-tone.is-warn {
+  --vital-mark: var(--warn);
+  --vital-value: var(--warn);
+}
+
+.vitals-tone.is-low {
+  --vital-mark: var(--danger);
+  --vital-value: var(--danger-text);
+}
+
+.vitals-tone.is-foe {
+  --vital-mark: var(--warn);
+  --vital-label: var(--text);
+  --vital-value: var(--warn);
+}
+
+.vitals-tone.is-hidden {
+  --vital-value: var(--tertiary);
+}
+
+/* Ledger. Columns under the pane label recipe, 10 px caps as MAP and
+   AFFECTS head their panes, the figure at --vitals-figure, round(16 px
+   x scale) until vitalsLedger.ts steps it down, the max at the caps
+   size, and a line under each column on the Meter's px. The marks rest
+   in tertiary, as Rows draws its lines. */
+.panel-vitals-ledger {
+  min-height: var(--vitals-min-height, 0);
+  padding: round(10px * var(--mud-scale), 1px) 0 round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-ledger {
+  --vital-quiet: var(--tertiary);
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-ledger-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 16px;
+}
+
+.vitals-ledger-column {
+  min-width: 0;
+}
+
+.vitals-ledger-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vital-label);
+}
+
+.vitals-ledger-figure {
+  display: flex;
+  align-items: baseline;
+  height: round(20px * var(--mud-scale), 1px);
+  margin-top: round(3px * var(--mud-scale), 1px);
+  white-space: nowrap;
+}
+
+.vitals-ledger-current {
+  font-size: var(--vitals-figure);
+  line-height: round(20px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--vital-value);
+}
+
+.vitals-ledger-max {
+  margin-left: 3px;
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  color: var(--tertiary);
+}
+
+.vitals-ledger-line {
+  height: var(--vitals-meter, 2px);
+  margin-top: round(4px * var(--mud-scale), 1px);
+  border-radius: var(--vitals-meter-radius, 1px);
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.vitals-ledger-fill {
+  height: 100%;
+  background: var(--vital-mark);
+}
+
+/* Your opponent across the footer, its name and health on one line and
+   a line under both, 12 above your columns or 12 under them. */
+.vitals-ledger-opponent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  margin-bottom: round(12px * var(--mud-scale), 1px);
+}
+
+.vitals-ledger-opponent.is-bottom {
+  margin: round(12px * var(--mud-scale), 1px) 0 0;
+}
+
+.vitals-ledger-opponent.is-alone {
+  margin: 0;
+}
+
+.vitals-ledger-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vital-label);
+}
+
+.vitals-ledger-opponent .vitals-ledger-figure {
+  margin-top: 0;
+}
+
+.vitals-ledger-opponent .vitals-ledger-line {
+  grid-column: 1 / -1;
+}
+
+/* Gauges and Pips. Each vital on a 22 px pane row, its label, its mark
+   and its value, the marks starting together after the longest label
+   and ending together before the widest value, which each value holds
+   under it unseen. On a narrow panel the marks drop under the label and
+   value (is-under, vitalsMarksFit.ts). Your opponent's name takes the
+   room of the marks, and its health sits at the right edge. */
+.panel-vitals-marks {
+  min-height: var(--vitals-min-height, 0);
+  padding: round(9px * var(--mud-scale), 1px) 0 round(11px * var(--mud-scale), 1px);
+}
+
+.panel-vitals-marks.is-under {
+  padding-top: round(8px * var(--mud-scale), 1px);
+}
+
+.vitals-marks {
+  display: grid;
+  grid-auto-rows: var(--mud-row);
+  align-items: center;
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-marks.is-gauges {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 10px;
+}
+
+.vitals-marks.is-pips {
+  grid-template-columns: minmax(0, 1fr) auto max-content;
+  column-gap: 8px;
+}
+
+.vitals-mark-row {
+  display: contents;
+}
+
+.vitals-mark-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vital-label);
+}
+
+.vitals-mark-value {
+  display: grid;
+  justify-items: end;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-mark-value > * {
+  grid-area: 1 / 1;
+}
+
+.vitals-mark-widest {
+  visibility: hidden;
+}
+
+.vitals-marks .panel-vitals-empty {
+  grid-column: 1 / -1;
+}
+
+.vitals-mark-opponent {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.vitals-mark-opponent .vitals-mark-label {
+  flex: 1 1 auto;
+}
+
+.vitals-mark-opponent .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-marks.is-under {
+  display: block;
+}
+
+.vitals-marks.is-under .vitals-mark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: 8px;
+  align-items: center;
+  padding: round(4px * var(--mud-scale), 1px) 0;
+}
+
+.vitals-marks.is-under .vitals-mark-label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.vitals-marks.is-under .vitals-mark-value {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.vitals-marks.is-under .vitals-mark-opponent {
+  display: flex;
+}
+
+/* The Gauges pill, 6 px on the divider tone, filled in the vital's
+   tone with at least its round end showing. */
+.vitals-gauge {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.vitals-gauge-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--vital-mark);
+}
+
+.vitals-marks.is-under .vitals-gauge {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 3px;
+}
+
+/* Pips, 6 px discs 3 apart, the whole disc at a fifth of its tone and
+   the lit half or whole at full, as the status line lights a moon. A
+   hidden value lights none, in tertiary. */
+.vitals-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.vitals-pip {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--vital-mark) 20%, transparent);
+}
+
+.vitals-pip.is-full {
+  background: var(--vital-mark);
+}
+
+.vitals-pip.is-half {
+  background: linear-gradient(
+    90deg,
+    var(--vital-mark) 50%,
+    color-mix(in oklab, var(--vital-mark) 20%, transparent) 50%
+  );
+}
+
+.vitals-tone.is-hidden .vitals-pip {
+  background: color-mix(in oklab, var(--tertiary) 20%, transparent);
+}
+
+.vitals-marks.is-under .vitals-pips {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 4px;
+}
+
+/* Text. Your vitals text in the game face at your panel size, on the
+   footer's 18 and 12 px sides and chat's line, each cell in the color
+   VitalsText.tsx gives it. A row with %{right} sets its right part at
+   the edge, whole, and its left part ends in an ellipsis where they
+   meet. With nothing to draw the footer keeps no room. */
+.panel-vitals-text {
+  flex: none;
+  padding: round(8px * var(--mud-scale), 1px) 12px round(10px * var(--mud-scale), 1px) 18px;
+  border-top: 1px solid var(--sep);
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-chat-line);
+  /* The terminal draws each cell alone, so no ligature joins the
+     game's === or --- into one glyph. */
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+.panel-vitals-text.is-empty {
+  padding: 0;
+  border-top: 0;
+}
+
+.panel-vitals-text-row {
+  display: flex;
+  min-width: 0;
+  height: var(--mud-chat-line);
+  white-space: pre;
+}
+
+.panel-vitals-text-left {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-vitals-text-right {
+  flex: none;
+  margin-left: auto;
+  padding-left: 1ch;
+}
+
+/* While the vitals text card is open each part of your text takes a
+   click, and the part you picked takes the ring the card draws round a
+   part of your prompt (board 5 of the Vitals Styles review). */
+.panel-vitals-text-part {
+  cursor: default;
+}
+
+.panel-vitals-text-part.is-picked {
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--mark-tint);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */

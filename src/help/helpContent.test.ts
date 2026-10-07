@@ -19,7 +19,7 @@ describe('the help on values the game hides', () => {
       'When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter',
     );
     expect(text).toContain('Nothing turns yellow or red while they stay hidden.');
-    expect(text).toContain('the status line drops the health of your target');
+    expect(text).toContain('and so does its health on the status line.');
   });
 
   it('says what the affects and group panes show', () => {

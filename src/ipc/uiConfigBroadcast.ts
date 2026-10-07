@@ -32,15 +32,18 @@ import {
   THEME_TERMINAL_COLORS_CHANGED,
   TICK_COUNT_CHANGED,
   TRACKED_AFFECTS_CHANGED,
-  VITALS_DENSITY_CHANGED,
   VITALS_OPTIONS_CHANGED,
+  VITALS_TEXT_CHANGED,
 } from './events';
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,
   vitalsOptionsOf,
+  vitalsTextOf,
   type FontChange,
   type UiConfig,
+  type VitalsOptions,
+  type VitalsTextChange,
 } from './uiConfig';
 
 function fontChangeOf(config: UiConfig): FontChange {
@@ -151,11 +154,18 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     config.input_cursor_style,
     before?.input_cursor_style,
   );
-  await emitChanged(VITALS_DENSITY_CHANGED, config.vitals_density, before?.vitals_density);
+  // Your style and every vitals choice go out as one, so a pick moves
+  // the footer, the status line and the menu together.
   await emitChanged(
     VITALS_OPTIONS_CHANGED,
     vitalsOptionsOf(config),
     before ? vitalsOptionsOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(
+    VITALS_TEXT_CHANGED,
+    vitalsTextOf(config),
+    before ? vitalsTextOf(before) : undefined,
     deepEqual,
   );
   await emitChanged(CHIP_STYLE_CHANGED, config.chip_style, before?.chip_style);
@@ -170,6 +180,19 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     before?.tracked_affects,
     deepEqual,
   );
+}
+
+/** Tell every window, this one included, your vitals options after
+ *  the vitals menu saved a pick, so the footer, the status line and
+ *  Settings follow at once. */
+export async function broadcastVitalsOptions(options: VitalsOptions): Promise<void> {
+  await emitChanged(VITALS_OPTIONS_CHANGED, options, undefined);
+}
+
+/** Tell every window, this one included, your vitals text after the
+ *  vitals text card saved it, so Settings shows it. */
+export async function broadcastVitalsText(change: VitalsTextChange): Promise<void> {
+  await emitChanged(VITALS_TEXT_CHANGED, change, undefined);
 }
 
 /** How followReplacedUiConfig hands a window the replaced config. */

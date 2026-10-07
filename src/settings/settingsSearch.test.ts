@@ -190,8 +190,12 @@ describe('searchSettingsRows', () => {
   });
 
   it('finds the Layout rows', () => {
-    expect(labels('vitals')).toContain('Density');
-    expect(labels('one line')).toEqual(['Density']);
+    expect(labels('vitals')).toContain('Style');
+    expect(labels('one line')).toEqual(['Style']);
+    expect(labels('gauges')).toEqual(['Style']);
+    expect(labels('status line')).toContain('Show your vitals in');
+    const style = searchSettingsRows('pips', mac)[0];
+    expect(style.target).toEqual({ group: 'layout', section: 'vitals', anchor: 'style' });
     expect(labels('panel width')[0]).toBe('Width');
     expect(labels('divider')).toEqual(['Divider color']);
     const divider = searchSettingsRows('divider', mac)[0];
@@ -200,7 +204,7 @@ describe('searchSettingsRows', () => {
 
   it('finds the Vitals rows the VitalsOptions board adds', () => {
     expect(labels('vitals')).toEqual(
-      expect.arrayContaining(['Density', 'Values', 'Meter', 'Warn before you run low']),
+      expect.arrayContaining(['Style', 'Values', 'Meter', 'Warn before you run low']),
     );
     expect(labels('percent')[0]).toBe('Values');
     expect(labels('meter')[0]).toBe('Meter');
@@ -212,10 +216,25 @@ describe('searchSettingsRows', () => {
       (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
     );
     expect(targets).toEqual([
-      { group: 'layout', section: 'vitals', anchor: 'values' },
-      { group: 'layout', section: 'vitals', anchor: 'meter' },
-      { group: 'layout', section: 'vitals', anchor: 'warn-low' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'values' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
+      { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
     ]);
+  });
+
+  it('finds Customize vitals by its list, its colors and your opponent', () => {
+    expect(labels('order')[0]).toBe('Vitals and their order');
+    expect(labels('vitals color')[0]).toBe('Vitals and their order');
+    expect(labels('opponent')).toContain('Your opponent');
+    expect(labels('vitals colors')).toEqual(['Vitals and their order']);
+    expect(labels('ledger')).toEqual(['Style']);
+    expect(labels('vitals text')).toContain('Style');
+    const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
+    expect(order?.target).toEqual({
+      group: 'layout',
+      section: 'customize-vitals',
+      anchor: 'vitals-order',
+    });
   });
 
   it('finds the affects style and marker under Layout', () => {

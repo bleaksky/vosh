@@ -194,6 +194,29 @@ const SCALED: [string, string, string, string][] = [
   ['.panel-vitals-empty', 'height', '16px', '21px'],
   ['.panel-vitals-empty', 'font-size', '12px', '16px'],
   ['.panel-vitals-empty', 'line-height', '16px', '21px'],
+  ['.panel-vitals-ledger', 'padding', '10px 0 12px', '13px 0 16px'],
+  ['.vitals-ledger', 'font-size', '12px', '16px'],
+  ['.vitals-ledger', 'line-height', '16px', '21px'],
+  ['.vitals-ledger-label', 'font-size', '10px', '13px'],
+  ['.vitals-ledger-label', 'line-height', '12px', '16px'],
+  ['.vitals-ledger-figure', 'height', '20px', '27px'],
+  ['.vitals-ledger-figure', 'margin-top', '3px', '4px'],
+  ['.vitals-ledger-current', 'line-height', '20px', '27px'],
+  ['.vitals-ledger-max', 'font-size', '10px', '13px'],
+  ['.vitals-ledger-max', 'line-height', '12px', '16px'],
+  ['.vitals-ledger-line', 'margin-top', '4px', '5px'],
+  ['.vitals-ledger-opponent', 'margin-bottom', '12px', '16px'],
+  ['.vitals-ledger-opponent.is-bottom', 'margin', '12px 0 0', '16px 0 0'],
+  ['.panel-vitals-marks', 'padding', '9px 0 11px', '12px 0 15px'],
+  ['.panel-vitals-marks.is-under', 'padding-top', '8px', '11px'],
+  ['.panel-vitals-text', 'padding', '8px 12px 10px 18px', '11px 12px 13px 18px'],
+  ['.panel-vitals-text', 'font-size', '12px', '16px'],
+  ['.panel-vitals-text', 'line-height', '17px', '23px'],
+  ['.panel-vitals-text-row', 'height', '17px', '23px'],
+  ['.vitals-marks', 'grid-auto-rows', '22px', '29px'],
+  ['.vitals-marks', 'font-size', '12px', '16px'],
+  ['.vitals-marks', 'line-height', '16px', '21px'],
+  ['.vitals-marks.is-under .vitals-mark-row', 'padding', '4px 0', '5px 0'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
@@ -286,6 +309,9 @@ describe('the panel in panel.css', () => {
         const at = `${selector} ${prop}`;
         if (selector.includes('pane-menu')) {
           expect(value.trim(), at).toMatch(/^\d+px$/);
+        } else if (selector === '.vitals-ledger-current' && prop === 'font-size') {
+          // Ledger's figure, which VitalsLedger sets from your size.
+          expect(value.trim(), at).toBe('var(--vitals-figure)');
         } else {
           expect(value.trim(), at).toMatch(
             /^(var\(--mud-[\w-]+\)|round\(\d+px \* var\(--mud-scale\), 1px\))$/,
