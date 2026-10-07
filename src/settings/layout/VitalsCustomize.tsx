@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import {
   DEFAULT_VITALS_CUSTOM,
   normalizeVitalsOff,
@@ -9,12 +9,13 @@ import {
   type VitalsMeter,
   type VitalsOpponent,
   type VitalsStyle,
+  type VitalsColors,
   type VitalsValues,
 } from '../../ipc/uiConfig';
 import { partShift, useRowDrag } from '../../lib/useRowDrag';
 import { VITAL_LABELS } from '../../panel/vitalsView';
-import { ANSI_SLOTS } from '../../theme/baseAnsi';
-import { playPalette, type XtermPalette } from '../../theme/themes';
+import type { AnsiSlot } from '../../theme/baseAnsi';
+import { playPalette, themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
 import {
   Button,
@@ -27,6 +28,8 @@ import {
   VisuallyHidden,
   type SegmentedOption,
 } from '../../ui';
+import { colorMarks, type ColorMark } from './vitalColorMarks';
+import { VitalSwatch } from './VitalSwatch';
 import { VitalsTextRows } from './VitalsTextRows';
 import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles';
 
@@ -180,6 +183,12 @@ function switched<T extends string>(off: readonly T[], name: T, on: boolean) {
   return normalizeVitalsOff(on ? off.filter((n) => n !== name) : [...off, name]);
 }
 
+/** `colors` with `vital` on `slot`, or on Default for null. */
+function colored(colors: VitalsColors, vital: Vital, slot: number | null): VitalsColors {
+  const { [vital]: _was, ...rest } = colors;
+  return slot === null ? rest : { ...rest, [vital]: slot };
+}
+
 /** Vitals and their order: a row for each vital with its grip, its name,
  *  its color and its switch. Exported for its test. */
 export function VitalsList({
@@ -194,6 +203,12 @@ export function VitalsList({
 }) {
   const theme = useActiveTheme();
   const palette = playPalette(theme, config.fit_game_colors, config.color_vision);
+  const marks = colorMarks(
+    palette,
+    themeTokens(theme, config.color_vision),
+    config.color_vision,
+    config.vitals_warn_thirds,
+  );
   const list = useRef<HTMLUListElement | null>(null);
   const order = config.vitals_order;
   const [said, setSaid] = useState('');
@@ -220,6 +235,7 @@ export function VitalsList({
             on={!config.vitals_off.includes(vital)}
             slot={config.vitals_colors[vital]}
             palette={palette}
+            marks={marks}
             quietColor={quietColors}
             lifted={drag?.id === vital}
             offset={
@@ -229,6 +245,9 @@ export function VitalsList({
             onKeyDown={(e) => keyDown(e, vital)}
             onBlur={putBack}
             onSwitch={(on) => update({ vitals_off: switched(config.vitals_off, vital, on) })}
+            onColor={(slot) =>
+              update({ vitals_colors: colored(config.vitals_colors, vital, slot) })
+            }
           />
         ))}
         {drag && drag.to !== drag.from && (
@@ -253,6 +272,7 @@ function VitalRow({
   on,
   slot,
   palette,
+  marks,
   quietColor,
   lifted,
   offset,
@@ -260,12 +280,14 @@ function VitalRow({
   onKeyDown,
   onBlur,
   onSwitch,
+  onColor,
 }: {
   vital: Vital;
   on: boolean;
   /** The ANSI slot you picked, or undefined for Default. */
   slot: number | undefined;
   palette: XtermPalette;
+  marks: Partial<Record<AnsiSlot, ColorMark>>;
   quietColor: boolean;
   lifted: boolean;
   offset: number;
@@ -273,9 +295,9 @@ function VitalRow({
   onKeyDown: (e: KeyboardEvent) => void;
   onBlur: () => void;
   onSwitch: (on: boolean) => void;
+  onColor: (slot: number | null) => void;
 }) {
   const label = VITAL_LABELS[vital];
-  const color = slot === undefined ? null : palette[ANSI_SLOTS[slot]];
   return (
     <li
       className={cx('st-vital', !on && 'is-off', lifted && 'is-lifted')}
@@ -293,14 +315,13 @@ function VitalRow({
         <GripIcon />
       </span>
       <span className="st-vital-name">{label}</span>
-      <span
-        className={cx(
-          'st-vital-swatch',
-          color === null && 'is-default',
-          (quietColor || !on) && 'is-quiet',
-        )}
-        style={color === null ? undefined : ({ '--swatch': color } as CSSProperties)}
-        aria-hidden="true"
+      <VitalSwatch
+        vital={vital}
+        slot={slot}
+        palette={palette}
+        marks={marks}
+        disabled={quietColor || !on}
+        onPick={onColor}
       />
       <Toggle checked={on} aria-label={`Show ${label}`} onChange={onSwitch} />
     </li>
