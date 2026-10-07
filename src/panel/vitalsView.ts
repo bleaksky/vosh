@@ -202,6 +202,12 @@ export function opponentHealth(
   return { value: '?', pct: null, hidden: true };
 }
 
+/** The widest your opponent's health reads, at 100 percent, so a
+ *  fight never moves a column. A condition or a `?` reads as itself. */
+export function widestOpponentHealth(health: OpponentHealth): string {
+  return health.pct === null ? health.value : '100%';
+}
+
 /** The contrast a vital's color holds on the panel, as a chat line's
  *  does (chatColors.ts). */
 export const VITAL_COLOR_CONTRAST = 3;

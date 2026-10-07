@@ -825,6 +825,180 @@
   grid-column: 1 / -1;
 }
 
+/* Gauges and Pips. Each vital on a 22 px pane row, its label, its mark
+   and its value, the marks starting together after the longest label
+   and ending together before the widest value, which each value holds
+   under it unseen. On a narrow panel the marks drop under the label and
+   value (is-under, vitalsMarksFit.ts). Your opponent's name takes the
+   room of the marks, and its health sits at the right edge. */
+.panel-vitals-marks {
+  min-height: var(--vitals-min-height, 0);
+  padding: round(9px * var(--mud-scale), 1px) 0 round(11px * var(--mud-scale), 1px);
+}
+
+.panel-vitals-marks.is-under {
+  padding-top: round(8px * var(--mud-scale), 1px);
+}
+
+.vitals-marks {
+  display: grid;
+  grid-auto-rows: var(--mud-row);
+  align-items: center;
+  padding: 0 12px 0 18px;
+  font-size: var(--mud-text);
+  line-height: var(--mud-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-marks.is-gauges {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 10px;
+}
+
+.vitals-marks.is-pips {
+  grid-template-columns: minmax(0, 1fr) auto max-content;
+  column-gap: 8px;
+}
+
+.vitals-mark-row {
+  display: contents;
+}
+
+.vitals-mark-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vital-label);
+}
+
+.vitals-mark-value {
+  display: grid;
+  justify-items: end;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-mark-value > * {
+  grid-area: 1 / 1;
+}
+
+.vitals-mark-widest {
+  visibility: hidden;
+}
+
+.vitals-marks .panel-vitals-empty {
+  grid-column: 1 / -1;
+}
+
+.vitals-mark-opponent {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.vitals-mark-opponent .vitals-mark-label {
+  flex: 1 1 auto;
+}
+
+.vitals-mark-opponent .vitals-mark-value {
+  flex: none;
+  margin-left: 8px;
+}
+
+.vitals-marks.is-under {
+  display: block;
+}
+
+.vitals-marks.is-under .vitals-mark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: 8px;
+  align-items: center;
+  padding: round(4px * var(--mud-scale), 1px) 0;
+}
+
+.vitals-marks.is-under .vitals-mark-label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.vitals-marks.is-under .vitals-mark-value {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.vitals-marks.is-under .vitals-mark-opponent {
+  display: flex;
+}
+
+/* The Gauges pill, 6 px on the divider tone, filled in the vital's
+   tone with at least its round end showing. */
+.vitals-gauge {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.vitals-gauge-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--vital-mark);
+}
+
+.vitals-marks.is-under .vitals-gauge {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 3px;
+}
+
+/* Pips, 6 px discs 3 apart, the whole disc at a fifth of its tone and
+   the lit half or whole at full, as the status line lights a moon. A
+   hidden value lights none, in tertiary. */
+.vitals-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.vitals-pip {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--vital-mark) 20%, transparent);
+}
+
+.vitals-pip.is-full {
+  background: var(--vital-mark);
+}
+
+.vitals-pip.is-half {
+  background: linear-gradient(
+    90deg,
+    var(--vital-mark) 50%,
+    color-mix(in oklab, var(--vital-mark) 20%, transparent) 50%
+  );
+}
+
+.vitals-tone.is-hidden .vitals-pip {
+  background: color-mix(in oklab, var(--tertiary) 20%, transparent);
+}
+
+.vitals-marks.is-under .vitals-pips {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 4px;
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 /* Menus keep the system face whatever the Panel font, like every other

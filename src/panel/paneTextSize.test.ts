@@ -202,6 +202,12 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-ledger-line', 'margin-top', '4px', '5px'],
   ['.vitals-ledger-opponent', 'margin-bottom', '12px', '16px'],
   ['.vitals-ledger-opponent.is-bottom', 'margin', '12px 0 0', '16px 0 0'],
+  ['.panel-vitals-marks', 'padding', '9px 0 11px', '12px 0 15px'],
+  ['.panel-vitals-marks.is-under', 'padding-top', '8px', '11px'],
+  ['.vitals-marks', 'grid-auto-rows', '22px', '29px'],
+  ['.vitals-marks', 'font-size', '12px', '16px'],
+  ['.vitals-marks', 'line-height', '16px', '21px'],
+  ['.vitals-marks.is-under .vitals-mark-row', 'padding', '4px 0', '5px 0'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
