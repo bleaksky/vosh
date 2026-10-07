@@ -708,7 +708,13 @@ function MainWindow() {
       terminal={terminalAreaElement}
       input={inputElement}
       statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
-      panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} />}
+      panel={
+        <PanelHost
+          promptShow={promptShow}
+          textSize={panelTextPx}
+          textColors={{ themeTerminalColors, brightBold }}
+        />
+      }
     >
       <UpdateNotice />
       <Toasts />

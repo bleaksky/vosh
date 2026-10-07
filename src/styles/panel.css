@@ -999,6 +999,50 @@
   margin-top: 4px;
 }
 
+/* Text. Your vitals text in the game face at your panel size, on the
+   footer's 18 and 12 px sides and chat's line, each cell in the color
+   VitalsText.tsx gives it. A row with %{right} sets its right part at
+   the edge, whole, and its left part ends in an ellipsis where they
+   meet. With nothing to draw the footer keeps no room. */
+.panel-vitals-text {
+  flex: none;
+  padding: round(8px * var(--mud-scale), 1px) 12px round(10px * var(--mud-scale), 1px) 18px;
+  border-top: 1px solid var(--sep);
+  font-family: var(--font-panel-game);
+  font-size: var(--mud-text);
+  line-height: var(--mud-chat-line);
+  /* The terminal draws each cell alone, so no ligature joins the
+     game's === or --- into one glyph. */
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}
+
+.panel-vitals-text.is-empty {
+  padding: 0;
+  border-top: 0;
+}
+
+.panel-vitals-text-row {
+  display: flex;
+  min-width: 0;
+  height: var(--mud-chat-line);
+  white-space: pre;
+}
+
+.panel-vitals-text-left {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-vitals-text-right {
+  flex: none;
+  margin-left: auto;
+  padding-left: 1ch;
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 /* Menus keep the system face whatever the Panel font, like every other
