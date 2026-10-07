@@ -283,11 +283,11 @@ describe('StatusClock sun path', () => {
   });
 
   it('sets the sun on the arc for the game hour', () => {
-    expect(sun({ text: '5:00', tint: null, daytime: true, hour: 5 })).toContain(
-      '<circle cx="2.53" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    expect(sun({ text: '6:00', tint: null, daytime: true, hour: 6 })).toContain(
+      '<circle cx="2.54" cy="9.84" r="1.75" fill="currentColor" stroke="none"></circle>',
     );
-    expect(sun({ text: '19:00', tint: null, daytime: true, hour: 19 })).toContain(
-      '<circle cx="13.47" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    expect(sun({ text: '18:00', tint: null, daytime: true, hour: 18 })).toContain(
+      '<circle cx="13.46" cy="9.84" r="1.75" fill="currentColor" stroke="none"></circle>',
     );
   });
 
