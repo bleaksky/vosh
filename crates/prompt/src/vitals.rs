@@ -11,7 +11,7 @@ use chrono::NaiveDateTime;
 use serde::Serialize;
 use serde_json::Value as Json;
 
-use crate::design::{FieldRef, Template};
+use crate::design::{FieldRef, PieceKind, Template};
 use crate::engine::Clock;
 use crate::render::{render, render_reading, RenderOptions, Rendered};
 use crate::values::format::{Resolved, Value};
@@ -39,6 +39,9 @@ pub struct VitalsText {
     pub full: Rendered,
     /// For each live row, whether it reads one of [`FIGHT_FIELDS`].
     pub fight: Vec<bool>,
+    /// The pieces that are a `%{right}`, so the footer finds in the spans
+    /// where a row pushes and keeps what follows whole (Q8).
+    pub right: Vec<usize>,
 }
 
 /// Draw `template` with `live` for a place `cols` cells wide.
@@ -58,6 +61,13 @@ pub fn draw(
         live: rendered,
         full: render(template, &Overridden::new(live, &full, now), options),
         fight,
+        right: template
+            .pieces()
+            .iter()
+            .enumerate()
+            .filter(|(_, piece)| piece.kind == PieceKind::Right)
+            .map(|(index, _)| index)
+            .collect(),
     }
 }
 
@@ -160,6 +170,20 @@ mod tests {
             .plain
             .ends_with("100%\n1020/1020hp 800/800mn 930/930mv"));
         assert_eq!(drawn.full.rows, drawn.live.rows);
+    }
+
+    #[test]
+    fn it_names_the_push_so_the_footer_finds_it_in_the_spans() {
+        let drawn = vosh_text(&[]);
+        let push = drawn
+            .live
+            .spans
+            .iter()
+            .find(|span| drawn.right.contains(&span.piece))
+            .expect("the opponent row pushes");
+        assert_eq!(push.row, 0);
+        assert_eq!(push.col, "Blackwatch Guard".len());
+        assert_eq!(push.col + push.width + "54%".len(), 40);
     }
 
     #[test]
