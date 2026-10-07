@@ -15,13 +15,17 @@ import { findTheme, onCustomThemesChanged, themeTokens } from '../theme/themes';
  *  "Use the theme's colors for MUD text" is off. It follows a theme
  *  change (every apply writes data-theme on the root), a new custom
  *  theme list, which brings a custom theme its fit, an edit to the base
- *  palette, Fit game colors and the color vision. */
+ *  palette, Fit game colors and the color vision. `fitGameColors` stands
+ *  in for this window's Fit game colors, for Settings, which plays the
+ *  published palette everywhere but the vitals gallery. */
 export function useBandEnv(
   themeTerminalColors: boolean,
   brightBold: boolean,
   renderer: BandEnv['renderer'],
+  fitGameColors?: boolean,
 ): BandEnv {
-  const fit = useFitGameColors();
+  const windowFit = useFitGameColors();
+  const fit = fitGameColors ?? windowFit;
   const vision = useColorVision();
   const [tick, setTick] = useState(0);
   useEffect(() => {

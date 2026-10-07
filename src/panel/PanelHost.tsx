@@ -17,7 +17,7 @@ import {
 } from './paneLayout';
 import type { PromptShowState } from '../ipc/prompt';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { panelShowsVitals } from './vitalsView';
+import { panelVitals } from './vitalsView';
 import { AffectsPane } from './affects/AffectsPane';
 import { ChatPane } from './chat/ChatPane';
 import { GroupPane } from './group/GroupPane';
@@ -32,14 +32,18 @@ import { paneLabel } from './paneTypes';
 import { chatFilterIn, chatFilterLabel, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
+import { useVitalsMenu } from './useVitalsMenu';
+import type { TextColors } from './VitalsText';
 
 // The right-hand panel (SPEC 9): the active profile's pane tree from
 // the title band down, then the vitals pinned at the bottom. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room
-// (see panelShowsVitals), all but your opponent's row in a fight. The lines
-// between panes are handles you drag to share the space. The shell
-// owns the panel's column, its left edge drag, and its label.
+// (see panelVitals), all but your opponent's row in a fight. With Show
+// your vitals in on Status line the footer goes and the panes reach the
+// window's foot. The lines between panes are handles you drag to share
+// the space. The shell owns the panel's column, its left edge drag, and
+// its label.
 //
 // Every pane renders as a flat, absolutely placed sibling keyed by its
 // leafKey: its paneKey for a pane the tree holds once, with the leaf id
@@ -60,6 +64,11 @@ import { VitalsFooter } from './VitalsFooter';
 // for every pane, the lightest ones come up short and scroll inside
 // their box, header and all for the map, whose drawing has no list of
 // its own to scroll.
+
+// A right click anywhere on the footer, whatever its style, opens the
+// vitals menu (VitalsMenu.tsx). The footer has no header, so it takes
+// no more button.
+const FOOTER = '.panel-vitals, .panel-vitals-text';
 
 // Arrow keys move a focused handle this far, Shift for bigger steps.
 const KEY_STEP = 8;
@@ -88,17 +97,21 @@ function domOrder(a: PaneLeaf, b: PaneLeaf): number {
 /** `promptShow` is where your prompt shows, from usePromptShow, which
  *  decides with Hide vitals while your prompt is pinned whether the
  *  vitals draw. `textSize` is your panel size in px, which every pane
- *  draws at, the terminal size when the panel follows it. */
+ *  draws at, the terminal size when the panel follows it. `textColors`
+ *  are the terminal settings the Text style of the vitals draws with. */
 export function PanelHost({
   promptShow,
   textSize: size,
+  textColors,
 }: {
   promptShow: PromptShowState | null;
   textSize?: number | undefined;
+  textColors?: TextColors;
 }) {
   const textSize = paneTextSize(size);
   const layout = usePanelLayout();
-  const { hide_when_pinned: hideWhenPinned } = useVitalsOptions();
+  const footer = panelVitals(promptShow, useVitalsOptions());
+  const vitalsMenu = useVitalsMenu();
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
 
@@ -135,7 +148,12 @@ export function PanelHost({
 
   return (
     <PaneTextSizeContext.Provider value={textSize}>
-      <div className="panel-host">
+      <div
+        className="panel-host"
+        onContextMenu={(e) => {
+          if (e.target instanceof Element && e.target.closest(FOOTER)) vitalsMenu.open(e);
+        }}
+      >
         <div ref={areaRef} className="panel-panes">
           {leaves.map(({ leaf, rect }) => (
             <section
@@ -164,11 +182,8 @@ export function PanelHost({
             </p>
           )}
         </div>
-        {panelShowsVitals(promptShow, hideWhenPinned) ? (
-          <VitalsFooter />
-        ) : (
-          <VitalsFooter opponentOnly />
-        )}
+        {footer && <VitalsFooter opponentOnly={footer === 'opponent'} textColors={textColors} />}
+        {vitalsMenu.menu}
       </div>
     </PaneTextSizeContext.Provider>
   );

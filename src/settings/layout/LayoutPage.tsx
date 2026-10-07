@@ -18,12 +18,7 @@ import {
   subscribeProfileSwitched,
   subscribeProfilesChanged,
 } from '../../ipc/profiles';
-import {
-  type UiConfig,
-  type VitalsDensity,
-  type VitalsMeter,
-  type VitalsValues,
-} from '../../ipc/uiConfig';
+import { shownStyle, type UiConfig, type VitalsPlace } from '../../ipc/uiConfig';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import {
   panelWidthOf,
@@ -36,6 +31,8 @@ import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
+import { CustomizeVitalsSection } from './VitalsCustomize';
+import { VitalsGallery } from './VitalsGallery';
 import {
   ColorField,
   Keycap,
@@ -147,6 +144,8 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
       {config && <AffectsSection config={config} update={update} />}
 
       {config && <VitalsSection config={config} update={update} />}
+
+      {config && <CustomizeVitalsSection config={config} update={update} />}
 
       {config && (
         <Section id="split" title="Split terminal">
@@ -332,31 +331,20 @@ export function AffectsSection({
   );
 }
 
-const DENSITIES: readonly SegmentedOption<VitalsDensity>[] = [
-  { value: 'rows', label: 'Rows' },
-  { value: 'line', label: 'One line' },
+const PLACES: readonly SegmentedOption<VitalsPlace>[] = [
+  { value: 'panel', label: 'Panel' },
+  { value: 'status', label: 'Status line' },
 ];
 
-const VALUES: readonly SegmentedOption<VitalsValues>[] = [
-  { value: 'current-max', label: 'Current and max' },
-  { value: 'current', label: 'Current' },
-  { value: 'percent', label: 'Percent' },
-];
-
-const METERS: readonly SegmentedOption<VitalsMeter>[] = [
-  { value: 'line', label: 'Line' },
-  { value: 'bar', label: 'Bar' },
-  { value: 'none', label: 'None' },
-];
-
-/** The vitals under the panel's panes (VitalsOptions.dc.html). Each
- *  default is the panel you had before these rows, so nothing changes
- *  until you pick something, except the last switch. It starts on and
- *  drops the vitals while your prompt is pinned above the command line,
- *  which usually shows them, and you can turn it off. The main window
- *  redraws as you click, so the card carries no preview. Values and the
- *  warning also shape the status line while the panel is hidden.
- *  Exported for its test. */
+/** Your vitals (VitalsOptions.dc.html, then board 2 of the Vitals
+ *  Styles review). The Style gallery draws each style with your numbers
+ *  and picks one, and Show your vitals in moves them to the status line.
+ *  Each default is the panel you had before these rows, so nothing
+ *  changes until you pick something, except the pinned switch. It starts
+ *  on and drops the vitals while your prompt is pinned above the command
+ *  line, which usually shows them, and you can turn it off. What every
+ *  style shares sits under Customize vitals below. Exported for its
+ *  test. */
 export function VitalsSection({
   config,
   update,
@@ -364,54 +352,28 @@ export function VitalsSection({
   config: UiConfig;
   update: (patch: Partial<UiConfig>) => void;
 }) {
+  const text = shownStyle(config) === 'text';
   return (
     <Section id="vitals" title="Vitals">
+      <VitalsGallery config={config} onPick={update} />
       <Row
-        label="Density"
-        description="One line fits Health, Mana, and Moves on a single row."
-        anchor="density"
+        label="Show your vitals in"
+        description="Status line moves them under the terminal in the line's quiet form, and the panes take the footer's room."
+        anchor="place"
       >
         <Segmented
-          options={DENSITIES}
-          value={config.vitals_density}
-          onChange={(density) => update({ vitals_density: density })}
-        />
-      </Row>
-      <Row
-        label="Values"
-        description="Current drops the maximum. Percent matches the Group pane."
-        anchor="values"
-      >
-        <Segmented
-          options={VALUES}
-          value={config.vitals_values}
-          onChange={(values) => update({ vitals_values: values })}
-        />
-      </Row>
-      <Row
-        label="Meter"
-        description="Bar is easier to read in a fight. None keeps only the numbers."
-        anchor="meter"
-      >
-        <Segmented
-          options={METERS}
-          value={config.vitals_meter}
-          onChange={(meter) => update({ vitals_meter: meter })}
-        />
-      </Row>
-      <Row
-        label="Warn before you run low"
-        description="Vitals turn yellow under two thirds and red under one third, like your group's health."
-        anchor="warn-low"
-      >
-        <Toggle
-          checked={config.vitals_warn_thirds}
-          onChange={(on) => update({ vitals_warn_thirds: on })}
+          options={PLACES}
+          value={config.vitals_place}
+          onChange={(place) => update({ vitals_place: place })}
         />
       </Row>
       <Row
         label="Hide vitals while your prompt is pinned"
-        description="While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out."
+        description={
+          text
+            ? 'While your prompt is pinned, only the rows of your text that read your fight stay, and the panes take the rest. Turn it off if your prompt leaves your vitals out.'
+            : 'While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out.'
+        }
         anchor="hide-pinned"
       >
         <Toggle

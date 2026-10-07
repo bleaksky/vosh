@@ -5,6 +5,8 @@ import uiDefaults from '../../fixtures/ui-config/defaults.json';
 import uiFields from '../../fixtures/ui-config/fields.json';
 import type { CustomTheme } from './theme';
 import {
+  DEFAULT_VITALS_CUSTOM,
+  DEFAULT_VITALS_OPTIONS,
   GAME_TIMES,
   getUiConfig,
   normalizeChipStyle,
@@ -17,8 +19,11 @@ import {
   normalizeVitalsOptions,
   normalizeVitalsValues,
   setUiFields,
+  shownStyle,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
+  VITALS_STYLES,
+  vitalsOptionsOf,
   type RawUiConfig,
   type UiConfig,
   type UiFields,
@@ -329,12 +334,43 @@ describe('vitals density', () => {
     expect(normalizeVitalsDensity('rows')).toBe('rows');
   });
 
-  it('tells every window when it changes', async () => {
+  it('tells every window when it changes, as the style the options carry', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw());
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_density: 'line' }, base);
-    expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
+    expect(sent.mock.calls).toEqual([
+      ['vosh://vitals-options-changed', { ...DEFAULT_VITALS_OPTIONS, style: 'line' }],
+    ]);
+  });
+});
+
+describe('vitals style', () => {
+  it('lists the six styles in the order of the gallery', () => {
+    expect(VITALS_STYLES).toEqual(['rows', 'line', 'ledger', 'gauges', 'pips', 'text']);
+  });
+
+  it('shows your density until you pick a style, then the style', () => {
+    expect(shownStyle(normalizeUiConfig(raw()))).toBe('rows');
+    expect(shownStyle(normalizeUiConfig(raw({ vitals_density: 'line' })))).toBe('line');
+    expect(
+      shownStyle(normalizeUiConfig(raw({ vitals_density: 'line', vitals_style: 'gauges' }))),
+    ).toBe('gauges');
+    // Rows and One line live in vitals_density, so a saved one reads as
+    // unset and the density shows.
+    expect(
+      shownStyle(normalizeUiConfig(raw({ vitals_density: 'line', vitals_style: 'rows' }))),
+    ).toBe('line');
+  });
+
+  it('moves the footer, the status line and the menu with one event for a pick', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw());
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, vitals_style: 'pips' }, base);
+    expect(sent.mock.calls).toEqual([
+      ['vosh://vitals-options-changed', { ...DEFAULT_VITALS_OPTIONS, style: 'pips' }],
+    ]);
   });
 });
 
@@ -498,26 +534,100 @@ describe('vitals options', () => {
     expect(normalizeUiConfig(raw({ vitals_meter: 'bar' })).vitals_meter).toBe('bar');
   });
 
+  it('reads junk in the vitals styles keys as something Vosh draws', () => {
+    const ui = normalizeUiConfig(
+      raw({
+        vitals_style: 'rows',
+        vitals_place: 'footer',
+        vitals_order: ['move', 'move', 'tp'],
+        vitals_off: ['opponent', 'tp', 'move'],
+        vitals_opponent: 'middle',
+        vitals_colors: { hp: 16, mana: 4, move: 'red', tp: 2 },
+        vitals_text_previous: ['', 'a', 'a', 'b', 'c'],
+      }),
+    );
+    expect(ui.vitals_style).toBeNull();
+    expect(ui.vitals_place).toBe('panel');
+    expect(ui.vitals_order).toEqual(['move', 'hp', 'mana']);
+    expect(ui.vitals_off).toEqual(['move', 'opponent']);
+    expect(ui.vitals_opponent).toBe('top');
+    expect(ui.vitals_colors).toEqual({ mana: 4 });
+    expect(ui.vitals_text_previous).toEqual(['a', 'b']);
+    expect(normalizeUiConfig(raw({ vitals_style: 'pips' })).vitals_style).toBe('pips');
+  });
+
   it('coerces anything else to the defaults', () => {
     expect(normalizeVitalsValues('both')).toBe('current-max');
     expect(normalizeVitalsValues(undefined)).toBe('current-max');
     expect(normalizeVitalsMeter('gauge')).toBe('line');
     expect(normalizeVitalsMeter(undefined)).toBe('line');
     expect(normalizeVitalsOptions(null)).toEqual({
+      style: 'rows',
+      place: 'panel',
+      order: ['hp', 'mana', 'move'],
+      off: [],
+      opponent: 'top',
+      colors: {},
       values: 'current-max',
       meter: 'line',
       warn_thirds: false,
       hide_when_pinned: true,
     });
+    expect(normalizeVitalsOptions(null)).toEqual(DEFAULT_VITALS_OPTIONS);
     expect(
       normalizeVitalsOptions({
+        style: 'strip',
+        place: 'footer',
+        order: ['move', 'tp'],
+        off: ['tp', 'opponent', 'opponent'],
+        opponent: 'middle',
+        colors: { hp: 'red', mana: 12 },
         values: 'percent',
         meter: 'bar',
         warn_thirds: 'yes',
         hide_when_pinned: 'no',
       }),
-    ).toEqual({ values: 'percent', meter: 'bar', warn_thirds: false, hide_when_pinned: true });
+    ).toEqual({
+      style: 'rows',
+      place: 'panel',
+      order: ['move', 'hp', 'mana'],
+      off: ['opponent'],
+      opponent: 'top',
+      colors: { mana: 12 },
+      values: 'percent',
+      meter: 'bar',
+      warn_thirds: false,
+      hide_when_pinned: true,
+    });
     expect(normalizeVitalsOptions({ hide_when_pinned: false }).hide_when_pinned).toBe(false);
+    expect(normalizeVitalsOptions({ style: 'text', place: 'status' })).toMatchObject({
+      style: 'text',
+      place: 'status',
+    });
+  });
+
+  it('resets Customize vitals to every vital on in todays order, and nothing above it', () => {
+    const picked = normalizeUiConfig(
+      raw({
+        vitals_style: 'gauges',
+        vitals_place: 'status',
+        vitals_hide_when_pinned: false,
+        vitals_order: ['move', 'hp', 'mana'],
+        vitals_off: ['mana', 'opponent'],
+        vitals_colors: { mana: 12 },
+        vitals_opponent: 'bottom',
+        vitals_values: 'percent',
+        vitals_meter: 'bar',
+        vitals_warn_thirds: true,
+      }),
+    );
+    const reset = vitalsOptionsOf({ ...picked, ...DEFAULT_VITALS_CUSTOM });
+    expect(reset).toEqual({
+      ...DEFAULT_VITALS_OPTIONS,
+      style: 'gauges',
+      place: 'status',
+      hide_when_pinned: false,
+    });
   });
 
   it('saves each one alone through ui_set_fields', async () => {
@@ -543,10 +653,8 @@ describe('vitals options', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' }, base);
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
-      values: 'current-max',
+      ...DEFAULT_VITALS_OPTIONS,
       meter: 'none',
-      warn_thirds: false,
-      hide_when_pinned: true,
     });
     sent.mockClear();
     await broadcastUiConfigChanges(
@@ -559,10 +667,9 @@ describe('vitals options', () => {
       { ...base, vitals_meter: 'none' },
     );
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
-      values: 'current-max',
+      ...DEFAULT_VITALS_OPTIONS,
       meter: 'none',
       warn_thirds: true,
-      hide_when_pinned: true,
     });
     sent.mockClear();
     await broadcastUiConfigChanges(
@@ -575,7 +682,7 @@ describe('vitals options', () => {
       { ...base, vitals_meter: 'none', vitals_warn_thirds: true },
     );
     expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
-      values: 'current-max',
+      ...DEFAULT_VITALS_OPTIONS,
       meter: 'none',
       warn_thirds: true,
       hide_when_pinned: false,
@@ -717,11 +824,24 @@ describe('the UI config defaults Rust sends', () => {
 describe('setUiFields', () => {
   const values: Record<string, unknown> = uiFields.fields;
 
+  // The tracked affects have a setter of their own, and the 0.7 style
+  // and text are read only, as READ_ONLY in the Rust test says.
+  const readOnly = ['tracked_affects', 'vitals_legacy_style', 'vitals_legacy_text'];
+
   it('can send every field Rust has a setter for', () => {
     const keys = Object.keys(normalizeUiConfig({} as RawUiConfig));
-    expect(keys.filter((key) => key !== 'tracked_affects').sort()).toEqual(
+    expect(keys.filter((key) => !readOnly.includes(key)).sort()).toEqual(
       Object.keys(values).sort(),
     );
+  });
+
+  it('reads the style your 0.7 vitals grew into, and nothing it does not know', () => {
+    const read = (style: unknown) =>
+      normalizeUiConfig({ vitals_legacy_style: style } as RawUiConfig).vitals_legacy_style;
+    expect(read('text')).toBe('text');
+    expect(read('line')).toBe('line');
+    expect(read(undefined)).toBeNull();
+    expect(read('ember')).toBeNull();
   });
 
   it('sends each field it names to its setter, for the profile it names', async () => {

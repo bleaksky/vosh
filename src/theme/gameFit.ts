@@ -233,6 +233,11 @@ export const GAME_FIXED_COLORS = [
 
 // ── The targets ────────────────────────────────────────────────────
 
+/** How far apart in OKLab dE times 100 two game colors stand at least
+ *  for the fit to call them two colors. Customize vitals marks a color
+ *  this near the low or warn tone. */
+export const PAIR_DE = 10;
+
 const T = {
   fgLc: 75,
   fgWcag: 7,
@@ -246,7 +251,7 @@ const T = {
   // neither can say whether black text shows, so black stands off the
   // ground by WCAG contrast. 1.25 to 1 is #1e1e1e on #000000.
   blackWcag: 1.25,
-  pairDE: 10,
+  pairDE: PAIR_DE,
   pairDL: 4,
   // Bold white stands farther from the ground than body text, so
   // weather, prayers and Lysenties read above it.

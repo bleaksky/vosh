@@ -244,31 +244,17 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'panel', 'panes'),
   },
   {
-    label: 'Density',
-    description: 'One line fits Health, Mana, and Moves on a single row.',
-    keywords: 'vitals rows one line compact health mana moves',
-    target: at('layout', 'vitals', 'density'),
+    label: 'Style',
+    description: 'Each tile draws your vitals in one style. Pick the one your panel shows.',
+    keywords:
+      'vitals style gallery rows one line ledger gauges pips text look density compact health mana moves',
+    target: at('layout', 'vitals', 'style'),
   },
   {
-    label: 'Values',
-    description: 'Current drops the maximum. Percent matches the Group pane.',
-    keywords: 'vitals numbers current max maximum percent percentage health mana moves',
-    target: at('layout', 'vitals', 'values'),
-  },
-  {
-    label: 'Meter',
-    description: 'Bar is easier to read in a fight. None keeps only the numbers.',
-    // Not `line`, which would pull Meter into a search for One line
-    // through the `one` in None.
-    keywords: 'vitals bar gauge thick thin health mana moves',
-    target: at('layout', 'vitals', 'meter'),
-  },
-  {
-    label: 'Warn before you run low',
-    description:
-      "Vitals turn yellow under two thirds and red under one third, like your group's health.",
-    keywords: 'vitals low warning danger thirds yellow red color health mana moves',
-    target: at('layout', 'vitals', 'warn-low'),
+    label: 'Show your vitals in',
+    description: 'Status line moves them under the terminal, and the panes take the room.',
+    keywords: 'vitals place panel status line footer where health mana moves',
+    target: at('layout', 'vitals', 'place'),
   },
   {
     label: 'Hide vitals while your prompt is pinned',
@@ -276,6 +262,40 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
     keywords: 'vitals hide pinned prompt band panel footer health mana moves',
     target: at('layout', 'vitals', 'hide-pinned'),
+  },
+  {
+    label: 'Vitals and their order',
+    description: 'Drag a vital to move it, give it a color, or turn it off.',
+    keywords:
+      'customize vitals order drag move reorder colors colours swatch hide show off reset health mana moves',
+    target: at('layout', 'customize-vitals', 'vitals-order'),
+  },
+  {
+    label: 'Your opponent',
+    description: 'In a fight, its name and its health in warn, in every style.',
+    keywords: 'customize vitals opponent enemy mob fight top bottom health',
+    target: at('layout', 'customize-vitals', 'opponent'),
+  },
+  {
+    label: 'Values',
+    description: 'Current drops the maximum. Percent matches the Group pane.',
+    keywords: 'vitals numbers current max maximum percent percentage health mana moves',
+    target: at('layout', 'customize-vitals', 'values'),
+  },
+  {
+    label: 'Meter',
+    description: 'Bar is easier to read in a fight. None keeps only the numbers.',
+    // Not `line`, which would pull Meter into a search for One line
+    // through the `one` in None.
+    keywords: 'vitals bar gauge thick thin health mana moves',
+    target: at('layout', 'customize-vitals', 'meter'),
+  },
+  {
+    label: 'Warn before you run low',
+    description:
+      "Vitals turn yellow under two thirds and red under one third, like your group's health.",
+    keywords: 'vitals low warning danger thirds yellow red color health mana moves',
+    target: at('layout', 'customize-vitals', 'warn-low'),
   },
   {
     label: 'Divider color',

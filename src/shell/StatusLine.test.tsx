@@ -1,10 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
-import type { CombatHealth } from '../panel/vitalsView';
+import type { BandEnv } from '../terminal/bandCells';
+import { parseSgrCells } from '../terminal/sgrCells';
 import frameCss from '../styles/frame.css?raw';
-import { StatusVitals, type StatusVitalsProps } from './StatusLine';
+import { StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
+import { FIT_ALL, type StatusLineFit } from './statusLineFit';
 
 // The stores behind StatusLine reach the Tauri bridge. StatusVitals,
 // under test, draws from plain values and never calls it.
@@ -14,9 +17,10 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// The VitalsOptions board's status line cases.
+// Board 4 of the Vitals Styles review: Tolliver at 765 of 1020 with a
+// Blackwatch guard at 54, and low at 159 on a walk.
 const FULL: Vitals = {
-  hp: 1020,
+  hp: 765,
   maxhp: 1020,
   mana: 800,
   maxmana: 800,
@@ -25,12 +29,12 @@ const FULL: Vitals = {
   low: { hp: false, mana: false, move: false },
   hidden: false,
 };
-const FIGHT: Vitals = {
-  hp: 186,
+const LOW: Vitals = {
+  hp: 159,
   maxhp: 1020,
-  mana: 344,
+  mana: 310,
   maxmana: 800,
-  move: 870,
+  move: 489,
   maxmove: 930,
   low: { hp: true, mana: false, move: false },
   hidden: false,
@@ -46,154 +50,272 @@ const HIDDEN: Vitals = {
   low: { hp: false, mana: false, move: false },
   hidden: true,
 };
-const GUARD: CombatHealth = { name: 'Blackwatch Guard', hp_pct: 38 };
-const DEFAULTS: VitalsOptions = {
-  values: 'current-max',
-  meter: 'line',
-  warn_thirds: false,
-  hide_when_pinned: true,
+const GUARD: CombatOpponent = {
+  name: 'a Blackwatch guard',
+  hp_pct: 54,
+  condition: null,
+  hidden: false,
+  tank: null,
 };
 
 function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOptions> = {}) {
   return renderToStaticMarkup(
     <StatusVitals
       showVitals
-      vitals={FIGHT}
-      target="Blackwatch Guard"
+      vitals={FULL}
+      target={null}
       combat={GUARD}
       {...props}
-      options={{ ...DEFAULTS, ...options }}
+      options={{ ...DEFAULT_VITALS_OPTIONS, ...options }}
     />,
   );
 }
 
-/** Each value on the line with its tone, in order. */
-function values(html: string): string[] {
+/** Each label, name and value on the line with its tone, in order. */
+function items(html: string): string[] {
   return [
-    ...html.matchAll(/<span class="shell-status-value( is-(?:low|warn|hidden))?">([^<]*)<\/span>/g),
-  ].map((m) => (m[1] ? `${m[2]} ${m[1].trim()}` : m[2]));
+    ...html.matchAll(
+      /<span class="shell-status-(?:value( is-(?:low|warn|hidden))?|name)">([^<]*)<\/span>|<span class="shell-status-vital">(Health|Mana|Moves)(?=<)|>(Target)(?=<)/g,
+    ),
+  ].map((m) => m[3] ?? m[4] ?? (m[1] ? `${m[2]} ${m[1].trim()}` : m[2]));
 }
 
 describe('StatusVitals', () => {
-  it('reads current and max while you explore', () => {
-    expect(values(draw({ vitals: FULL, combat: null }))).toEqual([
-      '1020 / 1020',
+  it('reads every vital, then your opponent with its health in warn', () => {
+    expect(items(draw())).toEqual([
+      'Health',
+      '765 / 1020',
+      'Mana',
       '800 / 800',
+      'Moves',
       '930 / 930',
-      'Blackwatch Guard',
+      'a Blackwatch guard',
+      '54% is-warn',
     ]);
   });
 
-  it('turns low Health danger in a fight and shows the target health in warn', () => {
-    expect(values(draw())).toEqual([
-      '186 / 1020 is-low',
-      '344 / 800',
-      '870 / 930',
-      'Blackwatch Guard',
-      '38% is-warn',
+  it('turns low Health danger out of a fight', () => {
+    expect(items(draw({ vitals: LOW, combat: null }))).toEqual([
+      'Health',
+      '159 / 1020 is-low',
+      'Mana',
+      '310 / 800',
+      'Moves',
+      '489 / 930',
     ]);
   });
 
-  it('follows Values', () => {
-    expect(values(draw({}, { values: 'current' })).slice(0, 3)).toEqual([
-      '186 is-low',
-      '344',
-      '870',
-    ]);
-    expect(values(draw({}, { values: 'percent' })).slice(0, 3)).toEqual([
-      '18% is-low',
-      '43%',
-      '94%',
-    ]);
-  });
-
-  it('follows Warn before you run low', () => {
-    expect(values(draw({}, { warn_thirds: true })).slice(0, 3)).toEqual([
-      '186 / 1020 is-low',
-      '344 / 800 is-warn',
-      '870 / 930',
-    ]);
-  });
-
-  it('never draws a meter', () => {
-    for (const meter of ['line', 'bar', 'none'] as const) {
-      expect(draw({}, { meter })).toBe(draw());
+  it('joins a target on the same mob to your opponent', () => {
+    for (const target of ['a Blackwatch guard', 'A BLACKWATCH GUARD ']) {
+      expect(draw({ target })).toBe(draw());
     }
-    expect(draw()).not.toContain('meter');
   });
 
-  it('shows the target health only when you fight that target', () => {
-    expect(values(draw({ target: 'blackwatch guard' }))).toContain('38% is-warn');
-    expect(values(draw({ target: 'guard' }))).not.toContain('38% is-warn');
-    expect(values(draw({ combat: null }))).not.toContain('38% is-warn');
-    expect(values(draw({ combat: { ...GUARD, hp_pct: null } }))).not.toContain('38% is-warn');
+  it('keeps a target on another mob as its own item after your opponent', () => {
+    expect(items(draw({ target: 'Orla' })).slice(6)).toEqual([
+      'a Blackwatch guard',
+      '54% is-warn',
+      'Target',
+      'Orla',
+    ]);
+    expect(items(draw({ target: 'Orla', combat: null })).slice(6)).toEqual(['Target', 'Orla']);
   });
 
-  it('keeps the target by name alone while the panel shows', () => {
-    expect(values(draw({ showVitals: false }))).toEqual(['Blackwatch Guard']);
+  it('follows your order and the vitals you turned off', () => {
+    const html = draw(
+      { vitals: LOW, combat: null },
+      { order: ['move', 'hp', 'mana'], off: ['mana'], values: 'current' },
+    );
+    expect(items(html)).toEqual(['Moves', '489', 'Health', '159 is-low']);
   });
 
-  it('draws nothing with no vitals shown and no target', () => {
-    expect(draw({ showVitals: false, target: null })).toBe('');
+  it('drops your opponent you turned off and keeps your target by name', () => {
+    expect(items(draw({ target: 'a Blackwatch guard' }, { off: ['opponent'] })).slice(6)).toEqual([
+      'Target',
+      'a Blackwatch guard',
+    ]);
+  });
+
+  it('keeps a vital with no max', () => {
+    const noMana = { ...FULL, mana: 0, maxmana: 0 };
+    expect(items(draw({ vitals: noMana, combat: null })).slice(2, 4)).toEqual(['Mana', '0 / 0']);
+  });
+
+  it('follows Values and Warn before you run low', () => {
+    expect(items(draw({ vitals: LOW, combat: null }, { values: 'percent' }))).toContain(
+      '16% is-low',
+    );
+    expect(items(draw({ vitals: LOW, combat: null }, { warn_thirds: true }))).toEqual([
+      'Health',
+      '159 / 1020 is-low',
+      'Mana',
+      '310 / 800 is-warn',
+      'Moves',
+      '489 / 930 is-warn',
+    ]);
+  });
+
+  it('draws one quiet form whatever the style, meter, colors or pinned switch', () => {
+    const plain = draw();
+    for (const style of ['rows', 'line', 'ledger', 'gauges', 'pips'] as const) {
+      expect(draw({}, { style })).toBe(plain);
+    }
+    for (const meter of ['line', 'bar', 'none'] as const) expect(draw({}, { meter })).toBe(plain);
+    expect(draw({}, { colors: { hp: 1, mana: 4 } })).toBe(plain);
+    expect(draw({}, { hide_when_pinned: false })).toBe(plain);
+    expect(draw({}, { opponent: 'bottom' })).toBe(plain);
+    expect(plain).not.toContain('meter');
+    expect(plain).not.toContain('style=');
   });
 
   it('shows ? for each hidden vital in the quiet tone and never warns', () => {
     for (const warn_thirds of [false, true]) {
-      expect(values(draw({ vitals: HIDDEN, combat: null }, { warn_thirds }))).toEqual([
+      expect(items(draw({ vitals: HIDDEN, combat: null }, { warn_thirds }))).toEqual([
+        'Health',
         '? / ? is-hidden',
+        'Mana',
         '? / ? is-hidden',
+        'Moves',
         '? / ? is-hidden',
-        'Blackwatch Guard',
       ]);
     }
-    expect(values(draw({ vitals: HIDDEN }, { values: 'current' })).slice(0, 3)).toEqual([
-      '? is-hidden',
-      '? is-hidden',
-      '? is-hidden',
-    ]);
-    expect(values(draw({ vitals: HIDDEN }, { values: 'percent' })).slice(0, 3)).toEqual([
-      '?% is-hidden',
-      '?% is-hidden',
-      '?% is-hidden',
-    ]);
-    const html = draw({ vitals: HIDDEN, combat: null });
-    for (const label of ['Health', 'Mana', 'Moves']) expect(html).toContain(label);
   });
 
-  it('drops the target health while the game withholds it', () => {
-    expect(values(draw({ combat: { ...GUARD, hidden: true } }))).toEqual([
-      '186 / 1020 is-low',
-      '344 / 800',
-      '870 / 930',
-      'Blackwatch Guard',
+  it('reads the health the game withholds as a quiet ?, and a condition in warn', () => {
+    const withheld = { ...GUARD, hp_pct: null, hidden: true };
+    expect(items(draw({ combat: withheld })).slice(6)).toEqual([
+      'a Blackwatch guard',
+      '? is-hidden',
     ]);
-    expect(values(draw({ combat: { ...GUARD, hp_pct: null } }))).not.toContain('38% is-warn');
+    const condition = { ...GUARD, hp_pct: null, condition: 'quite a few wounds' };
+    expect(items(draw({ combat: condition })).slice(7)).toEqual(['quite a few wounds is-warn']);
   });
 
-  it('sets the hidden tone in frame.css', () => {
-    const at = frameCss.indexOf('.shell-status-value.is-hidden {');
-    expect(at).toBeGreaterThanOrEqual(0);
-    expect(frameCss.slice(at, frameCss.indexOf('}', at))).toContain('color: var(--tertiary)');
+  it('keeps your target by name alone while the panel draws your vitals', () => {
+    expect(items(draw({ showVitals: false, target: 'a Blackwatch guard' }))).toEqual([
+      'Target',
+      'a Blackwatch guard',
+    ]);
+    expect(draw({ showVitals: false })).toBe('');
   });
 
-  it('lets your target give way with an ellipsis and keeps every other item whole', () => {
-    expect(draw()).toContain('<span class="shell-status-target">Target<span');
-    const rule = (selector: string) => {
-      const at = frameCss.indexOf(`\n${selector} {`);
-      expect(at, selector).toBeGreaterThanOrEqual(0);
-      return frameCss.slice(at, frameCss.indexOf('}', at));
+  describe('as the line gives way', () => {
+    const at = (fit: Partial<StatusLineFit>, props: Partial<StatusVitalsProps> = {}) =>
+      renderToStaticMarkup(
+        <StatusVitals
+          showVitals
+          vitals={LOW}
+          target="Orla"
+          combat={GUARD}
+          options={DEFAULT_VITALS_OPTIONS}
+          {...props}
+          fit={{ ...FIT_ALL, ...fit }}
+        />,
+      );
+
+    it('hides the name and drops a Target item on another mob', () => {
+      const html = at({ names: false });
+      expect(html).toContain(
+        '<span class="shell-status-foe"><span class="shell-sr">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
+      );
+      expect(html).not.toContain('Target');
+    });
+
+    it('keeps each label for a screen reader once it goes', () => {
+      expect(at({ labels: false })).toContain(
+        '<span class="shell-status-vital"><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
+      );
+    });
+
+    it('falls back to Current, and to ? while the game hides your vitals', () => {
+      expect(at({ current: true })).toContain('>159</span>');
+      expect(at({ current: true }, { vitals: HIDDEN })).toContain(
+        '<span class="shell-status-value is-hidden">?</span>',
+      );
+    });
+
+    it('starts a bare value at the item edge', () => {
+      expect(frameCss).toMatch(/\.shell-status-value\.is-bare \{\s*margin-left: 0;/);
+    });
+  });
+
+  describe('in the Text style', () => {
+    const env: BandEnv = {
+      palette: Array.from({ length: 16 }, (_, i) => `#${String(i).padStart(2, '0')}0000`),
+      fg: '#d0d0d0',
+      bg: '#101218',
+      selection: '#333333',
+      selectionText: '#ffffff',
+      renderer: 'xterm',
+      brightBold: false,
     };
+    const pieces = parseSgrCells(
+      'a Blackwatch guard\r\n\x1b[33m54%\x1b[39m\r\n765\x1b[90m/1020hp\x1b[39m',
+    );
+    const text: LineText = { pieces, fight: true, env };
+    const drawText = (props: Partial<StatusVitalsProps> = {}) =>
+      draw({ text, ...props }, { style: 'text' });
+
+    it('writes your text in pieces in place of the quiet form', () => {
+      const html = drawText();
+      expect(html).toContain('<span class="shell-status-text" style="color:#d0d0d0">');
+      expect(html.match(/class="shell-status-text-piece"/g)).toHaveLength(3);
+      expect(html).toContain('<span style="color:#030000">54%</span>');
+      expect(html).not.toContain('Health');
+      expect(html).not.toContain('shell-status-name');
+    });
+
+    it('joins a target on the mob your text fights, and keeps another', () => {
+      expect(drawText({ target: 'a Blackwatch guard' })).toBe(drawText());
+      expect(drawText({ target: 'Orla' })).toContain('Target<span class="shell-status-value">Orla');
+      const calm = { ...text, fight: false };
+      expect(drawText({ text: calm, target: 'a Blackwatch guard' })).toContain('Target<span');
+    });
+
+    it('draws nothing of its own before the text comes', () => {
+      expect(drawText({ text: null })).toBe('');
+    });
+
+    it('leaves your vitals to the panel while the line does not carry them', () => {
+      expect(drawText({ showVitals: false })).toBe('');
+    });
+  });
+});
+
+describe('the status line in frame.css', () => {
+  const rule = (selector: string) => {
+    const at = frameCss.indexOf(`\n${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return frameCss.slice(at, frameCss.indexOf('}', at));
+  };
+
+  it('keeps every item whole but your opponent, your target and your text', () => {
     expect(rule('.shell-statusline > *')).toContain('flex: none;');
-    const target = rule('.shell-statusline > .shell-status-target');
-    expect(target).toContain('flex: 0 1 auto;');
-    expect(target).toContain('min-width: 0;');
-    expect(target).toContain('overflow: hidden;');
-    expect(target).toContain('text-overflow: ellipsis;');
+    for (const item of ['foe', 'target', 'text']) {
+      const shrinks = rule(`.shell-statusline > .shell-status-${item}`);
+      expect(shrinks).toContain('flex: 0 1 auto;');
+      expect(shrinks).toContain('min-width: 0;');
+      expect(shrinks).toContain('overflow: hidden;');
+    }
   });
 
-  it('sets the warn tone in frame.css', () => {
-    const at = frameCss.indexOf('.shell-statusline .is-warn {');
-    expect(at).toBeGreaterThanOrEqual(0);
-    expect(frameCss.slice(at, frameCss.indexOf('}', at))).toContain('color: var(--warn)');
+  it('ends the name and the text in an ellipsis and keeps the health whole', () => {
+    expect(rule('.shell-status-name')).toContain('text-overflow: ellipsis;');
+    expect(rule('.shell-statusline > .shell-status-text')).toContain('text-overflow: ellipsis;');
+    expect(rule('.shell-status-foe > .shell-status-value')).toContain('flex: none;');
+  });
+
+  it('writes your text in the terminal face, 20 px between pieces', () => {
+    expect(rule('.shell-statusline > .shell-status-text')).toContain(
+      'font-family: var(--font-panel-game);',
+    );
+    expect(rule('.shell-status-text-piece + .shell-status-text-piece')).toContain(
+      'margin-left: 20px;',
+    );
+  });
+
+  it('sets the warn and hidden tones', () => {
+    expect(rule('.shell-statusline .is-warn')).toContain('color: var(--warn)');
+    expect(rule('.shell-status-value.is-hidden')).toContain('color: var(--tertiary)');
   });
 });

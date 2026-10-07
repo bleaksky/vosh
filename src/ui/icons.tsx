@@ -214,6 +214,30 @@ export function MoreIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** The grip on a row you drag is six filled dots in two columns, like
+ *  the more glyph. */
+export function GripIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      stroke="none"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <circle cx="6" cy="4" r="1.25" />
+      <circle cx="10" cy="4" r="1.25" />
+      <circle cx="6" cy="8" r="1.25" />
+      <circle cx="10" cy="8" r="1.25" />
+      <circle cx="6" cy="12" r="1.25" />
+      <circle cx="10" cy="12" r="1.25" />
+    </svg>
+  );
+}
+
 // Window controls for the frameless windows on Windows and Linux, drawn
 // in the main window's title band and in the Settings and Help headers.
 

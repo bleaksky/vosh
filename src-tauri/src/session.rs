@@ -31,6 +31,8 @@
 //! - `echo` keeps the text of a line you type while the server hides
 //!   your input out of the log.
 //! - `identity` says who is logged in, and sends it to every window.
+//! - `last_packages` keeps the last affects, vitals and combat packets
+//!   for a window that opens between them.
 //! - `room_block` finds the lines of a look that list what the room
 //!   holds, and `highlight_ground` keeps the ground trigger colors must
 //!   read on.
@@ -41,6 +43,8 @@
 //!   of redials.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
+//! - `vitals_text` renders your vitals text for a footer or the status
+//!   line while the page watches it.
 //! - `tests` drives the steps the way the loop does.
 
 mod batch;
@@ -52,6 +56,7 @@ mod gmcp;
 mod gmcp_vars;
 pub(crate) mod highlight_ground;
 pub(crate) mod identity;
+pub(crate) mod last_packages;
 mod lines;
 mod log_sink;
 mod lua_timers;
@@ -62,6 +67,7 @@ pub(crate) mod reconnect;
 pub(crate) mod room_block;
 mod socket;
 mod steps;
+pub(crate) mod vitals_text;
 pub(crate) mod walk;
 
 use std::sync::Arc;
@@ -318,9 +324,9 @@ pub(crate) async fn dial<R: tauri::Runtime>(
         let _persist_guard = PERSIST_LOCK.lock().await;
         crate::profile::set::save_sessions(state).await;
     }
-    // The old connection cleared the list as it ended. A new connection
-    // starts with none until the MUD sends its own.
-    session.last_affects.clear();
+    // The old connection cleared the packets as it ended. A new
+    // connection starts with none until the MUD sends its own.
+    session.last_packages.clear();
     crate::affects::full::connect(app, session);
 
     let scrollback_path = state

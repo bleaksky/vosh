@@ -140,6 +140,9 @@ struct Writer {
     cols: Option<usize>,
     /// The first push on the row being written.
     push: Option<Push>,
+    /// For each row, whether a piece on it reads a field the caller
+    /// asked about, see [`render_reading`].
+    marks: Vec<bool>,
 }
 
 impl Writer {
@@ -154,6 +157,7 @@ impl Writer {
             open_col: 0,
             cols,
             push: None,
+            marks: vec![false],
         }
     }
 
@@ -204,6 +208,14 @@ impl Writer {
         self.rows.len() - 1
     }
 
+    /// A piece on the row being written reads a field the caller asked
+    /// about.
+    fn mark(&mut self) {
+        if let Some(row) = self.marks.last_mut() {
+            *row = true;
+        }
+    }
+
     fn sgr(&mut self, params: &str) {
         if params.is_empty() {
             return;
@@ -240,6 +252,7 @@ impl Writer {
         self.close_span();
         self.out.push_str(bytes);
         self.rows.push(String::new());
+        self.marks.push(false);
         self.col = 0;
         self.reopen_span();
     }
@@ -351,9 +364,43 @@ impl Writer {
 
 /// Draw a template.
 pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) -> Rendered {
+    draw(template, values, options, None).0
+}
+
+/// Draw a template, and say for each row it draws whether a piece on it
+/// reads a field `asks` holds true for. A value, a color that follows a
+/// value and a condition that holds count on the row where they sit, so
+/// a condition that fails, and what it leaves out, mark nothing. The
+/// marks follow the rows the render drew, one for each.
+pub fn render_reading(
+    template: &Template,
+    values: &dyn Values,
+    options: RenderOptions,
+    asks: &dyn Fn(&FieldRef) -> bool,
+) -> (Rendered, Vec<bool>) {
+    draw(template, values, options, Some(asks))
+}
+
+fn draw(
+    template: &Template,
+    values: &dyn Values,
+    options: RenderOptions,
+    asks: Option<&dyn Fn(&FieldRef) -> bool>,
+) -> (Rendered, Vec<bool>) {
     let mut w = Writer::new(options.cols);
     let mut conditions: Vec<bool> = Vec::new();
     let tokens = template.tokens();
+    let reads = |range: std::ops::Range<usize>| {
+        asks.is_some_and(|asks| {
+            range.into_iter().any(|token| {
+                let mut hit = false;
+                tokens[token]
+                    .kind
+                    .each_read(&mut |field| hit |= asks(field));
+                hit
+            })
+        })
+    };
 
     for (index, piece) in template.pieces().iter().enumerate() {
         let active = conditions.iter().all(|c| *c);
@@ -371,6 +418,9 @@ pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) 
                     }
                     _ => false,
                 };
+                if holds && reads(piece.content.clone()) {
+                    w.mark();
+                }
                 conditions.push(holds);
                 continue;
             }
@@ -382,6 +432,9 @@ pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) 
         }
         if !active {
             continue;
+        }
+        if reads(piece.codes.start..piece.content.end) {
+            w.mark();
         }
         for code in piece.codes.clone() {
             write_code(&mut w, template, code, values);
@@ -440,12 +493,15 @@ pub fn render(template: &Template, values: &dyn Values, options: RenderOptions) 
         ansi.push_str(RESET);
     }
     let rows = if ansi.is_empty() { 0 } else { w.rows.len() };
-    Rendered {
+    let mut marks = w.marks;
+    marks.truncate(rows);
+    let rendered = Rendered {
         ansi,
         plain: w.rows.join("\n"),
         rows,
         spans: w.spans,
-    }
+    };
+    (rendered, marks)
 }
 
 /// Parse and draw a template in one step.

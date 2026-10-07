@@ -266,6 +266,34 @@ pub enum TokenKind {
     Unknown,
 }
 
+impl TokenKind {
+    /// Hand `read` each field the token reads, its value, its condition
+    /// or the field a color follows. `%{raw}` reads the field `raw`.
+    pub(crate) fn each_read(&self, read: &mut dyn FnMut(&FieldRef)) {
+        match self {
+            TokenKind::Value(value) => {
+                read(&value.field);
+                if let Format::Bar {
+                    color: BarColor::Color(ColorSpec::ByValue { field, .. }),
+                    ..
+                } = &value.format
+                {
+                    read(field);
+                }
+            }
+            TokenKind::Code(
+                Code::Fg(ColorSpec::ByValue { field, .. })
+                | Code::Bg(ColorSpec::ByValue { field, .. })
+                | Code::UnderlineColor(ColorSpec::ByValue { field, .. }),
+            )
+            | TokenKind::If(field)
+            | TokenKind::IfNot(field) => read(field),
+            TokenKind::Raw => read(&FieldRef::new("raw")),
+            _ => {}
+        }
+    }
+}
+
 /// A token with its byte range in the template.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {

@@ -27,6 +27,7 @@ export const RECONNECT = 'session://reconnect';
 
 export const LUA_OUTPUT = 'session://lua-output';
 export const LUA_PANES = 'session://lua-panes';
+export const VITALS_TEXT = 'session://vitals-text';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';
@@ -100,8 +101,10 @@ export const INPUT_ECHO_CARET_CHANGED = 'vosh://input-echo-caret-changed';
 export const PASTE_LINE_DELAY_CHANGED = 'vosh://paste-line-delay-changed';
 export const SPELLCHECK_PROMPT_CHANGED = 'vosh://spellcheck-prompt-changed';
 export const INPUT_CURSOR_STYLE_CHANGED = 'vosh://input-cursor-style-changed';
-export const VITALS_DENSITY_CHANGED = 'vosh://vitals-density-changed';
 export const VITALS_OPTIONS_CHANGED = 'vosh://vitals-options-changed';
+/** Carries your vitals text and the earlier ones, saved from Settings
+ *  or the vitals text card, to every window. */
+export const VITALS_TEXT_CHANGED = 'vosh://vitals-text-changed';
 
 /** Takes an open Settings window to a target, from openSettingsTab. */
 export const SETTINGS_GOTO_TAB = 'vosh://settings-goto-tab';

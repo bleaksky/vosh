@@ -1,6 +1,21 @@
+import type { CSSProperties } from 'react';
 import type { PromptShowState } from '../ipc/prompt';
-import type { VitalsMeter, VitalsValues } from '../ipc/uiConfig';
-import { vitalPercent } from '../stores/gmcp/vitalsStore';
+import type {
+  UiFields,
+  Vital,
+  VitalOff,
+  VitalsColors,
+  VitalsMeter,
+  VitalsOptions,
+  VitalsStyle,
+  VitalsValues,
+} from '../ipc/uiConfig';
+import type { CombatOpponent } from '../stores/gmcp/combatStore';
+import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
+import { ANSI_SLOTS } from '../theme/baseAnsi';
+import type { ChromeTokens } from '../theme/chrome';
+import { liftAtHue, parseHex, toHex } from '../theme/color';
+import type { XtermPalette } from '../theme/themes';
 
 // How your vitals read in the panel footer and in the status line, from
 // the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
@@ -102,44 +117,204 @@ export function vitalsFooterHeight(geometry: VitalsGeometry, rows: number): numb
   return 1 + geometry.padTop + rows * geometry.row + geometry.padBottom;
 }
 
-/** The opponent Char.Combat names, as far as the status line needs it. */
-export interface CombatHealth {
-  name: string;
-  hp_pct: number | null;
-  /** The game withholds the opponent's health. */
-  hidden?: boolean;
+/** The vitals you left on under Customize vitals, in your order. */
+export function vitalsOn(order: readonly Vital[], off: readonly VitalOff[]): Vital[] {
+  return order.filter((vital) => !off.includes(vital));
 }
 
-/** The target's health for the status line with the panel hidden. It
- *  shows only when the target you set is the one you are fighting, the
- *  Char.Combat opponent, with the names compared without case. Null
- *  otherwise, while the server sends no percent, and while the game
- *  withholds it. */
-export function targetHealthPercent(
-  target: string | null,
-  opponent: CombatHealth | null,
-): number | null {
-  if (!target || opponent === null || opponent.hidden === true || opponent.hp_pct === null) {
-    return null;
+/** The vitals the footer draws of the ones you left on (vitalsOn).
+ *  Health always shows. Mana and Moves drop while the game sends no
+ *  max for them, except while it hides your vitals, when it sends every
+ *  max as 0. */
+export function shownVitals(vitals: Vitals, on: readonly Vital[]): Vital[] {
+  return on.filter((vital) => vitals.hidden || vital === 'hp' || vitals[maxOf(vital)] > 0);
+}
+
+/** Each vital's name in the footer. */
+export const VITAL_LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
+
+/** Each style's name, as the gallery and the vitals menu write it. */
+export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
+  rows: 'Rows',
+  line: 'One line',
+  ledger: 'Ledger',
+  gauges: 'Gauges',
+  pips: 'Pips',
+  text: 'Text',
+};
+
+/** Each Values form's name, as Customize vitals and the vitals menu
+ *  write it. */
+export const VITALS_VALUES_LABELS: Readonly<Record<VitalsValues, string>> = {
+  'current-max': 'Current and max',
+  current: 'Current',
+  percent: 'Percent',
+};
+
+/** What a pick of `style` saves. Rows and One line live in
+ *  vitals_density, so an older build still reads them, and clear any
+ *  style you picked before (Q15). */
+export function vitalsStylePick(style: VitalsStyle): UiFields {
+  return style === 'rows' || style === 'line'
+    ? { vitals_density: style, vitals_style: null }
+    : { vitals_style: style };
+}
+
+/** One vital as every footer style draws it. */
+export interface ShownVital {
+  key: Vital;
+  current: number;
+  max: number;
+  /** The value in its Values form. */
+  value: string;
+  /** The widest the value reads, the vital at its max (widestVital). */
+  widest: string;
+  /** The mark's fill, null for an empty mark. */
+  pct: number | null;
+  tone: VitalTone;
+}
+
+/** The vitals the footer draws (shownVitals), each in the Values form
+ *  and the tone `options` ask for (vitalRows). */
+export function shownRows(
+  vitals: Vitals,
+  on: readonly Vital[],
+  options: Pick<VitalsOptions, 'values' | 'warn_thirds'>,
+): ShownVital[] {
+  return vitalRows(vitals, shownVitals(vitals, on), options);
+}
+
+/** Each of `keys` in the Values form and the tone `options` ask for. A
+ *  hidden vital reads `?` over an empty mark and never warns. The
+ *  status line draws every vital you left on this way, with or without
+ *  a max. */
+export function vitalRows(
+  vitals: Vitals,
+  keys: readonly Vital[],
+  options: Pick<VitalsOptions, 'values' | 'warn_thirds'>,
+): ShownVital[] {
+  return keys.map((key) => {
+    const current = vitals[key];
+    const max = vitals[maxOf(key)];
+    const widest = widestVital(options.values, max, vitals.hidden);
+    return vitals.hidden
+      ? { key, current, max, value: hiddenVital(options.values), widest, pct: null, tone: 'hidden' }
+      : {
+          key,
+          current,
+          max,
+          value: formatVital(options.values, current, max),
+          widest,
+          pct: meterFill(current, max),
+          tone: vitalTone(current, max, vitals.low[key], options.warn_thirds),
+        };
+  });
+}
+
+/** The key of a vital's max in Char.Vitals. */
+export function maxOf(vital: Vital): 'maxhp' | 'maxmana' | 'maxmove' {
+  if (vital === 'hp') return 'maxhp';
+  if (vital === 'mana') return 'maxmana';
+  return 'maxmove';
+}
+
+/** How your opponent's health reads in the footer. */
+export interface OpponentHealth {
+  value: string;
+  /** The meter's fill, null for an empty meter. */
+  pct: number | null;
+  /** The game withholds it, so it reads a quiet `?`. */
+  hidden: boolean;
+}
+
+/** Your opponent's health: its percent, else the condition the game
+ *  sends, else `?`. A health the game hides or sends nothing for reads
+ *  `?` either way, so no style draws a blank. */
+export function opponentHealth(
+  combat: Pick<CombatOpponent, 'hp_pct' | 'condition' | 'hidden'>,
+): OpponentHealth {
+  if (!combat.hidden && combat.hp_pct !== null) {
+    return { value: `${combat.hp_pct}%`, pct: combat.hp_pct, hidden: false };
   }
-  return sameName(target, opponent.name) ? opponent.hp_pct : null;
+  if (!combat.hidden && combat.condition) {
+    return { value: combat.condition, pct: null, hidden: false };
+  }
+  return { value: '?', pct: null, hidden: true };
 }
 
-function sameName(a: string, b: string): boolean {
+/** The widest your opponent's health reads, at 100 percent, so a
+ *  fight never moves a column. A condition or a `?` reads as itself. */
+export function widestOpponentHealth(health: OpponentHealth): string {
+  return health.pct === null ? health.value : '100%';
+}
+
+/** The contrast a vital's color holds on the panel, as a chat line's
+ *  does (chatColors.ts). */
+export const VITAL_COLOR_CONTRAST = 3;
+
+/** The color each vital's label and mark draw in, for the vitals you
+ *  gave one. A vital left out keeps the footer's own tones. */
+export type VitalInks = Partial<Record<Vital, string>>;
+
+/** The ground the footer draws on, from the theme's chrome tokens. */
+export type VitalsGround = Pick<ChromeTokens, 'panel' | 'appearance'>;
+
+/** Each color you picked under Customize vitals, the play palette's
+ *  slot lifted to 3:1 on the panel at its own hue, lighter on a dark
+ *  theme and darker on a light one. Numbers never take it, so every
+ *  value keeps the text color. A slot or panel that does not parse as
+ *  hex draws as given. */
+export function vitalInks(
+  colors: VitalsColors,
+  palette: XtermPalette,
+  ground: VitalsGround,
+): VitalInks {
+  const panel = parseHex(ground.panel);
+  const dir = ground.appearance === 'dark' ? 1 : -1;
+  const inks: VitalInks = {};
+  for (const [vital, slot] of Object.entries(colors) as [Vital, number][]) {
+    const color = palette[ANSI_SLOTS[slot]];
+    const rgb = parseHex(color);
+    inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
+  }
+  return inks;
+}
+
+/** A vital's tone and color as the classes and the custom property
+ *  the Ledger, Gauges and Pips rules in panel.css read: `is-low`,
+ *  `is-warn` or `is-hidden` on `vitals-tone`, and `--vital-ink` for a
+ *  color you picked. */
+export function toneProps(
+  tone: VitalTone,
+  ink: string | undefined,
+  className: string,
+): { className: string; style?: CSSProperties } {
+  const toned = tone === 'quiet' ? '' : ` is-${tone === 'danger' ? 'low' : tone}`;
+  const classes = `${className} vitals-tone${toned}`;
+  return ink
+    ? { className: classes, style: { '--vital-ink': ink } as CSSProperties }
+    : { className: classes };
+}
+
+/** Whether two names call the same mob, compared without case, as a
+ *  target you set and the opponent Char.Combat names. */
+export function sameMob(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-/** Whether the panel draws its vitals under the panes. While your
- *  prompt is pinned above the command line and Hide vitals while your
- *  prompt is pinned is on, the footer goes and the panes take its room,
- *  all but the opponent row in a fight.
- *  Turning either off brings it back. So does a pinned band with no
- *  prompt to show, with no capture or with prompts off in the game,
+/** What the panel draws under its panes: every vital you left on, only
+ *  your opponent's row in a fight, or nothing. With Show your vitals in
+ *  on Status line it draws nothing and the panes reach the window's
+ *  foot. While your prompt is pinned above the command line and Hide
+ *  vitals while your prompt is pinned is on, it keeps the opponent row.
+ *  Turning either off brings the vitals back. So does a pinned band with
+ *  no prompt to show, with no capture or with prompts off in the game,
  *  since your vitals would then show nowhere. */
-export function panelShowsVitals(
+export function panelVitals(
   prompt: Pick<PromptShowState, 'show' | 'capture' | 'promptsOff'> | null,
-  hideWhenPinned: boolean,
-): boolean {
+  options: Pick<VitalsOptions, 'place' | 'hide_when_pinned'>,
+): 'vitals' | 'opponent' | null {
+  if (options.place === 'status') return null;
   const pinnedPrompt = prompt?.show === 'pinned' && prompt.capture && !prompt.promptsOff;
-  return !(pinnedPrompt && hideWhenPinned);
+  return pinnedPrompt && options.hide_when_pinned ? 'opponent' : 'vitals';
 }

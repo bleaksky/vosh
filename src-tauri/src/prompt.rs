@@ -409,6 +409,11 @@ pub(crate) struct RenderRequest {
     /// card does.
     #[serde(default)]
     pub placeholders: bool,
+    /// The columns `%{right}` pushes the rest of its row against, such as
+    /// the vitals footer's width in terminal cells. None pushes by one
+    /// space.
+    #[serde(default)]
+    pub cols: Option<usize>,
 }
 
 /// The body of [`prompt_render`] and [`prompt_render_many`].
@@ -429,7 +434,7 @@ pub(crate) fn render_all(p: &Profile, c: &Connection, requests: &[RenderRequest]
             };
             let options = RenderOptions {
                 placeholders: request.placeholders,
-                ..RenderOptions::default()
+                cols: request.cols,
             };
             let template = Template::parse(&request.template);
             let overrides = PromptPreview {
