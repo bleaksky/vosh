@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { importErrorMessage } from '../../automation/automationRecords';
+import { presetTriggerNames } from '../../automation/presets';
 import {
   applyImport,
   detectImportFormat,
@@ -65,7 +66,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
     setBusy(true);
     setSummary(null);
     try {
-      setSummary(await applyImport(format, text, getShownProfile()));
+      setSummary(await applyImport(format, text, presetTriggerNames(), getShownProfile()));
       onError(null);
     } catch (e) {
       onError(importErrorMessage(e, 'import'));

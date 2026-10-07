@@ -19,7 +19,7 @@ use crate::app::events::{
 };
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_profile, save_then_broadcast, SavePolicy};
-use crate::import::ImportFormat;
+use crate::import::{merge_triggers, ImportFormat};
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::{
     delete_macro, import_macros, install_preset_macros, install_preset_triggers,
@@ -571,20 +571,26 @@ pub(crate) struct ImportSummary {
     pub unsupported: Vec<(String, String)>,
     pub unparsed: Vec<String>,
     pub rejected: Vec<String>,
+    /// The triggers that take the name of a preset trigger, which stay
+    /// out so the preset's keeps running.
+    pub clashes: Vec<crate::import::vosh::Clash>,
 }
 
 /// Parse + apply an import file to the live profile. The format
 /// string is an [`ImportFormat`] name such as `mudlet`; pass an
 /// empty string to auto-detect. Aliases / triggers / macros / vars
-/// merge into the existing stores (overwrite on name collision).
-/// Returns a summary so the UI can report what landed and what
-/// did not.
+/// merge into the existing stores (overwrite on name collision). A
+/// trigger that takes a name of `preset_triggers`, the trigger names
+/// of the page's preset library, joins the clash list instead, see
+/// [`merge_triggers`]. Returns a summary so the UI can report what
+/// landed and what did not.
 #[tauri::command]
 pub(crate) async fn import_apply<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     format: String,
     text: String,
+    preset_triggers: Vec<String>,
     profile: Option<String>,
 ) -> Result<ImportSummary, String> {
     let fmt = if format.is_empty() {
@@ -595,21 +601,17 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
             .map_err(|_| format!("unknown import format: {format}"))?
     };
     let report = crate::import::parse(fmt, &text);
-    let mut rejected: Vec<String> = Vec::new();
     let macros_changed = !report.macros.is_empty();
     let macros_snapshot: Vec<Macro>;
     let lists;
+    let merged;
     let open = {
         let mut p = state.lock_named(profile).await?;
         let lists_before = ListRevisions::of_lists(&p);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());
         }
-        for trigger in &report.triggers {
-            if let Err(e) = p.triggers.set(trigger.clone()) {
-                rejected.push(format!("trigger `{}` rejected: {e}", trigger.name));
-            }
-        }
+        merged = merge_triggers(&mut p.triggers, &report.triggers, &preset_triggers);
         if macros_changed {
             import_macros(&mut p, &report.macros);
         }
@@ -628,12 +630,13 @@ pub(crate) async fn import_apply<R: tauri::Runtime>(
     broadcast_list_changes(&app, &open, lists);
     Ok(ImportSummary {
         aliases: report.aliases.len(),
-        triggers: report.triggers.len() - rejected.len(),
+        triggers: report.triggers.len() - merged.rejected.len() - merged.clashes.len(),
         macros: report.macros.len(),
         vars: report.vars.len(),
         unsupported: report.unsupported,
         unparsed: report.unparsed,
-        rejected,
+        rejected: merged.rejected,
+        clashes: merged.clashes,
     })
 }
 
@@ -1009,6 +1012,7 @@ mod tests {
                 app.state::<SharedState>(),
                 "bogus".to_string(),
                 gmud.to_string(),
+                Vec::new(),
                 None,
             )
             .await;
@@ -1018,6 +1022,7 @@ mod tests {
                 app.state::<SharedState>(),
                 String::new(),
                 "look\n".to_string(),
+                Vec::new(),
                 None,
             )
             .await;

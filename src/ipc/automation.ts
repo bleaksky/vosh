@@ -430,16 +430,23 @@ export interface ImportSummary {
   unsupported: [string, string][];
   unparsed: string[];
   rejected: string[];
+  /** The triggers that take the name of a preset trigger, which stay
+   *  out so the preset's keeps running. */
+  clashes: { kind: 'trigger'; name: string }[];
 }
 
 export async function detectImportFormat(text: string): Promise<string | null> {
   return invoke('import_detect', { text });
 }
 
+/** Import `text` in `format`. `presetTriggers` names every trigger of
+ *  the preset library, each preset on or off, so a trigger of the file
+ *  that takes one of those names joins the clash list instead. */
 export async function applyImport(
   format: ImportFormat,
   text: string,
+  presetTriggers: string[],
   profile?: string | null,
 ): Promise<ImportSummary> {
-  return invoke('import_apply', { format, text, profile });
+  return invoke('import_apply', { format, text, presetTriggers, profile });
 }

@@ -924,6 +924,12 @@ export function defaultEnabledIds(): string[] {
   return PRESETS.filter((p) => PRESETS_ON_BY_DEFAULT.includes(p.id)).map((p) => p.id);
 }
 
+/** The name of every trigger in the library, each preset on or off. An
+ *  import from another client never replaces one of these. */
+export function presetTriggerNames(): string[] {
+  return PRESETS.flatMap((p) => p.triggers.map((t) => t.name));
+}
+
 export function presetById(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id);
 }

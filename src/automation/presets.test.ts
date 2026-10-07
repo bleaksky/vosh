@@ -13,6 +13,7 @@ import {
   presetById,
   presetMacros,
   type PresetSampleLine,
+  presetTriggerNames,
   presetTriggers,
 } from './presets';
 import type { HighlightStyle, TriggerTarget } from '../ipc/automation';
@@ -735,5 +736,14 @@ describe('the Disarms and fading buffs preset', () => {
   it('takes a secondary weapon back with dual and a primary with wield', () => {
     expect(sends('disarm.secondary')).toEqual(['get 1.;dual 1.']);
     expect(sends('disarm.primary')).toEqual(['get 1.;wield 1.']);
+  });
+});
+
+describe('the preset trigger names an import keeps', () => {
+  it('names every trigger of every preset once, on or off', () => {
+    const names = presetTriggerNames();
+    expect(names).toEqual(PRESETS.flatMap(presetTriggers).map((t) => t.name));
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain('disarm.secondary');
   });
 });
