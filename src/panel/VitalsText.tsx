@@ -102,11 +102,11 @@ export function VitalsTextBlock({
       {lines.map((line, i) => (
         <div key={i} className="panel-vitals-text-row">
           <span className="panel-vitals-text-left">
-            <Runs cells={line.left} env={env} />
+            <TextRuns cells={line.left} env={env} />
           </span>
           {line.right && (
             <span className="panel-vitals-text-right">
-              <Runs cells={line.right} env={env} />
+              <TextRuns cells={line.right} env={env} />
             </span>
           )}
         </div>
@@ -115,7 +115,8 @@ export function VitalsTextBlock({
   );
 }
 
-function Runs({ cells, env }: { cells: Cell[]; env: BandEnv }) {
+/** `cells` as runs of one look each, in the colors `env` draws. */
+export function TextRuns({ cells, env }: { cells: Cell[]; env: BandEnv }) {
   return bandRuns(cells, env, Number.POSITIVE_INFINITY).map((run) => {
     const { look } = run;
     const style: CSSProperties = {

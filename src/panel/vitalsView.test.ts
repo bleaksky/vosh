@@ -4,9 +4,9 @@ import {
   hiddenVital,
   meterFill,
   opponentHealth,
-  panelShowsVitals,
+  panelVitals,
+  sameMob,
   shownVitals,
-  targetHealthPercent,
   thirdsTone,
   vitalsFooterHeight,
   vitalsGeometry,
@@ -161,52 +161,40 @@ describe('vitalsFooterHeight', () => {
   });
 });
 
-describe('targetHealthPercent', () => {
-  const guard = { name: 'Blackwatch Guard', hp_pct: 38 };
-
-  it('shows the opponent percent when the target is the one you fight', () => {
-    expect(targetHealthPercent('Blackwatch Guard', guard)).toBe(38);
-  });
-
-  it('compares the names without case', () => {
-    expect(targetHealthPercent('blackwatch guard', guard)).toBe(38);
-    expect(targetHealthPercent(' BLACKWATCH GUARD ', guard)).toBe(38);
-  });
-
-  it('shows nothing for another target', () => {
-    expect(targetHealthPercent('guard', guard)).toBeNull();
-    expect(targetHealthPercent('Orc', guard)).toBeNull();
-  });
-
-  it('shows nothing out of a fight, with no target, or with no percent', () => {
-    expect(targetHealthPercent('Blackwatch Guard', null)).toBeNull();
-    expect(targetHealthPercent(null, guard)).toBeNull();
-    expect(targetHealthPercent('', guard)).toBeNull();
-    expect(targetHealthPercent('Blackwatch Guard', { ...guard, hp_pct: null })).toBeNull();
-  });
-
-  it('shows nothing while the game withholds the opponent health', () => {
-    expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: true })).toBeNull();
-    expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: false })).toBe(38);
+describe('sameMob', () => {
+  it('compares the names without case or the spaces round them', () => {
+    expect(sameMob('Blackwatch Guard', 'blackwatch guard')).toBe(true);
+    expect(sameMob(' BLACKWATCH GUARD ', 'Blackwatch Guard')).toBe(true);
+    expect(sameMob('guard', 'Blackwatch Guard')).toBe(false);
   });
 });
 
-describe('panelShowsVitals', () => {
+describe('panelVitals', () => {
   const pinned = { show: 'pinned', capture: true, promptsOff: false } as const;
+  const at = (hide: boolean, place: 'panel' | 'status' = 'panel') => ({
+    place,
+    hide_when_pinned: hide,
+  });
 
-  it('drops the footer only while your prompt is pinned and the switch is on', () => {
-    expect(panelShowsVitals(pinned, true)).toBe(false);
-    expect(panelShowsVitals(pinned, false)).toBe(true);
-    expect(panelShowsVitals({ ...pinned, show: 'text' }, true)).toBe(true);
-    expect(panelShowsVitals({ ...pinned, show: 'lifted' }, true)).toBe(true);
-    expect(panelShowsVitals(null, true)).toBe(true);
+  it('keeps the opponent alone only while your prompt is pinned and the switch is on', () => {
+    expect(panelVitals(pinned, at(true))).toBe('opponent');
+    expect(panelVitals(pinned, at(false))).toBe('vitals');
+    expect(panelVitals({ ...pinned, show: 'text' }, at(true))).toBe('vitals');
+    expect(panelVitals({ ...pinned, show: 'lifted' }, at(true))).toBe('vitals');
+    expect(panelVitals(null, at(true))).toBe('vitals');
   });
 
   it('keeps the footer while the pinned band has no prompt to show', () => {
     // No capture: the band never draws.
-    expect(panelShowsVitals({ ...pinned, capture: false }, true)).toBe(true);
+    expect(panelVitals({ ...pinned, capture: false }, at(true))).toBe('vitals');
     // Prompts off in the game: the band only says so, with no vitals.
-    expect(panelShowsVitals({ ...pinned, promptsOff: true }, true)).toBe(true);
+    expect(panelVitals({ ...pinned, promptsOff: true }, at(true))).toBe('vitals');
+  });
+
+  it('draws nothing with your vitals in the status line', () => {
+    expect(panelVitals(null, at(true, 'status'))).toBeNull();
+    expect(panelVitals(pinned, at(true, 'status'))).toBeNull();
+    expect(panelVitals(pinned, at(false, 'status'))).toBeNull();
   });
 });
 

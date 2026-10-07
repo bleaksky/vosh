@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { PromptRendered, PromptSpan } from '../ipc/promptDesign';
 import type { VitalsText } from '../ipc/vitals';
 import { parseSgrCells, type Cell } from '../terminal/sgrCells';
-import { fitText, textRows, vitalsTextLines, wrapAt, type TextLine } from './vitalsTextFit';
+import {
+  fitText,
+  textRows,
+  vitalsTextLines,
+  vitalsTextPieces,
+  wrapAt,
+  type TextLine,
+} from './vitalsTextFit';
 
 // Vosh's vitals text as the session renders it (crates/prompt vitals.rs
 // over Preview::Fight with a Blackwatch guard at 54 and Tolliver at 765
@@ -127,5 +134,28 @@ describe('fitting a vitals text to the footer', () => {
     expect(vitalsTextLines({ ...CALM, live: rendered(''), full: rendered('') }, 23, false)).toEqual(
       [],
     );
+  });
+});
+
+describe('a vitals text on the status line', () => {
+  it('writes each row and each side of a push as its own piece', () => {
+    expect(vitalsTextPieces(FIGHT).map(text)).toEqual([
+      'a Blackwatch guard',
+      '54%',
+      '765/1020hp 800/800mn 930/930mv',
+    ]);
+    expect(vitalsTextPieces(CALM).map(text)).toEqual(['1020/1020hp 800/800mn 930/930mv']);
+  });
+
+  it('keeps the colors of each piece', () => {
+    const [, health] = vitalsTextPieces(FIGHT);
+    expect(health.map((cell) => cell.attrs.fg)).toEqual(health.map(() => health[0].attrs.fg));
+    expect(health[0].attrs.fg).not.toEqual(vitalsTextPieces(FIGHT)[0][0].attrs.fg);
+  });
+
+  it('leaves out blank pieces and draws nothing for an empty text', () => {
+    const blank: VitalsText = { ...CALM, live: rendered('   \r\n\x1b[39mok  ') };
+    expect(vitalsTextPieces(blank).map(text)).toEqual(['ok']);
+    expect(vitalsTextPieces({ ...CALM, live: rendered('') })).toEqual([]);
   });
 });
