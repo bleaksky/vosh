@@ -9,6 +9,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { runPresetPlan } from '../automation/presetPlan';
+import { showPresetFix } from '../stores/presetFixStore';
 import { nativeSurfaceSetBrightBold, nativeSurfaceSetDividerColor } from '../ipc/nativeSurface';
 import { subscribeProfileSwitched } from '../ipc/profiles';
 import { subscribeCustomThemesChanged } from '../ipc/theme';
@@ -205,8 +206,9 @@ export function useUiConfigFollow({
         applyConfig(cfg, { broadcast: true, broadcastFlips: true });
 
         // Bring the preset triggers in line with the presets that are on
-        // and your edits to them.
-        await runPresetPlan();
+        // and your edits to them, and say when a fix changed a row you
+        // edited.
+        showPresetFix(await runPresetPlan());
       })
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(() => showAfterThemePaint(reveal));
@@ -233,13 +235,13 @@ export function useUiConfigFollow({
       applyConfig(cfg, { broadcast: true });
       // The profile in front changed, or #profile load or an import
       // brought it other presets and edits.
-      void runPresetPlan();
+      void runPresetPlan().then(showPresetFix);
     },
   );
 
   // A switch opens another profile, whose stored preset triggers may be
   // stale or carry another profile's edits until the plan runs for it.
-  useTauriEvent(subscribeProfileSwitched, (name) => void runPresetPlan(name));
+  useTauriEvent(subscribeProfileSwitched, (name) => void runPresetPlan(name).then(showPresetFix));
 
   useEffect(() => {
     const root = document.documentElement;

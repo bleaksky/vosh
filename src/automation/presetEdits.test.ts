@@ -11,6 +11,7 @@ import {
   editColors,
   editsToSave,
   fixedColorHex,
+  fixNotice,
   flagCount,
   flaggedColors,
   flaggedRows,
@@ -582,5 +583,48 @@ describe('the card of a preset trigger', () => {
   it('skips a trigger the library does not build', () => {
     const before = { ...stored(SANCTUARY), name: 'buff.gone' };
     expect(cardEdits([{ before, after: { ...before, enabled: false } }], {}).size).toBe(0);
+  });
+});
+
+// Board 4: the corner notice at the launch that finds a fix.
+describe('fixNotice', () => {
+  const row = (trigger: string | null, key: string | null) => ({
+    preset: 'disarm_buff_fade',
+    trigger,
+    row: key,
+  });
+
+  it('names one row by its trigger and opens it in Triggers', () => {
+    expect(fixNotice([row(SECONDARY, 'send')], [])).toEqual({
+      message: 'A preset fix changed a row you edited',
+      meta: SECONDARY,
+      mono: true,
+      link: 'automation:triggers#triggers:disarm.secondary',
+    });
+  });
+
+  it('counts two rows and names the first', () => {
+    const notice = fixNotice([row(SECONDARY, 'send'), row('buff.sanctuary', 'enabled')], []);
+    expect(notice?.message).toBe('A preset fix changed 2 rows you edited');
+    expect(notice?.meta).toBe(SECONDARY);
+  });
+
+  it('opens the preset card for a swatch', () => {
+    expect(fixNotice([row(null, 'line')], [])).toEqual({
+      message: 'A preset fix changed a row you edited',
+      meta: 'Disarms and fading buffs',
+      mono: false,
+      link: 'automation:presets#presets:disarm_buff_fade',
+    });
+  });
+
+  it('says a fix removed a trigger you edited', () => {
+    expect(fixNotice([], [row('buff.gone', null)])).toEqual({
+      message: 'A preset fix removed a trigger you edited',
+      meta: 'buff.gone',
+      mono: true,
+      link: 'automation:presets#presets:disarm_buff_fade',
+    });
+    expect(fixNotice([], [])).toBeNull();
   });
 });

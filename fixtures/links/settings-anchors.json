@@ -156,6 +156,10 @@
     },
     "presets": {
       "automation:presets#presets:healing_basics": "automation:presets#presets:healing_basics"
+    },
+    "preset fixes": {
+      "automation:triggers#triggers:disarm.secondary": "automation:triggers#triggers:disarm.secondary",
+      "automation:presets#presets:disarm_buff_fade": "automation:presets#presets:disarm_buff_fade"
     }
   },
   "help": [
@@ -270,7 +274,8 @@
       "presets:room_and_time",
       "presets:sent_tells",
       "presets:terror_events",
-      "tick"
+      "tick",
+      "triggers:disarm.secondary"
     ],
     "scripts": [
       "console",

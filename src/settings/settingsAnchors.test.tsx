@@ -1,6 +1,7 @@
 import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../fixtures/links/settings-anchors.json';
+import { presetById, presetTriggers } from '../automation/presets';
 import { resolveHelpTarget } from '../help/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 import { defaultLayout, type PaneLeaf } from '../panel/paneLayout';
@@ -53,6 +54,11 @@ const PROFILES = {
     { name: 'ilsabet', auto_match: { host: 'play.theforsakenlands.com', port: 1848 } },
   ],
 };
+
+/** A preset trigger as the store keeps it. */
+const SECONDARY = presetTriggers(presetById('disarm_buff_fade')!).find(
+  (t) => t.name === 'disarm.secondary',
+);
 
 const TICK = {
   enabled: true,
@@ -200,6 +206,12 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
       return config();
     case 'alert_presets_get':
       return { ids: ['alert_tells'], on: [], alerts: {} };
+    // The Triggers page lists a preset trigger, which a preset fix
+    // notice opens by name.
+    case 'triggers_export':
+      return JSON.stringify([SECONDARY]);
+    case 'preset_edits_get':
+      return {};
     case 'logs_list_sessions':
       return [];
     case 'logs_search_page':

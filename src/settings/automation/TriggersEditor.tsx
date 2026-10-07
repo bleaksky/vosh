@@ -185,6 +185,8 @@ function triggersSpec(): KindSpec<TriggerCard> {
       preset: Boolean(t.preset),
       edited: Boolean(heldOf(t)),
       ...fixWarn(t, heldOf(t)),
+      // A preset fix notice opens Settings on the trigger it names.
+      anchor: `triggers:${t.name}`,
       // A preset trigger also answers to its preset's name, which a link
       // from the preset's card fills the filter with.
       text: searchText(

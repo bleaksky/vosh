@@ -64,10 +64,11 @@ const START: View = {
 };
 
 const PRESET_ANCHOR = 'presets:';
+const TRIGGER_ANCHOR = 'triggers:';
 
 /** The view a target asks for, or null to stay put. The section names
- *  the kind. The anchors open Import, the JSON view, the Tick, or a
- *  preset as `presets:<id>`. */
+ *  the kind. The anchors open Import, the JSON view, the Tick, a preset
+ *  as `presets:<id>`, or a trigger as `triggers:<name>`. */
 function viewFor(target: SettingsTarget, from: View): View | null {
   // A link from a preset's card opens Triggers once, never again on the
   // next visit.
@@ -82,6 +83,11 @@ function viewFor(target: SettingsTarget, from: View): View | null {
     const key = target.anchor.slice(PRESET_ANCHOR.length);
     const seq = (current.preset?.seq ?? 0) + 1;
     return { ...current, kind: 'presets', panel: 'list', preset: { key, seq } };
+  }
+  if (target.anchor?.startsWith(TRIGGER_ANCHOR)) {
+    const select = target.anchor.slice(TRIGGER_ANCHOR.length);
+    const seq = (from.triggers?.seq ?? 0) + 1;
+    return { ...current, kind: 'triggers', panel: 'list', triggers: { select, seq } };
   }
   if (!kind) return null;
   const tickSeq = target.anchor === 'tick' ? current.tickSeq + 1 : current.tickSeq;

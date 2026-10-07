@@ -464,6 +464,40 @@ export interface RowRef {
   row: string | null;
 }
 
+/** What the corner notice says after a preset plan run (board 4): the
+ *  message, the trigger or the preset it names first as its meta, and
+ *  the Settings link Show opens. */
+export interface FixNotice {
+  message: string;
+  meta: string;
+  /** The meta is a trigger name, which reads in the terminal face. */
+  mono: boolean;
+  link: string;
+}
+
+/** The corner notice for the rows a run `told` of and the rows and the
+ *  triggers it `removed`, or null when it names none. Rows a fix changed
+ *  come first, then the triggers a fix took away. */
+export function fixNotice(told: readonly RowRef[], removed: readonly RowRef[]): FixNotice | null {
+  const changed = [...told, ...removed.filter((r) => r.row !== null)];
+  const gone = removed.filter((r) => r.row === null);
+  const first = changed[0] ?? gone[0];
+  if (!first) return null;
+  const n = changed.length > 0 ? changed.length : gone.length;
+  const message =
+    changed.length > 0
+      ? `A preset fix changed ${n === 1 ? 'a row' : `${n} rows`} you edited`
+      : `A preset fix removed ${n === 1 ? 'a trigger' : `${n} triggers`} you edited`;
+  // A trigger the preset still builds opens in Triggers, and a swatch or
+  // a trigger it took away opens the preset's card.
+  const inTriggers = first.trigger !== null && first.row !== null;
+  const link = inTriggers
+    ? `automation:triggers#triggers:${first.trigger}`
+    : `automation:presets#presets:${first.preset}`;
+  const meta = first.trigger ?? presetById(first.preset)?.name ?? first.preset;
+  return { message, meta, mono: first.trigger !== null, link };
+}
+
 /** A preset built with your edits laid over it. */
 export interface PresetBuild {
   /** Its triggers as the store holds them, in your colors with your rows

@@ -6,8 +6,7 @@ import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
 import { Resizable } from '../terminal/Resizable';
-import { UpdateNotice } from './overlays/UpdateNotice';
-import { Toasts } from './overlays/Toasts';
+import { CornerNotices } from './overlays/CornerNotices';
 import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
@@ -735,8 +734,7 @@ function MainWindow() {
       }
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
-      <UpdateNotice />
-      <Toasts />
+      <CornerNotices />
       {terminalMenu && (
         <TerminalMenu
           x={terminalMenu.x}

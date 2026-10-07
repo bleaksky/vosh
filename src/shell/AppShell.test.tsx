@@ -160,17 +160,17 @@ describe('the sessions column', () => {
     expect(tag).toContain('class="shell-sessions-edge"');
   });
 
-  // The toasts and the update notice pin themselves to the terminal's
-  // cell. Column 1 is the sidebar now, so a toast placed there landed on
+  // The corner that holds the toasts and the notices pins itself to the
+  // terminal's cell. Column 1 is the sidebar now, so a toast placed there landed on
   // the sidebar, its words squeezed to a letter a line.
-  it('keeps the toasts and the update notice in the terminal column', () => {
+  it('keeps the toasts and the notices in the terminal column', () => {
     const rule = (css: string, selector: string) =>
       css.match(
         new RegExp(`\\n${selector.replace(/[.>]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`),
       )?.[1] ?? '';
     const term = rule(frameCss, '.shell-slot-term');
     expect(term).toMatch(/grid-column: 2;/);
-    for (const selector of ['.shell > .ov-toasts', '.shell > .ov-update']) {
+    for (const selector of ['.shell > .ov-corner']) {
       const placed = rule(overlaysCss, selector);
       expect(placed, selector).toMatch(/grid-column: 2 \/ 3;/);
       expect(placed, selector).toMatch(/grid-row: 2 \/ 3;/);
