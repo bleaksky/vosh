@@ -2,6 +2,46 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.9.0 - 2026-10-06
+
+Play several characters in one window, write plugins that draw their own panes, pick a vitals style, and get alerts when something needs you.
+
+- Open more than one session in the same window. Each session keeps its own terminal, command line, history and scrollback, and Vosh brings them all back the next time you launch.
+- A sessions sidebar lists your sessions while two or more are open. Each row shows where that character stands, their room or fight and health, and a count of tells and mentions you missed.
+- Rest the pointer on a session row to see its character, world, room, vitals and time online.
+- Rename a session in place. Double click its name, or press Return or F2.
+- Fold the sidebar away and the session button in the title band lists the same rows, with the total of what waits on the others.
+- Step between sessions from the keyboard, and pick a session to land straight on its command line.
+- Vosh asks before you close a session or quit while you are connected.
+- Vosh can dial again on its own when your link drops. A notice counts down to each try, with Cancel and Reconnect now. Turn it on or off in Settings › General › Connection.
+- Triggers can raise alerts. Add an Alert row to a trigger to post a system banner, play a tone, or both.
+- Five alert presets cover tells, your name, an attack on you, low health and your connection, under Settings › Automation › Presets.
+- Choose a vitals style. Rows, One line, Ledger, Gauges, Pips and Text each draw your health, mana and moves their own way, in the panel or the status line.
+- Customize vitals sets the colors, the order and the low marks. Right click the vitals for quick changes.
+- Write your own vitals text, or keep the template you used before.
+- Settings has a Scripts page. Install, export, turn on and off, and reload your Lua plugins there, and read what they print in the console.
+- A plugin can draw its own pane with mud.pane, with rows, meters, lines and rules. Add it from Add a pane like any other pane.
+- A plugin can raise an alert with mud.alert.
+- Each session runs its own Lua. A plugin that runs too long or uses too much memory stops on its own instead of freezing Vosh.
+- Open up to four Chat panes. A second pane starts on tells, and your first pane turns to Everything else.
+- Pick one or more channels for each Chat pane. One pane can show Everything else, the channels no other pane picks.
+- Import a profile someone exported from Vosh, as a new profile or over one you have.
+- Triggers match in three ways. Pick Text, Starts with or Regex for each pattern.
+- Turn a whole group of triggers, aliases or timers on or off from the switch on its heading.
+- Timers can live in groups.
+- The Numpad movement preset walks with your number pad.
+- Type #walk with a string of directions and Vosh walks it one step at a time. Esc stops it.
+- Color vision in Settings › Appearance swaps the colors your eyes confuse, the way color blind modes in games do, for Deuteranopia, Protanopia and Tritanopia.
+- Fit game colors keeps the game's colors readable on any theme.
+- New themes join the gallery, among them Triad, Rubric, Harbor Dark, Iceberg Dark, Srcery, Nightfly, Melange Dark, Melange Light and Modus Vivendi. A new install starts on Triad, with Rubric as its light theme. One Dark, Vellum and Everforest Light give way to the themes that replace them, and your pick moves over on its own.
+- The panes can use their own font and size, set under Panel text in Settings › Appearance.
+- Collapse repeated lines can fold fight lines and attack lines too.
+- The status line can show the game time on a 12 hour clock.
+- Before your first prompt, the pinned prompt no longer leaves empty rows under the login menu.
+- A blank Enter with your prompt pinned no longer leaves an extra empty row.
+- Saving your aliases no longer turns back on an alias a plugin stopped.
+- The switches on trigger and alias groups work again.
+
 ## v0.8.1 - 2026-10-03
 
 Five new themes, blinking text, new prompt forms, room colors, and a 3D map.
