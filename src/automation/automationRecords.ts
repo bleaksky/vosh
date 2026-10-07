@@ -20,6 +20,7 @@ import {
   type Macro,
   type PresetSwitch,
 } from '../ipc/automation';
+import type { PresetEdit } from '../ipc/presetEdits';
 import { type TickConfig } from '../ipc/tick';
 import { errorText, listJoin, quoted } from '../lib/text';
 
@@ -456,6 +457,9 @@ export interface PresetToggle {
   /** What an alert preset does, its parts in the profile's `[alerts]`
    *  table. Absent on a preset of the library. */
   alert?: AlertParts;
+  /** Your edits to a preset of the library, its part of the profile's
+   *  `[preset_edits]` table. Absent while it holds none. */
+  edit?: PresetEdit;
 }
 
 /** The presets that are on for a stored enabled_presets list. An empty

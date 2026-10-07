@@ -2181,6 +2181,57 @@
   white-space: nowrap;
 }
 
+/* A link inside a card's text, in the quiet tone of Edit all as JSON…
+   with a hairline underline (Presets board 1). */
+.st-auto-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  cursor: default;
+}
+
+.st-auto-link:hover {
+  color: var(--text);
+}
+
+.st-auto-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The way back to a preset's color under a swatch you changed. */
+.st-auto-under {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-auto-link.is-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.st-auto-chip {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--key-ring);
+}
+
 .st-auto-unit {
   flex: none;
   color: var(--secondary);
@@ -2239,6 +2290,13 @@
   font: 12px/17px var(--font-mud);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A line too long for the box wraps three cells in, under the words
+   after a ## mark (Presets board 1). */
+.st-auto-sample-line {
+  padding-left: 3ch;
+  text-indent: -3ch;
 }
 
 .st-auto-sample,

@@ -32,6 +32,7 @@ import {
   type TriggerStyle,
 } from './automationTriggers';
 import { fillColors, type Preset, type PresetTrigger } from './presets';
+import { indexedRgb, toHex } from '../theme/color';
 import type {
   AlertParts,
   MatchMode,
@@ -299,8 +300,8 @@ export function keepMine(row: EditRow, now: EditValue): EditRow {
   return { value: row.value, was: now };
 }
 
-// The row Rust drops at once, since its value is its was.
-const dropped = (row: EditRow): EditRow => ({ value: row.was, was: row.was });
+/** The row Rust drops at once, since its value is its was. */
+export const dropped = (row: EditRow): EditRow => ({ value: row.was, was: row.was });
 
 /** A row of a preset the launch notice names. `trigger` is null for a
  *  swatch, and `row` is null for a whole trigger the preset no longer
@@ -385,4 +386,123 @@ export function buildPreset(preset: Preset, edit: PresetEdit = {}): PresetBuild 
   }
   if (Object.keys(triggerWrites).length > 0) build.write.triggers = triggerWrites;
   return build;
+}
+
+/** The hex of a preset color that never follows the theme: one of the
+ *  256 fixed colors past the sixteen, as fg:178, or a true color. Null
+ *  for a theme color. */
+export function fixedColorHex(token: string): string | null {
+  const fixed = /^fg:(\d+)$/.exec(token);
+  if (fixed) {
+    const n = Number(fixed[1]);
+    return n >= 16 && n < 256 ? toHex(indexedRgb(n, [])) : null;
+  }
+  return /^#[0-9a-f]{6}$/i.test(token) ? token.toLowerCase() : null;
+}
+
+// An edit with its empty parts left out, or undefined when it holds none,
+// as Rust keeps it.
+function tidy(edit: PresetEdit): PresetEdit | undefined {
+  const out: PresetEdit = {};
+  if (edit.colors && Object.keys(edit.colors).length > 0) out.colors = edit.colors;
+  const triggers = Object.entries(edit.triggers ?? {}).filter(([, r]) => Object.keys(r).length > 0);
+  if (triggers.length > 0) out.triggers = Object.fromEntries(triggers);
+  return out.colors || out.triggers ? out : undefined;
+}
+
+/** `edit`, your edits to `preset`, with its swatch `key` set to `value`,
+ *  or cleared with null. A value that is the preset's own token is no
+ *  edit, so its row goes at once. A row you change again keeps the
+ *  preset's value you first changed it from. Undefined once no edit is
+ *  left. */
+export function withColorEdit(
+  preset: Preset,
+  edit: PresetEdit | undefined,
+  key: string,
+  value: string | null,
+): PresetEdit | undefined {
+  const token = preset.colors[key].token;
+  const colors = { ...edit?.colors };
+  const held = colors[key];
+  delete colors[key];
+  if (value !== null && value !== token) {
+    colors[key] = { value, was: held?.was ?? token };
+  }
+  return tidy({ ...edit, colors });
+}
+
+/** What Save sends to preset_edits_set for `preset` to turn `before`,
+ *  your edits as they loaded, into `after`, the edits the card holds: each
+ *  row that changed, and each row that went as one that says the
+ *  preset's value, so Rust drops it. A swatch whose hex is the preset's
+ *  fixed color folds away the same way. Null when nothing changed. */
+export function editsToSave(
+  preset: Preset,
+  before: PresetEdit | undefined,
+  after: PresetEdit | undefined,
+): PresetEdit | null {
+  const out: PresetEdit = {};
+  const colors: Record<string, EditRow> = {};
+  const keys = new Set([...Object.keys(before?.colors ?? {}), ...Object.keys(after?.colors ?? {})]);
+  for (const key of keys) {
+    const was = before?.colors?.[key];
+    const row = after?.colors?.[key];
+    if (row && was && same(row.value, was.value)) continue;
+    const token = preset.colors[key]?.token ?? String((row ?? was)!.was);
+    const folds =
+      !row || (typeof row.value === 'string' && row.value.toLowerCase() === fixedColorHex(token));
+    colors[key] = folds ? { value: token, was: token } : row;
+  }
+  if (Object.keys(colors).length > 0) out.colors = colors;
+
+  const triggers: Record<string, Record<string, EditRow>> = {};
+  const names = new Set([
+    ...Object.keys(before?.triggers ?? {}),
+    ...Object.keys(after?.triggers ?? {}),
+  ]);
+  for (const name of names) {
+    const from = before?.triggers?.[name] ?? {};
+    const to = after?.triggers?.[name] ?? {};
+    const rows: Record<string, EditRow> = {};
+    for (const key of new Set([...Object.keys(from), ...Object.keys(to)])) {
+      const was = from[key];
+      const row = to[key];
+      if (row && was && same(row.value, was.value)) continue;
+      rows[key] = row ?? dropped(was);
+    }
+    if (Object.keys(rows).length > 0) triggers[name] = rows;
+  }
+  if (Object.keys(triggers).length > 0) out.triggers = triggers;
+  return out.colors || out.triggers ? out : null;
+}
+
+/** What Your changes on a preset's card names: the swatches you changed,
+ *  by key in the preset's order, and the triggers you edited, by name in
+ *  the preset's order, any it no longer builds last. */
+export interface EditSummary {
+  colors: string[];
+  triggers: string[];
+}
+
+export function editSummary(preset: Preset, edit: PresetEdit | undefined): EditSummary {
+  const colors = Object.keys(preset.colors).filter((k) => edit?.colors?.[k] !== undefined);
+  const edited = Object.keys(edit?.triggers ?? {});
+  const order = preset.triggers.map((t) => t.name);
+  const triggers = [
+    ...order.filter((n) => edited.includes(n)),
+    ...edited.filter((n) => !order.includes(n)),
+  ];
+  return { colors, triggers };
+}
+
+/** Whether `edit` holds any edit, the pencil in the list. */
+export function hasEdits(edit: PresetEdit | undefined): boolean {
+  return tidy(edit ?? {}) !== undefined;
+}
+
+/** Your swatch colors in `edit`, by key, the colors Looks like draws. */
+export function editColors(edit: PresetEdit | undefined): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(edit?.colors ?? {}).map(([key, row]) => [key, String(row.value)]),
+  );
 }

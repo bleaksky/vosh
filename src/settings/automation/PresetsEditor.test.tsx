@@ -21,6 +21,8 @@ const bus = vi.hoisted(() => ({
   /** What ui_get_config and alert_presets_get answer. */
   enabled: [] as string[],
   alerts: {} as unknown,
+  /** What preset_edits_get answers, by preset id. */
+  edits: {} as Record<string, unknown>,
   /** What alerts_permission answers, and alerts_ask_permission after
    *  you choose. */
   permission: 'granted' as string,
@@ -48,7 +50,11 @@ vi.mock('@tauri-apps/api/core', () => ({
       bus.calls.push([cmd, args]);
       return cmd === 'alerts_ask_permission' ? bus.answer : null;
     }
-    if (cmd === 'preset_edits_get') return {};
+    if (cmd === 'preset_edits_get') return bus.edits;
+    if (cmd === 'preset_edits_set') {
+      bus.calls.push([cmd, args]);
+      return null;
+    }
     if (cmd === 'triggers_list') return [];
     if (cmd === 'presets_enabled_set') {
       bus.calls.push([cmd, args]);
@@ -334,7 +340,9 @@ async function mountEditor(
   alerts: Record<string, unknown>,
   permission = 'granted',
   selectPreset: { key: string; seq: number } | null = null,
+  edits: Record<string, unknown> = {},
 ) {
+  bus.edits = edits;
   bus.permission = permission;
   bus.enabled = enabled;
   bus.alerts = { ids: ALERT_IDS, on, alerts };
@@ -418,6 +426,32 @@ async function mountEditor(
       );
       return row?.textContent.replace(label, '');
     },
+    /** Each swatch of the Colors block: its label, then what its field
+     *  shows, a placeholder in parentheses, and the line under it. */
+    swatches: () =>
+      findAll(card(), (el) => hasClass(el, 'st-color-cell')).map((cell) => {
+        const label = findAll(cell, (el) => hasClass(el, 'st-color-cell-label'))[0].textContent;
+        const text = findAll(cell, (el) => hasClass(el, 'st-color-text'))[0];
+        const select = findAll(cell, (el) => el.nodeName === 'SELECT')[0];
+        const under = findAll(cell, (el) => hasClass(el, 'st-auto-under'))[0];
+        const shown = select
+          ? `[${String(reactProps(select).value)}]`
+          : (text as unknown as { value: string }).value || `(${text.getAttribute('placeholder')})`;
+        return [label, shown, ...(under ? [under.textContent] : [])].join(' ');
+      }),
+    /** Type `text` in the swatch labeled `label` and leave the field. */
+    typeColor: (label: string, text: string) =>
+      act(async () => {
+        const cell = findAll(card(), (el) => hasClass(el, 'st-color-cell')).find(
+          (c) => findAll(c, (el) => hasClass(el, 'st-color-cell-label'))[0].textContent === label,
+        );
+        const input = findAll(cell!, (el) => hasClass(el, 'st-color-text'))[0];
+        const target = { value: text };
+        reactProps(input).onFocus();
+        reactProps(input).onChange({ target, currentTarget: target });
+        reactProps(input).onBlur({ target, currentTarget: target });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
     /** The parts of the Alert row, `+` before a pressed one. */
     parts: () =>
       findAll(
@@ -586,16 +620,22 @@ describe('the Presets page of First Run board 4', () => {
     expect(editor.row('Tells you send').suggested).toBe(false);
   });
 
-  it('reads the card as description, Looks like, Suggested and Adds', async () => {
+  it('reads the card as description, Looks like, Colors, Suggested and Adds', async () => {
     const editor = await mountEditor(['none'], [], {});
     await editor.pick('Your damage verbs');
-    expect(editor.rows()).toEqual(['Your damage verbs', 'Looks like', 'Suggested', 'Adds']);
+    expect(editor.rows()).toEqual([
+      'Your damage verbs',
+      'Looks like',
+      'Colors',
+      'Suggested',
+      'Adds',
+    ]);
     expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to a villager!']);
     expect(editor.value('Suggested')).toBe('For The Forsaken Lands');
     expect(editor.value('Adds')).toBe('2 triggers');
 
     await editor.pick('Herb labels');
-    expect(editor.rows()).toEqual(['Herb labels', 'Looks like', 'Adds']);
+    expect(editor.rows()).toEqual(['Herb labels', 'Looks like', 'Colors', 'Adds']);
     await editor.pick('Numpad movement');
     expect(editor.rows()).toEqual(['Numpad movement', 'Adds', 'Keys']);
   });
@@ -614,6 +654,85 @@ describe('the Presets page of First Run board 4', () => {
       selected: true,
     });
     expect(editor.rows()[0]).toBe('Herb labels');
+  });
+});
+
+const LILAC = { disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } } };
+
+/** What Save sent, but the removes of the presets that are off. */
+const sentCalls = () => bus.calls.filter(([cmd]) => cmd !== 'presets_remove');
+
+// Presets board 1: a preset's colors on its card, one swatch for each.
+describe('the Colors block', () => {
+  it('shows the preset color in each empty swatch and Back to under one you changed', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, LILAC);
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line #c3a6ff Back to 178']);
+
+    await editor.pick('Damage to you');
+    expect(editor.swatches()).toEqual([
+      'The rest of the line (244, #808080)',
+      'The damage verb (210, #ff8787)',
+      'A miss (152, #afd7d7)',
+    ]);
+  });
+
+  it('gives a color in a Highlight the theme sixteen and a template any color', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Room, time and weather colors');
+    expect(editor.swatches()).toEqual([
+      'Exits [green]',
+      'What is in the room [yellow]',
+      'Your target [bright_red]',
+      'Time of day [blue]',
+      'Weather change (#8fa7d9)',
+      'WiZNET tag [magenta]',
+    ]);
+    expect(findAll(doc.body, (el) => el.nodeName === 'OPTION').length).toBe(16 * 5);
+  });
+
+  it('puts the preset color back with one press, and Save drops your row', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, LILAC);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Back to 178');
+    expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line (178, #d7af00)']);
+    expect(editor.status()).toBe('Unsaved changes');
+
+    await editor.save();
+    expect(sentCalls().map(([cmd]) => cmd)).toEqual(['preset_edits_set', 'presets_install']);
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+
+  it('saves a color you type, then runs the plan in it', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {});
+    await editor.pick('Disarms and fading buffs');
+    await editor.typeColor('The line', '#c3a6ff');
+    expect(editor.swatches()[1]).toBe('The line #c3a6ff Back to 178');
+
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } },
+      profile: undefined,
+    });
+    // The fake keeps no edits, so the plan builds the preset as it ships.
+    expect(sentCalls()[1][0]).toBe('presets_install');
+  });
+
+  it('folds a hex that is the preset color at Save', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {});
+    await editor.pick('Disarms and fading buffs');
+    await editor.typeColor('The line', '#D7AF00');
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
   });
 });
 

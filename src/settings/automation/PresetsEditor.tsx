@@ -13,11 +13,17 @@ import {
   presetToggles,
   type PresetToggle,
 } from '../../automation/automationRecords';
+import { editColors, editsToSave, withColorEdit } from '../../automation/presetEdits';
 import { runPresetPlan } from '../../automation/presetPlan';
 import { type Preset, PRESET_CATEGORIES, presetById } from '../../automation/presets';
 import { alertPresetsGet, alertPresetsSet } from '../../ipc/alerts';
 import { type AlertParts, onPresetsChanged, type PresetSwitch } from '../../ipc/automation';
-import { onPresetEditsChanged } from '../../ipc/presetEdits';
+import {
+  onPresetEditsChanged,
+  presetEditsGet,
+  presetEditsSet,
+  type PresetEdit,
+} from '../../ipc/presetEdits';
 import { getUiConfig, type UiConfig } from '../../ipc/uiConfig';
 import { knownWorld } from '../../lib/knownWorlds';
 import { listJoin } from '../../lib/text';
@@ -28,6 +34,7 @@ import { getShownProfile } from '../shownProfile';
 import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
+import { PresetColors } from './PresetColors';
 import { PresetSample } from './PresetSample';
 import { SamplePaintContext, useSamplePaint } from './samplePaint';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
@@ -61,11 +68,13 @@ function suggestedWorld(): string | undefined {
 }
 
 /** The presets, one toggle each under its category, the five alert
- *  presets under Alerts. Save first writes the parts of each alert
- *  preset you changed, then turns on and off only the presets you
- *  flipped here, over the list as the profile holds it then, through
- *  presets_enabled_set (First Run Q17). The page follows that command
- *  and your preset edits as the trigger list follows its store. */
+ *  presets under Alerts. Save first writes your edits to each preset
+ *  through preset_edits_set and the parts of each alert preset you
+ *  changed, then runs the preset plan for the profile, which turns on and
+ *  off only the presets you flipped here, over the list as the profile
+ *  holds it then, through presets_enabled_set (First Run Q17), and
+ *  builds the presets in your colors. The page follows that command and
+ *  your preset edits as the trigger list follows its store. */
 export function PresetsEditor({
   config,
   setConfig,
@@ -87,12 +96,15 @@ export function PresetsEditor({
       // in loadout mode every profile shares one, next to the preset
       // triggers in the shared catalog.
       load: async (profile) => {
-        const [config, alerts] = await Promise.all([
+        const [config, alerts, edits] = await Promise.all([
           getUiConfig(profile),
           alertPresetsGet(profile),
+          presetEditsGet(profile),
         ]);
         return [
-          ...presetToggles(config.enabled_presets),
+          ...presetToggles(config.enabled_presets).map((t) =>
+            edits[t.id] ? { ...t, edit: edits[t.id] } : t,
+          ),
           ...alerts.ids.map((id) => ({
             id,
             enabled: alerts.on.includes(id),
@@ -104,8 +116,15 @@ export function PresetsEditor({
         // Rust saves each one at once. A Save that fails after them keeps
         // the draft unsaved, and the next Save sends the same parts again.
         const switches: PresetSwitch[] = [];
+        let edited = false;
         for (const { before, after } of draftChanges(draft).changed) {
           if (before.enabled !== after.enabled) switches.push({ id: after.id, on: after.enabled });
+          const preset = presetById(after.id);
+          const rows = preset ? editsToSave(preset, before.edit, after.edit) : null;
+          if (rows) {
+            await presetEditsSet(after.id, rows, profile);
+            edited = true;
+          }
           if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
             continue;
           }
@@ -115,11 +134,12 @@ export function PresetsEditor({
             profile,
           );
         }
-        if (switches.length === 0) return;
+        if (switches.length === 0 && !edited) return;
         // The preset plan builds the presets that are on with your edits
         // laid over them and lands the switches on the stored list, so a
         // preset another window turned on meanwhile stays on.
         await runPresetPlan(profile ?? null, switches);
+        if (switches.length === 0) return;
         const { enabled_presets } = await getUiConfig(profile);
         setConfig((prev) => (prev ? { ...prev, enabled_presets } : prev));
       },
@@ -199,9 +219,16 @@ export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
           <div className="st-row-text">
             <span className="st-row-label">Looks like</span>
           </div>
-          <PresetSample preset={preset} />
+          <PresetSample preset={preset} colors={editColors(t.edit)} />
         </div>
       )}
+      <PresetColors
+        preset={preset}
+        edit={t.edit}
+        onColor={(key, value) =>
+          update((v) => withEdit(v, withColorEdit(preset, v.edit, key, value)))
+        }
+      />
       {preset.suggest.length > 0 && (
         <Row label="Suggested">
           <span className="st-auto-value">For {listJoin(preset.suggest)}</span>
@@ -213,6 +240,12 @@ export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
       {binds.length > 0 && <PresetKeys preset={preset} />}
     </Card>
   );
+}
+
+/** `t` holding `edit`, or no edit at all once it is undefined. */
+function withEdit(t: PresetToggle, edit: PresetEdit | undefined): PresetToggle {
+  const { edit: _old, ...rest } = t;
+  return edit ? { ...rest, edit } : rest;
 }
 
 function isPresetDefault(alert: AlertParts): boolean {

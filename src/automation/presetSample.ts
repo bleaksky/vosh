@@ -73,15 +73,21 @@ function sgrChars(text: string): { ch: string; color: string | null }[] {
   return chars;
 }
 
-/** Draw a line of a preset's sample through the preset's own triggers. */
-export function drawSample(preset: Preset, line: PresetSampleLine): DrawnSample {
+/** Draw a line of a preset's sample through the preset's own triggers,
+ *  each color key filled from `colors`, yours by key, over the preset's
+ *  own. */
+export function drawSample(
+  preset: Preset,
+  line: PresetSampleLine,
+  colors: Readonly<Record<string, string>> = {},
+): DrawnSample {
   const scope: TriggerTarget = line.target ?? 'line';
   // Which triggers see the line, as MatchScope::matches has it.
   const reaches = (target: TriggerTarget = 'line') =>
     target === 'line' ||
     (target === 'room' && scope !== 'line') ||
     (target === 'room_target' && scope === 'room_target');
-  const triggers = presetTriggers(preset)
+  const triggers = presetTriggers(preset, colors)
     .map((t, n) => ({ t, n }))
     .sort((a, b) => b.t.priority - a.t.priority || a.n - b.n)
     .map(({ t }) => t);

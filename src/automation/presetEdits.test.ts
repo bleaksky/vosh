@@ -5,6 +5,9 @@ import {
   applyRows,
   buildPreset,
   diff,
+  editColors,
+  editsToSave,
+  fixedColorHex,
   hold,
   keepMine,
   NO_ROW,
@@ -12,7 +15,9 @@ import {
   patternKey,
   takeFix,
   triggerRows,
+  withColorEdit,
 } from './presetEdits';
+import { drawSample } from './presetSample';
 import { presetById, presetTriggers, PRESETS, type Preset, type PresetTrigger } from './presets';
 import type { EditRow, PresetEdit } from '../ipc/presetEdits';
 
@@ -351,5 +356,58 @@ describe('takeFix and keepMine', () => {
     const kept = keepMine(flagged, DUAL);
     expect(kept).toEqual({ value: '', was: DUAL });
     expect(hold('send', kept, DUAL)).toBe('applies');
+  });
+});
+
+// The swatches of a preset's card (Presets board 1, Q4 and Q8).
+describe('the swatches of the card', () => {
+  const lilac: PresetEdit = { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } };
+
+  it('names the hex of a fixed or true color and none for a theme color', () => {
+    expect(fixedColorHex('fg:178')).toBe('#d7af00');
+    expect(fixedColorHex('fg:244')).toBe('#808080');
+    expect(fixedColorHex('#8FA7D9')).toBe('#8fa7d9');
+    expect(fixedColorHex('bold_red')).toBeNull();
+    expect(fixedColorHex('green')).toBeNull();
+  });
+
+  it('sets a swatch from the preset color, and its own token or a clear is no edit', () => {
+    expect(withColorEdit(disarms, undefined, 'line', '#c3a6ff')).toEqual(lilac);
+    expect(withColorEdit(disarms, lilac, 'line', null)).toBeUndefined();
+    expect(withColorEdit(disarms, lilac, 'line', 'fg:178')).toBeUndefined();
+    // A row you change again keeps the value you first changed it from.
+    const flagged: PresetEdit = { colors: { line: { value: '#c3a6ff', was: 'fg:172' } } };
+    expect(withColorEdit(disarms, flagged, 'line', '#ffffff')).toEqual({
+      colors: { line: { value: '#ffffff', was: 'fg:172' } },
+    });
+  });
+
+  it('sends only what changed, and a row that went as the preset value', () => {
+    expect(editsToSave(disarms, lilac, lilac)).toBeNull();
+    expect(editsToSave(disarms, undefined, lilac)).toEqual(lilac);
+    expect(editsToSave(disarms, lilac, undefined)).toEqual({
+      colors: { line: { value: 'fg:178', was: 'fg:178' } },
+    });
+    const sanctuary: PresetEdit = {
+      ...lilac,
+      triggers: { 'buff.sanctuary': { enabled: { value: false, was: true } } },
+    };
+    expect(editsToSave(disarms, sanctuary, undefined)).toEqual({
+      colors: { line: { value: 'fg:178', was: 'fg:178' } },
+      triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } },
+    });
+  });
+
+  it('folds a hex that is the preset color', () => {
+    const gold: PresetEdit = { colors: { line: { value: '#d7af00', was: 'fg:178' } } };
+    expect(editsToSave(disarms, undefined, gold)).toEqual({
+      colors: { line: { value: 'fg:178', was: 'fg:178' } },
+    });
+  });
+
+  it('draws Looks like in your colors', () => {
+    const runs = drawSample(disarms, disarms.sample[0], editColors(lilac)).runs;
+    expect(runs.map(([, color]) => color)).toEqual(['bold red', null, '#c3a6ff']);
+    expect(drawSample(disarms, disarms.sample[0]).runs.at(-1)?.[1]).toBe('178');
   });
 });
