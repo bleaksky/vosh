@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import {
   DEFAULT_VITALS_CUSTOM,
   normalizeVitalsOff,
+  VITALS_VALUES,
   shownStyle,
   type UiConfig,
   type UiFields,
@@ -13,7 +14,7 @@ import {
   type VitalsValues,
 } from '../../ipc/uiConfig';
 import { partShift, useRowDrag } from '../../lib/useRowDrag';
-import { VITAL_LABELS } from '../../panel/vitalsView';
+import { VITAL_LABELS, VITALS_VALUES_LABELS } from '../../panel/vitalsView';
 import type { AnsiSlot } from '../../theme/baseAnsi';
 import { playPalette, themeTokens, type XtermPalette } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
@@ -56,11 +57,10 @@ const OPPONENT_PLACES: readonly SegmentedOption<VitalsOpponent>[] = [
   { value: 'bottom', label: 'At the bottom' },
 ];
 
-const VALUES: readonly SegmentedOption<VitalsValues>[] = [
-  { value: 'current-max', label: 'Current and max' },
-  { value: 'current', label: 'Current' },
-  { value: 'percent', label: 'Percent' },
-];
+const VALUES: readonly SegmentedOption<VitalsValues>[] = VITALS_VALUES.map((value) => ({
+  value,
+  label: VITALS_VALUES_LABELS[value],
+}));
 
 const METERS: readonly SegmentedOption<VitalsMeter>[] = [
   { value: 'line', label: 'Line' },

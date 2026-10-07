@@ -4,14 +4,8 @@ import { normalizeUiConfig, VITALS_STYLES, type UiConfig } from '../../ipc/uiCon
 import { nextVitals, type Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { VitalsTiles } from './VitalsGallery';
-import {
-  arrowPick,
-  galleryCaption,
-  galleryVitals,
-  SAMPLE_VITALS,
-  tileFit,
-  vitalsStylePick,
-} from './vitalsStyles';
+import { arrowPick, galleryCaption, galleryVitals, SAMPLE_VITALS, tileFit } from './vitalsStyles';
+import { vitalsStylePick } from '../../panel/vitalsView';
 
 // The Style gallery under Settings, Layout, Vitals (board 2 and board 5
 // of the Vitals Styles review). The tiles draw from plain values here.

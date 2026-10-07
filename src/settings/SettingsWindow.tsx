@@ -10,7 +10,14 @@ import {
 import { loadoutsGetState, subscribeLoadoutsChanged } from '../ipc/loadouts';
 import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
-import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from '../ipc/uiConfig';
+import {
+  fetchUiConfig,
+  shownStyle,
+  subscribeUiConfigReplaced,
+  subscribeVitalsOptionsChanged,
+  type UiConfig,
+  type UiFields,
+} from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {
@@ -39,6 +46,7 @@ import { ShownSession } from './ShownSession';
 import { Sidebar } from './Sidebar';
 import { useSettingsClose } from './useSettingsClose';
 import { settingsSaveHolds } from './useSettingsAutoSave';
+import { vitalsStylePick } from '../panel/vitalsView';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronRightIcon } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
@@ -101,6 +109,13 @@ function clearPendingTarget() {
     // Storage unavailable. Nothing was left there.
   }
 }
+
+/** The fields the vitals menu picks. */
+const VITALS_MENU_FIELDS: readonly (keyof UiFields)[] = [
+  'vitals_style',
+  'vitals_density',
+  'vitals_values',
+];
 
 export function SettingsWindow() {
   const mac = isMacPlatform();
@@ -292,6 +307,18 @@ export function SettingsWindow() {
     setConfig((prev) =>
       prev && !sameAffectsDisplay(affectsDisplayOf(prev), display)
         ? { ...prev, ...affectsDisplayFields(display) }
+        : prev,
+    );
+  });
+
+  // The vitals menu picks a style or a Values form in the main window.
+  // The config copy takes them, so Layout shows the pick, and keeps
+  // yours while this window's own save holds them.
+  useTauriEvent(subscribeVitalsOptionsChanged, (options) => {
+    if (settingsSaveHolds(VITALS_MENU_FIELDS)) return;
+    setConfig((prev) =>
+      prev && (shownStyle(prev) !== options.style || prev.vitals_values !== options.values)
+        ? { ...prev, ...vitalsStylePick(options.style), vitals_values: options.values }
         : prev,
     );
   });

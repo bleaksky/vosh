@@ -35,6 +35,7 @@ import {
   shownRows,
   vitalInks,
   vitalsOn,
+  vitalsStylePick,
   VITALS_STYLE_LABELS,
   type VitalInks,
 } from '../../panel/vitalsView';
@@ -43,13 +44,7 @@ import type { Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { playPalette, themeTokens } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
-import {
-  arrowPick,
-  galleryCaption,
-  tileFit,
-  vitalsStylePick,
-  type GalleryVitals,
-} from './vitalsStyles';
+import { arrowPick, galleryCaption, tileFit, type GalleryVitals } from './vitalsStyles';
 import { measurable, useGalleryVitals, usePanelText } from './usePanelVitals';
 
 // The Style gallery under Settings, Layout, Vitals (board 2 of the
