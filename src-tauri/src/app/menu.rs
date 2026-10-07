@@ -23,6 +23,10 @@ use serde::Deserialize;
 pub(crate) struct MenuState {
     /// Connecting or connected. Swaps Connect for Disconnect.
     pub(crate) connected: bool,
+    /// A series of redials runs, so Disconnect shows between the tries
+    /// too, as the palette and the session menu show it.
+    #[serde(default)]
+    pub(crate) redialing: bool,
     /// The world Connect dials, like `The Forsaken Lands`.
     pub(crate) world_name: Option<String>,
     pub(crate) panel_open: bool,
@@ -100,6 +104,13 @@ const SESSION_ROWS: [SessionRow; 10] = [
 #[cfg(target_os = "macos")]
 fn between_sessions(state: &MenuState) -> bool {
     state.sessions >= 2
+}
+
+/// Whether the Session menu ends on Disconnect in place of Connect: while
+/// the session is connecting or connected, and while a redial waits.
+#[cfg(target_os = "macos")]
+fn shows_disconnect(state: &MenuState) -> bool {
+    state.connected || state.redialing
 }
 
 /// Pane rows in View, in the panel's order.

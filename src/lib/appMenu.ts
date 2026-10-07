@@ -182,6 +182,9 @@ export interface MenuThemeState {
 /** The snapshot menu_set_state takes. camelCase on the wire. */
 export interface MenuState {
   connected: boolean;
+  /** A series of redials runs. The menu shows Disconnect between the
+   *  tries too, as the palette and the session menu do. */
+  redialing: boolean;
   worldName: string | null;
   panelOpen: boolean;
   splitOpen: boolean;
@@ -199,6 +202,8 @@ export interface MenuState {
 export interface MenuStateInput {
   /** Connecting or connected. */
   live: boolean;
+  /** A redial waits for its next try or dials it. */
+  redialing: boolean;
   worldName: string | null;
   panelOpen: boolean;
   /** The split is open, or the native grid is scrolled back. */
@@ -220,6 +225,7 @@ export function buildMenuState(input: MenuStateInput): MenuState {
   const world = input.worldName?.trim() ?? '';
   return {
     connected: input.live,
+    redialing: input.redialing,
     worldName: world.length > 0 ? world : null,
     panelOpen: input.panelOpen,
     splitOpen: input.splitOpen,
