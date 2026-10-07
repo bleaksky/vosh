@@ -6,7 +6,6 @@
 // applied over it, macros and timers go item by item, presets install
 // and remove triggers, and loadouts set the active list.
 
-import { isAlertPresetId } from './alertPresets';
 import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { groupKeyOf, searchText, type ListEntry } from './automationList';
 import { defaultEnabledIds, type Preset, PRESETS } from './presets';
@@ -472,32 +471,9 @@ export function presetToggles(stored: readonly string[]): PresetToggle[] {
   return PRESETS.map((p) => ({ id: p.id, enabled: on.has(p.id) }));
 }
 
-/** What to store in enabled_presets for these toggles, the library's
- *  and the alert presets'. The ids in `stored` that name no preset Vosh
- *  knows, such as one from a newer build, stay on the list. */
-export function storedPresetIds(
-  toggles: readonly PresetToggle[],
-  stored: readonly string[] = [],
-): string[] {
-  const known = (id: string) => isAlertPresetId(id) || PRESETS.some((p) => p.id === id);
-  const kept = stored.filter((id) => !known(id) && id !== PRESETS_OFF_MARKER);
-  const on = [...toggles.filter((t) => t.enabled).map((t) => t.id), ...kept];
-  return on.length > 0 ? on : [PRESETS_OFF_MARKER];
-}
-
-export interface PresetSavePlan {
+export interface PresetLaunchPlan {
   install: string[];
   remove: string[];
-}
-
-/** The library presets to install and remove for the toggles that
- *  changed. An alert preset has no triggers, so it takes no part. */
-export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
-  const changed = draftChanges(draft).changed.filter((c) => !isAlertPresetId(c.after.id));
-  return {
-    install: changed.filter((c) => c.after.enabled).map((c) => c.after.id),
-    remove: changed.filter((c) => !c.after.enabled).map((c) => c.after.id),
-  };
 }
 
 /** What launch does with the preset triggers and macros. `installed`
@@ -512,7 +488,7 @@ export function presetLaunchPlan(
   stored: readonly string[],
   installed: Iterable<string | null | undefined>,
   switches: readonly PresetSwitch[] = [],
-): PresetSavePlan {
+): PresetLaunchPlan {
   const on = new Set(enabledPresetIds(stored));
   for (const s of switches) {
     if (s.on) on.add(s.id);

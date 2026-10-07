@@ -263,7 +263,6 @@ pub(crate) struct PresetSwitch {
 /// list as stored. An empty list means the defaults, so it starts from
 /// them. Every id a switch does not name stays as it is, a preset of a
 /// newer build among them, and a list left empty stores [`PRESETS_OFF`].
-/// Mirrors `storedPresetIds` in src/automation/automationRecords.ts.
 pub(crate) fn switch_presets(list: &[String], switches: &[PresetSwitch]) -> Vec<String> {
     let mut on: Vec<String> = if list.is_empty() {
         PRESETS_ON_BY_DEFAULT

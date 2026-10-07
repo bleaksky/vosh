@@ -207,6 +207,7 @@ pub(crate) const PRESET_EDITS_CHANGED: &str = "vosh://preset-edits-changed";
 /// Sent to every window when `presets_enabled_set` turned presets on or
 /// off. The payload names the profile, `{profile}`, see
 /// [`PresetsChanged`]. In loadout mode every profile shares the list.
+/// The Presets page hears it through `onPresetsChanged`.
 pub(crate) const PRESETS_CHANGED: &str = "vosh://presets-changed";
 
 // Plugins.

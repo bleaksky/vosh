@@ -8,6 +8,7 @@ import {
   GROUPS_CHANGED,
   MACROS_CHANGED,
   MACRO_GROUPS_CHANGED,
+  PRESETS_CHANGED,
   TIMERS_CHANGED,
   TRIGGERS_CHANGED,
 } from './events';
@@ -244,6 +245,14 @@ export async function presetsEnabledSet(
   profile?: string | null,
 ): Promise<PresetsInstalled> {
   return invoke('presets_enabled_set', { changes, triggers, macros, profile });
+}
+
+/** Hear that presets_enabled_set turned presets on or off in a profile,
+ *  which the event names, null before any profile loads. */
+export async function onPresetsChanged(cb: (profile: string | null) => void): Promise<UnlistenFn> {
+  return listen<{ profile: string | null }>(PRESETS_CHANGED, (event) => {
+    cb(event.payload.profile);
+  });
 }
 
 export async function presetsRemove(presetId: string, profile?: string | null): Promise<number> {

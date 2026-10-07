@@ -5,35 +5,24 @@ import {
   isAlertPresetId,
   PRESET_ALERT_DEFAULT,
 } from '../../automation/alertPresets';
-import {
-  countPhrase,
-  draftChanges,
-  draftValues,
-  serializeValue,
-} from '../../automation/automationDraft';
+import { countPhrase, draftChanges, serializeValue } from '../../automation/automationDraft';
 import { searchText } from '../../automation/automationList';
 import {
   keptKeyNote,
   keysYourMacrosKeep,
-  presetSavePlan,
   presetToggles,
-  storedPresetIds,
   type PresetToggle,
 } from '../../automation/automationRecords';
-import {
-  type Preset,
-  PRESET_CATEGORIES,
-  presetById,
-  presetMacros,
-  PRESETS,
-  presetTriggers,
-} from '../../automation/presets';
+import { runPresetPlan } from '../../automation/presetPlan';
+import { type Preset, PRESET_CATEGORIES, presetById } from '../../automation/presets';
 import { alertPresetsGet, alertPresetsSet } from '../../ipc/alerts';
-import { type AlertParts, presetsInstall, presetsRemove } from '../../ipc/automation';
-import { getUiConfig, setUiFields } from '../../ipc/uiConfig';
+import { type AlertParts, onPresetsChanged, type PresetSwitch } from '../../ipc/automation';
+import { onPresetEditsChanged } from '../../ipc/presetEdits';
+import { getUiConfig } from '../../ipc/uiConfig';
 import { listJoin } from '../../lib/text';
 import { useMacroList } from '../../stores/config/macroListStore';
 import type { SetUiConfig } from '../pageTypes';
+import { getShownProfile } from '../shownProfile';
 import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
@@ -47,17 +36,19 @@ const ALERTS_CATEGORY = 'Alerts';
 
 interface PresetsEditorProps {
   setConfig: SetUiConfig;
+  /** Loadout mode, where every profile shares one list of presets. */
+  pathB: boolean;
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
 }
 
 /** The presets, one toggle each under its category, the five alert
  *  presets under Alerts. Save first writes the parts of each alert
- *  preset you changed, then installs the triggers and macros of the
- *  presets you turned on, removes the ones you turned off, and stores
- *  the list in enabled_presets, which launch reads to put the ones that
- *  are on back and take the rest out. */
-export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProps) {
+ *  preset you changed, then turns on and off only the presets you
+ *  flipped here, over the list as the profile holds it then, through
+ *  presets_enabled_set (First Run Q17). The page follows that command
+ *  and your preset edits as the trigger list follows its store. */
+export function PresetsEditor({ setConfig, pathB, onDirty, onError }: PresetsEditorProps) {
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
       id: 'presets',
@@ -86,7 +77,9 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
       save: async (draft, _written, profile) => {
         // Rust saves each one at once. A Save that fails after them keeps
         // the draft unsaved, and the next Save sends the same parts again.
+        const switches: PresetSwitch[] = [];
         for (const { before, after } of draftChanges(draft).changed) {
+          if (before.enabled !== after.enabled) switches.push({ id: after.id, on: after.enabled });
           if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
             continue;
           }
@@ -96,20 +89,23 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
             profile,
           );
         }
-        const plan = presetSavePlan(draft);
-        for (const id of plan.remove) await presetsRemove(id, profile);
-        const on = PRESETS.filter((p) => plan.install.includes(p.id));
-        const triggers = on.flatMap((p) => presetTriggers(p));
-        const macros = on.flatMap(presetMacros);
-        if (triggers.length > 0 || macros.length > 0) {
-          await presetsInstall(triggers, macros, profile);
-        }
-        // Keep the ids no preset of this build knows, as the profile
-        // holds them now.
-        const stored = (await getUiConfig(profile)).enabled_presets;
-        const enabled_presets = storedPresetIds(draftValues(draft), stored);
-        await setUiFields({ enabled_presets }, profile);
+        if (switches.length === 0) return;
+        // The preset plan builds the presets that are on with your edits
+        // laid over them and lands the switches on the stored list, so a
+        // preset another window turned on meanwhile stays on.
+        await runPresetPlan(profile ?? null, switches);
+        const { enabled_presets } = await getUiConfig(profile);
         setConfig((prev) => (prev ? { ...prev, enabled_presets } : prev));
+      },
+      // Follow a change another window made to the profile Settings
+      // shows. In loadout mode every profile shares the list and the edits.
+      subscribe: async (onChange) => {
+        const follow = (profile: string | null) => {
+          const shown = getShownProfile();
+          if (pathB || profile === null || shown === undefined || profile === shown) onChange();
+        };
+        const stops = await Promise.all([onPresetsChanged(follow), onPresetEditsChanged(follow)]);
+        return () => stops.forEach((stop) => stop());
       },
       entry: (t) => {
         const alert = alertPresetById(t.id);
@@ -138,7 +134,7 @@ export function PresetsEditor({ setConfig, onDirty, onError }: PresetsEditorProp
           <PresetDetail {...props} />
         ),
     }),
-    [setConfig, onError],
+    [setConfig, pathB, onError],
   );
 
   return (

@@ -200,7 +200,13 @@ export function AutomationPage({
         break;
       case 'presets':
         body = config ? (
-          <PresetsEditor key="presets" setConfig={setConfig} onDirty={onDirty} onError={onError} />
+          <PresetsEditor
+            key="presets"
+            setConfig={setConfig}
+            pathB={pathB}
+            onDirty={onDirty}
+            onError={onError}
+          />
         ) : null;
         break;
       case 'loadouts':

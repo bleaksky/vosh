@@ -139,6 +139,15 @@ describe('runPresetPlan', () => {
     expect(presetsInstall).not.toHaveBeenCalled();
   });
 
+  it('rejects when the switches it was asked for do not land', async () => {
+    vi.mocked(presetsEnabledSet).mockRejectedValue(new Error('no such profile'));
+    const switches = [{ id: 'terror_events', on: true }];
+    await expect(runPresetPlan('Maren', switches)).rejects.toThrow('no such profile');
+    expect(presetEditsSet).not.toHaveBeenCalled();
+    // The next run still goes.
+    expect(await runPresetPlan('Maren')).toEqual({ told: [], removed: [] });
+  });
+
   it('saves no seen when the install fails', async () => {
     vi.mocked(presetsInstall).mockRejectedValue(new Error('no such profile'));
     vi.spyOn(console, 'error').mockImplementation(() => {});

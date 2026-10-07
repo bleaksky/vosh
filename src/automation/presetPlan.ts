@@ -32,7 +32,9 @@ let running: Promise<unknown> = Promise.resolve();
  *  session's profile when it names none, in line with its presets and
  *  your edits. `switches` turn presets on and off first, through
  *  presets_enabled_set. A run waits for the one before it, so two never
- *  interleave. A failed call is logged and the rest still run. */
+ *  interleave. A failed call is logged and the rest still run, but a run
+ *  with switches rejects when the list does not read or the switches do
+ *  not land, so the Save that asked for them can say so. */
 export function runPresetPlan(
   profile: string | null = null,
   switches: readonly PresetSwitch[] = [],
@@ -51,6 +53,7 @@ async function presetPlan(
   try {
     stored = (await getUiConfig(profile)).enabled_presets;
   } catch (e) {
+    if (switches.length > 0) throw e;
     console.error('[presets] reading the presets that are on failed:', e);
     return notice;
   }
@@ -97,6 +100,7 @@ async function presetPlan(
       await presetsInstall(triggers, macros, profile);
     }
   } catch (e) {
+    if (switches.length > 0) throw e;
     console.error('[presets] installing the presets failed:', e);
     return notice;
   }

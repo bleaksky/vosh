@@ -47,6 +47,18 @@ vi.mock('@tauri-apps/api/core', () => ({
       bus.calls.push([cmd, args]);
       return cmd === 'alerts_ask_permission' ? bus.answer : null;
     }
+    if (cmd === 'preset_edits_get') return {};
+    if (cmd === 'triggers_list') return [];
+    if (cmd === 'presets_enabled_set') {
+      bus.calls.push([cmd, args]);
+      // Land the switches on the list as it stands, as switch_presets does.
+      for (const { id, on } of (args as { changes: { id: string; on: boolean }[] }).changes) {
+        bus.enabled = on
+          ? [...bus.enabled.filter((e) => e !== id), id]
+          : bus.enabled.filter((e) => e !== id);
+      }
+      return { installed: 0, removed: [] };
+    }
     if (['alert_presets_set', 'ui_set_fields', 'presets_install', 'presets_remove'].includes(cmd)) {
       bus.calls.push([cmd, args]);
       // Keep what a set writes, so a load after Save reads it back.
@@ -310,7 +322,12 @@ async function mountEditor(
   const errors: (string | null)[] = [];
   await act(async () => {
     root.render(
-      <PresetsEditor setConfig={() => {}} onDirty={() => {}} onError={(e) => errors.push(e)} />,
+      <PresetsEditor
+        setConfig={() => {}}
+        pathB={false}
+        onDirty={() => {}}
+        onError={(e) => errors.push(e)}
+      />,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -452,7 +469,7 @@ describe('the Alerts category', () => {
     expect(editor.rows()).not.toContain('Banner shows');
   });
 
-  it('saves the parts of the preset you changed, then the list', async () => {
+  it('saves only the parts of the preset you changed', async () => {
     const editor = await mountEditor(['alert_tells'], ['alert_tells'], { alert_tells: TELLS });
     await editor.pick('Tells you get');
     expect(editor.status()).toBe('');
@@ -467,13 +484,11 @@ describe('the Alerts category', () => {
     await editor.save();
     expect(editor.errors.filter(Boolean)).toEqual([]);
     const names = bus.calls.map(([cmd]) => cmd);
-    expect(names).toEqual(['alert_presets_set', 'ui_set_fields']);
+    expect(names).toEqual(['alert_presets_set']);
     expect(bus.calls[0][1]).toEqual({
       id: 'alert_tells',
       alert: { banner: true, sound: 'chime', background: true, words: false },
     });
-    const fields = (bus.calls[1][1] as { fields: { field: string; value: string[] }[] }).fields;
-    expect(fields).toEqual([{ field: 'enabled_presets', value: ['alert_tells'] }]);
   });
 
   it('forgets the parts that match the default, and keeps alert ids out of install and remove', async () => {
@@ -495,6 +510,59 @@ describe('the Alerts category', () => {
       ([cmd]) => cmd === 'presets_install' || cmd === 'presets_remove',
     );
     expect(JSON.stringify(installs)).not.toContain('alert_');
+  });
+});
+
+const CHANGED_NOTE =
+  'Your presets changed outside Settings while you edited them. Save keeps those changes and adds yours.';
+
+// The While you edit Presets frame of First Run board 4: the card in the
+// main window turns a preset on through presets_enabled_set while the
+// page is open.
+describe('following the presets another window turns on', () => {
+  it('loads the new list at once while the page is clean', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Cures and heals');
+    expect(editor.on()).toBe(false);
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://presets-changed', { profile: null });
+    expect(editor.on()).toBe(true);
+    expect(editor.status()).toBe('');
+    expect(editor.errors.filter(Boolean)).toEqual([]);
+  });
+
+  it('keeps your switch, says the list changed, and Save adds yours to it', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Parries, dodges, and blocks');
+    await editor.toggle();
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://presets-changed', { profile: null });
+    expect(editor.errors.at(-1)).toBe(CHANGED_NOTE);
+    await editor.pick('Cures and heals');
+    expect(editor.on()).toBe(false);
+
+    await editor.save();
+    const sent = bus.calls.filter(([cmd]) => cmd !== 'presets_remove');
+    expect(sent.map(([cmd]) => cmd)).toEqual(['presets_enabled_set']);
+    const { changes, triggers } = sent[0][1] as {
+      changes: unknown[];
+      triggers: { preset: string }[];
+    };
+    expect(changes).toEqual([{ id: 'defensive_combat', on: true }]);
+    expect(new Set(triggers.map((t) => t.preset))).toEqual(
+      new Set(['healing_basics', 'defensive_combat']),
+    );
+    expect(bus.enabled).toEqual(['healing_basics', 'defensive_combat']);
+    expect(editor.on()).toBe(true);
+    expect(editor.status()).not.toBe('Unsaved changes');
+  });
+
+  it('follows your preset edits too', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Cures and heals');
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://preset-edits-changed', { profile: null });
+    expect(editor.on()).toBe(true);
   });
 });
 
