@@ -346,8 +346,17 @@ describe('vitals density', () => {
 });
 
 describe('vitals style', () => {
-  it('lists the six styles in the order of the gallery', () => {
-    expect(VITALS_STYLES).toEqual(['rows', 'line', 'ledger', 'gauges', 'pips', 'text']);
+  it('lists the styles in the order of the gallery', () => {
+    expect(VITALS_STYLES).toEqual([
+      'rows',
+      'line',
+      'ledger',
+      'gauges',
+      'pips',
+      'bands',
+      'ladders',
+      'text',
+    ]);
   });
 
   it('shows your density until you pick a style, then the style', () => {
