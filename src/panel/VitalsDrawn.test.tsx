@@ -6,6 +6,7 @@ import type { Vitals } from '../stores/gmcp/vitalsStore';
 import { PaneTextSizeContext } from './paneTextSize';
 import { VitalsBlock, type VitalsBlockProps } from './VitalsFooter';
 import { bandsHeight } from './vitalsDrawnFit';
+import { marksHeight } from './vitalsMarksFit';
 import type { VitalsFit } from './vitalsFit';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -115,5 +116,55 @@ describe('Bands', () => {
     const html = draw(BANDS, {}, { vitals: null, combat: null });
     expect(html).toContain('Vitals appear when you log in.');
     expect(html).toContain(`--vitals-min-height:${bandsHeight(12, 3)}px`);
+  });
+});
+
+describe('Ladders', () => {
+  const BESIDE: VitalsFit = { style: 'ladders', fit: 'beside' };
+  const UNDER: VitalsFit = { style: 'ladders', fit: 'under' };
+
+  /** The lit and unlit segments of each ladder, in order. */
+  const ladders = (html: string) =>
+    all(html, /<span class="vitals-ladder">(.*?)<\/span>/g).map((segs) => [
+      (segs.match(/is-lit/g) ?? []).length,
+      (segs.match(/<i /g) ?? []).length,
+    ]);
+
+  it('lights each vital its share of 24 segments, and your opponent of 48', () => {
+    const html = draw(BESIDE);
+    expect(ladders(html)).toEqual([
+      [26, 48],
+      [17, 24],
+      [16, 24],
+      [19, 24],
+    ]);
+    expect(html).toContain('vitals-marks is-ladders"');
+    expect(all(html, /vitals-mark-label">([^<]+)/g)).toEqual([
+      'a Blackwatch guard',
+      'Health',
+      'Mana',
+      'Moves',
+    ]);
+  });
+
+  it('drops each ladder under its label and value at 200 pt', () => {
+    const html = draw(UNDER);
+    expect(html).toContain('panel-vitals panel-vitals-marks is-under');
+    expect(html).toContain('vitals-marks is-ladders is-under');
+  });
+
+  it('lights none for a value the game hides', () => {
+    const html = draw(BESIDE, {}, { vitals: { ...HIT, hidden: true } });
+    expect(ladders(html).slice(1)).toEqual([
+      [0, 24],
+      [0, 24],
+      [0, 24],
+    ]);
+  });
+
+  it('holds the height of your vitals while it waits for them', () => {
+    const html = draw(BESIDE, {}, { vitals: null, combat: null });
+    expect(html).toContain('Vitals appear when you log in.');
+    expect(html).toContain(`--vitals-min-height:${marksHeight(12, 3)}px`);
   });
 });

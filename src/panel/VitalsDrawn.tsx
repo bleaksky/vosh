@@ -4,6 +4,8 @@ import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { MarkValue } from './VitalsMarks';
 import {
   opponentHealth,
+  toneProps,
+  VITAL_LABELS,
   widestOpponentHealth,
   type OpponentHealth,
   type ShownVital,
@@ -86,6 +88,37 @@ export function DrawnVitals({
       {waiting && <p className="panel-vitals-empty">Vitals appear when you log in.</p>}
       {children}
       {place === 'bottom' && foe}
+    </div>
+  );
+}
+
+/** The row styles' grid: each vital's label, its mark and its value,
+ *  or the mark under the label and value. */
+export function MarkRows({
+  kind,
+  under,
+  rows,
+  inks,
+  mark,
+}: {
+  kind: string;
+  under: boolean;
+  rows: readonly ShownVital[];
+  inks: VitalInks;
+  mark: (row: ShownVital) => ReactNode;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className={`vitals-marks is-${kind}${under ? ' is-under' : ''}`}>
+      {rows.map((row) => (
+        <div key={row.key} {...toneProps(row.tone, inks[row.key], 'vitals-mark-row')}>
+          <span className="vitals-mark-label">{VITAL_LABELS[row.key]}</span>
+          <span className="vitals-mark" aria-hidden="true">
+            {mark(row)}
+          </span>
+          <MarkValue value={row.value} widest={row.widest} />
+        </div>
+      ))}
     </div>
   );
 }

@@ -137,7 +137,16 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
 
 /** The styles of the gallery, in its order. Rows and One line are the
  *  two densities, and vitals_style holds the others. */
-export const VITALS_STYLES = ['rows', 'line', 'ledger', 'gauges', 'pips', 'bands', 'text'] as const;
+export const VITALS_STYLES = [
+  'rows',
+  'line',
+  'ledger',
+  'gauges',
+  'pips',
+  'bands',
+  'ladders',
+  'text',
+] as const;
 
 export type VitalsStyle = (typeof VITALS_STYLES)[number];
 
@@ -146,7 +155,7 @@ export type VitalsStyle = (typeof VITALS_STYLES)[number];
  *  build reads a name it does not know as none and draws your density
  *  (More Vitals Styles Q30). Mirrors VITALS_STYLES in
  *  src-tauri/src/profile/ui.rs. */
-const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'bands', 'text'] as const;
+const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'bands', 'ladders', 'text'] as const;
 
 export type SavedVitalsStyle = (typeof SAVED_VITALS_STYLES)[number];
 

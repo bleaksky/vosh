@@ -65,6 +65,8 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   pips: 'Pips. Ten discs beside each value light up a tenth at a time, the way the moons light up the status line.',
   bands:
     'Bands. Each vital fills a bar over quiet bands that mark low and worn, with a tick where a fight began.',
+  ladders:
+    'Ladders. Each vital lights a row of segments, and a hit leaves its last peak lit for a moment.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 

@@ -33,11 +33,10 @@ import { ledgerHeight, type MeasureText } from './vitalsLedgerFit';
 import { VitalsLedger } from './VitalsLedger';
 import { VitalsGauges } from './VitalsGauges';
 import { VitalsPips } from './VitalsPips';
-import { VitalsBands } from './VitalsBands';
-import { bandsHeight } from './vitalsDrawnFit';
+import { DrawnSection } from './VitalsDrawnSection';
 import { marksHeight } from './vitalsMarksFit';
 import { VitalsText, type TextColors } from './VitalsText';
-import { vitalsFitOf, type VitalsFit } from './vitalsFit';
+import { isDrawnFit, vitalsFitOf, type VitalsFit } from './vitalsFit';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -86,7 +85,8 @@ import { vitalsFitOf, type VitalsFit } from './vitalsFit';
 // Gauges and Pips draw a pill or discs between each label and value
 // (VitalsGauges.tsx, VitalsPips.tsx), their own marks, so Meter goes
 // quiet for them. So do the styles of the More Vitals Styles review,
-// Bands (VitalsBands.tsx), which stands a tick where a fight began.
+// Bands (VitalsBands.tsx), which stands a tick where a fight began, and
+// Ladders (VitalsLadders.tsx), which lights segments as a meter does.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
  *  prompt hides your vitals. `textColors` are the terminal settings the
@@ -235,23 +235,21 @@ export function VitalsBlock({
       </section>
     );
   }
-  if (fit.style === 'bands') {
+  if (isDrawnFit(fit)) {
     return (
-      <section
-        ref={sectionRef}
-        className="panel-vitals panel-vitals-marks"
-        style={waitingStyle(waiting ? bandsHeight(size, mine) : 0)}
-        aria-label={label}
-      >
-        <VitalsBands
-          rows={rows}
-          waiting={waiting}
-          combat={foe}
-          place={options.opponent}
-          inks={inks}
-          fight={fight}
-        />
-      </section>
+      <DrawnSection
+        fit={fit}
+        sectionRef={sectionRef}
+        label={label}
+        size={size}
+        mine={mine}
+        rows={rows}
+        waiting={waiting}
+        combat={foe}
+        place={options.opponent}
+        inks={inks}
+        fight={fight}
+      />
     );
   }
   const line = mine > 0 && fit.style === 'line' && fit.fit !== 'rows';

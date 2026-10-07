@@ -3,6 +3,7 @@ import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 import { ledgerFigure, ledgerFit, type LedgerFit, type MeasureText } from './vitalsLedgerFit';
 import { gaugesFit, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
+import { rowMarkFit, type RowMarkFit } from './vitalsDrawnFit';
 import { opponentHealth, widestOpponentHealth, VITAL_LABELS, type ShownVital } from './vitalsView';
 
 // How each drawn style fits a footer's width, for the footer under the
@@ -15,7 +16,18 @@ export type VitalsFit =
   | { style: 'ledger'; fit: LedgerFit }
   | { style: 'gauges'; fit: GaugesFit }
   | { style: 'pips'; fit: PipsFit }
-  | { style: 'bands' };
+  | { style: 'bands' }
+  | { style: 'ladders'; fit: RowMarkFit };
+
+/** The styles of the More Vitals Styles review, which DrawnSection
+ *  draws. */
+export type DrawnFit = Extract<VitalsFit, { style: 'bands' | 'ladders' }>;
+
+const DRAWN: readonly string[] = ['bands', 'ladders'] satisfies DrawnFit['style'][];
+
+export function isDrawnFit(fit: VitalsFit): fit is DrawnFit {
+  return DRAWN.includes(fit.style);
+}
 
 /** How `style` fits a footer `width` px wide at panel size `size`.
  *  The gallery in Settings fits its tiles with it too. */
@@ -46,6 +58,19 @@ export function vitalsFitOf(
     return style === 'gauges'
       ? { style, fit: gaugesFit(width, size, labels, values, measure) }
       : { style, fit: pipsFit(width, size, labels, values, measure) };
+  }
+  if (style === 'ladders') {
+    const labels = rows.map((row) => VITAL_LABELS[row.key]);
+    return {
+      style,
+      fit: rowMarkFit(
+        width,
+        size,
+        labels,
+        rows.map((row) => row.widest),
+        measure,
+      ),
+    };
   }
   return { style };
 }

@@ -1167,6 +1167,45 @@
   margin-left: -2px;
 }
 
+/* The row styles: each vital's label, its mark and its value on a pane
+   row, the Gauges grid, the marks starting together after the longest
+   label and ending together before the widest value. Under them each
+   mark sits under its label and value. */
+.vitals-marks.is-ladders {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 10px;
+}
+
+.vitals-mark {
+  display: block;
+  min-width: 0;
+}
+
+.vitals-marks.is-under .vitals-mark {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 4px;
+}
+
+/* Ladders. 24 segments 8 px tall with 1 px gaps, lit in the vital's
+   tone and unlit at a fifth of it, as a level meter lights. */
+.vitals-ladder {
+  display: flex;
+  gap: 1px;
+  height: 8px;
+}
+
+.vitals-ladder-seg {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px;
+  background: var(--vital-soft);
+}
+
+.vitals-ladder-seg.is-lit {
+  background: var(--vital-mark);
+}
+
 /* Text. Your vitals text in the game face at your panel size, on the
    footer's 18 and 12 px sides and chat's line, each cell in the color
    VitalsText.tsx gives it. A row with %{right} sets its right part at
