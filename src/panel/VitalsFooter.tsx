@@ -8,20 +8,18 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
-import type { VitalsOptions, VitalsValues } from '../ipc/uiConfig';
+import type { VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
   opponentHealth,
   shownRows,
-  widestOpponentHealth,
   vitalsFooterHeight,
   vitalsOn,
   vitalsGeometry,
   vitalInks,
   VITAL_LABELS,
-  type ShownVital,
   type VitalInks,
   type VitalsGeometry,
   type VitalTone,
@@ -31,19 +29,13 @@ import { themeTokens } from '../theme/themes';
 import { useActiveTheme } from '../theme/useActiveTheme';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
 import { textPx, usePaneText } from './paneTextSize';
-import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
-import {
-  ledgerFigure,
-  ledgerFit,
-  ledgerHeight,
-  type LedgerFit,
-  type MeasureText,
-} from './vitalsLedgerFit';
+import { ledgerHeight, type MeasureText } from './vitalsLedgerFit';
 import { VitalsLedger } from './VitalsLedger';
 import { VitalsGauges } from './VitalsGauges';
 import { VitalsPips } from './VitalsPips';
-import { gaugesFit, marksHeight, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksFit';
+import { marksHeight } from './vitalsMarksFit';
 import { VitalsText, type TextColors } from './VitalsText';
+import { vitalsFitOf, type VitalsFit } from './vitalsFit';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -137,7 +129,7 @@ export function VitalsFooter({
       : shownRows(vitals, vitalsOn(options.order, options.off), options);
   // Gauges and Pips measure your opponent's health with your values.
   const foe = combat && !options.off.includes('opponent') ? combat : null;
-  const fit = fitOf(style, width, size, rows, foe, options.values, measure);
+  const fit = vitalsFitOf(style, width, size, rows, foe, options.values, measure);
 
   return (
     <VitalsBlock
@@ -152,48 +144,8 @@ export function VitalsFooter({
   );
 }
 
-/** The style the footer draws, with how it fits the panel's width. */
-export type VitalsFit =
-  | { style: 'rows' }
-  | { style: 'line'; fit: VitalsLineFit }
-  | { style: 'ledger'; fit: LedgerFit }
-  | { style: 'gauges'; fit: GaugesFit }
-  | { style: 'pips'; fit: PipsFit };
-
 /** The terminal's colors as they start, for a footer handed none. */
 const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: false };
-
-/** How `style` fits a footer `width` px wide at panel size `size`. */
-function fitOf(
-  style: VitalsFit['style'],
-  width: number,
-  size: number,
-  rows: readonly ShownVital[],
-  combat: CombatOpponent | null,
-  values: VitalsValues,
-  measure: MeasureText,
-): VitalsFit {
-  if (style === 'line') {
-    const items = rows.map((row) => ({
-      label: measure(VITAL_LABELS[row.key], size, 400),
-      value: measure(row.widest, size, 500),
-    }));
-    return { style, fit: rows.length === 0 ? 'rows' : vitalsLineFit(width, items) };
-  }
-  if (style === 'ledger') {
-    const widest = rows.map((row) => ledgerFigure(values, row.max, row.max, row.tone === 'hidden'));
-    return { style, fit: ledgerFit(width, size, widest, measure) };
-  }
-  if (style === 'gauges' || style === 'pips') {
-    const labels = rows.map((row) => VITAL_LABELS[row.key]);
-    const values = rows.map((row) => row.widest);
-    if (combat) values.push(widestOpponentHealth(opponentHealth(combat)));
-    return style === 'gauges'
-      ? { style, fit: gaugesFit(width, size, labels, values, measure) }
-      : { style, fit: pipsFit(width, size, labels, values, measure) };
-  }
-  return { style };
-}
 
 export interface VitalsBlockProps {
   vitals: Vitals | null;

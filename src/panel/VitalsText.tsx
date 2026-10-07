@@ -8,7 +8,7 @@ import type { Cell } from '../terminal/sgrCells';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { readPanelGameFace, usePanelFaceVersion } from './panelFace';
 import { usePaneText } from './paneTextSize';
-import { vitalsTextLines, type TextLine } from './vitalsTextFit';
+import { textCols, vitalsTextLines, type TextLine } from './vitalsTextFit';
 
 // The Text style (Vitals Styles Q7 to Q9): your vitals text, which the
 // session renders with your prompt's codes and pushes while this footer
@@ -20,9 +20,6 @@ import { vitalsTextLines, type TextLine } from './vitalsTextFit';
 // ends in an ellipsis (vitalsTextFit.ts). Under Hide vitals while your
 // prompt is pinned only the rows that read your fight stay, and the
 // footer goes when none are left.
-
-/** The footer's sides, 18 px at the left and 12 at the right. */
-const SIDES_PX = 30;
 
 /** The terminal settings your text draws its colors with. */
 export interface TextColors {
@@ -47,13 +44,12 @@ export function VitalsText({
   const text = useVitalsText();
   const { size } = usePaneText();
   const faceVersion = usePanelFaceVersion();
-  const cell = useMemo(
-    () => cellWidth(readPanelGameFace(), size),
+  const cols = useMemo(
+    () => textCols(width, readPanelGameFace(), size),
     // faceVersion marks a face that loaded or changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [size, faceVersion],
+    [width, size, faceVersion],
   );
-  const cols = Math.max(1, Math.floor((width - SIDES_PX) / cell));
   // Watch while this footer draws the Text style. A new width or
   // session watches again, and a new style or place, which unmounts
   // this, stops it.
@@ -134,19 +130,4 @@ export function TextRuns({ cells, env }: { cells: Cell[]; env: BandEnv }) {
       </span>
     );
   });
-}
-
-let measureCanvas: HTMLCanvasElement | null = null;
-
-/** One cell of `face` at `size` px, or 0.6 of the size where nothing
- *  can measure. */
-function cellWidth(face: string, size: number): number {
-  const guess = size * 0.6;
-  if (typeof document === 'undefined') return guess;
-  measureCanvas ??= document.createElement('canvas');
-  const ctx = measureCanvas.getContext?.('2d');
-  if (!ctx) return guess;
-  ctx.font = `${size}px ${face}`;
-  const width = ctx.measureText('0000000000').width / 10;
-  return width > 0 ? width : guess;
 }

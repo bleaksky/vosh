@@ -6,6 +6,7 @@ import type {
   VitalsColors,
   VitalsMeter,
   VitalsOptions,
+  VitalsStyle,
   VitalsValues,
 } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
@@ -130,6 +131,16 @@ export function shownVitals(vitals: Vitals, on: readonly Vital[]): Vital[] {
 
 /** Each vital's name in the footer. */
 export const VITAL_LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
+
+/** Each style's name, as the gallery and the vitals menu write it. */
+export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
+  rows: 'Rows',
+  line: 'One line',
+  ledger: 'Ledger',
+  gauges: 'Gauges',
+  pips: 'Pips',
+  text: 'Text',
+};
 
 /** One vital as every footer style draws it. */
 export interface ShownVital {

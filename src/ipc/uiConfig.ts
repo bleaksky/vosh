@@ -462,6 +462,10 @@ export interface UiConfig {
   /** At most two earlier texts, newest first. Saving vitals_text puts
    *  the one it replaces here. */
   vitals_text_previous: string[];
+  /** The style your 0.7 vitals grew into, which the gallery marks
+   *  Yours in 0.7, or null when they give no clue. Read only, nothing
+   *  saves it. */
+  vitals_legacy_style: VitalsStyle | null;
   /** How the status line draws the tick, the game time, and the moons.
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
@@ -580,6 +584,7 @@ export interface RawUiConfig {
   vitals_colors?: unknown;
   vitals_text?: string;
   vitals_text_previous?: unknown;
+  vitals_legacy_style?: string | null;
   chip_style?: string;
   tick_count?: string;
   game_time?: string;
@@ -696,6 +701,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_colors: normalizeVitalsColors(cfg.vitals_colors),
     vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
     vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
+    vitals_legacy_style: VITALS_STYLES.find((style) => style === cfg.vitals_legacy_style) ?? null,
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
@@ -741,8 +747,8 @@ export async function setUiTheme(
 }
 
 /** The fields setUiFields can save. The tracked affects save through
- *  trackedAffectsSet. */
-export type UiFields = Partial<Omit<UiConfig, 'tracked_affects'>>;
+ *  trackedAffectsSet, and the 0.7 style is read only. */
+export type UiFields = Partial<Omit<UiConfig, 'tracked_affects' | 'vitals_legacy_style'>>;
 
 /** Save only the fields `fields` names, so two windows that each change
  *  a field keep both changes. It writes the profile `profile` names while

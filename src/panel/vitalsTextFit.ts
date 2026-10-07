@@ -133,3 +133,27 @@ function trimSpaces(cells: Cell[]): Cell[] {
   while (end > start && cells[end - 1].ch === ' ') end -= 1;
   return cells.slice(start, end);
 }
+
+/** The footer's sides, 18 px at the left and 12 at the right. */
+const SIDES_PX = 30;
+
+/** The cells of `face` at `size` px a footer `width` px wide holds
+ *  inside its sides. */
+export function textCols(width: number, face: string, size: number): number {
+  return Math.max(1, Math.floor((width - SIDES_PX) / cellWidth(face, size)));
+}
+
+let measureCanvas: HTMLCanvasElement | null = null;
+
+/** One cell of `face` at `size` px, or 0.6 of the size where nothing
+ *  can measure. */
+function cellWidth(face: string, size: number): number {
+  const guess = size * 0.6;
+  if (typeof document === 'undefined') return guess;
+  measureCanvas ??= document.createElement('canvas');
+  const ctx = measureCanvas.getContext?.('2d');
+  if (!ctx) return guess;
+  ctx.font = `${size}px ${face}`;
+  const width = ctx.measureText('0000000000').width / 10;
+  return width > 0 ? width : guess;
+}

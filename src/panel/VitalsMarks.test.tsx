@@ -4,7 +4,8 @@ import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import { PaneTextSizeContext } from './paneTextSize';
-import { VitalsBlock, type VitalsFit } from './VitalsFooter';
+import { VitalsBlock } from './VitalsFooter';
+import type { VitalsFit } from './vitalsFit';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

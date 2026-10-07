@@ -237,10 +237,24 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'panel', 'panes'),
   },
   {
-    label: 'Density',
-    description: 'One line fits Health, Mana, and Moves on a single row.',
-    keywords: 'vitals rows one line compact health mana moves',
-    target: at('layout', 'vitals', 'density'),
+    label: 'Style',
+    description: 'Each tile draws your vitals in one style. Pick the one your panel shows.',
+    keywords:
+      'vitals style gallery rows one line ledger gauges pips text look density compact health mana moves',
+    target: at('layout', 'vitals', 'style'),
+  },
+  {
+    label: 'Show your vitals in',
+    description: 'Status line moves them under the terminal, and the panes take the room.',
+    keywords: 'vitals place panel status line footer where health mana moves',
+    target: at('layout', 'vitals', 'place'),
+  },
+  {
+    label: 'Hide vitals while your prompt is pinned',
+    description:
+      'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
+    keywords: 'vitals hide pinned prompt band panel footer health mana moves',
+    target: at('layout', 'vitals', 'hide-pinned'),
   },
   {
     label: 'Values',
@@ -262,13 +276,6 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       "Vitals turn yellow under two thirds and red under one third, like your group's health.",
     keywords: 'vitals low warning danger thirds yellow red color health mana moves',
     target: at('layout', 'vitals', 'warn-low'),
-  },
-  {
-    label: 'Hide vitals while your prompt is pinned',
-    description:
-      'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
-    keywords: 'vitals hide pinned prompt band panel footer health mana moves',
-    target: at('layout', 'vitals', 'hide-pinned'),
   },
   {
     label: 'Divider color',

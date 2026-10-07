@@ -11,6 +11,11 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
+// The gallery reads the window's stores and has tests of its own
+// (VitalsGallery.test.tsx). Here it stands in as its anchor.
+vi.mock('./VitalsGallery', () => ({
+  VitalsGallery: () => <fieldset data-st-anchor="style" />,
+}));
 
 const config = (patch: Partial<UiConfig> = {}): UiConfig => ({
   ...normalizeUiConfig({
@@ -37,16 +42,21 @@ const switches = (html: string) =>
   [...html.matchAll(/<input[^>]*role="switch"[^>]*>/g)].map((m) => m[0].includes('checked=""'));
 
 describe('VitalsSection', () => {
-  it('draws Density, Values, Meter, the warning, and the pinned switch in the board order', () => {
+  it('draws the gallery, then Show your vitals in, the pinned switch, Values, Meter and the warning', () => {
     const html = draw();
+    expect(html.indexOf('data-st-anchor="style"')).toBeLessThan(html.indexOf('st-row-label'));
     const labels = [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
     expect(labels).toEqual([
-      'Density',
+      'Show your vitals in',
+      'Hide vitals while your prompt is pinned',
       'Values',
       'Meter',
       'Warn before you run low',
-      'Hide vitals while your prompt is pinned',
     ]);
+    expect(html).not.toContain('Density');
+    expect(html).toContain(
+      'Status line moves them under the terminal in the line&#x27;s quiet form, and the panes take the footer&#x27;s room.',
+    );
     expect(html).toContain(
       'While your prompt is pinned, the panes take their room, and your opponent keeps its row in a fight. Turn it off if your prompt leaves your vitals out.',
     );
@@ -57,34 +67,44 @@ describe('VitalsSection', () => {
     );
   });
 
+  it('says under Text that only the rows reading your fight stay while your prompt is pinned', () => {
+    const html = draw({ vitals_style: 'text' });
+    expect(html).toContain(
+      'While your prompt is pinned, only the rows of your text that read your fight stay, and the panes take the rest. Turn it off if your prompt leaves your vitals out.',
+    );
+  });
+
   it('presses the defaults, the panel you had before these rows', () => {
     const html = draw();
-    expect(pressed(html)).toEqual(['Rows', 'Current and max', 'Line']);
-    // The warning starts off. Hiding the vitals under a pinned prompt
-    // starts on, as the recommended choice you can turn off.
-    expect(switches(html)).toEqual([false, true]);
+    expect(pressed(html)).toEqual(['Panel', 'Current and max', 'Line']);
+    // Hiding the vitals under a pinned prompt starts on, as the
+    // recommended choice you can turn off. The warning starts off.
+    expect(switches(html)).toEqual([true, false]);
   });
 
   it('shows the saved choices', () => {
     const html = draw({
-      vitals_density: 'line',
+      vitals_place: 'status',
       vitals_values: 'percent',
       vitals_meter: 'none',
       vitals_warn_thirds: true,
       vitals_hide_when_pinned: false,
     });
-    expect(pressed(html)).toEqual(['One line', 'Percent', 'None']);
-    expect(switches(html)).toEqual([true, false]);
+    expect(pressed(html)).toEqual(['Status line', 'Percent', 'None']);
+    expect(switches(html)).toEqual([false, true]);
   });
 
-  it('saves the pinned switch alone when you flip it', () => {
+  it('saves the place and the pinned switch alone', () => {
     const update = vi.fn();
     const element = VitalsSection({ config: config(), update });
-    // The fifth row holds the switch. Its handler takes the new state.
+    // The gallery comes first, then Show your vitals in and the switch.
     const rows = (element.props as { children: { props: { children: unknown } }[] }).children;
-    const toggle = rows[4].props.children as { props: { onChange: (on: boolean) => void } };
+    const place = rows[1].props.children as { props: { onChange: (place: string) => void } };
+    place.props.onChange('status');
+    expect(update).toHaveBeenLastCalledWith({ vitals_place: 'status' });
+    const toggle = rows[2].props.children as { props: { onChange: (on: boolean) => void } };
     toggle.props.onChange(false);
-    expect(update).toHaveBeenCalledWith({ vitals_hide_when_pinned: false });
+    expect(update).toHaveBeenLastCalledWith({ vitals_hide_when_pinned: false });
   });
 
   it('renders every search anchor Layout, Vitals lists', () => {
@@ -92,7 +112,7 @@ describe('VitalsSection', () => {
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'vitals',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['density', 'values', 'meter', 'warn-low', 'hide-pinned']);
+    expect(anchors).toEqual(['style', 'place', 'hide-pinned', 'values', 'meter', 'warn-low']);
     for (const anchor of anchors) {
       expect(html).toContain(`data-st-anchor="${anchor}"`);
     }
