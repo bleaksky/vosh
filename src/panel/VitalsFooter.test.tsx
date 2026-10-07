@@ -6,7 +6,7 @@ import type { Vitals } from '../stores/gmcp/vitalsStore';
 import panelCss from '../styles/panel.css?raw';
 import { PaneTextSizeContext } from './paneTextSize';
 import type { VitalsLineFit } from './vitalsLine';
-import { VitalsBlock } from './VitalsFooter';
+import { VitalsBlock, type VitalsFit } from './VitalsFooter';
 
 // The stores behind VitalsFooter reach the Tauri bridge. VitalsBlock,
 // under test, draws from plain values and never calls it.
@@ -36,6 +36,11 @@ const GUARD: CombatOpponent = {
   tank: null,
 };
 
+/** The footer's fit for a density and a One line fit. */
+function styleFit(density: VitalsDensity, fit: VitalsLineFit): VitalsFit {
+  return density === 'line' ? { style: 'line', fit } : { style: 'rows' };
+}
+
 function draw(
   options: Partial<VitalsOptions> = {},
   {
@@ -54,8 +59,7 @@ function draw(
     <VitalsBlock
       vitals={vitals}
       combat={combat}
-      density={density}
-      fit={fit}
+      fit={styleFit(density, fit)}
       options={{ ...DEFAULT_VITALS_OPTIONS, ...options }}
     />,
   );
@@ -112,8 +116,7 @@ describe('VitalsBlock', () => {
         <VitalsBlock
           vitals={FIGHT}
           combat={combat}
-          density="rows"
-          fit="rows"
+          fit={{ style: 'rows' }}
           options={DEFAULT_VITALS_OPTIONS}
           opponentOnly
         />,
@@ -343,8 +346,7 @@ describe('VitalsBlock', () => {
       <VitalsBlock
         vitals={FIGHT}
         combat={GUARD}
-        density="rows"
-        fit="rows"
+        fit={{ style: 'rows' }}
         options={{ ...DEFAULT_VITALS_OPTIONS, off: ['opponent'] }}
         opponentOnly
       />,
@@ -373,8 +375,7 @@ describe('VitalsBlock', () => {
         <VitalsBlock
           vitals={FIGHT}
           combat={GUARD}
-          density={density}
-          fit={fit}
+          fit={styleFit(density, fit)}
           options={DEFAULT_VITALS_OPTIONS}
           inks={{ mana: '#8cc2d8' }}
         />,
@@ -408,8 +409,7 @@ describe('VitalsBlock', () => {
           <VitalsBlock
             vitals={FIGHT}
             combat={null}
-            density="rows"
-            fit="rows"
+            fit={{ style: 'rows' }}
             options={{ ...DEFAULT_VITALS_OPTIONS, meter }}
           />
         </PaneTextSizeContext.Provider>,

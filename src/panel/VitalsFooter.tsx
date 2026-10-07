@@ -8,23 +8,19 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, usePanelFaceVersion } from './panelFace';
-import type { Vital, VitalsDensity, VitalsOptions } from '../ipc/uiConfig';
+import type { VitalsOptions, VitalsStyle, VitalsValues } from '../ipc/uiConfig';
 import { useCombat, type CombatOpponent } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
 import {
-  formatVital,
-  hiddenVital,
-  maxOf,
-  meterFill,
   opponentHealth,
-  shownVitals,
+  shownRows,
   vitalsFooterHeight,
   vitalsOn,
   vitalsGeometry,
   vitalInks,
-  vitalTone,
-  widestVital,
+  VITAL_LABELS,
+  type ShownVital,
   type VitalInks,
   type VitalsGeometry,
   type VitalTone,
@@ -35,6 +31,14 @@ import { useActiveTheme } from '../theme/useActiveTheme';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
 import { textPx, usePaneText } from './paneTextSize';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
+import {
+  ledgerFigure,
+  ledgerFit,
+  ledgerHeight,
+  type LedgerFit,
+  type MeasureText,
+} from './vitalsLedgerFit';
+import { VitalsLedger } from './VitalsLedger';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -76,7 +80,8 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // It colors the vital's label and its meter, never the number, and low
 // and warn still turn the meter and the value.
 
-const LABELS: Record<Vital, string> = { hp: 'Health', mana: 'Mana', move: 'Moves' };
+// Ledger draws columns of figures under the pane label caps
+// (VitalsLedger.tsx). Meter sets the line under each column there.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned
  *  prompt hides your vitals. */
@@ -90,10 +95,9 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
     () => vitalInks(options.colors, palette, themeTokens(theme)),
     [options.colors, palette, theme],
   );
-  // The footer draws One line, and Rows for every other style.
-  const density: VitalsDensity = options.style === 'line' ? 'line' : 'rows';
+  const style = drawnStyle(options.style);
   const sectionRef = useRef<HTMLElement | null>(null);
-  const width = useFooterWidth(sectionRef, density === 'line');
+  const width = useFooterWidth(sectionRef, style !== 'rows');
   const { size } = usePaneText();
   // The vitals draw in the panel face at your panel size, so they
   // measure in it, again each time it changes or a face loads.
@@ -101,30 +105,24 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
   // Fit by each vital at its max, the widest its value reads, so the
-  // line does not jump between forms as a value loses a digit in a
+  // footer does not jump between forms as a value loses a digit in a
   // fight. Only a new max, a new Values form, a new panel width, or a
   // new face moves it.
-  const fit =
-    density === 'line' && vitals !== null
-      ? vitalsLineFit(
-          width,
-          shownVitals(vitals, vitalsOn(options.order, options.off)).map((vital) => ({
-            label: textWidth(LABELS[vital], `400 ${size}px ${face}`, faceVersion),
-            value: textWidth(
-              widestVital(options.values, vitals[maxOf(vital)], vitals.hidden),
-              `500 ${size}px ${face}`,
-              faceVersion,
-            ),
-          })),
-        )
-      : 'rows';
+  const measure: MeasureText = (text, px, weight) =>
+    textWidth(text, `${weight} ${px}px ${face}`, faceVersion);
+  // Only the vitals the footer draws, none while it keeps the opponent
+  // alone.
+  const rows =
+    vitals === null || opponentOnly
+      ? []
+      : shownRows(vitals, vitalsOn(options.order, options.off), options);
+  const fit = fitOf(style, width, size, rows, options.values, measure);
 
   return (
     <VitalsBlock
       sectionRef={sectionRef}
       vitals={vitals}
       combat={combat}
-      density={density}
       fit={fit}
       options={options}
       inks={inks}
@@ -133,12 +131,47 @@ export function VitalsFooter({ opponentOnly = false }: { opponentOnly?: boolean 
   );
 }
 
+/** The style the footer draws, with how it fits the panel's width. */
+export type VitalsFit =
+  | { style: 'rows' }
+  | { style: 'line'; fit: VitalsLineFit }
+  | { style: 'ledger'; fit: LedgerFit };
+
+/** The footer styles drawn so far. Every other style draws Rows. */
+type DrawnStyle = VitalsFit['style'];
+
+function drawnStyle(style: VitalsStyle): DrawnStyle {
+  return style === 'line' || style === 'ledger' ? style : 'rows';
+}
+
+/** How `style` fits a footer `width` px wide at panel size `size`. */
+function fitOf(
+  style: DrawnStyle,
+  width: number,
+  size: number,
+  rows: readonly ShownVital[],
+  values: VitalsValues,
+  measure: MeasureText,
+): VitalsFit {
+  if (style === 'line') {
+    const items = rows.map((row) => ({
+      label: measure(VITAL_LABELS[row.key], size, 400),
+      value: measure(row.widest, size, 500),
+    }));
+    return { style, fit: rows.length === 0 ? 'rows' : vitalsLineFit(width, items) };
+  }
+  if (style === 'ledger') {
+    const widest = rows.map((row) => ledgerFigure(values, row.max, row.max, row.tone === 'hidden'));
+    return { style, fit: ledgerFit(width, size, widest, measure) };
+  }
+  return { style };
+}
+
 export interface VitalsBlockProps {
   vitals: Vitals | null;
   combat: CombatOpponent | null;
-  density: VitalsDensity;
-  /** How One line fits the panel. Rows ignores it. */
-  fit: VitalsLineFit;
+  /** The style the footer draws and how it fits the panel. */
+  fit: VitalsFit;
   options: VitalsOptions;
   /** The color of each vital you gave one, lifted (vitalInks). */
   inks?: VitalInks;
@@ -153,7 +186,6 @@ export interface VitalsBlockProps {
 export function VitalsBlock({
   vitals,
   combat,
-  density,
   fit,
   options,
   inks = {},
@@ -163,35 +195,41 @@ export function VitalsBlock({
   const { size } = usePaneText();
   const on = opponentOnly ? [] : vitalsOn(options.order, options.off);
   const foe = options.off.includes('opponent') ? null : combat;
-  const rows =
-    vitals === null
-      ? []
-      : shownVitals(vitals, on).map((key) => {
-          const max = vitals[maxOf(key)];
-          return vitals.hidden
-            ? {
-                key,
-                value: hiddenVital(options.values),
-                pct: null,
-                tone: 'hidden' as const,
-              }
-            : {
-                key,
-                value: formatVital(options.values, vitals[key], max),
-                pct: meterFill(vitals[key], max),
-                tone: vitalTone(vitals[key], max, vitals.low[key], options.warn_thirds),
-              };
-        });
+  const rows = vitals === null ? [] : shownRows(vitals, on, options);
   // With no vital to draw, out of a fight, the panes take the room.
   const mine = vitals === null ? on.length : rows.length;
   if (mine === 0 && !foe) return null;
-  const line = mine > 0 && density === 'line' && fit !== 'rows';
   const geometry = geometryAt(vitalsGeometry(options.meter), size);
+  const label = mine === 0 ? 'Opponent' : 'Vitals';
+  const waiting = vitals === null && mine > 0;
+  if (fit.style === 'ledger') {
+    return (
+      <section
+        ref={sectionRef}
+        className="panel-vitals panel-vitals-ledger"
+        style={ledgerStyle(geometry, waiting ? ledgerHeight(size, geometry.meter) : 0)}
+        aria-label={label}
+      >
+        <VitalsLedger
+          rows={rows}
+          waiting={waiting}
+          combat={foe}
+          place={options.opponent}
+          values={options.values}
+          fit={fit.fit}
+          size={size}
+          meter={geometry.meter > 0}
+          inks={inks}
+        />
+      </section>
+    );
+  }
+  const line = mine > 0 && fit.style === 'line' && fit.fit !== 'rows';
   const meter = geometry.meter > 0;
   // Rows holds the vitals that show, and every vital you left on while
   // it waits for your vitals, so logging in moves nothing. One line
   // and the opponent alone hold one row.
-  const held = mine === 0 || density === 'line' ? 1 : mine;
+  const held = mine === 0 || fit.style === 'line' ? 1 : mine;
   const opponent = foe && <OpponentRow combat={foe} meter={meter} />;
 
   return (
@@ -199,7 +237,7 @@ export function VitalsBlock({
       ref={sectionRef}
       className={`panel-vitals${line ? ' is-one-line' : ''}`}
       style={footerStyle(geometry, held)}
-      aria-label={mine === 0 ? 'Opponent' : 'Vitals'}
+      aria-label={label}
     >
       {options.opponent === 'top' && opponent}
       {mine === 0 ? null : vitals === null ? (
@@ -211,9 +249,9 @@ export function VitalsBlock({
           {rows.map((r) => (
             <VitalItem
               key={r.key}
-              label={LABELS[r.key]}
+              label={VITAL_LABELS[r.key]}
               ink={inks[r.key]}
-              showLabel={fit === 'labels'}
+              showLabel={fit.fit === 'labels'}
               value={r.value}
               pct={r.pct}
               tone={r.tone}
@@ -226,7 +264,7 @@ export function VitalsBlock({
           <VitalRow
             key={r.key}
             className={toneClass(r.tone)}
-            label={LABELS[r.key]}
+            label={VITAL_LABELS[r.key]}
             ink={inks[r.key]}
             value={r.value}
             pct={r.pct}
@@ -251,6 +289,16 @@ function geometryAt(geometry: VitalsGeometry, size: number): VitalsGeometry {
     padTop: textPx(geometry.padTop, size),
     padBottom: textPx(geometry.padBottom, size),
   };
+}
+
+/** Ledger's meter as custom properties panel.css reads, and the height
+ *  it holds while it waits for your vitals, 0 once they show. */
+function ledgerStyle(geometry: VitalsGeometry, waiting: number): CSSProperties {
+  return {
+    '--vitals-meter': `${geometry.meter}px`,
+    '--vitals-meter-radius': `${geometry.meterRadius}px`,
+    ...(waiting > 0 ? { '--vitals-min-height': `${waiting}px` } : {}),
+  } as CSSProperties;
 }
 
 /** The geometry as custom properties panel.css reads. */
