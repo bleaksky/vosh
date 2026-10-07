@@ -64,7 +64,7 @@ export function codeReaderStep(gameSent: boolean): CardStep {
   return openingStep({ capture: { kind: 'none' }, forsaken: true, gameSent });
 }
 
-export type MoreItemId = 'change-codes' | 'point' | 'use-codes' | 'forget';
+export type MoreItemId = 'change-codes' | 'point' | 'use-codes' | 'forget' | 'customize-vitals';
 
 export type MoreItem = { id: MoreItemId; label: string; danger?: boolean } | 'separator';
 
@@ -72,6 +72,21 @@ const CHANGE_CODES: MoreItem = { id: 'change-codes', label: 'Change codes…' };
 const POINT: MoreItem = { id: 'point', label: 'Point at the line instead…' };
 const USE_CODES: MoreItem = { id: 'use-codes', label: 'Use Forsaken Lands prompt codes…' };
 const FORGET: MoreItem = { id: 'forget', label: "Forget your game's prompt", danger: true };
+
+/** The card's title, which names it to a reader too, and the name of
+ *  its More button. A vitals text has its own title, which keeps it
+ *  apart from Customize vitals…, which opens Settings (Q10). */
+export function cardNames(kind: 'prompt' | 'vitals'): { title: string; options: string } {
+  return kind === 'vitals'
+    ? { title: 'Your vitals text', options: 'Vitals text options' }
+    : { title: 'Customize prompt', options: 'Prompt options' };
+}
+
+/** What More offers on the vitals text card, which reads no prompt:
+ *  Customize vitals…, which opens Settings there. */
+export const VITALS_MORE: readonly MoreItem[] = [
+  { id: 'customize-vitals', label: 'Customize vitals…' },
+];
 
 /** What More in the card's header offers (section 7.1 header). On The
  *  Forsaken Lands: Change codes… only when the game sent no prompt
@@ -459,6 +474,32 @@ export function startRows(
   return { rows, others, empty };
 }
 
+/** The Presets of the vitals text card (Vitals Styles Q10): Vosh's
+ *  text, Yours, Your text before that from the earlier texts, and Your
+ *  0.7 text while your 0.7 template was on. A text the same as a row
+ *  above it is left out, and the first row that holds your text takes
+ *  the check. */
+export function vitalsStartRows(
+  config: PromptConfig,
+  vosh: string,
+  legacy: string | null,
+): { rows: StartRow[]; others: StartRow[]; empty: null } {
+  const [yours, before] = config.previous_templates;
+  const rows: StartRow[] = [];
+  const add = (id: string, label: string, template: string | null | undefined) => {
+    if (template && !rows.some((row) => row.template === template)) {
+      rows.push({ id, label, template, checked: false });
+    }
+  };
+  add('default', "Vosh's text", vosh);
+  add('yours', 'Yours', yours);
+  add('before', 'Your text before that', before);
+  add('legacy', 'Your 0.7 text', legacy);
+  const first = rows.find((row) => row.template === config.template);
+  if (first) first.checked = true;
+  return { rows, others: [], empty: null };
+}
+
 // ---------------------------------------------------------------------
 // Naming another game's numbers (P15)
 // ---------------------------------------------------------------------
@@ -603,6 +644,31 @@ export function cardAnchor(input: {
       ? input.bandRowTop - CARD_GAP
       : (input.promptTop ?? input.lastRowTop) - input.cellH - CARD_GAP;
   return {
+    bottom: input.viewportH - edge,
+    maxHeight: Math.max(0, edge - (input.areaTop + CARD_TOP_MARGIN)),
+  };
+}
+
+/** The vitals text card's gap to the panel and its foot's to the input
+ *  band (board 5 of the Vitals Styles review). */
+const BESIDE_GAP = 12;
+const ABOVE_INPUT = 16;
+
+/** Where the vitals text card sits, as CSS `right` and `bottom` from the
+ *  window's edges, and the most it may be tall: over the terminal 12 px
+ *  from the panel, its foot just over the input band, so the footer it
+ *  edits stays in view. The terminal area ends at the panel and at the
+ *  input band. */
+export function besideAnchor(input: {
+  areaTop: number;
+  areaRight: number;
+  areaBottom: number;
+  viewportW: number;
+  viewportH: number;
+}): { right: number; bottom: number; maxHeight: number } {
+  const edge = input.areaBottom - ABOVE_INPUT;
+  return {
+    right: input.viewportW - input.areaRight + BESIDE_GAP,
     bottom: input.viewportH - edge,
     maxHeight: Math.max(0, edge - (input.areaTop + CARD_TOP_MARGIN)),
   };

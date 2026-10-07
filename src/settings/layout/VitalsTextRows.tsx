@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { promptStateGet } from '../../ipc/prompt';
+import { openVitalsTextCard, promptStateGet } from '../../ipc/prompt';
 import {
   promptRenderMany,
   type PromptPreviewName,
@@ -109,9 +109,8 @@ export function VitalsTextRows({ config }: { config: UiConfig }) {
         description="Write your vitals with the codes your prompt uses. Your text decides which vitals show, their order, their colors and how values read."
         anchor="vitals-text"
       >
-        {/* The card that edits your vitals text lands with the menu on
-            the vitals, so Edit… waits for it. */}
-        <Button disabled>Edit…</Button>
+        {/* The card for your text opens over the main window's terminal. */}
+        <Button onClick={() => void openVitalsTextCard().catch(() => undefined)}>Edit…</Button>
       </Row>
       <div className="st-block st-vitals-preview" data-st-anchor="vitals-preview">
         <Segmented

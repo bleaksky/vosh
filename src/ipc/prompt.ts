@@ -216,6 +216,9 @@ export type PromptCardView = 'text' | 'point' | null;
 
 export interface PromptCardRequest {
   view: PromptCardView;
+  /** The card for your vitals text, Your vitals text, in place of your
+   *  prompt's. */
+  vitals?: true;
 }
 
 /** Ask the main window to open the prompt card, from any window, such as
@@ -224,14 +227,21 @@ export async function openPromptCard(view: PromptCardView = null): Promise<void>
   await emit(PROMPT_CARD_OPEN, { view });
 }
 
+/** Ask the main window to open the card for your vitals text, from Edit…
+ *  in Settings or Edit your text… on the vitals menu. */
+export async function openVitalsTextCard(): Promise<void> {
+  await emit(PROMPT_CARD_OPEN, { view: null, vitals: true });
+}
+
 /** Hear a window ask for the prompt card. */
 export async function subscribePromptCardOpen(
   cb: (request: PromptCardRequest) => void,
 ): Promise<UnlistenFn> {
   return listen<unknown>(PROMPT_CARD_OPEN, (event) => {
-    const raw = event.payload as { view?: unknown } | null;
+    const raw = event.payload as { view?: unknown; vitals?: unknown } | null;
     const view = raw?.view;
-    cb({ view: view === 'text' || view === 'point' ? view : null });
+    const known = view === 'text' || view === 'point' ? view : null;
+    cb(raw?.vitals === true ? { view: known, vitals: true } : { view: known });
   });
 }
 

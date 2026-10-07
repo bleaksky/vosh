@@ -33,14 +33,17 @@ import {
   TICK_COUNT_CHANGED,
   TRACKED_AFFECTS_CHANGED,
   VITALS_OPTIONS_CHANGED,
+  VITALS_TEXT_CHANGED,
 } from './events';
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,
   vitalsOptionsOf,
+  vitalsTextOf,
   type FontChange,
   type UiConfig,
   type VitalsOptions,
+  type VitalsTextChange,
 } from './uiConfig';
 
 function fontChangeOf(config: UiConfig): FontChange {
@@ -159,6 +162,12 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     before ? vitalsOptionsOf(before) : undefined,
     deepEqual,
   );
+  await emitChanged(
+    VITALS_TEXT_CHANGED,
+    vitalsTextOf(config),
+    before ? vitalsTextOf(before) : undefined,
+    deepEqual,
+  );
   await emitChanged(CHIP_STYLE_CHANGED, config.chip_style, before?.chip_style);
   await emitChanged(TICK_COUNT_CHANGED, config.tick_count, before?.tick_count);
   await emitChanged(GAME_TIME_CHANGED, config.game_time, before?.game_time);
@@ -178,6 +187,12 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
  *  Settings follow at once. */
 export async function broadcastVitalsOptions(options: VitalsOptions): Promise<void> {
   await emitChanged(VITALS_OPTIONS_CHANGED, options, undefined);
+}
+
+/** Tell every window, this one included, your vitals text after the
+ *  vitals text card saved it, so Settings shows it. */
+export async function broadcastVitalsText(change: VitalsTextChange): Promise<void> {
+  await emitChanged(VITALS_TEXT_CHANGED, change, undefined);
 }
 
 /** How followReplacedUiConfig hands a window the replaced config. */

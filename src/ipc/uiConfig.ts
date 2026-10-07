@@ -45,6 +45,7 @@ import {
   TICK_COUNT_CHANGED,
   UI_CONFIG_REPLACED,
   VITALS_OPTIONS_CHANGED,
+  VITALS_TEXT_CHANGED,
 } from './events';
 import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
 
@@ -466,6 +467,9 @@ export interface UiConfig {
    *  Yours in 0.7, or null when they give no clue. Read only, nothing
    *  saves it. */
   vitals_legacy_style: VitalsStyle | null;
+  /** Your 0.7 template in today's codes while it was on, which the
+   *  vitals text card offers among its Presets, or null. Read only. */
+  vitals_legacy_text: string | null;
   /** How the status line draws the tick, the game time, and the moons.
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
@@ -585,6 +589,7 @@ export interface RawUiConfig {
   vitals_text?: string;
   vitals_text_previous?: unknown;
   vitals_legacy_style?: string | null;
+  vitals_legacy_text?: unknown;
   chip_style?: string;
   tick_count?: string;
   game_time?: string;
@@ -702,6 +707,10 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
     vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
     vitals_legacy_style: VITALS_STYLES.find((style) => style === cfg.vitals_legacy_style) ?? null,
+    vitals_legacy_text:
+      typeof cfg.vitals_legacy_text === 'string' && cfg.vitals_legacy_text !== ''
+        ? cfg.vitals_legacy_text
+        : null,
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
     game_time: normalizeGameTime(cfg.game_time),
@@ -747,8 +756,10 @@ export async function setUiTheme(
 }
 
 /** The fields setUiFields can save. The tracked affects save through
- *  trackedAffectsSet, and the 0.7 style is read only. */
-export type UiFields = Partial<Omit<UiConfig, 'tracked_affects' | 'vitals_legacy_style'>>;
+ *  trackedAffectsSet, and the 0.7 style and text are read only. */
+export type UiFields = Partial<
+  Omit<UiConfig, 'tracked_affects' | 'vitals_legacy_style' | 'vitals_legacy_text'>
+>;
 
 /** Save only the fields `fields` names, so two windows that each change
  *  a field keep both changes. It writes the profile `profile` names while
@@ -838,6 +849,27 @@ export async function subscribeVitalsOptionsChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(VITALS_OPTIONS_CHANGED, (event) => {
     cb(normalizeVitalsOptions(event.payload));
+  });
+}
+
+/** Your vitals text and the earlier ones, as one event payload. */
+export type VitalsTextChange = Pick<UiConfig, 'vitals_text' | 'vitals_text_previous'>;
+
+export function vitalsTextOf(config: VitalsTextChange): VitalsTextChange {
+  return { vitals_text: config.vitals_text, vitals_text_previous: config.vitals_text_previous };
+}
+
+/** Hear a new vitals text, saved from Settings or the vitals text card,
+ *  or the one a profile switch brings. */
+export async function subscribeVitalsTextChanged(
+  cb: (value: VitalsTextChange) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(VITALS_TEXT_CHANGED, (event) => {
+    const raw = event.payload as { vitals_text?: unknown; vitals_text_previous?: unknown } | null;
+    cb({
+      vitals_text: typeof raw?.vitals_text === 'string' ? raw.vitals_text : '',
+      vitals_text_previous: normalizeVitalsTextPrevious(raw?.vitals_text_previous),
+    });
   });
 }
 

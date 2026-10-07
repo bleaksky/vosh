@@ -15,6 +15,7 @@ import {
   shownStyle,
   subscribeUiConfigReplaced,
   subscribeVitalsOptionsChanged,
+  subscribeVitalsTextChanged,
   type UiConfig,
   type UiFields,
 } from '../ipc/uiConfig';
@@ -116,6 +117,9 @@ const VITALS_MENU_FIELDS: readonly (keyof UiFields)[] = [
   'vitals_density',
   'vitals_values',
 ];
+
+/** The fields the vitals text card saves. */
+const VITALS_TEXT_FIELDS: readonly (keyof UiFields)[] = ['vitals_text', 'vitals_text_previous'];
 
 export function SettingsWindow() {
   const mac = isMacPlatform();
@@ -319,6 +323,20 @@ export function SettingsWindow() {
     setConfig((prev) =>
       prev && (shownStyle(prev) !== options.style || prev.vitals_values !== options.values)
         ? { ...prev, ...vitalsStylePick(options.style), vitals_values: options.values }
+        : prev,
+    );
+  });
+
+  // The vitals text card saves your text in the main window. The config
+  // copy takes it, so Customize vitals previews it, and keeps yours
+  // while this window's own save holds it.
+  useTauriEvent(subscribeVitalsTextChanged, (change) => {
+    if (settingsSaveHolds(VITALS_TEXT_FIELDS)) return;
+    setConfig((prev) =>
+      prev &&
+      (prev.vitals_text !== change.vitals_text ||
+        prev.vitals_text_previous.join('\u0000') !== change.vitals_text_previous.join('\u0000'))
+        ? { ...prev, ...change }
         : prev,
     );
   });

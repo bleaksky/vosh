@@ -1,4 +1,4 @@
-import type { PromptRendered } from '../ipc/promptDesign';
+import type { PromptRendered, PromptSpan } from '../ipc/promptDesign';
 import type { VitalsText } from '../ipc/vitals';
 import { parseSgrCells, type Cell } from '../terminal/sgrCells';
 
@@ -23,6 +23,27 @@ export interface TextRow {
 export interface TextLine {
   left: Cell[];
   right: Cell[] | null;
+}
+
+/** A cell with the piece of your text that drew it, for the rings the
+ *  vitals text card draws on the footer. */
+export interface PieceCell extends Cell {
+  piece?: number;
+}
+
+/** `rows` with each cell a span of `spans` covers marked with its
+ *  piece. Cutting a row into lines keeps the marks. */
+export function withPieces(rows: readonly TextRow[], spans: readonly PromptSpan[]): TextRow[] {
+  return rows.map((row, r) => {
+    const cells: PieceCell[] = row.cells.map((cell) => ({ ...cell }));
+    for (const span of spans) {
+      if (span.row !== r) continue;
+      for (let col = span.col; col < span.col + span.width && col < cells.length; col += 1) {
+        cells[col].piece = span.piece;
+      }
+    }
+    return { ...row, cells };
+  });
 }
 
 /** The rows of `rendered` as cells. `right` names the pieces that are a
@@ -104,9 +125,16 @@ export function fitText(
 
 /** The lines the footer draws of `text` at `cols` cells. `fightOnly`
  *  keeps only the rows that read your fight, for Hide vitals while your
- *  prompt is pinned (Q9), with everything else you wrote on them. */
-export function vitalsTextLines(text: VitalsText, cols: number, fightOnly: boolean): TextLine[] {
-  const live = textRows(text.live, text.right);
+ *  prompt is pinned (Q9), with everything else you wrote on them. With
+ *  `pieces` each cell carries the piece that drew it. */
+export function vitalsTextLines(
+  text: VitalsText,
+  cols: number,
+  fightOnly: boolean,
+  pieces = false,
+): TextLine[] {
+  const rows = textRows(text.live, text.right);
+  const live = pieces ? withPieces(rows, text.live.spans) : rows;
   const full = textRows(text.full, text.right);
   return fitText(live, full, cols).flatMap((lines, r) =>
     !fightOnly || text.fight[r] ? lines : [],

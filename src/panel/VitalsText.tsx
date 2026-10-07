@@ -1,14 +1,16 @@
-import { useEffect, useMemo, type CSSProperties, type Ref } from 'react';
-import { vitalsTextWatch } from '../ipc/vitals';
+import { useEffect, useMemo, useState, type CSSProperties, type Ref } from 'react';
+import { promptRenderMany, type PromptRendered } from '../ipc/promptDesign';
+import { vitalsTextWatch, type VitalsText as RenderedText } from '../ipc/vitals';
 import { useBandEnv } from '../prompt/useBandEnv';
 import { useSelected } from '../stores/session/sessionsStore';
 import { useVitalsText } from '../stores/session/vitalsTextStore';
+import { useVitalsCardMarks, type VitalsCardMarks } from '../stores/session/vitalsCardStore';
 import { bandRuns, decorationLine, type BandEnv } from '../terminal/bandCells';
 import type { Cell } from '../terminal/sgrCells';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { readPanelGameFace, usePanelFaceVersion } from './panelFace';
 import { usePaneText } from './paneTextSize';
-import { textCols, vitalsTextLines, type TextLine } from './vitalsTextFit';
+import { textCols, vitalsTextLines, type PieceCell, type TextLine } from './vitalsTextFit';
 
 // The Text style (Vitals Styles Q7 to Q9): your vitals text, which the
 // session renders with your prompt's codes and pushes while this footer
@@ -20,6 +22,10 @@ import { textCols, vitalsTextLines, type TextLine } from './vitalsTextFit';
 // ends in an ellipsis (vitalsTextFit.ts). Under Hide vitals while your
 // prompt is pinned only the rows that read your fight stay, and the
 // footer goes when none are left.
+//
+// While the vitals text card is open the footer rings the part you
+// picked, a click on a part turns the card to it, and a preview the
+// card picks draws here, wrapped on its own values.
 
 /** The terminal settings your text draws its colors with. */
 export interface TextColors {
@@ -64,11 +70,59 @@ export function VitalsText({
     colors.brightBold,
     nativeSurfaceEnabled() ? 'native' : 'xterm',
   );
+  const marks = useVitalsCardMarks();
+  const previewed = usePreviewed(text, marks, cols, session);
+  const shown = previewed ?? text;
   const lines = useMemo(
-    () => (text ? vitalsTextLines(text, cols, fightOnly) : []),
-    [text, cols, fightOnly],
+    () => (shown ? vitalsTextLines(shown, cols, fightOnly, marks !== null) : []),
+    [shown, cols, fightOnly, marks],
   );
-  return <VitalsTextBlock lines={lines} env={env} fightOnly={fightOnly} sectionRef={hostRef} />;
+  return (
+    <VitalsTextBlock
+      lines={lines}
+      env={env}
+      fightOnly={fightOnly}
+      sectionRef={hostRef}
+      marks={marks}
+    />
+  );
+}
+
+/** `text` as the card's preview draws it, or null at Now and while the
+ *  card is closed. A preview row stays under Hide vitals while your
+ *  prompt is pinned, since the preview is what you asked to see. */
+function usePreviewed(
+  text: RenderedText | null,
+  marks: VitalsCardMarks | null,
+  cols: number,
+  session: number,
+): RenderedText | null {
+  const template = marks?.template ?? null;
+  const preview = marks?.preview ?? 'now';
+  const [rendered, setRendered] = useState<PromptRendered | null>(null);
+  useEffect(() => {
+    if (template === null || preview === 'now') return;
+    let open = true;
+    void promptRenderMany([{ template, values: 'live', preview, cols }], session)
+      .then(([drawn]) => open && setRendered(drawn ?? null))
+      .catch(() => open && setRendered(null));
+    return () => {
+      open = false;
+      setRendered(null);
+    };
+  }, [template, preview, cols, session]);
+  return useMemo(
+    () =>
+      text && rendered
+        ? {
+            ...text,
+            live: rendered,
+            full: rendered,
+            fight: Array.from({ length: rendered.rows }, () => true),
+          }
+        : null,
+    [text, rendered],
+  );
 }
 
 /** The footer drawn from its lines, so a test draws every case. With no
@@ -79,11 +133,14 @@ export function VitalsTextBlock({
   env,
   fightOnly = false,
   sectionRef,
+  marks = null,
 }: {
   lines: readonly TextLine[];
   env: BandEnv;
   fightOnly?: boolean;
   sectionRef?: Ref<HTMLElement> | undefined;
+  /** The vitals text card's marks while it is open. */
+  marks?: VitalsCardMarks | null;
 }) {
   if (lines.length === 0) {
     return <section ref={sectionRef} className="panel-vitals-text is-empty" aria-hidden="true" />;
@@ -98,17 +155,52 @@ export function VitalsTextBlock({
       {lines.map((line, i) => (
         <div key={i} className="panel-vitals-text-row">
           <span className="panel-vitals-text-left">
-            <TextRuns cells={line.left} env={env} />
+            <Side cells={line.left} env={env} marks={marks} />
           </span>
           {line.right && (
             <span className="panel-vitals-text-right">
-              <TextRuns cells={line.right} env={env} />
+              <Side cells={line.right} env={env} marks={marks} />
             </span>
           )}
         </div>
       ))}
     </section>
   );
+}
+
+/** One side of a line: its runs, or while the card is open each part
+ *  of your text on its own, clickable, the one you picked ringed. */
+function Side({
+  cells,
+  env,
+  marks,
+}: {
+  cells: PieceCell[];
+  env: BandEnv;
+  marks: VitalsCardMarks | null;
+}) {
+  if (!marks) return <TextRuns cells={cells} env={env} />;
+  const parts: { piece: number | undefined; cells: PieceCell[] }[] = [];
+  for (const cell of cells) {
+    const last = parts[parts.length - 1];
+    if (last && last.piece === cell.piece) last.cells.push(cell);
+    else parts.push({ piece: cell.piece, cells: [cell] });
+  }
+  return parts.map((part, i) => {
+    const { piece } = part;
+    if (piece === undefined) return <TextRuns key={i} cells={part.cells} env={env} />;
+    return (
+      <span
+        key={i}
+        className={`panel-vitals-text-part${marks.picked === piece ? ' is-picked' : ''}`}
+        // The card keeps focus, so the keys that work on a part reach it.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => marks.pick(piece)}
+      >
+        <TextRuns cells={part.cells} env={env} />
+      </span>
+    );
+  });
 }
 
 /** `cells` as runs of one look each, in the colors `env` draws. */

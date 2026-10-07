@@ -234,6 +234,17 @@
   margin-left: 4px;
 }
 
+/* Where your vitals text draws, at the left of its foot (TextFoot). */
+.pc-foot-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
 /* The foot under your design (DesignFoot) keeps the one row 52 tall of
    every foot, with drawing on or off: Draw your prompt and where your
    prompt shows on the left, the preview and Done on the right. The
