@@ -9,10 +9,13 @@ import { sessionOf } from './session';
 
 /** The last Char.Vitals and Char.Combat of a session's connection, raw
  *  as the game sent them, each null before the first one and after the
- *  connection ends. Mirrors VitalsSnapshot in src-tauri/src/ipc/vitals.rs. */
+ *  connection ends, and the last 60 Char.Vitals the game showed, oldest
+ *  first, each with the time it came in ms since the epoch. Mirrors
+ *  VitalsSnapshot in src-tauri/src/ipc/vitals.rs. */
 export interface VitalsSnapshot {
   vitals: unknown;
   combat: unknown;
+  history?: { at: number; vitals: unknown }[];
 }
 
 /** Vosh's vitals text, which a profile that sets no vitals_text draws.
