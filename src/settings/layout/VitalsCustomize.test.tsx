@@ -190,6 +190,13 @@ describe('CustomizeVitalsSection', () => {
     ]);
   });
 
+  it('quiets Show each hit for Traces, whose line already draws each hit', () => {
+    const traces = draw({ vitals_style: 'traces' });
+    expect(traces).toContain('Traces already draw each hit in their line.');
+    expect(traces).toContain('Traces draw their own line, so they take no meter.');
+    expect(draw()).not.toContain('Traces already draw');
+  });
+
   it('quiets the swatches and Meter under Status line, as board 4 draws it', () => {
     const html = draw({ vitals_place: 'status', vitals_colors: { mana: 12 } });
     expect(html).toContain(

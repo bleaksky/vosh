@@ -185,6 +185,25 @@ describe('Blocks', () => {
   });
 });
 
+describe('Traces', () => {
+  it('draws each vital over its history, and your opponent over the fight', () => {
+    const history = [744, 800, 851].map((hp, at) => ({ at, values: { ...HIT, hp } }));
+    const html = draw({ style: 'traces', fit: 'beside' }, {}, { history });
+    expect(html).toContain('vitals-marks is-traces"');
+    const lines = all(html, /class="vitals-trace-line" d="([^"]+)"/g);
+    expect(lines).toHaveLength(4);
+    // The guard from 100 to 61 to 54 across the fight.
+    expect(lines[0]).toBe('M0 1 L50 6.85 L100 7.9');
+    expect(lines[1]?.split(' L')).toHaveLength(3);
+  });
+
+  it('draws only the baseline for a value the game hides', () => {
+    const html = draw({ style: 'traces', fit: 'beside' }, {}, { vitals: { ...HIT, hidden: true } });
+    expect(all(html, /class="(vitals-trace-line)"/g)).toHaveLength(1);
+    expect(all(html, /class="(vitals-trace-base)"/g)).toHaveLength(4);
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

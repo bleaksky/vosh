@@ -43,6 +43,7 @@ function draw(patch: Partial<UiConfig> = {}, vitals: Vitals = SAMPLE_VITALS): st
     <VitalsTiles
       config={config(patch)}
       vitals={vitals}
+      history={[]}
       text={null}
       env={ENV}
       inks={{}}
@@ -84,6 +85,7 @@ describe('the Style gallery', () => {
       'Bands',
       'Ladders',
       'Blocks',
+      'Traces',
       'Text',
     ]);
     expect(html).toContain('data-st-anchor="style"');
@@ -102,6 +104,7 @@ describe('the Style gallery', () => {
       'bands',
       'ladders',
       'blocks',
+      'traces',
       'text',
     ]);
   });
@@ -117,6 +120,7 @@ describe('the Style gallery', () => {
       'Bands',
       'Ladders',
       'Blocks',
+      'Traces',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');
@@ -180,7 +184,7 @@ describe('the arrow keys', () => {
 
 describe('the numbers the tiles draw', () => {
   it('are the catalog samples while no session has your vitals', () => {
-    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, live: false });
+    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, history: [], live: false });
     expect(galleryVitals({ vitals: null, combat: null }).live).toBe(false);
     expect(SAMPLE_VITALS).toMatchObject({
       hp: 1020,

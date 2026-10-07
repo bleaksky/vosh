@@ -45,7 +45,7 @@ import {
   type VitalInks,
 } from '../../panel/vitalsView';
 import type { MeasureText } from '../../panel/vitalsLedgerFit';
-import type { Vitals } from '../../stores/gmcp/vitalsStore';
+import type { VitalSample, Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { playPalette, themeTokens } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
@@ -164,6 +164,7 @@ export function VitalsGallery({
     <VitalsTiles
       config={config}
       vitals={data.vitals}
+      history={data.history}
       text={text}
       env={env}
       inks={inks}
@@ -183,6 +184,8 @@ export function VitalsGallery({
 export interface VitalsTilesProps {
   config: UiConfig;
   vitals: Vitals;
+  /** Your last Char.Vitals, oldest first, which the Traces tile draws. */
+  history: readonly VitalSample[];
   /** Your vitals text rendered for the Text tile, or null before it is. */
   text: PromptRendered | null;
   env: BandEnv;
@@ -207,6 +210,7 @@ export interface VitalsTilesProps {
 export function VitalsTiles({
   config,
   vitals,
+  history,
   text,
   env,
   inks,
@@ -283,6 +287,7 @@ export function VitalsTiles({
                       <StyleTile
                         style={style}
                         vitals={vitals}
+                        history={history}
                         options={{ ...options, style }}
                         inks={inks}
                         width={width}
@@ -313,6 +318,7 @@ export function VitalsTiles({
 function StyleTile({
   style,
   vitals,
+  history,
   options,
   inks,
   width,
@@ -322,6 +328,7 @@ function StyleTile({
 }: {
   style: Exclude<VitalsStyle, 'text'>;
   vitals: Vitals;
+  history: readonly VitalSample[];
   options: VitalsOptions;
   inks: VitalInks;
   width: number;
@@ -331,5 +338,14 @@ function StyleTile({
 }): ReactNode {
   const rows = shownRows(vitals, vitalsOn(options.order, options.off), options);
   const fit = vitalsFitOf(style, width, size, rows, null, options.values, measure, measureGame);
-  return <VitalsBlock vitals={vitals} combat={null} fit={fit} options={options} inks={inks} />;
+  return (
+    <VitalsBlock
+      vitals={vitals}
+      history={history}
+      combat={null}
+      fit={fit}
+      options={options}
+      inks={inks}
+    />
+  );
 }

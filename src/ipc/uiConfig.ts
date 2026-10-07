@@ -146,6 +146,7 @@ export const VITALS_STYLES = [
   'bands',
   'ladders',
   'blocks',
+  'traces',
   'text',
 ] as const;
 
@@ -163,6 +164,7 @@ const SAVED_VITALS_STYLES = [
   'bands',
   'ladders',
   'blocks',
+  'traces',
   'text',
 ] as const;
 

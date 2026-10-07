@@ -3,7 +3,9 @@ import type { Fight } from '../stores/gmcp/combatStore';
 import { VitalsBands } from './VitalsBands';
 import { VitalsBlocks } from './VitalsBlocks';
 import type { DrawnVitalsProps } from './VitalsDrawn';
-import { bandsHeight } from './vitalsDrawnFit';
+import { bandsHeight, tracesHeight } from './vitalsDrawnFit';
+import { VitalsTraces } from './VitalsTraces';
+import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import type { DrawnFit } from './vitalsFit';
 import { VitalsLadders } from './VitalsLadders';
 import { marksHeight } from './vitalsMarksFit';
@@ -19,6 +21,7 @@ export function DrawnSection({
   size,
   mine,
   fight,
+  history,
   ...props
 }: DrawnVitalsProps & {
   fit: DrawnFit;
@@ -29,6 +32,8 @@ export function DrawnSection({
   /** How many of your vitals the footer holds room for. */
   mine: number;
   fight: Fight | null;
+  /** Your last Char.Vitals, oldest first, which Traces draws. */
+  history: readonly VitalSample[];
 }) {
   let body: ReactNode;
   let height: number;
@@ -41,6 +46,11 @@ export function DrawnSection({
     case 'ladders':
       body = <VitalsLadders {...props} fit={fit.fit} />;
       height = marksHeight(size, mine);
+      under = fit.fit === 'under';
+      break;
+    case 'traces':
+      body = <VitalsTraces {...props} history={history} fight={fight} fit={fit.fit} />;
+      height = tracesHeight(size, mine);
       under = fit.fit === 'under';
       break;
     case 'blocks':

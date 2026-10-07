@@ -227,6 +227,7 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-band-text', 'height', '16px', '21px'],
   ['.vitals-band-graph', 'margin-top', '3px', '4px'],
   ['.vitals-blocks', 'line-height', '16px', '21px'],
+  ['.vitals-drawn .vitals-marks.is-traces', 'grid-auto-rows', '26px', '35px'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);

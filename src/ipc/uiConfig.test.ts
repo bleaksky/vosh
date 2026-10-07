@@ -356,6 +356,7 @@ describe('vitals style', () => {
       'bands',
       'ladders',
       'blocks',
+      'traces',
       'text',
     ]);
   });

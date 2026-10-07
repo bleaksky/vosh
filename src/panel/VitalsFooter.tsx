@@ -11,7 +11,12 @@ import { readPanelFace, readPanelGameFace, textWidth, usePanelFaceVersion } from
 import type { Vital, VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, useFight, type CombatOpponent, type Fight } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
-import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
+import {
+  useVitals,
+  useVitalsHistory,
+  type VitalSample,
+  type Vitals,
+} from '../stores/gmcp/vitalsStore';
 import {
   opponentHealth,
   shownRows,
@@ -106,6 +111,7 @@ export function VitalsFooter({
   const vitals = useVitals();
   const combat = useCombat();
   const fight = useFight();
+  const history = useVitalsHistory();
   const options = useVitalsOptions();
   const theme = useActiveTheme();
   const palette = usePlayPalette();
@@ -164,6 +170,7 @@ export function VitalsFooter({
       vitals={vitals}
       combat={combat}
       fight={fight}
+      history={history}
       fit={fit}
       options={options}
       inks={inks}
@@ -182,8 +189,11 @@ const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: fal
 export interface VitalsBlockProps {
   vitals: Vitals | null;
   combat: CombatOpponent | null;
-  /** The fight so far, for the tick Bands stands where it began. */
+  /** The fight so far, for the tick Bands stands where it began and
+   *  your opponent's trace. */
   fight?: Fight | null;
+  /** Your last Char.Vitals, oldest first, which Traces draws. */
+  history?: readonly VitalSample[];
   /** The style the footer draws and how it fits the panel. */
   fit: VitalsFit;
   options: VitalsOptions;
@@ -203,6 +213,7 @@ export function VitalsBlock({
   vitals,
   combat,
   fight = null,
+  history = [],
   fit,
   options,
   inks = {},
@@ -282,6 +293,7 @@ export function VitalsBlock({
         inks={inks}
         hits={hits}
         fight={fight}
+        history={history}
       />
     );
   }

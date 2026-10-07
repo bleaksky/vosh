@@ -21,7 +21,7 @@ export type VitalsFit =
 
 /** The row styles of the More Vitals Styles review, each vital's mark
  *  between its label and its value, or under both. */
-const ROW_STYLES = ['ladders', 'blocks'] as const;
+const ROW_STYLES = ['ladders', 'blocks', 'traces'] as const;
 type RowStyle = (typeof ROW_STYLES)[number];
 
 /** The styles of the More Vitals Styles review, which DrawnSection

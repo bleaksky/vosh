@@ -1,4 +1,7 @@
+import type { Vital } from '../ipc/uiConfig';
+import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { textPx } from './paneTextSize';
+import { maxOf } from './vitalsView';
 import type { MeasureText } from './vitalsLedgerFit';
 import { markRoom } from './vitalsMarksFit';
 
@@ -57,6 +60,26 @@ export const FOE_LADDER = 48;
  *  19 of 24. A value the game hides lights none. */
 export function litSegments(pct: number | null, count: number): number {
   return pct === null ? 0 : Math.round((pct * count) / 100);
+}
+
+/** The footer's height for `rows` rows of Traces, the 1 px line on top
+ *  included: each row 26 tall, between the footer's pads. */
+export function tracesHeight(size: number, rows: number): number {
+  return 1 + textPx(9, size) + rows * textPx(26, size) + textPx(11, size);
+}
+
+/** How many of your last Char.Vitals a trace spans. */
+export const TRACE_POINTS = 40;
+
+/** A vital's trace: each of the last TRACE_POINTS of `history` as a
+ *  share of its max, oldest first, or `now` percent alone while the
+ *  history holds none. */
+export function traceSeries(history: readonly VitalSample[], vital: Vital, now: number): number[] {
+  const series = history.slice(-TRACE_POINTS).map(({ values }) => {
+    const max = values[maxOf(vital)];
+    return max > 0 ? Math.max(0, Math.min(1, values[vital] / max)) : 0;
+  });
+  return series.length === 0 ? [now / 100] : series;
 }
 
 /** The full block, the cell Blocks draws for each whole share. */

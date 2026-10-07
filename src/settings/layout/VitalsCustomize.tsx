@@ -76,7 +76,19 @@ const OWN_MARKS: Partial<Record<VitalsStyle, string>> = {
   bands: 'Bands draw their own bars, so they take no meter.',
   ladders: 'Ladders draw their own segments, so they take no meter.',
   blocks: 'Blocks draw their own cells, so they take no meter.',
+  traces: 'Traces draw their own line, so they take no meter.',
 };
+
+/** What Show each hit does. */
+const HIT_WORDS =
+  'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.';
+
+/** Why Show each hit goes quiet, or null where it draws. */
+function hitQuietOf(style: VitalsStyle, status: boolean): string | null {
+  if (status) return "The status line doesn't show hits, so this waits for the panel.";
+  if (style === 'traces') return 'Traces already draw each hit in their line.';
+  return null;
+}
 
 /** Why Meter goes quiet for a style or the status line, or null where it
  *  draws. */
@@ -122,6 +134,7 @@ export function CustomizeVitalsSection({
 function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFields) => void }) {
   const status = config.vitals_place === 'status';
   const quiet = meterQuiet(shownStyle(config), status);
+  const hitQuiet = hitQuietOf(shownStyle(config), status);
   const opponentOn = !config.vitals_off.includes('opponent');
   return (
     <>
@@ -184,18 +197,10 @@ function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFi
           onChange={(on) => update({ vitals_warn_thirds: on })}
         />
       </Row>
-      <Row
-        label="Show each hit"
-        description={
-          status
-            ? "The status line doesn't show hits, so this waits for the panel."
-            : 'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.'
-        }
-        anchor="show-each-hit"
-      >
+      <Row label="Show each hit" description={hitQuiet ?? HIT_WORDS} anchor="show-each-hit">
         <Toggle
           checked={config.vitals_hit}
-          disabled={status}
+          disabled={hitQuiet !== null}
           onChange={(on) => update({ vitals_hit: on })}
         />
       </Row>

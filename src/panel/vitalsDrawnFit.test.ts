@@ -6,6 +6,9 @@ import {
   LADDER,
   litSegments,
   rowMarkFit,
+  TRACE_POINTS,
+  traceSeries,
+  tracesHeight,
 } from './vitalsDrawnFit';
 import type { MeasureText } from './vitalsLedgerFit';
 
@@ -36,6 +39,31 @@ describe('Blocks', () => {
     expect(blockRun(78.2, 17)).toBe('█'.repeat(13) + '▎');
     expect(blockRun(100, 17)).toBe('█'.repeat(17));
     expect(blockRun(0, 17)).toBe('');
+  });
+});
+
+describe('Traces', () => {
+  const sample = (at: number, hp: number) => ({
+    at,
+    values: { hp, maxhp: 1000, mana: 0, maxmana: 0, move: 50, maxmove: 100 },
+  });
+
+  it('spans the last 40 Char.Vitals, each a share of its max', () => {
+    const history = Array.from({ length: 60 }, (_, i) => sample(i, i * 10));
+    const series = traceSeries(history, 'hp', 59);
+    expect(series).toHaveLength(TRACE_POINTS);
+    expect(series[0]).toBe(0.2);
+    expect(series[TRACE_POINTS - 1]).toBe(0.59);
+    expect(traceSeries(history, 'mana', 0)[0]).toBe(0);
+    expect(traceSeries(history, 'move', 50)[0]).toBe(0.5);
+  });
+
+  it('draws the vital now while the history holds none', () => {
+    expect(traceSeries([], 'hp', 72)).toEqual([0.72]);
+  });
+
+  it('holds 26 for each row while it waits', () => {
+    expect(tracesHeight(12, 3)).toBe(1 + 9 + 78 + 11);
   });
 });
 
