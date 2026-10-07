@@ -178,6 +178,19 @@ export async function setSessionAddress(session: number, target: ConnectionTarge
   });
 }
 
+/** Who hears each Connect this window sends a session. */
+const connectsAsked = new Set<(session: number) => void>();
+
+/** Hear each Connect this window sends a session, as it goes out. The
+ *  backend ends the link the session runs first, which says the link is
+ *  down with no reason, the same as your Disconnect, so a store that
+ *  tells the two apart marks the session here. A Connect that names no
+ *  session reaches nobody here. */
+export function onConnectAsked(cb: (session: number) => void): () => void {
+  connectsAsked.add(cb);
+  return () => connectsAsked.delete(cb);
+}
+
 /** Dial `host` in a session, the selected one when it names none. */
 export async function connectSession(
   host: string,
@@ -185,6 +198,7 @@ export async function connectSession(
   tls: boolean,
   session?: number,
 ): Promise<void> {
+  if (session !== undefined) for (const cb of connectsAsked) cb(session);
   await invoke('session_connect', { host, port, tls, session });
 }
 
