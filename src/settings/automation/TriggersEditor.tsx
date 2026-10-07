@@ -60,12 +60,13 @@ import {
   Toggle,
   type SelectOption,
 } from '../../ui';
+import { presetById } from '../../automation/presets';
 import { usePromptGags } from '../../stores/session/promptGagStore';
 import { AlertDetailRows, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
 import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
-import type { DetailProps, EditorProps, KindSpec } from './types';
+import type { DetailProps, EditorProps, KindSpec, TriggersLink } from './types';
 
 const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
   id: 'triggers',
@@ -86,8 +87,11 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
     group: groupKeyOf(t.group),
     enabled: t.enabled,
     preset: Boolean(t.preset),
+    // A preset trigger also answers to its preset's name, which a link
+    // from the preset's card fills the filter with.
     text: searchText(
       t.name,
+      t.preset ? presetById(t.preset)?.name : undefined,
       t.group,
       t.patterns.map(patternSource).join('\n'),
       effectOf(t.actions, 'send'),
@@ -103,7 +107,10 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
   renderDetail: (props) => <TriggerDetail {...props} />,
 };
 
-export function TriggersEditor(props: EditorProps) {
+export function TriggersEditor({
+  open = null,
+  ...props
+}: EditorProps & { open?: TriggersLink | null }) {
   // A trigger that hid your prompt this session while the profile reads
   // no prompt carries the warn ring in the list.
   const gags = usePromptGags();
@@ -111,7 +118,23 @@ export function TriggersEditor(props: EditorProps) {
     () => new Map([...gags].map((name) => [name, HIDES_PROMPT_NOTE])),
     [gags],
   );
-  return <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNotes={warnNotes} />;
+  const selectKey = useMemo(
+    () => (open?.select ? { key: open.select, seq: open.seq } : null),
+    [open],
+  );
+  const filterTo = useMemo(
+    () => (open?.filter ? { text: open.filter, seq: open.seq } : null),
+    [open],
+  );
+  return (
+    <DraftEditor
+      spec={TRIGGERS_SPEC}
+      {...props}
+      warnNotes={warnNotes}
+      selectKey={selectKey}
+      filterTo={filterTo}
+    />
+  );
 }
 
 /** Why a trigger carries the warn ring: it hid your prompt this session

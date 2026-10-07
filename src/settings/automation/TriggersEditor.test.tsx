@@ -58,6 +58,10 @@ beforeAll(async () => {
     setItem: () => undefined,
     removeItem: () => undefined,
   });
+  // A link scrolls the row it opens into view, which the fake page has
+  // no layout for.
+  vi.stubGlobal('CSS', { escape: (s: string) => s });
+  Object.assign(FakeElement.prototype, { querySelector: () => null });
   ({ createRoot } = await import('react-dom/client'));
   ({ TriggerDetail, TriggersEditor } = await import('./TriggersEditor'));
 });
@@ -219,14 +223,23 @@ function alertParts(root: FakeElement) {
 }
 
 /** The whole Triggers editor over the store, with nothing selected. */
-async function mountEditor(list: TriggerRecord[]) {
+async function mountEditor(
+  list: TriggerRecord[],
+  open: { select?: string; filter?: string; seq: number } | null = null,
+) {
   stored = JSON.stringify(list);
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   await act(async () => {
     root.render(
-      <TriggersEditor json={false} onJson={() => {}} onDirty={() => {}} onError={() => {}} />,
+      <TriggersEditor
+        json={false}
+        onJson={() => {}}
+        onDirty={() => {}}
+        onError={() => {}}
+        open={open}
+      />,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -251,6 +264,13 @@ async function mountEditor(list: TriggerRecord[]) {
         )[0],
       ),
     click: (text: string) => click(button(text)),
+    /** The names of the rows the list shows, `*` after the selected one. */
+    rows: () =>
+      findAll(container, (el) => el.hasAttribute('data-uid')).map(
+        (el) =>
+          findAll(el, (n) => (n.getAttribute('class') ?? '').includes('st-auto-row-name'))[0]
+            ?.textContent + (el.getAttribute('aria-current') === 'true' ? '*' : ''),
+      ),
     parts: () => alertParts(container),
     status: () =>
       findAll(container, (el) => el.getAttribute('class') === 'st-savebar-status')[0]?.textContent,
@@ -316,5 +336,28 @@ describe('the trigger Alert row', () => {
     expect((await mount(VISITOR)).parts()).toEqual(['Banner', 'Sound', 'Mark']);
     doc.documentElement.dataset.platform = 'macos';
     expect((await mount(VISITOR)).parts()).toEqual(['Banner', 'Sound', 'Bounce']);
+  });
+});
+
+// Presets board 1: the links on a preset's card open Triggers on one of
+// its triggers, or filtered by the preset's name.
+describe('a link from a preset card', () => {
+  const sanctuary = trigger({
+    name: 'buff.sanctuary',
+    preset: 'disarm_buff_fade',
+    patterns: [{ pattern: '^The white aura around your body fades\\.$', enabled: true }],
+  });
+
+  it('filters by the preset name, which a preset trigger now answers to', async () => {
+    const editor = await mountEditor([VISITOR, sanctuary], {
+      filter: 'Disarms and fading buffs',
+      seq: 1,
+    });
+    expect(editor.rows()).toEqual(['buff.sanctuary*']);
+  });
+
+  it('opens on the trigger it names', async () => {
+    const editor = await mountEditor([VISITOR, sanctuary], { select: 'buff.sanctuary', seq: 1 });
+    expect(editor.rows()).toEqual(['visitor', 'buff.sanctuary*']);
   });
 });

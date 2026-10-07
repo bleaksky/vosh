@@ -66,6 +66,8 @@ interface DraftEditorProps<T> {
   /** Select the item with this key, by keyOf, and bring its row into
    *  view each time `seq` goes up, as a deep link asks. */
   selectKey?: { key: string; seq: number } | null;
+  /** Set the filter to `text` each time `seq` goes up, as a link asks. */
+  filterTo?: { text: string; seq: number } | null;
   /** More on the left of the save bar, given the draft and its setter. */
   barExtra?: (draft: Draft<T>, setDraft: (next: Draft<T>) => void) => ReactNode;
   /** The list rows that carry the warn ring while they are on, by name,
@@ -94,6 +96,7 @@ export function DraftEditor<T>({
   pinned = null,
   pinnedSeq = 0,
   selectKey = null,
+  filterTo = null,
   barExtra,
   warnNotes,
 }: DraftEditorProps<T>) {
@@ -276,6 +279,14 @@ export function DraftEditor<T>({
     // reveal reads the draft through its ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectKey, draft, spec]);
+
+  // Set the filter a link names once per request.
+  const filterSeqDone = useRef(0);
+  useEffect(() => {
+    if (!filterTo || filterSeqDone.current === filterTo.seq) return;
+    filterSeqDone.current = filterTo.seq;
+    setFilter(filterTo.text);
+  }, [filterTo]);
 
   const count = draft ? draftChangeCount(draft) : 0;
 

@@ -112,3 +112,12 @@ export interface EditorProps {
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
 }
+
+/** Where a link on a preset's card opens Triggers: on one trigger, by
+ *  name, or with the filter set, as to a preset's name. `seq` goes up
+ *  with each link, so the same one opens again. */
+export interface TriggersLink {
+  select?: string;
+  filter?: string;
+  seq: number;
+}

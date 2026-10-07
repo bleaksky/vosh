@@ -10,7 +10,13 @@ import { MacrosEditor } from './MacrosEditor';
 import { PresetsEditor } from './PresetsEditor';
 import { TimersEditor } from './TimersEditor';
 import { TriggersEditor } from './TriggersEditor';
-import { isAutomationKind, isListKind, type AutomationKind, type DirtyReport } from './types';
+import {
+  isAutomationKind,
+  isListKind,
+  type AutomationKind,
+  type DirtyReport,
+  type TriggersLink,
+} from './types';
 import { useCloseGuard } from '../useCloseGuard';
 
 // Settings, Automation (the approved SettingsAutomation board). One
@@ -45,16 +51,27 @@ interface View {
   /** The preset a link asked for last, by id, and a count that goes up
    *  with each such link. */
   preset: { key: string; seq: number } | null;
+  /** The trigger or the filter a preset's card opened Triggers on last. */
+  triggers: TriggersLink | null;
 }
 
-const START: View = { kind: 'triggers', panel: 'list', tickSeq: 0, preset: null };
+const START: View = {
+  kind: 'triggers',
+  panel: 'list',
+  tickSeq: 0,
+  preset: null,
+  triggers: null,
+};
 
 const PRESET_ANCHOR = 'presets:';
 
 /** The view a target asks for, or null to stay put. The section names
  *  the kind. The anchors open Import, the JSON view, the Tick, or a
  *  preset as `presets:<id>`. */
-function viewFor(target: SettingsTarget, current: View): View | null {
+function viewFor(target: SettingsTarget, from: View): View | null {
+  // A link from a preset's card opens Triggers once, never again on the
+  // next visit.
+  const current = { ...from, triggers: null };
   const kind = isAutomationKind(target.section) ? target.section : null;
   if (target.anchor === 'import') return { ...current, panel: 'import' };
   if (target.anchor === 'json') {
@@ -149,6 +166,14 @@ export function AutomationPage({
   useCloseGuard(dirty !== null, ask);
 
   const kinds = pathB ? [...KINDS, LOADOUTS] : KINDS;
+  const openTriggers = useCallback(
+    (to: Omit<TriggersLink, 'seq'>) => {
+      const current = viewRef.current;
+      const seq = (current.triggers?.seq ?? 0) + 1;
+      go({ ...current, kind: 'triggers', panel: 'list', triggers: { ...to, seq } });
+    },
+    [go],
+  );
   const openJson = useCallback(
     (open: boolean) => setView({ ...viewRef.current, panel: open ? 'json' : 'list' }),
     [setView],
@@ -172,6 +197,7 @@ export function AutomationPage({
             onJson={openJson}
             onDirty={onDirty}
             onError={onError}
+            open={view.triggers}
           />
         );
         break;
@@ -219,6 +245,7 @@ export function AutomationPage({
             onDirty={onDirty}
             onError={onError}
             selectPreset={view.preset}
+            onOpenTriggers={openTriggers}
           />
         ) : null;
         break;
@@ -241,7 +268,7 @@ export function AutomationPage({
           label="Kind"
           options={kinds}
           value={view.panel === 'import' ? null : view.kind}
-          onChange={(kind) => go({ ...viewRef.current, kind, panel: 'list' })}
+          onChange={(kind) => go({ ...viewRef.current, kind, panel: 'list', triggers: null })}
         />
         <Button onClick={() => go({ ...viewRef.current, panel: 'import' })}>Import…</Button>
       </div>

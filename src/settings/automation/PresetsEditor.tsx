@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { normalizeAlert, withAlertPart, withAlertParts } from '../../automation/alertParts';
 import {
   alertPresetById,
@@ -13,7 +13,13 @@ import {
   presetToggles,
   type PresetToggle,
 } from '../../automation/automationRecords';
-import { editColors, editsToSave, withColorEdit } from '../../automation/presetEdits';
+import {
+  editColors,
+  editsToSave,
+  editSummary,
+  hasEdits,
+  withColorEdit,
+} from '../../automation/presetEdits';
 import { runPresetPlan } from '../../automation/presetPlan';
 import { type Preset, PRESET_CATEGORIES, presetById } from '../../automation/presets';
 import { alertPresetsGet, alertPresetsSet } from '../../ipc/alerts';
@@ -31,18 +37,19 @@ import { useMacroList } from '../../stores/config/macroListStore';
 import { loadTarget } from '../../stores/session/useConnection';
 import type { SetUiConfig } from '../pageTypes';
 import { getShownProfile } from '../shownProfile';
-import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
+import { Button, Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
 import { PresetColors } from './PresetColors';
 import { PresetSample } from './PresetSample';
 import { SamplePaintContext, useSamplePaint } from './samplePaint';
-import type { DetailProps, DirtyReport, KindSpec } from './types';
+import type { DetailProps, DirtyReport, KindSpec, TriggersLink } from './types';
 import { useBannerPermission } from './useBannerPermission';
 
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 const MACRO_NOUN = { one: 'macro', many: 'macros' };
 const ALERT_NOUN = { one: 'alert', many: 'alerts' };
+const COLOR_NOUN = { one: 'color', many: 'colors' };
 const ALERTS_CATEGORY = 'Alerts';
 
 interface PresetsEditorProps {
@@ -54,7 +61,12 @@ interface PresetsEditorProps {
   onError: (message: string | null) => void;
   /** Select this preset, by id, each time `seq` goes up. */
   selectPreset: { key: string; seq: number } | null;
+  /** Open Triggers on a trigger, or filtered, as a link on a card asks. */
+  onOpenTriggers: OpenTriggers;
 }
+
+/** Open Triggers where a link on a preset's card points. */
+type OpenTriggers = (to: Omit<TriggersLink, 'seq'>) => void;
 
 /** The deep link anchor of a preset's row, `presets:<id>`. */
 function presetAnchor(id: string): string {
@@ -82,6 +94,7 @@ export function PresetsEditor({
   onDirty,
   onError,
   selectPreset,
+  onOpenTriggers,
 }: PresetsEditorProps) {
   const paint = useSamplePaint(config);
   const spec = useMemo<KindSpec<PresetToggle>>(
@@ -181,10 +194,10 @@ export function PresetsEditor({
         isAlertPresetId(props.value.id) ? (
           <AlertPresetDetail {...props} onError={onError} />
         ) : (
-          <PresetDetail {...props} />
+          <PresetDetail {...props} onOpenTriggers={onOpenTriggers} />
         ),
     }),
-    [setConfig, pathB, onError],
+    [setConfig, pathB, onError, onOpenTriggers],
   );
 
   return (
@@ -201,44 +214,122 @@ export function PresetsEditor({
   );
 }
 
-export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
+/** The card of a preset of the library, as Presets board 1 draws it:
+ *  the description, Looks like, Colors, Suggested, Adds and Your changes,
+ *  with Reset to preset under it while it holds your edits. Its links
+ *  open Triggers while the preset is on, and read as plain text while it
+ *  is off, since Triggers then holds none of its triggers. */
+export function PresetDetail({
+  value: t,
+  update,
+  onOpenTriggers,
+}: DetailProps<PresetToggle> & { onOpenTriggers: OpenTriggers }) {
   const preset = presetById(t.id);
   if (!preset) return null;
   const binds = preset.macros ?? [];
-  const adds = listJoin([
-    ...(preset.triggers.length > 0 ? [countPhrase(preset.triggers.length, TRIGGER_NOUN)] : []),
+  const link = (text: string, to: Omit<TriggersLink, 'seq'>): ReactNode =>
+    t.enabled ? (
+      <button type="button" className="st-auto-link" onClick={() => onOpenTriggers(to)}>
+        {text}
+      </button>
+    ) : (
+      text
+    );
+  const adds = [
+    ...(preset.triggers.length > 0
+      ? [link(countPhrase(preset.triggers.length, TRIGGER_NOUN), { filter: preset.name })]
+      : []),
     ...(binds.length > 0 ? [countPhrase(binds.length, MACRO_NOUN)] : []),
-  ]);
+  ];
+  const changes = yourChanges(preset, t.edit, link);
   return (
-    <Card className="st-auto-card">
-      <Row label={preset.name} description={preset.description}>
-        <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
-      </Row>
-      {preset.sample.length > 0 && (
-        <div className="st-row st-auto-block">
-          <div className="st-row-text">
-            <span className="st-row-label">Looks like</span>
-          </div>
-          <PresetSample preset={preset} colors={editColors(t.edit)} />
-        </div>
-      )}
-      <PresetColors
-        preset={preset}
-        edit={t.edit}
-        onColor={(key, value) =>
-          update((v) => withEdit(v, withColorEdit(preset, v.edit, key, value)))
-        }
-      />
-      {preset.suggest.length > 0 && (
-        <Row label="Suggested">
-          <span className="st-auto-value">For {listJoin(preset.suggest)}</span>
+    <>
+      <Card className="st-auto-card">
+        <Row label={preset.name} description={preset.description}>
+          <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
         </Row>
-      )}
-      <Row label="Adds">
-        <span className="st-auto-value">{adds}</span>
-      </Row>
-      {binds.length > 0 && <PresetKeys preset={preset} />}
-    </Card>
+        {preset.sample.length > 0 && (
+          <div className="st-row st-auto-block">
+            <div className="st-row-text">
+              <span className="st-row-label">Looks like</span>
+            </div>
+            <PresetSample preset={preset} colors={editColors(t.edit)} />
+          </div>
+        )}
+        <PresetColors
+          preset={preset}
+          edit={t.edit}
+          onColor={(key, value) =>
+            update((v) => withEdit(v, withColorEdit(preset, v.edit, key, value)))
+          }
+        />
+        {preset.suggest.length > 0 && (
+          <Row label="Suggested">
+            <span className="st-auto-value">For {listJoin(preset.suggest)}</span>
+          </Row>
+        )}
+        <Row label="Adds">
+          <span className="st-auto-value">{joined(adds, ' and ')}</span>
+        </Row>
+        {binds.length > 0 && <PresetKeys preset={preset} />}
+        {changes && (
+          <Row
+            label="Your changes"
+            description={t.enabled ? undefined : 'Kept while the preset is off.'}
+          >
+            <span className="st-auto-value">{changes}</span>
+          </Row>
+        )}
+      </Card>
+      {hasEdits(t.edit) && <ResetToPreset onReset={() => update((v) => withEdit(v, undefined))} />}
+    </>
+  );
+}
+
+/** `parts` with `between` between each two. */
+function joined(parts: readonly ReactNode[], between: string): ReactNode {
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && between}
+      {part}
+    </Fragment>
+  ));
+}
+
+/** What Your changes says: each color and trigger you changed, as `The
+ *  line color, buff.sanctuary`, each trigger a link, or past two, how
+ *  many, as `2 colors and 3 triggers`. Null while you changed nothing. */
+function yourChanges(
+  preset: Preset,
+  edit: PresetEdit | undefined,
+  link: (text: string, to: Omit<TriggersLink, 'seq'>) => ReactNode,
+): ReactNode {
+  const { colors, triggers } = editSummary(preset, edit);
+  const count = colors.length + triggers.length;
+  if (count === 0) return null;
+  if (count > 2) {
+    return listJoin([
+      ...(colors.length > 0 ? [countPhrase(colors.length, COLOR_NOUN)] : []),
+      ...(triggers.length > 0 ? [countPhrase(triggers.length, TRIGGER_NOUN)] : []),
+    ]);
+  }
+  return joined(
+    [
+      ...colors.map((key) => `${preset.colors[key].label} color`),
+      ...triggers.map((name) => link(name, { select: name })),
+    ],
+    ', ',
+  );
+}
+
+/** Reset to preset, under the card where Delete sits for your own items.
+ *  It waits for Save like any other change, so Discard brings your edits
+ *  back. */
+function ResetToPreset({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="st-auto-detail-actions">
+      <Button onClick={onReset}>Reset to preset</Button>
+    </div>
   );
 }
 
@@ -280,34 +371,39 @@ export function AlertPresetDetail({
     'background',
   ];
   return (
-    <Card className="st-auto-card">
-      {banner.permission === 'denied' && <BannerOffNote onError={onError} />}
-      <Row label={preset.name} description={preset.description}>
-        <Toggle checked={t.enabled} onChange={turn} />
-      </Row>
-      <Row label="Listens to">
-        <span className="st-auto-value">{preset.listensTo}</span>
-      </Row>
-      <AlertRow
-        alert={alert}
-        disabled={false}
-        banner={banner}
-        onPress={(part, on) =>
-          update((v) => ({ ...v, alert: withAlertPart(v.alert ?? alert, part, on) }))
-        }
-      />
-      <AlertDetailRows
-        alert={alert}
-        disabled={false}
-        only={rows}
-        onChange={(patch) =>
-          update((v) => ({ ...v, alert: withAlertParts(v.alert ?? alert, patch) }))
-        }
-      />
-      <Row label="Adds">
-        <span className="st-auto-value">{countPhrase(1, ALERT_NOUN)}</span>
-      </Row>
-    </Card>
+    <>
+      <Card className="st-auto-card">
+        {banner.permission === 'denied' && <BannerOffNote onError={onError} />}
+        <Row label={preset.name} description={preset.description}>
+          <Toggle checked={t.enabled} onChange={turn} />
+        </Row>
+        <Row label="Listens to">
+          <span className="st-auto-value">{preset.listensTo}</span>
+        </Row>
+        <AlertRow
+          alert={alert}
+          disabled={false}
+          banner={banner}
+          onPress={(part, on) =>
+            update((v) => ({ ...v, alert: withAlertPart(v.alert ?? alert, part, on) }))
+          }
+        />
+        <AlertDetailRows
+          alert={alert}
+          disabled={false}
+          only={rows}
+          onChange={(patch) =>
+            update((v) => ({ ...v, alert: withAlertParts(v.alert ?? alert, patch) }))
+          }
+        />
+        <Row label="Adds">
+          <span className="st-auto-value">{countPhrase(1, ALERT_NOUN)}</span>
+        </Row>
+      </Card>
+      {!isPresetDefault(alert) && (
+        <ResetToPreset onReset={() => update((v) => ({ ...v, alert: PRESET_ALERT_DEFAULT }))} />
+      )}
+    </>
   );
 }
 
