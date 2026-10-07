@@ -50,6 +50,7 @@ const PREVIEW: ImportPreview = {
   plugins: ['vitals_alert'],
   world: { host: WORLD, port: 1848, name: 'The Forsaken Lands' },
   characters: [{ name: 'Orla', claimed_by: 'Healer' }],
+  presets_stay: false,
 };
 
 // Board 5's list, Default and Healer on The Forsaken Lands.

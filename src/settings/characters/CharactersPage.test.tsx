@@ -26,6 +26,7 @@ const PREVIEW: ImportPreview = {
   plugins: [],
   world: { host: WORLD, port: 1848, name: 'The Forsaken Lands' },
   characters: [{ name: 'Orla', claimed_by: 'Healer' }],
+  presets_stay: false,
 };
 
 const state = vi.hoisted(() => ({

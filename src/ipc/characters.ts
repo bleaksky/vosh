@@ -149,6 +149,9 @@ export interface ImportPreview {
   world: { host: string; port: number | null; name: string } | null;
   /** The characters the file names. Only a file with a world names any. */
   characters: ImportCharacter[];
+  /** In loadout mode, whether the file holds presets, which stay out,
+   *  since the catalog's presets serve every character (Presets Q11). */
+  presets_stay: boolean;
 }
 
 /** Read `text`, the file you picked as `fileName`, as a Vosh profile

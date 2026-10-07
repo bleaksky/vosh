@@ -27,6 +27,7 @@ const FULL: ImportPreview = {
   plugins: ['vitals_alert'],
   world: { host: WORLD, port: 1848, name: 'The Forsaken Lands' },
   characters: [{ name: 'Orla', claimed_by: 'Healer' }],
+  presets_stay: false,
 };
 
 /** Each row as it reads, with the names in the MUD font in brackets. */
@@ -70,6 +71,12 @@ describe('In this file', () => {
       'Variables: 2',
       'Panes: Map, Affects',
     ]);
+  });
+
+  it('says the presets stay as the catalog has them in loadout mode', () => {
+    expect(read(importSummary({ ...FULL, presets_stay: true })).at(-1)).toBe(
+      'Presets: Stay as the catalog has them (wide)',
+    );
   });
 
   it('names every Lua item and plugin, and a tick with no timer', () => {
