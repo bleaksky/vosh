@@ -10,6 +10,7 @@ use super::{split_first_word, InputResult, ProfileReplace};
 use crate::app::state::AppState;
 use crate::disk::paths;
 use crate::import::tintin;
+use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Profile;
 use crate::profile::open::OpenProfile;
@@ -99,7 +100,10 @@ pub(super) fn slash_profile(
             None => InputResult::error("could not resolve profile path"),
         },
         "reset" => {
-            let blank = ProfileConfig::default();
+            // What a fresh install gets: every preset off and no edits
+            // to come back when you turn one on (First Run Q11).
+            let mut blank = ProfileConfig::default();
+            blank.ui.enabled_presets = vec![PRESETS_OFF.to_string()];
             let tick_before = profile.tick.config.clone();
             let _ = blank.apply_to(profile);
             hand_to_connection(profile, c, &tick_before);
@@ -233,4 +237,68 @@ fn expand_home(path: &str) -> std::path::PathBuf {
         }
     }
     std::path::PathBuf::from(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loadouts::preset_edits::lilac_line;
+
+    /// A profile named Healer with Disarms and fading buffs on and its
+    /// line in lilac.
+    fn edited() -> Profile {
+        let mut p = Profile {
+            name: Some("Healer".into()),
+            ..Profile::default()
+        };
+        p.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+        p.preset_edits = lilac_line();
+        p
+    }
+
+    fn run(state: &AppState, p: &mut Profile, args: &str) -> InputResult {
+        slash_profile(state, p, &mut Connection::default(), args, &mut false)
+    }
+
+    #[test]
+    fn a_reset_turns_every_preset_off_and_clears_your_edits() {
+        let state = AppState::default();
+        let mut p = edited();
+        run(&state, &mut p, "reset");
+        // An empty list would turn the eleven defaults back on.
+        assert_eq!(p.ui.enabled_presets, [PRESETS_OFF]);
+        assert!(p.preset_edits.is_empty(), "{:?}", p.preset_edits);
+    }
+
+    #[test]
+    fn a_load_reads_the_list_and_the_edits_of_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::default();
+        state.app_data.set(dir.path().to_path_buf()).unwrap();
+        let path = paths::profile_path(dir.path(), "Healer");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        ProfileConfig::from_profile(&edited()).save(&path).unwrap();
+        let mut p = Profile {
+            name: Some("Healer".into()),
+            ..Profile::default()
+        };
+        run(&state, &mut p, "load");
+        assert_eq!(p.ui.enabled_presets, ["disarm_buff_fade"]);
+        assert_eq!(p.preset_edits, lilac_line());
+    }
+
+    #[test]
+    fn loadout_mode_still_refuses_a_reset() {
+        let state = AppState::default();
+        state
+            .loadout_mode
+            .store(true, std::sync::atomic::Ordering::Release);
+        let mut p = edited();
+        let refused = run(&state, &mut p, "reset");
+        assert_eq!(
+            refused.echo,
+            ["[profile reset does not apply in loadout mode. delete items from settings instead]"]
+        );
+        assert_eq!(p.preset_edits, lilac_line());
+    }
 }

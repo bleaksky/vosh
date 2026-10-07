@@ -19,6 +19,7 @@ use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
 use crate::disk::paths::catalog_path;
+use crate::profile::file::ProfileConfig;
 use crate::profile::live::{Macro, Profile};
 
 /// The global catalog. Every alias, trigger, macro lives here as a
@@ -60,8 +61,7 @@ pub(crate) struct GlobalCatalog {
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
     /// macros, enabled presets, alert presets and preset edits. A save in
-    /// loadout mode
-    /// writes this.
+    /// loadout mode writes this.
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
@@ -71,6 +71,24 @@ impl GlobalCatalog {
             alerts: profile.alerts.clone(),
             preset_edits: profile.preset_edits.clone(),
         }
+    }
+
+    /// Give `file`, the file of a profile no session plays, the presets
+    /// as the catalog runs them: its list of presets that are on, your
+    /// edits to them, and the preset triggers as installed, your edits in
+    /// them (Presets Q11). An export of that profile then carries the
+    /// presets you play, as an export of an open one does. A catalog that
+    /// has not taken the list yet leaves the file's own.
+    pub(crate) fn lay_presets_over_file(&self, file: &mut ProfileConfig) {
+        let Some(list) = &self.enabled_presets else {
+            return;
+        };
+        file.ui.enabled_presets.clone_from(list);
+        file.preset_edits.clone_from(&self.preset_edits);
+        let presets = self.triggers.iter().filter(|t| t.preset.is_some());
+        file.triggers
+            .retain(|t| !presets.clone().any(|p| p.name == t.name));
+        file.triggers.extend(presets.cloned());
     }
 }
 

@@ -282,8 +282,9 @@ pub(crate) fn reset_open_panes(
 
 /// A profile as Export to Downloads writes it. First its settings as
 /// TOML, the way `#profile save` writes them: the open copy of a profile
-/// a session plays, the saved file (or defaults) for any other. Then the
-/// `[vosh_export]` table with its world and the characters in `ticked`
+/// a session plays, the saved file (or defaults) for any other, which in
+/// loadout mode takes the catalog's presets and your edits to them. Then
+/// the `[vosh_export]` table with its world and the characters in `ticked`
 /// that it claims. Holds [`PERSIST_LOCK`] like [`profile_detail`], so a
 /// switch or a rename cannot land between reading the claim, deciding
 /// which copy to read and reading it.
@@ -305,7 +306,13 @@ pub(crate) async fn export_text(
         (table, stored)
     };
     let config = match stored {
-        Stored::File(config) => config,
+        Stored::File(mut config) => {
+            // In loadout mode the catalog holds the presets you play.
+            if let Some(catalog) = &*state.global_catalog.lock().await {
+                catalog.lay_presets_over_file(&mut config);
+            }
+            config
+        }
         Stored::Open(open) => ProfileConfig::from_profile(&*open.lock().await),
     };
     let failed = |e: &dyn std::fmt::Display| {
@@ -570,6 +577,65 @@ mod tests {
         assert_eq!(back.prompt_config(), vosh_prompt::PromptConfig::fresh());
 
         assert!(export_text(&state, "Nobody", &[]).await.is_err());
+    }
+
+    /// An export carries the list of presets that are on, your edits to
+    /// them and the preset triggers as installed (Presets Q11).
+    #[tokio::test]
+    async fn an_export_carries_the_preset_edits_in_per_profile_mode() {
+        use crate::loadouts::preset_edits::lilac_line;
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+        config.preset_edits = lilac_line();
+        write_profile(dir.path(), "Healer", &config);
+        {
+            let mut p = state.selected_profile().await;
+            p.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+            p.preset_edits = lilac_line();
+        }
+        for name in ["Healer", DEFAULT_PROFILE_NAME] {
+            let text = export_text(&state, name, &[]).await.unwrap();
+            let back = ProfileConfig::from_toml(&text).unwrap();
+            assert_eq!(back.ui.enabled_presets, ["disarm_buff_fade"], "{name}");
+            assert_eq!(back.preset_edits, lilac_line(), "{name}");
+        }
+    }
+
+    /// In loadout mode an export of a profile no session plays carries
+    /// the catalog's presets, as one of the profile you play does, and
+    /// never the old list its file keeps.
+    #[tokio::test]
+    async fn a_loadout_export_carries_the_catalog_presets_for_a_closed_profile() {
+        use crate::loadouts::catalog::GlobalCatalog;
+        use crate::loadouts::preset_edits::lilac_line;
+        use vosh_automation::trigger::{Trigger, TriggerAction};
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.enabled_presets = vec!["sent_tells".into()];
+        write_profile(dir.path(), "Healer", &config);
+        let mut preset = Trigger::new(
+            "disarm.secondary",
+            "disarms you and sends your weapon flying",
+            TriggerAction::Gag,
+        );
+        preset.preset = Some("disarm_buff_fade".into());
+        let yours = Trigger::new("spam", "^spam$", TriggerAction::Gag);
+        *state.global_catalog.lock().await = Some(GlobalCatalog {
+            triggers: vec![preset, yours],
+            enabled_presets: Some(vec!["disarm_buff_fade".into()]),
+            preset_edits: lilac_line(),
+            ..GlobalCatalog::default()
+        });
+
+        let text = export_text(&state, "Healer", &[]).await.unwrap();
+        let back = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(back.ui.enabled_presets, ["disarm_buff_fade"]);
+        assert_eq!(back.preset_edits, lilac_line());
+        let names: Vec<_> = back.triggers.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, ["disarm.secondary"]);
     }
 
     #[tokio::test]

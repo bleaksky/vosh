@@ -1086,6 +1086,28 @@ pub(crate) mod tests {
         assert!(set.get("Other").is_none());
     }
 
+    /// New profile copies the profile you play, your preset edits with
+    /// the list of presets that are on (Presets board 5).
+    #[tokio::test]
+    async fn a_new_profile_copies_the_preset_edits_with_the_list() {
+        use crate::loadouts::preset_edits::lilac_line;
+        let dir = tempdir().unwrap();
+        let state: SharedState = std::sync::Arc::new(crate::app::state::AppState::default());
+        state.set_profiles(james_like_set(dir.path())).await;
+        {
+            let mut p = state.selected_profile().await;
+            p.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+            p.preset_edits = lilac_line();
+        }
+        create_profile(&state, "Orla", Some(DEFAULT_PROFILE_NAME), None)
+            .await
+            .unwrap();
+        let set = state.loaded_profile_set().await.unwrap();
+        let copy = ProfileConfig::load(&set.profile_path("Orla")).unwrap();
+        assert_eq!(copy.ui.enabled_presets, ["disarm_buff_fade"]);
+        assert_eq!(copy.preset_edits, lilac_line());
+    }
+
     #[test]
     fn duplicate_copies_per_profile_file() {
         let dir = tempdir().unwrap();

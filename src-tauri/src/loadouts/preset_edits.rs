@@ -90,6 +90,24 @@ fn merge_rows(held: &mut BTreeMap<String, EditRow>, sent: BTreeMap<String, EditR
     }
 }
 
+/// Orla's lilac line in Disarms and fading buffs, the color row of board
+/// 1, for the tests that carry a table from file to file.
+#[cfg(test)]
+pub(crate) fn lilac_line() -> PresetEdits {
+    let line = EditRow {
+        value: "#c3a6ff".into(),
+        was: "fg:178".into(),
+        seen: None,
+    };
+    PresetEdits::from([(
+        "disarm_buff_fade".into(),
+        PresetEdit {
+            colors: BTreeMap::from([("line".into(), line)]),
+            ..PresetEdit::default()
+        },
+    )])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
