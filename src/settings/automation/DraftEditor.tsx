@@ -406,8 +406,8 @@ export function DraftEditor<T>({
   const applyJson = (text: string): boolean => {
     jsonPending.current = null;
     window.clearTimeout(jsonTimer.current);
-    const values = spec.json?.fromText(text) ?? null;
     const d = draftRef.current;
+    const values = d ? (spec.json?.fromText(text, draftValues(d)) ?? null) : null;
     if (!values || !d) {
       setJsonBad(true);
       return false;

@@ -1,6 +1,8 @@
 import { act, useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { presetById, presetTriggers } from '../../automation/presets';
 import type { TriggerRecord } from '../../ipc/automation';
+import type { PresetEdit, PresetEdits } from '../../ipc/presetEdits';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
 // The trigger card's Pattern row, board 6 of the Scripts review: the
@@ -15,7 +17,9 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn((cmd: string, args?: { json?: string }) => Promise.resolve(answer(cmd, args))),
+  invoke: vi.fn((cmd: string, args?: Parameters<typeof answer>[1]) =>
+    Promise.resolve(answer(cmd, args)),
+  ),
 }));
 
 // CodeMirror needs a real DOM. Advanced holds the Lua script row, and
@@ -25,6 +29,12 @@ vi.mock('../../ui/CodeEditor', () => ({
     <textarea data-code="" value={value} onChange={(e) => onChange(e.target.value)} />
   ),
 }));
+// The plan builds and installs the presets after a Save that changed a
+// preset trigger. presetPlan.test.ts covers it.
+const runPresetPlan = vi.fn((_profile: string | null) =>
+  Promise.resolve({ told: [], removed: [] }),
+);
+vi.mock('../../automation/presetPlan', () => ({ runPresetPlan }));
 vi.mock('../../stores/session/promptGagStore', () => ({
   usePromptGags: () => new Set<string>(),
 }));
@@ -32,10 +42,16 @@ vi.mock('../../stores/session/promptGagStore', () => ({
 /** The trigger list triggers_export answers with and triggers_import
  *  writes, as JSON. */
 let stored = '[]';
+/** Your preset edits, as preset_edits_get answers. */
+let presetEdits: PresetEdits = {};
+/** Each preset_edits_set call, as its preset id and the rows it sent. */
+const editsSent: [string, PresetEdit][] = [];
 
-function answer(cmd: string, args?: { json?: string }): unknown {
+function answer(cmd: string, args?: { json?: string; id?: string; edits?: PresetEdit }): unknown {
   if (cmd === 'triggers_export') return stored;
   if (cmd === 'triggers_import') stored = args?.json ?? stored;
+  if (cmd === 'preset_edits_get') return presetEdits;
+  if (cmd === 'preset_edits_set') editsSent.push([args?.id ?? '', args?.edits ?? {}]);
   if (cmd === 'groups_list') return [];
   return undefined;
 }
@@ -83,6 +99,9 @@ function on(el: FakeElement): Record<string, Handler> {
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const clean of cleanups.splice(0)) await clean();
+  presetEdits = {};
+  editsSent.length = 0;
+  runPresetPlan.mockClear();
   delete doc.documentElement.dataset.platform;
 });
 
@@ -274,19 +293,22 @@ async function mountEditor(
         )[0],
       ),
     click: (text: string) => click(button(text)),
-    /** Type `text` into the field the label `label` names. */
-    type: (label: string, text: string) =>
-      act(async () => {
+    /** Type `text` into the field the label `label` names, and leave
+     *  it, as a Group field commits. */
+    type: async (label: string, text: string) => {
+      const field = () => {
         const name = findAll(
           container,
           (el) => el.nodeName === 'LABEL' && el.textContent === label,
         )[0];
         const id = name?.getAttribute('for') ?? name?.getAttribute('htmlFor');
-        const field = findAll(container, (el) => el.getAttribute('id') === id)[0];
-        if (!field) throw new Error(`no ${label} field`);
-        on(field).onChange({ target: { value: text } });
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }),
+        const el = findAll(container, (n) => n.getAttribute('id') === id)[0];
+        if (!el) throw new Error(`no ${label} field`);
+        return el;
+      };
+      await act(async () => on(field()).onChange({ target: { value: text } }));
+      await act(async () => on(field()).onBlur?.());
+    },
     /** The text of Edit all as JSON. */
     json: () => findAll(container, (el) => el.hasAttribute('data-code'))[0]?.value,
     /** Type `text` into Edit all as JSON, and wait out its pause. */
@@ -421,5 +443,61 @@ describe('the preset name guard', () => {
     await editor.click('Save');
     expect(editor.error()).toBe(GUARD);
     expect(JSON.parse(stored)).toEqual([VISITOR]);
+  });
+});
+
+/** The triggers of Disarms and fading buffs as the store holds them. */
+const DISARMS = presetTriggers(presetById('disarm_buff_fade')!);
+const SANCTUARY = DISARMS.find((t) => t.name === 'buff.sanctuary')!;
+
+// Presets Q9: the text holds your own triggers, and its Save keeps every
+// preset trigger as the store holds it.
+describe('Edit all as JSON', () => {
+  it('leaves the preset triggers out and keeps them at Save', async () => {
+    const editor = await mountEditor([VISITOR, SANCTUARY], null, true);
+    expect(JSON.parse(editor.json() ?? '')).toEqual([VISITOR]);
+    const before = JSON.parse(stored) as TriggerRecord[];
+
+    await editor.typeJson(JSON.stringify([{ ...VISITOR, enabled: false }]));
+    await editor.click('Save');
+    expect(editor.error()).toBeNull();
+    const after = JSON.parse(stored) as TriggerRecord[];
+    expect(after.map((t) => [t.name, t.enabled])).toEqual([
+      ['visitor', false],
+      ['buff.sanctuary', true],
+    ]);
+    expect(after[1]).toEqual(before[1]);
+    expect(editsSent).toEqual([]);
+    expect(runPresetPlan).not.toHaveBeenCalled();
+  });
+
+  it('keeps the preset triggers when you clear the text', async () => {
+    const editor = await mountEditor([VISITOR, SANCTUARY], null, true);
+    await editor.typeJson('[]');
+    await editor.click('Save');
+    expect((JSON.parse(stored) as TriggerRecord[]).map((t) => t.name)).toEqual(['buff.sanctuary']);
+  });
+});
+
+// Presets board 2: Save writes your triggers through the store and the
+// rows you changed in a preset trigger through preset_edits_set, then
+// runs the plan that builds the preset trigger again.
+describe('saving a preset trigger', () => {
+  it('keeps its group in the store and in your edits', async () => {
+    const editor = await mountEditor([VISITOR, SANCTUARY]);
+    const before = JSON.parse(stored) as TriggerRecord[];
+    await editor.pick('buff.sanctuary');
+    await editor.type('Group', 'fights');
+    await editor.click('Save');
+    expect(editor.error()).toBeNull();
+    const after = JSON.parse(stored) as TriggerRecord[];
+    expect(after).toEqual([before[0], { ...before[1], group: 'fights' }]);
+    expect(editsSent).toEqual([
+      [
+        'disarm_buff_fade',
+        { triggers: { 'buff.sanctuary': { group: { value: 'fights', was: '' } } } },
+      ],
+    ]);
+    expect(runPresetPlan).toHaveBeenCalledTimes(1);
   });
 });

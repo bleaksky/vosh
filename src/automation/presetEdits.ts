@@ -31,7 +31,7 @@ import {
   type HighlightPatch,
   type TriggerStyle,
 } from './automationTriggers';
-import { fillColors, type Preset, type PresetTrigger } from './presets';
+import { fillColors, presetById, type Preset, type PresetTrigger } from './presets';
 import { indexedRgb, toHex } from '../theme/color';
 import type {
   AlertParts,
@@ -283,6 +283,93 @@ export function diff(
     const was = nowOf(now, key) ?? NO_ROW;
     const seen = held[key]?.seen;
     out[key] = seen === undefined ? { value, was } : { value, was, seen };
+  }
+  return out;
+}
+
+/** The preset `t`, a stored trigger, comes from and its trigger there,
+ *  or undefined for a trigger of yours or one this build no longer
+ *  builds. */
+export function libraryTrigger(
+  t: TriggerRecord,
+): { preset: Preset; trigger: PresetTrigger } | undefined {
+  const preset = t.preset ? presetById(t.preset) : undefined;
+  const trigger = preset?.triggers.find((p) => p.name === t.name);
+  return preset && trigger ? { preset, trigger } : undefined;
+}
+
+// A preset trigger as a card holds it, tagged with its preset and in
+// `group`, or in none.
+function asCard(
+  preset: Preset,
+  trigger: PresetTrigger,
+  group: string | null | undefined,
+): TriggerRecord {
+  const { group: _shipped, ...rest } = asRecord(trigger);
+  return group ? { ...rest, group, preset: preset.id } : { ...rest, preset: preset.id };
+}
+
+/** The card Triggers shows for `stored`, a preset trigger as the store
+ *  holds it: its trigger in the library with `edit`, your edits to its
+ *  preset, laid over it, in the group the store keeps. Its colors stay
+ *  named by key, so Replace with shows {mark} and {line} and a swatch
+ *  still reaches what you write there. Undefined for a trigger the
+ *  library does not build. */
+export function presetCard(
+  stored: TriggerRecord,
+  edit: PresetEdit | undefined,
+): TriggerRecord | undefined {
+  const from = libraryTrigger(stored);
+  if (!from) return undefined;
+  const laid = overlay(from.trigger, edit?.triggers?.[stored.name]).trigger;
+  return asCard(from.preset, laid, stored.group);
+}
+
+/** The card of `t` with every row as its preset ships it, its group
+ *  included, as Reset to preset leaves it. */
+export function shippedCard(t: TriggerRecord): TriggerRecord {
+  const from = libraryTrigger(t);
+  return from ? asCard(from.preset, from.trigger, from.trigger.group) : t;
+}
+
+/** The rows of `card` that differ from its trigger as the preset ships
+ *  it, each with the preset's value. Empty for a trigger of yours. */
+export function changedRows(card: TriggerRecord): Rows {
+  const from = libraryTrigger(card);
+  if (!from) return {};
+  const mine = triggerRows(asPreset(card));
+  const ship = triggerRows(from.trigger);
+  const out: Rows = {};
+  for (const key of new Set([...Object.keys(mine), ...Object.keys(ship)])) {
+    const theirs = ship[key] ?? NO_ROW;
+    if (!same(mine[key] ?? NO_ROW, theirs)) out[key] = theirs;
+  }
+  return out;
+}
+
+/** What a Save in Triggers sends to preset_edits_set, by preset id: for
+ *  each preset trigger the page changed, the rows that differ between
+ *  `before`, the card as it loaded, and `after`, the card as you left
+ *  it. `edits` are your edits as they loaded, so a flagged row keeps its
+ *  seen. */
+export function cardEdits(
+  changed: readonly { before: TriggerRecord; after: TriggerRecord }[],
+  edits: Readonly<Record<string, PresetEdit>>,
+): Map<string, PresetEdit> {
+  const out = new Map<string, PresetEdit>();
+  for (const { before, after } of changed) {
+    const from = libraryTrigger(after);
+    if (!from) continue;
+    const { preset, trigger } = from;
+    const rows = diff(
+      triggerRows(asPreset(before)),
+      triggerRows(asPreset(after)),
+      triggerRows(trigger),
+      edits[preset.id]?.triggers?.[trigger.name],
+    );
+    if (Object.keys(rows).length === 0) continue;
+    const edit = out.get(preset.id) ?? {};
+    out.set(preset.id, { triggers: { ...edit.triggers, [trigger.name]: rows } });
   }
   return out;
 }

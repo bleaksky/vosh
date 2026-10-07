@@ -90,8 +90,10 @@ export interface KindSpec<T> {
   /** JSON editing. Leave out for kinds with no JSON view. */
   json?: {
     toText: (values: T[]) => string;
-    /** The values, or null when the text does not read. */
-    fromText: (text: string) => T[] | null;
+    /** The values, or null when the text does not read. `current` is
+     *  the draft as it stands, for a kind whose text leaves some items
+     *  out, as Triggers leaves out the preset triggers. */
+    fromText: (text: string, current: readonly T[]) => T[] | null;
   };
   /** Reload when the store changes elsewhere while the draft is clean. */
   subscribe?: (onChange: () => void) => Promise<() => void>;

@@ -4,6 +4,8 @@ import {
   alsoKey,
   applyRows,
   buildPreset,
+  cardEdits,
+  changedRows,
   diff,
   editColors,
   editsToSave,
@@ -13,10 +15,13 @@ import {
   NO_ROW,
   overlay,
   patternKey,
+  presetCard,
+  shippedCard,
   takeFix,
   triggerRows,
   withColorEdit,
 } from './presetEdits';
+import { withReplaceTemplate } from './automationTriggers';
 import { drawSample } from './presetSample';
 import { presetById, presetTriggers, PRESETS, type Preset, type PresetTrigger } from './presets';
 import type { EditRow, PresetEdit } from '../ipc/presetEdits';
@@ -409,5 +414,105 @@ describe('the swatches of the card', () => {
     const runs = drawSample(disarms, disarms.sample[0], editColors(lilac)).runs;
     expect(runs.map(([, color]) => color)).toEqual(['bold red', null, '#c3a6ff']);
     expect(drawSample(disarms, disarms.sample[0]).runs.at(-1)?.[1]).toBe('178');
+  });
+});
+
+// Presets board 2: a preset trigger's card in Triggers, and what its
+// Save sends.
+describe('the card of a preset trigger', () => {
+  const SANCTUARY = 'buff.sanctuary';
+  const stored = (name: string, edit?: PresetEdit) =>
+    buildPreset(disarms, edit).triggers.find((t) => t.name === name)!;
+  const off: PresetEdit = { triggers: { [SANCTUARY]: { enabled: { value: false, was: true } } } };
+
+  it('shows the color keys, your rows and the group the store keeps', () => {
+    const card = presetCard({ ...stored(SANCTUARY, off), group: 'fights' }, off)!;
+    expect(card.enabled).toBe(false);
+    expect(card.group).toBe('fights');
+    expect(card.preset).toBe('disarm_buff_fade');
+    expect(triggerRows(card as unknown as PresetTrigger).replace).toBe(
+      '{mark}##{reset} {line}The protective aura around $1 fades.{reset}',
+    );
+    expect(changedRows(card)).toEqual({ enabled: true, group: NO_ROW });
+  });
+
+  it('is undefined for a trigger the library does not build', () => {
+    expect(presetCard({ ...stored(SANCTUARY), name: 'buff.gone' }, undefined)).toBeUndefined();
+    expect(presetCard({ ...stored(SANCTUARY), preset: 'gone' }, undefined)).toBeUndefined();
+  });
+
+  it('goes back to the preset whole, its group included', () => {
+    const card = presetCard({ ...stored(SANCTUARY, off), group: 'fights' }, off)!;
+    const reset = shippedCard(card);
+    expect(changedRows(reset)).toEqual({});
+    expect('group' in reset).toBe(false);
+  });
+
+  it('sends only the rows you changed, each from the preset', () => {
+    const before = presetCard(stored(SANCTUARY), undefined)!;
+    const after = { ...before, enabled: false, priority: 7 };
+    expect(cardEdits([{ before, after }], {})).toEqual(
+      new Map([
+        [
+          'disarm_buff_fade',
+          {
+            triggers: {
+              [SANCTUARY]: {
+                enabled: { value: false, was: true },
+                priority: { value: 7, was: 5 },
+              },
+            },
+          },
+        ],
+      ]),
+    );
+  });
+
+  it('folds a row set back to the preset at Save', () => {
+    const before = presetCard(stored(SANCTUARY, off), off)!;
+    const after = { ...before, enabled: true };
+    const sent = cardEdits([{ before, after }], { disarm_buff_fade: off });
+    // A row whose value is its was, which preset_edits_set drops.
+    expect(sent.get('disarm_buff_fade')).toEqual({
+      triggers: { [SANCTUARY]: { enabled: { value: true, was: true } } },
+    });
+  });
+
+  it('leaves out a flagged row you never touched', () => {
+    const flagged: PresetEdit = {
+      triggers: { [SECONDARY]: { send: { value: '', was: DUAL, seen: DUAL } } },
+    };
+    const before = presetCard(stored(SECONDARY, flagged), flagged)!;
+    const after = { ...before, priority: 7 };
+    expect(cardEdits([{ before, after }], { disarm_buff_fade: flagged })).toEqual(
+      new Map([
+        ['disarm_buff_fade', { triggers: { [SECONDARY]: { priority: { value: 7, was: 5 } } } }],
+      ]),
+    );
+  });
+
+  it('keeps the keys of a Replace with edit, so a later swatch reaches it', () => {
+    const TURNING = 'buff.spell_turning';
+    const before = presetCard(stored(TURNING), undefined)!;
+    const unmarked = '{line}Your shield of spell turning collapses.{reset}';
+    const after = { ...before, actions: withReplaceTemplate(before.actions, unmarked) };
+    const edit = cardEdits([{ before, after }], {}).get('disarm_buff_fade')!;
+    expect(edit.triggers![TURNING].replace.value).toBe(unmarked);
+
+    const lilac = { line: { value: '#c3a6ff', was: 'fg:178' } };
+    const t = buildPreset(disarms, { ...edit, colors: lilac }).triggers.find(
+      (x) => x.name === TURNING,
+    )!;
+    expect(t.actions).toEqual([
+      {
+        kind: 'replace',
+        template: colorize('{#c3a6ff}Your shield of spell turning collapses.{reset}'),
+      },
+    ]);
+  });
+
+  it('skips a trigger the library does not build', () => {
+    const before = { ...stored(SANCTUARY), name: 'buff.gone' };
+    expect(cardEdits([{ before, after: { ...before, enabled: false } }], {}).size).toBe(0);
   });
 });

@@ -1,5 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { alertOrNone, withAlertPart, withAlertParts } from '../../automation/alertParts';
+import {
+  draftChanges,
+  isDraftDirty,
+  type Draft,
+  type DraftItem,
+} from '../../automation/automationDraft';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
@@ -60,7 +66,10 @@ import {
   Toggle,
   type SelectOption,
 } from '../../ui';
+import { cardEdits, libraryTrigger, presetCard } from '../../automation/presetEdits';
+import { runPresetPlan } from '../../automation/presetPlan';
 import { presetById } from '../../automation/presets';
+import { presetEditsGet, presetEditsSet, type PresetEdits } from '../../ipc/presetEdits';
 import { usePromptGags } from '../../stores/session/promptGagStore';
 import { AlertDetailRows, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
@@ -68,49 +77,105 @@ import { CodeRow, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec, TriggersLink } from './types';
 
-const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
-  id: 'triggers',
-  groups: 'triggers',
-  noun: { one: 'trigger', many: 'triggers' },
-  filterLabel: 'Filter triggers',
-  newLabel: 'New trigger',
-  deleteLabel: 'Delete trigger',
-  // Presets put their triggers back at launch. Turn the preset off.
-  canDelete: (t) => !t.preset,
-  emptyDetail: 'Choose a trigger to edit it.',
-  emptyList: 'You have no triggers yet.',
-  load: (profile) => loadTriggers(triggerStore(profile)),
-  save: (draft, _written, profile) => saveTriggerDraft(draft, triggerStore(profile)),
-  validate: validateTriggers,
-  entry: (t) => ({
-    name: t.name,
-    group: groupKeyOf(t.group),
-    enabled: t.enabled,
-    preset: Boolean(t.preset),
-    // A preset trigger also answers to its preset's name, which a link
-    // from the preset's card fills the filter with.
-    text: searchText(
-      t.name,
-      t.preset ? presetById(t.preset)?.name : undefined,
-      t.group,
-      t.patterns.map(patternSource).join('\n'),
-      effectOf(t.actions, 'send'),
-    ),
-  }),
-  keyOf: triggerKey,
-  blank: blankTrigger,
-  json: {
-    toText: jsonListText,
-    fromText: (text) => parseJsonList(text, normalizeTrigger),
-  },
-  subscribe: subscribeTriggersChanged,
-  renderDetail: (props) => <TriggerDetail {...props} />,
-};
+/** What the list loaded beside the triggers: your preset edits, and each
+ *  preset trigger as the store holds it, by name. */
+interface Loaded {
+  edits: PresetEdits;
+  stored: ReadonlyMap<string, TriggerRecord>;
+}
+
+/** `draft` as the trigger store takes it. A preset trigger goes back as
+ *  the store holds it, in the group its card sets, since the store keeps
+ *  the group the preset plan falls back to. */
+function storeDraft(draft: Draft<TriggerRecord>, { stored }: Loaded): Draft<TriggerRecord> {
+  const toStore = (item: DraftItem<TriggerRecord>): DraftItem<TriggerRecord> => {
+    const copy = stored.get(item.value.name);
+    if (!copy || !libraryTrigger(item.value)) return item;
+    return { uid: item.uid, value: withGroup(copy, item.value.group ?? '') };
+  };
+  return { items: draft.items.map(toStore), saved: draft.saved.map(toStore) };
+}
+
+/** `t` as one of your triggers, with no preset tag. */
+function asYours(t: TriggerRecord): TriggerRecord {
+  const { preset: _preset, ...yours } = t;
+  return yours;
+}
+
+/** The Triggers kind. Each preset trigger shows as its card, the
+ *  library's trigger with your edits over it (presetCard). Save writes
+ *  your triggers through the store, and the rows you changed in a preset
+ *  trigger through preset_edits_set, then runs the preset plan for the
+ *  profile, which builds and installs them (Presets board 2). Edit all
+ *  as JSON lists your triggers only, and keeps every preset trigger as
+ *  it is (Q9). */
+function triggersSpec(): KindSpec<TriggerRecord> {
+  let loaded: Loaded = { edits: {}, stored: new Map() };
+  return {
+    id: 'triggers',
+    groups: 'triggers',
+    noun: { one: 'trigger', many: 'triggers' },
+    filterLabel: 'Filter triggers',
+    newLabel: 'New trigger',
+    deleteLabel: 'Delete trigger',
+    // Presets put their triggers back at launch. Turn the preset off.
+    canDelete: (t) => !t.preset,
+    emptyDetail: 'Choose a trigger to edit it.',
+    emptyList: 'You have no triggers yet.',
+    load: async (profile) => {
+      const [list, edits] = await Promise.all([
+        loadTriggers(triggerStore(profile)),
+        presetEditsGet(profile),
+      ]);
+      loaded = {
+        edits: edits ?? {},
+        stored: new Map(list.filter((t) => t.preset).map((t) => [t.name, t])),
+      };
+      return list.map((t) => (t.preset ? presetCard(t, loaded.edits[t.preset]) : undefined) ?? t);
+    },
+    save: async (draft, _written, profile) => {
+      const now = loaded;
+      const list = storeDraft(draft, now);
+      if (isDraftDirty(list)) await saveTriggerDraft(list, triggerStore(profile));
+      const edits = cardEdits(draftChanges(draft).changed, now.edits);
+      for (const [id, edit] of edits) await presetEditsSet(id, edit, profile);
+      if (edits.size > 0) await runPresetPlan(profile ?? null);
+    },
+    validate: validateTriggers,
+    entry: (t) => ({
+      name: t.name,
+      group: groupKeyOf(t.group),
+      enabled: t.enabled,
+      preset: Boolean(t.preset),
+      // A preset trigger also answers to its preset's name, which a link
+      // from the preset's card fills the filter with.
+      text: searchText(
+        t.name,
+        t.preset ? presetById(t.preset)?.name : undefined,
+        t.group,
+        t.patterns.map(patternSource).join('\n'),
+        effectOf(t.actions, 'send'),
+      ),
+    }),
+    keyOf: triggerKey,
+    blank: blankTrigger,
+    json: {
+      toText: (values) => jsonListText(values.filter((t) => !t.preset)),
+      fromText: (text, current) => {
+        const yours = parseJsonList(text, normalizeTrigger);
+        return yours && [...current.filter((t) => t.preset), ...yours.map(asYours)];
+      },
+    },
+    subscribe: subscribeTriggersChanged,
+    renderDetail: (props) => <TriggerDetail {...props} />,
+  };
+}
 
 export function TriggersEditor({
   open = null,
   ...props
 }: EditorProps & { open?: TriggersLink | null }) {
+  const [spec] = useState(triggersSpec);
   // A trigger that hid your prompt this session while the profile reads
   // no prompt carries the warn ring in the list.
   const gags = usePromptGags();
@@ -128,7 +193,7 @@ export function TriggersEditor({
   );
   return (
     <DraftEditor
-      spec={TRIGGERS_SPEC}
+      spec={spec}
       {...props}
       warnNotes={warnNotes}
       selectKey={selectKey}
