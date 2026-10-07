@@ -4,11 +4,14 @@ import { aabahranPacket } from '../../test/aabahranGmcp';
 import {
   holdPromptVitals,
   mergeVitals,
+  nextHistory,
   nextLow,
   nextVitals,
+  parseHistory,
   parseVitals,
   parseVitalsPacket,
   releasePromptVitals,
+  VITALS_HISTORY,
   withoutHeld,
   type VitalValues,
 } from './vitalsStore';
@@ -183,5 +186,27 @@ describe('hidden vitals', () => {
     const shown = nextVitals(null, zeros);
     expect(shown?.hidden).toBe(false);
     expect(nextVitals(shown, zeros, true)?.hidden).toBe(true);
+  });
+});
+
+describe('the vitals history', () => {
+  it('keeps the last sixty packets with their times, oldest first', () => {
+    let history = nextHistory([], full, 1000);
+    for (let n = 1; n <= VITALS_HISTORY; n++)
+      history = nextHistory(history, { ...full, hp: n }, 1000 + n);
+    expect(history).toHaveLength(VITALS_HISTORY);
+    expect(history[0]).toEqual({ at: 1001, values: { ...full, hp: 1 } });
+    expect(history[VITALS_HISTORY - 1]?.at).toBe(1000 + VITALS_HISTORY);
+  });
+
+  it('reads the history a snapshot carries and skips what it cannot', () => {
+    expect(
+      parseHistory([
+        { at: 5, vitals: { hp: 744, maxhp: 1038 } },
+        { at: 'soon', vitals: { hp: 1 } },
+        null,
+      ]),
+    ).toEqual([{ at: 5, values: { ...parseVitals({ hp: 744, maxhp: 1038 }) } }]);
+    expect(parseHistory(undefined)).toEqual([]);
   });
 });

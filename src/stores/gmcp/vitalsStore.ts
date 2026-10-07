@@ -1,5 +1,7 @@
+import { useSyncExternalStore } from 'react';
 import { onPromptVars, type PromptVarsPayload } from '../../ipc/prompt';
 import { createSessionStore } from '../sessionStore';
+import { getSelected, subscribeSelected } from '../session/sessionsStore';
 import { getHiddenOf, subscribeHiddenOf } from './hiddenStore';
 import { asNumber, isHiddenFlag } from '../store';
 
@@ -33,6 +35,11 @@ const LEDGER_LOW_EXIT = 25;
 // session://hidden, and hiddenStore's `vitals` hides the snapshot the
 // same way the flag does. Its values then read as zeros, so no view
 // can show the true ones.
+//
+// The store also keeps the last 60 Char.Vitals the game showed, each
+// with the time it came, for the Traces style (More Vitals Styles
+// Q27). A hidden packet stays out of it, and a disconnect empties it,
+// so it starts over at each login and never reaches the disk.
 
 export interface VitalValues {
   hp: number;
@@ -70,6 +77,39 @@ const MAX_OF: Record<VitalKey, keyof VitalValues> = {
   move: 'maxmove',
 };
 const NOT_LOW: Record<VitalKey, boolean> = { hp: false, mana: false, move: false };
+
+/** One Char.Vitals of the history and when it came, in ms since the
+ *  epoch. */
+export interface VitalSample {
+  at: number;
+  values: VitalValues;
+}
+
+/** How many Char.Vitals the history keeps, a minute or two of play. */
+export const VITALS_HISTORY = 60;
+
+const NO_HISTORY: readonly VitalSample[] = Object.freeze([]);
+
+/** `history` with `values` at `at` added, the oldest let go past
+ *  VITALS_HISTORY. */
+export function nextHistory(
+  history: readonly VitalSample[],
+  values: VitalValues,
+  at: number,
+): readonly VitalSample[] {
+  const next = [...history, { at, values }];
+  return next.length > VITALS_HISTORY ? next.slice(next.length - VITALS_HISTORY) : next;
+}
+
+/** The history a vitals snapshot carries, as the backend kept it. */
+export function parseHistory(raw: unknown): readonly VitalSample[] {
+  if (!Array.isArray(raw)) return NO_HISTORY;
+  return raw.slice(-VITALS_HISTORY).flatMap((item: unknown) => {
+    const sample = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const at = asNumber(sample.at);
+    return at === null ? [] : [{ at, values: parseVitals(sample.vitals) }];
+  });
+}
 
 /** Parse a Char.Vitals payload. Missing fields read as 0. */
 export function parseVitals(data: unknown): VitalValues {
@@ -199,6 +239,8 @@ interface VitalsState {
   /** What the panes read. Each change works it out from the one before,
    *  so the low latch of each vital stays with the rest of the state. */
   shown: Vitals | null;
+  /** The last Char.Vitals the game showed, oldest first. */
+  history: readonly VitalSample[];
 }
 
 /** True while the game hides your vitals, by the packet's own flag or
@@ -227,6 +269,7 @@ function empty(session: number, last: Vitals | null = null): VitalsState {
     held: {},
     hiddenByBackend: getHiddenOf(session).vitals,
     shown: last,
+    history: NO_HISTORY,
   });
 }
 
@@ -235,7 +278,8 @@ const store = createSessionStore<VitalsState, Vitals | null>({
   packages: {
     'Char.Vitals': (state, data) => {
       const next = { ...state, packet: parseVitalsPacket(data) };
-      return show(hiddenNow(next) ? { ...next, held: holdPromptVitals(state.vars) } : next);
+      if (hiddenNow(next)) return show({ ...next, held: holdPromptVitals(state.vars) });
+      return show({ ...next, history: nextHistory(state.history, next.packet.values, Date.now()) });
     },
   },
   connection: (state, { kind, session }) =>
@@ -271,3 +315,21 @@ export const useVitals = store.use;
 export const getVitalsOf = (session: number): Vitals | null => store.stateOf(session).shown;
 /** Hear each change to a session's vitals, with that session. */
 export const subscribeVitalsOf = store.subscribeStates;
+
+/** The vitals history of the session `session` names, oldest first. */
+export const getVitalsHistoryOf = (session: number): readonly VitalSample[] =>
+  store.stateOf(session).history;
+
+function subscribeHistory(cb: () => void): () => void {
+  const offStates = store.subscribeStates(cb);
+  const offSelected = subscribeSelected(cb);
+  return () => {
+    offStates();
+    offSelected();
+  };
+}
+
+/** The selected session's vitals history, oldest first. */
+export function useVitalsHistory(): readonly VitalSample[] {
+  return useSyncExternalStore(subscribeHistory, () => getVitalsHistoryOf(getSelected()));
+}
