@@ -9,6 +9,7 @@ import { normalizeAlert } from './alertParts';
 import { saveDraftOnto, type Draft } from './automationDraft';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
+import { PRESETS } from './presets';
 import {
   exportTriggers,
   importTriggers,
@@ -387,8 +388,17 @@ export function blankTrigger(): TriggerRecord {
 
 /** Why the triggers cannot save yet, or null. Every trigger needs a
  *  name, names must differ (the store keys by name, so a second one
- *  would replace the first), and a trigger needs a pattern. */
+ *  would replace the first), and a trigger needs a pattern. A trigger of
+ *  yours never takes the name of a trigger in the preset library, its
+ *  preset on or off, since the next launch would put the preset's in
+ *  its place (Presets board 2). */
 export function validateTriggers(list: readonly TriggerRecord[]): string | null {
+  for (const t of list) {
+    if (t.preset) continue;
+    const name = t.name.trim();
+    const preset = PRESETS.find((p) => p.triggers.some((pt) => pt.name === name));
+    if (preset) return `${preset.name} uses the name ${name}. Give your trigger its own name.`;
+  }
   const seen = new Set<string>();
   for (const t of list) {
     const name = t.name.trim();

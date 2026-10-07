@@ -506,6 +506,17 @@ describe('validateTriggers', () => {
     expect(validateTriggers([t('a', ' ')])).toContain('needs a pattern');
   });
 
+  it('keeps your trigger off the name of a preset trigger, its preset on or off', () => {
+    const guard =
+      'Disarms and fading buffs uses the name disarm.secondary. Give your trigger its own name.';
+    expect(validateTriggers([t('disarm.secondary')])).toBe(guard);
+    // Ahead of the clash with the preset's own copy, so the message
+    // says why.
+    const installed = { ...t('disarm.secondary'), preset: 'disarm_buff_fade' };
+    expect(validateTriggers([installed, t('disarm.secondary')])).toBe(guard);
+    expect(validateTriggers([installed])).toBeNull();
+  });
+
   it('reads what you typed in a Text row, not its regex', () => {
     const row = { pattern: '^\\s*\\s*$', enabled: true, mode: 'text' as const, text: ' ' };
     expect(validateTriggers([{ ...t('a'), patterns: [row] }])).toContain('needs a pattern');

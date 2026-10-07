@@ -18,8 +18,13 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn((cmd: string, args?: { json?: string }) => Promise.resolve(answer(cmd, args))),
 }));
 
-// CodeMirror needs a real DOM, and Advanced holds the Lua script row.
-vi.mock('../../ui/CodeEditor', () => ({ CodeEditor: () => null }));
+// CodeMirror needs a real DOM. Advanced holds the Lua script row, and
+// Edit all as JSON is one editor, so a plain text area stands in.
+vi.mock('../../ui/CodeEditor', () => ({
+  CodeEditor: ({ value, onChange }: { value: string; onChange: (text: string) => void }) => (
+    <textarea data-code="" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
 vi.mock('../../stores/session/promptGagStore', () => ({
   usePromptGags: () => new Set<string>(),
 }));
@@ -226,18 +231,23 @@ function alertParts(root: FakeElement) {
 async function mountEditor(
   list: TriggerRecord[],
   open: { select?: string; filter?: string; seq: number } | null = null,
+  json = false,
 ) {
   stored = JSON.stringify(list);
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
+  /** The last error the editor showed, null once it cleared it. */
+  let error: string | null = null;
   await act(async () => {
     root.render(
       <TriggersEditor
-        json={false}
+        json={json}
         onJson={() => {}}
         onDirty={() => {}}
-        onError={() => {}}
+        onError={(message) => {
+          error = message;
+        }}
         open={open}
       />,
     );
@@ -264,6 +274,29 @@ async function mountEditor(
         )[0],
       ),
     click: (text: string) => click(button(text)),
+    /** Type `text` into the field the label `label` names. */
+    type: (label: string, text: string) =>
+      act(async () => {
+        const name = findAll(
+          container,
+          (el) => el.nodeName === 'LABEL' && el.textContent === label,
+        )[0];
+        const id = name?.getAttribute('for') ?? name?.getAttribute('htmlFor');
+        const field = findAll(container, (el) => el.getAttribute('id') === id)[0];
+        if (!field) throw new Error(`no ${label} field`);
+        on(field).onChange({ target: { value: text } });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
+    /** The text of Edit all as JSON. */
+    json: () => findAll(container, (el) => el.hasAttribute('data-code'))[0]?.value,
+    /** Type `text` into Edit all as JSON, and wait out its pause. */
+    typeJson: (text: string) =>
+      act(async () => {
+        const area = findAll(container, (el) => el.hasAttribute('data-code'))[0];
+        on(area).onChange({ target: { value: text } });
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }),
+    error: () => error,
     /** The names of the rows the list shows, `*` after the selected one. */
     rows: () =>
       findAll(container, (el) => el.hasAttribute('data-uid')).map(
@@ -359,5 +392,34 @@ describe('a link from a preset card', () => {
   it('opens on the trigger it names', async () => {
     const editor = await mountEditor([VISITOR, sanctuary], { select: 'buff.sanctuary', seq: 1 });
     expect(editor.rows()).toEqual(['visitor', 'buff.sanctuary*']);
+  });
+});
+
+// Presets board 2: a trigger of yours never takes a preset trigger's
+// name, its preset on or off, wherever you name it.
+describe('the preset name guard', () => {
+  const GUARD =
+    'Disarms and fading buffs uses the name disarm.secondary. Give your trigger its own name.';
+
+  it('meets New trigger and the Name field at Save', async () => {
+    const editor = await mountEditor([VISITOR]);
+    await editor.click('New trigger');
+    await editor.type('Name', 'disarm.secondary');
+    await editor.click('Save');
+    expect(editor.error()).toBe(GUARD);
+    expect(JSON.parse(stored)).toEqual([VISITOR]);
+
+    // A name of its own passes the guard, and Save asks for the pattern.
+    await editor.type('Name', 'disarm.mine');
+    await editor.click('Save');
+    expect(editor.error()).toBe('The trigger “disarm.mine” needs a pattern.');
+  });
+
+  it('meets Save in Edit all as JSON', async () => {
+    const editor = await mountEditor([VISITOR], null, true);
+    await editor.typeJson(JSON.stringify([VISITOR, { ...VISITOR, name: 'disarm.secondary' }]));
+    await editor.click('Save');
+    expect(editor.error()).toBe(GUARD);
+    expect(JSON.parse(stored)).toEqual([VISITOR]);
   });
 });
