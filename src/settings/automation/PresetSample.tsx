@@ -1,0 +1,62 @@
+import { useContext, type CSSProperties, type ReactNode } from 'react';
+import { drawSample, quotedWords, sampleRunCss } from '../../automation/presetSample';
+import type { Preset } from '../../automation/presets';
+import { cx } from '../../ui';
+import { SamplePaintContext } from './samplePaint';
+
+/** A preset's sample as the terminal draws it, one line each, each run
+ *  in the color the preset paints it. The words a tell quotes draw as a
+ *  bar in the color of their run. */
+export function PresetSample({ preset }: { preset: Preset }) {
+  const paint = useContext(SamplePaintContext);
+  return (
+    <div
+      className="st-auto-sample"
+      style={paint ? ({ '--sample-fg': paint.foreground } as CSSProperties) : undefined}
+    >
+      {preset.sample.map((line, n) => {
+        const { runs } = drawSample(preset, line);
+        const bar = quotedWords(runs.map(([text]) => text).join(''));
+        const parts: ReactNode[] = [];
+        let at = 0;
+        runs.forEach(([text, color], r) => {
+          const css = paint ? sampleRunCss(color, paint) : { bold: false };
+          const style = css.color ? ({ '--sample-fg': css.color } as CSSProperties) : undefined;
+          const piece = (key: string, body: ReactNode) => (
+            <span key={key} className={cx(css.bold && 'is-bold')} style={style}>
+              {body}
+            </span>
+          );
+          const start = at;
+          at += text.length;
+          if (!bar || bar[1] <= start || bar[0] >= at) {
+            parts.push(piece(`${r}`, text));
+            return;
+          }
+          const from = Math.max(bar[0], start) - start;
+          const to = Math.min(bar[1], at) - start;
+          parts.push(
+            piece(
+              `${r}`,
+              <>
+                {text.slice(0, from)}
+                <span
+                  className="st-auto-sample-bar"
+                  style={{ width: `${to - from}ch` }}
+                  role="img"
+                  aria-label="Words"
+                />
+                {text.slice(to)}
+              </>,
+            ),
+          );
+        });
+        return (
+          <div key={n} className="st-auto-sample-line">
+            {parts}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

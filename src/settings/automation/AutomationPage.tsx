@@ -42,12 +42,18 @@ interface View {
   panel: Panel;
   /** Goes up each time a link asks for the Tick. */
   tickSeq: number;
+  /** The preset a link asked for last, by id, and a count that goes up
+   *  with each such link. */
+  preset: { key: string; seq: number } | null;
 }
 
-const START: View = { kind: 'triggers', panel: 'list', tickSeq: 0 };
+const START: View = { kind: 'triggers', panel: 'list', tickSeq: 0, preset: null };
+
+const PRESET_ANCHOR = 'presets:';
 
 /** The view a target asks for, or null to stay put. The section names
- *  the kind. The anchors open Import, the JSON view, or the Tick. */
+ *  the kind. The anchors open Import, the JSON view, the Tick, or a
+ *  preset as `presets:<id>`. */
 function viewFor(target: SettingsTarget, current: View): View | null {
   const kind = isAutomationKind(target.section) ? target.section : null;
   if (target.anchor === 'import') return { ...current, panel: 'import' };
@@ -55,9 +61,14 @@ function viewFor(target: SettingsTarget, current: View): View | null {
     const wanted = kind ?? current.kind;
     return { ...current, kind: isListKind(wanted) ? wanted : 'triggers', panel: 'json' };
   }
+  if (target.anchor?.startsWith(PRESET_ANCHOR)) {
+    const key = target.anchor.slice(PRESET_ANCHOR.length);
+    const seq = (current.preset?.seq ?? 0) + 1;
+    return { ...current, kind: 'presets', panel: 'list', preset: { key, seq } };
+  }
   if (!kind) return null;
   const tickSeq = target.anchor === 'tick' ? current.tickSeq + 1 : current.tickSeq;
-  return { kind, panel: 'list', tickSeq };
+  return { ...current, kind, panel: 'list', tickSeq };
 }
 
 /** Whether moving from one view to the next drops the current draft. */
@@ -202,10 +213,12 @@ export function AutomationPage({
         body = config ? (
           <PresetsEditor
             key="presets"
+            config={config}
             setConfig={setConfig}
             pathB={pathB}
             onDirty={onDirty}
             onError={onError}
+            selectPreset={view.preset}
           />
         ) : null;
         break;

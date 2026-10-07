@@ -63,6 +63,9 @@ interface DraftEditorProps<T> {
   pinned?: PinnedPart | null;
   /** Select the pinned block each time this goes up. */
   pinnedSeq?: number;
+  /** Select the item with this key, by keyOf, and bring its row into
+   *  view each time `seq` goes up, as a deep link asks. */
+  selectKey?: { key: string; seq: number } | null;
   /** More on the left of the save bar, given the draft and its setter. */
   barExtra?: (draft: Draft<T>, setDraft: (next: Draft<T>) => void) => ReactNode;
   /** The list rows that carry the warn ring while they are on, by name,
@@ -90,6 +93,7 @@ export function DraftEditor<T>({
   onError,
   pinned = null,
   pinnedSeq = 0,
+  selectKey = null,
   barExtra,
   warnNotes,
 }: DraftEditorProps<T>) {
@@ -257,6 +261,21 @@ export function DraftEditor<T>({
     pinnedSeqDone.current = pinnedSeq;
     setSelected(pinnedUid);
   }, [pinnedSeq, pinnedUid]);
+
+  // Select the item a link names once per request, as soon as the list
+  // has loaded.
+  const selectSeqDone = useRef(0);
+  useEffect(() => {
+    if (!selectKey || !draft || selectSeqDone.current === selectKey.seq) return;
+    selectSeqDone.current = selectKey.seq;
+    const item = draft.items.find((i) => spec.keyOf(i.value) === selectKey.key);
+    if (!item) return;
+    setFilter('');
+    setSelected(item.uid);
+    reveal(item.uid);
+    // reveal reads the draft through its ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectKey, draft, spec]);
 
   const count = draft ? draftChangeCount(draft) : 0;
 

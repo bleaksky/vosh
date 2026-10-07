@@ -153,6 +153,9 @@
       "characters:Ilsabet": "characters:Ilsabet",
       "general:logs": "general:logs",
       "layout:affects#affects-running-out": "layout:affects#affects-running-out"
+    },
+    "presets": {
+      "automation:presets#presets:healing_basics": "automation:presets#presets:healing_basics"
     }
   },
   "help": [
@@ -254,6 +257,19 @@
     "automation": [
       "import",
       "json",
+      "presets:alert_tells",
+      "presets:combat_incoming",
+      "presets:combat_outgoing",
+      "presets:defensive_combat",
+      "presets:disarm_buff_fade",
+      "presets:healing_basics",
+      "presets:herb_labels",
+      "presets:loot_progression",
+      "presets:numpad_movement",
+      "presets:potion_labels",
+      "presets:room_and_time",
+      "presets:sent_tells",
+      "presets:terror_events",
       "tick"
     ],
     "scripts": [

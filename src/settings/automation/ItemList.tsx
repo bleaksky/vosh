@@ -19,6 +19,7 @@ import {
   sectionKeyOf,
   stopId,
   tabStopId,
+  type ListEntry,
   type ListSection,
   type ListStop,
 } from '../../automation/automationList';
@@ -47,6 +48,8 @@ interface RowProps {
   monoName: boolean;
   monoMeta: boolean;
   anchor: string | undefined;
+  /** How the dot draws while the row is off, see ListEntry. */
+  dot: ListEntry['dot'];
   /** Why the row carries the warn ring, which a reader hears as its
    *  description. Undefined for a row with no ring. */
   warnNote: string | undefined;
@@ -68,11 +71,13 @@ const ListRow = memo(function ListRow({
   monoName,
   monoMeta,
   anchor,
+  dot,
   warnNote,
   onSelect,
   onFocus,
 }: RowProps) {
   const warn = warnNote !== undefined;
+  const suggested = !enabled && dot === 'suggested';
   const noteId = warn ? `st-auto-warn-${uid}` : undefined;
   return (
     <div className="st-auto-rowwrap">
@@ -98,8 +103,11 @@ const ListRow = memo(function ListRow({
           {name || placeholder}
         </span>
         {meta && <span className={cx('st-auto-row-meta', monoMeta && 'st-auto-mono')}>{meta}</span>}
-        <span className={cx('st-auto-dot', !enabled && 'is-off')} aria-hidden="true" />
-        <VisuallyHidden>{enabled ? 'On' : 'Off'}</VisuallyHidden>
+        <span
+          className={cx('st-auto-dot', !enabled && 'is-off', suggested && 'is-suggested')}
+          aria-hidden="true"
+        />
+        <VisuallyHidden>{enabled ? 'On' : suggested ? 'Suggested, off' : 'Off'}</VisuallyHidden>
         {noteId && (
           <span id={noteId} hidden>
             {warnNote}
@@ -275,6 +283,7 @@ export function ItemList({
               monoName={false}
               monoMeta={false}
               anchor={pinned.anchor}
+              dot={undefined}
               warnNote={undefined}
               onSelect={onSelect}
               onFocus={onRowFocus}
@@ -296,7 +305,8 @@ export function ItemList({
                     placeholder={placeholder}
                     monoName={monoName}
                     monoMeta={monoMeta}
-                    anchor={undefined}
+                    anchor={entry.anchor}
+                    dot={entry.dot}
                     warnNote={entry.enabled ? warnNotes?.get(entry.name) : undefined}
                     onSelect={onSelect}
                     onFocus={onRowFocus}

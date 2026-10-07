@@ -1,6 +1,7 @@
 import { act, useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Macro } from '../../ipc/automation';
+import { normalizeUiConfig } from '../../ipc/uiConfig';
 import type { PresetToggle } from '../../automation/automationRecords';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
@@ -117,6 +118,18 @@ beforeAll(async () => {
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
   vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  // A link scrolls the row it opens into view, which the fake page has
+  // no layout for.
+  vi.stubGlobal('CSS', { escape: (s: string) => s });
+  Object.assign(FakeElement.prototype, { querySelector: () => null });
+  // The samples follow the theme, which the page marks on its root.
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   ({ createRoot } = await import('react-dom/client'));
   ({ PresetDetail, PresetsEditor } = await import('./PresetsEditor'));
 });
@@ -304,6 +317,15 @@ function reactProps(el: FakeElement): Record<string, (e?: unknown) => void> {
   return (el as unknown as Record<string, Record<string, (e?: unknown) => void>>)[key];
 }
 
+const CONFIG = normalizeUiConfig({
+  theme: 'obsidian-ember',
+  auto_update: false,
+  font_family: 'Menlo',
+  font_size: 14,
+  tracked_affects: [],
+  enabled_presets: [],
+});
+
 /** The whole Presets editor over a profile with `enabled` stored and
  *  the alert presets `on` with `alerts` for parts. */
 async function mountEditor(
@@ -311,6 +333,7 @@ async function mountEditor(
   on: string[],
   alerts: Record<string, unknown>,
   permission = 'granted',
+  selectPreset: { key: string; seq: number } | null = null,
 ) {
   bus.permission = permission;
   bus.enabled = enabled;
@@ -323,8 +346,10 @@ async function mountEditor(
   await act(async () => {
     root.render(
       <PresetsEditor
+        config={CONFIG}
         setConfig={() => {}}
         pathB={false}
+        selectPreset={selectPreset}
         onDirty={() => {}}
         onError={(e) => errors.push(e)}
       />,
@@ -363,6 +388,28 @@ async function mountEditor(
       ),
     save: () =>
       click(findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === 'Save')[0]),
+    /** Each row of the list by name, with `+` for a suggested ring and
+     *  its anchor, and whether it is the one selected. */
+    row: (name: string) => {
+      const row = findAll(
+        container,
+        (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+      )[0];
+      const dot = findAll(row, (el) => hasClass(el, 'st-auto-dot'))[0];
+      return {
+        suggested: hasClass(dot, 'is-suggested'),
+        anchor: row.getAttribute('data-st-anchor'),
+        selected: row.getAttribute('aria-current') === 'true',
+      };
+    },
+    /** Each line of the card's Looks like sample, with `|` after it for
+     *  each bar that stands in for words. */
+    sample: () =>
+      findAll(card(), (el) => hasClass(el, 'st-auto-sample-line')).map(
+        (line) =>
+          line.textContent +
+          '|'.repeat(findAll(line, (el) => hasClass(el, 'st-auto-sample-bar')).length),
+      ),
     /** The labels of the card's rows, in order. */
     rows: () => findAll(card(), isLabel).map((el) => el.textContent),
     value: (label: string) => {
@@ -510,6 +557,63 @@ describe('the Alerts category', () => {
       ([cmd]) => cmd === 'presets_install' || cmd === 'presets_remove',
     );
     expect(JSON.stringify(installs)).not.toContain('alert_');
+  });
+});
+
+// First Run board 4: every preset off, the suggestions ringed, and the
+// card with Looks like and Suggested.
+describe('the Presets page of First Run board 4', () => {
+  it('rings each suggestion for your world while it is off', async () => {
+    const editor = await mountEditor(['sent_tells'], [], {});
+    for (const name of [
+      'Cures and heals',
+      'Your damage verbs',
+      'Damage to you',
+      'Gold, experience, and levels',
+      'Room, time and weather colors',
+    ]) {
+      expect(editor.row(name).suggested, name).toBe(true);
+    }
+    for (const name of [
+      'Parries, dodges, and blocks',
+      'Herb labels',
+      'Numpad movement',
+      'Tells you get',
+    ]) {
+      expect(editor.row(name).suggested, name).toBe(false);
+    }
+    // Once on, it takes the green dot like any other.
+    expect(editor.row('Tells you send').suggested).toBe(false);
+  });
+
+  it('reads the card as description, Looks like, Suggested and Adds', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Your damage verbs');
+    expect(editor.rows()).toEqual(['Your damage verbs', 'Looks like', 'Suggested', 'Adds']);
+    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to a villager!']);
+    expect(editor.value('Suggested')).toBe('For The Forsaken Lands');
+    expect(editor.value('Adds')).toBe('2 triggers');
+
+    await editor.pick('Herb labels');
+    expect(editor.rows()).toEqual(['Herb labels', 'Looks like', 'Adds']);
+    await editor.pick('Numpad movement');
+    expect(editor.rows()).toEqual(['Numpad movement', 'Adds', 'Keys']);
+  });
+
+  it('draws the words a tell quotes as a bar', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Tells you send');
+    expect(editor.sample()).toEqual(["You tell Tolliver ''|"]);
+  });
+
+  it('opens on the preset a link names, by its anchor', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', { key: 'herb_labels', seq: 1 });
+    expect(editor.row('Herb labels')).toEqual({
+      suggested: false,
+      anchor: 'presets:herb_labels',
+      selected: true,
+    });
+    expect(editor.rows()[0]).toBe('Herb labels');
   });
 });
 

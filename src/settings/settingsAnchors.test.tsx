@@ -19,7 +19,7 @@ import {
   type SettingsTarget,
 } from '../lib/settingsNav';
 import { SETTINGS_ROWS, settingsRowKey } from './settingsSearch';
-import { FakeDocument, findAll, type FakeElement } from '../test/fakeDom';
+import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
 import type { PaneMenu as PaneMenuType } from '../panel/PaneMenu';
 import type { SettingsPageProps } from './pageTypes';
 
@@ -194,6 +194,12 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
     }
     case 'tick_get_config':
       return TICK;
+    // The Presets page reads the list of presets that are on, and the
+    // alert presets, to draw a row for each.
+    case 'ui_get_config':
+      return config();
+    case 'alert_presets_get':
+      return { ids: ['alert_tells'], on: [], alerts: {} };
     case 'logs_list_sessions':
       return [];
     case 'logs_search_page':
@@ -263,6 +269,10 @@ beforeAll(async () => {
   vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '' }));
+  // A link to a preset scrolls its row into view in the list. A color
+  // field reads no color, as it reads none where CSS is missing.
+  vi.stubGlobal('CSS', { escape: (s: string) => s, supports: () => false });
+  Object.assign(FakeElement.prototype, { querySelector: () => null });
   // React DOM checks for a DOM once, when it loads, so it and the pages
   // load now.
   ({ createRoot } = await import('react-dom/client'));

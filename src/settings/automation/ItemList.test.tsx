@@ -289,3 +289,39 @@ describe('the switch on a group heading', () => {
     ).toEqual(['g:combat', 'combat']);
   });
 });
+
+// First Run board 4: a suggested preset that is off wears the accent ring
+// where the off ring sits, and a reader hears Suggested, off.
+describe('the suggested ring in the Automation list', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Cures and heals', false), dot: 'suggested' },
+      { ...entry('b', 'Herb labels', false), anchor: 'presets:herb_labels' },
+      { ...entry('c', 'Your damage verbs', true), dot: 'suggested' },
+    ]),
+  });
+  const dot = (uid: string) => {
+    const row = new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+    return {
+      dot: /class="(st-auto-dot[^"]*)"/.exec(row)?.[1],
+      heard: />(On|Off|Suggested, off)</.exec(row)?.[1],
+    };
+  };
+
+  it('rings a suggested row only while it is off', () => {
+    expect(dot('a')).toEqual({ dot: 'st-auto-dot is-off is-suggested', heard: 'Suggested, off' });
+    expect(dot('b')).toEqual({ dot: 'st-auto-dot is-off', heard: 'Off' });
+    expect(dot('c')).toEqual({ dot: 'st-auto-dot', heard: 'On' });
+  });
+
+  it('draws the ring in the accent where the off ring sits', () => {
+    expect(settingsCss).toMatch(
+      /\.st-auto-dot\.is-off\.is-suggested \{\s*box-shadow: inset 0 0 0 1\.25px var\(--accent\);\s*\}/,
+    );
+  });
+
+  it('puts a row anchor on the row a link opens', () => {
+    expect(html).toMatch(/data-uid="b"[^>]*data-st-anchor="presets:herb_labels"/);
+    expect(html).not.toMatch(/data-uid="a"[^>]*data-st-anchor/);
+  });
+});

@@ -2033,6 +2033,12 @@
   box-shadow: inset 0 0 0 1.25px var(--tertiary);
 }
 
+/* A preset suggested for your world wears the accent ring while it is
+   off (First Run board 4). */
+.st-auto-dot.is-off.is-suggested {
+  box-shadow: inset 0 0 0 1.25px var(--accent);
+}
+
 /* MUD text in the list and cards: alias names, macro keys, commands. */
 .st-auto-mono {
   font-family: var(--font-mud);
@@ -2221,6 +2227,40 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+/* A preset's sample as the terminal draws it, on the terminal ground, in
+   the theme's colors. Each run sets --sample-fg to its color. */
+.st-auto-sample {
+  padding: 6px 10px;
+  border-radius: var(--r-row);
+  background: var(--xterm-bg);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 12px/17px var(--font-mud);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.st-auto-sample,
+.st-auto-sample-line > span {
+  color: var(--sample-fg, var(--text));
+}
+
+.st-auto-sample .is-bold {
+  font-weight: 700;
+}
+
+/* What a character says never shows. A bar in the run's color at a third
+   of its strength stands in for the words, at the cap height of the
+   face. */
+.st-auto-sample-bar {
+  display: inline-block;
+  height: 0.62em;
+  margin: 0 0.04em;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.32;
+  vertical-align: 0.02em;
 }
 
 /* A block's label and description with a control beside them, as the

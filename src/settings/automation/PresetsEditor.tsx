@@ -18,14 +18,18 @@ import { type Preset, PRESET_CATEGORIES, presetById } from '../../automation/pre
 import { alertPresetsGet, alertPresetsSet } from '../../ipc/alerts';
 import { type AlertParts, onPresetsChanged, type PresetSwitch } from '../../ipc/automation';
 import { onPresetEditsChanged } from '../../ipc/presetEdits';
-import { getUiConfig } from '../../ipc/uiConfig';
+import { getUiConfig, type UiConfig } from '../../ipc/uiConfig';
+import { knownWorld } from '../../lib/knownWorlds';
 import { listJoin } from '../../lib/text';
 import { useMacroList } from '../../stores/config/macroListStore';
+import { loadTarget } from '../../stores/session/useConnection';
 import type { SetUiConfig } from '../pageTypes';
 import { getShownProfile } from '../shownProfile';
 import { Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
+import { PresetSample } from './PresetSample';
+import { SamplePaintContext, useSamplePaint } from './samplePaint';
 import type { DetailProps, DirtyReport, KindSpec } from './types';
 import { useBannerPermission } from './useBannerPermission';
 
@@ -35,11 +39,25 @@ const ALERT_NOUN = { one: 'alert', many: 'alerts' };
 const ALERTS_CATEGORY = 'Alerts';
 
 interface PresetsEditorProps {
+  config: UiConfig;
   setConfig: SetUiConfig;
   /** Loadout mode, where every profile shares one list of presets. */
   pathB: boolean;
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
+  /** Select this preset, by id, each time `seq` goes up. */
+  selectPreset: { key: string; seq: number } | null;
+}
+
+/** The deep link anchor of a preset's row, `presets:<id>`. */
+function presetAnchor(id: string): string {
+  return `presets:${id}`;
+}
+
+/** The world a preset's Suggested row names, the known world of the
+ *  host you connect to, else undefined. */
+function suggestedWorld(): string | undefined {
+  return knownWorld(loadTarget().host)?.name;
 }
 
 /** The presets, one toggle each under its category, the five alert
@@ -48,7 +66,15 @@ interface PresetsEditorProps {
  *  flipped here, over the list as the profile holds it then, through
  *  presets_enabled_set (First Run Q17). The page follows that command
  *  and your preset edits as the trigger list follows its store. */
-export function PresetsEditor({ setConfig, pathB, onDirty, onError }: PresetsEditorProps) {
+export function PresetsEditor({
+  config,
+  setConfig,
+  pathB,
+  onDirty,
+  onError,
+  selectPreset,
+}: PresetsEditorProps) {
+  const paint = useSamplePaint(config);
   const spec = useMemo<KindSpec<PresetToggle>>(
     () => ({
       id: 'presets',
@@ -115,15 +141,19 @@ export function PresetsEditor({ setConfig, pathB, onDirty, onError }: PresetsEdi
             group: ALERTS_CATEGORY,
             enabled: t.enabled,
             text: searchText(alert.name, alert.description, ALERTS_CATEGORY),
+            anchor: presetAnchor(t.id),
           };
         }
         const preset = presetById(t.id);
         const category = preset ? PRESET_CATEGORIES[preset.category] : '';
+        const world = suggestedWorld();
         return {
           name: preset?.name ?? t.id,
           group: category,
           enabled: t.enabled,
           text: searchText(preset?.name, preset?.description, category),
+          anchor: presetAnchor(t.id),
+          ...(world && preset?.suggest.includes(world) ? { dot: 'suggested' as const } : {}),
         };
       },
       keyOf: (t) => t.id,
@@ -138,7 +168,16 @@ export function PresetsEditor({ setConfig, pathB, onDirty, onError }: PresetsEdi
   );
 
   return (
-    <DraftEditor spec={spec} json={false} onJson={() => {}} onDirty={onDirty} onError={onError} />
+    <SamplePaintContext.Provider value={paint}>
+      <DraftEditor
+        spec={spec}
+        json={false}
+        onJson={() => {}}
+        onDirty={onDirty}
+        onError={onError}
+        selectKey={selectPreset}
+      />
+    </SamplePaintContext.Provider>
   );
 }
 
@@ -155,6 +194,19 @@ export function PresetDetail({ value: t, update }: DetailProps<PresetToggle>) {
       <Row label={preset.name} description={preset.description}>
         <Toggle checked={t.enabled} onChange={(enabled) => update((v) => ({ ...v, enabled }))} />
       </Row>
+      {preset.sample.length > 0 && (
+        <div className="st-row st-auto-block">
+          <div className="st-row-text">
+            <span className="st-row-label">Looks like</span>
+          </div>
+          <PresetSample preset={preset} />
+        </div>
+      )}
+      {preset.suggest.length > 0 && (
+        <Row label="Suggested">
+          <span className="st-auto-value">For {listJoin(preset.suggest)}</span>
+        </Row>
+      )}
       <Row label="Adds">
         <span className="st-auto-value">{adds}</span>
       </Row>
