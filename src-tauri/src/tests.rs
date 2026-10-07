@@ -10,6 +10,7 @@ mod latency;
 mod lua_panes;
 mod reconnect;
 mod sessions;
+mod snoop;
 mod throughput;
 mod upgrade_order;
 mod vitals_text;

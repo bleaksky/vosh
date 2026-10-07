@@ -40,6 +40,12 @@ use super::vitals_text;
 /// mortals nothing). Group carries the roster the Group pane shows.
 /// Aabahran sends every package without this list, so it names them
 /// for servers that honor it.
+///
+/// Snoop is the one Aabahran waits for. A Core.Supports body that holds
+/// `"Snoop ` turns on Snoop.Start, Snoop.Stop and Snoop.Output for the
+/// players you snoop (gmcp.c). The game sends them only to someone who
+/// snoops, so a mortal sees no change. serde writes the list with no
+/// spaces, so the one entry is enough.
 pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Char 1",
     "Room 1",
@@ -48,6 +54,7 @@ pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Map 1",
     "Imm.Queues 1",
     "Group 1",
+    "Snoop 1",
 ];
 
 pub(super) async fn handle_gmcp<R: tauri::Runtime>(
