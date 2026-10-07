@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, textWidth, usePanelFaceVersion } from './panelFace';
-import type { VitalsOptions } from '../ipc/uiConfig';
+import type { Vital, VitalsOptions } from '../ipc/uiConfig';
 import { useCombat, useFight, type CombatOpponent, type Fight } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useVitals, type Vitals } from '../stores/gmcp/vitalsStore';
@@ -37,6 +37,9 @@ import { DrawnSection } from './VitalsDrawnSection';
 import { marksHeight } from './vitalsMarksFit';
 import { VitalsText, type TextColors } from './VitalsText';
 import { isDrawnFit, vitalsFitOf, type VitalsFit } from './vitalsFit';
+import { hitFill, type HitView, type HitViews } from './vitalsHit';
+import { HitGhost } from './HitGhost';
+import { useVitalsHits } from './useVitalsHits';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
@@ -78,6 +81,11 @@ import { isDrawnFit, vitalsFitOf, type VitalsFit } from './vitalsFit';
 // It colors the vital's label and its meter, never the number, and low
 // and warn still turn the meter and the value.
 
+// Show each hit, under Customize vitals, leaves the part a hit took
+// pale on every style with a fill, and Ladders holds its last peak lit
+// (vitalsHit.ts, useVitalsHits.ts). Text and the status line leave it
+// out.
+
 // Text writes your vitals with your prompt's codes (VitalsText.tsx).
 
 // Ledger draws columns of figures under the pane label caps
@@ -114,6 +122,25 @@ export function VitalsFooter({
   const faceVersion = usePanelFaceVersion();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const face = useMemo(() => readPanelFace(), [faceVersion]);
+  // Only the vitals the footer draws, none while it keeps the opponent
+  // alone.
+  const rows =
+    vitals === null || opponentOnly
+      ? []
+      : shownRows(vitals, vitalsOn(options.order, options.off), options);
+  // Gauges and Pips measure your opponent's health with your values.
+  const foe = combat && !options.off.includes('opponent') ? combat : null;
+  const fillOf = (vital: Vital) => rows.find((row) => row.key === vital)?.pct ?? null;
+  const hits = useVitalsHits(
+    {
+      hp: fillOf('hp'),
+      mana: fillOf('mana'),
+      move: fillOf('move'),
+      foe: foe ? opponentHealth(foe).pct : null,
+    },
+    options.hit && style !== 'text',
+    foe?.name ?? null,
+  );
   if (style === 'text') {
     return (
       <VitalsText width={width} hostRef={sectionRef} colors={textColors} fightOnly={opponentOnly} />
@@ -125,14 +152,6 @@ export function VitalsFooter({
   // new face moves it.
   const measure: MeasureText = (text, px, weight) =>
     textWidth(text, `${weight} ${px}px ${face}`, faceVersion);
-  // Only the vitals the footer draws, none while it keeps the opponent
-  // alone.
-  const rows =
-    vitals === null || opponentOnly
-      ? []
-      : shownRows(vitals, vitalsOn(options.order, options.off), options);
-  // Gauges and Pips measure your opponent's health with your values.
-  const foe = combat && !options.off.includes('opponent') ? combat : null;
   const fit = vitalsFitOf(style, width, size, rows, foe, options.values, measure);
 
   return (
@@ -144,10 +163,14 @@ export function VitalsFooter({
       fit={fit}
       options={options}
       inks={inks}
+      hits={hits}
       opponentOnly={opponentOnly}
     />
   );
 }
+
+/** No trail on any mark, for a footer drawn without Show each hit. */
+const NO_HITS: HitViews = {};
 
 /** The terminal's colors as they start, for a footer handed none. */
 const NO_TEXT_COLORS: TextColors = { themeTerminalColors: false, brightBold: false };
@@ -162,6 +185,8 @@ export interface VitalsBlockProps {
   options: VitalsOptions;
   /** The color of each vital you gave one, lifted (vitalInks). */
   inks?: VitalInks;
+  /** What Show each hit leaves on each mark now (useVitalsHits). */
+  hits?: HitViews;
   sectionRef?: Ref<HTMLElement>;
   /** Only the opponent row, and nothing out of a fight, as when every
    *  vital is off. */
@@ -177,6 +202,7 @@ export function VitalsBlock({
   fit,
   options,
   inks = {},
+  hits = NO_HITS,
   sectionRef,
   opponentOnly = false,
 }: VitalsBlockProps) {
@@ -208,6 +234,7 @@ export function VitalsBlock({
           size={size}
           meter={geometry.meter > 0}
           inks={inks}
+          hits={hits}
         />
       </section>
     );
@@ -219,6 +246,7 @@ export function VitalsBlock({
       combat: foe,
       place: options.opponent,
       inks,
+      hits,
     };
     return (
       <section
@@ -248,6 +276,7 @@ export function VitalsBlock({
         combat={foe}
         place={options.opponent}
         inks={inks}
+        hits={hits}
         fight={fight}
       />
     );
@@ -258,7 +287,7 @@ export function VitalsBlock({
   // it waits for your vitals, so logging in moves nothing. One line
   // and the opponent alone hold one row.
   const held = mine === 0 || fit.style === 'line' ? 1 : mine;
-  const opponent = foe && <OpponentRow combat={foe} meter={meter} />;
+  const opponent = foe && <OpponentRow combat={foe} meter={meter} hit={hits.foe} />;
 
   return (
     <section
@@ -284,6 +313,7 @@ export function VitalsBlock({
               pct={r.pct}
               tone={r.tone}
               meter={meter}
+              hit={hits[r.key]}
             />
           ))}
         </div>
@@ -297,6 +327,7 @@ export function VitalsBlock({
             value={r.value}
             pct={r.pct}
             meter={meter}
+            hit={hits[r.key]}
           />
         ))
       )}
@@ -389,6 +420,7 @@ function VitalRow({
   value,
   pct,
   meter,
+  hit,
   className,
   ink,
 }: {
@@ -396,6 +428,7 @@ function VitalRow({
   value: string;
   pct: number | null;
   meter: boolean;
+  hit: HitView | undefined;
   className?: string | undefined;
   ink?: string | undefined;
 }) {
@@ -405,14 +438,22 @@ function VitalRow({
         <span className="panel-vitals-label">{label}</span>
         <span className="panel-vitals-value">{value}</span>
       </div>
-      {meter && <Meter pct={pct} />}
+      {meter && <Meter pct={pct} hit={hit} />}
     </div>
   );
 }
 
 /** Your opponent's name and health, in warn, or a quiet `?` while the
  *  game withholds the health. */
-function OpponentRow({ combat, meter }: { combat: CombatOpponent; meter: boolean }) {
+function OpponentRow({
+  combat,
+  meter,
+  hit,
+}: {
+  combat: CombatOpponent;
+  meter: boolean;
+  hit: HitView | undefined;
+}) {
   const health = opponentHealth(combat);
   return (
     <VitalRow
@@ -421,6 +462,7 @@ function OpponentRow({ combat, meter }: { combat: CombatOpponent; meter: boolean
       value={health.value}
       pct={health.pct}
       meter={meter}
+      hit={hit}
     />
   );
 }
@@ -435,6 +477,7 @@ function VitalItem({
   pct,
   tone,
   meter,
+  hit,
   ink,
 }: {
   label: string;
@@ -444,6 +487,7 @@ function VitalItem({
   pct: number | null;
   tone: VitalTone;
   meter: boolean;
+  hit: HitView | undefined;
 }) {
   const toned = toneClass(tone);
   return (
@@ -459,15 +503,20 @@ function VitalItem({
         </span>
         <span className="panel-vitals-value">{value}</span>
       </div>
-      {meter && <Meter pct={pct} />}
+      {meter && <Meter pct={pct} hit={hit} />}
     </div>
   );
 }
 
-function Meter({ pct }: { pct: number | null }) {
+/** A meter at `pct`, with the part Show each hit leaves pale. */
+function Meter({ pct, hit }: { pct: number | null; hit: HitView | undefined }) {
+  const { fill, ghost, draining } = hitFill(pct, hit);
   return (
     <div className="panel-vitals-meter" aria-hidden="true">
-      {pct !== null && <div className="panel-vitals-fill" style={{ width: `${pct}%` }} />}
+      {fill !== null && ghost !== null && (
+        <HitGhost className="panel-vitals-gone" fill={fill} ghost={ghost} draining={draining} />
+      )}
+      {fill !== null && <div className="panel-vitals-fill" style={{ width: `${fill}%` }} />}
     </div>
   );
 }

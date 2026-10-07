@@ -58,3 +58,9 @@ export const FOE_LADDER = 48;
 export function litSegments(pct: number | null, count: number): number {
   return pct === null ? 0 : Math.round((pct * count) / 100);
 }
+
+/** The segment of `count` a Ladders peak at `peak` percent holds lit,
+ *  the one the vital reached into, or -1 for none. */
+export function ladderPeak(peak: number | null, count: number): number {
+  return peak === null ? -1 : Math.ceil((peak * count) / 100) - 1;
+}

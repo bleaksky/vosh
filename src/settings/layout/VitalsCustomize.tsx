@@ -39,7 +39,8 @@ import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles'
 // vitals show and their order, a color for each, where your opponent
 // sits, Values, Meter and the warning. Each pick saves alone, and Reset
 // to default puts the set back and leaves your style, Show your vitals
-// in and the pinned switch alone. It rests until something differs.
+// in and the pinned switch alone. Show each hit sits with the warning,
+// since both change how a vital reads as it changes (Q21). It rests until something differs.
 //
 // The list moves a vital with its grip, by the pointer or from the
 // keyboard, as the Sessions list moves a session. Under Status line the
@@ -176,6 +177,21 @@ function CustomRows({ config, update }: { config: UiConfig; update: (patch: UiFi
         <Toggle
           checked={config.vitals_warn_thirds}
           onChange={(on) => update({ vitals_warn_thirds: on })}
+        />
+      </Row>
+      <Row
+        label="Show each hit"
+        description={
+          status
+            ? "The status line doesn't show hits, so this waits for the panel."
+            : 'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.'
+        }
+        anchor="show-each-hit"
+      >
+        <Toggle
+          checked={config.vitals_hit}
+          disabled={status}
+          onChange={(on) => update({ vitals_hit: on })}
         />
       </Row>
     </>

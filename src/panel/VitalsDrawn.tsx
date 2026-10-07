@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { VitalsOpponent } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { MarkRow, MarkValue } from './VitalsMarks';
+import type { HitViews } from './vitalsHit';
 import {
   opponentHealth,
   widestOpponentHealth,
@@ -26,6 +27,8 @@ export interface DrawnVitalsProps {
   combat: CombatOpponent | null;
   place: VitalsOpponent;
   inks: VitalInks;
+  /** What Show each hit leaves on each mark now. */
+  hits: HitViews;
 }
 
 /** Your opponent's name and health on one line, with `under` across

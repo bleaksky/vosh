@@ -8,6 +8,7 @@ import { VitalsBlock, type VitalsBlockProps } from './VitalsFooter';
 import { bandsHeight } from './vitalsDrawnFit';
 import { marksHeight } from './vitalsMarksFit';
 import type { VitalsFit } from './vitalsFit';
+import type { HitViews } from './vitalsHit';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -166,5 +167,63 @@ describe('Ladders', () => {
     const html = draw(BESIDE, {}, { vitals: null, combat: null });
     expect(html).toContain('Vitals appear when you log in.');
     expect(html).toContain(`--vitals-min-height:${marksHeight(12, 3)}px`);
+  });
+});
+
+describe('Show each hit', () => {
+  // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
+  const HEALTH_WAS = (851 / 1038) * 100;
+  const HEALTH = (744 / 1038) * 100;
+  const HITS: HitViews = {
+    hp: { fill: HEALTH, ghost: HEALTH_WAS, draining: false, peak: HEALTH_WAS },
+    foe: { fill: 54, ghost: 61, draining: false, peak: 61 },
+  };
+  const gone = (html: string, name: string) =>
+    [
+      ...html.matchAll(
+        new RegExp(`${name} vitals-ghost" style="left:([\\d.]+)%;width:([\\d.]+)%`, 'g'),
+      ),
+    ].map((m) => [Number(m[1]), Number(m[2])]);
+
+  it('leaves the part a hit took pale beside the Rows meter', () => {
+    const html = draw({ style: 'rows' }, {}, { hits: HITS });
+    expect(gone(html, 'panel-vitals-gone')).toEqual([
+      [54, 7],
+      [HEALTH, HEALTH_WAS - HEALTH],
+    ]);
+  });
+
+  it('leaves it on the Ledger line, the Gauges pill and the Bands bar', () => {
+    expect(
+      gone(draw({ style: 'ledger', fit: 'full' }, {}, { hits: HITS }), 'vitals-ledger-gone'),
+    ).toHaveLength(2);
+    const gauges = draw({ style: 'gauges', fit: 'beside' }, {}, { hits: HITS });
+    expect(gone(gauges, 'vitals-gauge-gone')).toEqual([[HEALTH, HEALTH_WAS - HEALTH]]);
+    expect(gauges).toContain('vitals-gauge-fill is-hit');
+    expect(gone(draw({ style: 'bands' }, {}, { hits: HITS }), 'vitals-band-gone')).toHaveLength(2);
+  });
+
+  it('leaves the discs a hit put out pale on Pips', () => {
+    const html = draw({ style: 'pips', fit: 'ten' }, {}, { hits: HITS });
+    // 72 percent lights seven discs, 82 lit eight.
+    const health = all(html, /<span class="vitals-pips"[^>]*>(.*?)<\/span><\/span>/g)[0] ?? '';
+    expect(all(health, /class="vitals-pip([^"]*)"/g)).toEqual([
+      ...Array(7).fill(' is-full'),
+      ' is-gone',
+      '',
+      '',
+    ]);
+  });
+
+  it('holds the Ladders peak lit, one segment over the fill', () => {
+    const html = draw({ style: 'ladders', fit: 'beside' }, {}, { hits: HITS });
+    const health = all(html, /<span class="vitals-ladder">(.*?)<\/span>/g)[1] ?? '';
+    const lit = all(health, /class="vitals-ladder-seg( is-lit)?"/g).map(Boolean);
+    expect(lit.slice(0, 17).every(Boolean)).toBe(true);
+    expect(lit.slice(17)).toEqual([false, false, true, false, false, false, false]);
+  });
+
+  it('draws nothing pale without a trail', () => {
+    expect(draw({ style: 'rows' })).not.toContain('vitals-ghost');
   });
 });

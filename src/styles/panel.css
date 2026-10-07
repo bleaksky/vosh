@@ -616,6 +616,7 @@
 }
 
 .panel-vitals-meter {
+  position: relative;
   height: var(--vitals-meter, 2px);
   margin-top: var(--vitals-meter-gap, 1px);
   border-radius: var(--vitals-meter-radius, 1px);
@@ -624,6 +625,7 @@
 }
 
 .panel-vitals-fill {
+  position: relative;
   height: 100%;
   border-radius: inherit;
   background: var(--tertiary);
@@ -668,6 +670,27 @@
 
 .panel-vitals-row-combat .panel-vitals-fill {
   background: var(--warn);
+}
+
+/* Show each hit on Rows and One line: the part a hit took in the
+   fill's color at 62 percent, so it still reads on the divider. */
+.panel-vitals-gone {
+  top: 0;
+  bottom: 0;
+  background: color-mix(in oklab, var(--tertiary) 62%, transparent);
+}
+
+.panel-vitals-swatch .panel-vitals-gone {
+  background: color-mix(in oklab, var(--vital-ink) 62%, transparent);
+}
+
+.panel-vitals-row-low .panel-vitals-gone {
+  background: color-mix(in oklab, var(--danger) 62%, transparent);
+}
+
+.panel-vitals-row-warn .panel-vitals-gone,
+.panel-vitals-row-combat .panel-vitals-gone {
+  background: color-mix(in oklab, var(--warn) 62%, transparent);
 }
 
 /* The game hides the value (lamented tears): a quiet `?` over an empty
@@ -741,6 +764,7 @@
   --vital-mark: var(--vital-ink, var(--vital-quiet, var(--secondary)));
   --vital-label: var(--vital-ink, var(--vital-quiet, var(--secondary)));
   --vital-value: var(--text);
+  --vital-ghost: color-mix(in oklab, var(--vital-mark) 40%, transparent);
 }
 
 .vitals-tone.is-warn {
@@ -829,6 +853,7 @@
 }
 
 .vitals-ledger-line {
+  position: relative;
   height: var(--vitals-meter, 2px);
   margin-top: round(4px * var(--mud-scale), 1px);
   border-radius: var(--vitals-meter-radius, 1px);
@@ -837,8 +862,15 @@
 }
 
 .vitals-ledger-fill {
+  position: relative;
   height: 100%;
   background: var(--vital-mark);
+}
+
+.vitals-ledger-gone {
+  top: 0;
+  bottom: 0;
+  background: color-mix(in oklab, var(--vital-mark) 62%, transparent);
 }
 
 /* Your opponent across the footer, its name and health on one line and
@@ -1005,6 +1037,16 @@
   background: var(--vital-mark);
 }
 
+.vitals-gauge-fill.is-hit {
+  border-radius: 3px 0 0 3px;
+}
+
+.vitals-gauge-gone {
+  top: 0;
+  bottom: 0;
+  background: var(--vital-ghost);
+}
+
 .vitals-marks.is-under .vitals-gauge {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -1037,6 +1079,14 @@
     var(--vital-mark) 50%,
     color-mix(in oklab, var(--vital-mark) 20%, transparent) 50%
   );
+}
+
+.vitals-pip.is-gone {
+  background: var(--vital-ghost);
+}
+
+.vitals-pip.is-half-gone {
+  background: linear-gradient(90deg, var(--vital-mark) 50%, var(--vital-ghost) 50%);
 }
 
 .vitals-tone.is-hidden .vitals-pip {
@@ -1146,12 +1196,21 @@
   background: color-mix(in oklab, var(--text) 10%, transparent);
 }
 
-.vitals-band-bar {
+.vitals-band-bar,
+.vitals-band-gone {
   position: absolute;
   top: 2px;
-  left: 0;
   height: 4px;
+}
+
+.vitals-band-bar {
+  left: 0;
   background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-band-gone {
+  background: var(--vital-ghost);
 }
 
 .vitals-band-tick {
@@ -1204,6 +1263,24 @@
 
 .vitals-ladder-seg.is-lit {
   background: var(--vital-mark);
+}
+
+/* Show each hit. The part a hit took holds pale beside the fill, then
+   drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
+   every fill jumps and the pale part just goes. */
+.vitals-ghost {
+  position: absolute;
+}
+
+.vitals-ghost.is-draining {
+  transition: width 400ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-vitals-marks *,
+  .vitals-ghost.is-draining {
+    transition: none;
+  }
 }
 
 /* Text. Your vitals text in the game face at your panel size, on the

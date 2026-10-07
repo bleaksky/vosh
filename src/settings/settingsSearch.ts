@@ -298,6 +298,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'customize-vitals', 'warn-low'),
   },
   {
+    label: 'Show each hit',
+    description:
+      'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.',
+    keywords: 'vitals hit trail pale drain heal peak health mana moves',
+    target: at('layout', 'customize-vitals', 'show-each-hit'),
+  },
+  {
     label: 'Divider color',
     keywords: 'split terminal scrollback divider line',
     target: at('layout', 'split', 'divider-color'),
