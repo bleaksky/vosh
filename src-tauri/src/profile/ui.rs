@@ -359,8 +359,8 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_true")]
     pub vitals_hide_when_pinned: bool,
     /// The vitals style you picked from the gallery: `ledger`, `gauges`,
-    /// `pips`, `bands`, `ladders`, `blocks`, `traces`, `dials`, `vials`,
-    /// `orbs`, `candles` or `text`. None for Rows and One line, which stay in
+    /// `pips`, `bands`, `ladders`, `blocks`, `traces`, `dials`, `rings`,
+    /// `vials`, `orbs`, `candles` or `text`. None for Rows and One line, which stay in
     /// `vitals_density`, so a build without styles reads your look. The
     /// keys from here to `vitals_text_previous` are written only once
     /// they differ from the default, so a profile that never picks saves
@@ -1172,9 +1172,9 @@ pub(crate) fn coerce_vitals_meter(value: String) -> String {
 
 /// The vitals styles the gallery adds to Rows and One line. Anything
 /// else saves as None, which draws `vitals_density`.
-pub(crate) const VITALS_STYLES: [&str; 12] = [
-    "ledger", "gauges", "pips", "bands", "ladders", "blocks", "traces", "dials", "vials", "orbs",
-    "candles", "text",
+pub(crate) const VITALS_STYLES: [&str; 13] = [
+    "ledger", "gauges", "pips", "bands", "ladders", "blocks", "traces", "dials", "rings", "vials",
+    "orbs", "candles", "text",
 ];
 
 /// Keep a known style and turn anything else into None.
@@ -1720,7 +1720,7 @@ name = "haste"
             );
         }
         // Rows and One line live in vitals_density, so they are no style.
-        for junk in ["rows", "line", "Gauges", ""] {
+        for junk in ["rows", "line", "Gauges", "Rings", ""] {
             assert_eq!(coerce_vitals_style(Some(junk.into())), None, "{junk}");
         }
         assert_eq!(coerce_vitals_style(None), None);
