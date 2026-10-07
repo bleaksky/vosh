@@ -740,6 +740,8 @@ impl ScriptEngine {
         let began = Instant::now();
         let result = body(&self.lua);
         let took = began.elapsed();
+        #[cfg(any(test, feature = "testkit"))]
+        let took = took + testkit::take_napped(&self.lua);
         let memory_error = matches!(&result, Err(err) if limits::is_memory_error(err));
         let stop = self.limits.end(&self.lua, memory_error);
         let (dropped, text_dropped, blocks_dropped) = match self.state.cell.lock() {

@@ -86,9 +86,10 @@ mod tests {
     use crate::testkit::engine_with_nap as engine;
     use crate::{Action, ScriptEngine, ScriptOutcome};
 
-    /// How long each slow handler naps, on the wall clock. Four naps use
-    /// the budget, so one owner runs at most four slow handlers for one
-    /// event. A nap stays well inside the limit of one call.
+    /// How long each slow handler naps, as the budget counts it. Four
+    /// naps use the budget, so one owner runs at most four slow handlers
+    /// for one event. A nap never sleeps, so it never meets the limit of
+    /// one call.
     const SLOW_MS: u32 = 30;
 
     /// Load `code` as the plugin `name`.
