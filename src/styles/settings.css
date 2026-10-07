@@ -2039,6 +2039,18 @@
   box-shadow: inset 0 0 0 1.25px var(--accent);
 }
 
+/* The pencil of an item you edited sits just before its dot (Presets
+   Q6). */
+.st-auto-mark {
+  flex: none;
+  margin-left: auto;
+  color: var(--tertiary);
+}
+
+.st-auto-mark + .st-auto-dot {
+  margin-left: 0;
+}
+
 /* MUD text in the list and cards: alias names, macro keys, commands. */
 .st-auto-mono {
   font-family: var(--font-mud);

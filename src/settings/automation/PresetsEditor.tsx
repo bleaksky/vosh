@@ -175,6 +175,8 @@ export function PresetsEditor({
             enabled: t.enabled,
             text: searchText(alert.name, alert.description, ALERTS_CATEGORY),
             anchor: presetAnchor(t.id),
+            // An alert preset with parts of its own in [alerts] is edited.
+            ...(t.alert && !isPresetDefault(t.alert) ? { edited: true } : {}),
           };
         }
         const preset = presetById(t.id);
@@ -187,6 +189,7 @@ export function PresetsEditor({
           text: searchText(preset?.name, preset?.description, category),
           anchor: presetAnchor(t.id),
           ...(world && preset?.suggest.includes(world) ? { dot: 'suggested' as const } : {}),
+          ...(hasEdits(t.edit) ? { edited: true } : {}),
         };
       },
       keyOf: (t) => t.id,

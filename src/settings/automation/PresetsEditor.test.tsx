@@ -415,6 +415,7 @@ async function mountEditor(
       )[0];
       const dot = findAll(row, (el) => hasClass(el, 'st-auto-dot'))[0];
       return {
+        ...(findAll(row, (el) => hasClass(el, 'st-auto-mark')).length > 0 ? { edited: true } : {}),
         suggested: hasClass(dot, 'is-suggested'),
         anchor: row.getAttribute('data-st-anchor'),
         selected: row.getAttribute('aria-current') === 'true',
@@ -803,7 +804,10 @@ describe('Your changes and Reset to preset', () => {
   it('clears every edit with Reset to preset, off included, at Save', async () => {
     const editor = await mountEditor(['none'], [], {}, 'granted', null, ORLA);
     await editor.pick('Disarms and fading buffs');
+    expect(editor.row('Disarms and fading buffs').edited).toBe(true);
+    expect(editor.row('Herb labels').edited).toBeUndefined();
     await editor.press('Reset to preset');
+    expect(editor.row('Disarms and fading buffs').edited).toBeUndefined();
     expect(editor.value('Your changes')).toBeUndefined();
     expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line (178, #d7af00)']);
     expect(editor.status()).toBe('Unsaved changes');
@@ -825,6 +829,7 @@ describe('Your changes and Reset to preset', () => {
   it('clears the parts of an alert preset you changed', async () => {
     const editor = await mountEditor(['none'], [], { alert_tells: TELLS });
     await editor.pick('Tells you get');
+    expect(editor.row('Tells you get').edited).toBe(true);
     await editor.press('Reset to preset');
     expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
     await editor.save();

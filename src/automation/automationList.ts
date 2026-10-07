@@ -28,6 +28,9 @@ export interface ListEntry {
   /** How the dot draws while the item is off. `suggested` wears the
    *  accent ring of a preset suggested for your world. */
   dot?: 'suggested';
+  /** Holds your edits, as a preset you changed. The row wears a pencil
+   *  beside its dot. */
+  edited?: boolean;
   /** Deep link and search anchor on the row, like `presets:herb_labels`. */
   anchor?: string;
 }

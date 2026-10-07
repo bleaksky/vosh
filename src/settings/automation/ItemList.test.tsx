@@ -325,3 +325,28 @@ describe('the suggested ring in the Automation list', () => {
     expect(html).not.toMatch(/data-uid="a"[^>]*data-st-anchor/);
   });
 });
+
+// Presets Q6: a preset you edited wears a 12 px pencil just before its
+// dot, and a reader hears edited after its name.
+describe('the pencil of an edited preset', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Disarms and fading buffs', true), edited: true },
+      { ...entry('b', 'Herb labels', true) },
+    ]),
+  });
+  const row = (uid: string) => new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+
+  it('draws the pencil before the dot and names the row edited', () => {
+    expect(row('a')).toMatch(
+      /Disarms and fading buffs<span class="st-visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot"/,
+    );
+    expect(row('b')).not.toMatch(/st-auto-mark|edited/);
+  });
+
+  it('sets the pencil in the tertiary color right before the dot', () => {
+    expect(settingsCss).toMatch(
+      /\.st-auto-mark \{\s*flex: none;\s*margin-left: auto;\s*color: var\(--tertiary\);\s*\}\s*\.st-auto-mark \+ \.st-auto-dot \{\s*margin-left: 0;\s*\}/,
+    );
+  });
+});

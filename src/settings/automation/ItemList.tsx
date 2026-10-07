@@ -25,7 +25,15 @@ import {
 } from '../../automation/automationList';
 import { loadoutHoldNote } from '../../automation/groupSwitches';
 import { scrollWithin } from '../../lib/scrollWithin';
-import { ChevronRightIcon, cx, Field, SearchIcon, Toggle, VisuallyHidden } from '../../ui';
+import {
+  ChevronRightIcon,
+  cx,
+  Field,
+  PencilIcon,
+  SearchIcon,
+  Toggle,
+  VisuallyHidden,
+} from '../../ui';
 import type { GroupSwitches } from './useGroupSwitches';
 
 /** A row pinned above the groups, like the Tick in Timers. */
@@ -50,6 +58,8 @@ interface RowProps {
   anchor: string | undefined;
   /** How the dot draws while the row is off, see ListEntry. */
   dot: ListEntry['dot'];
+  /** Wears the pencil of an item you edited, see ListEntry. */
+  edited: boolean;
   /** Why the row carries the warn ring, which a reader hears as its
    *  description. Undefined for a row with no ring. */
   warnNote: string | undefined;
@@ -72,6 +82,7 @@ const ListRow = memo(function ListRow({
   monoMeta,
   anchor,
   dot,
+  edited,
   warnNote,
   onSelect,
   onFocus,
@@ -101,8 +112,10 @@ const ListRow = memo(function ListRow({
           )}
         >
           {name || placeholder}
+          {edited && <VisuallyHidden>, edited</VisuallyHidden>}
         </span>
         {meta && <span className={cx('st-auto-row-meta', monoMeta && 'st-auto-mono')}>{meta}</span>}
+        {edited && <PencilIcon size={12} className="st-auto-mark" />}
         <span
           className={cx('st-auto-dot', !enabled && 'is-off', suggested && 'is-suggested')}
           aria-hidden="true"
@@ -284,6 +297,7 @@ export function ItemList({
               monoMeta={false}
               anchor={pinned.anchor}
               dot={undefined}
+              edited={false}
               warnNote={undefined}
               onSelect={onSelect}
               onFocus={onRowFocus}
@@ -307,6 +321,7 @@ export function ItemList({
                     monoMeta={monoMeta}
                     anchor={entry.anchor}
                     dot={entry.dot}
+                    edited={entry.edited ?? false}
                     warnNote={entry.enabled ? warnNotes?.get(entry.name) : undefined}
                     onSelect={onSelect}
                     onFocus={onRowFocus}
