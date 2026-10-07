@@ -163,11 +163,6 @@ const UNHEARD: &[Unheard] = &[
               reads it in the page half, after R18 (Alerts Q16).",
     },
     Unheard {
-        name: "vosh://preset-edits-changed",
-        why: "Your edits to a preset were saved. The Presets page and the \
-              trigger cards follow it once they edit presets (Presets Q10).",
-    },
-    Unheard {
         name: "vosh://presets-changed",
         why: "Presets turned on or off in one step. The Presets page and \
               First Run follow it once they switch presets through \

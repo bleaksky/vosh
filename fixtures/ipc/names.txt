@@ -210,7 +210,7 @@ event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
 event vosh://plugins-changed app heard
-event vosh://preset-edits-changed app unheard
+event vosh://preset-edits-changed app heard
 event vosh://presets-changed app unheard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard

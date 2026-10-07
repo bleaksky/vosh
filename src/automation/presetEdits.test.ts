@@ -1,0 +1,355 @@
+import { describe, expect, it } from 'vitest';
+import { colorize } from './colorTokens';
+import {
+  alsoKey,
+  applyRows,
+  buildPreset,
+  diff,
+  hold,
+  keepMine,
+  NO_ROW,
+  overlay,
+  patternKey,
+  takeFix,
+  triggerRows,
+} from './presetEdits';
+import { presetById, presetTriggers, PRESETS, type Preset, type PresetTrigger } from './presets';
+import type { EditRow, PresetEdit } from '../ipc/presetEdits';
+
+const DUAL = 'get 1.;dual 1.';
+const WIELD = 'get 1.;wield 1.';
+const SECONDARY = 'disarm.secondary';
+
+const disarms = presetById('disarm_buff_fade')!;
+
+/** Disarms and fading buffs with disarm.secondary sending `send`, as it
+ *  sent before the fix of October 5 with WIELD. */
+function withSecondarySend(send: string): Preset {
+  return {
+    ...disarms,
+    triggers: disarms.triggers.map((t) =>
+      t.name === SECONDARY
+        ? {
+            ...t,
+            actions: t.actions.map((a) => (a.kind === 'send' ? { ...a, template: send } : a)),
+          }
+        : t,
+    ),
+  };
+}
+
+function trigger(preset: Preset, name: string): PresetTrigger {
+  return preset.triggers.find((t) => t.name === name)!;
+}
+
+function sendOf(build: ReturnType<typeof buildPreset>, name: string): string | undefined {
+  const t = build.triggers.find((x) => x.name === name)!;
+  const send = t.actions.find((a) => a.kind === 'send');
+  return send?.kind === 'send' ? send.template : undefined;
+}
+
+const secondaryEdit = (row: EditRow): PresetEdit => ({ triggers: { [SECONDARY]: { send: row } } });
+
+const ref = (row: string | null, trigger: string | null = SECONDARY) => ({
+  preset: 'disarm_buff_fade',
+  trigger,
+  row,
+});
+
+describe('buildPreset with no edits', () => {
+  it('builds every preset byte for byte as it ships', () => {
+    for (const preset of PRESETS) {
+      const build = buildPreset(preset);
+      expect(JSON.stringify(build.triggers)).toBe(JSON.stringify(presetTriggers(preset)));
+      expect(build).toMatchObject({ write: {}, told: [], removed: [] });
+    }
+  });
+
+  it('leaves the group out, so Rust keeps the stored copy', () => {
+    for (const t of buildPreset(disarms).triggers) expect('group' in t).toBe(false);
+  });
+});
+
+// Board 4's table, every edit of Then send on disarm.secondary against
+// the dual fix.
+describe('the dual fix on disarm.secondary', () => {
+  it('lands where you made no edit', () => {
+    const build = buildPreset(disarms);
+    expect(sendOf(build, SECONDARY)).toBe(DUAL);
+  });
+
+  it('folds an edit that now equals the fix, with no notice', () => {
+    const build = buildPreset(disarms, secondaryEdit({ value: DUAL, was: WIELD }));
+    expect(sendOf(build, SECONDARY)).toBe(DUAL);
+    expect(build.told).toEqual([]);
+    // Its value is its was, so Rust drops the row and the pencil goes.
+    expect(build.write).toEqual({
+      triggers: { [SECONDARY]: { send: { value: WIELD, was: WIELD } } },
+    });
+  });
+
+  it('keeps get 1. and flags it, telling the fix once', () => {
+    const build = buildPreset(disarms, secondaryEdit({ value: 'get 1.', was: WIELD }));
+    expect(sendOf(build, SECONDARY)).toBe('get 1.');
+    expect(build.told).toEqual([ref('send')]);
+    expect(build.write).toEqual({
+      triggers: { [SECONDARY]: { send: { value: 'get 1.', was: DUAL, seen: DUAL } } },
+    });
+  });
+
+  it('keeps a cleared send and flags it', () => {
+    const build = buildPreset(disarms, secondaryEdit({ value: '', was: WIELD }));
+    expect(sendOf(build, SECONDARY)).toBeUndefined();
+    expect(build.told).toEqual([ref('send')]);
+  });
+
+  it('stays flagged and quiet once the notice named the fix', () => {
+    const seen = secondaryEdit({ value: '', was: WIELD, seen: DUAL });
+    const build = buildPreset(disarms, seen);
+    expect(sendOf(build, SECONDARY)).toBeUndefined();
+    expect(build.told).toEqual([]);
+    expect(build.write).toEqual({});
+    expect(overlay(trigger(disarms, SECONDARY), seen.triggers![SECONDARY]).holds).toEqual({
+      send: 'flagged',
+    });
+  });
+
+  it('tells a second fix to the same row again', () => {
+    const second = withSecondarySend('get 2.;dual 2.');
+    const build = buildPreset(second, secondaryEdit({ value: '', was: WIELD, seen: DUAL }));
+    expect(build.told).toEqual([ref('send')]);
+    expect(build.write.triggers![SECONDARY].send.seen).toBe('get 2.;dual 2.');
+  });
+
+  it('holds before the fix as an edit that applies', () => {
+    const before = withSecondarySend(WIELD);
+    const build = buildPreset(before, secondaryEdit({ value: 'get 1.', was: WIELD }));
+    expect(sendOf(build, SECONDARY)).toBe('get 1.');
+    expect(build).toMatchObject({ write: {}, told: [], removed: [] });
+  });
+});
+
+describe('a swatch', () => {
+  const LILAC = '#c3a6ff';
+  const lilac = (was: string, seen?: string): PresetEdit => ({
+    colors: { line: seen ? { value: LILAC, was, seen } : { value: LILAC, was } },
+  });
+  const moved: Preset = {
+    ...disarms,
+    colors: { ...disarms.colors, line: { ...disarms.colors.line, token: 'fg:179' } },
+  };
+
+  it('paints every trigger that uses its key', () => {
+    const build = buildPreset(disarms, lilac('fg:178'));
+    expect(build.triggers).toEqual(presetTriggers(disarms, { line: LILAC }));
+    expect(build).toMatchObject({ write: {}, told: [], removed: [] });
+  });
+
+  it('follows the same rule when a fix changes its color', () => {
+    const build = buildPreset(moved, lilac('fg:178'));
+    expect(build.triggers).toEqual(presetTriggers(moved, { line: LILAC }));
+    expect(build.told).toEqual([ref('line', null)]);
+    expect(build.write).toEqual({
+      colors: { line: { value: LILAC, was: 'fg:179', seen: 'fg:179' } },
+    });
+    expect(buildPreset(moved, lilac('fg:178', 'fg:179')).told).toEqual([]);
+  });
+
+  it('folds once the preset paints your color', () => {
+    const yours: Preset = {
+      ...disarms,
+      colors: { ...disarms.colors, line: { ...disarms.colors.line, token: LILAC } },
+    };
+    const build = buildPreset(yours, lilac('fg:178'));
+    expect(build.told).toEqual([]);
+    expect(build.write).toEqual({ colors: { line: { value: 'fg:178', was: 'fg:178' } } });
+  });
+
+  it('is a removed row once the preset no longer has its key', () => {
+    const build = buildPreset(disarms, {
+      colors: { glow: { value: LILAC, was: 'fg:200' } },
+    });
+    expect(build.triggers).toEqual(presetTriggers(disarms));
+    expect(build.removed).toEqual([ref('glow', null)]);
+  });
+});
+
+describe('Replace with keeps the color keys', () => {
+  const TURNING = 'buff.spell_turning';
+  const shipped = '{mark}##{reset} {line}Your shield of spell turning collapses.{reset}';
+  const unmarked = '{line}Your shield of spell turning collapses.{reset}';
+  const edit = (colors: PresetEdit['colors'] = {}): PresetEdit => ({
+    colors,
+    triggers: { [TURNING]: { replace: { value: unmarked, was: shipped } } },
+  });
+
+  it('reads the preset template with its keys', () => {
+    expect(triggerRows(trigger(disarms, TURNING)).replace).toBe(shipped);
+  });
+
+  it('never reads a color change as a fix', () => {
+    const build = buildPreset(disarms, edit({ line: { value: '#c3a6ff', was: 'fg:178' } }));
+    const t = build.triggers.find((x) => x.name === TURNING)!;
+    expect(t.actions).toEqual([
+      {
+        kind: 'replace',
+        template: colorize('{#c3a6ff}Your shield of spell turning collapses.{reset}'),
+      },
+    ]);
+    expect(build).toMatchObject({ write: {}, told: [], removed: [] });
+  });
+
+  it('never reads a color reset as a fix', () => {
+    const build = buildPreset(disarms, edit());
+    const t = build.triggers.find((x) => x.name === TURNING)!;
+    expect(t.actions).toEqual([
+      {
+        kind: 'replace',
+        template: colorize('{fg:178}Your shield of spell turning collapses.{reset}'),
+      },
+    ]);
+    expect(build.told).toEqual([]);
+  });
+});
+
+describe('a trigger the preset no longer builds', () => {
+  const gone: PresetEdit = {
+    triggers: { 'disarm.tertiary': { enabled: { value: false, was: true } } },
+  };
+
+  it('is named once and its edits come out', () => {
+    const build = buildPreset(disarms, gone);
+    expect(build.removed).toEqual([ref(null, 'disarm.tertiary')]);
+    expect(build.triggers.map((t) => t.name)).not.toContain('disarm.tertiary');
+    // Every row Rust drops, so the next launch finds nothing to name.
+    expect(build.write).toEqual({
+      triggers: { 'disarm.tertiary': { enabled: { value: true, was: true } } },
+    });
+  });
+});
+
+describe('rows in a list', () => {
+  const room = presetById('room_and_time')!;
+  const weather = trigger(room, 'weather.change');
+  const first = weather.patterns[0].pattern;
+  const off: Record<string, EditRow> = {
+    [patternKey(first)]: {
+      value: { text: first, enabled: false },
+      was: { text: first, enabled: true },
+    },
+  };
+
+  it('key a pattern by its text, so an edit stays on its row when a fix adds one', () => {
+    const added: PresetTrigger = {
+      ...weather,
+      patterns: [{ pattern: '^The fog thickens\\.$', enabled: true }, ...weather.patterns],
+    };
+    const laid = overlay(added, off);
+    expect(laid.holds).toEqual({ [patternKey(first)]: 'applies' });
+    expect(laid.trigger.patterns[0]).toEqual({ pattern: '^The fog thickens\\.$', enabled: true });
+    expect(laid.trigger.patterns[1]).toEqual({ pattern: first, enabled: false });
+  });
+
+  it('count a pattern the preset rewrote as a removed row', () => {
+    const rewritten: PresetTrigger = {
+      ...weather,
+      patterns: [
+        { pattern: '^The sky clouds over\\.$', enabled: true },
+        ...weather.patterns.slice(1),
+      ],
+    };
+    expect(overlay(rewritten, off).holds).toEqual({ [patternKey(first)]: 'removed' });
+  });
+
+  it('take a pattern or an Also send you added', () => {
+    const laid = overlay(weather, {
+      [patternKey('^The fog thickens\\.$')]: {
+        value: { text: '^The fog thickens\\.$', enabled: true },
+        was: NO_ROW,
+      },
+      [alsoKey('look')]: { value: 'look', was: NO_ROW },
+    });
+    expect(laid.trigger.patterns.at(-1)).toEqual({
+      pattern: '^The fog thickens\\.$',
+      enabled: true,
+    });
+    expect(laid.trigger.actions.at(-1)).toEqual({ kind: 'send', template: 'look' });
+  });
+
+  it('take out a row you removed', () => {
+    const laid = overlay(weather, {
+      [patternKey(first)]: { value: NO_ROW, was: { text: first, enabled: true } },
+    });
+    expect(laid.trigger.patterns).toEqual(weather.patterns.slice(1));
+  });
+});
+
+describe('applyRows', () => {
+  it('lays a group, a priority, Match and a color of your own over a preset trigger', () => {
+    const cure = trigger(presetById('healing_basics')!, 'cure.less_sick');
+    const t = applyRows(cure, { group: 'Healing', priority: 7, target: 'prompt', fg: 'red' });
+    expect(t).toMatchObject({ group: 'Healing', priority: 7, target: 'prompt' });
+    expect(t.actions).toEqual([{ kind: 'highlight', style: { fg: 'red' } }]);
+    expect(triggerRows(cure).fg).toBe('{line}');
+  });
+
+  it('turns Then send off with an empty row and on with a command', () => {
+    const primary = trigger(disarms, 'disarm.primary');
+    expect(applyRows(primary, { send: NO_ROW }).actions.map((a) => a.kind)).toEqual(['replace']);
+    expect(applyRows(primary, { send: 'get all' }).actions[1]).toEqual({
+      kind: 'send',
+      template: 'get all',
+    });
+  });
+
+  it('reads every pattern in the mode you pick', () => {
+    const t = applyRows(trigger(disarms, 'disarm.primary'), { mode: 'starts_with' });
+    expect(t.patterns[0].mode).toBe('starts_with');
+  });
+});
+
+describe('hold', () => {
+  it('reads a row the preset no longer has as removed', () => {
+    expect(hold('stance', { value: 'x', was: 'y' }, undefined)).toBe('removed');
+  });
+
+  it('flags a field the fix emptied, since a field is no list', () => {
+    expect(hold('send', { value: 'get 1.', was: WIELD }, NO_ROW)).toBe('flagged');
+  });
+});
+
+describe('diff', () => {
+  const primary = trigger(disarms, 'disarm.primary');
+  const now = triggerRows(primary);
+
+  it('gives only the rows that changed on the page, each against the preset now', () => {
+    const left = { ...now, priority: 7, enabled: false };
+    expect(diff(now, left, now)).toEqual({
+      priority: { value: 7, was: 5 },
+      enabled: { value: false, was: true },
+    });
+    expect(diff(now, now, now)).toEqual({});
+  });
+
+  it('keeps the seen of a flagged row you change again', () => {
+    const held: Record<string, EditRow> = { send: { value: '', was: WIELD, seen: DUAL } };
+    const loaded = { ...now, send: '' };
+    expect(diff(loaded, { ...loaded, send: 'get 1.' }, now, held)).toEqual({
+      send: { value: 'get 1.', was: WIELD, seen: DUAL },
+    });
+  });
+});
+
+describe('takeFix and keepMine', () => {
+  const flagged: EditRow = { value: '', was: WIELD, seen: DUAL };
+
+  it('take the fix as a row that folds', () => {
+    expect(takeFix(DUAL)).toEqual({ value: DUAL, was: DUAL });
+  });
+
+  it('keep mine by moving was and clearing seen', () => {
+    const kept = keepMine(flagged, DUAL);
+    expect(kept).toEqual({ value: '', was: DUAL });
+    expect(hold('send', kept, DUAL)).toBe('applies');
+  });
+});

@@ -35,6 +35,7 @@ export const MACRO_GROUPS_CHANGED = 'vosh://macro-groups-changed';
 export const GROUPS_CHANGED = 'vosh://groups-changed';
 export const MACROS_CHANGED = 'vosh://macros-changed';
 export const TIMERS_CHANGED = 'vosh://timers-changed';
+export const PRESET_EDITS_CHANGED = 'vosh://preset-edits-changed';
 
 export const PLUGINS_CHANGED = 'vosh://plugins-changed';
 

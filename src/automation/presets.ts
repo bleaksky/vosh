@@ -983,12 +983,25 @@ export const PRESETS_ON_BY_DEFAULT: readonly string[] = [
 
 /** The triggers of `preset` as the store holds them, each color key
  *  filled from `colors`, yours by key, over the preset's own. With none of
- *  yours they are the triggers the preset ships. A mark the preset paints
- *  bold keeps its bold in any color you give it. */
+ *  yours they are the triggers the preset ships. */
 export function presetTriggers(
   preset: Preset,
   colors: Readonly<Record<string, string>> = {},
 ): TriggerRecord[] {
+  return preset.triggers.map((t) => fillColors(preset, t, colors));
+}
+
+/** `trigger`, one of `preset`'s with your edits laid over it or as it
+ *  ships, as the store holds it. Each color key fills from `colors`,
+ *  yours by key, over the preset's own, and a color of your own in place
+ *  of a key stays as it is. A mark the preset paints bold keeps its bold
+ *  in any color you give it. */
+export function fillColors(
+  preset: Preset,
+  trigger: PresetTrigger,
+  colors: Readonly<Record<string, string>> = {},
+): TriggerRecord {
+  const isKey = (key: string) => Object.hasOwn(preset.colors, key);
   const token = (key: string) => colors[key] ?? preset.colors[key].token;
   const inBraces = (key: string) => {
     const own = colors[key];
@@ -998,20 +1011,19 @@ export function presetTriggers(
   };
   const fill = (template: string) =>
     colorize(
-      template.replace(/\{([a-z_]+)\}/g, (m, key: string) =>
-        Object.hasOwn(preset.colors, key) ? inBraces(key) : m,
-      ),
+      template.replace(/\{([a-z_]+)\}/g, (m, key: string) => (isKey(key) ? inBraces(key) : m)),
     );
-  return preset.triggers.map((t) => ({
-    ...t,
-    actions: t.actions.map((a): TriggerAction => {
+  return {
+    ...trigger,
+    actions: trigger.actions.map((a): TriggerAction => {
       if (a.kind === 'highlight') {
-        return { ...a, style: { ...a.style, fg: token(a.style.fg) as NamedColor } };
+        const fg = isKey(a.style.fg) ? token(a.style.fg) : a.style.fg;
+        return { ...a, style: { ...a.style, fg: fg as NamedColor } };
       }
       return a.kind === 'replace' ? { ...a, template: fill(a.template) } : a;
     }),
     preset: preset.id,
-  }));
+  };
 }
 
 export function presetMacros(preset: Preset): Macro[] {
