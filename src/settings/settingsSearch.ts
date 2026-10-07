@@ -1,3 +1,4 @@
+import { PRESET_CATEGORIES, PRESETS } from '../automation/presets';
 import {
   formatSettingsTarget,
   settingsGroupLabel,
@@ -447,6 +448,24 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'preset triggers macros built in numpad movement walk keys alerts tells name attacked health connection banner notification sound',
     target: at('automation', 'presets'),
   },
+  // Each preset of the library, on its own card, which holds its colors,
+  // Your changes and Reset to preset (Presets review). The alert presets
+  // come from Rust, so the Presets row finds them.
+  ...PRESETS.map(
+    (preset): SettingsRowEntry => ({
+      label: preset.name,
+      description: preset.description,
+      keywords: [
+        'preset',
+        PRESET_CATEGORIES[preset.category].toLowerCase(),
+        Object.keys(preset.colors).length > 0 ? 'colors swatch swatches' : '',
+        'your changes edits edited reset to preset',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      target: at('automation', 'presets', `presets:${preset.id}`),
+    }),
+  ),
   {
     label: 'Loadouts',
     keywords: 'loadout groups active catalog',

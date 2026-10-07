@@ -98,8 +98,8 @@ describe('searchSettingsRows', () => {
     ]);
   });
 
-  it('finds Macros and Presets by numpad', () => {
-    expect(labels('numpad')).toEqual(['Macros', 'Presets']);
+  it('finds Macros, Presets and the preset by numpad', () => {
+    expect(labels('numpad')).toEqual(['Numpad movement', 'Macros', 'Presets']);
     expect(labels('walk keys')).toEqual(['Presets']);
   });
 
@@ -117,6 +117,21 @@ describe('searchSettingsRows', () => {
     expect(labels('attacked')).toEqual(['Presets']);
     expect(labels('health')).toContain('Presets');
     expect(labels('connection')).toContain('Presets');
+  });
+
+  it('finds each preset on its card, by its colors and Reset to preset', () => {
+    expect(labels('herb')).toEqual(['Herb labels', 'Potion labels']);
+    expect(searchSettingsRows('disarms', mac)[0].target).toEqual({
+      group: 'automation',
+      section: 'presets',
+      anchor: 'presets:disarm_buff_fade',
+    });
+    const swatches = labels('swatch');
+    expect(swatches).toContain('Room, time and weather colors');
+    expect(swatches).not.toContain('Numpad movement');
+    expect(swatches).not.toContain('Tells you send');
+    expect(labels('reset to preset')).toContain('Numpad movement');
+    expect(labels('your changes')).toContain('Disarms and fading buffs');
   });
 
   it('shows loadouts only in loadout mode', () => {
@@ -139,9 +154,9 @@ describe('searchSettingsRows', () => {
 
   it('finds In a fight and Attack lines under Collapse repeated lines', () => {
     expect(labels('fight')[0]).toBe('In a fight');
-    expect(labels('combat')).toEqual(['In a fight', 'Attack lines']);
+    expect(labels('combat').slice(0, 2)).toEqual(['In a fight', 'Attack lines']);
     expect(labels('attack')[0]).toBe('Attack lines');
-    expect(labels('damage')).toEqual(['Attack lines']);
+    expect(labels('damage')).toEqual(['Damage to you', 'Your damage verbs', 'Attack lines']);
     const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
     expect(target('In a fight')).toEqual({
       group: 'appearance',
