@@ -18,7 +18,7 @@ import {
   presetTriggers,
   type PresetTrigger,
 } from './presets';
-import { drawSample, quotedWords, sampleRunCss, type SampleRun } from './presetSample';
+import { drawSample, quotedWords, sampleBars, sampleRunCss, type SampleRun } from './presetSample';
 import { ANSI_SLOTS } from '../theme/baseAnsi';
 import { contrast, parseHex } from '../theme/color';
 import { findTheme } from '../theme/themes';
@@ -430,7 +430,7 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
     ],
     [
       ['You have become better at ', '120'],
-      ['knot tying', '230'],
+      ['dagger', '230'],
       ['!', '120'],
     ],
   ],
@@ -795,5 +795,18 @@ describe('the colors a sample draws in', () => {
     const at = quotedWords(tell);
     expect(at && tell.slice(...at)).toBe('The day has begun.');
     expect(quotedWords("A villager's punch grazes you.")).toBeNull();
+  });
+
+  it('finds the bars a line names beside the words a tell quotes, in order', () => {
+    const [xp, skill] = presetById('loot_progression')!.sample;
+    const words = (text: string, bars?: readonly string[]) =>
+      sampleBars(text, bars).map((at) => text.slice(...at));
+    expect(words(xp.text, xp.bars)).toEqual(['1250']);
+    expect(words(skill.text, skill.bars)).toEqual(['dagger']);
+    expect(words("You tell Tolliver 'The day has begun.'", ['Tolliver'])).toEqual([
+      'Tolliver',
+      'The day has begun.',
+    ]);
+    expect(words('You feel less sick.', ['dagger'])).toEqual([]);
   });
 });

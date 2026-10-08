@@ -107,6 +107,9 @@ export interface PresetSampleLine {
    *  room_target for the line of the one you target among them. A plain
    *  line leaves it out. */
   target?: Extract<TriggerTarget, 'room' | 'room_target'>;
+  /** Words of the line a page draws as bars, never as text, as the
+   *  mockups draw a number or a name the line could hold. */
+  bars?: readonly string[];
 }
 
 // The Forsaken Lands, as KNOWN_WORLDS in knownWorlds.ts names it. Get
@@ -646,11 +649,11 @@ export const PRESETS: Preset[] = [
     // group_gain in fight.c, with the experience to the next level of
     // fixtures/gmcp/aabahran group-info.gmcp, 1250, then the line
     // check_improve prints at skills.c:1442, as Q5 of the first run review
-    // and its board 3 ask. Knot tying, a skill the game lacks, stands in
-    // for a real one.
+    // and its board 3 ask. Dagger is a skill of skill_table in const.c,
+    // and bars stand for the number and the skill, as board 3 draws them.
     sample: [
-      { text: 'You receive 1250 experience points.', shows: 'loot.xp' },
-      { text: 'You have become better at knot tying!', shows: 'loot.skill_up' },
+      { text: 'You receive 1250 experience points.', shows: 'loot.xp', bars: ['1250'] },
+      { text: 'You have become better at dagger!', shows: 'loot.skill_up', bars: ['dagger'] },
     ],
     suggest: [FORSAKEN_LANDS],
     colors: {

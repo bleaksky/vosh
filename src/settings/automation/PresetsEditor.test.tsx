@@ -677,6 +677,15 @@ describe('the Presets page of First Run board 4', () => {
     expect(editor.sample()).toEqual(["You tell Tolliver ''|"]);
   });
 
+  it('draws the number and the skill a gain names as bars', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Gold, experience, and levels');
+    expect(editor.sample()).toEqual([
+      'You receive  experience points.|',
+      'You have become better at !|',
+    ]);
+  });
+
   it('opens on the preset a link names, by its anchor', async () => {
     const editor = await mountEditor(['none'], [], {}, 'granted', { key: 'herb_labels', seq: 1 });
     expect(editor.row('Herb labels')).toEqual({

@@ -1,12 +1,13 @@
 import { useContext, type CSSProperties, type ReactNode } from 'react';
-import { drawSample, quotedWords, sampleRunCss } from './presetSample';
+import { drawSample, sampleBars, sampleRunCss } from './presetSample';
 import type { Preset } from './presets';
 import { cx } from '../ui';
 import { SamplePaintContext } from './samplePaint';
 
 /** A preset's sample as the terminal draws it, one line each, each run
  *  in the color the preset paints it, or in `colors`, yours by key. The
- *  words a tell quotes draw as a bar in the color of their run. The
+ *  words a tell quotes and the line's own bars draw as bars in the color
+ *  of their run. The
  *  Presets page and Get started both show it. */
 export function PresetSample({
   preset,
@@ -25,39 +26,38 @@ export function PresetSample({
     >
       {preset.sample.map((line, n) => {
         const { runs } = drawSample(preset, line, colors);
-        const bar = quotedWords(runs.map(([text]) => text).join(''));
+        const bars = sampleBars(runs.map(([text]) => text).join(''), line.bars);
         const parts: ReactNode[] = [];
         let at = 0;
         runs.forEach(([text, color], r) => {
           const css = paint ? sampleRunCss(color, paint) : { bold: false };
           const style = css.color ? ({ '--sample-fg': css.color } as CSSProperties) : undefined;
-          const piece = (key: string, body: ReactNode) => (
-            <span key={key} className={cx(css.bold && 'is-bold')} style={style}>
-              {body}
-            </span>
-          );
           const start = at;
           at += text.length;
-          if (!bar || bar[1] <= start || bar[0] >= at) {
-            parts.push(piece(`${r}`, text));
-            return;
+          // The run as text, with a bar where one crosses it.
+          const body: ReactNode[] = [];
+          let from = 0;
+          for (const [b0, b1] of bars) {
+            if (b1 <= start || b0 >= at) continue;
+            const s0 = Math.max(b0, start) - start;
+            const s1 = Math.min(b1, at) - start;
+            if (s0 > from) body.push(text.slice(from, s0));
+            body.push(
+              <span
+                key={s0}
+                className="st-auto-sample-bar"
+                style={{ width: `${s1 - s0}ch` }}
+                role="img"
+                aria-label="Words"
+              />,
+            );
+            from = s1;
           }
-          const from = Math.max(bar[0], start) - start;
-          const to = Math.min(bar[1], at) - start;
+          if (from < text.length) body.push(text.slice(from));
           parts.push(
-            piece(
-              `${r}`,
-              <>
-                {text.slice(0, from)}
-                <span
-                  className="st-auto-sample-bar"
-                  style={{ width: `${to - from}ch` }}
-                  role="img"
-                  aria-label="Words"
-                />
-                {text.slice(to)}
-              </>,
-            ),
+            <span key={r} className={cx(css.bold && 'is-bold')} style={style}>
+              {body}
+            </span>,
           );
         });
         return (

@@ -205,3 +205,17 @@ export function quotedWords(text: string): [number, number] | null {
   const start = m.index + 2;
   return [start, start + m[1].length];
 }
+
+/** Where a sample line draws bars, start and end, in order: the words a
+ *  tell quotes and each of `bars` where it first shows in `text`. */
+export function sampleBars(text: string, bars: readonly string[] = []): [number, number][] {
+  const spans = bars
+    .map((words): [number, number] => {
+      const at = text.indexOf(words);
+      return [at, at + words.length];
+    })
+    .filter(([at]) => at >= 0);
+  const quoted = quotedWords(text);
+  if (quoted) spans.push(quoted);
+  return spans.sort((a, b) => a[0] - b[0]);
+}
