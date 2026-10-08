@@ -130,6 +130,23 @@ describe('pickTheme', () => {
     expect(pickTheme(ui, 'gruvbox', null)).toEqual({ ...ui, theme: 'gruvbox' });
   });
 
+  it('shows the high contrast pair under Increase contrast while it follows the system', () => {
+    const ui = prefs({ follow_system_appearance: true });
+    expect(resolveActiveTheme(ui, true, null, true)).toBe('high-contrast');
+    expect(resolveActiveTheme(ui, false, null, true)).toBe('high-contrast-light');
+    const blank = prefs({ follow_system_appearance: true, dark_theme: '', light_theme: '' });
+    expect(resolveActiveTheme(blank, true, null, true)).toBe('high-contrast');
+    expect(resolveActiveTheme(blank, false, null, true)).toBe('high-contrast-light');
+  });
+
+  it('leaves Increase contrast alone while off or following the game', () => {
+    expect(resolveActiveTheme(prefs(), true, null, true)).toBe('nord');
+    const game = prefs({ theme_follow: 'game', day_theme: 'rubric', night_theme: 'dracula' });
+    expect(resolveActiveTheme(game, true, 'day', true)).toBe('rubric');
+    expect(resolveActiveTheme(game, false, 'night', true)).toBe('dracula');
+    expect(resolveActiveTheme(game, false, null, true)).toBe('nord');
+  });
+
   it('keeps the other fields of a whole config', () => {
     const ui = { ...prefs(), font_size: 14 };
     expect(pickTheme(ui, 'dracula').font_size).toBe(14);
@@ -138,6 +155,7 @@ describe('pickTheme', () => {
 
 describe('applyThemePrefs', () => {
   let dark = true;
+  let more = false;
   let listeners: Array<() => void> = [];
 
   beforeEach(() => {
@@ -145,11 +163,12 @@ describe('applyThemePrefs', () => {
     setTheme.mockClear();
     emit.mockClear();
     dark = true;
+    more = false;
     listeners = [];
     vi.stubGlobal('window', {
       matchMedia: (query: string) => ({
         get matches() {
-          return query.includes('dark') ? dark : false;
+          return query.includes('dark') ? dark : query.includes('contrast') ? more : false;
         },
         addEventListener: (_type: string, fn: () => void) => listeners.push(fn),
         removeEventListener: (_type: string, fn: () => void) => {
@@ -209,7 +228,8 @@ describe('applyThemePrefs', () => {
     });
     expect(id).toBe('tokyo-night');
     expect(setTheme).toHaveBeenLastCalledWith(null);
-    expect(listeners).toHaveLength(1);
+    // One listener for the appearance, one for Increase contrast.
+    expect(listeners).toHaveLength(2);
 
     flip(false);
     expect(theme.getCurrentThemeId()).toBe('rubric');
@@ -217,6 +237,29 @@ describe('applyThemePrefs', () => {
 
     flip(true);
     expect(theme.getCurrentThemeId()).toBe('tokyo-night');
+  });
+
+  it('swaps in the high contrast pair when Increase contrast goes on', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }), { broadcastFlips: true });
+    expect(theme.getCurrentThemeId()).toBe('tokyo-night');
+    more = true;
+    for (const l of listeners) l();
+    expect(theme.getCurrentThemeId()).toBe('high-contrast');
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'high-contrast');
+    flip(false);
+    expect(theme.getCurrentThemeId()).toBe('high-contrast-light');
+    expect(emit).toHaveBeenCalledWith('vosh://theme-changed', 'high-contrast-light');
+    more = false;
+    for (const l of listeners) l();
+    expect(theme.getCurrentThemeId()).toBe('rubric');
+  });
+
+  it('opens on the high contrast pair when Increase contrast is already on', async () => {
+    more = true;
+    const theme = await import('./theme');
+    expect(theme.applyThemePrefs(prefs({ follow_system_appearance: true }))).toBe('high-contrast');
+    expect(theme.applyThemePrefs(prefs())).toBe('nord');
   });
 
   it('stops following when follow goes off', async () => {
@@ -240,6 +283,7 @@ describe('applyThemePrefs', () => {
 
 describe('the paint cache', () => {
   let dark = true;
+  let more = false;
   let listeners: Array<() => void> = [];
   let stored: Record<string, string> = {};
   let rootAttrs: Record<string, string> = {};
@@ -249,13 +293,14 @@ describe('the paint cache', () => {
     getUiConfig.mockReset();
     getUiConfig.mockImplementation(() => Promise.resolve({ custom_themes: [] }));
     dark = true;
+    more = false;
     listeners = [];
     stored = {};
     rootAttrs = {};
     vi.stubGlobal('window', {
       matchMedia: (query: string) => ({
         get matches() {
-          return query.includes('dark') ? dark : false;
+          return query.includes('dark') ? dark : query.includes('contrast') ? more : false;
         },
         addEventListener: (_type: string, fn: () => void) => listeners.push(fn),
         removeEventListener: (_type: string, fn: () => void) => {

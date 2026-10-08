@@ -25,6 +25,7 @@ import type { Daylight } from '../ipc/tick';
 export const THEME_PAINT_KEY = 'vosh.cache.themePaint';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 /** What one theme paints on the document root. */
 export interface ThemePaintSide {
@@ -158,6 +159,15 @@ export function pageStorage(): PaintStorage | null {
 export function osPrefersDark(): boolean {
   try {
     return typeof window !== 'undefined' && window.matchMedia(DARK_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the OS asks for more contrast. False outside a browser. */
+export function osPrefersMoreContrast(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia(CONTRAST_QUERY).matches;
   } catch {
     return false;
   }

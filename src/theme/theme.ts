@@ -9,6 +9,9 @@
 // shows `theme`. With the system, follow_system_appearance on, it is
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
+// While macOS Increase contrast is on, prefers-contrast more, it shows
+// the high contrast pair instead, the dark one or the light one as the
+// OS appearance says (Q24).
 // With the game, theme_follow `game`, it is `day_theme` or
 // `night_theme`, whichever matches the selected session's daylight
 // (stores/session/daylightStore), and the store swaps them at the
@@ -42,6 +45,7 @@ import {
   bootPaintPhase,
   bootPaintSide,
   osPrefersDark,
+  osPrefersMoreContrast,
   pageStorage,
   paintRoot,
   samePaintSide,
@@ -61,6 +65,7 @@ import {
 } from './themes';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 let cleanupContrastListener: (() => void) | null = null;
 let cleanupSchemeListener: (() => void) | null = null;
@@ -134,12 +139,18 @@ function shownSlot(
 /** The theme id to show. Pure. `theme` while Switch themes is off, the
  *  pair entry that matches the OS while it follows the system, and the
  *  one that matches `daylight` while it follows the game. A blank entry,
- *  or a game that has not said, shows `theme`. */
+ *  or a game that has not said, shows `theme`. While it follows the
+ *  system and the OS asks for more contrast, the high contrast theme
+ *  that matches the OS shows instead of either entry. */
 export function resolveActiveTheme(
   ui: ThemePrefs,
   systemDark: boolean,
   daylight: Daylight | null,
+  moreContrast = false,
 ): string {
+  if (moreContrast && themeFollowOf(ui) === 'system') {
+    return systemDark ? 'high-contrast' : 'high-contrast-light';
+  }
   const slot = shownSlot(ui, systemDark, daylight);
   const id = slot === null ? '' : ui[slot];
   return id.length > 0 ? id : ui.theme;
@@ -180,6 +191,12 @@ export function systemPrefersDark(): boolean {
   return osPrefersDark();
 }
 
+/** Whether the OS asks for more contrast, macOS Increase contrast.
+ *  False outside a browser. */
+export function systemPrefersMoreContrast(): boolean {
+  return osPrefersMoreContrast();
+}
+
 /** The selected session's day or night, or the one last shown before
  *  its game says. Null when this window never knew one. */
 export function daylightShown(): Daylight | null {
@@ -190,7 +207,7 @@ export function daylightShown(): Daylight | null {
 
 /** The theme id the saved fields resolve to right now. */
 export function activeThemeFor(ui: ThemePrefs): string {
-  return resolveActiveTheme(ui, systemPrefersDark(), daylightShown());
+  return resolveActiveTheme(ui, systemPrefersDark(), daylightShown(), systemPrefersMoreContrast());
 }
 
 // Match the native window appearance to the theme: on macOS the window
@@ -221,8 +238,9 @@ function syncWindowAppearance(appearance: Appearance) {
   }
 }
 
-// Swap the pair when the OS appearance flips. Installed while follow is
-// on, removed when it goes off.
+// Swap the pair when the OS appearance flips, and swap in the high
+// contrast pair when Increase contrast goes on. Installed while follow
+// is on, removed when it goes off.
 function followSystemScheme(on: boolean) {
   followingSystem = on;
   if (!on) {
@@ -231,21 +249,27 @@ function followSystemScheme(on: boolean) {
     return;
   }
   if (cleanupSchemeListener) return;
-  let mq: MediaQueryList;
+  let dark: MediaQueryList;
+  let contrast: MediaQueryList;
   try {
-    mq = window.matchMedia(DARK_QUERY);
+    dark = window.matchMedia(DARK_QUERY);
+    contrast = window.matchMedia(CONTRAST_QUERY);
   } catch {
     return;
   }
   const update = () => {
     if (!themePrefs || themeFollowOf(themePrefs) !== 'system') return;
-    const id = resolveActiveTheme(themePrefs, mq.matches, null);
+    const id = resolveActiveTheme(themePrefs, dark.matches, null, contrast.matches);
     if (id === currentThemeId) return;
     if (broadcastFlips) void applyAndBroadcastTheme(id);
     else applyTheme(id);
   };
-  mq.addEventListener('change', update);
-  cleanupSchemeListener = () => mq.removeEventListener('change', update);
+  dark.addEventListener('change', update);
+  contrast.addEventListener('change', update);
+  cleanupSchemeListener = () => {
+    dark.removeEventListener('change', update);
+    contrast.removeEventListener('change', update);
+  };
 }
 
 // Swap the day and night themes when the selected session's game turns,
@@ -366,7 +390,6 @@ function applyToRoot(theme: AppTheme, standsFor: string | null = theme.id) {
 // high contrast theme when you asked for more contrast, else the
 // default theme.
 const LEGACY_SYSTEM = 'system';
-const CONTRAST_QUERY = '(prefers-contrast: more)';
 
 function contrastTheme(more: boolean): string {
   return more ? 'high-contrast' : DEFAULT_THEME_ID;
@@ -402,8 +425,9 @@ function rememberPaint(shown: ThemePaintSide, standsFor: string) {
 // `theme`, and the cache holds it as your pick.
 function cachePaint(prefs: ThemePrefs, shown: ThemePaintSide, standsFor: string): boolean {
   const systemDark = systemPrefersDark();
+  const more = systemPrefersMoreContrast();
   const daylight = daylightShown();
-  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark, daylight))) return false;
+  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark, daylight, more))) return false;
   const side = (dark: boolean, phase: Daylight | null) =>
     themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark, phase))));
   const follow = themeFollowOf(prefs);

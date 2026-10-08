@@ -81,7 +81,12 @@ beforeAll(async () => {
     HTMLIFrameElement: class {},
     addEventListener() {},
     removeEventListener() {},
-    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+    // A dark OS without Increase contrast.
+    matchMedia: (query: string) => ({
+      matches: !query.includes('contrast'),
+      addEventListener() {},
+      removeEventListener() {},
+    }),
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
