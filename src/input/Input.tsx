@@ -580,11 +580,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const lineCount = passwordMode ? 1 : value.split('\n').length;
 
   return (
-    <div
-      className={`input-row${pasteBurst ? ' input-row-pasting' : ''}${
-        lineCount > 1 ? ' input-row-multiline' : ''
-      }`}
-    >
+    <div className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}`}>
       <span className="prompt" aria-hidden="true">
         &#8250;
       </span>

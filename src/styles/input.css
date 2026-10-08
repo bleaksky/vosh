@@ -209,9 +209,7 @@
    chip sits between the prompt glyph and the live input showing
    progress + the cancel hint. Bracket-delimited to match the rest of
    the chrome ([save], [check now], etc.). Tabular-nums keep the
-   counts stable as digits grow so the slash does not shift. The
-   subtle pulse on the row signals "work in progress" without flashing
-   colors at the user. */
+   counts stable as digits grow so the slash does not shift. */
 .paste-burst {
   display: inline-flex;
   align-items: baseline;
@@ -267,20 +265,6 @@
 .paste-burst-hint {
   color: var(--tertiary);
   font-size: 0.92em;
-}
-
-.input-row-pasting {
-  animation: vosh-paste-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes vosh-paste-pulse {
-  0%,
-  100% {
-    border-top-color: var(--divider);
-  }
-  50% {
-    border-top-color: var(--accent-soft);
-  }
 }
 
 /* The prompt glyph sits 16 in, in the tertiary tone, so the text you
