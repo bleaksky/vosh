@@ -463,8 +463,9 @@ export function Terminal({
     // shaper of its own.
     let shaper = new OutputShaper(term.cols, fields, washed);
 
-    // Fill the copy anew from the session's scrollback, in the wash fields
-    // in force, and keep the live pane at its tail. The history pane keeps
+    // Fill the copy anew from the session's scrollback, word wrapped as
+    // live output is and in the wash fields in force, and keep the live
+    // pane at its tail. The history pane keeps
     // the row it shows. Only a copy the screen gave back says the
     // scrollback was restored, since its writes stopped meanwhile. A fill
     // that a newer one overtook writes nothing and settles nothing, since
@@ -496,7 +497,7 @@ export function Terminal({
         .then(({ bytes }) => {
           if (gen !== fills) return;
           if (bytes.length === 0) return settle();
-          writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
+          writer.local(shaper.whole(localDecoder.decode(bytes)));
           if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
           // The pad reads where the cursor sits once xterm parsed it all.
           writer.whenParsed(settle);

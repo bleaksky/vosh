@@ -17,6 +17,8 @@ const bus = vi.hoisted(() => ({
   local: new Map<object, string[]>(),
   /** Scrollback loads held until a test answers them, while it holds. */
   hold: false,
+  /** How wide each new xterm is. */
+  cols: 80,
   held: [] as ((bytes: number[]) => void)[],
 }));
 
@@ -46,7 +48,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@xterm/xterm', () => {
   const none = () => ({ dispose() {} });
   class Terminal {
-    cols = 80;
+    cols = bus.cols;
     rows = 24;
     options: Record<string, unknown>;
     unicode = { activeVersion: '' };
@@ -314,6 +316,26 @@ describe('a theme change on a pane xterm draws', () => {
     // The fill resets in the stream, then writes the history once.
     expect(local[0]).toBe('\x1bc');
     expect(local.join('').split('The day has begun.').length - 1).toBe(1);
+    await act(async () => root.unmount());
+  });
+
+  it('word wraps the history it fills anew as live output wraps', async () => {
+    bus.cols = 16;
+    const root = await mount();
+    bus.cols = 80;
+    themeChanged('obsidian-ember');
+    output(1, SANCTUARY);
+    const [live] = [...bus.written.values()];
+    bus.hold = true;
+    await act(async () => themeChanged('vellum'));
+    const [load] = bus.held.splice(0);
+    await act(async () => load([...new TextEncoder().encode(SANCTUARY)]));
+    bus.hold = false;
+    const [local] = [...bus.local.values()];
+    // eslint-disable-next-line no-control-regex
+    const plain = (text: string) => text.replace(/\x1b\[[0-9;:]*[A-Za-z]/g, '');
+    expect(plain(live.join(''))).toBe('Your sanctuary\r\nflickers and\r\nfades.\r\n');
+    expect(plain(local[1])).toBe(plain(live.join('')));
     await act(async () => root.unmount());
   });
 

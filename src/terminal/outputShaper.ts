@@ -45,8 +45,9 @@ export class OutputShaper {
     return this.wrapper.process(text) + this.wrapper.flush();
   }
 
-  /** Wrap and paint a chunk that stands alone, a region's own text. */
-  private wholeChunk(text: string): string {
+  /** Wrap and paint text that stands alone: a region's own text, or the
+   *  scrollback a pane fills anew from, the way live output wraps. */
+  whole(text: string): string {
     return WashPainter.whole(this.wrapChunk(text), this.fields(), this.onWash);
   }
 
@@ -78,25 +79,23 @@ export class OutputShaper {
       this.painter.drop();
       replace = {
         gen: out.replace.gen,
-        text: this.wholeChunk(this.replaceDecoder.decode(out.replace.bytes)),
+        text: this.whole(this.replaceDecoder.decode(out.replace.bytes)),
         fresh: out.replace.fresh,
       };
       if (out.replace.above) {
         replace.above = {
           plain: out.replace.above.plain,
-          text: this.wholeChunk(this.replaceDecoder.decode(out.replace.above.bytes)),
+          text: this.whole(this.replaceDecoder.decode(out.replace.above.bytes)),
         };
       }
       // The end of the region the text leaves out follows it.
       if (out.replace.tail) {
-        replace.tail = this.wholeChunk(this.replaceDecoder.decode(out.replace.tail));
+        replace.tail = this.whole(this.replaceDecoder.decode(out.replace.tail));
       }
     }
     const text = this.decoder.decode(out.bytes, { stream: true });
     const wrapped = this.streamChunk(text);
-    const restore = out.restore
-      ? this.wholeChunk(this.replaceDecoder.decode(out.restore))
-      : undefined;
+    const restore = out.restore ? this.whole(this.replaceDecoder.decode(out.restore)) : undefined;
     // Held line ends follow the text in the stream, so they wrap after it.
     const hold = out.hold ? this.streamChunk(this.decoder.decode(out.hold, { stream: true })) : '';
     // Whether a pinned prompt's row is open reaches the writer even when
