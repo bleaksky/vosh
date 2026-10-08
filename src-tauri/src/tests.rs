@@ -2,6 +2,7 @@
 
 mod alerts;
 mod broadcast;
+mod bundle;
 mod config_golden;
 mod echo;
 mod fake_mud;
