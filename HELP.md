@@ -383,7 +383,7 @@ A highlight trigger restyles every line that matches a pattern. Define one from 
 - Add `wash` to the style list to tint the whole line instead of restyling the text alone.
 - Type `#triggers` to confirm the pattern and action. Defining a trigger under an existing name replaces it.
 
-A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, a dim field in that color fills the row edge to edge, and an accent bar marks the left edge. The field and the bar follow your theme palette, so a washed line sits with the colors around it instead of fighting them.
+A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, and a dim field in that color fills the row edge to edge. The field follows your theme palette, so a washed line sits with the colors around it instead of fighting them.
 
 Colors take the sixteen ANSI names. `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` maps to magenta and `gray` to `bright_black`. Stack `bold`, `underline`, and `inverse` freely, and add `bg:<color>` for a background.
 
