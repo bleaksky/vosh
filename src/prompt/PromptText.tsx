@@ -9,7 +9,7 @@ import {
   TOKEN_ROWS,
 } from './textEdit';
 import type { PromptToken } from '../ipc/promptDesign';
-import { Button, PlusIcon } from '../ui';
+import { Button, PlusIcon, VisuallyHidden } from '../ui';
 
 // Edit as text (P9): your design byte for byte in the terminal's face,
 // each token colored by what it is, wrapping only between tokens. The
@@ -180,9 +180,7 @@ export function PromptText({
 
   return (
     <div className="pc-body pc-text">
-      <span id="pc-template-label" className="st-visually-hidden">
-        {fieldLabel}
-      </span>
+      <VisuallyHidden id="pc-template-label">{fieldLabel}</VisuallyHidden>
       <div
         ref={fieldRef}
         className="pc-text-field"

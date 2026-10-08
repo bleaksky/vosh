@@ -263,7 +263,7 @@ export function VitalsTiles({
   return (
     <>
       <fieldset className="st-gallery" data-st-anchor="style">
-        <legend className="st-visually-hidden">Style</legend>
+        <legend className="visually-hidden">Style</legend>
         <div className="st-vitals-grid" onKeyDown={onKeyDown}>
           {VITALS_STYLES.map((style) => (
             <label key={style} className="st-vitals-pick">

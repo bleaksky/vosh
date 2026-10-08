@@ -1,22 +1,8 @@
 /* The Affects pane in its three styles, Timers first, Countdown and
    Grouped chips, with the markers, the recast tint and the draining
-   fill you pick, and the words a screen reader hears for a cell. */
+   fill you pick. */
 
 /* ── Affects ─────────────────────────────────────────────────────── */
-
-/* Words for a screen reader that a cell shows only as glyphs and
-   color. */
-.pane-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 
 /* Board Affects A, timers first. Two columns 16 apart on 22 px rows
    at 12 px, 18 in from the left and 12 from the right. In each cell the mark

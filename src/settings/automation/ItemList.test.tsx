@@ -157,7 +157,7 @@ describe('collapsible groups in the Automation list', () => {
     expect(button).toContain('aria-expanded="false"');
     expect(button).not.toContain('aria-controls');
     expect(button).toContain(
-      '<span class="st-auto-fold-count">2<span class="st-visually-hidden"> triggers</span></span>',
+      '<span class="st-auto-fold-count">2<span class="visually-hidden"> triggers</span></span>',
     );
     expect(html).not.toContain('data-uid="c1"');
     expect(html).not.toContain('data-uid="c2"');
@@ -168,7 +168,7 @@ describe('collapsible groups in the Automation list', () => {
 
   it('counts one item in the singular', () => {
     const html = renderList({ sections, selected: 'u', folded: new Set(['g:idle']) });
-    expect(heading(html, 'g:idle')).toContain('>1<span class="st-visually-hidden"> trigger</span>');
+    expect(heading(html, 'g:idle')).toContain('>1<span class="visually-hidden"> trigger</span>');
   });
 
   it('gives the ungrouped items at the top no heading to fold', () => {
@@ -367,7 +367,7 @@ describe('the pencil of an edited preset', () => {
 
   it('draws the pencil before the dot and names the row edited', () => {
     expect(row('a')).toMatch(
-      /Disarms and fading buffs<span class="st-visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot"/,
+      /Disarms and fading buffs<span class="visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot"/,
     );
     expect(row('b')).not.toMatch(/st-auto-mark|edited/);
   });

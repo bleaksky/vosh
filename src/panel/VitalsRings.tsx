@@ -3,6 +3,7 @@ import { RING_RADII, RINGS, type RingsFit } from './vitalsDrawnFit';
 import { hitFill } from './vitalsHit';
 import { MarkValue } from './VitalsMarks';
 import { toneProps, VITAL_LABELS } from './vitalsView';
+import { VisuallyHidden } from '../ui';
 
 // Rings (More Vitals Styles, board 3): your vitals as arcs nested in
 // one 56 pt glyph, outer to inner in your order, with a legend of
@@ -79,7 +80,7 @@ export function VitalsRings({
                   {fit === 'labels' ? (
                     VITAL_LABELS[row.key]
                   ) : (
-                    <span className="panel-vitals-label-hidden">{VITAL_LABELS[row.key]}</span>
+                    <VisuallyHidden>{VITAL_LABELS[row.key]}</VisuallyHidden>
                   )}
                 </span>
                 <MarkValue value={row.value} widest={row.widest} />

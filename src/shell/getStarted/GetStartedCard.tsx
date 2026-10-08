@@ -198,7 +198,7 @@ export function GetStartedCard({
           onClose={close}
         />
       )}
-      <p className="st-visually-hidden" aria-live="polite">
+      <p className="visually-hidden" aria-live="polite">
         {said}
       </p>
     </section>

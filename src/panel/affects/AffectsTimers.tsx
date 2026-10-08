@@ -13,6 +13,7 @@ import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { affectHours, affectsEmptyText, affectWords } from '../paneText';
 import { usePaneText } from '../paneTextSize';
+import { VisuallyHidden } from '../../ui';
 
 // The at a glance checklist, board Affects A, timers first. Two columns
 // of 22 px rows at 12 px, taller at a larger panel size, each the
@@ -214,7 +215,7 @@ function AffectCell({
       </span>
       <span className="pane-affect-name">
         {row.name}
-        {words && <span className="pane-sr">{words}</span>}
+        {words && <VisuallyHidden>{words}</VisuallyHidden>}
       </span>
     </li>
   );

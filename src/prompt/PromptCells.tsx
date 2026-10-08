@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { bandRuns, decorationLine, type BandEnv } from '../terminal/bandCells';
 import { contrast, parseHex } from '../theme/color';
 import { sampleCut } from './cardRules';
+import { VisuallyHidden } from '../ui';
 import type { Cell } from '../terminal/sgrCells';
 
 // One row of terminal text inside the prompt card: a prompt line in the
@@ -109,7 +110,7 @@ export function CellLine({
       className={['pc-cells', className].filter(Boolean).join(' ')}
       style={{ width: cut ? cut.width : shown * cellW, ...style }}
     >
-      <span className="st-visually-hidden">{text}</span>
+      <VisuallyHidden>{text}</VisuallyHidden>
       {marks.map((mark) => (
         <span
           key={`${mark.from}-${mark.to}`}

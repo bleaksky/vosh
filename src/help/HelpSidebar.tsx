@@ -94,7 +94,7 @@ export function HelpSidebar({
         <span className="st-search-icon" aria-hidden="true">
           <SearchIcon />
         </span>
-        <label htmlFor={inputId} className="st-visually-hidden">
+        <label htmlFor={inputId} className="visually-hidden">
           Search help
         </label>
         <input

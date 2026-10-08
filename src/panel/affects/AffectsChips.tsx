@@ -29,6 +29,7 @@ import {
 } from './chipsGrid';
 import { affectHours, affectsEmptyText, affectWords } from '../paneText';
 import { usePaneText } from '../paneTextSize';
+import { VisuallyHidden } from '../../ui';
 
 // Board Affects C, Grouped chips. What to recast first: the tracked
 // affects you miss and the ones running out, then the rest you track,
@@ -268,7 +269,7 @@ function Chip({
     <li className={cls} style={style}>
       <span className="pane-chip-name">
         {row.name}
-        {words && <span className="pane-sr">{words}</span>}
+        {words && <VisuallyHidden>{words}</VisuallyHidden>}
       </span>
       {hours && (
         <span className={`pane-chip-hours${tone ? ` is-${tone}` : ''}`} aria-hidden="true">
@@ -302,7 +303,7 @@ function MissingChip({
     <li ref={ref} className="pane-chip pane-chip-missing">
       <span className="pane-chip-name">
         {row.name}
-        <span className="pane-sr">{affectWords(row.state, row.ticks)}</span>
+        <VisuallyHidden>{affectWords(row.state, row.ticks)}</VisuallyHidden>
       </span>
       <span className="pane-chip-hours" aria-hidden="true">
         {hours}

@@ -14,6 +14,7 @@ import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsPa
 import { countdownGrid, type CountdownGrid } from './countdownGrid';
 import { affectHours, affectsEmptyText, affectWords } from '../paneText';
 import { usePaneText } from '../paneTextSize';
+import { VisuallyHidden } from '../../ui';
 
 // Board Affects B, Countdown. One run by the hours left, missing first
 // and permanent last, down the left column and on down the right, on
@@ -164,7 +165,7 @@ function CountdownCell({
       <span className="pane-countdown-line">
         <span className="pane-countdown-name">
           {row.name}
-          {words && <span className="pane-sr">{words}</span>}
+          {words && <VisuallyHidden>{words}</VisuallyHidden>}
         </span>
         <span className={`pane-countdown-hours${tone ? ` is-${tone}` : ''}`} aria-hidden="true">
           {affectHours(row.state, row.ticks)}

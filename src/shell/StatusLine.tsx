@@ -42,6 +42,7 @@ import { FIT_ALL, statusLineFit, type StatusLineFit } from './statusLineFit';
 import { roundTripText, roundTripTone, SLOW_MS, WIDEST_ROUND_TRIP } from './roundTrip';
 import { statusMoons } from './statusMoons';
 import { useVitalsMenu } from '../panel/useVitalsMenu';
+import { VisuallyHidden } from '../ui';
 
 // The quiet line under the input band (SPEC 10 G4): your vitals when
 // the line carries them, your opponent, your target, then the tick, the
@@ -360,7 +361,7 @@ export function StatusVitals({
 /** A label, a name, or a value the line gives way on, still read by a
  *  screen reader. */
 function Hideable({ shown, children }: { shown: boolean; children: string }) {
-  return shown ? <>{children}</> : <span className="shell-sr">{children}</span>;
+  return shown ? <>{children}</> : <VisuallyHidden>{children}</VisuallyHidden>;
 }
 
 function StatusItemsView({ items, fit }: { items: StatusItems; fit: StatusLineFit }) {
@@ -407,7 +408,7 @@ function FoeItem({ combat, name }: { combat: CombatOpponent; name: boolean }) {
       {name ? (
         <span className="shell-status-name">{combat.name}</span>
       ) : (
-        <span className="shell-sr">{combat.name}</span>
+        <VisuallyHidden>{combat.name}</VisuallyHidden>
       )}
       <span className={toneClass(health.hidden ? 'hidden' : 'warn', !name)}>{health.value}</span>
     </span>

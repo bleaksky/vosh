@@ -732,15 +732,6 @@
   margin-left: 0;
 }
 
-.panel-vitals-label-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* Ledger, Gauges and Pips (Vitals Styles, board 1). Each vital carries
    its tone as custom properties: the mark, the label and the value. The
    mark rests in a quiet tone, a color you picked colors the mark and

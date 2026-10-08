@@ -78,7 +78,7 @@ export function ThemeGallery({
 
   return (
     <fieldset className="st-gallery">
-      <legend className="st-visually-hidden">Theme</legend>
+      <legend className="visually-hidden">Theme</legend>
       {onVision && (
         <div className="st-gallery-bar">
           <span id={visionLabel} className="st-meta">

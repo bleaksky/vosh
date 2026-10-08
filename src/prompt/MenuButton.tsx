@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import type { MenuPlace } from './cardRules';
-import { Button, CheckIcon, ChevronDownIcon } from '../ui';
+import { Button, CheckIcon, ChevronDownIcon, VisuallyHidden } from '../ui';
 import { MenuItem } from '../ui/MenuSurface';
 import { CardMenu } from './CardMenu';
 
@@ -85,11 +85,7 @@ export function MenuButton<T extends string>({
         </span>
         <ChevronDownIcon />
       </Button>
-      {why !== null && (
-        <span id={whyId} className="st-visually-hidden">
-          {why}
-        </span>
-      )}
+      {why !== null && <VisuallyHidden id={whyId}>{why}</VisuallyHidden>}
       {openAt && (
         <CardMenu anchor={openAt} place={place} label={name} onClose={() => setMenuAt(null)}>
           {choices.map((choice) => {

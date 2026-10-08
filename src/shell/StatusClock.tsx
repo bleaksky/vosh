@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { ChipStyle, TickCount } from '../ipc/uiConfig';
 import { SunPathIcon, TickRingIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
+import { VisuallyHidden } from '../ui';
 
 // The tick, the game time, and the moons as one status line item,
 // drawn from plain values so a test can render it without the stores.
@@ -110,7 +111,7 @@ export function StatusClock({ style, tick, time, moons = null }: Props) {
 function Moons({ style, moons }: { style: ChipStyle; moons: ClockMoons }) {
   return (
     <span className="shell-status-part">
-      <span className={style === 'caption_value' ? undefined : 'shell-sr'}>Moons</span>
+      <span className={style === 'caption_value' ? undefined : 'visually-hidden'}>Moons</span>
       <span className="shell-status-moons">
         {moons.moons.map((moon) => (
           <MoonPhaseIcon
@@ -157,14 +158,14 @@ function Reading({
   return (
     <span className={`shell-status-part${tone}`}>
       {style === 'icon_value' && icon}
-      <span className={style === 'caption_value' ? undefined : 'shell-sr'}>{caption}</span>
+      <span className={style === 'caption_value' ? undefined : 'visually-hidden'}>{caption}</span>
       <span className="shell-status-value" style={valueStyle}>
         {spoken === undefined ? (
           value
         ) : (
           <>
             <span aria-hidden="true">{value}</span>
-            <span className="shell-sr">{spoken}</span>
+            <VisuallyHidden>{spoken}</VisuallyHidden>
           </>
         )}
       </span>

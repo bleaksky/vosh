@@ -111,7 +111,7 @@ A row whose content sits under its label line at full width, like the prompt tem
 
 `CoachRing` is Show me's ring, mounted once in each window. `showCoach({ find, line })` rings what `find` returns once it draws, 2 px out in the accent with one pulse, moves focus to the first of them and sets `line` beside it on the toast recipe. The pick, Esc, a press anywhere or a target that leaves the page clears it. `menuRows(menu, labels)` finds rows of an open menu by their labels. A Settings anchor with `data-st-coach` rings the same way when a deep link reaches it.
 
-`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
+`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off. It renders a span with the `visually-hidden` class from base.css. A label, a legend, a live paragraph or a span that hides only in some styles wears the class by name.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.
 

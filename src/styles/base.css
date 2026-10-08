@@ -1,6 +1,6 @@
 /* The base. The box-sizing reset, html and body in Inter, thin
-   scrollbars in the theme's colors on every platform, and the window
-   edge every window root wears. */
+   scrollbars in the theme's colors on every platform, the window edge
+   every window root wears, and the one visually hidden class. */
 
 * {
   box-sizing: border-box;
@@ -92,4 +92,17 @@ body {
 
 [data-platform='macos'] .window-edge::after {
   display: none;
+}
+
+/* Words a screen reader hears and the page does not show. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

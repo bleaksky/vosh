@@ -522,9 +522,7 @@ function VitalItem({
       )}
     >
       <div className="panel-vitals-line">
-        <span className={showLabel ? 'panel-vitals-label' : 'panel-vitals-label-hidden'}>
-          {label}
-        </span>
+        <span className={showLabel ? 'panel-vitals-label' : 'visually-hidden'}>{label}</span>
         <span className="panel-vitals-value">{value}</span>
       </div>
       {meter && <Meter pct={pct} hit={hit} />}
