@@ -246,6 +246,29 @@ export function MoreIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Pin to the panel: a push pin, its head a bar over a tapered body
+ *  and its point straight down. */
+export function PinIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M5.5 2.5h5M6.5 2.5v3.75L4.5 9h7l-2-2.75V2.5M8 9v4.5" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
+/** Float over the terminal: a box with an arrow leaving its top right
+ *  corner. */
+export function PopOutIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path
+        d="M9.5 2.5h4v4M13.5 2.5L8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"
+        {...scale(props.size)}
+      />
+    </Glyph>
+  );
+}
+
 /** The grip on a row you drag is six filled dots in two columns, like
  *  the more glyph. */
 export function GripIcon({ size = 16, className }: IconProps) {

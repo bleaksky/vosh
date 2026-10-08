@@ -15,6 +15,131 @@
   cursor: default;
 }
 
+/* The card draws into a box of its own, which moves between the window
+   and the Writing pane's slot, and adds nothing to the layout. */
+.wr-host {
+  display: contents;
+}
+
+/* You drag the card by its header. Its words never select, and while it
+   moves the pointer grabs. */
+.wr-head.is-movable {
+  user-select: none;
+}
+
+.wr-card.is-moving,
+.wr-card.is-moving .pc-head {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The grip on the edge that moves: a 6 px strip with the resize cursor,
+   and a short bar that shows on hover and while you drag. */
+.wr-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.wr-grip.is-foot {
+  bottom: 0;
+}
+
+.wr-grip.is-top {
+  top: 0;
+}
+
+.wr-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: var(--tertiary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.wr-grip.is-foot::after {
+  bottom: 2px;
+}
+
+.wr-grip.is-top::after {
+  top: 2px;
+}
+
+.wr-grip:hover::after,
+.wr-grip:active::after {
+  opacity: 0.6;
+}
+
+/* Pinned to the panel, the card fills the Writing pane edge to edge on
+   the panel's own ground. The line about the draft moves under the
+   title, the header wraps in a narrow panel, and the text and guide
+   scroll inside the pane both ways. */
+.wr-pane-slot {
+  position: absolute;
+  inset: 0;
+}
+
+.pc-card.wr-card.is-pinned {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  max-height: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.wr-card.is-pinned .pc-head {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  height: auto;
+  min-height: 46px;
+  padding: 7px 8px 7px 12px;
+}
+
+.wr-card.is-pinned .wr-kind {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.wr-card.is-pinned .wr-kind .pc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wr-card.is-pinned .pc-spacer {
+  display: none;
+}
+
+.wr-card.is-pinned .wr-switch,
+.wr-card.is-pinned .pc-saved {
+  order: 1;
+}
+
+.wr-card.is-pinned .pc-saved {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+
+.wr-card.is-pinned .wr-main {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.wr-card.is-pinned .pc-body.wr-body {
+  padding: 12px;
+}
+
 /* The kind in the title, a button that opens what you can write. The
    title keeps the prompt card's 15 px, and the chevron the title band's
    12 px in the tertiary tone. */

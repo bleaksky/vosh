@@ -57,7 +57,9 @@ import { CoachRing } from '../ui/CoachRing';
 import { openSettingsTab } from '../lib/settingsLink';
 import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
-import { allPanes, isOfferedPaneType, PANE_TYPES } from '../panel/paneLayout';
+import { allPanes, isOfferedPaneType, PANE_TYPES, WRITING_PANE } from '../panel/paneLayout';
+import { useWritingCardPrefs } from '../stores/config/writingCardStore';
+import { keepWritingPane } from '../writing/pinnedPane';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import {
   getSelected,
@@ -253,6 +255,18 @@ function MainWindow() {
     setWritingCard(null);
     focusInput();
   };
+  // The Writing pane shows while the card is open and pinned, so closing
+  // or unpinning the card takes it out, and a pane a saved tree kept with
+  // no card open goes too.
+  const writingPrefs = useWritingCardPrefs();
+  const wantsWritingPane = writingCard !== null && writingPrefs.pinned;
+  const hasWritingPane = shownPanes.includes(WRITING_PANE);
+  const panelLoaded = panelLayout !== null;
+  useEffect(() => {
+    if (panelLoaded && writingPrefs.loaded && wantsWritingPane !== hasWritingPane) {
+      keepWritingPane(wantsWritingPane);
+    }
+  }, [panelLoaded, writingPrefs.loaded, wantsWritingPane, hasWritingPane]);
 
   // Customize… in Settings, and anything else in another window, opens
   // the card here and brings this window forward. Edit… under Customize

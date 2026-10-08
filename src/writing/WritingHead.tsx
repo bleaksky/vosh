@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useRef, useState, type HTMLAttributes } from 'react';
 import type { WritingKind } from '../ipc/writing';
 import { openPaneSubmenu, type PaneSubmenuState } from '../panel/affects/affectsDisplay';
 import {
@@ -9,6 +9,8 @@ import {
   CloseIcon,
   IconButton,
   MoreIcon,
+  PinIcon,
+  PopOutIcon,
   Segmented,
 } from '../ui';
 import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
@@ -20,7 +22,9 @@ import { SWITCH_LABELS } from './kinds';
 // The writing card's header (Note Editor board 1): the kind you write
 // as a button that opens what else you can write and your drafts, the
 // switch a text about you shares its card through, the line about the
-// draft, Guide, the ⋯ menu and Close.
+// draft, Guide, the ⋯ menu, the pin and Close. You move the card by
+// pressing anywhere on the header but its buttons and dragging, which
+// the card handles through `drag`.
 
 /** What the title's menu lists. */
 export interface KindsMenu {
@@ -58,6 +62,14 @@ interface Props {
   more: MoreItem[];
   /** The ⋯ menu's name for a reader. */
   moreLabel: string;
+  /** The card lives in its pane in the panel. */
+  pinned: boolean;
+  onPin: () => void;
+  /** The handlers that move the card, set while it can move. */
+  drag: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'
+  > | null;
   onClose: () => void;
 }
 
@@ -81,6 +93,9 @@ export function WritingHead({
   kinds,
   more,
   moreLabel,
+  pinned,
+  onPin,
+  drag,
   onClose,
 }: Props) {
   const titleRef = useRef<HTMLButtonElement | null>(null);
@@ -176,7 +191,8 @@ export function WritingHead({
 
   return (
     <div
-      className={`pc-head wr-head${folded ? ' is-folded' : ''}`}
+      className={`pc-head wr-head${folded ? ' is-folded' : ''}${drag ? ' is-movable' : ''}`}
+      {...drag}
       onClick={(e) => {
         if (folded && e.target === e.currentTarget) onUnfold();
       }}
@@ -215,6 +231,12 @@ export function WritingHead({
             aria-haspopup="menu"
             aria-expanded={moreAt !== null}
             onClick={(e) => setMoreAt(moreAt ? null : e.currentTarget)}
+          />
+          <IconButton
+            label={pinned ? 'Float over the terminal' : 'Pin to the panel'}
+            title={pinned ? 'Float over the terminal' : 'Pin to the panel'}
+            icon={pinned ? <PopOutIcon /> : <PinIcon />}
+            onClick={onPin}
           />
         </>
       )}
