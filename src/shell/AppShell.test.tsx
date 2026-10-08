@@ -1,10 +1,21 @@
-import type { ReactNode } from 'react';
+import { act, createElement, useEffect, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+import { PaneSizer, type SizedPane } from '../terminal/paneSizer';
 import frameCss from '../styles/frame.css?raw';
 import overlaysCss from '../styles/overlays.css?raw';
 import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../panel/paneLayout';
 import { AppShell } from './AppShell';
+
+/** The bounds the live pane gave the native surface. */
+const bounds = vi.hoisted(() => [] as { y: number; height: number }[]);
+
+vi.mock('../ipc/nativeSurface', () => ({
+  nativeSurfaceSetBounds: async (b: { y: number; height: number }) => void bounds.push(b),
+  nativeSurfaceSetCellMetrics: async () => undefined,
+}));
+vi.mock('../terminal/terminalRenderer', () => ({ nativeSurfaceEnabled: () => true }));
 
 // The width the frame draws the panel at. On Windows and Linux the
 // title band carries the window controls, so the panel draws at least
@@ -174,6 +185,112 @@ describe('the sessions column', () => {
       const placed = rule(overlaysCss, selector);
       expect(placed, selector).toMatch(/grid-column: 2 \/ 3;/);
       expect(placed, selector).toMatch(/grid-row: 2 \/ 3;/);
+    }
+  });
+});
+
+// A snoop that opens takes the top of the terminal column (Snoop SN1).
+// The split renders first in the terminal's slot, so the live terminal
+// keeps its parent and never remounts, which would reload its scrollback.
+describe('the snoop slot', () => {
+  it('opens and closes the split over the live terminal without remounting it', () => {
+    const doc = new FakeDocument();
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      innerWidth: 1280,
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+    vi.stubGlobal('Node', FakeNode);
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    return import('react-dom/client')
+      .then(({ createRoot }) => {
+        let mounts = 0;
+        let unmounts = 0;
+        function Live() {
+          useEffect(() => {
+            mounts += 1;
+            return () => {
+              unmounts += 1;
+            };
+          }, []);
+          return createElement('div', { className: 'terminal-area' });
+        }
+        const live = createElement(Live);
+        const shell = (snoop: ReactNode) =>
+          createElement(AppShell, {
+            panelOpen: true,
+            panelWidth: 300,
+            onPanelWidth: () => undefined,
+            titleBand: null,
+            snoop,
+            terminal: live,
+            input: null,
+            statusLine: null,
+            panel: null,
+          });
+        const host = doc.createElement('div');
+        const root = createRoot(host as unknown as HTMLElement);
+        const area = () => findAll(host, (el) => el.getAttribute('class') === 'terminal-area')[0];
+        act(() => root.render(shell(null)));
+        const first = area();
+        const slot = first.parentNode as FakeElement;
+        expect(slot.getAttribute('class')).toBe('shell-slot-term');
+
+        act(() => root.render(shell(createElement('section', { className: 'snoop' }))));
+        expect(area()).toBe(first);
+        expect(slot.childNodes.map((n) => (n as FakeElement).getAttribute('class'))).toEqual([
+          'snoop',
+          'terminal-area',
+        ]);
+
+        act(() => root.render(shell(null)));
+        expect(area()).toBe(first);
+        expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 0 });
+        act(() => root.unmount());
+      })
+      .finally(() => vi.unstubAllGlobals());
+  });
+
+  // Under the native surface the live pane measures its own box, so the
+  // grid shrinks with the pane when the split takes the top of the
+  // column: a 700 column with a 280 split leaves the pane 420, its sizer
+  // 408 inside the terminal's 6 px top and foot.
+  it('keeps the native grid on the live pane under a 280 split', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', {
+      devicePixelRatio: 2,
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    try {
+      const top = 32 + 280 + 6;
+      const sizer = {
+        getBoundingClientRect: () => ({ left: 16, top, width: 948, height: 420 - 12 }),
+      } as unknown as HTMLDivElement;
+      const pane: SizedPane = {
+        term: { dimensions: undefined } as unknown as SizedPane['term'],
+        fit: {} as SizedPane['fit'],
+        sizer,
+        host: { style: {} } as unknown as HTMLDivElement,
+        resize: () => undefined,
+        lent: () => 0,
+        anchor: () => false,
+        quiet: () => false,
+        shown: () => true,
+        onCellSize: () => undefined,
+      };
+      new PaneSizer(pane).show();
+      expect(bounds.at(-1)).toMatchObject({ x: 16, y: top, width: 948, height: 408 });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
     }
   });
 });
