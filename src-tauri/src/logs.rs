@@ -285,16 +285,25 @@ pub(crate) fn write_scrollback(path: &Path, snapshot: &Snapshot) -> bool {
 }
 
 /// Write the scrollback file of each session whose ring changed since its
-/// file was last written. The session loop never waits on it: each ring
-/// is locked only to copy its bytes, and the writes run on the blocking
-/// pool. A ring whose write failed reads as changed again.
+/// file was last written, see [`save_scrollback`].
 pub(crate) async fn save_changed_scrollback(state: &crate::app::state::SharedState) {
+    save_scrollback(state, Scrollback::take_changed).await;
+}
+
+/// Write the scrollback file of each session `copy` takes a snapshot of.
+/// The session loop never waits on it: each ring is locked only to copy
+/// its bytes, and the writes run on the blocking pool. A ring whose write
+/// failed reads as changed again.
+async fn save_scrollback(
+    state: &crate::app::state::SharedState,
+    copy: impl Fn(&mut Scrollback) -> Option<Snapshot>,
+) {
     let Some(dir) = state.app_data.get().cloned() else {
         return;
     };
     let mut files = Vec::new();
     for session in state.all_sessions() {
-        let snapshot = session.scrollback.lock().await.take_changed();
+        let snapshot = copy(&mut *session.scrollback.lock().await);
         if let Some(snapshot) = snapshot {
             let path = crate::disk::paths::scrollback_path(&dir, session.id);
             files.push((session.scrollback.clone(), path, snapshot));
@@ -325,16 +334,25 @@ pub(crate) async fn keep_scrollback_lines(session: &crate::sessions::Session, li
     crate::native::grid::set_history(session.id, lines as usize);
 }
 
-/// On the way out: end each log still open, since a quit while connected
-/// never reaches the end of the session loop, and write the scrollback
-/// that changed, so the next launch shows what you saw last.
+/// On the way out: write every scrollback ring, so the next launch shows
+/// what you saw last, and end each log still open, since a quit while
+/// connected never reaches the end of the session loop. Every ring takes
+/// a fresh copy, so a three minute write still running when you quit is
+/// waited on or skipped as older, never left to land after the exit. The
+/// two run side by side, so a log store busy with a rebuild cannot hold
+/// up the scrollback. A log the quit could not end, the launch sweep ends.
 pub(crate) async fn on_quit(state: &crate::app::state::SharedState) {
-    if let Some(store) = state.logs.lock().await.as_mut() {
-        if let Err(e) = store.end_open_sessions(crate::session::now_ms()) {
-            tracing::warn!(error = %e, "could not end the open logs on quit");
+    let end_logs = async {
+        if let Some(store) = state.logs.lock().await.as_mut() {
+            if let Err(e) = store.end_open_sessions(crate::session::now_ms()) {
+                tracing::warn!(error = %e, "could not end the open logs on quit");
+            }
         }
-    }
-    save_changed_scrollback(state).await;
+    };
+    tokio::join!(
+        save_scrollback(state, |ring| Some(ring.snapshot())),
+        end_logs
+    );
 }
 
 /// Write the scrollback that changed every few minutes, for as long as
@@ -433,6 +451,55 @@ mod tests {
         let guard = state.logs.lock().await;
         let row = guard.as_ref().unwrap().get_session(open).unwrap().unwrap();
         assert!(row.ended_at_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn a_quit_writes_the_scrollback_a_running_pass_already_took() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let state: crate::app::state::SharedState =
+            Arc::new(crate::app::state::AppState::default());
+        let _ = state.app_data.set(dir.path().to_path_buf());
+        let session = state.selected_session();
+        let mut ring = session.scrollback.lock().await;
+        ring.push(b"Maren waves.".to_vec());
+        // The three minute pass took this copy, and its write has not
+        // landed when you quit.
+        let in_flight = ring.take_changed().expect("the ring changed");
+        drop(ring);
+
+        on_quit(&state).await;
+        let path = crate::disk::paths::scrollback_path(dir.path(), session.id);
+        assert_eq!(std::fs::read(&path).unwrap(), b"Maren waves.\r\n");
+        // The older copy landing late writes nothing.
+        session.scrollback.lock().await.push(b"Orla nods.".to_vec());
+        on_quit(&state).await;
+        assert!(write_scrollback(&path, &in_flight));
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"Maren waves.\r\nOrla nods.\r\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_busy_log_store_does_not_hold_up_the_scrollback_on_quit() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let state: crate::app::state::SharedState =
+            Arc::new(crate::app::state::AppState::default());
+        let _ = state.app_data.set(dir.path().to_path_buf());
+        let session = state.selected_session();
+        session
+            .scrollback
+            .lock()
+            .await
+            .push(b"Tolliver leaves north.".to_vec());
+        // A rebuild holds the log store past the quit's time.
+        let busy = state.logs.lock().await;
+
+        let quit = tokio::time::timeout(std::time::Duration::from_millis(200), on_quit(&state));
+        assert!(quit.await.is_err(), "the log end waits on the store");
+        drop(busy);
+        let path = crate::disk::paths::scrollback_path(dir.path(), session.id);
+        assert_eq!(std::fs::read(path).unwrap(), b"Tolliver leaves north.\r\n");
     }
 
     #[test]
