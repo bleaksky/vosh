@@ -128,7 +128,9 @@ command session_set_address(session, host, port, tls)
 command session_set_window_size(cols, rows, session?)
 command session_walk_stop(session?)
 command sessions_list()
+command snoop_close(session?, name?)
 command snoop_get(session?)
+command snoop_stop(session?, name?)
 command target_get(session?)
 command terminal_cursor(session?)
 command terminal_local_write(text, after?, session?)
@@ -171,6 +173,8 @@ event session://prompt-status app heard
 event session://prompt-vars app heard
 event session://reconnect app heard
 event session://routed app heard
+event session://snoop app unheard
+event session://snoop-output app unheard
 event session://state app heard
 event session://target app heard
 event session://tick app heard

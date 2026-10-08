@@ -9,13 +9,18 @@
 //!
 //! The text never touches the line pipeline, so no trigger, highlight,
 //! gag or preset sound sees it. Lua still hears the packets through its
-//! GMCP handlers. The page reads every tab with its text through
-//! `snoop_get`.
+//! GMCP handlers. The session sends the tab list on `session://snoop`
+//! and new text on `session://snoop-output` once per read, and the page
+//! reads every tab with its text through `snoop_get`.
 
 use std::collections::VecDeque;
 
 use serde::Serialize;
 use serde_json::Value;
+use tauri::AppHandle;
+
+use crate::app::events;
+use crate::sessions::Session;
 
 /// The lines a tab keeps, as the snoop terminal's scrollback does.
 pub(crate) const MAX_LINES: usize = 5_000;
@@ -25,6 +30,8 @@ pub(crate) const MAX_LINES: usize = 5_000;
 enum State {
     /// The game sends this player's screen.
     Live,
+    /// You pressed Stop, and the game has not said the snoop ended yet.
+    Stopping,
     /// The snoop ended at this time, in ms since the epoch, by the game
     /// or a link that ended. The tab stays until you close it.
     Ended { at_ms: i64 },
@@ -79,7 +86,7 @@ impl Tab {
 
     fn row(&self) -> SnoopTab {
         let (live, ended_at) = match self.state {
-            State::Live => (true, None),
+            State::Live | State::Stopping => (true, None),
             State::Ended { at_ms } => (false, Some(at_ms)),
         };
         SnoopTab {
@@ -91,7 +98,8 @@ impl Tab {
     }
 }
 
-/// A tab as the page reads it.
+/// A tab as the page reads it. A snoop you pressed Stop on reads live
+/// until the game says it ended.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SnoopTab {
     pub(crate) name: String,
@@ -103,6 +111,21 @@ pub(crate) struct SnoopTab {
     pub(crate) last_output_at: Option<i64>,
 }
 
+/// What `session://snoop` carries beside the session: every tab, in the
+/// order they started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SnoopPayload {
+    pub(crate) tabs: Vec<SnoopTab>,
+}
+
+/// What `session://snoop-output` carries beside the session: the text
+/// one player's screen got in one read, raw.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SnoopOutputPayload {
+    pub(crate) name: String,
+    pub(crate) text: String,
+}
+
 /// A tab with its text, as `snoop_get` returns it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SnoopTabText {
@@ -111,10 +134,21 @@ pub(crate) struct SnoopTabText {
     pub(crate) text: String,
 }
 
-/// The snoops of one session.
+/// What changed since the last send.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct SnoopChanges {
+    /// Every tab, when the list changed.
+    pub(crate) list: Option<SnoopPayload>,
+    /// The new text of each player, one entry a name.
+    pub(crate) output: Vec<SnoopOutputPayload>,
+}
+
+/// The snoops of one session, and what changed since the last send.
 #[derive(Debug, Default)]
 pub(crate) struct Snoops {
     tabs: Vec<Tab>,
+    list_changed: bool,
+    output: Vec<SnoopOutputPayload>,
 }
 
 impl Snoops {
@@ -150,13 +184,21 @@ impl Snoops {
             Some(tab) => tab.state = State::Live,
             None => self.tabs.push(Tab::new(name)),
         }
+        self.list_changed = true;
     }
 
-    /// The game ended a snoop, and its tab stays as ended.
+    /// The game ended a snoop. The one you pressed Stop on goes, and any
+    /// other stays as ended.
     fn stop(&mut self, name: &str, now_ms: i64) {
-        if let Some(tab) = self.find(name).filter(|tab| tab.state == State::Live) {
-            tab.state = State::Ended { at_ms: now_ms };
+        let Some(at) = self.tabs.iter().position(|tab| tab.name == name) else {
+            return;
+        };
+        match self.tabs[at].state {
+            State::Stopping => self.remove(at),
+            State::Live => self.tabs[at].state = State::Ended { at_ms: now_ms },
+            State::Ended { .. } => return,
         }
+        self.list_changed = true;
     }
 
     /// A player's screen got `text`. Text for a player with no tab opens
@@ -168,15 +210,55 @@ impl Snoops {
         let tab = self.find(name).expect("the tab");
         tab.push(text);
         tab.last_output_ms = Some(now_ms);
+        self.list_changed = true;
+        match self.output.iter_mut().find(|o| o.name == name) {
+            Some(sent) => sent.text.push_str(text),
+            None => self.output.push(SnoopOutputPayload {
+                name: name.to_string(),
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    fn remove(&mut self, at: usize) {
+        let tab = self.tabs.remove(at);
+        self.output.retain(|o| o.name != tab.name);
     }
 
     /// The link ended at `now_ms`, and every snoop with it. A live one
-    /// stays as ended.
+    /// stays as ended, and one you pressed Stop on goes.
     pub(crate) fn link_ended(&mut self, now_ms: i64) {
+        let before = self.tabs.len();
+        self.tabs.retain(|tab| tab.state != State::Stopping);
+        let mut changed = self.tabs.len() != before;
         for tab in &mut self.tabs {
             if tab.state == State::Live {
                 tab.state = State::Ended { at_ms: now_ms };
+                changed = true;
             }
+        }
+        self.list_changed |= changed;
+    }
+
+    /// You pressed Stop on the snoop of `name`, or Stop every snoop with
+    /// no name. Each live one it names waits for the game to end it.
+    pub(crate) fn stopping(&mut self, name: Option<&str>) {
+        for tab in &mut self.tabs {
+            if tab.state == State::Live && name.map_or(true, |name| tab.name == name) {
+                tab.state = State::Stopping;
+                self.list_changed = true;
+            }
+        }
+    }
+
+    /// Close the ended tab of `name`, or every ended tab with no name,
+    /// and its text.
+    pub(crate) fn close(&mut self, name: Option<&str>) {
+        while let Some(at) = self.tabs.iter().position(|tab| {
+            matches!(tab.state, State::Ended { .. }) && name.map_or(true, |name| tab.name == name)
+        }) {
+            self.remove(at);
+            self.list_changed = true;
         }
     }
 
@@ -190,13 +272,45 @@ impl Snoops {
             })
             .collect()
     }
+
+    /// What changed since the last call.
+    pub(crate) fn take_changes(&mut self) -> SnoopChanges {
+        let list = std::mem::take(&mut self.list_changed).then(|| SnoopPayload {
+            tabs: self.tabs.iter().map(Tab::row).collect(),
+        });
+        SnoopChanges {
+            list,
+            output: std::mem::take(&mut self.output),
+        }
+    }
+}
+
+/// Send `changes` for `session`: the tab list first, so a tab that
+/// started shows before its text, then the text of each player.
+pub(crate) fn emit<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    changes: SnoopChanges,
+) {
+    if let Some(list) = changes.list {
+        session.emit(app, events::SNOOP, &list);
+    }
+    for output in changes.output {
+        session.emit(app, events::SNOOP_OUTPUT, &output);
+    }
+}
+
+/// Send what changed in the snoops of `session` since the last send.
+pub(crate) fn emit_changes<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
+    let changes = session.connection.lock().snoops.take_changes();
+    emit(app, session, changes);
 }
 
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::{Snoops, MAX_LINES};
+    use super::{SnoopTab, Snoops, MAX_LINES};
 
     fn start(s: &mut Snoops, name: &str) {
         assert!(s.gmcp("Snoop.Start", &json!({ "name": name }), 0));
@@ -248,9 +362,34 @@ mod tests {
     }
 
     #[test]
-    fn a_stop_ends_the_tab_and_a_repeat_start_brings_it_back() {
+    fn a_read_sends_the_list_once_and_one_text_a_name() {
         let mut s = Snoops::default();
+        start(&mut s, "Orla");
+        output(&mut s, "Orla", "one\n\r", 1);
+        output(&mut s, "Orla", "two\n\r", 2);
+        let changes = s.take_changes();
+        assert_eq!(
+            changes.list.expect("the list").tabs,
+            [SnoopTab {
+                name: "Orla".into(),
+                live: true,
+                ended_at: None,
+                last_output_at: Some(2),
+            }]
+        );
+        assert_eq!(changes.output.len(), 1);
+        assert_eq!(changes.output[0].text, "one\n\rtwo\n\r");
+        assert_eq!(s.take_changes(), super::SnoopChanges::default());
+    }
+
+    #[test]
+    fn a_stop_you_asked_for_removes_the_tab_and_any_other_ends_it() {
+        let mut s = Snoops::default();
+        start(&mut s, "Tolliver");
         start(&mut s, "Maren");
+        s.stopping(Some("Tolliver"));
+        assert_eq!(tabs(&s)[0], tab("Tolliver", true, None));
+        stop(&mut s, "Tolliver", 10);
         stop(&mut s, "Maren", 11);
         assert_eq!(tabs(&s), [tab("Maren", false, Some(11))]);
         // A repeat start brings it back live with its text.
@@ -262,19 +401,46 @@ mod tests {
     }
 
     #[test]
+    fn stop_every_snoop_and_close_every_ended_tab() {
+        let mut s = Snoops::default();
+        for name in ["Tolliver", "Maren", "Orla"] {
+            start(&mut s, name);
+        }
+        stop(&mut s, "Orla", 3);
+        s.stopping(None);
+        stop(&mut s, "Tolliver", 4);
+        stop(&mut s, "Maren", 4);
+        assert_eq!(tabs(&s), [tab("Orla", false, Some(3))]);
+        s.close(Some("Tolliver"));
+        assert_eq!(tabs(&s).len(), 1);
+        s.close(None);
+        assert_eq!(s.all(), Vec::new());
+    }
+
+    #[test]
+    fn a_closed_tab_takes_its_unsent_text_and_a_live_one_stays_open() {
+        let mut s = Snoops::default();
+        start(&mut s, "Maren");
+        output(&mut s, "Maren", "x", 1);
+        s.close(Some("Maren"));
+        assert_eq!(tabs(&s), [tab("Maren", true, None)]);
+        stop(&mut s, "Maren", 2);
+        s.close(Some("Maren"));
+        assert_eq!(s.take_changes().output, Vec::new());
+    }
+
+    #[test]
     fn the_end_of_the_link_ends_each_live_snoop() {
         let mut s = Snoops::default();
         start(&mut s, "Tolliver");
         start(&mut s, "Maren");
-        stop(&mut s, "Maren", 10);
+        s.stopping(Some("Maren"));
+        s.take_changes();
         s.link_ended(20);
-        assert_eq!(
-            tabs(&s),
-            [
-                tab("Tolliver", false, Some(20)),
-                tab("Maren", false, Some(10))
-            ]
-        );
+        assert_eq!(tabs(&s), [tab("Tolliver", false, Some(20))]);
+        assert!(s.take_changes().list.is_some());
+        s.link_ended(30);
+        assert_eq!(s.take_changes().list, None);
     }
 
     #[test]
@@ -294,6 +460,6 @@ mod tests {
         let mut s = Snoops::default();
         assert!(!s.gmcp("Char.Vitals", &json!({ "name": "Orla" }), 0));
         assert!(!s.gmcp("Snoop.Start", &json!({}), 0));
-        assert_eq!(s.all(), Vec::new());
+        assert_eq!(s.take_changes(), super::SnoopChanges::default());
     }
 }

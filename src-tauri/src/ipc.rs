@@ -130,6 +130,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         panes::pane_layout_reset,
         panes::lua_panes_get,
         snoop::snoop_get,
+        snoop::snoop_stop,
+        snoop::snoop_close,
         characters::profile_set_login,
         characters::profile_set_world,
         characters::session_identity_get,

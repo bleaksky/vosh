@@ -28,6 +28,9 @@ pub(super) struct ReadBatch {
     /// A plugin changed its panes, so what changed goes out once after
     /// the output.
     pub(super) lua_panes: bool,
+    /// A Snoop packet came, so the tab list and the new text go out once
+    /// after the output.
+    pub(super) snoop: bool,
     /// Vosh read your prompt in this read, so the prompt state goes out
     /// after it while the card watches.
     pub(super) prompt: bool,
@@ -55,6 +58,7 @@ impl ReadBatch {
             log: Vec::new(),
             prompt_vars: false,
             lua_panes: false,
+            snoop: false,
             prompt: false,
             gag_without_reader: Vec::new(),
             character: None,

@@ -79,7 +79,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight, vitals_text) = {
+    let (tick_step, script_apply, daylight, vitals_text, snooped) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -89,7 +89,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         c.link.gmcp(&msg.package);
         // A snoop's text goes to its tab and never to the line pipeline.
         // Lua still hears the packet below.
-        c.snoops.gmcp(&msg.package, &msg.data, now_ms());
+        let snooped = c.snoops.gmcp(&msg.package, &msg.data, now_ms());
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
         // A tell you got or a fight that starts on you rings its preset.
         apply
@@ -101,8 +101,15 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             .flatten();
         // Your vitals or the fight moved, so a vitals text draws again.
         let vitals_text = vitals_text::after_package(&conn.session, &p, &c, &msg.package, now);
-        (tick_step, apply.ran_under(p.open()), daylight, vitals_text)
+        (
+            tick_step,
+            apply.ran_under(p.open()),
+            daylight,
+            vitals_text,
+            snooped,
+        )
     };
+    batch.snoop |= snooped;
     vitals_text::emit(&conn.app, &conn.session, vitals_text);
     if let Some(phase) = daylight {
         conn.session.emit(

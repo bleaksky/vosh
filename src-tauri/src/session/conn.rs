@@ -488,7 +488,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // tail end with the connection, and so does this session's variable
     // that mirrors the target. Your quick keys outlive it, though not a
     // restart.
-    let target_after = {
+    let (target_after, snoops) = {
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
@@ -500,8 +500,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         // A new GMCP handler gets the last packet of its package, and
         // the packets of this connection end with it.
         c.script.forget_gmcp_packets();
-        had.then(|| TargetPayload::of(&c))
+        (had.then(|| TargetPayload::of(&c)), c.snoops.take_changes())
     };
+    super::snoop::emit(&conn.app, &conn.session, snoops);
     // Line triggers no longer see a prompt the profile reads, so the first
     // session that read yours names the ones that matched it, once, at the
     // next launch.
