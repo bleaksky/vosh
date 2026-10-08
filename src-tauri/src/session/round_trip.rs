@@ -14,7 +14,7 @@
 //! counts in two halves. The link half counts while the kernel still
 //! holds bytes the game's machine has not acknowledged. The game half
 //! counts once the game has sent nothing at all since your line for
-//! longer than [`HELD_AT_MOST`], the longest lag it puts on you. It times
+//! longer than [`HELD_AT_MOST`], past the lags it puts on you. It times
 //! only a line the game owes an answer, one sent while its prompt
 //! showed. The note editor shows none and answers no line of the note
 //! (board.c), so writing a note never counts. Any bytes from the game,
@@ -52,14 +52,19 @@ const USUAL_OVER: Duration = Duration::from_secs(600);
 /// The stalls of a connection `#lag` lists, the newest.
 const KEPT_STALLS: usize = 20;
 
-/// The longest the game holds a line of yours with nothing sent back.
-/// The longest lag The Forsaken Lands puts on you is `PULSE_TICK`, 30
-/// seconds, when a psalm drags you off bloody (magic.c:6713,
-/// `WAIT_STATE(victim, PULSE_TICK)`). Skills reach 24 seconds at most
-/// (handler.c:5173, `WAIT_STATE(ch,96)`), and `WAIT_STATE` takes the
-/// longer lag, so lags never stack. The game answers the held line in
-/// the pulse the lag ends, so add one 250 ms pulse.
-pub(crate) const HELD_AT_MOST: Duration = Duration::from_millis(30_250);
+/// The longest the game holds a line of yours with nothing sent back
+/// under the lags it puts on you in play. The longest in the skill
+/// table is 120 beats, 30 seconds (const.c), as long as the `PULSE_TICK`
+/// a psalm puts on you when it drags you off bloody (magic.c:6713).
+/// `WAIT_STATE2` adds up to `PULSE_VIOLENCE`, 3 seconds, while ghoul
+/// touch or paralyze slows you (handler.c:7711), and `WAIT_STATE` takes
+/// the longer lag, so lags never stack. The game answers the held line
+/// in the pulse the lag ends, so add one 250 ms pulse. Spell lag also
+/// scales by `MOD_WAIT_STATE` (magic.c:141), which only an item with
+/// `spelllag` raises, and no item in the game's data has one. An
+/// immortal can lag you for any time with `lag` (`act_wiz.c`). Those can
+/// still read as a stall.
+pub(crate) const HELD_AT_MOST: Duration = Duration::from_millis(33_250);
 
 /// How long the oldest line of yours the game has not answered has
 /// waited, in two halves, see the module doc. [`super::socket::Stream`] tells it each line you send and
@@ -517,20 +522,25 @@ mod tests {
             ms(38)
         );
 
-        // A timer sends a line while a skill lags you 24 seconds, the
-        // longest skill lag (handler.c), and the game says nothing until
-        // it ends.
+        // A timer sends a line while a 120 beat psalm lags you, the
+        // longest lag in the skill table (const.c), and paralyze adds a
+        // violence pulse (handler.c), 33 seconds in all. The game says
+        // nothing until it ends.
         let sent = start + ms(3000);
         waits.sent(sent, true);
-        for i in 1..=12 {
+        for i in 1..=16 {
             assert_eq!(
                 waits.reading(link(false), sent + READ_EVERY * i).reading,
                 ms(38)
             );
         }
+        assert_eq!(
+            waits.reading(link(false), sent + ms(33_250)).reading,
+            ms(38)
+        );
         waits.heard();
         assert_eq!(
-            waits.reading(link(false), sent + ms(25_000)).reading,
+            waits.reading(link(false), sent + ms(33_500)).reading,
             ms(38)
         );
     }
