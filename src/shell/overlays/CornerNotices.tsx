@@ -1,15 +1,20 @@
 import type { ComponentType } from 'react';
+import { GetStartedNotice } from './GetStartedNotice';
 import { PresetFixNotice } from './PresetFixNotice';
 import { Toasts } from './Toasts';
 import { UpdateNotice } from './UpdateNotice';
 
-/** The notices in the corner, top to bottom in First Run Q19's order:
- *  Get started, the reconnect notice, a preset fix, then the update
- *  notice. An item that adds a notice puts it in its slot here, so each
- *  notice takes its place in the stack with no offsets of its own. Each
- *  draws nothing while it has nothing to say. */
+/** The notices in the corner, top to bottom. First Run Q19 stacks them
+ *  from the command line up: the update notice keeps its spot at the
+ *  bottom, Get started stands above it, a preset fix above that, and the
+ *  reconnect notice of track A goes on top, since it comes and goes with
+ *  the link and nothing under it moves. Each sits 52 px over the one
+ *  below while both are up. An item that adds a notice puts it in its
+ *  slot here, so each notice takes its place in the stack with no
+ *  offsets of its own. Each draws nothing while it has nothing to say. */
 const SLOTS: readonly { id: string; Notice: ComponentType }[] = [
   { id: 'preset-fix', Notice: PresetFixNotice },
+  { id: 'get-started', Notice: GetStartedNotice },
   { id: 'update', Notice: UpdateNotice },
 ];
 

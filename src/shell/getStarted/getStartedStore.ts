@@ -149,5 +149,5 @@ export function mountGetStarted(): () => void {
 export const getGetStarted = store.get;
 
 export function useGetStarted(): GetStartedView {
-  return useSyncExternalStore(store.subscribe, store.get);
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
