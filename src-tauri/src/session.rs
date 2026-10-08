@@ -41,6 +41,7 @@
 //! - `perf` counts the work on the hot path.
 //! - `reconnect` decides whether a drop dials again, and runs the series
 //!   of redials.
+//! - `snoop` keeps the players the session snoops, with their text.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
 //! - `vitals_text` renders your vitals text for a footer or the status
@@ -65,6 +66,7 @@ pub(crate) mod prompt_view;
 mod read;
 pub(crate) mod reconnect;
 pub(crate) mod room_block;
+pub(crate) mod snoop;
 mod socket;
 mod steps;
 pub(crate) mod vitals_text;

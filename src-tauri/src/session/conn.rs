@@ -492,6 +492,8 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
+        // Every snoop ends with the link, and each tab stays as ended.
+        c.snoops.link_ended(now_ms());
         link = std::mem::take(&mut c.link);
         line_triggers = c.prompt.stage.line_trigger_notice();
         end_prompt(&mut p, &mut c);

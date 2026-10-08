@@ -27,6 +27,7 @@ use super::conn::Conn;
 use super::connection::Connection;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
+use super::now_ms;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
 use super::vitals_text;
@@ -86,6 +87,9 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
         c.link.gmcp(&msg.package);
+        // A snoop's text goes to its tab and never to the line pipeline.
+        // Lua still hears the packet below.
+        c.snoops.gmcp(&msg.package, &msg.data, now_ms());
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
         // A tell you got or a fight that starts on you rings its preset.
         apply

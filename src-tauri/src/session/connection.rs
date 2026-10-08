@@ -120,6 +120,10 @@ pub(crate) struct Connection {
     /// aliases they make. A disconnect keeps them, since only the plugin
     /// that draws a pane changes or removes it.
     pub(crate) lua_panes: crate::script::panes::LuaPanes,
+    /// The players the session snoops, one tab each with its text. A
+    /// link that ends marks them ended and keeps them, so only the
+    /// session that closes drops them.
+    pub(crate) snoops: super::snoop::Snoops,
 }
 
 impl Connection {

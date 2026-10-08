@@ -13,6 +13,7 @@ pub(crate) mod profiles;
 pub(crate) mod prompt;
 pub(crate) mod scripts;
 pub(crate) mod session;
+pub(crate) mod snoop;
 pub(crate) mod terminal;
 pub(crate) mod tick;
 pub(crate) mod ui_config;
@@ -128,6 +129,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         characters::profile_detail_get,
         panes::pane_layout_reset,
         panes::lua_panes_get,
+        snoop::snoop_get,
         characters::profile_set_login,
         characters::profile_set_world,
         characters::session_identity_get,
