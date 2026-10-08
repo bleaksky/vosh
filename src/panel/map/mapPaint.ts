@@ -136,16 +136,30 @@ export function drawWalkPath(
   place: GridPlace,
 ) {
   const { ox, oy, pitch } = place;
-  const points = [from, ...walk.cells];
+  const points = [from, ...walk.cells].map(({ row, col }) => ({
+    x: ox + col * pitch,
+    y: oy + row * pitch,
+  }));
+  strokeWalkPath(ctx, walk, points);
+}
+
+/** The path of a walk through `points` on screen, your room first and
+ *  then each of `walk.cells`, in the path color at 2 px, with the steps
+ *  left of a stopped walk dashed in the secondary ink. */
+export function strokeWalkPath(
+  ctx: CanvasRenderingContext2D,
+  walk: WalkMark,
+  points: { x: number; y: number }[],
+) {
   const solid = walk.solid ?? walk.cells.length;
   const leg = (start: number, end: number, color: string, dash: number[]) => {
     if (end <= start) return;
     ctx.strokeStyle = color;
     ctx.setLineDash(dash);
     ctx.beginPath();
-    points.slice(start, end + 1).forEach(({ row, col }, i) => {
-      if (i === 0) ctx.moveTo(ox + col * pitch, oy + row * pitch);
-      else ctx.lineTo(ox + col * pitch, oy + row * pitch);
+    points.slice(start, end + 1).forEach(({ x, y }, i) => {
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     });
     ctx.stroke();
   };
@@ -166,15 +180,7 @@ export function drawWalkTarget(ctx: CanvasRenderingContext2D, walk: WalkMark, pl
   const { ox, oy, pitch, size } = place;
   const half = size / 2 + 3.5;
   ctx.save();
-  if (walk.solid !== undefined) {
-    ctx.strokeStyle = MAP_COLORS.text;
-    ctx.setLineDash([3, 2]);
-  } else {
-    const open = walk.kind === 'open';
-    ctx.strokeStyle = open ? MAP_COLORS.origin : MAP_COLORS.danger;
-    ctx.setLineDash(open ? [] : [3, 2]);
-  }
-  ctx.lineWidth = 1.5;
+  inkWalkTarget(ctx, walk);
   ctx.beginPath();
   ctx.roundRect(
     ox + walk.target.col * pitch - half,
@@ -185,6 +191,20 @@ export function drawWalkTarget(ctx: CanvasRenderingContext2D, walk: WalkMark, pl
   );
   ctx.stroke();
   ctx.restore();
+}
+
+/** The ring's ink for a walk, 1.5 px in the accent, a dashed danger
+ *  past a door or a shore, or a dashed text ink once it stopped. */
+export function inkWalkTarget(ctx: CanvasRenderingContext2D, walk: WalkMark) {
+  if (walk.solid !== undefined) {
+    ctx.strokeStyle = MAP_COLORS.text;
+    ctx.setLineDash([3, 2]);
+  } else {
+    const open = walk.kind === 'open';
+    ctx.strokeStyle = open ? MAP_COLORS.origin : MAP_COLORS.danger;
+    ctx.setLineDash(open ? [] : [3, 2]);
+  }
+  ctx.lineWidth = 1.5;
 }
 
 export function drawSquares(

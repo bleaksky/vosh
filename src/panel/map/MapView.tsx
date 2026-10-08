@@ -322,7 +322,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     }
 
     if (style === '3d') {
-      drawMap3D(ctx, cssWidth, cssHeight, tiles, view3d, zoom, mapInks());
+      drawMap3D(ctx, cssWidth, cssHeight, tiles, view3d, zoom, mapInks(), mark);
       return;
     }
 
