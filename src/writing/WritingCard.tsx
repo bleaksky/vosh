@@ -584,7 +584,13 @@ export function WritingCard({
   const px = narrow ? 11 : fontSize;
   const lineH = Math.round(px * 1.3);
   const boxWidth = 32 + 82 * useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
-  const fieldsH = info.board ? (info.room || draft.language !== null ? 102 : 68) : 0;
+  // The fields over the text: To and Subject, and a third row for the
+  // language or the room when the card shows one. The rows count only
+  // the fields the card draws, so a note with no language keeps the two
+  // rows' height and its box the rows the window has room for.
+  const fieldLanguage = info.language && draft.language !== undefined ? draft.language : null;
+  const fieldRoom = info.room ? (draft.room ?? room.info?.name ?? null) : null;
+  const fieldsH = info.board ? (fieldLanguage !== null || fieldRoom !== null ? 102 : 68) : 0;
   const chrome = 46 + 1 + 1 + 52 + 12 + 16 + 10 + fieldsH;
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
@@ -1025,10 +1031,8 @@ export function WritingCard({
                       to={draft.to ?? ''}
                       toFixed={info.toImmortal}
                       subject={subject}
-                      language={
-                        info.language && draft.language !== undefined ? draft.language : null
-                      }
-                      room={info.room ? (draft.room ?? room.info?.name ?? null) : null}
+                      language={fieldLanguage}
+                      room={fieldRoom}
                       bad={badField}
                       readOnly={running !== null || sentView}
                       onTo={(to) => {
