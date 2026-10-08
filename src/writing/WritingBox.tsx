@@ -443,7 +443,6 @@ export function WritingBox({
             selection: { anchor: from + insert.length },
             userEvent: 'input.paste',
             annotations: Pasted.of({ from, flows: p.rows.map((r) => r.flows) }),
-            scrollIntoView: true,
           });
           if (p.wrapped > 0 || p.folded.length > 0) {
             const single = p.folded.length === 1 && p.folded[0].count === 1;
@@ -477,14 +476,16 @@ export function WritingBox({
   useEffect(() => {
     if (!view) return;
     const now = look.current.sending;
-    const effects: StateEffect<unknown>[] = [setSending.of(now)];
-    // The line on its way stays in view.
-    if (now?.current !== null && now?.current !== undefined && now.current < view.state.doc.lines) {
-      effects.push(
-        EditorView.scrollIntoView(view.state.doc.line(now.current + 1).from, { y: 'nearest' }),
-      );
+    view.dispatch({ effects: setSending.of(now) });
+    // The line on its way stays in view, within the box alone.
+    if (now?.current === null || now?.current === undefined) return;
+    if (now.current >= view.state.doc.lines) return;
+    const block = view.lineBlockAt(view.state.doc.line(now.current + 1).from);
+    const box = view.scrollDOM;
+    if (block.top < box.scrollTop) box.scrollTop = block.top;
+    else if (block.bottom > box.scrollTop + box.clientHeight) {
+      box.scrollTop = block.bottom - box.clientHeight;
     }
-    view.dispatch({ effects });
   }, [view, sendingAt]);
 
   // Text from outside replaces what the box holds.
