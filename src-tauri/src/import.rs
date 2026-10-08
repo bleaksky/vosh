@@ -26,9 +26,10 @@ pub(crate) mod vosh;
 use quick_xml::events::BytesStart;
 use quick_xml::name::QName;
 use vosh_automation::alias::Alias;
-use vosh_automation::trigger::Trigger;
+use vosh_automation::trigger::{Trigger, TriggerStore};
 
 use crate::profile::live::Macro;
+use vosh::{Clash, ClashKind};
 
 use cmud::parse_cmud;
 use gmud::parse_gmud;
@@ -100,6 +101,44 @@ pub(crate) fn parse(format: ImportFormat, text: &str) -> ImportReport {
         ImportFormat::Gmud => parse_gmud(text),
         ImportFormat::Cmud => parse_cmud(text),
     }
+}
+
+/// What the triggers of a report did in a profile: each one the store
+/// refused, as the line the summary shows, and each one that takes the
+/// name of a preset trigger.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct TriggersMerged {
+    pub rejected: Vec<String>,
+    pub clashes: Vec<Clash>,
+}
+
+/// Merge `triggers` into `store`, each replacing yours of the same name.
+/// One that takes the name of a preset trigger, any name in `presets`,
+/// the library's, or one the store holds for a preset, joins the clash
+/// list and leaves the preset's in place, its preset on or off, since
+/// the next install would put the preset's back (Presets board 5).
+pub(crate) fn merge_triggers(
+    store: &mut TriggerStore,
+    triggers: &[Trigger],
+    presets: &[String],
+) -> TriggersMerged {
+    let mut merged = TriggersMerged::default();
+    for trigger in triggers {
+        let name = &trigger.name;
+        let preset =
+            presets.contains(name) || store.get(name).is_some_and(|held| held.preset.is_some());
+        if preset {
+            merged.clashes.push(Clash {
+                kind: ClashKind::Trigger,
+                name: name.clone(),
+            });
+        } else if let Err(e) = store.set(trigger.clone()) {
+            merged
+                .rejected
+                .push(format!("trigger `{name}` rejected: {e}"));
+        }
+    }
+    merged
 }
 
 fn attr(e: &BytesStart, name: &[u8]) -> Option<String> {

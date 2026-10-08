@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { FIRST_ATTENTION, FIRST_TONE, type AlertPart } from '../../automation/alertParts';
 import { alertsOpenSettings } from '../../ipc/alerts';
 import type { AlertParts } from '../../ipc/automation';
-import { errorText } from '../../lib/text';
+import { errorText, listJoin } from '../../lib/text';
 import { ALERT_TONES, playAlertTone } from '../../stores/session/alertTones';
 import {
   Button,
@@ -37,6 +38,17 @@ function attentionLabel(): string {
   return 'Bounce';
 }
 
+/** The parts `alert` has on, as the Alert row names them, as `Banner
+ *  and Sound`, or `none` while it has none. */
+export function AlertPartsOn({ alert, none }: { alert: AlertParts | undefined; none: string }) {
+  const on = [
+    alert?.banner ? 'Banner' : '',
+    alert?.sound !== undefined ? 'Sound' : '',
+    alert?.attention !== undefined ? attentionLabel() : '',
+  ].filter(Boolean);
+  return on.length > 0 ? listJoin(on) : none;
+}
+
 /** Why Banner shows nothing while the system turns Vosh's banners off.
  *  Only macOS and Windows turn them off. */
 function bannerOffNote(): [why: string, still: string] {
@@ -57,11 +69,15 @@ export function AlertRow({
   alert,
   disabled,
   banner,
+  description,
   onPress,
 }: {
   alert: AlertParts | undefined;
   disabled: boolean;
   banner: BannerPermission;
+  /** The line under the label, as a preset trigger's says what its
+   *  preset has once you changed the row. */
+  description?: ReactNode;
   onPress: (part: AlertPart, on: boolean) => void;
 }) {
   const parts: { part: AlertPart; label: string; on: boolean }[] = [
@@ -72,7 +88,7 @@ export function AlertRow({
   const off = banner.permission === 'denied';
   return (
     <>
-      <Row label="Alert">
+      <Row label="Alert" description={description}>
         <div role="group" aria-label="Alert with" className="st-seg is-multi">
           {parts.map(({ part, label, on }) => {
             const warn = off && part === 'banner';

@@ -516,9 +516,11 @@
   box-shadow: inset 0 0 0 1px var(--sep);
 }
 
-/* Toasts, bottom right of the terminal column. Each is a floating card
-   with a 16 status mark, then the message and an optional detail. */
-.ov-toasts {
+/* The corner of the terminal column, bottom right, where the toasts
+   stack above the notices in the order CornerNotices.tsx lists them.
+   Each card takes clicks, and the gaps between them pass clicks to the
+   terminal. */
+.ov-corner {
   position: absolute;
   right: 16px;
   bottom: 16px;
@@ -528,6 +530,17 @@
   align-items: flex-end;
   gap: 8px;
   max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+/* Toasts, at the top of the corner. Each is a floating card with a 16
+   status mark, then the message and an optional detail. */
+.ov-toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
   pointer-events: none;
 }
 
@@ -608,6 +621,44 @@
 .ov-toast-meta.is-mono {
   font-family: var(--font-mud);
   font-variant-numeric: normal;
+}
+
+/* Show me (First Run Q3, board 2). A 2 px accent ring 2 px out from
+   what to pick, over the menus, with one pulse, and its line on the
+   toast recipe beside it. Neither takes a press. */
+.cm-ring {
+  position: fixed;
+  z-index: 1050;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--accent);
+  pointer-events: none;
+  animation: cm-pulse 700ms ease-out 1;
+}
+
+@keyframes cm-pulse {
+  from {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.cm-tip {
+  position: fixed;
+  z-index: 1050;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-ring {
+    animation: none;
+  }
 }
 
 /* Confirm dialog. No scrim: the layer is clear and only catches a
@@ -756,7 +807,7 @@
   opacity: 0.45;
 }
 
-/* The shell mounts the toasts among its floating surfaces, a direct
+/* The shell mounts the corner among its floating surfaces, a direct
    child of its grid. An absolutely placed grid child takes its grid
    area as the containing block, so pinning the stack to the terminal
    cell keeps it 16 inside the terminal column's corner, clear of the
@@ -764,27 +815,23 @@
    the second column, after the sessions sidebar's, which is 0 wide
    while the sidebar is gone. Both lines are explicit, since an auto end
    line would fall back to the whole grid. */
-.shell > .ov-toasts {
+.shell > .ov-corner {
   grid-column: 2 / 3;
   grid-row: 2 / 3;
 }
 
-/* Update notice. A floating card at the toasts' corner, one line tall:
-   an 8 status dot, the message, the version in the tertiary tone, then
+/* Update notice. A floating card in the corner, one line tall: an 8
+   status dot, the message, the version in the tertiary tone, then
    Later and Install and restart. The buttons sit 8 inside the card, so
    their radius 8 runs concentric with its 16. The height is fixed at
-   44 (8 + 28 + 8) and a long failure message ellipsizes, which lets
-   the toast stack clear the card by a known offset. */
+   44 (8 + 28 + 8) and a long failure message ellipsizes. The preset fix
+   notice wears the same recipe in the warn tone. */
 .ov-update {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 55;
   display: flex;
   align-items: center;
   gap: 8px;
   height: 44px;
-  max-width: calc(100% - 32px);
+  max-width: 100%;
   padding: 8px 8px 8px 12px;
   border-radius: var(--r-float);
   background: var(--raised);
@@ -796,6 +843,7 @@
   font-weight: 400;
   color: var(--text);
   white-space: nowrap;
+  pointer-events: auto;
 }
 
 .ov-update-dot {
@@ -818,6 +866,10 @@
   border: 1.25px solid var(--success);
 }
 
+.ov-update.is-warn .ov-update-dot {
+  background: var(--warn);
+}
+
 .ov-update-msg {
   flex: none;
 }
@@ -833,32 +885,15 @@
   color: var(--tertiary);
 }
 
+/* A trigger name reads in the terminal's face. */
+.ov-update-meta.is-mono {
+  font-family: var(--font-mud);
+  font-variant-numeric: normal;
+}
+
 .ov-update-actions {
   display: flex;
   flex: none;
   gap: 8px;
   margin-left: 8px;
-}
-
-/* The notice mounts among the shell's floating surfaces, a direct child
-   of its grid, so it takes the terminal cell as the toasts do and stays
-   clear of the panel's vitals. MainWindow mounts it just before the toasts, and
-   while it is up the stack rises by the card's 44 plus an 8 gap. */
-.shell > .ov-update {
-  grid-column: 2 / 3;
-  grid-row: 2 / 3;
-}
-
-.shell > .ov-update ~ .ov-toasts {
-  bottom: 68px;
-}
-
-/* The reconnect notice mounts first, so the update notice rises above
-   it, and the toasts clear both. */
-.shell > .ov-update ~ .ov-update {
-  bottom: 68px;
-}
-
-.shell > .ov-update ~ .ov-update ~ .ov-toasts {
-  bottom: 120px;
 }

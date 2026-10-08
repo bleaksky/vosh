@@ -1,6 +1,7 @@
 import { act, useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Macro } from '../../ipc/automation';
+import { normalizeUiConfig } from '../../ipc/uiConfig';
 import type { PresetToggle } from '../../automation/automationRecords';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
@@ -20,6 +21,10 @@ const bus = vi.hoisted(() => ({
   /** What ui_get_config and alert_presets_get answer. */
   enabled: [] as string[],
   alerts: {} as unknown,
+  /** What preset_edits_get answers, by preset id. */
+  edits: {} as Record<string, unknown>,
+  /** The triggers triggers_export answers and triggers_import writes. */
+  stored: [] as { name: string; group?: string }[],
   /** What alerts_permission answers, and alerts_ask_permission after
    *  you choose. */
   permission: 'granted' as string,
@@ -46,6 +51,28 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (cmd === 'alerts_ask_permission' || cmd === 'alerts_open_settings') {
       bus.calls.push([cmd, args]);
       return cmd === 'alerts_ask_permission' ? bus.answer : null;
+    }
+    if (cmd === 'preset_edits_get') return bus.edits;
+    if (cmd === 'preset_edits_set') {
+      bus.calls.push([cmd, args]);
+      return null;
+    }
+    if (cmd === 'triggers_list') return [];
+    if (cmd === 'triggers_export') return JSON.stringify(bus.stored);
+    if (cmd === 'triggers_import') {
+      bus.calls.push([cmd, args]);
+      bus.stored = JSON.parse((args as { json: string }).json) as typeof bus.stored;
+      return bus.stored.length;
+    }
+    if (cmd === 'presets_enabled_set') {
+      bus.calls.push([cmd, args]);
+      // Land the switches on the list as it stands, as switch_presets does.
+      for (const { id, on } of (args as { changes: { id: string; on: boolean }[] }).changes) {
+        bus.enabled = on
+          ? [...bus.enabled.filter((e) => e !== id), id]
+          : bus.enabled.filter((e) => e !== id);
+      }
+      return { installed: 0, removed: [] };
     }
     if (['alert_presets_set', 'ui_set_fields', 'presets_install', 'presets_remove'].includes(cmd)) {
       bus.calls.push([cmd, args]);
@@ -105,6 +132,18 @@ beforeAll(async () => {
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
   vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  // A link scrolls the row it opens into view, which the fake page has
+  // no layout for.
+  vi.stubGlobal('CSS', { escape: (s: string) => s });
+  Object.assign(FakeElement.prototype, { querySelector: () => null });
+  // The samples follow the theme, which the page marks on its root.
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   ({ createRoot } = await import('react-dom/client'));
   ({ PresetDetail, PresetsEditor } = await import('./PresetsEditor'));
 });
@@ -145,6 +184,7 @@ async function mount(start: PresetToggle) {
         update={(fn) => setValue(fn)}
         fresh={false}
         revealInList={() => {}}
+        onOpenTriggers={() => {}}
       />
     );
   }
@@ -292,6 +332,15 @@ function reactProps(el: FakeElement): Record<string, (e?: unknown) => void> {
   return (el as unknown as Record<string, Record<string, (e?: unknown) => void>>)[key];
 }
 
+const CONFIG = normalizeUiConfig({
+  theme: 'obsidian-ember',
+  auto_update: false,
+  font_family: 'Menlo',
+  font_size: 14,
+  tracked_affects: [],
+  enabled_presets: [],
+});
+
 /** The whole Presets editor over a profile with `enabled` stored and
  *  the alert presets `on` with `alerts` for parts. */
 async function mountEditor(
@@ -299,18 +348,31 @@ async function mountEditor(
   on: string[],
   alerts: Record<string, unknown>,
   permission = 'granted',
+  selectPreset: { key: string; seq: number } | null = null,
+  edits: Record<string, unknown> = {},
 ) {
+  bus.edits = edits;
   bus.permission = permission;
   bus.enabled = enabled;
   bus.alerts = { ids: ALERT_IDS, on, alerts };
   bus.calls = [];
+  bus.stored = [];
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   const errors: (string | null)[] = [];
+  const opened: unknown[] = [];
   await act(async () => {
     root.render(
-      <PresetsEditor setConfig={() => {}} onDirty={() => {}} onError={(e) => errors.push(e)} />,
+      <PresetsEditor
+        onOpenTriggers={(to) => opened.push(to)}
+        config={CONFIG}
+        setConfig={() => {}}
+        pathB={false}
+        selectPreset={selectPreset}
+        onDirty={() => {}}
+        onError={(e) => errors.push(e)}
+      />,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -327,6 +389,13 @@ async function mountEditor(
   const card = () => findAll(container, (el) => hasClass(el, 'st-auto-card'))[0];
   return {
     errors,
+    /** Where each link of a card opened Triggers. */
+    opened,
+    /** Press the button that says `text` anywhere on the page. */
+    press: (text: string) =>
+      click(findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === text)[0]),
+    /** The links of the card, by their text. */
+    links: () => findAll(card(), (el) => hasClass(el, 'st-auto-link')).map((el) => el.textContent),
     /** The headings of the list, in order. */
     headings: () =>
       findAll(container, (el) => hasClass(el, 'st-auto-fold-name')).map((el) => el.textContent),
@@ -346,6 +415,40 @@ async function mountEditor(
       ),
     save: () =>
       click(findAll(container, (el) => el.nodeName === 'BUTTON' && el.textContent === 'Save')[0]),
+    /** Each row of the list by name, with `+` for a suggested ring and
+     *  its anchor, and whether it is the one selected. */
+    row: (name: string) => {
+      const row = findAll(
+        container,
+        (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+      )[0];
+      const dot = findAll(row, (el) => hasClass(el, 'st-auto-dot'))[0];
+      return {
+        ...(findAll(row, (el) => hasClass(el, 'st-auto-mark')).length > 0 ? { edited: true } : {}),
+        suggested: hasClass(dot, 'is-suggested'),
+        anchor: row.getAttribute('data-st-anchor'),
+        selected: row.getAttribute('aria-current') === 'true',
+      };
+    },
+    /** Each line of the card's Looks like sample, with `|` after it for
+     *  each bar that stands in for words. */
+    sample: () =>
+      findAll(card(), (el) => hasClass(el, 'st-auto-sample-line')).map(
+        (line) =>
+          line.textContent +
+          '|'.repeat(findAll(line, (el) => hasClass(el, 'st-auto-sample-bar')).length),
+      ),
+    /** What a reader hears with the warn ring of the list row named
+     *  `name`, or null while it wears none. */
+    ring: (name: string) => {
+      const row = findAll(
+        container,
+        (el) => el.hasAttribute('data-uid') && el.textContent.startsWith(name),
+      )[0];
+      if (!hasClass(row, 'is-warn')) return null;
+      const id = row.getAttribute('aria-describedby');
+      return findAll(container, (el) => el.getAttribute('id') === id)[0]?.textContent ?? '';
+    },
     /** The labels of the card's rows, in order. */
     rows: () => findAll(card(), isLabel).map((el) => el.textContent),
     value: (label: string) => {
@@ -354,6 +457,32 @@ async function mountEditor(
       );
       return row?.textContent.replace(label, '');
     },
+    /** Each swatch of the Colors block: its label, then what its field
+     *  shows, a placeholder in parentheses, and the line under it. */
+    swatches: () =>
+      findAll(card(), (el) => hasClass(el, 'st-color-cell')).map((cell) => {
+        const label = findAll(cell, (el) => hasClass(el, 'st-color-cell-label'))[0].textContent;
+        const text = findAll(cell, (el) => hasClass(el, 'st-color-text'))[0];
+        const select = findAll(cell, (el) => el.nodeName === 'SELECT')[0];
+        const under = findAll(cell, (el) => hasClass(el, 'st-auto-under'))[0];
+        const shown = select
+          ? `[${String(reactProps(select).value)}]`
+          : (text as unknown as { value: string }).value || `(${text.getAttribute('placeholder')})`;
+        return [label, shown, ...(under ? [under.textContent] : [])].join(' ');
+      }),
+    /** Type `text` in the swatch labeled `label` and leave the field. */
+    typeColor: (label: string, text: string) =>
+      act(async () => {
+        const cell = findAll(card(), (el) => hasClass(el, 'st-color-cell')).find(
+          (c) => findAll(c, (el) => hasClass(el, 'st-color-cell-label'))[0].textContent === label,
+        );
+        const input = findAll(cell!, (el) => hasClass(el, 'st-color-text'))[0];
+        const target = { value: text };
+        reactProps(input).onFocus();
+        reactProps(input).onChange({ target, currentTarget: target });
+        reactProps(input).onBlur({ target, currentTarget: target });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
     /** The parts of the Alert row, `+` before a pressed one. */
     parts: () =>
       findAll(
@@ -452,7 +581,7 @@ describe('the Alerts category', () => {
     expect(editor.rows()).not.toContain('Banner shows');
   });
 
-  it('saves the parts of the preset you changed, then the list', async () => {
+  it('saves only the parts of the preset you changed', async () => {
     const editor = await mountEditor(['alert_tells'], ['alert_tells'], { alert_tells: TELLS });
     await editor.pick('Tells you get');
     expect(editor.status()).toBe('');
@@ -467,13 +596,11 @@ describe('the Alerts category', () => {
     await editor.save();
     expect(editor.errors.filter(Boolean)).toEqual([]);
     const names = bus.calls.map(([cmd]) => cmd);
-    expect(names).toEqual(['alert_presets_set', 'ui_set_fields']);
+    expect(names).toEqual(['alert_presets_set']);
     expect(bus.calls[0][1]).toEqual({
       id: 'alert_tells',
       alert: { banner: true, sound: 'chime', background: true, words: false },
     });
-    const fields = (bus.calls[1][1] as { fields: { field: string; value: string[] }[] }).fields;
-    expect(fields).toEqual([{ field: 'enabled_presets', value: ['alert_tells'] }]);
   });
 
   it('forgets the parts that match the default, and keeps alert ids out of install and remove', async () => {
@@ -495,6 +622,379 @@ describe('the Alerts category', () => {
       ([cmd]) => cmd === 'presets_install' || cmd === 'presets_remove',
     );
     expect(JSON.stringify(installs)).not.toContain('alert_');
+  });
+});
+
+// First Run board 4: every preset off, the suggestions ringed, and the
+// card with Looks like and Suggested.
+describe('the Presets page of First Run board 4', () => {
+  it('rings each suggestion for your world while it is off', async () => {
+    const editor = await mountEditor(['sent_tells'], [], {});
+    for (const name of [
+      'Cures and heals',
+      'Your damage verbs',
+      'Damage to you',
+      'Gold, experience, and levels',
+      'Room, time and weather colors',
+    ]) {
+      expect(editor.row(name).suggested, name).toBe(true);
+    }
+    for (const name of [
+      'Parries, dodges, and blocks',
+      'Herb labels',
+      'Numpad movement',
+      'Tells you get',
+    ]) {
+      expect(editor.row(name).suggested, name).toBe(false);
+    }
+    // Once on, it takes the green dot like any other.
+    expect(editor.row('Tells you send').suggested).toBe(false);
+  });
+
+  it('reads the card as description, Looks like, Colors, Suggested and Adds', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Your damage verbs');
+    expect(editor.rows()).toEqual([
+      'Your damage verbs',
+      'Looks like',
+      'Colors',
+      'Suggested',
+      'Adds',
+    ]);
+    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to a villager!']);
+    expect(editor.value('Suggested')).toBe('For The Forsaken Lands');
+    expect(editor.value('Adds')).toBe('2 triggers');
+
+    await editor.pick('Herb labels');
+    expect(editor.rows()).toEqual(['Herb labels', 'Looks like', 'Colors', 'Adds']);
+    await editor.pick('Numpad movement');
+    expect(editor.rows()).toEqual(['Numpad movement', 'Adds', 'Keys']);
+  });
+
+  it('draws the words a tell quotes as a bar', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Tells you send');
+    expect(editor.sample()).toEqual(["You tell Tolliver ''|"]);
+  });
+
+  it('draws the number and the skill a gain names as bars', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Gold, experience, and levels');
+    expect(editor.sample()).toEqual([
+      'You receive  experience points.|',
+      'You have become better at !|',
+    ]);
+  });
+
+  it('opens on the preset a link names, by its anchor', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', { key: 'herb_labels', seq: 1 });
+    expect(editor.row('Herb labels')).toEqual({
+      suggested: false,
+      anchor: 'presets:herb_labels',
+      selected: true,
+    });
+    expect(editor.rows()[0]).toBe('Herb labels');
+  });
+});
+
+const LILAC = { disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } } };
+
+/** What Save sent, but the removes of the presets that are off. */
+const sentCalls = () => bus.calls.filter(([cmd]) => cmd !== 'presets_remove');
+
+// Presets board 1: a preset's colors on its card, one swatch for each.
+describe('the Colors block', () => {
+  it('shows the preset color in each empty swatch and Back to under one you changed', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, LILAC);
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line #c3a6ff Back to 178']);
+
+    await editor.pick('Damage to you');
+    expect(editor.swatches()).toEqual([
+      'The rest of the line (244, #808080)',
+      'The damage verb (210, #ff8787)',
+      'A miss (152, #afd7d7)',
+    ]);
+  });
+
+  it('gives a color in a Highlight the theme sixteen and a template any color', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Room, time and weather colors');
+    expect(editor.swatches()).toEqual([
+      'Exits [green]',
+      'What is in the room [yellow]',
+      'Your target [bright_red]',
+      'Time of day [blue]',
+      'Weather change (#8fa7d9)',
+      'WiZNET tag [magenta]',
+    ]);
+    expect(findAll(doc.body, (el) => el.nodeName === 'OPTION').length).toBe(16 * 5);
+  });
+
+  it('puts the preset color back with one press, and Save drops your row', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, LILAC);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Back to 178');
+    expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line (178, #d7af00)']);
+    expect(editor.status()).toBe('Unsaved changes');
+
+    await editor.save();
+    expect(sentCalls().map(([cmd]) => cmd)).toEqual(['preset_edits_set', 'presets_install']);
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+
+  it('saves a color you type, then runs the plan in it', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {});
+    await editor.pick('Disarms and fading buffs');
+    await editor.typeColor('The line', '#c3a6ff');
+    expect(editor.swatches()[1]).toBe('The line #c3a6ff Back to 178');
+
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } },
+      profile: undefined,
+    });
+    // The fake keeps no edits, so the plan builds the preset as it ships.
+    expect(sentCalls()[1][0]).toBe('presets_install');
+  });
+
+  // Board 4: a fix to the line color Orla changed.
+  const FIXED = {
+    disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg:172', seen: 'fg:178' } } },
+  };
+
+  it('rings a swatch a fix changed, and the preset in the list, on or off', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', null, FIXED);
+    expect(editor.ring('Disarms and fading buffs')).toBe(
+      'A fix to this preset changed a row you edited.',
+    );
+    expect(editor.ring('Damage to you')).toBeNull();
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.swatches()).toEqual([
+      'The ## mark (Theme red)',
+      'The line #c3a6ff The preset now has 178Take the fixKeep mine',
+    ]);
+    const cells = findAll(doc.body, (el) => hasClass(el, 'st-color-cell'));
+    expect(cells.map((el) => hasClass(el, 'is-warn'))).toEqual([false, true]);
+  });
+
+  it('keeps your color at Save with the fix as its was', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, FIXED);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Keep mine');
+    expect(editor.swatches()[1]).toBe('The line #c3a6ff Back to 178');
+    expect(editor.ring('Disarms and fading buffs')).toBeNull();
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+
+  it('takes the fix at Save as a row Rust drops', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, FIXED);
+    await editor.pick('Disarms and fading buffs');
+    await editor.click('Take the fix');
+    expect(editor.swatches()[1]).toBe('The line (178, #d7af00)');
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+
+  it('folds a hex that is the preset color at Save', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {});
+    await editor.pick('Disarms and fading buffs');
+    await editor.typeColor('The line', '#D7AF00');
+    await editor.save();
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { colors: { line: { value: 'fg:178', was: 'fg:178' } } },
+      profile: undefined,
+    });
+  });
+});
+
+const ORLA = {
+  disarm_buff_fade: {
+    ...LILAC.disarm_buff_fade,
+    triggers: { 'buff.sanctuary': { enabled: { value: false, was: true } } },
+  },
+};
+
+// Presets board 1 and 5: Your changes, its links, and Reset to preset.
+describe('Your changes and Reset to preset', () => {
+  it('names each change, and its links open Triggers while the preset is on', async () => {
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, ORLA);
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.rows()).toEqual([
+      'Disarms and fading buffs',
+      'Looks like',
+      'Colors',
+      'Adds',
+      'Your changes',
+    ]);
+    expect(editor.value('Your changes')).toBe('The line color, buff.sanctuary');
+    expect(editor.links()).toEqual(['Back to 178', '7 triggers', 'buff.sanctuary']);
+    await editor.click('buff.sanctuary');
+    await editor.click('7 triggers');
+    expect(editor.opened).toEqual([
+      { select: 'buff.sanctuary' },
+      { filter: 'Disarms and fading buffs' },
+    ]);
+  });
+
+  it('reads as plain text while the preset is off and says the edits are kept', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', null, ORLA);
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.links()).toEqual(['Back to 178']);
+    expect(editor.value('Adds')).toBe('7 triggers');
+    expect(editor.value('Your changes')).toBe(
+      'Kept while the preset is off.The line color, buff.sanctuary',
+    );
+  });
+
+  it('counts past two', async () => {
+    const edits = {
+      combat_incoming: {
+        colors: {
+          line: { value: '#999999', was: 'fg:244' },
+          verb: { value: '#ff0000', was: 'fg:210' },
+        },
+        triggers: { 'combat.incoming': { enabled: { value: false, was: true } } },
+      },
+    };
+    const editor = await mountEditor(['none'], [], {}, 'granted', null, edits);
+    await editor.pick('Damage to you');
+    expect(editor.value('Your changes')).toContain('2 colors and 1 trigger');
+  });
+
+  it('clears every edit with Reset to preset, off included, at Save', async () => {
+    const editor = await mountEditor(['none'], [], {}, 'granted', null, ORLA);
+    await editor.pick('Disarms and fading buffs');
+    expect(editor.row('Disarms and fading buffs').edited).toBe(true);
+    expect(editor.row('Herb labels').edited).toBeUndefined();
+    await editor.press('Reset to preset');
+    expect(editor.row('Disarms and fading buffs').edited).toBeUndefined();
+    expect(editor.value('Your changes')).toBeUndefined();
+    expect(editor.swatches()).toEqual(['The ## mark (Theme red)', 'The line (178, #d7af00)']);
+    expect(editor.status()).toBe('Unsaved changes');
+
+    await editor.save();
+    expect(sentCalls()[0]).toEqual([
+      'preset_edits_set',
+      {
+        id: 'disarm_buff_fade',
+        edits: {
+          colors: { line: { value: 'fg:178', was: 'fg:178' } },
+          triggers: { 'buff.sanctuary': { enabled: { value: true, was: true } } },
+        },
+        profile: undefined,
+      },
+    ]);
+  });
+
+  it('takes a trigger out of the group you put it in, as its own Reset does', async () => {
+    const edits = {
+      disarm_buff_fade: {
+        triggers: { 'buff.sanctuary': { group: { value: 'buffs', was: '' } } },
+      },
+    };
+    const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, edits);
+    bus.stored = [
+      { name: 'buff.sanctuary', group: 'buffs' },
+      { name: 'rest', group: 'mine' },
+    ];
+    await editor.pick('Disarms and fading buffs');
+    await editor.press('Reset to preset');
+    await editor.save();
+    expect(sentCalls().map(([cmd]) => cmd)).toEqual([
+      'preset_edits_set',
+      'triggers_import',
+      'presets_install',
+    ]);
+    expect(sentCalls()[0][1]).toEqual({
+      id: 'disarm_buff_fade',
+      edits: { triggers: { 'buff.sanctuary': { group: { value: '', was: '' } } } },
+      profile: undefined,
+    });
+    expect(bus.stored).toEqual([{ name: 'buff.sanctuary' }, { name: 'rest', group: 'mine' }]);
+  });
+
+  it('clears the parts of an alert preset you changed', async () => {
+    const editor = await mountEditor(['none'], [], { alert_tells: TELLS });
+    await editor.pick('Tells you get');
+    expect(editor.row('Tells you get').edited).toBe(true);
+    await editor.press('Reset to preset');
+    expect(editor.parts()).toEqual(['+Banner', 'Sound', 'Bounce']);
+    await editor.save();
+    expect(sentCalls()).toEqual([
+      ['alert_presets_set', { id: 'alert_tells', alert: null, profile: undefined }],
+    ]);
+
+    await editor.pick('Your name');
+    expect(findAll(doc.body, (el) => el.textContent === 'Reset to preset')).toEqual([]);
+  });
+});
+
+const CHANGED_NOTE =
+  'Your presets changed outside Settings while you edited them. Save keeps those changes and adds yours.';
+
+// The While you edit Presets frame of First Run board 4: the card in the
+// main window turns a preset on through presets_enabled_set while the
+// page is open.
+describe('following the presets another window turns on', () => {
+  it('loads the new list at once while the page is clean', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Cures and heals');
+    expect(editor.on()).toBe(false);
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://presets-changed', { profile: null });
+    expect(editor.on()).toBe(true);
+    expect(editor.status()).toBe('');
+    expect(editor.errors.filter(Boolean)).toEqual([]);
+  });
+
+  it('keeps your switch, says the list changed, and Save adds yours to it', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Parries, dodges, and blocks');
+    await editor.toggle();
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://presets-changed', { profile: null });
+    expect(editor.errors.at(-1)).toBe(CHANGED_NOTE);
+    await editor.pick('Cures and heals');
+    expect(editor.on()).toBe(false);
+
+    await editor.save();
+    const sent = bus.calls.filter(([cmd]) => cmd !== 'presets_remove');
+    expect(sent.map(([cmd]) => cmd)).toEqual(['presets_enabled_set']);
+    const { changes, triggers } = sent[0][1] as {
+      changes: unknown[];
+      triggers: { preset: string }[];
+    };
+    expect(changes).toEqual([{ id: 'defensive_combat', on: true }]);
+    expect(new Set(triggers.map((t) => t.preset))).toEqual(
+      new Set(['healing_basics', 'defensive_combat']),
+    );
+    expect(bus.enabled).toEqual(['healing_basics', 'defensive_combat']);
+    expect(editor.on()).toBe(true);
+    expect(editor.status()).not.toBe('Unsaved changes');
+  });
+
+  it('follows your preset edits too', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Cures and heals');
+    bus.enabled = ['healing_basics'];
+    await fire('vosh://preset-edits-changed', { profile: null });
+    expect(editor.on()).toBe(true);
   });
 });
 

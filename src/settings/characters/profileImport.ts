@@ -59,7 +59,9 @@ function plugins(names: readonly string[]): SummaryPart[] {
 }
 
 /** In this file, in the order board 5 draws it. Runs Lua and Plugins
- *  show only for a file that has some. */
+ *  show only for a file that has some. In loadout mode a file that holds
+ *  presets closes with a line that says the catalog keeps its own
+ *  (Presets board 5). */
 export function importSummary(preview: ImportPreview): SummaryRow[] {
   const count = (label: string, n: number): SummaryRow => ({
     label,
@@ -80,6 +82,9 @@ export function importSummary(preview: ImportPreview): SummaryRow[] {
   }
   if (preview.plugins.length > 0) {
     rows.push({ label: 'Plugins', value: plugins(preview.plugins), wide: true });
+  }
+  if (preview.presets_stay) {
+    rows.push({ label: 'Presets', value: ['Stay as the catalog has them'], wide: true });
   }
   return rows;
 }

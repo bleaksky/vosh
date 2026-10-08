@@ -10,11 +10,13 @@ command aliases_import(json, profile?)
 command app_quit()
 command daylight_get(session?)
 command fonts_list()
+command get_started_get()
+command get_started_set(atLaunch, done)
 command groups_list(list, profile?)
 command groups_set_enabled(list, group, enabled, profile?)
 command hidden_get(session?)
 command highlight_ground_set(background?, game?)
-command import_apply(format, text, profile?)
+command import_apply(format, text, presetTriggers, profile?)
 command import_detect(text)
 command launch_notices_take()
 command loadouts_get_state(profile?)
@@ -52,6 +54,7 @@ command native_surface_set_prompt_reach(px)
 command native_surface_set_theme(background, foreground, selection, ansi)
 command native_surface_set_tokens(divider?, selection?, selectionText?, findMatch?, currentMatch?, link?, scrollbar?, selrow?, appearance?)
 command native_surface_wheel(deltaY)
+command open_get_started()
 command open_help_window()
 command open_settings_window()
 command pane_layout_get(profile?)
@@ -69,6 +72,9 @@ command plugin_reveal(name)
 command plugin_save(name, manifest, code, session?)
 command plugin_set_enabled(name, on, session?)
 command plugins_list(session?)
+command preset_edits_get(profile?)
+command preset_edits_set(id, edits, profile?)
+command presets_enabled_set(changes, triggers, macros, profile?)
 command presets_install(triggers, macros, profile?)
 command presets_remove(presetId, profile?)
 command profile_create(name, copyFrom?, autoMatch?)
@@ -126,6 +132,7 @@ command session_send_input(line, session?)
 command session_send_masked(line, session?)
 command session_set_address(session, host, port, tls)
 command session_set_window_size(cols, rows, session?)
+command session_walk_route(steps, start, rooms, session?)
 command session_walk_stop(session?)
 command sessions_list()
 command snoop_close(session?, name?)
@@ -152,7 +159,7 @@ command ui_reset_chat_colors(profile?)
 command ui_set_affects_display(style?, marker?, tint?, runningOut?, almostGone?, profile?)
 command ui_set_chat_color(channel, color?, profile?)
 command ui_set_fields(fields, profile?)
-command ui_set_theme(theme, lightTheme?, darkTheme?, profile?)
+command ui_set_theme(theme, lightTheme?, darkTheme?, dayTheme?, nightTheme?, profile?)
 command updater_check()
 command updater_install_and_relaunch()
 command vitals_snapshot_get(session?)
@@ -181,6 +188,7 @@ event session://state app heard
 event session://target app heard
 event session://tick app heard
 event session://vitals-text app heard
+event session://walk app heard
 event vosh://affect-full-changed app heard
 event vosh://affects-display-changed app page heard
 event vosh://aliases-changed app heard
@@ -193,12 +201,13 @@ event vosh://chip-style-changed app page heard
 event vosh://color-vision-changed page heard
 event vosh://connection-target-changed page heard
 event vosh://custom-themes-changed app page heard
-event vosh://daylight-changed app unheard
+event vosh://daylight-changed app heard
 event vosh://echo-macros-changed page heard
 event vosh://fit-game-colors-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard
 event vosh://game-time-changed app page heard
+event vosh://get-started-open app heard
 event vosh://groups-changed app heard
 event vosh://help-find app heard
 event vosh://help-goto page heard
@@ -217,6 +226,8 @@ event vosh://native-scroll app heard
 event vosh://pane-layout-changed app heard
 event vosh://paste-line-delay-changed page heard
 event vosh://plugins-changed app heard
+event vosh://preset-edits-changed app heard
+event vosh://presets-changed app heard
 event vosh://profile-changed app heard
 event vosh://profile-switched app heard
 event vosh://profiles-changed app heard

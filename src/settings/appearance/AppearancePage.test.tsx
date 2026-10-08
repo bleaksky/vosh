@@ -41,6 +41,22 @@ const fitting = vi.hoisted(() => {
   return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
 });
 vi.mock('../../theme/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
+// The selected session's day or night, which a test sets. Like the real
+// store it says nothing until something starts it.
+const daylight = vi.hoisted(() => ({
+  now: null as 'day' | 'night' | null,
+  started: false,
+}));
+vi.mock('../../stores/session/daylightStore', () => ({
+  getDaylight: () => (daylight.started ? daylight.now : null),
+  startDaylightStore: () => {
+    daylight.started = true;
+  },
+  subscribeDaylight: () => {
+    daylight.started = true;
+    return () => undefined;
+  },
+}));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -995,5 +1011,203 @@ describe('AppearancePage', () => {
     const attacks = await collapseRows(on, undefined, (rows) => rows.attacks.segments[0]);
     expect(attacks.saved?.collapse_attack_lines).toBe(true);
     expect(attacks.saved?.collapse_fight_lines).toBe(true);
+  });
+
+  /** Draw the page with `cfg`, read the Theme card's rows after the
+   *  gallery, and the config `then` saves when it acts on the page. */
+  async function themeCard(cfg: UiConfig, then?: (container: FakeNode) => void, anchor?: string) {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    let saved: UiConfig | null = null;
+    await act(async () => {
+      root.render(
+        createElement(AppearancePage, {
+          target: anchor
+            ? { group: 'appearance', section: 'theme', anchor }
+            : { group: 'appearance' },
+          navSeq: 0,
+          config: cfg,
+          setConfig: (next) => {
+            saved = next(cfg);
+          },
+          onError: () => undefined,
+          pathB: false,
+          navigate: () => undefined,
+          setLeaveGuard: () => undefined,
+        }),
+      );
+    });
+    const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+      (el) => el.getAttribute('data-st-anchor'),
+    );
+    const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'switch-themes');
+    const segments = findAll(row, (el) => el.nodeName === 'BUTTON');
+    const pressed = segments
+      .filter((el) => el.getAttribute('aria-pressed') === 'true')
+      .map((el) => el.textContent);
+    // Each pair select's options and the one it shows.
+    const selects = new Map<string, { options: string[]; chosen: string | undefined }>();
+    for (const at of findAll(container, (el) => el.getAttribute('data-st-anchor') !== null)) {
+      const [select] = findAll(at, (el) => el.nodeName === 'SELECT');
+      if (!select) continue;
+      selects.set(at.getAttribute('data-st-anchor') ?? '', {
+        options: select.options.map((o) => o.value),
+        chosen: select.options.find((o) => (o as unknown as { selected?: boolean }).selected)
+          ?.value,
+      });
+    }
+    const drawn = {
+      anchors: anchors.slice(anchors.indexOf('switch-themes'), anchors.indexOf('text')),
+      text: row.textContent,
+      segments: segments.map((el) => el.textContent),
+      pressed,
+      options: (anchor: string) => selects.get(anchor)?.options,
+      chosen: (anchor: string) => selects.get(anchor)?.chosen,
+    };
+    if (then) {
+      await act(async () => {
+        then(container);
+      });
+    }
+    await act(async () => {
+      root.unmount();
+    });
+    return { ...drawn, saved: saved as UiConfig | null };
+  }
+
+  /** The segment of Switch themes that reads `label`. */
+  const segment = (container: FakeNode, label: string) =>
+    findAll(
+      container,
+      (el) => el.getAttribute('class') === 'st-seg-item' && el.textContent === label,
+    )[0];
+
+  /** Call the onChange React keeps on an element. */
+  function change(el: FakeElement, event: unknown) {
+    const key = Object.keys(el).find((k) => k.startsWith('__reactProps$')) ?? '';
+    (el as unknown as Record<string, { onChange: (e: unknown) => void }>)[key].onChange(event);
+  }
+
+  const gameConfig = (): UiConfig => ({
+    ...config(),
+    theme_follow: 'game',
+    day_theme: 'gruvbox',
+    night_theme: 'obsidian-ember',
+  });
+
+  it('shows the pair each Switch themes mode switches between, and Off shows neither', async () => {
+    const off = await themeCard(config());
+    expect(off.segments).toEqual(['Off', 'With the system', 'With the game']);
+    expect(off.pressed).toEqual(['Off']);
+    expect(off.anchors).toEqual(['switch-themes']);
+
+    const system = await themeCard({ ...config(), follow_system_appearance: true });
+    expect(system.pressed).toEqual(['With the system']);
+    expect(system.anchors).toEqual(['switch-themes', 'light-theme', 'dark-theme']);
+    expect(system.text).toContain(
+      'Vosh switches between your light and dark theme when your system does.',
+    );
+
+    const game = await themeCard(gameConfig());
+    expect(game.pressed).toEqual(['With the game']);
+    expect(game.anchors).toEqual(['switch-themes', 'day-theme', 'night-theme']);
+    expect(game.text).toContain("Turns at the game's dawn and dusk, about every 6 minutes.");
+    expect(game.chosen('day-theme')).toBe('gruvbox');
+    expect(game.chosen('night-theme')).toBe('obsidian-ember');
+    // A link to a row of a pair shows that pair in any mode, so search
+    // lands on it.
+    expect((await themeCard(config(), undefined, 'night-theme')).anchors).toEqual([
+      'switch-themes',
+      'day-theme',
+      'night-theme',
+    ]);
+    expect((await themeCard(gameConfig(), undefined, 'light-theme')).anchors).toEqual([
+      'switch-themes',
+      'light-theme',
+      'dark-theme',
+      'day-theme',
+      'night-theme',
+    ]);
+    // Day and Night list every theme, light or dark.
+    for (const anchor of ['day-theme', 'night-theme']) {
+      const listed = game.options(anchor);
+      expect(listed, anchor).toContain('rubric');
+      expect(listed, anchor).toContain('obsidian-ember');
+      expect(listed, anchor).toHaveLength(BUILTIN_THEMES.length);
+    }
+  });
+
+  it('starts both slots on the theme showing when you choose With the game', async () => {
+    const chose = await themeCard(config(), (c) => press(segment(c, 'With the game')));
+    expect(chose.saved).toMatchObject({
+      theme_follow: 'game',
+      follow_system_appearance: false,
+      theme: 'nord',
+      day_theme: 'nord',
+      night_theme: 'nord',
+    });
+    // A slot you filled before keeps your pick.
+    const kept = await themeCard({ ...config(), night_theme: 'obsidian-ember' }, (c) =>
+      press(segment(c, 'With the game')),
+    );
+    expect(kept.saved).toMatchObject({ day_theme: 'nord', night_theme: 'obsidian-ember' });
+  });
+
+  it('keeps your theme when you choose With the game after the game said', async () => {
+    // A window that never followed the game until now.
+    daylight.started = false;
+    daylight.now = 'night';
+    const system: UiConfig = {
+      ...config(),
+      theme_follow: 'system',
+      follow_system_appearance: true,
+      dark_theme: 'tokyo-night',
+    };
+    const game = await themeCard(system, (c) => press(segment(c, 'With the game')));
+    expect(game.saved).toMatchObject({
+      theme_follow: 'game',
+      theme: 'nord',
+      day_theme: 'tokyo-night',
+      night_theme: 'tokyo-night',
+    });
+    const off = await themeCard(game.saved as UiConfig, (c) => press(segment(c, 'Off')));
+    expect(off.saved).toMatchObject({ theme_follow: 'off', theme: 'nord' });
+    daylight.now = null;
+  });
+
+  it('saves Off as follow system appearance off', async () => {
+    const off = await themeCard({ ...config(), follow_system_appearance: true }, (c) =>
+      press(segment(c, 'Off')),
+    );
+    expect(off.saved).toMatchObject({ theme_follow: 'off', follow_system_appearance: false });
+    const system = await themeCard(gameConfig(), (c) => press(segment(c, 'With the system')));
+    expect(system.saved).toMatchObject({
+      theme_follow: 'system',
+      follow_system_appearance: true,
+    });
+  });
+
+  it('fills the slot showing with a pick in the gallery while it follows the game', async () => {
+    daylight.now = 'night';
+    const radio = (c: FakeNode, id: string) =>
+      findAll(c, (el) => el.getAttribute('type') === 'radio' && el.value === id)[0];
+    const night = await themeCard(gameConfig(), (c) => change(radio(c, 'rubric'), {}));
+    expect(night.saved).toMatchObject({
+      theme: 'nord',
+      day_theme: 'gruvbox',
+      night_theme: 'rubric',
+    });
+    daylight.now = 'day';
+    const day = await themeCard(gameConfig(), (c) => change(radio(c, 'rubric'), {}));
+    expect(day.saved).toMatchObject({ day_theme: 'rubric', night_theme: 'obsidian-ember' });
+    // The Night theme select fills its own slot, whatever shows.
+    const picked = await themeCard(gameConfig(), (c) => {
+      const [row] = findAll(c, (el) => el.getAttribute('data-st-anchor') === 'night-theme');
+      const [found] = findAll(row, (el) => el.nodeName === 'SELECT');
+      change(found, { target: { value: 'tokyo-night' } });
+    });
+    expect(picked.saved).toMatchObject({ day_theme: 'gruvbox', night_theme: 'tokyo-night' });
+    daylight.now = null;
   });
 });

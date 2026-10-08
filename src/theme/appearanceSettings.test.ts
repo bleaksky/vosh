@@ -24,7 +24,7 @@ import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
 import type { CustomTheme } from '../ipc/theme';
 import { COLOR_VISIONS } from './gameFit';
-import { pickTheme, resolveActiveTheme } from './theme';
+import { pickTheme, resolveActiveTheme, type ThemePrefs } from './theme';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
 
@@ -217,6 +217,13 @@ describe('pairChoices', () => {
     ]);
   });
 
+  it('lists every theme, light or dark, in gallery order for Day and Night', () => {
+    const every = pairChoices(themes, null, 'gruvbox').map((c) => c.value);
+    expect(every).toEqual(themes.map((t) => t.id));
+    expect(every).toContain('rubric');
+    expect(every).toContain('obsidian-ember');
+  });
+
   it('keeps a pick of the other appearance, first', () => {
     const light = pairChoices(themes, 'light', 'nord');
     expect(light[0]).toEqual({ value: 'nord', label: 'Nord' });
@@ -274,18 +281,21 @@ describe('stepGalleryTheme', () => {
   });
 
   it('shows every step and leaves the light theme alone on a dark system', () => {
-    let ui = {
+    let ui: ThemePrefs = {
       theme: 'nord',
       follow_system_appearance: true,
       light_theme: 'rubric',
       dark_theme: 'nord',
+      theme_follow: 'system',
+      day_theme: '',
+      night_theme: '',
     };
     let id = 'nord';
     for (let i = 0; i < themes.length; i += 1) {
       id = stepGalleryTheme(themes, id, 1, 'dark');
       ui = pickTheme(ui, id);
       // The radio the arrow lands on is the one the gallery checks.
-      expect(resolveActiveTheme(ui, true)).toBe(id);
+      expect(resolveActiveTheme(ui, true, null)).toBe(id);
     }
     expect(ui.light_theme).toBe('rubric');
   });
@@ -476,16 +486,23 @@ describe('removeCustomTheme', () => {
     follow_system_appearance: true,
     light_theme: 'mine',
     dark_theme: 'mine',
+    theme_follow: 'system' as const,
+    day_theme: 'mine',
+    night_theme: 'nord',
     custom_themes: [custom('mine'), custom('other')],
   };
 
   it('drops the theme and resets every pick that named it', () => {
-    // The light pick falls back to the light default, which shows Rubric.
+    // The light pick falls back to the light default, which shows Rubric,
+    // and the day pick to none, which shows the manual pick.
     expect(removeCustomTheme(ui, 'mine')).toEqual({
       theme: 'obsidian-ember',
       follow_system_appearance: true,
       light_theme: 'vellum',
       dark_theme: 'obsidian-ember',
+      theme_follow: 'system',
+      day_theme: '',
+      night_theme: 'nord',
       custom_themes: [custom('other')],
     });
   });

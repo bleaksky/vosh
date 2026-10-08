@@ -335,6 +335,26 @@ export function floorNumbers(
   return out;
 }
 
+/** The room of your floor whose roof lies under x, y on screen, the
+ *  nearest to the eye first where two overlap, or null. A point on a
+ *  room of another floor only, or on bare ground, gives null. */
+export function roomAt(c: Camera, scene: Scene, x: number, y: number): Room3d | null {
+  const hf = TILE / 2;
+  let hit: Room3d | null = null;
+  let nearest = Infinity;
+  for (const r of scene.rooms) {
+    if (r.z !== 0) continue;
+    const roof = square(c, r.x, r.y, roofAt(0), hf);
+    if (!inside({ x, y }, roof)) continue;
+    const { depth } = project(c, r.x, r.y, roofAt(0));
+    if (depth < nearest) {
+      nearest = depth;
+      hit = r;
+    }
+  }
+  return hit;
+}
+
 /** The unit vector of north on screen, for the compass. */
 export function northOnScreen(c: Camera): { x: number; y: number } {
   const o = project(c, c.tx, c.ty, c.tz);

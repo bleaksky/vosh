@@ -153,6 +153,40 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
+/// Your edits to the presets move to catalog.toml with the list of
+/// presets that are on, leave the profile file, and reach every
+/// character (Presets Q2).
+#[tokio::test]
+async fn a_loadout_save_keeps_the_preset_edits_in_the_catalog() {
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    loadout_mode(&set, dir.path());
+    let edits = crate::loadouts::preset_edits::PresetEdits::from([(
+        "disarm_buff_fade".to_string(),
+        crate::loadouts::preset_edits::PresetEdit {
+            colors: std::collections::BTreeMap::from([(
+                "line".to_string(),
+                crate::loadouts::preset_edits::EditRow {
+                    value: "#c3a6ff".into(),
+                    was: "fg:178".into(),
+                    seen: None,
+                },
+            )]),
+            ..Default::default()
+        },
+    )]);
+    let state = relaunch_as(dir.path(), crate::profile::set::DEFAULT_PROFILE_NAME).await;
+    state.selected_profile().await.preset_edits = edits.clone();
+    persist(&state).await;
+    let saved = crate::loadouts::catalog::load_global_catalog(dir.path()).unwrap();
+    assert_eq!(saved.preset_edits, edits);
+    let text = read(&set.active_path());
+    assert!(!text.contains("preset_edits"), "{text}");
+
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert_eq!(state.selected_profile().await.preset_edits, edits);
+}
+
 #[tokio::test]
 async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
     let dir = tempfile::tempdir().unwrap();
@@ -2366,4 +2400,96 @@ async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
     persist(&state).await;
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(live_rows(&state).await, rows);
+}
+
+/// Save `name`'s file with Disarms and fading buffs on and its line in
+/// `color`.
+fn write_line_color(set: &ProfileSet, name: &str, color: &str) {
+    let mut config = ProfileConfig::default();
+    config.ui.enabled_presets = vec!["disarm_buff_fade".into()];
+    config.preset_edits = crate::loadouts::preset_edits::lilac_line();
+    for edit in config.preset_edits.values_mut() {
+        for row in edit.colors.values_mut() {
+            row.value = color.into();
+        }
+    }
+    config.save(&set.profile_path(name)).unwrap();
+}
+
+/// The color of the line of Disarms and fading buffs in `edits`.
+fn line_color(edits: &crate::loadouts::preset_edits::PresetEdits) -> Option<String> {
+    let row = edits.get("disarm_buff_fade")?.colors.get("line")?;
+    row.value.as_str().map(str::to_string)
+}
+
+/// Edits that differ ask which to keep, the one you pick goes to
+/// catalog.toml for every character, and the table leaves each profile
+/// file (Presets board 5).
+#[tokio::test]
+async fn the_preset_edits_you_pick_reach_every_character() {
+    use super::apply::ConflictResolution;
+    use super::plan::ItemKind;
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    write_line_color(&set, DEFAULT_PROFILE_NAME, "#c3a6ff");
+    write_line_color(&set, "Healer", "#8fa7d9");
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    let plan = analyze_migration(&state, LIBRARY).await.unwrap();
+    let presets: Vec<_> = plan
+        .conflicts
+        .iter()
+        .filter(|c| c.kind == ItemKind::Preset)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(presets, ["disarm_buff_fade"]);
+
+    let pick = ConflictResolution {
+        kind: ItemKind::Preset,
+        name: "disarm_buff_fade".into(),
+        source_profile: "Healer".into(),
+    };
+    apply_migration(&state, &[pick], LIBRARY).await.unwrap();
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
+    assert_eq!(
+        line_color(&catalog.preset_edits).as_deref(),
+        Some("#8fa7d9")
+    );
+    for name in [DEFAULT_PROFILE_NAME, "Healer"] {
+        let text = read(&set.profile_path(name));
+        assert!(!text.contains("preset_edits"), "{name} {text}");
+        let state = relaunch_as(dir.path(), name).await;
+        let p = state.selected_profile().await;
+        assert_eq!(line_color(&p.preset_edits).as_deref(), Some("#8fa7d9"));
+    }
+}
+
+/// A run that stops after catalog.toml finishes from its journal with
+/// the edits in the catalog and none in a profile file.
+#[tokio::test]
+async fn a_run_the_journal_finishes_keeps_the_preset_edits() {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    write_line_color(&set, DEFAULT_PROFILE_NAME, "#c3a6ff");
+    write_line_color(&set, "Healer", "#c3a6ff");
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    // Stop once catalog.toml and loadouts.toml are written.
+    WIZARD_WRITES_BEFORE_A_CRASH.set(Some(2));
+    let run = tokio::spawn({
+        let state = state.clone();
+        async move { apply_migration(&state, &[], LIBRARY).await }
+    })
+    .await;
+    WIZARD_WRITES_BEFORE_A_CRASH.set(None);
+    assert!(run.is_err());
+    assert!(read(&set.profile_path("Healer")).contains("preset_edits"));
+
+    let state = relaunch_as(dir.path(), "Healer").await;
+    let p = state.selected_profile().await;
+    assert_eq!(line_color(&p.preset_edits).as_deref(), Some("#c3a6ff"));
+    for name in [DEFAULT_PROFILE_NAME, "Healer"] {
+        let text = read(&set.profile_path(name));
+        assert!(!text.contains("preset_edits"), "{name} {text}");
+    }
 }

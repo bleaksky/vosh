@@ -8,6 +8,7 @@ import {
   GROUPS_CHANGED,
   MACROS_CHANGED,
   MACRO_GROUPS_CHANGED,
+  PRESETS_CHANGED,
   TIMERS_CHANGED,
   TRIGGERS_CHANGED,
 } from './events';
@@ -197,8 +198,8 @@ export async function importTriggers(json: string, profile?: string | null): Pro
   return invoke('triggers_import', { json, profile });
 }
 
-export async function listTriggers(): Promise<TriggerRecord[]> {
-  return invoke('triggers_list');
+export async function listTriggers(profile?: string | null): Promise<TriggerRecord[]> {
+  return invoke('triggers_list', { profile });
 }
 
 export async function exportAliases(profile?: string | null): Promise<string> {
@@ -209,14 +210,49 @@ export async function importAliases(json: string, profile?: string | null): Prom
   return invoke('aliases_import', { json, profile });
 }
 
-/** Install the triggers and macros of the presets you turned on. Each
- *  carries its preset's id. */
+/** What a preset install did. `removed` names each stored trigger of
+ *  those presets that their built set no longer carries, which the
+ *  install took out. */
+export interface PresetsInstalled {
+  installed: number;
+  removed: string[];
+}
+
+/** Install the triggers and macros of the presets that are on. Each
+ *  carries its preset's id, and each preset comes whole. */
 export async function presetsInstall(
   triggers: TriggerRecord[],
   macros: Macro[],
   profile?: string | null,
-): Promise<number> {
+): Promise<PresetsInstalled> {
   return invoke('presets_install', { triggers, macros, profile });
+}
+
+/** One preset to turn on or off, as presets_enabled_set takes it. */
+export interface PresetSwitch {
+  id: string;
+  on: boolean;
+}
+
+/** Turn presets on and off in one step. Each preset `changes` turns off
+ *  loses its triggers and macros, `triggers` and `macros`, built for the
+ *  presets it turns on, install as presetsInstall installs them, and the
+ *  switches land on the stored list of presets that are on. */
+export async function presetsEnabledSet(
+  changes: readonly PresetSwitch[],
+  triggers: TriggerRecord[],
+  macros: Macro[],
+  profile?: string | null,
+): Promise<PresetsInstalled> {
+  return invoke('presets_enabled_set', { changes, triggers, macros, profile });
+}
+
+/** Hear that presets_enabled_set turned presets on or off in a profile,
+ *  which the event names, null before any profile loads. */
+export async function onPresetsChanged(cb: (profile: string | null) => void): Promise<UnlistenFn> {
+  return listen<{ profile: string | null }>(PRESETS_CHANGED, (event) => {
+    cb(event.payload.profile);
+  });
 }
 
 export async function presetsRemove(presetId: string, profile?: string | null): Promise<number> {
@@ -422,16 +458,23 @@ export interface ImportSummary {
   unsupported: [string, string][];
   unparsed: string[];
   rejected: string[];
+  /** The triggers that take the name of a preset trigger, which stay
+   *  out so the preset's keeps running. */
+  clashes: { kind: 'trigger'; name: string }[];
 }
 
 export async function detectImportFormat(text: string): Promise<string | null> {
   return invoke('import_detect', { text });
 }
 
+/** Import `text` in `format`. `presetTriggers` names every trigger of
+ *  the preset library, each preset on or off, so a trigger of the file
+ *  that takes one of those names joins the clash list instead. */
 export async function applyImport(
   format: ImportFormat,
   text: string,
+  presetTriggers: string[],
   profile?: string | null,
 ): Promise<ImportSummary> {
-  return invoke('import_apply', { format, text, profile });
+  return invoke('import_apply', { format, text, presetTriggers, profile });
 }

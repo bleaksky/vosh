@@ -12,6 +12,7 @@ import {
   sendInput,
   sendMaskedInput,
   stopWalk,
+  walkRoute,
 } from './session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -46,6 +47,17 @@ describe('sending a line', () => {
     await stopWalk(2);
     expect(vi.mocked(invoke)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_walk_stop', { session: 2 });
+  });
+
+  it('walks a path clicked on the map with the rooms each step should reach', async () => {
+    vi.mocked(invoke).mockClear();
+    await walkRoute('2w', 4406, [4405, 4404], 2);
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_walk_route', {
+      steps: '2w',
+      start: 4406,
+      rooms: [4405, 4404],
+      session: 2,
+    });
   });
 
   it('names the session the line was typed in', async () => {

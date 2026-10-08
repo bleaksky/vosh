@@ -129,6 +129,9 @@ export interface PaletteDeps {
   paneVisible: (pane: PaneType) => boolean;
   togglePane: (pane: PaneType) => void;
   openHelp: () => void;
+  /** Open Get started on its list. The row appears when the shell
+   *  passes it. */
+  openGetStarted?: () => void;
   openFind: () => void;
   /** Open Settings on its last tab. Falls back to the General tab. */
   openSettings?: () => void;
@@ -348,6 +351,16 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     searchOnly: true,
     run: deps.openHelp,
   });
+  if (deps.openGetStarted) {
+    entries.push({
+      id: 'get-started',
+      section: 'view',
+      title: 'Get started',
+      keywords: 'walkthrough welcome suggestions presets',
+      searchOnly: true,
+      run: deps.openGetStarted,
+    });
+  }
   entries.push({
     id: 'settings',
     section: 'view',

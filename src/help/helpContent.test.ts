@@ -571,6 +571,46 @@ describe('the help on prompt design codes', () => {
   });
 });
 
+describe('the Get started topic', () => {
+  // First Run board 5: topic 1.5 at the end of Get connected, its button,
+  // and the table of where each step lives.
+  it('closes Get connected with a button and the table board 5 draws', () => {
+    const topic = HELP_TOPICS.find((t) => t.id === 'get-connected.get-started');
+    expect(topic).toMatchObject({ number: '1.5', title: 'Get started', section: 'Get connected' });
+    const connected = HELP_TOPICS.filter((t) => t.section === 'Get connected');
+    expect(connected[connected.length - 1]).toBe(topic);
+    const blocks = parseHelpBody(topic?.body ?? '');
+    expect(blocks.map((b) => b.kind)).toEqual([
+      'paragraph',
+      'action',
+      'paragraph',
+      'table',
+      'paragraph',
+    ]);
+    expect(blocks[1]).toEqual({ kind: 'action', label: 'Open Get started', action: 'get-started' });
+    const table = blocks[3];
+    expect(table.kind === 'table' && table.head).toEqual(['What', 'Where it lives']);
+    expect(table.kind === 'table' && table.rows.map((r) => r[0])).toEqual([
+      'Connect to The Forsaken Lands',
+      'Color what the game prints',
+      'Add Chat and Group',
+      'Track the affects you keep up',
+      'Customize your prompt',
+      'Read back while you play',
+    ]);
+  });
+
+  it('says a new install starts with every preset off and lists the palette row', () => {
+    expect(body('automate.highlight-lines')).toContain(
+      'unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.',
+    );
+    expect(body('shape.chat-pane')).toContain(
+      'unless you had turned every preset off. A new install starts with every preset off. Each one reads',
+    );
+    expect(body('play.palette')).toContain('`Open help`, `Get started`, `Open settings`');
+  });
+});
+
 describe('HELP.md', () => {
   // HELP.md mirrors the catalog word for word, every topic under its
   // section, so the file and the Help window never tell two stories.
@@ -782,7 +822,7 @@ describe('the help on the Room, time and weather colors preset', () => {
       'The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors.',
     );
     expect(text).toContain(
-      'The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so give it a group in Triggers and turn the group off to keep your target yellow.',
+      'The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset.',
     );
     expect(text).toContain(
       'The magenta covers the WiZNET tag alone, so the message after it keeps its colors too.',
@@ -832,6 +872,15 @@ describe('the help on Mark your commands', () => {
 });
 
 describe('the help body format', () => {
+  it('reads a lone Vosh link as a button and any other link as text', () => {
+    expect(parseHelpBody('[Open Get started](vosh:get-started)')).toEqual([
+      { kind: 'action', label: 'Open Get started', action: 'get-started' },
+    ]);
+    for (const text of ['[Open it](vosh:nowhere)', 'See [Open it](vosh:get-started) here.']) {
+      expect(parseHelpBody(text)).toEqual([{ kind: 'paragraph', text }]);
+    }
+  });
+
   it('reads paragraphs, lists and tables', () => {
     expect(
       parseHelpBody('One line.\n\n- a\n- b\n\n| A | B |\n|---|---|\n| `x` | y. |\n| z | w |'),
@@ -1113,8 +1162,10 @@ describe('the help on #walk', () => {
     ]);
   });
 
-  it('leaves click to walk out until the map offers it', () => {
-    expect(topic().body).not.toContain('Click a room');
+  it('teaches click to walk on the map', () => {
+    expect(topic().body).toContain(
+      '- Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.',
+    );
   });
 
   it('lists #walk with the slash commands, and Esc among the keys', () => {
@@ -1411,10 +1462,10 @@ describe('the help on importing a profile', () => {
     expect(text).toContain(
       'When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so.',
     );
-    // A preset macro waits for yours on its key, and the presets on in
-    // loadout mode add their own, so the file's stay out (B2 chunk 3).
+    // The presets of the catalog serve every character, so the file's
+    // stay out, its preset macros among them (Presets board 5).
     expect(text).toContain(
-      'The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.',
+      'The presets of the file stay out, the triggers and macros they added, the list of those that are on and the changes to them, since the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.',
     );
   });
 
@@ -1496,5 +1547,39 @@ describe('the help on the alert presets', () => {
   it('points there from Reconnect and Create a trigger', () => {
     expect(body('get-connected.reconnect')).toContain('in Get alerts at 3.9');
     expect(body('automate.first-trigger')).toContain('as Get alerts at 3.9 shows');
+  });
+});
+
+describe('the help on preset edits', () => {
+  // The Presets review, Q1 to Q11 and boards 1 to 5.
+  it('names the swatches, Your changes and Reset to preset', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain('shows a swatch under `Colors` for each color it paints');
+    expect(text).toContain('Its card closes with `Your changes`');
+    expect(text).toContain(
+      '`Reset to preset` under the card takes back every color and trigger you changed in that preset.',
+    );
+  });
+
+  it('says what a fix does to your change, and the notice', () => {
+    const text = body('automate.highlight-lines');
+    expect(text).toContain('When a fix lands on a row you changed, your change stays.');
+    expect(text).toContain('`Take the fix` and `Keep mine`');
+    expect(text).toContain('`A preset fix changed a row you edited`');
+    expect(text).toContain('`A preset fix removed a trigger you edited`');
+  });
+
+  it('says you edit a preset trigger in Triggers, all but its name', () => {
+    const text = body('automate.first-trigger');
+    expect(text).toContain('every row but `Name`');
+    expect(text).toContain('A preset trigger has no `Delete`, so turn off `Enabled` to stop it.');
+  });
+
+  it('says what export, New profile, the profile commands and 0.8.1 do with them', () => {
+    const text = body('characters-and-data.profiles');
+    expect(text).toContain('The file carries the presets you have on and your changes to them');
+    expect(text).toContain('`New profile` copies both from the profile you play.');
+    expect(text).toContain('`#profile reset` turns every preset off and clears your changes');
+    expect(text).toContain('An older version, such as 0.8.1, runs the presets as they ship');
   });
 });

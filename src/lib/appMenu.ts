@@ -23,6 +23,10 @@ export const APP_SHORTCUTS: Readonly<Record<AppShortcutId, string>> = SHORTCUTS;
 /** Opens the session popover under the title, on what a request names. */
 export const SESSION_MENU_EVENT = 'vosh:session-menu';
 
+/** Opens Add a pane under the plus in the title band, as Show me on
+ *  the Chat and Group step of Get started does. */
+export const ADD_PANE_MENU_EVENT = 'vosh:add-pane-menu';
+
 /** A session New session… opened for its form: the session, the one
  *  selected before it, which Cancel goes back to, the profile in front
  *  then, which the form's pick falls back to, and the profile it plays. */

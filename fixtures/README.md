@@ -65,6 +65,10 @@ fixtures/
              its first case. Hand written.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
+  presets/   triggers.json, the triggers every preset installs while you
+             leave its colors alone, as presetTriggers gives them, so
+             src/automation/presets.test.ts holds the library to them
+             byte for byte. Generated. Change it only with a preset.
   prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
                and cell sizes, shared by layoutBands on xterm and
                band_rects on the native grid, so both renderers draw the

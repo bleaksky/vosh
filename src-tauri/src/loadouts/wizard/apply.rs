@@ -1,7 +1,8 @@
 //! What the shared catalog wizard does for its two commands. The preview
 //! plans the move from the profile files and writes nothing. The apply
 //! step saves the journal, then writes catalog.toml, loadouts.toml, and
-//! each profile file without its aliases, triggers, and macros.
+//! each profile file without its aliases, triggers, macros and preset
+//! edits.
 
 use std::path::Path;
 
@@ -351,6 +352,11 @@ pub(crate) async fn apply_migration(
             ItemPayload::Alias { item } => catalog.aliases.push(item.clone()),
             ItemPayload::Trigger { item } => catalog.triggers.push(item.clone()),
             ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
+            ItemPayload::Preset { item } => {
+                catalog
+                    .preset_edits
+                    .insert(conflict.name.clone(), item.clone());
+            }
         }
     }
     // A preset macro comes over on, and is held off while a macro of yours

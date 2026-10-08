@@ -17,7 +17,7 @@
 @import './map.css'; /* server-view, map-, pane-map- */
 @import './controls.css'; /* the st- controls and their --st- fills */
 @import './settings.css'; /* st- */
-@import './prompt.css'; /* prompt-, pc- */
+@import './prompt.css'; /* prompt-, pc-, gs- */
 @import './help.css'; /* hp- */
 @import './frame.css'; /* shell, shell- */
 @import './sessions.css'; /* shell-sessions- */

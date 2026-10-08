@@ -112,6 +112,15 @@
   padding: 0 0 0 20px;
 }
 
+/* A button row, 16 under the text above it, as First Run board 5
+   draws Open Get started. */
+.hp-actions {
+  display: flex;
+  gap: 8px;
+  max-width: 528px;
+  margin: 16px 0 0;
+}
+
 /* An outline row scrolls its item 48 under the band, and a pick
    flashes it with the selected row fill. */
 .hp-article li {

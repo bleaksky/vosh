@@ -13,6 +13,7 @@ use vosh_automation::alias::Alias;
 use vosh_automation::trigger::{Trigger, TriggerAction};
 
 use crate::loadouts::catalog::GlobalCatalog;
+use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::export;
 use crate::profile::file::ProfileConfig;
 use crate::profile::live::Macro;
@@ -49,6 +50,11 @@ pub(crate) struct ImportPreview {
     /// The characters the table names. A character logs in only on a
     /// world, so a file with no world lists none.
     pub characters: Vec<ImportCharacter>,
+    /// In loadout mode, whether the file holds presets, a list of them,
+    /// their triggers or macros, or your edits to them, which stay out as
+    /// the catalog's presets serve every character (Presets Q11). The
+    /// sheet then says the presets stay as the catalog has them.
+    pub presets_stay: bool,
 }
 
 /// A trigger or an alias that runs Lua.
@@ -88,8 +94,9 @@ pub(crate) struct ImportPlan {
     /// The profile file to write. Its `[plugins]` list is empty, since an
     /// import brings each plugin in off (Q9), and the settings your scope
     /// shares sit at their defaults, so your shared theme and font stay.
-    /// In loadout mode it holds no triggers, aliases, macros or alert
-    /// presets, which belong to the catalog.
+    /// In loadout mode it holds no triggers, aliases, macros, alert
+    /// presets, list of presets that are on or edits to them, which
+    /// belong to the catalog.
     pub file: ProfileConfig,
     /// The world the `[vosh_export]` table names, with the characters it
     /// lists, or None when it names no world.
@@ -106,6 +113,8 @@ pub(crate) struct CatalogJoin {
     /// The group each item joins, named for the file, like
     /// `Healer profile`.
     pub group: String,
+    /// Your triggers of the file. Its preset triggers stay out, since a
+    /// launch installs the catalog's own from its `enabled_presets`.
     pub triggers: Vec<Trigger>,
     pub aliases: Vec<Alias>,
     /// Your macros of the file. Its preset macros stay out, since a
@@ -184,12 +193,13 @@ fn read_export(file_name: &str, text: &str) -> Result<Export, String> {
 }
 
 /// Say what the export `text`, the file you picked as `file_name`, holds
-/// and where it would go. A file that is no export is refused, see
-/// [`read_export`].
+/// and where it would go, in loadout mode when `loadout_mode`. A file
+/// that is no export is refused, see [`read_export`].
 pub(crate) fn preview(
     set: &ProfileSet,
     file_name: &str,
     text: &str,
+    loadout_mode: bool,
 ) -> Result<ImportPreview, String> {
     let Export {
         name,
@@ -239,6 +249,7 @@ pub(crate) fn preview(
             name: a.name.clone(),
         });
     let runs_lua = lua_triggers.chain(lua_aliases).collect();
+    let presets_stay = loadout_mode && holds_presets(&config);
 
     Ok(ImportPreview {
         name,
@@ -253,7 +264,17 @@ pub(crate) fn preview(
         plugins: config.plugins.enabled,
         world,
         characters,
+        presets_stay,
     })
+}
+
+/// Whether `file` turns a preset on, an empty list turning the defaults
+/// on, or holds a preset trigger, a preset macro or an edit to a preset.
+fn holds_presets(file: &ProfileConfig) -> bool {
+    !file.ui.enabled_presets.iter().any(|id| id == PRESETS_OFF)
+        || !file.preset_edits.is_empty()
+        || file.triggers.iter().any(|t| t.preset.is_some())
+        || file.macros.iter().any(|m| m.preset.is_some())
 }
 
 /// Plan the import of the export `text`, the file you picked as
@@ -266,8 +287,9 @@ pub(crate) fn preview(
 /// their defaults, as every save writes them, so your shared theme and
 /// font stay. A scope that shares nothing keeps the file's own. In
 /// loadout mode the file's triggers, aliases and macros move to the
-/// catalog in a group named for the file, and the alert presets the
-/// catalog keeps stay yours.
+/// catalog in a group named for the file, and the presets the catalog
+/// keeps stay as they are: its list, your edits to them and the alert
+/// presets (Presets Q11).
 pub(crate) fn plan(
     file_name: &str,
     text: &str,
@@ -283,6 +305,9 @@ pub(crate) fn plan(
         let group = file_name.strip_suffix(".toml").unwrap_or(file_name);
         let join = join_catalog(&config, catalog, group);
         config.clear_catalog_items();
+        // A list that turns no preset on, which a catalog that has yet to
+        // take a list reads as nothing to add.
+        config.ui.enabled_presets = vec![PRESETS_OFF.to_string()];
         join
     });
     Ok(ImportPlan {
@@ -296,9 +321,17 @@ pub(crate) fn plan(
 /// moved into `group`, with a clash for each one it has.
 fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> CatalogJoin {
     let mut clashes = Vec::new();
+    // The catalog's preset triggers serve every character, so the file's
+    // stay out, or the catalog would file them as yours (Presets Q11).
+    let yours: Vec<Trigger> = file
+        .triggers
+        .iter()
+        .filter(|t| t.preset.is_none())
+        .cloned()
+        .collect();
     let triggers = join(
         ClashKind::Trigger,
-        &file.triggers,
+        &yours,
         &catalog.triggers,
         |t| &t.name,
         |t| t.group = Some(group.to_string()),
@@ -401,7 +434,7 @@ mod tests {
     #[test]
     fn the_full_profile_previews_what_it_holds() {
         let set = set_with_profiles(vec![]);
-        let view = preview(&set, "Healer profile.toml", FULL).unwrap();
+        let view = preview(&set, "Healer profile.toml", FULL, false).unwrap();
         assert_eq!(
             view,
             ImportPreview {
@@ -420,14 +453,32 @@ mod tests {
                 plugins: vec!["vitals_alert".into()],
                 world: None,
                 characters: Vec::new(),
+                presets_stay: false,
             }
         );
+    }
+
+    /// In loadout mode the sheet says the presets stay as the catalog has
+    /// them, when the file holds any (Presets Q11).
+    #[test]
+    fn a_loadout_preview_flags_the_presets_that_stay_out() {
+        let set = set_with_profiles(vec![]);
+        let view = preview(&set, "Healer profile.toml", EXPORT, true).unwrap();
+        assert!(view.presets_stay);
+        let view = preview(&set, "Healer profile.toml", EXPORT, false).unwrap();
+        assert!(!view.presets_stay);
+        // A file with every preset off has nothing to leave out.
+        let mut off = ProfileConfig::default();
+        off.ui.enabled_presets = vec![PRESETS_OFF.into()];
+        let off = off.to_toml().unwrap();
+        let view = preview(&set, "Default profile.toml", &off, true).unwrap();
+        assert!(!view.presets_stay);
     }
 
     #[test]
     fn a_character_another_profile_lists_reads_as_claimed_by_it() {
         let set = set_with_profiles(vec![("Healer", claim(WORLD, Some(1848), &["Orla"]))]);
-        let view = preview(&set, "Healer profile.toml", EXPORT).unwrap();
+        let view = preview(&set, "Healer profile.toml", EXPORT, false).unwrap();
         assert_eq!(
             view.world,
             Some(ImportWorld {
@@ -447,7 +498,7 @@ mod tests {
         // Maren is on no list, and a blank or repeated name drops out.
         let table = "\n[vosh_export]\nhost = \" play.theforsakenlands.com \"\n\
                      characters = [\"Orla\", \" \", \"Maren\", \"orla\"]\n";
-        let view = preview(&set, "shared.toml", &format!("{FULL}{table}")).unwrap();
+        let view = preview(&set, "shared.toml", &format!("{FULL}{table}"), false).unwrap();
         assert_eq!(view.name.as_deref(), Some("shared"));
         assert_eq!(
             view.world.as_ref().map(|w| (w.host.as_str(), w.port)),
@@ -464,21 +515,21 @@ mod tests {
     #[test]
     fn an_export_without_the_table_reads_by_its_file_name() {
         let set = set_with_profiles(vec![]);
-        let view = preview(&set, "Healer profile (2).toml", FULL).unwrap();
+        let view = preview(&set, "Healer profile (2).toml", FULL, false).unwrap();
         assert_eq!(view.name.as_deref(), Some("Healer"));
         assert_eq!(view.triggers, 3);
         assert_eq!(view.world, None);
 
         // A profile at its defaults keeps the default tick and panes.
         let blank = ProfileConfig::default().to_toml().unwrap();
-        let view = preview(&set, "Default profile.toml", &blank).unwrap();
+        let view = preview(&set, "Default profile.toml", &blank, false).unwrap();
         assert_eq!(view.name.as_deref(), Some("Default"));
         assert!(!view.tick);
         assert_eq!(view.panes, ["map", "affects"]);
         assert!(view.runs_lua.is_empty() && view.plugins.is_empty());
 
         // A name the profile rule refuses leaves the name for you to type.
-        let view = preview(&set, "Healer (old) profile.toml", FULL).unwrap();
+        let view = preview(&set, "Healer (old) profile.toml", FULL, false).unwrap();
         assert_eq!(view.name, None);
     }
 
@@ -488,7 +539,7 @@ mod tests {
         let catalog = include_str!("../../../fixtures/config/catalog.full.toml");
         let manifest = include_str!("../../../plugins/vitals_alert/manifest.toml");
         assert_eq!(
-            preview(&set, "catalog.toml", catalog),
+            preview(&set, "catalog.toml", catalog, false),
             Err(
                 "catalog.toml is not a Vosh profile export. Import other clients under Automation."
                     .into()
@@ -501,7 +552,7 @@ mod tests {
             ("notes.toml", "not = [toml"),
         ] {
             assert_eq!(
-                preview(&set, file, text),
+                preview(&set, file, text, false),
                 Err(format!(
                     "{file} is not a Vosh profile export. Import other clients under Automation."
                 ))
@@ -509,7 +560,7 @@ mod tests {
         }
         // An export name over a file Vosh cannot read says so.
         assert_eq!(
-            preview(&set, "Healer profile.toml", "not = [toml"),
+            preview(&set, "Healer profile.toml", "not = [toml", false),
             Err("Vosh could not read Healer profile.toml.".into())
         );
     }
@@ -574,6 +625,11 @@ mod tests {
         );
         assert_eq!(plan.file.timers.len(), 1);
         assert_eq!(plan.file.alerts.len(), 2);
+        // The list of presets that are on and your edits come whole.
+        let exported = ProfileConfig::from_toml(EXPORT).unwrap();
+        assert!(!exported.preset_edits.is_empty());
+        assert_eq!(plan.file.ui.enabled_presets, exported.ui.enabled_presets);
+        assert_eq!(plan.file.preset_edits, exported.preset_edits);
         let am = plan.claim.unwrap();
         assert_eq!(
             (am.host.as_deref(), am.port, am.characters, am.enabled),
@@ -639,12 +695,16 @@ mod tests {
         let file = &plan.file;
         assert!(file.triggers.is_empty() && file.aliases.is_empty() && file.macros.is_empty());
         assert!(file.alerts.is_empty(), "{:?}", file.alerts);
+        // The presets stay as the catalog has them.
+        assert_eq!(file.ui.enabled_presets, [PRESETS_OFF]);
+        assert!(file.preset_edits.is_empty(), "{:?}", file.preset_edits);
         assert_eq!(file.timers.len(), 1);
         assert_eq!(file.profile_vars.len(), 2);
 
         let join = plan.catalog.unwrap();
         assert_eq!(join.group, "Healer profile (2)");
-        assert_eq!(names(&join.triggers, |t| &t.name), ["tells", "room-items"]);
+        // The preset trigger tells stays out with its preset.
+        assert_eq!(names(&join.triggers, |t| &t.name), ["room-items"]);
         assert_eq!(names(&join.aliases, |a| &a.name), ["heal"]);
         // The file's preset macros stay out.
         assert_eq!(names(&join.macros, |m| &m.key), ["F1", "Numpad3"]);
@@ -655,7 +715,7 @@ mod tests {
             .chain(join.aliases.iter().map(|a| a.group.as_deref()))
             .chain(join.macros.iter().map(|m| m.group.as_deref()))
             .collect();
-        assert_eq!(groups, [Some("Healer profile (2)"); 5]);
+        assert_eq!(groups, [Some("Healer profile (2)"); 4]);
         // A clash keeps yours, by name and for a macro by key.
         let clash = |kind, name: &str| Clash {
             kind,

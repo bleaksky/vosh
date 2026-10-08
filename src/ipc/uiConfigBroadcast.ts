@@ -3,7 +3,7 @@
 // replaced.
 
 import { emit, type UnlistenFn } from '@tauri-apps/api/event';
-import { resolveActiveTheme, systemPrefersDark, themePrefsOf } from '../theme/theme';
+import { activeThemeFor, themePrefsOf } from '../theme/theme';
 import { resolveThemeTerminalColors } from '../theme/themes';
 import { affectsDisplayOf } from './affects';
 import {
@@ -87,15 +87,14 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   // Custom themes go out first so any other window's theme registry is
   // current by the time `theme-changed` points at a custom theme id.
   await emitChanged(CUSTOM_THEMES_CHANGED, config.custom_themes, before?.custom_themes, deepEqual);
-  // The four theme fields go out whole so Settings and the palette keep
+  // The seven theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
   // is `theme` unless follow is on.
   const prefs = themePrefsOf(config);
   const prevPrefs = before ? themePrefsOf(before) : undefined;
   await emitChanged(THEME_PREFS_CHANGED, prefs, prevPrefs, deepEqual);
-  const systemDark = systemPrefersDark();
-  const shown = resolveActiveTheme(config, systemDark);
-  const prevShown = before ? resolveActiveTheme(before, systemDark) : undefined;
+  const shown = activeThemeFor(config);
+  const prevShown = before ? activeThemeFor(before) : undefined;
   await emitChanged(THEME_CHANGED, shown, prevShown);
   await emitChanged<FontChange>(
     FONT_CHANGED,

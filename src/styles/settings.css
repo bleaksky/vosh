@@ -2033,6 +2033,24 @@
   box-shadow: inset 0 0 0 1.25px var(--tertiary);
 }
 
+/* A preset suggested for your world wears the accent ring while it is
+   off (First Run board 4). */
+.st-auto-dot.is-off.is-suggested {
+  box-shadow: inset 0 0 0 1.25px var(--accent);
+}
+
+/* The pencil of an item you edited sits just before its dot (Presets
+   Q6). */
+.st-auto-mark {
+  flex: none;
+  margin-left: auto;
+  color: var(--tertiary);
+}
+
+.st-auto-mark + .st-auto-dot {
+  margin-left: 0;
+}
+
 /* MUD text in the list and cards: alias names, macro keys, commands. */
 .st-auto-mono {
   font-family: var(--font-mud);
@@ -2175,6 +2193,133 @@
   white-space: nowrap;
 }
 
+/* A link inside a card's text, in the quiet tone of Edit all as JSON…
+   with a hairline underline (Presets board 1). */
+.st-auto-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  cursor: default;
+}
+
+.st-auto-link:hover {
+  color: var(--text);
+}
+
+.st-auto-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* A row of a preset trigger you changed says what the preset has, under
+   the label for a switch or a number and under the field for text
+   (Presets board 2). */
+.st-auto-changed {
+  display: block;
+}
+
+.st-auto-changed:not(:first-child) {
+  margin-top: 4px;
+}
+
+.st-auto-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.st-auto-card .st-row-control:has(> .st-auto-stack) {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.st-auto-stack > .st-auto-grow {
+  flex: none;
+}
+
+/* How many rows under a closed Advanced hold an edit. */
+.st-auto-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-auto-count > svg {
+  color: var(--tertiary);
+}
+
+/* The way back to a preset's color under a swatch you changed. */
+.st-auto-under {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* A row a preset fix changed under your edit (Presets board 4): what
+   the preset now has in warn, then Take the fix and Keep mine on the
+   24 px chip recipe. */
+.st-auto-fix {
+  display: block;
+}
+
+.st-auto-fix-line {
+  color: var(--warn-text);
+}
+
+/* A swatch's new color keeps its chip beside its name. */
+.st-auto-fix-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.st-auto-fix-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* A swatch a preset fix changed under your color wears the warn ring. */
+.st-color-cell.is-warn .st-color,
+.st-color-cell.is-warn .st-select-input {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.st-auto-link.is-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.st-auto-chip {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--key-ring);
+}
+
 .st-auto-unit {
   flex: none;
   color: var(--secondary);
@@ -2221,6 +2366,47 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+/* A preset's sample as the terminal draws it, on the terminal ground, in
+   the theme's colors. Each run sets --sample-fg to its color. */
+.st-auto-sample {
+  padding: 6px 10px;
+  border-radius: var(--r-row);
+  background: var(--xterm-bg);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  font: 12px/17px var(--font-mud);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A line too long for the box wraps three cells in, under the words
+   after a ## mark (Presets board 1). */
+.st-auto-sample-line {
+  padding-left: 3ch;
+  text-indent: -3ch;
+}
+
+.st-auto-sample,
+.st-auto-sample-line > span {
+  color: var(--sample-fg, var(--text));
+}
+
+.st-auto-sample .is-bold {
+  font-weight: 700;
+}
+
+/* What a character says never shows. A bar in the run's color at a third
+   of its strength stands in for the words, at the cap height of the
+   face. */
+.st-auto-sample-bar {
+  display: inline-block;
+  height: 0.62em;
+  margin: 0 0.04em;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.32;
+  vertical-align: 0.02em;
 }
 
 /* A block's label and description with a control beside them, as the

@@ -95,6 +95,44 @@ describe('a conflict in the shared catalog preview', () => {
     expect(html).toContain('default</span><span class="migration-variant-state">off</span>');
     expect(html).toContain('When only one version is on, the wizard picks it for you.');
   });
+
+  it('names what each version of a preset changed, as its card does', () => {
+    const line = { value: '#8fa7d9', was: 'fg:178' };
+    const off = { enabled: { value: false, was: true } };
+    const html = draw({
+      ...PLAN,
+      conflicts: [
+        {
+          kind: 'preset',
+          name: 'disarm_buff_fade',
+          default_source: 'default',
+          variants: [
+            {
+              source_profile: 'default',
+              switched_on: true,
+              item: {
+                kind: 'preset',
+                item: { colors: { line }, triggers: { 'buff.sanctuary': off } },
+              },
+            },
+            {
+              source_profile: 'Healer',
+              switched_on: true,
+              item: {
+                kind: 'preset',
+                item: {
+                  colors: { line },
+                  triggers: { 'buff.sanctuary': off, 'buff.stoneskin': off },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const bodies = [...html.matchAll(/migration-variant-body">([^<]*)</g)].map((m) => m[1]);
+    expect(bodies).toEqual(['The line color, buff.sanctuary', '1 color and 2 triggers']);
+  });
 });
 
 describe('the shared presets in the preview', () => {

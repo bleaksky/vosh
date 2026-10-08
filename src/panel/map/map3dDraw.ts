@@ -2,8 +2,9 @@
 // floor, after the game's builder3d.js and atlas. Your floor draws lit
 // on a faint plate the shape of your reach, the floors above as
 // outlines you see through, and the floors below faded toward the
-// ground. Your room takes the accent. map3dScene.ts holds the geometry,
-// and this file decides only the paint and its order.
+// ground. Your room takes the accent, and a walk draws its path across
+// the roofs of your floor. map3dScene.ts holds the geometry, and this
+// file decides only the paint and its order.
 
 import { WHITE, mix, parseHex, scaled, toRgba, type Rgb } from '../../theme/color';
 import { isNorthUp, type Map3dView } from './map3dView';
@@ -26,8 +27,10 @@ import {
   type Scene,
 } from './map3dScene';
 import { SPRITE_SIZE, TERRAIN, paintSprite, spriteMean, spriteVariant } from './mapAtlas';
+import { inkWalkTarget, strokeWalkPath } from './mapPaint';
 import type { MapInks } from './mapPalette';
 import { DOOR_COLORS, type MapTilesPayload } from './mapTiles';
+import type { WalkMark } from './mapWalk';
 
 // How far a floor below fades toward the ground, by its steps from
 // yours. Each step fades more, so the floors count by eye.
@@ -66,7 +69,8 @@ interface Prim {
 type BoxMode = 'lit' | 'faded' | 'outline';
 
 /** Paint a Map.Tiles packet in 3D on a canvas w by h CSS pixels, its
- *  transform already set for the device pixel ratio. */
+ *  transform already set for the device pixel ratio, with the walk on
+ *  offer or under way, if any. */
 export function drawMap3D(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -75,6 +79,7 @@ export function drawMap3D(
   view: Map3dView,
   zoom: number,
   inks: MapInks,
+  walk: WalkMark | null,
 ): void {
   const scene = sceneOf(payload, view.floors);
   const cam = cameraFor(w, h, scene, view, zoom);
@@ -204,6 +209,7 @@ export function drawMap3D(
   ctx.fillRect(0, 0, w, h);
   prims.sort((p, q) => p.floor - q.floor || q.depth - p.depth);
   for (const p of prims) p.draw();
+  if (scene.you && walk) drawWalk(ctx, cam, scene.you, walk, inks);
   if (scene.you) drawYou(ctx, cam, scene.you, inks);
   if (view.floors === 'all') drawFloorNumbers(ctx, cam, scene, inks, ground);
   if (!isNorthUp(view)) drawCompass(ctx, cam, inks);
@@ -380,6 +386,40 @@ function drawStairMark(
   ctx.stroke();
   ctx.fillStyle = color;
   ctx.fill();
+}
+
+/** A walk on the plane of your roofs: the path from your room through
+ *  each step, as the flat styles stroke it, and the ring round the
+ *  roof it goes to. It draws over every floor and under your pin. */
+function drawWalk(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  you: Room3d,
+  walk: WalkMark,
+  inks: MapInks,
+) {
+  const h = roofAt(0);
+  const points = [{ row: you.y, col: you.x }, ...walk.cells].map(({ row, col }) =>
+    project(cam, col, row, h),
+  );
+  // A casing of the ground under the whole path, as the corridors have,
+  // so it reads over a roof of its own color.
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 2 + 1.7;
+  ctx.strokeStyle = inks.ground;
+  ctx.beginPath();
+  points.forEach(({ x, y }, i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.stroke();
+  ctx.restore();
+  strokeWalkPath(ctx, walk, points);
+  ctx.save();
+  inkWalkTarget(ctx, walk);
+  ctx.lineJoin = 'round';
+  path(ctx, square(cam, walk.target.col, walk.target.row, h, TILE / 2 + 3.5 / cam.ppc));
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Your room. Its roof clears to the ground and takes the accent tint,

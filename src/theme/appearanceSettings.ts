@@ -152,15 +152,17 @@ export function panelSizeChoices(current: number): Choice[] {
 // ── Light and dark themes ────────────────────────────────────────────
 
 /** What the Light theme or Dark theme select offers: every theme of
- *  that appearance in gallery order. The current pick stays listed
- *  first when it is not one of them, so the select shows it. */
+ *  that appearance in gallery order. Null offers every theme, light or
+ *  dark, as the Day theme and Night theme selects do. The current pick
+ *  stays listed first when it is not one of them, so the select shows
+ *  it. */
 export function pairChoices(
   themes: readonly AppTheme[],
-  appearance: Appearance,
+  appearance: Appearance | null,
   current: string,
 ): Choice[] {
   const choices = themes
-    .filter((t) => themeTokens(t).appearance === appearance)
+    .filter((t) => appearance === null || themeTokens(t).appearance === appearance)
     .map((t) => ({ value: t.id, label: t.label }));
   if (current !== '' && !choices.some((c) => c.value === current)) {
     const found = themes.find((t) => t.id === current);
@@ -172,7 +174,7 @@ export function pairChoices(
 /** The theme an arrow key moves to in the gallery. `step` 1 is the
  *  next theme in gallery order and -1 the one before, wrapping at both
  *  ends. With `appearance` set only themes of that appearance count.
- *  While follow system appearance is on the page passes the OS
+ *  While Switch themes follows the system the page passes the OS
  *  appearance, so each step shows the theme it lands on and fills only
  *  the slot the OS uses now, never the other one. Returns `from` when
  *  no other theme qualifies. */
@@ -299,7 +301,8 @@ export function keepFit(
 /** The fields after you delete a custom theme. Any pick that named it
  *  falls back to the stock theme for its place: Obsidian Ember for the
  *  manual pick and the dark theme, DEFAULT_LIGHT_THEME_ID for the light
- *  theme, which shows Rubric. */
+ *  theme, which shows Rubric. A day or night theme that named it goes
+ *  empty, so that slot shows the manual pick. */
 export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
   return {
     ...ui,
@@ -307,6 +310,8 @@ export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
     theme: ui.theme === id ? DEFAULT_THEME_ID : ui.theme,
     light_theme: ui.light_theme === id ? DEFAULT_LIGHT_THEME_ID : ui.light_theme,
     dark_theme: ui.dark_theme === id ? DEFAULT_THEME_ID : ui.dark_theme,
+    day_theme: ui.day_theme === id ? '' : ui.day_theme,
+    night_theme: ui.night_theme === id ? '' : ui.night_theme,
   };
 }
 

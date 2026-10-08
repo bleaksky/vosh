@@ -191,6 +191,10 @@ pub(crate) const SNOOP_OUTPUT: &str = "session://snoop-output";
 /// at full values with which of them read a fight. `onVitalsText`
 /// hears it.
 pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
+/// Where the walk stands, when that changed: idle, walking or stopped.
+/// The payload is a [`crate::session::walk::WalkProgress`]. `onWalk`
+/// hears it, and the map shows the Walking chip and the Stopped toast.
+pub(crate) const WALK: &str = "session://walk";
 
 // The lists.
 
@@ -223,6 +227,15 @@ pub(crate) const MACROS_CHANGED: &str = "vosh://macros-changed";
 /// the whole list of [`crate::profile::live::Timer`].
 /// `subscribeTimersChanged` hears it.
 pub(crate) const TIMERS_CHANGED: &str = "vosh://timers-changed";
+/// Sent to every window when `preset_edits_set` saved your edits to a
+/// preset. The payload names the profile, `{profile}`, see
+/// [`PresetEditsChanged`]. In loadout mode every profile shares the edits.
+pub(crate) const PRESET_EDITS_CHANGED: &str = "vosh://preset-edits-changed";
+/// Sent to every window when `presets_enabled_set` turned presets on or
+/// off. The payload names the profile, `{profile}`, see
+/// [`PresetsChanged`]. In loadout mode every profile shares the list.
+/// The Presets page hears it through `onPresetsChanged`.
+pub(crate) const PRESETS_CHANGED: &str = "vosh://presets-changed";
 
 // Plugins.
 
@@ -279,9 +292,9 @@ pub(crate) const SESSION_SELECTED: &str = "vosh://session-selected";
 pub(crate) const SESSIONS_CHANGED: &str = "vosh://sessions-changed";
 /// Sent to every window when the game of a session turns to day or
 /// night, from World.Time (Alerts Q16). The payload is a
-/// [`crate::tick::DaylightPayload`] with the session beside it. Switch
-/// themes With the game reads it in the page half. No page listener
-/// hears it yet.
+/// [`crate::tick::DaylightPayload`] with the session beside it.
+/// `subscribeDaylightChanged` hears it, and the daylight store keeps the
+/// selected session's for Switch themes With the game.
 pub(crate) const DAYLIGHT_CHANGED: &str = "vosh://daylight-changed";
 /// Sent to every window when sharing the theme category added to the
 /// live custom themes. The payload is the whole list of
@@ -354,6 +367,9 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 /// Sent to the main window on `#help <words>`. The payload is the
 /// words. `useAppCommands` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
+/// Sent to the main window when Help opens Get started. The payload is
+/// null. `subscribeGetStartedOpen` hears it.
+pub(crate) const GET_STARTED_OPEN: &str = "vosh://get-started-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
 pub(crate) const FLUSH_PENDING_WRITES: &str = "vosh://flush-pending-writes";
@@ -405,6 +421,20 @@ pub(crate) const TERMINAL_CURSOR: &str = "vosh://terminal-cursor";
 /// table changed, None before any profile loads.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct PromptConfigChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// The payload of [`PRESET_EDITS_CHANGED`]: the profile whose edits
+/// changed, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetEditsChanged {
+    pub(crate) profile: Option<String>,
+}
+
+/// The payload of [`PRESETS_CHANGED`]: the profile whose presets turned
+/// on or off, None before any profile loads.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PresetsChanged {
     pub(crate) profile: Option<String>,
 }
 

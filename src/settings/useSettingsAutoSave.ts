@@ -38,7 +38,7 @@ interface AutoSave {
   failed: (error: unknown) => void;
 }
 
-/** The fields the shown theme comes from, the four that pick it and
+/** The fields the shown theme comes from, the seven that pick it and
  *  the custom themes that can draw it. */
 const THEME_FIELDS = [...THEME_PREFS_FIELDS, 'custom_themes'] as const;
 

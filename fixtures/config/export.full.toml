@@ -129,6 +129,9 @@ theme = "custom-dusk"
 follow_system_appearance = true
 light_theme = "kanso-pearl"
 dark_theme = "tokyo-night"
+theme_follow = "system"
+day_theme = "kanso-pearl"
+night_theme = "custom-dusk"
 auto_update = true
 font_family = "JetBrains Mono, monospace"
 font_size = 16
@@ -358,6 +361,23 @@ sound = "bell"
 attention = "once"
 background = true
 words = false
+
+[preset_edits.disarm_buff_fade.colors.line]
+value = "#c3a6ff"
+was = "fg:178"
+
+[preset_edits.disarm_buff_fade.triggers."buff.sanctuary".enabled]
+value = false
+was = true
+
+[preset_edits.disarm_buff_fade.triggers."buff.spell_turning".replace]
+value = "{line}Your shield of spell turning collapses.{reset}"
+was = "{mark}##{reset} {line}Your shield of spell turning collapses.{reset}"
+
+[preset_edits.disarm_buff_fade.triggers."disarm.secondary".send]
+value = ""
+was = "get 1.;wield 1."
+seen = "get 1.;dual 1."
 
 [vosh_export]
 host = "play.theforsakenlands.com"

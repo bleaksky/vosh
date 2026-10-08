@@ -26,6 +26,10 @@ pub(crate) struct UiConfigPayload {
     pub follow_system_appearance: bool,
     pub light_theme: String,
     pub dark_theme: String,
+    /// `off`, `system` or `game`.
+    pub theme_follow: String,
+    pub day_theme: String,
+    pub night_theme: String,
     pub auto_update: bool,
     pub font_family: String,
     pub font_size: u32,
@@ -109,6 +113,9 @@ impl UiConfigPayload {
             follow_system_appearance: ui.follow_system_appearance,
             light_theme: ui.light_theme.clone(),
             dark_theme: ui.dark_theme.clone(),
+            theme_follow: ui.theme_follow.clone(),
+            day_theme: ui.day_theme.clone(),
+            night_theme: ui.night_theme.clone(),
             auto_update: ui.auto_update,
             font_family: ui.font_family.clone(),
             font_size: ui.font_size,
@@ -189,6 +196,10 @@ pub(crate) enum UiField {
     FollowSystemAppearance(bool),
     LightTheme(String),
     DarkTheme(String),
+    /// Follow system appearance stays true only for `system`.
+    ThemeFollow(String),
+    DayTheme(String),
+    NightTheme(String),
     AutoUpdate(bool),
     FontFamily(String),
     FontSize(u32),
@@ -301,9 +312,12 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
     for field in fields {
         match field {
             UiField::Theme(v) => ui.theme = v,
-            UiField::FollowSystemAppearance(v) => ui.follow_system_appearance = v,
+            UiField::FollowSystemAppearance(v) => cfg::set_follow_system_appearance(ui, v),
             UiField::LightTheme(v) => ui.light_theme = cfg::coerce_light_theme(v),
             UiField::DarkTheme(v) => ui.dark_theme = cfg::normalize_dark_theme(v),
+            UiField::ThemeFollow(v) => cfg::set_theme_follow(ui, v),
+            UiField::DayTheme(v) => ui.day_theme = cfg::normalize_day_night_theme(v),
+            UiField::NightTheme(v) => ui.night_theme = cfg::normalize_day_night_theme(v),
             UiField::AutoUpdate(v) => ui.auto_update = v,
             UiField::FontFamily(v) => ui.font_family = v,
             UiField::FontSize(v) => ui.font_size = cfg::coerce_font_size(v),
@@ -371,21 +385,29 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
 }
 
 /// Replace a profile's theme choice without touching the rest of the UI
-/// config, for the main window's palette. The caller applies
-/// and broadcasts the theme itself. While follow system
-/// appearance is on, a pick fills the light or dark slot instead, so the
-/// caller also sends the pair.
+/// config, for the main window's palette. The caller applies and
+/// broadcasts the theme itself. While Switch themes follows the system or
+/// the game, a pick fills the slot that is showing, light or dark, day or
+/// night, so the caller also sends that slot.
 #[tauri::command]
 pub(crate) async fn ui_set_theme(
     state: State<'_, SharedState>,
     theme: String,
     light_theme: Option<String>,
     dark_theme: Option<String>,
+    day_theme: Option<String>,
+    night_theme: Option<String>,
     profile: Option<String>,
 ) -> Result<(), String> {
+    let slots = ThemeSlots {
+        light: light_theme,
+        dark: dark_theme,
+        day: day_theme,
+        night: night_theme,
+    };
     let open = {
         let mut p = state.lock_named(profile).await?;
-        if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
+        if !apply_theme_pick(&mut p.ui, theme, slots) {
             return Ok(());
         }
         p.open().clone()
@@ -395,14 +417,23 @@ pub(crate) async fn ui_set_theme(
     Ok(())
 }
 
-/// Write a theme pick onto the live UI config. A missing or blank pair
-/// entry leaves that slot alone. Returns whether anything changed, so an
+/// The slots a palette pick can fill beside the theme. None leaves a
+/// slot alone.
+#[derive(Default)]
+struct ThemeSlots {
+    light: Option<String>,
+    dark: Option<String>,
+    day: Option<String>,
+    night: Option<String>,
+}
+
+/// Write a theme pick onto the live UI config. A missing or blank slot
+/// leaves that slot alone. Returns whether anything changed, so an
 /// unchanged pick skips the save.
 fn apply_theme_pick(
     ui: &mut crate::profile::ui::UiConfig,
     theme: String,
-    light_theme: Option<String>,
-    dark_theme: Option<String>,
+    slots: ThemeSlots,
 ) -> bool {
     let mut changed = false;
     let mut set = |slot: &mut String, value: String| {
@@ -412,11 +443,15 @@ fn apply_theme_pick(
         }
     };
     set(&mut ui.theme, theme);
-    if let Some(v) = light_theme {
-        set(&mut ui.light_theme, v);
-    }
-    if let Some(v) = dark_theme {
-        set(&mut ui.dark_theme, v);
+    for (slot, pick) in [
+        (&mut ui.light_theme, slots.light),
+        (&mut ui.dark_theme, slots.dark),
+        (&mut ui.day_theme, slots.day),
+        (&mut ui.night_theme, slots.night),
+    ] {
+        if let Some(v) = pick {
+            set(slot, v);
+        }
     }
     changed
 }
@@ -608,18 +643,37 @@ mod tests {
             .collect();
         let names: Vec<&String> = values.keys().collect();
         assert_eq!(names, keys);
+        // Follow system appearance on is the system mode of Switch themes,
+        // so that setter writes the mode too.
+        let write = |want: &mut serde_json::Value, f: &str| {
+            want[f] = values[f].clone();
+            if f == "follow_system_appearance" {
+                want["theme_follow"] = "system".into();
+            }
+        };
         for (at, f) in names.iter().enumerate() {
             let mut ui = UiConfig::default();
             super::apply_fields(&mut ui, vec![setter(f, &values[*f])]);
             let mut want = defaults.clone();
-            want[*f] = values[*f].clone();
+            write(&mut want, f);
             assert_eq!(sent(&ui), want, "{f} alone");
             // Another window writes the next field onto the same profile.
             let g = names[(at + 1) % names.len()];
             super::apply_fields(&mut ui, vec![setter(g, &values[g])]);
-            want[g] = values[g].clone();
+            write(&mut want, g);
             assert_eq!(sent(&ui), want, "{f}, then {g}");
         }
+        // Game turns the switch off, so 0.8.1 reads it as off.
+        let mut ui = UiConfig::default();
+        super::apply_fields(
+            &mut ui,
+            vec![
+                setter("follow_system_appearance", &true.into()),
+                setter("theme_follow", &"game".into()),
+            ],
+        );
+        assert_eq!(sent(&ui)["follow_system_appearance"], false);
+        assert_eq!(sent(&ui)["theme_follow"], "game");
     }
 
     #[tokio::test]
@@ -693,9 +747,17 @@ mod tests {
             state.open_session(orla.clone());
             let shown = state.selected_profile().await.ui.theme.clone();
 
-            super::ui_set_theme(app.state(), "nord".into(), None, None, Some("Orla".into()))
-                .await
-                .unwrap();
+            super::ui_set_theme(
+                app.state(),
+                "nord".into(),
+                None,
+                None,
+                None,
+                None,
+                Some("Orla".into()),
+            )
+            .await
+            .unwrap();
             assert_eq!(orla.lock().await.ui.theme, "nord");
             assert_eq!(state.selected_profile().await.ui.theme, shown);
             let saved = ProfileConfig::from_toml(&std::fs::read_to_string(&orla_file).unwrap());
@@ -843,12 +905,28 @@ mod tests {
 
     #[test]
     fn follow_system_appearance_round_trips() {
-        let ui = UiConfig {
-            follow_system_appearance: true,
-            ..UiConfig::default()
-        };
+        let mut ui = UiConfig::default();
+        crate::profile::ui::set_follow_system_appearance(&mut ui, true);
         assert!(through_payload(&ui).follow_system_appearance);
         assert!(!through_payload(&UiConfig::default()).follow_system_appearance);
+    }
+
+    #[test]
+    fn the_switch_themes_keys_round_trip() {
+        let mut ui = UiConfig::default();
+        for mode in ["off", "system", "game"] {
+            crate::profile::ui::set_theme_follow(&mut ui, mode.into());
+            let back = through_payload(&ui);
+            assert_eq!(back.theme_follow, mode);
+            assert_eq!(back.follow_system_appearance, mode == "system");
+        }
+        crate::profile::ui::set_theme_follow(&mut ui, "dusk".into());
+        assert_eq!(through_payload(&ui).theme_follow, "off");
+        ui.day_theme = "solarized-light".into();
+        ui.night_theme = "tokyo-night".into();
+        let back = through_payload(&ui);
+        assert_eq!(back.day_theme, "solarized-light");
+        assert_eq!(back.night_theme, "tokyo-night");
     }
 
     #[test]
@@ -913,30 +991,70 @@ mod tests {
 
     #[test]
     fn a_theme_pick_writes_only_what_it_names() {
+        use super::ThemeSlots;
+
         let mut ui = UiConfig::default();
-        assert!(super::apply_theme_pick(&mut ui, "nord".into(), None, None));
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "nord".into(),
+            ThemeSlots::default()
+        ));
         assert_eq!(ui.theme, "nord");
         assert_eq!(ui.light_theme, "vellum");
         assert_eq!(ui.dark_theme, "");
 
         // A pick while following the system fills the dark slot.
-        assert!(super::apply_theme_pick(
-            &mut ui,
-            "nord".into(),
-            Some("vellum".into()),
-            Some("tokyo-night".into()),
-        ));
+        let dark = || ThemeSlots {
+            light: Some("vellum".into()),
+            dark: Some("tokyo-night".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(&mut ui, "nord".into(), dark()));
         assert_eq!(ui.theme, "nord");
         assert_eq!(ui.dark_theme, "tokyo-night");
 
         // The same pick again changes nothing, and a blank slot is left alone.
+        let blank_light = ThemeSlots {
+            light: Some(String::new()),
+            ..dark()
+        };
         assert!(!super::apply_theme_pick(
             &mut ui,
             "nord".into(),
-            Some(String::new()),
-            Some("tokyo-night".into()),
+            blank_light
         ));
         assert_eq!(ui.light_theme, "vellum");
+    }
+
+    #[test]
+    fn a_theme_pick_while_following_the_game_fills_day_or_night() {
+        use super::ThemeSlots;
+
+        let mut ui = UiConfig::default();
+        let night = ThemeSlots {
+            night: Some("tokyo-night".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "tokyo-night".into(),
+            night
+        ));
+        assert_eq!(ui.night_theme, "tokyo-night");
+        assert_eq!(ui.day_theme, "");
+        let day = ThemeSlots {
+            day: Some("solarized-light".into()),
+            ..ThemeSlots::default()
+        };
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "solarized-light".into(),
+            day
+        ));
+        assert_eq!(ui.day_theme, "solarized-light");
+        assert_eq!(ui.night_theme, "tokyo-night");
+        assert_eq!(ui.light_theme, "vellum");
+        assert_eq!(ui.dark_theme, "");
     }
 
     #[test]

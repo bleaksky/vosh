@@ -193,6 +193,17 @@ export function shownStyle(config: Pick<UiConfig, 'vitals_style' | 'vitals_densi
   return config.vitals_style ?? config.vitals_density;
 }
 
+/** What switches the theme by itself, the Switch themes row: nothing,
+ *  the OS appearance, or the game's dawn and dusk. */
+export const THEME_FOLLOWS = ['off', 'system', 'game'] as const;
+
+export type ThemeFollow = (typeof THEME_FOLLOWS)[number];
+
+/** Coerce an unknown mode back to off. */
+export function normalizeThemeFollow(value: unknown): ThemeFollow {
+  return THEME_FOLLOWS.find((mode) => mode === value) ?? 'off';
+}
+
 /** Where your vitals show, under the panel's panes or in the status
  *  line. */
 export const VITALS_PLACES = ['panel', 'status'] as const;
@@ -391,6 +402,15 @@ export interface UiConfig {
   light_theme: string;
   /** The theme shown while following the system and the OS is dark. */
   dark_theme: string;
+  /** What switches the theme by itself, one of THEME_FOLLOWS. Rust keeps
+   *  follow_system_appearance true only for `system`. */
+  theme_follow: ThemeFollow;
+  /** The theme shown by day while following the game. Empty until you
+   *  pick one. */
+  day_theme: string;
+  /** The theme shown by night while following the game. Empty until you
+   *  pick one. */
+  night_theme: string;
   auto_update: boolean;
   font_family: string;
   font_size: number;
@@ -595,6 +615,9 @@ export interface RawUiConfig {
   follow_system_appearance?: boolean;
   light_theme?: string;
   dark_theme?: string;
+  theme_follow?: string;
+  day_theme?: string;
+  night_theme?: string;
   auto_update: boolean;
   font_family: string;
   font_size: number;
@@ -699,6 +722,9 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
       typeof cfg.dark_theme === 'string' && cfg.dark_theme.length > 0
         ? cfg.dark_theme
         : seedDarkTheme(theme, customThemes),
+    theme_follow: normalizeThemeFollow(cfg.theme_follow),
+    day_theme: typeof cfg.day_theme === 'string' ? cfg.day_theme : '',
+    night_theme: typeof cfg.night_theme === 'string' ? cfg.night_theme : '',
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,
@@ -806,17 +832,20 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
 }
 
 /** Save the theme choice alone, from a window that keeps no copy of
- *  the other fields, like the palette. Pass the light and dark pair too
- *  when the pick came from pickTheme, which fills one of them while
- *  follow system appearance is on. */
+ *  the other fields, like the palette. Pass the slots too when the pick
+ *  came from pickTheme, which fills the light or dark one while the
+ *  theme follows the system and the day or night one while it follows
+ *  the game. */
 export async function setUiTheme(
   theme: string,
-  pair?: { light_theme: string; dark_theme: string },
+  slots?: Pick<UiConfig, 'light_theme' | 'dark_theme' | 'day_theme' | 'night_theme'>,
 ): Promise<void> {
   await invoke('ui_set_theme', {
     theme,
-    lightTheme: pair?.light_theme ?? null,
-    darkTheme: pair?.dark_theme ?? null,
+    lightTheme: slots?.light_theme ?? null,
+    darkTheme: slots?.dark_theme ?? null,
+    dayTheme: slots?.day_theme ?? null,
+    nightTheme: slots?.night_theme ?? null,
   });
 }
 

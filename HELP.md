@@ -155,6 +155,25 @@ Closing the window ends every session and quits Vosh. While a session is connect
 
 On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected, and with one Vosh quits at once. A quit from the Dock or as you log out cannot ask.
 
+### 1.5 Get started
+
+Get started is a short list of what to turn on in Vosh, with a line on what each thing does. It opens by itself the first time you start Vosh, and you open it again here.
+
+[Open Get started](vosh:get-started)
+
+A new install starts with every preset off. The list suggests the presets that suit the world you connect to, each with a sample, and a switch turns one on at once.
+
+| What                          | Where it lives                              |
+| ----------------------------- | ------------------------------------------- |
+| Connect to The Forsaken Lands | The session button, or `Cmd+R`              |
+| Color what the game prints    | Settings, Automation, Presets               |
+| Add Chat and Group            | Add a pane, the plus in the title band      |
+| Track the affects you keep up | Settings, Characters, Tracked affects       |
+| Customize your prompt         | The first row when you right click the text |
+| Read back while you play      | Scroll up, `Cmd+\` or a middle click        |
+
+On macOS, choose Get started in the Help menu. Anywhere, press `Cmd+K` on macOS or `Ctrl+K` elsewhere and type get started.
+
 ## Play
 
 ### 2.1 Send commands
@@ -270,7 +289,7 @@ The command palette runs Vosh commands from the keyboard. It covers the View and
 The palette sorts what it finds into five sections.
 
 - Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`.
-- View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
+- View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
 - Aliases. Every alias that is on. One that takes no arguments runs the moment you pick it. One that takes arguments puts its name in the command line instead, so you finish the line and press `Enter`.
 - Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open, `Close session`, `Hide sessions` or `Show sessions` with two or more, `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
 - Go to. Every open session by the name its row shows, with the world beside a character, while two or more are open. The one in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Pick one to bring it to the front, or type a name or a port to find it.
@@ -298,6 +317,7 @@ Items with a shortcut show it on the right, and `Settings` shows an arrow. The a
 - Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
 - The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. Other `#` commands leave it going.
 - An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
+- Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.
 
 | You type     | Vosh sends                                                        |
 | ------------ | ----------------------------------------------------------------- |
@@ -351,6 +371,8 @@ Triggers watch incoming lines and run actions when a pattern matches. They live 
 
 Example. To match the line `You feel better.`, type `You feel better.` in `Text`, `You feel better` in `Starts with`, or `You feel better\.$` in `Regex`. Pick `Regex` for the pattern `(\w+) is DEAD!`, and a send of `get all corpse` loots each kill as the death line arrives.
 
+A preset adds its triggers under `From presets`, and you edit one as you edit your own, every row but `Name`, since Vosh finds the trigger in its preset by that name. The note at the top names the preset, and a click on its name opens its card in Presets. Each row you changed says `Changed` and what the preset has, `Advanced` counts the rows under it that you changed, and a pencil marks the trigger in the list. Vosh keeps only the rows you change, so a fix Vosh ships for the preset still reaches the rest, as Highlight lines at 3.3 shows. A preset trigger has no `Delete`, so turn off `Enabled` to stop it. `Reset to preset` under the card puts back the rows of that trigger, and like every change it waits for `Save`. A trigger of your own cannot take the name of a preset trigger, its preset on or off, and `Edit all as JSON…` lists only your own triggers.
+
 The command line builds triggers too. `#trigger name {pattern} send command` creates one with a `Regex` pattern at priority 0 on the `line` target, `#triggers` lists everything by priority, and `#untrigger name` removes one. Vosh rejects an invalid regex and names the broken pattern.
 
 ### 3.3 Highlight lines
@@ -369,7 +391,15 @@ Example. `#trigger tell-glow {tells you} highlight bright_yellow bold` renders e
 
 The Triggers editor under Automation in Settings offers the same options. Pick `Highlight` or `Wash` in `Style`, then open `Advanced` to set `Text color` and `Background`, with `Bold`, `Underline`, and `Inverse` beside them.
 
-The `Room, time and weather colors` preset colors a room look, the clock and the weather. The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so give it a group in Triggers and turn the group off to keep your target yellow. Each one is a terminal color from your theme, so a theme switch carries them along. A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue. That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads. The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. Turn it off in Settings under Automation, then Presets.
+Settings under Automation, then Presets, holds ready made colors for lines the game prints. Each card shows a sample under `Looks like`, drawn in your theme the way the terminal draws it. A preset suggested for the game you connect to wears a ring in the accent color while it is off, and its card names the game under `Suggested`. Turn a preset on or off and click `Save`.
+
+A preset that paints lines shows a swatch under `Colors` for each color it paints, named for what it marks, such as `The line` or `The damage verb`. A swatch paints every trigger of the preset that uses its color. Most swatches take any color, and while you leave one empty it shows the color of the preset, such as `Theme red`. A swatch whose color sits in a highlight picks from the sixteen colors of your theme. `Looks like` redraws the sample in your colors. A swatch you changed says `Back to` and the color of the preset under it, and a press there puts that color back.
+
+A preset you changed wears a pencil beside its dot in the list. Its card closes with `Your changes`, which names each color and trigger you changed, or counts them past two, and a click on a trigger opens it in Triggers. `Reset to preset` under the card takes back every color and trigger you changed in that preset. A swatch and a reset wait for `Save`, and `Discard` brings your changes back. Turn a preset off and your changes wait for it, so it comes back on in your colors, and `Reset to preset` works while it is off. A description keeps the words of the preset, so one that names a color still names the color the preset ships.
+
+Vosh keeps only what you change and lays it over the preset each time a profile opens, so a fix Vosh ships later still reaches the parts you left alone. When a fix lands on a row you changed, your change stays. The trigger card says a fix changed a row you edited, the row shows what the preset now has, and `Take the fix` and `Keep mine` sit under it. A swatch whose color a fix changed wears a warning ring with the same two choices. Your pick waits for `Save`. A change the fix now matches drops away on its own. At the launch that finds a fix, a notice in the corner says `A preset fix changed a row you edited` and names the trigger. `Show` opens it in Settings, and `Close` hides the notice and keeps the marks. When a fix takes away a trigger you changed, the notice says `A preset fix removed a trigger you edited`. Vosh tells you about each fix once.
+
+The `Room, time and weather colors` preset colors a room look, the clock and the weather. The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset. Each one is a terminal color from your theme, so a theme switch carries them along. A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue. That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads. The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.
 
 ### 3.4 Route lines to a pane
 
@@ -502,7 +532,7 @@ Alert presets get your attention when the game needs you, while you play another
 - `Low health` rings when your health falls under 20 percent, and again only after it climbs back to 25 percent and falls once more. It never rings while the game hides your vitals.
 - `Connection` rings when your link to the game drops while you play, when a redial reaches the login, and when Vosh stops trying.
 
-All five start off. Turn one on with its switch and click `Save`. Each starts with `Banner` pressed in its `Alert` row, and `Sound` and `Bounce` press on and off as they do on a trigger. The rows for the parts you press show under it. `Banner shows` waits for Tells you get and Your name, where `Title and words` adds what was said or the line that named you. `Only while you are not looking at its session` starts on, so a preset rings only while you look at another session or another app. Turn it off and it rings while you watch too.
+All five start off. Turn one on with its switch and click `Save`. Each starts with `Banner` pressed in its `Alert` row, and `Sound` and `Bounce` press on and off as they do on a trigger. The rows for the parts you press show under it. `Banner shows` waits for Tells you get and Your name, where `Title and words` adds what was said or the line that named you. `Only while you are not looking at its session` starts on, so a preset rings only while you look at another session or another app. Turn it off and it rings while you watch too. A preset whose `Alert` row you changed wears a pencil in the list, and `Reset to preset` on its card puts the row back as the preset ships.
 
 The first time you turn on a `Banner`, on a preset or on a trigger, Vosh asks before macOS does. Click `Continue` and macOS asks whether Vosh may post banners. `Not now` keeps `Banner` on and asks no more until you close Settings. If banners from Vosh are off in System Settings, `Banner` wears a warning ring on every `Alert` row, and each alert preset says so at the top of its card. `Sound` and `Bounce` still work. `Open notification settings` takes you to the page where you turn banners back on, and the ring goes once you come back to Settings. On Windows the note names Windows Settings and `Flash`. A dev build you run from the source shows no banners, so it asks nothing and wears no ring.
 
@@ -589,7 +619,7 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 - Filter with the channel select beside the pane's name. A lone chat pane shows `All`, or the channels you check. Check as many as you like, and the header names them, like `Gtell, Tell`. Each chat pane keeps its own filter, so you can split one off for tells alone.
 - Add a second chat pane and it starts on `Tell`. Your first pane turns to `Everything else` at the same moment, the channels no other chat pane checks, so each tell lands in one pane, and a note says so. With two or more panes, each one shows the channels you check in it or `Everything else`, and `All` steps aside. One pane at a time shows `Everything else`, so the menus of the others say it is in another pane. A later pane starts on `Tell` while no pane checks it, then on `Everything else` while no pane shows it, and with no channels otherwise for you to pick. Close the others and the last pane shows `All` again. The panel holds up to four chat panes.
 - Route trigger output in. On a trigger under Automation, then Triggers, put a name in `Send to pane` under `Advanced`. Those lines land in the chat pane under that name, in their own words.
-- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
+- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
 
 The buffer holds a rolling 500 lines, survives closing and reopening the pane, and empties only when you choose `Disconnect` or connect to another world. Every chat pane reads the same buffer. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
@@ -734,7 +764,10 @@ Themes recolor the whole window, the terminal included. They live in Settings un
 - Click a theme in the gallery. Each one draws in its own colors with its name under it, and your own themes follow the built in ones. The theme applies at once and saves. The arrow keys move the pick too.
 - Read the line under the gallery. It describes the theme on screen and, for a built in theme, names where its colors come from, who made them, and the license they carry.
 - Use the `Vision` switch above the gallery to see every theme as a player with deuteranopia, protanopia or tritanopia sees it. It starts on your `Color vision` and only previews, so it changes no theme.
-- Turn on `Follow system appearance` to switch between the `Light theme` and the `Dark theme` you pick under it whenever your system does.
+- Pick how the window changes theme in `Switch themes`. `Off` keeps the theme you click. `With the system` switches between the `Light theme` and the `Dark theme` you pick under it whenever your system does. `With the game` shows your `Day theme` from the game's dawn and your `Night theme` from its dusk, so the window turns about every 6 minutes.
+- Pick the `Day theme` and the `Night theme` from any theme, light or dark. Both start on the theme showing, so nothing changes until you pick. A click in the gallery fills whichever one is showing now.
+- Choose a pair close in tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes read as evening coming on, where a dark and a light one flash at every turn.
+- Go offline and the window keeps the theme it showed last, through a relaunch too, until the game names the time again.
 - Click `Import…` to read a Ghostty, iTerm2, Kitty, or Alacritty theme file. Vosh adds it to your own themes and switches to it.
 - Or choose `Choose theme` in the View menu or the palette, which lists every theme.
 
@@ -808,9 +841,11 @@ Settings edits the profile of the session in front and follows you to another se
 
 `Export to Downloads` saves the profile as a file in your Downloads folder. A profile with characters asks first which ones the file names. Each starts off, so a profile you share names your characters only when you turn them on.
 
-To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened.
+The file carries the presets you have on and your changes to them, so a friend who imports it sees your colors. In loadout mode it carries the presets of the catalog, which every character shares. `New profile` copies both from the profile you play. `#profile reset` turns every preset off and clears your changes, and `#profile load` reads both back from the file. An older version, such as 0.8.1, runs the presets as they ship and keeps the groups you gave their triggers. It drops your other changes the first time it opens the profile, so back in this version the presets run as they ship, with your groups.
 
-In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so. The macros a preset added in the file stay out, since the presets you turn on in loadout mode add their own.
+To bring in a profile, click `Import…` beside `New profile` and pick a Vosh profile export. Vosh shows what the file holds before anything changes. Under `Add as`, `New profile` adds it under the name you type, and `Replace a profile` lays it over the profile you pick, which keeps its own world and characters. Click `Import` or `Replace`, and Vosh selects the profile and says under the list what happened. The profile takes the presets the file has on and the changes to them whole.
+
+In loadout mode the triggers, aliases and macros in the file join the shared catalog in a group named after the file, like `Healer profile`, and never the profile file. When the catalog already has one of the same name, or a macro of yours on the same key, yours stays, and the line under the list says so. The presets of the file stay out, the triggers and macros they added, the list of those that are on and the changes to them, since the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.
 
 Plugins the file turns on come in off, so you turn each one on under Scripts. When a trigger or an alias in the file runs Lua, Vosh names each one under a warning, since Lua can send commands to the game and read everything the game sends. Import profiles only from people you trust.
 
@@ -828,7 +863,7 @@ Loadouts flip whole groups of aliases, triggers, and macros on and off from one 
 
 - Open Settings, choose Automation, click `Import…`, and find the `Shared catalog` section. Click `Preview…`.
 - Review the plan. The wizard shows how your profiles would merge into a single shared catalog with one generated loadout per source profile. The preview writes nothing.
-- Apply the migration. Vosh copies each profile file to `profiles/legacy/`, writes the catalog and the loadouts, and takes the aliases, triggers, and macros out of each profile file. Every other setting stays with its profile except the presets. Loadout mode keeps one list of presets that are on, and every character shares it. The list starts with every preset that any profile file had on, and the preview names each character that gains or loses a preset. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
+- Apply the migration. Vosh copies each profile file to `profiles/legacy/`, writes the catalog and the loadouts, and takes the aliases, triggers, and macros out of each profile file. Every other setting stays with its profile except the presets. Loadout mode keeps one list of presets that are on, and every character shares it. The list starts with every preset that any profile file had on, and the preview names each character that gains or loses a preset. Every character shares one set of changes to the presets too. Changes your profiles agree on carry over, and where two profiles changed a preset in different ways, the wizard asks which version to keep, as it does for an alias. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
 - Reopen Settings and choose Automation, then Loadouts, which now appears after Presets. Turn on the loadouts you want live and click `Save`. The runtime enables the union of their groups across every active loadout.
 
 The catalog keeps your folder names where it can. Each alias, trigger, and macro lands in a group that is on for exactly the profiles that had it on, so a folder two characters filled differently can become more than one group. `combat` holds what most characters kept in their combat folder, `combat (Healer)` holds the combat items only the Healer had, and `(Healer)` holds the items the Healer had outside any folder. Each profile file remembers which groups its folders became, so `#group combat on` and `#group combat off` still turn on and off exactly what that profile had in its combat folder.
@@ -858,7 +893,7 @@ The importer handles `#alias {name} {expansion}` and `#variable {name} {value}`,
 
 Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder, and a skip line of `event=2 ticker=1` reports two `event` directives and one `ticker` directive left behind.
 
-Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
+Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable. A trigger that takes the name of a preset trigger stays out, so the preset keeps its own, and the summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
 
 ### 7.4 Search session logs
 

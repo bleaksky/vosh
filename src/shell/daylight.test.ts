@@ -105,11 +105,11 @@ describe('isDaytime', () => {
     expect(isDaytime(at(null, 'light'))).toBe(true);
   });
 
-  it('falls back to the hour, day from 5 until 20', () => {
-    expect(isDaytime(at(4))).toBe(false);
-    expect(isDaytime(at(5))).toBe(true);
-    expect(isDaytime(at(19))).toBe(true);
-    expect(isDaytime(at(20))).toBe(false);
+  it('falls back to the hour, day from 6 until 19', () => {
+    expect(isDaytime(at(5))).toBe(false);
+    expect(isDaytime(at(6))).toBe(true);
+    expect(isDaytime(at(18))).toBe(true);
+    expect(isDaytime(at(19))).toBe(false);
     expect(isDaytime(at(0, 'foggy'))).toBe(false);
   });
 

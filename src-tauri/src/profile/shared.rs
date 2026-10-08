@@ -19,8 +19,8 @@ use crate::profile::live::Profile;
 use crate::profile::panes::DockEntryPersist;
 use crate::profile::set::ProfileSet;
 use crate::profile::ui::{
-    default_color_vision, is_default_color_vision, is_default_font_family, CustomTheme, UiConfig,
-    DEFAULT_PANEL_FONT_SIZE,
+    default_color_vision, is_default_color_vision, is_default_font_family, read_theme_follow,
+    set_theme_follow, CustomTheme, UiConfig, DEFAULT_PANEL_FONT_SIZE,
 };
 
 /// Per-category scope choice. Per-profile fields move with the
@@ -122,6 +122,20 @@ pub(crate) struct GlobalConfig {
     pub light_theme: Option<String>,
     #[serde(default)]
     pub dark_theme: Option<String>,
+    /// The Switch themes mode, while the theme is shared. Written only
+    /// once it is not `off`, like the profile file's own. With `theme`
+    /// here, a missing mode reads from `follow_system_appearance` (see
+    /// `shared_theme_follow`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_follow: Option<String>,
+    /// The day theme, while the theme is shared. Written only once you
+    /// pick one. With `theme` here, a missing one is empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub day_theme: Option<String>,
+    /// The night theme, while the theme is shared. Written only once you
+    /// pick one. With `theme` here, a missing one is empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub night_theme: Option<String>,
     /// The color vision, while the theme is shared. Written only once you
     /// pick another than Typical, like the profile file's own. With
     /// `theme` here, a missing color vision is Typical (see
@@ -160,6 +174,15 @@ impl GlobalConfig {
             follow_system_appearance: theme.then_some(profile.ui.follow_system_appearance),
             light_theme: theme.then(|| profile.ui.light_theme.clone()),
             dark_theme: theme.then(|| profile.ui.dark_theme.clone()),
+            theme_follow: theme
+                .then(|| profile.ui.theme_follow.clone())
+                .filter(|mode| mode != "off"),
+            day_theme: theme
+                .then(|| profile.ui.day_theme.clone())
+                .filter(|id| !id.is_empty()),
+            night_theme: theme
+                .then(|| profile.ui.night_theme.clone())
+                .filter(|id| !id.is_empty()),
             color_vision: theme
                 .then(|| profile.ui.color_vision.clone())
                 .filter(|vision| !is_default_color_vision(vision)),
@@ -213,6 +236,13 @@ impl GlobalConfig {
         if let Some(v) = &self.dark_theme {
             profile.ui.dark_theme.clone_from(v);
         }
+        if let Some(v) = self.shared_theme_follow() {
+            set_theme_follow(&mut profile.ui, v);
+        }
+        if let Some((day, night)) = self.shared_day_night() {
+            profile.ui.day_theme = day;
+            profile.ui.night_theme = night;
+        }
         if let Some(v) = self.shared_color_vision() {
             profile.ui.color_vision = v;
         }
@@ -233,6 +263,29 @@ impl GlobalConfig {
         if let Some(v) = &self.custom_themes {
             profile.ui.custom_themes.clone_from(v);
         }
+    }
+
+    /// The Switch themes mode every character shares, or None while the
+    /// theme is not shared. It reads as a profile file's own does, so a
+    /// global.toml without it keeps what `follow_system_appearance` says.
+    fn shared_theme_follow(&self) -> Option<String> {
+        self.theme.as_ref().map(|_| {
+            read_theme_follow(
+                self.follow_system_appearance.unwrap_or_default(),
+                self.theme_follow.as_deref().unwrap_or_default(),
+            )
+        })
+    }
+
+    /// The day and night themes every character shares, or None while
+    /// the theme is not shared. The file leaves out an empty one.
+    fn shared_day_night(&self) -> Option<(String, String)> {
+        self.theme.as_ref().map(|_| {
+            (
+                self.day_theme.clone().unwrap_or_default(),
+                self.night_theme.clone().unwrap_or_default(),
+            )
+        })
     }
 
     /// The color vision every character shares, or None while the theme
@@ -302,6 +355,9 @@ impl GlobalConfig {
             self.follow_system_appearance = None;
             self.light_theme = None;
             self.dark_theme = None;
+            self.theme_follow = None;
+            self.day_theme = None;
+            self.night_theme = None;
             self.color_vision = None;
             self.custom_themes = None;
         }
@@ -391,6 +447,9 @@ impl GlobalConfig {
                 || ui.follow_system_appearance != defaults.follow_system_appearance
                 || ui.light_theme != defaults.light_theme
                 || ui.dark_theme != defaults.dark_theme
+                || ui.theme_follow != defaults.theme_follow
+                || ui.day_theme != defaults.day_theme
+                || ui.night_theme != defaults.night_theme
                 || ui.color_vision != defaults.color_vision;
             if let Some(shared) = &self.custom_themes {
                 let own = std::mem::take(&mut ui.custom_themes);
@@ -412,6 +471,13 @@ impl GlobalConfig {
                 }
                 if let Some(v) = &self.dark_theme {
                     changed |= replace_value(&mut ui.dark_theme, v.clone());
+                }
+                if let Some(v) = self.shared_theme_follow() {
+                    changed |= replace_value(&mut ui.theme_follow, v);
+                }
+                if let Some((day, night)) = self.shared_day_night() {
+                    changed |= replace_value(&mut ui.day_theme, day);
+                    changed |= replace_value(&mut ui.night_theme, night);
                 }
                 if let Some(v) = self.shared_color_vision() {
                     changed |= replace_value(&mut ui.color_vision, v);
@@ -561,6 +627,9 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
         config.ui.follow_system_appearance = defaults.follow_system_appearance;
         config.ui.light_theme = defaults.light_theme;
         config.ui.dark_theme = defaults.dark_theme;
+        config.ui.theme_follow = defaults.theme_follow;
+        config.ui.day_theme = defaults.day_theme;
+        config.ui.night_theme = defaults.night_theme;
         config.ui.color_vision = defaults.color_vision;
         config.ui.custom_themes = defaults.custom_themes;
     }
@@ -765,6 +834,44 @@ mod tests {
     }
 
     #[test]
+    fn a_shared_theme_that_follows_the_game_reads_as_off_in_0_8_1() {
+        let mut profile = styled_profile();
+        crate::profile::ui::set_theme_follow(&mut profile.ui, "game".into());
+        let scope = ScopeConfig::default();
+        let global = GlobalConfig::from_profile(&profile, &scope);
+        let text = toml::to_string_pretty(&global).unwrap();
+        assert!(text.contains("follow_system_appearance = false"), "{text}");
+        assert!(text.contains("theme_follow = \"game\""), "{text}");
+        let (_, restored) = split_and_reload(&profile, &scope);
+        assert_eq!(restored.ui.theme_follow, "game");
+        assert!(!restored.ui.follow_system_appearance);
+
+        // A global.toml from 0.8.1 has no mode, and an older Vosh that
+        // turns the switch on wins over game.
+        for (text, mode) in [
+            (
+                "theme = \"nord\"\nfollow_system_appearance = true\n",
+                "system",
+            ),
+            (
+                "theme = \"nord\"\nfollow_system_appearance = false\n",
+                "off",
+            ),
+            (
+                "theme = \"nord\"\nfollow_system_appearance = true\ntheme_follow = \"game\"\n",
+                "system",
+            ),
+        ] {
+            let mut restored = Profile::default();
+            toml::from_str::<GlobalConfig>(text)
+                .unwrap()
+                .apply_to(&mut restored);
+            assert_eq!(restored.ui.theme_follow, mode, "{text}");
+            assert_eq!(restored.ui.follow_system_appearance, mode == "system");
+        }
+    }
+
+    #[test]
     fn theme_scope_carries_the_theme_pair_and_custom_themes() {
         let profile = styled_profile();
         let (per_profile, restored) = split_and_reload(&profile, &ScopeConfig::default());
@@ -773,12 +880,18 @@ mod tests {
         assert!(!per_profile.ui.follow_system_appearance);
         assert_eq!(per_profile.ui.light_theme, defaults.light_theme);
         assert_eq!(per_profile.ui.dark_theme, defaults.dark_theme);
+        assert_eq!(per_profile.ui.theme_follow, defaults.theme_follow);
+        assert_eq!(per_profile.ui.day_theme, defaults.day_theme);
+        assert_eq!(per_profile.ui.night_theme, defaults.night_theme);
         let leftover = &per_profile.ui.custom_themes;
         assert!(leftover.is_empty(), "{leftover:?}");
 
         assert!(restored.ui.follow_system_appearance);
         assert_eq!(restored.ui.light_theme, "classic-vivid");
         assert_eq!(restored.ui.dark_theme, "night-ink");
+        assert_eq!(restored.ui.theme_follow, "system");
+        assert_eq!(restored.ui.day_theme, "classic-vivid");
+        assert_eq!(restored.ui.night_theme, "night-ink");
         assert_eq!(restored.ui.theme, "night-ink");
         assert_eq!(restored.ui.custom_themes.len(), 1);
         assert_eq!(restored.ui.custom_themes[0].id, "night-ink");
@@ -812,6 +925,9 @@ mod tests {
             "follow_system_appearance",
             "light_theme",
             "dark_theme",
+            "theme_follow",
+            "day_theme",
+            "night_theme",
             "custom_themes",
             "terminal_line_height",
         ] {
@@ -1341,6 +1457,9 @@ mod scope_change_tests {
         assert!(healer.follow_system_appearance);
         assert_eq!(healer.light_theme, "classic-vivid");
         assert_eq!(healer.dark_theme, "night-ink");
+        assert_eq!(healer.theme_follow, "system");
+        assert_eq!(healer.day_theme, "classic-vivid");
+        assert_eq!(healer.night_theme, "night-ink");
         assert_eq!(theme_ids(&healer.custom_themes), ["night-ink"]);
         assert_eq!(healer.font_family, "Iosevka");
         assert_eq!(healer.font_size, 16);

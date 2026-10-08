@@ -11,6 +11,7 @@ use vosh_automation::alias::AliasStore;
 use vosh_automation::trigger::TriggerStore;
 use vosh_automation::vars::VariableStore;
 
+use crate::loadouts::preset_edits::PresetEdits;
 use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist};
 use crate::profile::ui::UiConfig;
 use crate::tick::TickSettings;
@@ -90,6 +91,10 @@ pub(crate) struct Profile {
     /// mode catalog.toml keeps them, beside the list of presets that are
     /// on.
     pub(crate) alerts: BTreeMap<String, AlertParts>,
+    /// Your edits to the presets, which the file saves under
+    /// `[preset_edits]`. In loadout mode catalog.toml keeps them, beside
+    /// the list of presets that are on, as it keeps `alerts`.
+    pub(crate) preset_edits: PresetEdits,
     /// Vosh dials again after the link drops while you play, see
     /// [`crate::session::reconnect`]. On at first.
     pub(crate) reconnect: OnSwitch,

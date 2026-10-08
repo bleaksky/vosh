@@ -13,9 +13,11 @@
     "general:advanced#gpu",
     "appearance:theme",
     "appearance:theme#import-theme",
-    "appearance:theme#follow-system",
+    "appearance:theme#switch-themes",
     "appearance:theme#light-theme",
     "appearance:theme#dark-theme",
+    "appearance:theme#day-theme",
+    "appearance:theme#night-theme",
     "appearance:text#font",
     "appearance:text#size",
     "appearance:text#line-height",
@@ -70,6 +72,18 @@
     "automation:timers",
     "automation:timers#tick",
     "automation:presets",
+    "automation:presets#presets:healing_basics",
+    "automation:presets#presets:defensive_combat",
+    "automation:presets#presets:disarm_buff_fade",
+    "automation:presets#presets:terror_events",
+    "automation:presets#presets:combat_outgoing",
+    "automation:presets#presets:combat_incoming",
+    "automation:presets#presets:loot_progression",
+    "automation:presets#presets:potion_labels",
+    "automation:presets#presets:herb_labels",
+    "automation:presets#presets:sent_tells",
+    "automation:presets#presets:room_and_time",
+    "automation:presets#presets:numpad_movement",
     "automation:loadouts",
     "automation#import",
     "automation#json",
@@ -146,7 +160,8 @@
       "input:advanced#prompt-show": "input:prompt#prompt-show",
       "layout:vitals#values": "layout:customize-vitals#values",
       "layout:vitals#meter": "layout:customize-vitals#meter",
-      "layout:vitals#warn-low": "layout:customize-vitals#warn-low"
+      "layout:vitals#warn-low": "layout:customize-vitals#warn-low",
+      "appearance:theme#follow-system": "appearance:theme#switch-themes"
     },
     "from other pages and windows": {
       "characters#tracked": "characters#tracked",
@@ -155,6 +170,13 @@
       "characters:Ilsabet": "characters:Ilsabet",
       "general:logs": "general:logs",
       "layout:affects#affects-running-out": "layout:affects#affects-running-out"
+    },
+    "presets": {
+      "automation:presets#presets:healing_basics": "automation:presets#presets:healing_basics"
+    },
+    "preset fixes": {
+      "automation:triggers#triggers:disarm.secondary": "automation:triggers#triggers:disarm.secondary",
+      "automation:presets#presets:disarm_buff_fade": "automation:presets#presets:disarm_buff_fade"
     }
   },
   "help": [
@@ -195,18 +217,20 @@
       "color-vision",
       "custom-theme",
       "dark-theme",
+      "day-theme",
       "fit-game-colors",
-      "follow-system",
       "font",
       "font-stack",
       "import-theme",
       "light-theme",
       "line-height",
+      "night-theme",
       "panel-font",
       "panel-size",
       "panel-text",
       "readable-highlights",
       "size",
+      "switch-themes",
       "text",
       "theme",
       "theme-colors"
@@ -258,13 +282,28 @@
     "automation": [
       "import",
       "json",
-      "tick"
+      "presets:alert_tells",
+      "presets:combat_incoming",
+      "presets:combat_outgoing",
+      "presets:defensive_combat",
+      "presets:disarm_buff_fade",
+      "presets:healing_basics",
+      "presets:herb_labels",
+      "presets:loot_progression",
+      "presets:numpad_movement",
+      "presets:potion_labels",
+      "presets:room_and_time",
+      "presets:sent_tells",
+      "presets:terror_events",
+      "tick",
+      "triggers:disarm.secondary"
     ],
     "scripts": [
       "console",
       "plugins"
     ],
     "characters": [
+      "add-affect",
       "import-profile",
       "layout",
       "login",

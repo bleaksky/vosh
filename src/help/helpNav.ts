@@ -22,6 +22,10 @@ export function topicPieces(topic: HelpTopic): string[] {
       for (const piece of codePieces(block.text, block.lang)) pieces.push(piece.text);
       continue;
     }
+    if (block.kind === 'action') {
+      pieces.push(block.label);
+      continue;
+    }
     const lines =
       block.kind === 'paragraph'
         ? [block.text]

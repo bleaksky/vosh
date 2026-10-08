@@ -116,7 +116,9 @@ describe('a backticked span in help', () => {
             ? [block.text]
             : block.kind === 'list'
               ? block.items
-              : [...block.head, ...block.rows.flat()];
+              : block.kind === 'table'
+                ? [...block.head, ...block.rows.flat()]
+                : [block.label];
         for (const line of lines) {
           expect(line.split('`').length % 2, `${topic.number} ${line}`).toBe(1);
           for (const piece of inlinePieces(line)) {

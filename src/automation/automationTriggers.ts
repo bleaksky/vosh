@@ -9,6 +9,7 @@ import { normalizeAlert } from './alertParts';
 import { saveDraftOnto, type Draft } from './automationDraft';
 import { parseJsonList } from './automationRecords';
 import { colorize, decolorize } from './colorTokens';
+import { PRESETS } from './presets';
 import {
   exportTriggers,
   importTriggers,
@@ -387,8 +388,17 @@ export function blankTrigger(): TriggerRecord {
 
 /** Why the triggers cannot save yet, or null. Every trigger needs a
  *  name, names must differ (the store keys by name, so a second one
- *  would replace the first), and a trigger needs a pattern. */
+ *  would replace the first), and a trigger needs a pattern. A trigger of
+ *  yours never takes the name of a trigger in the preset library, its
+ *  preset on or off, since the next launch would put the preset's in
+ *  its place (Presets board 2). */
 export function validateTriggers(list: readonly TriggerRecord[]): string | null {
+  for (const t of list) {
+    if (t.preset) continue;
+    const name = t.name.trim();
+    const preset = PRESETS.find((p) => p.triggers.some((pt) => pt.name === name));
+    if (preset) return `${preset.name} uses the name ${name}. Give your trigger its own name.`;
+  }
   const seen = new Set<string>();
   for (const t of list) {
     const name = t.name.trim();
@@ -430,6 +440,24 @@ export async function loadTriggers(
   return parseJsonList(await api.exportTriggers(), normalizeTrigger) ?? [];
 }
 
+// The store's list as it wrote it, each field kept, so a change to one
+// field writes every other back untouched. Throws when it does not read.
+async function storedList(api: TriggerStoreApi): Promise<unknown[]> {
+  let list: unknown;
+  try {
+    list = JSON.parse(await api.exportTriggers());
+  } catch {
+    list = null;
+  }
+  if (!Array.isArray(list)) {
+    throw new Error('Vosh could not read your saved triggers, so it changed nothing.');
+  }
+  return list;
+}
+
+type Stored = { name?: unknown; group?: string | null };
+const isStored = (t: unknown): t is Stored => t !== null && typeof t === 'object';
+
 /** Set the trigger named `name` to match Prompts, as Match does in the
  *  Triggers editor. The prompt card offers it for a Line trigger that
  *  matched your prompt as a line (D6), which no longer sees it once the
@@ -440,22 +468,31 @@ export async function moveTriggerToPrompts(
   name: string,
   api: TriggerStoreApi = triggerStore(),
 ): Promise<void> {
-  let list: unknown;
-  try {
-    list = JSON.parse(await api.exportTriggers());
-  } catch {
-    list = null;
-  }
-  if (!Array.isArray(list)) {
-    throw new Error('Vosh could not read your saved triggers, so it changed nothing.');
-  }
-  const at = list.findIndex(
-    (t: unknown) => t !== null && typeof t === 'object' && (t as { name?: unknown }).name === name,
-  );
+  const list = await storedList(api);
+  const at = list.findIndex((t) => isStored(t) && t.name === name);
   if (at < 0) throw new Error(`Vosh no longer has a trigger named ${quoted(name)}.`);
   const next = [...list];
-  next[at] = { ...(list[at] as object), target: 'prompt' };
+  next[at] = { ...(list[at] as Stored), target: 'prompt' };
   await api.importTriggers(JSON.stringify(next, null, 2));
+}
+
+/** Put each stored trigger `groups` names in its group there, blank for
+ *  none, every other field as the store wrote it. A name the store does
+ *  not hold is passed over, and with none to change it writes nothing. */
+export async function setTriggerGroups(
+  groups: ReadonlyMap<string, string>,
+  api: TriggerStoreApi = triggerStore(),
+): Promise<void> {
+  const list = await storedList(api);
+  let changed = false;
+  const next = list.map((t) => {
+    const group = isStored(t) ? groups.get(String(t.name)) : undefined;
+    if (!isStored(t) || group === undefined) return t;
+    const moved = withGroup(t, group);
+    changed ||= moved.group !== t.group;
+    return moved;
+  });
+  if (changed) await api.importTriggers(JSON.stringify(next, null, 2));
 }
 
 /** Save the Triggers draft. The store takes a whole list, so Save reads

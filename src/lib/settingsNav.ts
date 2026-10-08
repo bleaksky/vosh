@@ -107,13 +107,19 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
 // where they are now. Your prompt left Input, Advanced for its own
 // section (P12), and the switch is the section's own row. Values, Meter
 // and the warning left Layout, Vitals for Customize vitals (Vitals
-// Styles Q3).
+// Styles Q3). Switch themes took the place of Follow system appearance
+// (Alerts Q16).
 const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
   'input:advanced#prompt': { group: 'input', section: 'prompt' },
   'input:advanced#prompt-show': { group: 'input', section: 'prompt', anchor: 'prompt-show' },
   'layout:vitals#values': { group: 'layout', section: 'customize-vitals', anchor: 'values' },
   'layout:vitals#meter': { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
   'layout:vitals#warn-low': { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
+  'appearance:theme#follow-system': {
+    group: 'appearance',
+    section: 'theme',
+    anchor: 'switch-themes',
+  },
 };
 
 /** Resolve a deep link string. Legacy tab ids and rows that moved map to

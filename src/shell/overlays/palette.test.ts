@@ -107,6 +107,22 @@ describe('paletteSections', () => {
     expect(ids(['map', 'imm'])).toEqual(['pane-map', 'pane-imm']);
   });
 
+  it('finds Get started in View once you type, beside Open help', () => {
+    const openGetStarted = vi.fn();
+    const entries = buildPaletteEntries(deps({ openGetStarted }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('get-started');
+    const view = paletteSections(entries, 'get started', []).find((s) => s.label === 'View');
+    expect(view?.rows.map((r) => r.id)).toContain('get-started');
+    for (const word of ['walkthrough', 'welcome', 'suggestions', 'presets']) {
+      expect(flat(paletteSections(entries, word, [])).map((r) => r.id)).toContain('get-started');
+    }
+    const ids = entries.map((r) => r.id);
+    expect(ids.indexOf('get-started')).toBe(ids.indexOf('help') + 1);
+    void entries.find((r) => r.id === 'get-started')?.run();
+    expect(openGetStarted).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'get-started')).toBe(false);
+  });
+
   it('picks where your prompt shows only while the profile reads one', async () => {
     const none = buildPaletteEntries(deps());
     expect(none.some((r) => r.id.startsWith('prompt-show-'))).toBe(false);
@@ -641,6 +657,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'obsidian-ember',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     vi.unstubAllGlobals();
   });
@@ -652,6 +671,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: false,
       light_theme: 'rubric',
       dark_theme: 'nord',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('gruvbox');
     expect(getCurrentThemeId()).toBe('gruvbox');
@@ -660,6 +682,8 @@ describe('chooseTheme', () => {
       theme: 'gruvbox',
       lightTheme: 'rubric',
       darkTheme: 'nord',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 
@@ -670,6 +694,9 @@ describe('chooseTheme', () => {
       follow_system_appearance: true,
       light_theme: 'rubric',
       dark_theme: 'tokyo-night',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
     await chooseTheme('rose-pine');
     expect(getCurrentThemeId()).toBe('rose-pine');
@@ -694,6 +721,8 @@ describe('chooseTheme', () => {
       theme: 'nord',
       lightTheme: 'paper',
       darkTheme: 'rose-pine',
+      dayTheme: '',
+      nightTheme: '',
     });
   });
 });

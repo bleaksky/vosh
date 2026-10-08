@@ -26,6 +26,7 @@ const PREVIEW: ImportPreview = {
   plugins: [],
   world: { host: WORLD, port: 1848, name: 'The Forsaken Lands' },
   characters: [{ name: 'Orla', claimed_by: 'Healer' }],
+  presets_stay: false,
 };
 
 const state = vi.hoisted(() => ({
@@ -262,6 +263,19 @@ describe('Import under Characters', () => {
     expect(done.headings[0]).toBe('Healer 2');
     expect(done.status).toBe(
       'Vosh added Healer 2 from Healer profile.toml. Orla stays with Healer, so Healer 2 starts with its login off.',
+    );
+  });
+});
+
+describe('Show me on Track the affects you keep up', () => {
+  it('points at Add affect, the anchor its link names, with the line its ring says', async () => {
+    let add: FakeElement | undefined;
+    await run((root) => {
+      add = findAll(root, (el) => el.nodeName === 'BUTTON' && el.textContent === 'Add affect…')[0];
+    });
+    expect(add?.getAttribute('data-st-anchor')).toBe('add-affect');
+    expect(add?.getAttribute('data-st-coach')).toBe(
+      'Pick Add affect… and name a spell you keep up.',
     );
   });
 });

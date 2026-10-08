@@ -31,6 +31,7 @@ export const LUA_PANES = 'session://lua-panes';
 export const SNOOP = 'session://snoop';
 export const SNOOP_OUTPUT = 'session://snoop-output';
 export const VITALS_TEXT = 'session://vitals-text';
+export const WALK = 'session://walk';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';
@@ -39,6 +40,8 @@ export const MACRO_GROUPS_CHANGED = 'vosh://macro-groups-changed';
 export const GROUPS_CHANGED = 'vosh://groups-changed';
 export const MACROS_CHANGED = 'vosh://macros-changed';
 export const TIMERS_CHANGED = 'vosh://timers-changed';
+export const PRESET_EDITS_CHANGED = 'vosh://preset-edits-changed';
+export const PRESETS_CHANGED = 'vosh://presets-changed';
 
 export const PLUGINS_CHANGED = 'vosh://plugins-changed';
 
@@ -62,8 +65,10 @@ export const CHIP_STYLE_CHANGED = 'vosh://chip-style-changed';
 export const AFFECTS_DISPLAY_CHANGED = 'vosh://affects-display-changed';
 export const CHAT_COLORS_CHANGED = 'vosh://chat-colors-changed';
 export const TICK_CONFIG_CHANGED = 'vosh://tick-config-changed';
+export const DAYLIGHT_CHANGED = 'vosh://daylight-changed';
 
 export const HELP_OPEN = 'vosh://help-open';
+export const GET_STARTED_OPEN = 'vosh://get-started-open';
 export const FLUSH_PENDING_WRITES = 'vosh://flush-pending-writes';
 export const APP_MENU = 'vosh://app-menu';
 export const SETTINGS_FIND = 'vosh://settings-find';
@@ -82,7 +87,7 @@ export const TERMINAL_CURSOR = 'vosh://terminal-cursor';
 // order broadcastUiConfigChanges in uiConfigBroadcast.ts sends them. The two
 // theme events also go out on their own, as on a palette pick.
 
-/** Carries the four theme fields after a save or a palette pick, so a
+/** Carries the seven theme fields after a save or a palette pick, so a
  *  window that keeps its own copy (Settings, the palette) stays current. */
 export const THEME_PREFS_CHANGED = 'vosh://theme-prefs-changed';
 export const THEME_CHANGED = 'vosh://theme-changed';

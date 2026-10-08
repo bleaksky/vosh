@@ -344,6 +344,9 @@ export function TerminalMenu({
                     if (item.submenu) openSub(false);
                     else if (i !== active || sub) highlight(i);
                   }}
+                  // A row that takes focus, as Show me's ring gives it,
+                  // is the row the keys act on.
+                  onFocus={() => setActive(i)}
                   onClick={() => pick(item)}
                 >
                   <span className="ov-menu-label">{item.label}</span>

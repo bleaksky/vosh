@@ -63,6 +63,11 @@ interface DraftEditorProps<T> {
   pinned?: PinnedPart | null;
   /** Select the pinned block each time this goes up. */
   pinnedSeq?: number;
+  /** Select the item with this key, by keyOf, and bring its row into
+   *  view each time `seq` goes up, as a deep link asks. */
+  selectKey?: { key: string; seq: number } | null;
+  /** Set the filter to `text` each time `seq` goes up, as a link asks. */
+  filterTo?: { text: string; seq: number } | null;
   /** More on the left of the save bar, given the draft and its setter. */
   barExtra?: (draft: Draft<T>, setDraft: (next: Draft<T>) => void) => ReactNode;
   /** The list rows that carry the warn ring while they are on, by name,
@@ -90,6 +95,8 @@ export function DraftEditor<T>({
   onError,
   pinned = null,
   pinnedSeq = 0,
+  selectKey = null,
+  filterTo = null,
   barExtra,
   warnNotes,
 }: DraftEditorProps<T>) {
@@ -258,6 +265,29 @@ export function DraftEditor<T>({
     setSelected(pinnedUid);
   }, [pinnedSeq, pinnedUid]);
 
+  // Select the item a link names once per request, as soon as the list
+  // has loaded.
+  const selectSeqDone = useRef(0);
+  useEffect(() => {
+    if (!selectKey || !draft || selectSeqDone.current === selectKey.seq) return;
+    selectSeqDone.current = selectKey.seq;
+    const item = draft.items.find((i) => spec.keyOf(i.value) === selectKey.key);
+    if (!item) return;
+    setFilter('');
+    setSelected(item.uid);
+    reveal(item.uid);
+    // reveal reads the draft through its ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectKey, draft, spec]);
+
+  // Set the filter a link names once per request.
+  const filterSeqDone = useRef(0);
+  useEffect(() => {
+    if (!filterTo || filterSeqDone.current === filterTo.seq) return;
+    filterSeqDone.current = filterTo.seq;
+    setFilter(filterTo.text);
+  }, [filterTo]);
+
   const count = draft ? draftChangeCount(draft) : 0;
 
   // The list went clean while it was behind the store, after Discard or
@@ -376,8 +406,8 @@ export function DraftEditor<T>({
   const applyJson = (text: string): boolean => {
     jsonPending.current = null;
     window.clearTimeout(jsonTimer.current);
-    const values = spec.json?.fromText(text) ?? null;
     const d = draftRef.current;
+    const values = d ? (spec.json?.fromText(text, draftValues(d)) ?? null) : null;
     if (!values || !d) {
       setJsonBad(true);
       return false;

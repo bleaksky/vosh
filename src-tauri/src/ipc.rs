@@ -5,10 +5,12 @@ pub(crate) mod affects;
 pub(crate) mod alerts;
 pub(crate) mod automation;
 pub(crate) mod characters;
+pub(crate) mod get_started;
 pub(crate) mod loadouts;
 pub(crate) mod logs;
 pub(crate) mod native_surface;
 pub(crate) mod panes;
+pub(crate) mod preset_edits;
 pub(crate) mod profiles;
 pub(crate) mod prompt;
 pub(crate) mod scripts;
@@ -70,6 +72,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_connect,
         session::session_send_input,
         session::session_send_masked,
+        session::session_walk_route,
         session::session_walk_stop,
         session::session_set_window_size,
         session::session_disconnect,
@@ -85,6 +88,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::aliases_import,
         automation::presets_install,
         automation::presets_remove,
+        automation::presets_enabled_set,
         logs::logs_list_sessions,
         logs::logs_search_page,
         logs::logs_export,
@@ -117,10 +121,15 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         alerts::alerts_permission,
         alerts::alerts_ask_permission,
         alerts::alerts_open_settings,
+        preset_edits::preset_edits_get,
+        preset_edits::preset_edits_set,
         profiles::profile_get_scope,
         profiles::profile_set_scope,
         windows::open_settings_window,
         windows::open_help_window,
+        get_started::get_started_get,
+        get_started::get_started_set,
+        get_started::open_get_started,
         windows::snoop_window_open,
         windows::window_backdrop_set,
         terminal::highlight_ground_set,

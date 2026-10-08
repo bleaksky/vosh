@@ -12,6 +12,9 @@ export interface DisclosureProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   expanded: boolean;
   /** Search and deep link anchor, like Row's. */
   anchor?: string;
+  /** More under the description, like the count of edits a preset
+   *  trigger's Advanced holds. */
+  note?: ReactNode;
 }
 
 /** A row sized button that opens more settings, like the boards'
@@ -23,6 +26,7 @@ export function Disclosure({
   description,
   expanded,
   anchor,
+  note,
   className,
   ...rest
 }: DisclosureProps) {
@@ -38,6 +42,7 @@ export function Disclosure({
       <span className="st-row-text">
         <span className="st-row-label">{label}</span>
         {description !== undefined && <span className="st-row-desc">{description}</span>}
+        {note}
       </span>
       <ChevronRightIcon className="st-disclosure-chevron" />
     </button>

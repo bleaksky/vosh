@@ -414,6 +414,60 @@ mod tests {
         assert_eq!(r.triggers[0].actions.len(), 1);
     }
 
+    /// A trigger named for a preset trigger joins the clash list and
+    /// never replaces the preset's, its preset on or off (Presets board
+    /// 5).
+    #[test]
+    fn a_mudlet_trigger_named_for_a_preset_trigger_clashes() {
+        use crate::import::vosh::{Clash, ClashKind};
+        use crate::import::{merge_triggers, TriggersMerged};
+        use vosh_automation::trigger::{TriggerAction, TriggerStore};
+        let xml = r#"<MudletPackage>
+            <TriggerPackage>
+                <Trigger isActive="yes">
+                    <name>disarm.secondary</name>
+                    <script>send("get 1.;wield 1.")</script>
+                    <regexCodeList>
+                        <string>disarms you and sends your weapon flying</string>
+                    </regexCodeList>
+                </Trigger>
+                <Trigger isActive="yes">
+                    <name>combat</name>
+                    <script>send("kick")</script>
+                    <regexCodeList>
+                        <string>^You hit</string>
+                    </regexCodeList>
+                </Trigger>
+            </TriggerPackage>
+        </MudletPackage>"#;
+        let r = parse_mudlet(xml);
+        let clash = TriggersMerged {
+            rejected: Vec::new(),
+            clashes: vec![Clash {
+                kind: ClashKind::Trigger,
+                name: "disarm.secondary".into(),
+            }],
+        };
+        // Its preset off, so only the library knows the name.
+        let mut store = TriggerStore::new();
+        let library = ["disarm.secondary".to_string()];
+        assert_eq!(merge_triggers(&mut store, &r.triggers, &library), clash);
+        assert!(store.get("disarm.secondary").is_none());
+        assert!(store.get("combat").is_some());
+
+        // Its preset on, so the store holds the preset's, which stays.
+        let mut store = TriggerStore::new();
+        let mut preset = vosh_automation::trigger::Trigger::new(
+            "disarm.secondary",
+            "disarms you and sends your weapon flying",
+            TriggerAction::Gag,
+        );
+        preset.preset = Some("disarm_buff_fade".into());
+        store.set(preset.clone()).unwrap();
+        assert_eq!(merge_triggers(&mut store, &r.triggers, &[]), clash);
+        assert_eq!(store.get("disarm.secondary"), Some(&preset));
+    }
+
     #[test]
     fn mudlet_key_to_macro() {
         // Qt::Key_F1 = 0x01000030, no modifier

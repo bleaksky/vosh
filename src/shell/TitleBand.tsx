@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import { SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
+import { ADD_PANE_MENU_EVENT, SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
 import { paneKey, paneRef, type PaneRef, type PaneSplit } from '../panel/paneLayout';
 import {
@@ -109,8 +109,13 @@ export function TitleBand({
       setSession((s) => ({ request, key: s.key + 1 }));
       setMenu('session');
     };
+    const onAddPane = () => setMenu('add');
     window.addEventListener(SESSION_MENU_EVENT, onRequest);
-    return () => window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+    window.addEventListener(ADD_PANE_MENU_EVENT, onAddPane);
+    return () => {
+      window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+      window.removeEventListener(ADD_PANE_MENU_EVENT, onAddPane);
+    };
   }, []);
   // Hiding the panel takes Add a pane with it, so its menu closes too
   // instead of coming back the next time the panel shows.

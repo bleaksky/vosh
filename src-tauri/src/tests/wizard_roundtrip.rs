@@ -712,6 +712,7 @@ fn kind_word(kind: ItemKind) -> &'static str {
         ItemKind::Alias => "alias",
         ItemKind::Trigger => "trigger",
         ItemKind::Macro => "macro",
+        ItemKind::Preset => "preset",
     }
 }
 
@@ -829,6 +830,10 @@ async fn round_trip(seed: u64) -> Result<(), String> {
                 Err(format!("the wizard asks about trigger {}", item.name))
             }
             ItemPayload::Macro { item } => Ok(macro_row(item)),
+            // The characters here edit no preset.
+            ItemPayload::Preset { .. } => {
+                Err(format!("the wizard asks about preset {}", conflict.name))
+            }
         };
         // The one version switched on anywhere, when exactly one is, is
         // the one the wizard keeps unless you pick another.

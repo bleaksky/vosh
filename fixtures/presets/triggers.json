@@ -1,0 +1,1588 @@
+[
+  {
+    "id": "healing_basics",
+    "triggers": [
+      {
+        "name": "cure.feel_lot_better",
+        "patterns": [
+          {
+            "pattern": "You feel a lot better!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.feel_better",
+        "patterns": [
+          {
+            "pattern": "You feel better\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.feel_much_better",
+        "patterns": [
+          {
+            "pattern": "You feel much better!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.righteous",
+        "patterns": [
+          {
+            "pattern": "You feel righteous\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.less_sick",
+        "patterns": [
+          {
+            "pattern": "You feel less sick\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.no_longer_poisoned",
+        "patterns": [
+          {
+            "pattern": "You are no longer poisoned\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      },
+      {
+        "name": "cure.less_tired",
+        "patterns": [
+          {
+            "pattern": "You feel less tired\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_green"
+            }
+          }
+        ],
+        "preset": "healing_basics"
+      }
+    ]
+  },
+  {
+    "id": "defensive_combat",
+    "triggers": [
+      {
+        "name": "def.dodge_or_parry",
+        "patterns": [
+          {
+            "pattern": "^You (?:dodge|parry) .+\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.redirect_momentum",
+        "patterns": [
+          {
+            "pattern": "^You .+ and redirect the momentum!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.shadows_evade",
+        "patterns": [
+          {
+            "pattern": "^You blend into the shadows, evading .+!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.parry_hand",
+        "patterns": [
+          {
+            "pattern": "^You parry .+ attack with your (?:first|second) hand\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.block_shield",
+        "patterns": [
+          {
+            "pattern": "^You block .+ with your shield\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.block_weapon",
+        "patterns": [
+          {
+            "pattern": "^You block .+ attack with your weapon\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.block_attempt",
+        "patterns": [
+          {
+            "pattern": "^You block .+ attack and attempt to strike at the brief opening\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.dual_parry",
+        "patterns": [
+          {
+            "pattern": "^You dual parry .+ attack\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.reverse",
+        "patterns": [
+          {
+            "pattern": "^You reverse .+ attack.*\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.stagger",
+        "patterns": [
+          {
+            "pattern": "^You stagger wildly out of .+ attack\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.swing_through",
+        "patterns": [
+          {
+            "pattern": "^You swing right through .+ blurred image\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.misses",
+        "patterns": [
+          {
+            "pattern": "^.+ swings wildly and misses you by a mile\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.shadows_envelop",
+        "patterns": [
+          {
+            "pattern": "^Shadows envelop .+\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;253m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.terra_shield",
+        "patterns": [
+          {
+            "pattern": "^Your Terra shield deflects the attack\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.faith",
+        "patterns": [
+          {
+            "pattern": "^Your faith holding fast, you stop the blow with .+ power\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      },
+      {
+        "name": "def.giant_blade",
+        "patterns": [
+          {
+            "pattern": "^The giant blade deflects .+ attack\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;240m$0\u001b[0m"
+          }
+        ],
+        "preset": "defensive_combat"
+      }
+    ]
+  },
+  {
+    "id": "disarm_buff_fade",
+    "triggers": [
+      {
+        "name": "disarm.secondary",
+        "patterns": [
+          {
+            "pattern": "^(.+) disarms you and sends your secondary weapon flying!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 disarms you and sends your SECONDARY weapon flying!\u001b[0m"
+          },
+          {
+            "kind": "send",
+            "template": "get 1.;dual 1."
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "disarm.primary",
+        "patterns": [
+          {
+            "pattern": "^(.+) disarms you and sends your weapon flying!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 disarms you and sends your PRIMARY weapon flying!\u001b[0m"
+          },
+          {
+            "kind": "send",
+            "template": "get 1.;wield 1."
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "buff.protective_shield",
+        "patterns": [
+          {
+            "pattern": "^(.+) protective shield dissipates\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178m$1 protective shield dissipates.\u001b[0m"
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "buff.protective_aura",
+        "patterns": [
+          {
+            "pattern": "^The protective aura around your body fades\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe protective aura around your body fades.\u001b[0m"
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "buff.stoneskin",
+        "patterns": [
+          {
+            "pattern": "^The shards of metal protecting you fall to the ground\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe shards of metal protecting you fall to the ground.\u001b[0m"
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "buff.sanctuary",
+        "patterns": [
+          {
+            "pattern": "^The protective aura around (.+) fades\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178mThe protective aura around $1 fades.\u001b[0m"
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      },
+      {
+        "name": "buff.spell_turning",
+        "patterns": [
+          {
+            "pattern": "^Your shield of spell turning collapses\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[1;31m##\u001b[0m \u001b[38;5;178mYour shield of spell turning collapses.\u001b[0m"
+          }
+        ],
+        "preset": "disarm_buff_fade"
+      }
+    ]
+  },
+  {
+    "id": "terror_events",
+    "triggers": [
+      {
+        "name": "terror.drop",
+        "patterns": [
+          {
+            "pattern": "^Filled with terror, your weapon slips through your slippery fingers\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_red",
+              "bold": true
+            }
+          },
+          {
+            "kind": "send",
+            "template": "get 1.;wield 1."
+          }
+        ],
+        "preset": "terror_events"
+      }
+    ]
+  },
+  {
+    "id": "combat_outgoing",
+    "triggers": [
+      {
+        "name": "combat.outgoing",
+        "patterns": [
+          {
+            "pattern": "^(You(?:r .+?)? )((?:(?:[*=><]{3}|does|do) )?(?:scratches|scratch|grazes|graze|hits|hit|injures|injure|wounds|wound|mauls|maul|decimates|decimate|devastates|devastate|maims|maim|MUTILATES|MUTILATE|LACERATES|LACERATE|EVISCERATES|EVISCERATE|DISMEMBERS|DISMEMBER|MASSACRES|MASSACRE|MANGLES|MANGLE|DEMOLISHES|DEMOLISH|OBLITERATES|OBLITERATE|DISINTEGRATES|DISINTEGRATE|ANNIHILATES|ANNIHILATE|ERADICATES|ERADICATE|UNSPEAKABLE)(?: (?:[*=><]{3}|things))?)( .+[!.])$",
+            "enabled": true
+          }
+        ],
+        "priority": 7,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;253m$1\u001b[0m\u001b[38;5;214m$2\u001b[0m\u001b[38;5;253m$3\u001b[0m"
+          }
+        ],
+        "preset": "combat_outgoing"
+      },
+      {
+        "name": "combat.outgoing_miss",
+        "patterns": [
+          {
+            "pattern": "^(You(?:r .+?)? )(misses|miss)( .+[!.])$",
+            "enabled": true
+          }
+        ],
+        "priority": 7,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;253m$1\u001b[0m\u001b[38;5;152m$2\u001b[0m\u001b[38;5;253m$3\u001b[0m"
+          }
+        ],
+        "preset": "combat_outgoing"
+      }
+    ]
+  },
+  {
+    "id": "combat_incoming",
+    "triggers": [
+      {
+        "name": "combat.incoming",
+        "patterns": [
+          {
+            "pattern": "^(.+? )((?:(?:[*=><]{3}|does|do) )?(?:scratches|scratch|grazes|graze|hits|hit|injures|injure|wounds|wound|mauls|maul|decimates|decimate|devastates|devastate|maims|maim|MUTILATES|MUTILATE|LACERATES|LACERATE|EVISCERATES|EVISCERATE|DISMEMBERS|DISMEMBER|MASSACRES|MASSACRE|MANGLES|MANGLE|DEMOLISHES|DEMOLISH|OBLITERATES|OBLITERATE|DISINTEGRATES|DISINTEGRATE|ANNIHILATES|ANNIHILATE|ERADICATES|ERADICATE|UNSPEAKABLE)(?: (?:[*=><]{3}|things))?)( you[!.])$",
+            "enabled": true
+          }
+        ],
+        "priority": 7,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;210m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m"
+          }
+        ],
+        "preset": "combat_incoming"
+      },
+      {
+        "name": "combat.incoming_miss",
+        "patterns": [
+          {
+            "pattern": "^(.+? )(misses|miss)( you[!.])$",
+            "enabled": true
+          }
+        ],
+        "priority": 7,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;244m$1\u001b[0m\u001b[38;5;152m$2\u001b[0m\u001b[38;5;244m$3\u001b[0m"
+          }
+        ],
+        "preset": "combat_incoming"
+      }
+    ]
+  },
+  {
+    "id": "loot_progression",
+    "triggers": [
+      {
+        "name": "loot.gold",
+        "patterns": [
+          {
+            "pattern": "^You get (\\d+) gold coins from (.+)\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;249mYou get \u001b[38;5;230m$1 \u001b[38;5;249mgold coins from $2.\u001b[0m"
+          }
+        ],
+        "preset": "loot_progression"
+      },
+      {
+        "name": "loot.skill_up",
+        "patterns": [
+          {
+            "pattern": "^You have become better at (.+)!( \\[\\d+%\\])?$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;120mYou have become better at \u001b[38;5;230m$1\u001b[38;5;120m!$2\u001b[0m"
+          }
+        ],
+        "preset": "loot_progression"
+      },
+      {
+        "name": "loot.level",
+        "patterns": [
+          {
+            "pattern": "^You raise a level!!$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;120mYou raise a level!!\u001b[0m"
+          }
+        ],
+        "preset": "loot_progression"
+      },
+      {
+        "name": "loot.level_gain",
+        "patterns": [
+          {
+            "pattern": "^You gain:  (\\d+)/(\\d+) hit point(s?), (\\d+)/(\\d+) mana, (\\d+)/(\\d+) move, and (\\d+) practice(s?)\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;120mYou gain:  \u001b[38;5;230m$1\u001b[38;5;120m/$2 hit point$3, \u001b[38;5;230m$4\u001b[38;5;120m/$5 mana, \u001b[38;5;230m$6\u001b[38;5;120m/$7 move, and \u001b[38;5;230m$8\u001b[38;5;120m practice$9.\u001b[0m"
+          }
+        ],
+        "preset": "loot_progression"
+      },
+      {
+        "name": "loot.xp",
+        "patterns": [
+          {
+            "pattern": "^You receive (\\d+) experience points\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;5;248mYou receive \u001b[38;5;230m$1 \u001b[38;5;248mexperience points.\u001b[0m"
+          }
+        ],
+        "preset": "loot_progression"
+      }
+    ]
+  },
+  {
+    "id": "potion_labels",
+    "triggers": [
+      {
+        "name": "potion.blue",
+        "patterns": [
+          {
+            "pattern": "a bubbly blue potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly blue potion \u001b[38;5;248m(armor)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.brown",
+        "patterns": [
+          {
+            "pattern": "a bubbly brown potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly brown potion \u001b[38;5;248m(cure serious)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.clear",
+        "patterns": [
+          {
+            "pattern": "a bubbly clear potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly clear potion \u001b[38;5;248m(invisibility)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.crimson",
+        "patterns": [
+          {
+            "pattern": "a bubbly crimson potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly crimson potion \u001b[38;5;248m(frenzy)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.green",
+        "patterns": [
+          {
+            "pattern": "a bubbly green potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly green potion \u001b[38;5;248m(haste)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.grey",
+        "patterns": [
+          {
+            "pattern": "a bubbly grey potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly grey potion \u001b[38;5;248m(bless)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.orange",
+        "patterns": [
+          {
+            "pattern": "a bubbly orange potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly orange potion \u001b[38;5;248m(fireball)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.pink",
+        "patterns": [
+          {
+            "pattern": "a bubbly pink potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly pink potion \u001b[38;5;248m(cure light)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.red",
+        "patterns": [
+          {
+            "pattern": "a bubbly red potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly red potion \u001b[38;5;248m(cure blind)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      },
+      {
+        "name": "potion.white",
+        "patterns": [
+          {
+            "pattern": "a bubbly white potion",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a bubbly white potion \u001b[38;5;248m(sanctuary)\u001b[0m"
+          }
+        ],
+        "preset": "potion_labels"
+      }
+    ]
+  },
+  {
+    "id": "herb_labels",
+    "triggers": [
+      {
+        "name": "herb.purple_seaweed",
+        "patterns": [
+          {
+            "pattern": "a dried purple seaweed",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a dried purple seaweed \u001b[38;5;248m(fly)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.mandrake",
+        "patterns": [
+          {
+            "pattern": "a mandrake root",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a mandrake root \u001b[38;5;248m(stone skin)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.red_herb",
+        "patterns": [
+          {
+            "pattern": "a small red herb",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "a small red herb \u001b[38;5;248m(detect invis)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.magenta",
+        "patterns": [
+          {
+            "pattern": "some Magenta Leaves",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some Magenta Leaves \u001b[38;5;248m(frenzy)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.cinnamon",
+        "patterns": [
+          {
+            "pattern": "some cinnamon",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some cinnamon \u001b[38;5;248m(armor)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.damiana",
+        "patterns": [
+          {
+            "pattern": "some damiana leaves",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some damiana leaves \u001b[38;5;248m(cure serious)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.dark_black",
+        "patterns": [
+          {
+            "pattern": "some dark black leaves",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some dark black leaves \u001b[38;5;248m(sanctuary)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.catnip",
+        "patterns": [
+          {
+            "pattern": "some dried catnip",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some dried catnip \u001b[38;5;248m(frenzy)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.raspberry",
+        "patterns": [
+          {
+            "pattern": "some fermenting raspberry leaves",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some fermenting raspberry leaves \u001b[38;5;248m(shield)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.opium",
+        "patterns": [
+          {
+            "pattern": "some finely cut opium",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some finely cut opium \u001b[38;5;248m(frenzy)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.ginger",
+        "patterns": [
+          {
+            "pattern": "some ginger",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some ginger \u001b[38;5;248m(faerie fog)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.greyish",
+        "patterns": [
+          {
+            "pattern": "some greyish herbs",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some greyish herbs \u001b[38;5;248m(bless)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.mugwort",
+        "patterns": [
+          {
+            "pattern": "some mugwort",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some mugwort \u001b[38;5;248m(slow)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.mullein",
+        "patterns": [
+          {
+            "pattern": "some mullein",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some mullein \u001b[38;5;248m(pass door)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.coca",
+        "patterns": [
+          {
+            "pattern": "some purified coca",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some purified coca \u001b[38;5;248m(endorphin rush)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.rosemary",
+        "patterns": [
+          {
+            "pattern": "some rosemary",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some rosemary \u001b[38;5;248m(protection)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.sand_leaves",
+        "patterns": [
+          {
+            "pattern": "some sand colored leaves",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some sand colored leaves \u001b[38;5;248m(stone skin)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      },
+      {
+        "name": "herb.spearmint",
+        "patterns": [
+          {
+            "pattern": "some spearmint",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "some spearmint \u001b[38;5;248m(giant strength)\u001b[0m"
+          }
+        ],
+        "preset": "herb_labels"
+      }
+    ]
+  },
+  {
+    "id": "sent_tells",
+    "triggers": [
+      {
+        "name": "chat.sent_tells",
+        "patterns": [
+          {
+            "pattern": "^You (tell|project to) .+ '",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "route",
+            "pane": "tell"
+          }
+        ],
+        "preset": "sent_tells"
+      }
+    ]
+  },
+  {
+    "id": "room_and_time",
+    "triggers": [
+      {
+        "name": "room.exits",
+        "patterns": [
+          {
+            "pattern": "^\\[Exits:(?: none|(?: \\(?\\+?(?:north|east|south|west|up|down)\\)?)+)\\]$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "green",
+              "base": true
+            }
+          }
+        ],
+        "preset": "room_and_time"
+      },
+      {
+        "name": "room.contents",
+        "patterns": [
+          {
+            "pattern": "^.+$",
+            "enabled": true
+          }
+        ],
+        "priority": 4,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "yellow",
+              "base": true
+            }
+          }
+        ],
+        "target": "room",
+        "preset": "room_and_time"
+      },
+      {
+        "name": "room.target",
+        "patterns": [
+          {
+            "pattern": "^.+$",
+            "enabled": true
+          }
+        ],
+        "priority": 5,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "bright_red",
+              "base": true
+            }
+          }
+        ],
+        "target": "room_target",
+        "preset": "room_and_time"
+      },
+      {
+        "name": "time.of_day",
+        "patterns": [
+          {
+            "pattern": "^The night is about to end\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The day has begun\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The sun rises in the east\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The sun slowly disappears in the west\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The night has begun\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The darkness begets an unbearable chill\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The night air is suffocating\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^Darkness covers the landscape\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^Your bones ache as the chilly air cuts through you\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The night air burns as the chilly air dances across your body\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The landscape remains grey and lifeless\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "blue"
+            }
+          }
+        ],
+        "preset": "room_and_time"
+      },
+      {
+        "name": "weather.change",
+        "patterns": [
+          {
+            "pattern": "^The sky is getting cloudy\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The clouds disappear\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^It starts to snow\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^It starts to sleet\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^It starts to rain\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The snowstorm becomes a blizzard\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The sleet turns into hail\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^Lightning flashes in the sky\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The snow stopped\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The sleet stopped\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The rain stopped\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The blizzard has slowed down\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The hail stops and it starts sleeting\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The lightning has stopped\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^A fierce blizzard descends, howling winds and blinding snow engulfing the area\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The blizzard subsides, the winds dying down\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The winds pick up violently, hurling sand in every direction\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The sandstorm dies down, the air clearing\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The cold bites deep as ice forms across every surface\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The ice begins to thaw and melt away\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The rain soaks into the ground, turning it to thick mud\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The ground begins to dry out and firm up\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^A thick fog rolls in, shrouding the area\\.$",
+            "enabled": true
+          },
+          {
+            "pattern": "^The fog lifts, revealing the surroundings once more\\.$",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "replace",
+            "template": "\u001b[38;2;143;167;217m$0\u001b[0m"
+          }
+        ],
+        "preset": "room_and_time"
+      },
+      {
+        "name": "wiznet.tag",
+        "patterns": [
+          {
+            "pattern": "^WiZNET\\b",
+            "enabled": true
+          }
+        ],
+        "priority": 6,
+        "enabled": true,
+        "actions": [
+          {
+            "kind": "highlight",
+            "style": {
+              "fg": "magenta",
+              "bold": true
+            }
+          }
+        ],
+        "preset": "room_and_time"
+      }
+    ]
+  },
+  {
+    "id": "numpad_movement",
+    "triggers": []
+  }
+]

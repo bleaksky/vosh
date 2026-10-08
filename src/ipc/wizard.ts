@@ -13,7 +13,9 @@ import { MIGRATION_APPLIED } from './events';
 // migration_apply (not in this build) commits the plan after the user
 // picks conflict winners in the wizard.
 
-export type MigrationItemKind = 'alias' | 'trigger' | 'macro';
+/** A conflict of `preset` kind holds your edits to the preset its name
+ *  gives, one version for each profile that edits it its own way. */
+export type MigrationItemKind = 'alias' | 'trigger' | 'macro' | 'preset';
 
 export interface MigrationVariant {
   source_profile: string;

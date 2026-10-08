@@ -23,7 +23,7 @@ const raw = (patch: Partial<RawUiConfig> = {}): RawUiConfig => ({
 });
 
 describe('broadcastUiConfigChanges theme events', () => {
-  it('sends the resolved theme and the four theme fields when they change', async () => {
+  it('sends the resolved theme and the seven theme fields when they change', async () => {
     const sent = vi.mocked(emit);
     const base = normalizeUiConfig(raw({ theme: 'nord' }));
     sent.mockClear();
@@ -36,6 +36,9 @@ describe('broadcastUiConfigChanges theme events', () => {
       follow_system_appearance: true,
       light_theme: 'vellum',
       dark_theme: 'nord',
+      theme_follow: 'off',
+      day_theme: '',
+      night_theme: '',
     });
   });
 

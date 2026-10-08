@@ -164,6 +164,9 @@ interface PromptCardProps {
   /** The card draws your design over the band of Lifted in the text, so
    *  the page turns the band pass on while it does. */
   onBand?: (on: boolean) => void;
+  /** Done on your prompt's card, before it closes. Get started counts
+   *  it as Customize your prompt. */
+  onPromptDone?: () => void;
   onClose: () => void;
 }
 
@@ -183,6 +186,7 @@ export function PromptCard({
   renderer,
   opening,
   onBand,
+  onPromptDone,
   onClose,
 }: PromptCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -812,7 +816,10 @@ export function PromptCard({
                 preview={drawn}
                 forsaken={forsaken}
                 onPreview={setPreview}
-                onDone={onClose}
+                onDone={() => {
+                  onPromptDone?.();
+                  onClose();
+                }}
               />
             )}
           </>

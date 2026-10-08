@@ -1,21 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import roomLines from '../../fixtures/room-colors/lines.json';
 import roomPreset from '../../fixtures/room-colors/preset.json';
+import shippedTriggers from '../../fixtures/presets/triggers.json?raw';
 import { enabledPresetIds, PRESETS_OFF_MARKER } from './automationRecords';
 import { parseRoutedLine } from '../stores/gmcp/chatStore';
+import { HIGHLIGHT_COLORS } from './automationTriggers';
+import { colorize } from './colorTokens';
 import { KNOWN_WORLDS } from '../lib/knownWorlds';
 import {
   defaultEnabledIds,
-  type Preset,
   PRESET_CATEGORIES,
   PRESETS,
   PRESETS_ON_BY_DEFAULT,
   presetById,
   presetMacros,
-  type PresetSampleLine,
+  presetTriggerNames,
   presetTriggers,
+  type PresetTrigger,
 } from './presets';
-import type { HighlightStyle, TriggerTarget } from '../ipc/automation';
+import { drawSample, quotedWords, sampleBars, sampleRunCss, type SampleRun } from './presetSample';
+import { ANSI_SLOTS } from '../theme/baseAnsi';
+import { contrast, parseHex } from '../theme/color';
+import { findTheme } from '../theme/themes';
 
 // The preset that puts the tells you send in the chat pane, run against
 // every line the game prints when you talk to one person or your group
@@ -193,7 +199,9 @@ describe('the Room, time and weather colors preset', () => {
 
   it('leaves each weather line to this preset alone', () => {
     const weather = roomLines.lines.filter((l) => 'trigger' in l && l.trigger === 'weather.change');
-    const others = PRESETS.filter((p) => p.id !== 'room_and_time').flatMap(presetTriggers);
+    const others = PRESETS.filter((p) => p.id !== 'room_and_time').flatMap((p) =>
+      presetTriggers(p),
+    );
     expect(others.length).toBeGreaterThan(0);
     for (const entry of weather) {
       const text = plain(entry.line);
@@ -366,143 +374,11 @@ describe('the Potion labels preset', () => {
   });
 });
 
-// What the trigger engine draws on a line, modeled on process_on_ground in
-// crates/automation/src/trigger/engine.rs. Triggers run high priority
-// first. A Replace rewrites the text through its template, $1 to $9
-// filled from the groups, a highlight colors the text it matches with the
-// first span winning, and a base color fills what is left in the default
-// color. The runs name each color by its ANSI name, its 256 color index
-// or its hex, with bold before it. The model draws no highlight over a
-// replaced line, which the engine matches against the rebuilt text, since
-// no sample has one.
-type Run = [text: string, color: string | null];
-
-interface Drawn {
-  fired: string[];
-  runs: Run[];
-  routes: string[];
-}
-
-const ANSI_NAMES = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
-
-function styleColor(style: HighlightStyle): string | null {
-  if (!style.fg) return null;
-  return style.bold ? `bold ${style.fg}` : style.fg;
-}
-
-// Each character of `text`, which holds SGR codes, with the color it
-// shows in.
-function sgrChars(text: string): { ch: string; color: string | null }[] {
-  const chars: { ch: string; color: string | null }[] = [];
-  let fg: string | null = null;
-  let bold = false;
-  // eslint-disable-next-line no-control-regex
-  for (const m of text.matchAll(/\x1b\[([0-9;]*)m|([^\x1b])/g)) {
-    if (m[2] !== undefined) {
-      chars.push({ ch: m[2], color: fg && bold ? `bold ${fg}` : fg });
-      continue;
-    }
-    const codes = m[1].split(';').map((c) => (c === '' ? 0 : Number(c)));
-    for (let i = 0; i < codes.length; i++) {
-      const c = codes[i];
-      if (c === 0) [fg, bold] = [null, false];
-      else if (c === 1) bold = true;
-      else if (c === 22) bold = false;
-      else if (c === 39) fg = null;
-      else if (c >= 30 && c <= 37) fg = ANSI_NAMES[c - 30];
-      else if (c >= 90 && c <= 97) fg = `bright_${ANSI_NAMES[c - 90]}`;
-      else if (c === 38 && codes[i + 1] === 5) {
-        fg = String(codes[i + 2]);
-        i += 2;
-      } else if (c === 38 && codes[i + 1] === 2) {
-        fg = `#${codes
-          .slice(i + 2, i + 5)
-          .map((n) => n.toString(16).padStart(2, '0'))
-          .join('')}`;
-        i += 4;
-      }
-    }
-  }
-  return chars;
-}
-
-function draw(preset: Preset, line: PresetSampleLine): Drawn {
-  const scope: TriggerTarget = line.target ?? 'line';
-  // Which triggers see the line, as MatchScope::matches has it.
-  const reaches = (target: TriggerTarget = 'line') =>
-    target === 'line' ||
-    (target === 'room' && scope !== 'line') ||
-    (target === 'room_target' && scope === 'room_target');
-  const triggers = presetTriggers(preset)
-    .map((t, n) => ({ t, n }))
-    .sort((a, b) => b.t.priority - a.t.priority || a.n - b.n)
-    .map(({ t }) => t);
-  const fired: string[] = [];
-  const routes: string[] = [];
-  const spans: [RegExp, string | null][] = [];
-  let base: string | null = null;
-  let text = line.text;
-  let replaced = false;
-  for (const t of triggers) {
-    if (!t.enabled || !reaches(t.target)) continue;
-    for (const row of t.patterns) {
-      const regex = new RegExp(row.pattern);
-      if (!row.enabled || !regex.test(line.text)) continue;
-      if (!fired.includes(t.name)) fired.push(t.name);
-      const groups = (new RegExp(`${row.pattern}|`).exec('')?.length ?? 1) - 1;
-      for (const action of t.actions) {
-        if (action.kind === 'replace') {
-          text = text.replace(new RegExp(row.pattern, 'g'), (...m: unknown[]) =>
-            action.template.replace(/\$(\d)/g, (_, n: string) => {
-              const at = Number(n);
-              return at <= groups ? String(m[at] ?? '') : '';
-            }),
-          );
-          replaced = true;
-        } else if (action.kind === 'highlight' && action.style.base) {
-          base ??= styleColor(action.style);
-        } else if (action.kind === 'highlight') {
-          spans.push([regex, styleColor(action.style)]);
-        } else if (action.kind === 'route' && !routes.includes(action.pane)) {
-          routes.push(action.pane);
-        }
-      }
-    }
-  }
-  if (replaced && spans.length > 0) {
-    throw new Error(`the model draws no highlight over a replaced line: ${line.text}`);
-  }
-  const chars = replaced
-    ? sgrChars(text)
-    : [...line.text].map((ch) => ({ ch, color: null as string | null }));
-  const taken = chars.map(() => false);
-  for (const [regex, color] of spans) {
-    if (!color) continue;
-    for (const m of line.text.matchAll(new RegExp(regex.source, 'g'))) {
-      const start = m.index;
-      const end = start + m[0].length;
-      if (end === start || taken.slice(start, end).some(Boolean)) continue;
-      for (let i = start; i < end; i++) {
-        taken[i] = true;
-        chars[i].color = color;
-      }
-    }
-  }
-  const runs: Run[] = [];
-  for (const { ch, color } of chars) {
-    const shown = color ?? base;
-    const last = runs.at(-1);
-    if (last && last[1] === shown) last[0] += ch;
-    else runs.push([ch, shown]);
-  }
-  return { fired, runs, routes };
-}
-
 // What each line of each preset's sample shows, in order, as runs of text
 // and their colors. A preset that names a 256 color index paints that
 // index on every theme, and one that names an ANSI color paints the
 // theme's own.
-const SAMPLES_DRAW: Record<string, Run[][]> = {
+const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
   healing_basics: [
     [['You feel a lot better!', 'bright_green']],
     [['You feel less sick.', 'bright_green']],
@@ -552,7 +428,11 @@ const SAMPLES_DRAW: Record<string, Run[][]> = {
       ['1250 ', '230'],
       ['experience points.', '248'],
     ],
-    [['You raise a level!!', '120']],
+    [
+      ['You have become better at ', '120'],
+      ['dagger', '230'],
+      ['!', '120'],
+    ],
   ],
   potion_labels: [
     [
@@ -605,7 +485,7 @@ describe('the sample of every preset', () => {
   it('fires the trigger each line means to show, and paints the colors the preset gives it', () => {
     expect(Object.keys(SAMPLES_DRAW)).toEqual(TRIGGER_PRESETS.map((p) => p.id));
     for (const preset of TRIGGER_PRESETS) {
-      const drawn = preset.sample.map((line) => draw(preset, line));
+      const drawn = preset.sample.map((line) => drawSample(preset, line));
       preset.sample.forEach((line, n) => {
         expect(drawn[n].fired, `${preset.id} ${line.text}`).toContain(line.shows);
       });
@@ -621,14 +501,14 @@ describe('the sample of every preset', () => {
     const line = preset?.sample.find((l) => l.target === 'room');
     if (!preset || !line) throw new Error('the room sample lists a room line');
     const plain = { text: line.text, shows: line.shows };
-    expect(draw(preset, plain).runs).toEqual([[line.text, null]]);
+    expect(drawSample(preset, plain).runs).toEqual([[line.text, null]]);
   });
 
   it('puts the tell in its sample in the chat pane as one you sent', () => {
     const preset = presetById('sent_tells');
     if (!preset) throw new Error('no sent_tells preset');
     const [line] = preset.sample;
-    const drawn = draw(preset, line);
+    const drawn = drawSample(preset, line);
     expect(drawn.routes).toEqual(['tell']);
     expect(parseRoutedLine({ pane: 'tell', text: line.text })).toMatchObject({
       direction: 'sent',
@@ -640,7 +520,7 @@ describe('the sample of every preset', () => {
   it('routes no other sample anywhere', () => {
     for (const preset of PRESETS.filter((p) => p.id !== 'sent_tells')) {
       for (const line of preset.sample) {
-        expect(draw(preset, line).routes, `${preset.id} ${line.text}`).toEqual([]);
+        expect(drawSample(preset, line).routes, `${preset.id} ${line.text}`).toEqual([]);
       }
     }
   });
@@ -735,5 +615,198 @@ describe('the Disarms and fading buffs preset', () => {
   it('takes a secondary weapon back with dual and a primary with wield', () => {
     expect(sends('disarm.secondary')).toEqual(['get 1.;dual 1.']);
     expect(sends('disarm.primary')).toEqual(['get 1.;wield 1.']);
+  });
+});
+
+describe('the preset trigger names an import keeps', () => {
+  it('names every trigger of every preset once, on or off', () => {
+    const names = presetTriggerNames();
+    expect(names).toEqual(PRESETS.flatMap((p) => presetTriggers(p)).map((t) => t.name));
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain('disarm.secondary');
+  });
+});
+
+// Each preset names its colors once, by what they mark, and its templates
+// and highlights name them by key (Presets Q3, Q4). The swatch table of
+// board 1 gives each swatch, its color and the triggers it paints.
+describe('the colors each preset names', () => {
+  // The keys `trigger` names, each once, in the order it names them.
+  const keysOf = (trigger: PresetTrigger): string[] => {
+    const keys = trigger.actions.flatMap((a) =>
+      a.kind === 'highlight'
+        ? [a.style.fg]
+        : a.kind === 'replace'
+          ? [...a.template.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]).filter((k) => k !== 'reset')
+          : [],
+    );
+    return [...new Set(keys)];
+  };
+
+  it('installs every preset you never changed byte for byte as it shipped', () => {
+    const now = PRESETS.map((p) => ({ id: p.id, triggers: presetTriggers(p) }));
+    expect(`${JSON.stringify(now, null, 2)}\n`).toBe(shippedTriggers);
+    const none = PRESETS.map((p) => ({ id: p.id, triggers: presetTriggers(p, {}) }));
+    expect(none).toEqual(now);
+  });
+
+  it('gives 24 swatches over the 75 triggers, each painting the triggers of the table', () => {
+    const table = Object.fromEntries(
+      PRESETS.map((p) => [
+        p.id,
+        Object.entries(p.colors).map(([key, c]) => [
+          c.label,
+          c.token,
+          c.sits,
+          p.triggers.filter((t) => keysOf(t).includes(key)).length,
+        ]),
+      ]),
+    );
+    expect(table).toEqual({
+      healing_basics: [['The line', 'bright_green', 'highlight', 7]],
+      defensive_combat: [
+        ['Routine defenses', 'fg:240', 'template', 15],
+        ['Shadows envelop', 'fg:253', 'template', 1],
+      ],
+      disarm_buff_fade: [
+        ['The ## mark', 'bold_red', 'template', 7],
+        ['The line', 'fg:178', 'template', 7],
+      ],
+      terror_events: [['The line', 'bright_red', 'highlight', 1]],
+      combat_outgoing: [
+        ['The rest of the line', 'fg:253', 'template', 2],
+        ['The damage verb', 'fg:214', 'template', 1],
+        ['A miss', 'fg:152', 'template', 1],
+      ],
+      combat_incoming: [
+        ['The rest of the line', 'fg:244', 'template', 2],
+        ['The damage verb', 'fg:210', 'template', 1],
+        ['A miss', 'fg:152', 'template', 1],
+      ],
+      loot_progression: [
+        ['What you gain', 'fg:230', 'template', 4],
+        ['Skill and level lines', 'fg:120', 'template', 3],
+        ['The gold line', 'fg:249', 'template', 1],
+        ['The experience line', 'fg:248', 'template', 1],
+      ],
+      potion_labels: [['The spell', 'fg:248', 'template', 10]],
+      herb_labels: [['The spell', 'fg:248', 'template', 18]],
+      sent_tells: [],
+      room_and_time: [
+        ['Exits', 'green', 'highlight', 1],
+        ['What is in the room', 'yellow', 'highlight', 1],
+        ['Your target', 'bright_red', 'highlight', 1],
+        ['Time of day', 'blue', 'highlight', 1],
+        ['Weather change', '#8fa7d9', 'template', 1],
+        ['WiZNET tag', 'magenta', 'highlight', 1],
+      ],
+      numpad_movement: [],
+    });
+    expect(PRESETS.flatMap((p) => Object.keys(p.colors))).toHaveLength(24);
+    expect(PRESETS.flatMap((p) => p.triggers)).toHaveLength(75);
+  });
+
+  it('names in each template and highlight only keys its preset has, each where it sits', () => {
+    for (const preset of PRESETS) {
+      for (const trigger of preset.triggers) {
+        for (const action of trigger.actions) {
+          const keys =
+            action.kind === 'highlight'
+              ? [action.style.fg]
+              : action.kind === 'replace'
+                ? keysOf({ ...trigger, actions: [action] })
+                : [];
+          const sits = action.kind === 'highlight' ? 'highlight' : 'template';
+          for (const key of keys) {
+            expect(preset.colors[key]?.sits, `${trigger.name} ${key}`).toBe(sits);
+          }
+        }
+      }
+    }
+  });
+
+  it('keeps a highlight to the sixteen and never names a key a color token holds', () => {
+    const sixteen = HIGHLIGHT_COLORS.map((c) => c.value as string);
+    for (const preset of PRESETS) {
+      for (const [key, color] of Object.entries(preset.colors)) {
+        if (color.sits === 'highlight') expect(sixteen, key).toContain(color.token);
+        expect(colorize(`{${key}}`), key).toBe(`{${key}}`);
+        expect(colorize(`{${color.token}}`), key).not.toBe(`{${color.token}}`);
+      }
+    }
+  });
+
+  it('fills a key with your color over the preset, the mark keeping its bold', () => {
+    const preset = presetById('disarm_buff_fade')!;
+    const aura = (colors?: Record<string, string>) =>
+      presetTriggers(preset, colors).find((t) => t.name === 'buff.protective_aura')!.actions[0];
+    expect(aura({ line: '#c3a6ff' })).toEqual({
+      kind: 'replace',
+      template:
+        '\x1b[1;31m##\x1b[0m \x1b[38;2;195;166;255mThe protective aura around your body fades.\x1b[0m',
+    });
+    expect(aura({ mark: 'fg:141' })).toEqual({
+      kind: 'replace',
+      template:
+        '\x1b[1m\x1b[38;5;141m##\x1b[0m \x1b[38;5;178mThe protective aura around your body fades.\x1b[0m',
+    });
+    const cures = presetTriggers(presetById('healing_basics')!, { line: 'cyan' });
+    expect(
+      cures.every((t) => t.actions[0].kind === 'highlight' && t.actions[0].style.fg === 'cyan'),
+    ).toBe(true);
+  });
+});
+
+// The Looks like row draws each run in the theme's colors, as the
+// terminal does, so a fixed color darkens on Vellum the way Keep
+// highlight colors readable darkens it (readable.rs).
+describe('the colors a sample draws in', () => {
+  const xterm = findTheme('rubric').xterm;
+  const palette = ANSI_SLOTS.map((slot) => xterm[slot]);
+  const paint = { palette, ground: xterm.background, brightBold: true };
+
+  it('darkens a fixed color until it reads on a light ground', () => {
+    const lifted = sampleRunCss('178', paint).color ?? '';
+    const ground = parseHex(xterm.background)!;
+    expect(contrast(parseHex('#d7af00')!, ground)).toBeLessThan(4.5);
+    expect(contrast(parseHex(lifted)!, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(sampleRunCss('#8fa7d9', paint).color).not.toBe('#8fa7d9');
+  });
+
+  it('keeps a fixed color as it is while the setting is off', () => {
+    expect(sampleRunCss('178', { ...paint, ground: null })).toEqual({
+      color: '#d7af00',
+      bold: false,
+    });
+  });
+
+  it('takes a theme color from the palette, bold lifting it to its bright pair', () => {
+    expect(sampleRunCss('bright_green', paint)).toEqual({ color: xterm.brightGreen, bold: true });
+    expect(sampleRunCss('bold red', paint)).toEqual({ color: xterm.brightRed, bold: true });
+    expect(sampleRunCss('bold red', { ...paint, brightBold: false })).toEqual({
+      color: xterm.brightRed,
+      bold: false,
+    });
+    expect(sampleRunCss(null, paint)).toEqual({ bold: false });
+  });
+
+  it('finds the words a tell quotes, and no others', () => {
+    const tell = presetById('sent_tells')!.sample[0].text;
+    const at = quotedWords(tell);
+    expect(at && tell.slice(...at)).toBe('The day has begun.');
+    expect(quotedWords("A villager's punch grazes you.")).toBeNull();
+  });
+
+  it('finds the bars a line names beside the words a tell quotes, in order', () => {
+    const [xp, skill] = presetById('loot_progression')!.sample;
+    const words = (text: string, bars?: readonly string[]) =>
+      sampleBars(text, bars).map((at) => text.slice(...at));
+    expect(words(xp.text, xp.bars)).toEqual(['1250']);
+    expect(words(skill.text, skill.bars)).toEqual(['dagger']);
+    expect(words("You tell Tolliver 'The day has begun.'", ['Tolliver'])).toEqual([
+      'Tolliver',
+      'The day has begun.',
+    ]);
+    expect(words('You feel less sick.', ['dagger'])).toEqual([]);
   });
 });

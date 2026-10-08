@@ -163,10 +163,29 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+/** A pencil: you changed this. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M10.75 2.75l2.5 2.5L6 12.5l-3.25.75.75-3.25z" {...scale(props.size)} />
+      <path d="M9.25 4.25l2.5 2.5" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <path d="M3.5 8.5l3 3 6-7" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
+/** An open ring: a step still to do, where a done one takes the check. */
+export function RingIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="5.25" {...scale(props.size)} />
     </Glyph>
   );
 }

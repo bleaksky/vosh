@@ -99,6 +99,23 @@ describe('the warn ring in the Automation list', () => {
     expect(noteOf('c')).toBe('Second note.');
   });
 
+  // Presets board 4: a fix that changed a row you edited rings the row
+  // on or off, and its note wins over the prompt note.
+  it('rings a row a fix flagged while it is off too', () => {
+    const fix = 'A fix to Disarms and fading buffs changed Then send, a row you edited.';
+    const html = renderList({
+      sections: buildSections([
+        { ...entry('a', 'disarm.secondary', false), warn: fix },
+        { ...entry('b', 'my-capture', true), warn: fix },
+      ]),
+      warnNotes: new Map([['my-capture', HIDES_PROMPT_NOTE]]),
+    });
+    expect(rowClass(html, 'a')).toBe('st-auto-row is-warn');
+    expect(rowClass(html, 'b')).toBe('st-auto-row is-warn');
+    expect(html).toContain(`>${fix}<`);
+    expect(html).not.toContain('This trigger hides your prompt');
+  });
+
   it('says why a trigger carries it in plain sentences', () => {
     expect(HIDES_PROMPT_NOTE).toMatch(/^This trigger hides your prompt/);
     expect(HIDES_PROMPT_NOTE).not.toMatch(/[;:–—]| - /);
@@ -287,5 +304,66 @@ describe('the switch on a group heading', () => {
         }),
       ),
     ).toEqual(['g:combat', 'combat']);
+  });
+});
+
+// First Run board 4: a suggested preset that is off wears the accent ring
+// where the off ring sits, and a reader hears Suggested, off.
+describe('the suggested ring in the Automation list', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Cures and heals', false), dot: 'suggested' },
+      { ...entry('b', 'Herb labels', false), anchor: 'presets:herb_labels' },
+      { ...entry('c', 'Your damage verbs', true), dot: 'suggested' },
+    ]),
+  });
+  const dot = (uid: string) => {
+    const row = new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+    return {
+      dot: /class="(st-auto-dot[^"]*)"/.exec(row)?.[1],
+      heard: />(On|Off|Suggested, off)</.exec(row)?.[1],
+    };
+  };
+
+  it('rings a suggested row only while it is off', () => {
+    expect(dot('a')).toEqual({ dot: 'st-auto-dot is-off is-suggested', heard: 'Suggested, off' });
+    expect(dot('b')).toEqual({ dot: 'st-auto-dot is-off', heard: 'Off' });
+    expect(dot('c')).toEqual({ dot: 'st-auto-dot', heard: 'On' });
+  });
+
+  it('draws the ring in the accent where the off ring sits', () => {
+    expect(settingsCss).toMatch(
+      /\.st-auto-dot\.is-off\.is-suggested \{\s*box-shadow: inset 0 0 0 1\.25px var\(--accent\);\s*\}/,
+    );
+  });
+
+  it('puts a row anchor on the row a link opens', () => {
+    expect(html).toMatch(/data-uid="b"[^>]*data-st-anchor="presets:herb_labels"/);
+    expect(html).not.toMatch(/data-uid="a"[^>]*data-st-anchor/);
+  });
+});
+
+// Presets Q6: a preset you edited wears a 12 px pencil just before its
+// dot, and a reader hears edited after its name.
+describe('the pencil of an edited preset', () => {
+  const html = renderList({
+    sections: buildSections([
+      { ...entry('a', 'Disarms and fading buffs', true), edited: true },
+      { ...entry('b', 'Herb labels', true) },
+    ]),
+  });
+  const row = (uid: string) => new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
+
+  it('draws the pencil before the dot and names the row edited', () => {
+    expect(row('a')).toMatch(
+      /Disarms and fading buffs<span class="st-visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot"/,
+    );
+    expect(row('b')).not.toMatch(/st-auto-mark|edited/);
+  });
+
+  it('sets the pencil in the tertiary color right before the dot', () => {
+    expect(settingsCss).toMatch(
+      /\.st-auto-mark \{\s*flex: none;\s*margin-left: auto;\s*color: var\(--tertiary\);\s*\}\s*\.st-auto-mark \+ \.st-auto-dot \{\s*margin-left: 0;\s*\}/,
+    );
   });
 });

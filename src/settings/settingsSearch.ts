@@ -1,3 +1,4 @@
+import { PRESET_CATEGORIES, PRESETS } from '../automation/presets';
 import {
   formatSettingsTarget,
   settingsGroupLabel,
@@ -108,13 +109,16 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'theme', 'import-theme'),
   },
   {
-    label: 'Follow system appearance',
-    description: 'Vosh switches between your light and dark theme when macOS does.',
-    keywords: 'dark mode light mode automatic',
-    target: at('appearance', 'theme', 'follow-system'),
+    label: 'Switch themes',
+    description: "Turns at the game's dawn and dusk, about every 6 minutes.",
+    keywords:
+      'follow system appearance dark mode light mode automatic with the system with the game day night',
+    target: at('appearance', 'theme', 'switch-themes'),
   },
   { label: 'Light theme', target: at('appearance', 'theme', 'light-theme') },
   { label: 'Dark theme', target: at('appearance', 'theme', 'dark-theme') },
+  { label: 'Day theme', target: at('appearance', 'theme', 'day-theme') },
+  { label: 'Night theme', target: at('appearance', 'theme', 'night-theme') },
   {
     label: 'Font',
     keywords: 'typeface family terminal text monospace',
@@ -461,6 +465,24 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       'preset triggers macros built in numpad movement walk keys alerts tells name attacked health connection banner notification sound',
     target: at('automation', 'presets'),
   },
+  // Each preset of the library, on its own card, which holds its colors,
+  // Your changes and Reset to preset (Presets review). The alert presets
+  // come from Rust, so the Presets row finds them.
+  ...PRESETS.map(
+    (preset): SettingsRowEntry => ({
+      label: preset.name,
+      description: preset.description,
+      keywords: [
+        'preset',
+        PRESET_CATEGORIES[preset.category].toLowerCase(),
+        Object.keys(preset.colors).length > 0 ? 'colors swatch swatches' : '',
+        'your changes edits edited reset to preset',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      target: at('automation', 'presets', `presets:${preset.id}`),
+    }),
+  ),
   {
     label: 'Loadouts',
     keywords: 'loadout groups active catalog',

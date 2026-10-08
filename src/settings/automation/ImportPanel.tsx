@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { importErrorMessage } from '../../automation/automationRecords';
+import { presetTriggerNames } from '../../automation/presets';
 import {
   applyImport,
   detectImportFormat,
@@ -65,7 +66,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
     setBusy(true);
     setSummary(null);
     try {
-      setSummary(await applyImport(format, text, getShownProfile()));
+      setSummary(await applyImport(format, text, presetTriggerNames(), getShownProfile()));
       onError(null);
     } catch (e) {
       onError(importErrorMessage(e, 'import'));
@@ -102,7 +103,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
       >
         <CardNote>
           Vosh adds the aliases, triggers, macros, and variables it can read and replaces any with
-          the same name. The summary lists what it could not bring over.
+          the same name, but never a preset trigger. The summary lists what it could not bring over.
         </CardNote>
         <Row label="File" description={fileName ?? 'Or paste the contents below.'}>
           <Button onClick={() => fileRef.current?.click()} disabled={busy}>
@@ -174,6 +175,7 @@ function ImportResult({ summary }: { summary: ImportSummary }) {
     { label: 'Rejected', items: summary.rejected },
     { label: 'Not supported', items: summary.unsupported.map(([kind, what]) => `${kind} ${what}`) },
     { label: 'Lines Vosh could not read', items: summary.unparsed },
+    { label: 'Left out, a preset uses the name', items: summary.clashes.map((c) => c.name) },
   ].filter((l) => l.items.length > 0);
   return (
     <Section title={total === 1 ? 'Vosh imported 1 item' : `Vosh imported ${total} items`}>

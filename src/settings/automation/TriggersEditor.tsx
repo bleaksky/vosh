@@ -1,5 +1,22 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { alertOrNone, withAlertPart, withAlertParts } from '../../automation/alertParts';
+import {
+  countPhrase,
+  draftChanges,
+  isDraftDirty,
+  type Draft,
+  type DraftItem,
+} from '../../automation/automationDraft';
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
@@ -46,6 +63,7 @@ import {
   type TriggerRecord,
 } from '../../ipc/automation';
 import {
+  Button,
   Card,
   CardNote,
   ChipButton,
@@ -53,6 +71,7 @@ import {
   Disclosure,
   Field,
   FieldArea,
+  PencilIcon,
   PlusIcon,
   Row,
   Segmented,
@@ -60,50 +79,150 @@ import {
   Toggle,
   type SelectOption,
 } from '../../ui';
+import {
+  cardEdits,
+  cardFlags,
+  changedRows,
+  editColors,
+  libraryTrigger,
+  NO_ROW,
+  patternKey,
+  presetCard,
+  shippedCard,
+  withRow,
+  type Rows,
+  type TriggerCard,
+} from '../../automation/presetEdits';
+import { runPresetPlan } from '../../automation/presetPlan';
+import { presetById, type Preset } from '../../automation/presets';
+import {
+  presetEditsGet,
+  presetEditsSet,
+  type EditRow,
+  type EditValue,
+  type PresetEdits,
+} from '../../ipc/presetEdits';
+import { listJoin } from '../../lib/text';
 import { usePromptGags } from '../../stores/session/promptGagStore';
-import { AlertDetailRows, AlertRow } from './AlertRows';
+import { AlertDetailRows, AlertPartsOn, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
-import { CodeRow, GroupField, NumberField } from './fields';
+import { CodeRow, FixChoice, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
-import type { DetailProps, EditorProps, KindSpec } from './types';
+import type { DetailProps, EditorProps, KindSpec, TriggersLink } from './types';
 
-const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
-  id: 'triggers',
-  groups: 'triggers',
-  noun: { one: 'trigger', many: 'triggers' },
-  filterLabel: 'Filter triggers',
-  newLabel: 'New trigger',
-  deleteLabel: 'Delete trigger',
-  // Presets put their triggers back at launch. Turn the preset off.
-  canDelete: (t) => !t.preset,
-  emptyDetail: 'Choose a trigger to edit it.',
-  emptyList: 'You have no triggers yet.',
-  load: (profile) => loadTriggers(triggerStore(profile)),
-  save: (draft, _written, profile) => saveTriggerDraft(draft, triggerStore(profile)),
-  validate: validateTriggers,
-  entry: (t) => ({
-    name: t.name,
-    group: groupKeyOf(t.group),
-    enabled: t.enabled,
-    preset: Boolean(t.preset),
-    text: searchText(
-      t.name,
-      t.group,
-      t.patterns.map(patternSource).join('\n'),
-      effectOf(t.actions, 'send'),
+/** What the list loaded beside the triggers: your preset edits, and each
+ *  preset trigger as the store holds it, by name. */
+interface Loaded {
+  edits: PresetEdits;
+  stored: ReadonlyMap<string, TriggerRecord>;
+}
+
+/** `draft` as the trigger store takes it. A preset trigger goes back as
+ *  the store holds it, in the group its card sets, since the store keeps
+ *  the group the preset plan falls back to. */
+function storeDraft(draft: Draft<TriggerCard>, { stored }: Loaded): Draft<TriggerRecord> {
+  const toStore = (item: DraftItem<TriggerCard>): DraftItem<TriggerRecord> => {
+    const copy = stored.get(item.value.name);
+    if (!copy || !libraryTrigger(item.value)) return item;
+    return { uid: item.uid, value: withGroup(copy, item.value.group ?? '') };
+  };
+  return { items: draft.items.map(toStore), saved: draft.saved.map(toStore) };
+}
+
+/** `t` as one of your triggers, with no preset tag. */
+function asYours(t: TriggerRecord): TriggerRecord {
+  const { preset: _preset, ...yours } = t;
+  return yours;
+}
+
+/** The Triggers kind. Each preset trigger shows as its card, the
+ *  library's trigger with your edits over it (presetCard). Save writes
+ *  your triggers through the store, and the rows you changed in a preset
+ *  trigger through preset_edits_set, then runs the preset plan for the
+ *  profile, which builds and installs them (Presets board 2). Edit all
+ *  as JSON lists your triggers only, and keeps every preset trigger as
+ *  it is (Q9). */
+function triggersSpec(): KindSpec<TriggerCard> {
+  let loaded: Loaded = { edits: {}, stored: new Map() };
+  /** Your edits to the preset trigger `t` as they loaded. */
+  const heldOf = (t: TriggerRecord) =>
+    t.preset ? loaded.edits[t.preset]?.triggers?.[t.name] : undefined;
+  return {
+    id: 'triggers',
+    groups: 'triggers',
+    noun: { one: 'trigger', many: 'triggers' },
+    filterLabel: 'Filter triggers',
+    newLabel: 'New trigger',
+    deleteLabel: 'Delete trigger',
+    // Presets put their triggers back at launch. Turn the preset off.
+    canDelete: (t) => !t.preset,
+    emptyDetail: 'Choose a trigger to edit it.',
+    emptyList: 'You have no triggers yet.',
+    load: async (profile) => {
+      const [list, edits] = await Promise.all([
+        loadTriggers(triggerStore(profile)),
+        presetEditsGet(profile),
+      ]);
+      loaded = {
+        edits: edits ?? {},
+        stored: new Map(list.filter((t) => t.preset).map((t) => [t.name, t])),
+      };
+      return list.map((t) => (t.preset ? presetCard(t, loaded.edits[t.preset]) : undefined) ?? t);
+    },
+    save: async (draft, _written, profile) => {
+      const now = loaded;
+      const list = storeDraft(draft, now);
+      if (isDraftDirty(list)) await saveTriggerDraft(list, triggerStore(profile));
+      const edits = cardEdits(draftChanges(draft).changed, now.edits);
+      for (const [id, edit] of edits) await presetEditsSet(id, edit, profile);
+      if (edits.size > 0) await runPresetPlan(profile ?? null);
+    },
+    validate: validateTriggers,
+    entry: (t) => ({
+      name: t.name,
+      group: groupKeyOf(t.group),
+      enabled: t.enabled,
+      preset: Boolean(t.preset),
+      edited: Boolean(heldOf(t)),
+      ...fixWarn(t, heldOf(t)),
+      // A preset fix notice opens Settings on the trigger it names.
+      anchor: `triggers:${t.name}`,
+      // A preset trigger also answers to its preset's name, which a link
+      // from the preset's card fills the filter with.
+      text: searchText(
+        t.name,
+        t.preset ? presetById(t.preset)?.name : undefined,
+        t.group,
+        t.patterns.map(patternSource).join('\n'),
+        effectOf(t.actions, 'send'),
+      ),
+    }),
+    keyOf: triggerKey,
+    blank: blankTrigger,
+    json: {
+      toText: (values) => jsonListText(values.filter((t) => !t.preset)),
+      fromText: (text, current) => {
+        const yours = parseJsonList(text, normalizeTrigger);
+        return yours && [...current.filter((t) => t.preset), ...yours.map(asYours)];
+      },
+    },
+    subscribe: subscribeTriggersChanged,
+    renderDetail: (props) => (
+      <TriggerDetail
+        {...props}
+        swatches={props.value.preset ? editColors(loaded.edits[props.value.preset]) : undefined}
+        held={heldOf(props.value)}
+      />
     ),
-  }),
-  keyOf: triggerKey,
-  blank: blankTrigger,
-  json: {
-    toText: jsonListText,
-    fromText: (text) => parseJsonList(text, normalizeTrigger),
-  },
-  subscribe: subscribeTriggersChanged,
-  renderDetail: (props) => <TriggerDetail {...props} />,
-};
+  };
+}
 
-export function TriggersEditor(props: EditorProps) {
+export function TriggersEditor({
+  open = null,
+  onOpenPreset = () => {},
+  ...props
+}: EditorProps & { open?: TriggersLink | null; onOpenPreset?: (id: string) => void }) {
+  const [spec] = useState(triggersSpec);
   // A trigger that hid your prompt this session while the profile reads
   // no prompt carries the warn ring in the list.
   const gags = usePromptGags();
@@ -111,7 +230,25 @@ export function TriggersEditor(props: EditorProps) {
     () => new Map([...gags].map((name) => [name, HIDES_PROMPT_NOTE])),
     [gags],
   );
-  return <DraftEditor spec={TRIGGERS_SPEC} {...props} warnNotes={warnNotes} />;
+  const selectKey = useMemo(
+    () => (open?.select ? { key: open.select, seq: open.seq } : null),
+    [open],
+  );
+  const filterTo = useMemo(
+    () => (open?.filter ? { text: open.filter, seq: open.seq } : null),
+    [open],
+  );
+  return (
+    <OpenPresetContext.Provider value={onOpenPreset}>
+      <DraftEditor
+        spec={spec}
+        {...props}
+        warnNotes={warnNotes}
+        selectKey={selectKey}
+        filterTo={filterTo}
+      />
+    </OpenPresetContext.Provider>
+  );
 }
 
 /** Why a trigger carries the warn ring: it hid your prompt this session
@@ -119,6 +256,57 @@ export function TriggersEditor(props: EditorProps) {
  *  (section 7 step 13 of the prompt build spec). */
 export const HIDES_PROMPT_NOTE =
   "This trigger hides your prompt, and this profile draws nothing in its place. Turn it off, or tell Vosh your game's prompt in Customize prompt.";
+
+/** Each row of a trigger's card by the key its edits keep, as a fix
+ *  note names it. */
+const ROW_LABELS: Readonly<Record<string, string>> = {
+  enabled: 'Enabled',
+  priority: 'Priority',
+  group: 'Group',
+  target: 'Match',
+  mode: 'Pattern',
+  style: 'Style',
+  replace: 'Replace with',
+  fg: 'Text color',
+  bg: 'Background',
+  bold: 'Bold',
+  underline: 'Underline',
+  inverse: 'Inverse',
+  send: 'Then send',
+  route: 'Send to pane',
+  script: 'Lua script',
+  alert: 'Alert',
+};
+
+/** The key of the main pattern of `ship`, the trigger as its preset
+ *  ships it. */
+const mainKeyOf = (ship: TriggerRecord) => patternKey(patternSource(mainPattern(ship)));
+
+/** The rows `flags` names, as a fix note lists them, each once. */
+function flagLabels(ship: TriggerRecord, flags: Rows): string[] {
+  const main = mainKeyOf(ship);
+  const label = (key: string) =>
+    key === main ? 'Pattern' : key.startsWith('pattern:') ? 'More patterns' : ROW_LABELS[key];
+  return [...new Set(Object.keys(flags).map(label))].filter(Boolean);
+}
+
+/** What a fix note says after the preset's name (board 4). */
+const fixTail = (labels: readonly string[]) =>
+  `changed ${listJoin(labels)}, ${labels.length === 1 ? 'a row' : 'rows'} you edited.`;
+
+/** The warn ring of a preset trigger a fix changed under your edit, with
+ *  the note a reader hears, on or off. */
+function fixWarn(
+  t: TriggerCard,
+  held: Readonly<Record<string, EditRow>> | undefined,
+): { warn?: string } {
+  const from = libraryTrigger(t);
+  const flags = from ? cardFlags(t, held) : {};
+  if (!from || Object.keys(flags).length === 0) return {};
+  return {
+    warn: `A fix to ${from.preset.name} ${fixTail(flagLabels(shippedCard(t), flags))}`,
+  };
+}
 
 const COLOR_OPTIONS: readonly SelectOption[] = [
   { value: '', label: 'Default' },
@@ -158,17 +346,127 @@ function colorOptions(current: string | undefined): readonly SelectOption[] {
   return [...COLOR_OPTIONS, { value: current, label: current }];
 }
 
-/** The card for the selected trigger. */
+/** Opens a preset's card in Presets, by id, from the note at the head
+ *  of a preset trigger's card. */
+const OpenPresetContext = createContext<(id: string) => void>(() => {});
+
+const PATTERN_NOUN = { one: 'pattern', many: 'patterns' };
+const CHANGE_NOUN = { one: 'change', many: 'changes' };
+
+/** The rows under Advanced, by the key their edits keep. */
+const ADVANCED_ROWS = [
+  'priority',
+  'target',
+  'fg',
+  'bg',
+  'bold',
+  'underline',
+  'inverse',
+  'route',
+  'script',
+] as const;
+
+/** The rows under Advanced past ADVANCED_ROWS whose fix opens it. */
+const opensAdvanced = (key: string, main: string) =>
+  (ADVANCED_ROWS as readonly string[]).includes(key) ||
+  (key.startsWith('pattern:') && key !== main);
+
+/** What a flagged row shows, or null for a row no fix flags: `say` puts
+ *  the preset's value now in words. */
+type Flag = (key: string, say: (value: EditValue) => ReactNode) => ReactNode;
+
+/** How a changed row says what the preset has. */
+function Changed({ children }: { children: ReactNode }) {
+  return <span className="st-auto-changed">Changed. The preset has {children}.</span>;
+}
+
+/** The preset's text, in the MUD font, or that it leaves it empty. */
+function presetText(value: EditValue | undefined): ReactNode {
+  const text = typeof value === 'string' ? value : '';
+  return text ? <span className="st-auto-mono">{text}</span> : 'it empty';
+}
+
+const presetSwitch = (value: EditValue | undefined) => (value === true ? 'it on' : 'it off');
+
+/** Whether a pattern row's value has the pattern on. */
+const patternOn = (value: EditValue) =>
+  typeof value === 'object' && !Array.isArray(value) && value.enabled !== false;
+
+const modeLabel = (value: EditValue) =>
+  MATCH_MODE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
+
+/** A text row's field with the line under it that says what the preset
+ *  has, once you changed it. */
+function UnderField({ changed, children }: { changed: ReactNode; children: ReactNode }) {
+  if (changed === null) return children;
+  return (
+    <div className="st-auto-stack">
+      {children}
+      <p className="st-auto-under">{changed}</p>
+    </div>
+  );
+}
+
+/** `description` with the line of a changed row after it, or either one
+ *  alone. */
+function withChanged(description: ReactNode, changed: ReactNode): ReactNode {
+  if (changed === null) return description;
+  return (
+    <>
+      {description}
+      {changed}
+    </>
+  );
+}
+
+/** What a preset trigger's card knows of its preset: the trigger as
+ *  the preset ships it, each row you changed with the preset's value,
+ *  and the color your swatch or the preset gives each key. */
+interface FromPreset {
+  preset: Preset;
+  ship: TriggerRecord;
+  changed: Rows;
+  colorOf: (key: string) => string;
+}
+
+/** The card for the selected trigger. A preset trigger edits as yours
+ *  do, all but its name, and each row you changed says what the preset
+ *  has (Presets board 2). `swatches` are your colors of its preset. */
 export function TriggerDetail({
   value: t,
   update,
   fresh,
   revealInList,
-}: DetailProps<TriggerRecord>) {
-  const [advanced, setAdvanced] = useState(false);
+  swatches,
+  held,
+}: DetailProps<TriggerCard> & {
+  swatches?: Readonly<Record<string, string>> | undefined;
+  /** Your edits to this preset trigger as they loaded, whose flagged
+   *  rows carry Take the fix and Keep mine. */
+  held?: Readonly<Record<string, EditRow>> | undefined;
+}) {
+  const flags = useMemo(() => cardFlags(t, held), [t, held]);
+  const [advanced, setAdvanced] = useState(() => {
+    const main = mainKeyOf(shippedCard(t));
+    return Object.keys(flags).some((key) => opensAdvanced(key, main));
+  });
   const advancedId = useId();
   const nameRef = useRef<HTMLInputElement | null>(null);
-  const locked = Boolean(t.preset);
+  const openPreset = useContext(OpenPresetContext);
+  const from = useMemo((): FromPreset | null => {
+    const lib = libraryTrigger(t);
+    if (!lib) return null;
+    const { colors } = lib.preset;
+    return {
+      preset: lib.preset,
+      ship: shippedCard(t),
+      changed: changedRows(t),
+      colorOf: (key) => swatches?.[key] ?? colors[key]?.token ?? key,
+    };
+  }, [t, swatches]);
+  // A preset trigger this build no longer builds stays as the store has
+  // it until the preset plan takes it out.
+  const locked = Boolean(t.preset) && !from;
   const style = triggerStyle(t.actions);
   const gags = usePromptGags();
   const hidesPrompt = t.enabled && gags.has(t.name);
@@ -181,88 +479,254 @@ export function TriggerDetail({
   const set = (patch: Partial<TriggerRecord>) => update((v) => ({ ...v, ...patch }));
   const setActions = (fn: (actions: TriggerAction[]) => TriggerAction[]) =>
     update((v) => ({ ...v, actions: fn(v.actions) }));
+  const flag: Flag = (key, say) => {
+    if (!Object.hasOwn(flags, key)) return null;
+    const now = flags[key];
+    const sends = key === 'send';
+    return (
+      <FixChoice
+        verb={sends ? 'sends' : 'has'}
+        onTake={() => update((v) => withRow(v, key, now))}
+        onKeep={() => update((v) => ({ ...v, kept: [...(v.kept ?? []), key] }))}
+      >
+        {sends && now === NO_ROW ? 'nothing' : say(now)}
+      </FixChoice>
+    );
+  };
+  const changed = (key: string, say: (value: EditValue) => ReactNode): ReactNode =>
+    flag(key, say) ??
+    (from && Object.hasOwn(from.changed, key) ? <Changed>{say(from.changed[key])}</Changed> : null);
+  const fixLabels = from ? flagLabels(from.ship, flags) : [];
+  const replaceKeys = from ? colorKeys(from.preset, replaceTemplateOf(from.ship.actions)) : [];
 
   return (
-    <Card className="st-auto-card">
-      {hidesPrompt && <CardNote tone="warn">{HIDES_PROMPT_NOTE}</CardNote>}
-      {locked && (
-        <CardNote>
-          This trigger comes from a preset, so only its group changes here. Turn the preset off
-          under Presets to remove it.
-        </CardNote>
-      )}
-      <Row label="Name">
-        <Field
-          ref={nameRef}
-          width="100%"
-          value={t.name}
-          disabled={locked}
-          onChange={(name) => set({ name })}
-        />
-      </Row>
-      <Row label="Group">
-        <GroupField
-          width="100%"
-          value={t.group ?? ''}
-          onCommit={(group) => {
-            update((v) => withGroup(v, group));
-            revealInList();
-          }}
-        />
-      </Row>
-      <PatternRow t={t} update={update} locked={locked} />
-      <Row label="Style">
-        <Select
-          width="100%"
-          value={style}
-          options={TRIGGER_STYLE_OPTIONS}
-          disabled={locked}
-          onChange={(next) => setActions((a) => withTriggerStyle(a, next as TriggerStyle))}
-        />
-      </Row>
-      {style === 'replace' && (
-        <Row label="Replace with">
-          <FieldArea
-            mono
+    <>
+      <Card className="st-auto-card">
+        {hidesPrompt && <CardNote tone="warn">{HIDES_PROMPT_NOTE}</CardNote>}
+        {from && fixLabels.length > 0 && (
+          <CardNote tone="warn">
+            A fix to{' '}
+            <button
+              type="button"
+              className="st-auto-link"
+              onClick={() => openPreset(from.preset.id)}
+            >
+              {from.preset.name}
+            </button>{' '}
+            {fixTail(fixLabels)}
+          </CardNote>
+        )}
+        {from && fixLabels.length === 0 && (
+          <CardNote>
+            From{' '}
+            <button
+              type="button"
+              className="st-auto-link"
+              onClick={() => openPreset(from.preset.id)}
+            >
+              {from.preset.name}
+            </button>
+            . The rows you change here stay yours, and the fixes Vosh ships for the preset still
+            reach the rest.
+          </CardNote>
+        )}
+        {locked && (
+          <CardNote>
+            This trigger comes from a preset, so only its group changes here. Turn the preset off
+            under Presets to remove it.
+          </CardNote>
+        )}
+        <Row label="Name">
+          <Field
+            ref={nameRef}
             width="100%"
-            value={replaceTemplateOf(t.actions)}
-            disabled={locked}
-            onChange={(template) => setActions((a) => withReplaceTemplate(a, template))}
+            value={t.name}
+            disabled={Boolean(t.preset)}
+            onChange={(name) => set({ name })}
           />
         </Row>
-      )}
-      <Row label="Then send">
-        <FieldArea
-          mono
-          width="100%"
-          value={effectOf(t.actions, 'send')}
+        <Row label="Group">
+          <UnderField changed={changed('group', (g) => (g ? presetText(g) : 'no group'))}>
+            <GroupField
+              width="100%"
+              value={t.group ?? ''}
+              onCommit={(group) => {
+                update((v) => withGroup(v, group));
+                revealInList();
+              }}
+            />
+          </UnderField>
+        </Row>
+        <PatternRow t={t} update={update} locked={locked} ship={from?.ship ?? null} flag={flag} />
+        <Row label="Style" description={changed('style', styleLabel)}>
+          <Select
+            width="100%"
+            value={style}
+            options={TRIGGER_STYLE_OPTIONS}
+            disabled={locked}
+            onChange={(next) => setActions((a) => withTriggerStyle(a, next as TriggerStyle))}
+          />
+        </Row>
+        {style === 'replace' && (
+          <Row
+            label="Replace with"
+            description={
+              replaceKeys.length > 0 ? (
+                <>
+                  {joinNodes(
+                    replaceKeys.map((key) => (
+                      <span key={key} className="st-auto-mono">{`{${key}}`}</span>
+                    )),
+                  )}{' '}
+                  {replaceKeys.length === 1 ? 'follows' : 'follow'} the preset’s card
+                </>
+              ) : undefined
+            }
+          >
+            <UnderField changed={changed('replace', presetText)}>
+              <FieldArea
+                mono
+                width="100%"
+                value={replaceTemplateOf(t.actions)}
+                disabled={locked}
+                onChange={(template) => setActions((a) => withReplaceTemplate(a, template))}
+              />
+            </UnderField>
+          </Row>
+        )}
+        <Row label="Then send">
+          <UnderField changed={changed('send', presetText)}>
+            <FieldArea
+              mono
+              width="100%"
+              value={effectOf(t.actions, 'send')}
+              disabled={locked}
+              onChange={(command) => setActions((a) => withEffect(a, 'send', command))}
+            />
+          </UnderField>
+        </Row>
+        <AlertRow
+          alert={t.alert}
           disabled={locked}
-          onChange={(command) => setActions((a) => withEffect(a, 'send', command))}
+          banner={banner}
+          description={
+            flag('alert', (v) => (
+              <AlertPartsOn
+                alert={v === NO_ROW ? undefined : (v as unknown as AlertParts)}
+                none="no alert"
+              />
+            )) ??
+            (from && partsOn(t.alert) !== partsOn(from.ship.alert) ? (
+              <Changed>
+                <AlertPartsOn alert={from.ship.alert} none="no alert" />
+              </Changed>
+            ) : undefined)
+          }
+          onPress={(part, on) => update((v) => withAlert(v, (a) => withAlertPart(a, part, on)))}
         />
-      </Row>
-      <AlertRow
-        alert={t.alert}
-        disabled={locked}
-        banner={banner}
-        onPress={(part, on) => update((v) => withAlert(v, (a) => withAlertPart(a, part, on)))}
-      />
-      <Row label="Enabled">
-        <Toggle checked={t.enabled} disabled={locked} onChange={(enabled) => set({ enabled })} />
-      </Row>
-      <Disclosure
-        label="Advanced"
-        description="Set priority, match prompts, send to a pane, run Lua, or tune alerts."
-        expanded={advanced}
-        aria-controls={advancedId}
-        onClick={() => setAdvanced((open) => !open)}
-      />
-      {advanced && (
-        <div id={advancedId} className="st-auto-advanced">
-          <TriggerAdvanced t={t} update={update} locked={locked} style={style} />
+        <Row label="Enabled" description={changed('enabled', presetSwitch)}>
+          <Toggle checked={t.enabled} disabled={locked} onChange={(enabled) => set({ enabled })} />
+        </Row>
+        <Disclosure
+          label="Advanced"
+          description="Set priority, match prompts, send to a pane, run Lua, or tune alerts."
+          note={<AdvancedCount t={t} from={from} />}
+          expanded={advanced}
+          aria-controls={advancedId}
+          onClick={() => setAdvanced((open) => !open)}
+        />
+        {advanced && (
+          <div id={advancedId} className="st-auto-advanced">
+            <TriggerAdvanced
+              t={t}
+              update={update}
+              locked={locked}
+              style={style}
+              from={from}
+              changed={changed}
+              flag={flag}
+            />
+          </div>
+        )}
+      </Card>
+      {from && (
+        <div className="st-auto-detail-actions">
+          <Button
+            disabled={Object.keys(from.changed).length === 0}
+            onClick={() => update(shippedCard)}
+          >
+            Reset to preset
+          </Button>
         </div>
       )}
-    </Card>
+    </>
   );
+}
+
+/** The color keys of `preset` that `template` names, in its order. */
+function colorKeys(preset: Preset, template: string): string[] {
+  const keys = [...template.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
+  return [...new Set(keys)].filter((key) => Object.hasOwn(preset.colors, key));
+}
+
+/** `parts` joined as a sentence joins them, `a and b`, `a, b, and c`. */
+function joinNodes(parts: readonly ReactNode[]): ReactNode {
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {i === 0 ? '' : i === parts.length - 1 ? (parts.length > 2 ? ', and ' : ' and ') : ', '}
+      {part}
+    </Fragment>
+  ));
+}
+
+const styleLabel = (value: EditValue) =>
+  TRIGGER_STYLE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
+
+/** Which parts an alert has on, to tell whether the Alert row
+ *  changed. */
+const partsOn = (alert: AlertParts | undefined) =>
+  [Boolean(alert?.banner), alert?.sound !== undefined, alert?.attention !== undefined].join();
+
+/** The rows under Advanced that differ from the preset, the count a
+ *  closed Advanced shows beside the pencil so no edit hides there. */
+function AdvancedCount({ t, from }: { t: TriggerRecord; from: FromPreset | null }) {
+  if (!from) return null;
+  const rows = ADVANCED_ROWS.filter((key) => Object.hasOwn(from.changed, key)).length;
+  const count = rows + (morePatternsDiffer(t, from.ship) ? 1 : 0) + alsoChanges(t, from.ship);
+  if (count === 0) return null;
+  return (
+    <span className="st-auto-count">
+      <PencilIcon size={12} />
+      {countPhrase(count, CHANGE_NOUN)}
+    </span>
+  );
+}
+
+/** Each pattern past the main one, and whether the main one is on. */
+function morePatterns(t: TriggerRecord): string {
+  return JSON.stringify([
+    mainPattern(t).enabled,
+    ...t.patterns.slice(1).map((p) => [patternSource(p), p.enabled]),
+  ]);
+}
+
+const morePatternsDiffer = (t: TriggerRecord, ship: TriggerRecord) =>
+  morePatterns(t) !== morePatterns(ship);
+
+/** The commands of each Also send. */
+const alsoSends = (t: TriggerRecord) =>
+  extraEffects(t.actions)
+    .filter((e) => e.kind === 'send')
+    .map((e) => e.value);
+
+/** How many Also send rows differ from the preset's: the ones you
+ *  changed or added, or the ones you took out where those are more. */
+function alsoChanges(t: TriggerRecord, ship: TriggerRecord): number {
+  const mine = alsoSends(t);
+  const theirs = alsoSends(ship);
+  const added = mine.filter((c) => !theirs.includes(c)).length;
+  const gone = theirs.filter((c) => !mine.includes(c)).length;
+  return Math.max(added, gone);
 }
 
 /** The Pattern row as board 6 draws it: the label and what the mode
@@ -273,14 +737,28 @@ function PatternRow({
   t,
   update,
   locked,
+  ship,
+  flag,
 }: {
-  t: TriggerRecord;
-  update: DetailProps<TriggerRecord>['update'];
+  t: TriggerCard;
+  update: DetailProps<TriggerCard>['update'];
   locked: boolean;
+  ship: TriggerRecord | null;
+  flag: Flag;
 }) {
   const labelId = useId();
   const descId = useId();
   const mode = triggerMode(t);
+  const source = patternSource(mainPattern(t));
+  // A fix to the main pattern or its mode shows its choices in place of
+  // the line that says what the preset has.
+  let changed: ReactNode =
+    (ship && flag(mainKeyOf(ship), (v) => presetSwitch(patternOn(v)))) ?? flag('mode', modeLabel);
+  if (changed === null && ship && patternSource(mainPattern(ship)) !== source) {
+    changed = <Changed>{presetText(patternSource(mainPattern(ship)))}</Changed>;
+  } else if (changed === null && ship && triggerMode(ship) !== mode) {
+    changed = <Changed>{modeLabel(triggerMode(ship))}</Changed>;
+  }
   return (
     <div className="st-row st-auto-block">
       <div className="st-auto-block-head">
@@ -306,10 +784,11 @@ function PatternRow({
         width="100%"
         aria-labelledby={labelId}
         aria-describedby={descId}
-        value={patternSource(mainPattern(t))}
+        value={source}
         disabled={locked}
         onChange={(pattern) => update((v) => withMainPatternSource(v, pattern))}
       />
+      {changed && <p className="st-auto-under">{changed}</p>}
     </div>
   );
 }
@@ -319,11 +798,17 @@ function TriggerAdvanced({
   update,
   locked,
   style,
+  from,
+  changed,
+  flag,
 }: {
-  t: TriggerRecord;
-  update: DetailProps<TriggerRecord>['update'];
+  t: TriggerCard;
+  update: DetailProps<TriggerCard>['update'];
   locked: boolean;
   style: TriggerStyle;
+  from: FromPreset | null;
+  changed: (key: string, say: (value: EditValue) => ReactNode) => ReactNode;
+  flag: Flag;
 }) {
   const setActions = (fn: (actions: TriggerAction[]) => TriggerAction[]) =>
     update((v) => ({ ...v, actions: fn(v.actions) }));
@@ -331,10 +816,30 @@ function TriggerAdvanced({
     setActions((a) => withHighlight(a, { [key]: value } as HighlightPatch));
   const highlight = highlightOf(t.actions);
   const extras = extraEffects(t.actions);
+  const shipSends = from ? alsoSends(from.ship) : [];
+  // A text color the preset names by key shows as the color it paints,
+  // and picking that color again puts the key back, so the swatch on
+  // the preset's card still reaches it.
+  const shipFg = from ? highlightOf(from.ship.actions)?.fg : undefined;
+  const isKey = (c: string | undefined): c is string =>
+    c !== undefined && from !== null && Object.hasOwn(from.preset.colors, c);
+  const shown = (c: string | undefined) => (isKey(c) ? from!.colorOf(c) : c);
+  const colorWords = (value: EditValue) => {
+    const c = typeof value === 'string' ? (/^\{(.+)\}$/.exec(value)?.[1] ?? value) : '';
+    const named = shown(c) ?? '';
+    return COLOR_OPTIONS.find((o) => o.value === named)?.label ?? named;
+  };
+  const shownFg = shown(highlight?.fg);
 
   return (
     <>
-      <Row label="Priority" description="Vosh runs triggers with higher numbers first.">
+      <Row
+        label="Priority"
+        description={withChanged(
+          'Vosh runs triggers with higher numbers first.',
+          changed('priority', String),
+        )}
+      >
         <NumberField
           value={t.priority}
           min={0}
@@ -345,7 +850,10 @@ function TriggerAdvanced({
       </Row>
       <Row
         label="Match"
-        description="Prompts match what your MUD sends before you type. Room matches the armies, things and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them."
+        description={withChanged(
+          'Prompts match what your MUD sends before you type. Room matches the armies, things and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them.',
+          changed('target', (v) => MATCH_OPTIONS.find((o) => o.value === v)?.label ?? String(v)),
+        )}
       >
         <Segmented
           options={MATCH_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
@@ -360,19 +868,26 @@ function TriggerAdvanced({
           }
         />
       </Row>
-      <PatternsBlock t={t} update={update} locked={locked} />
+      <PatternsBlock t={t} update={update} locked={locked} ship={from?.ship ?? null} flag={flag} />
       {highlight && (style === 'highlight' || style === 'wash') && (
         <>
-          <Row label="Text color">
+          <Row label="Text color" description={changed('fg', colorWords)}>
             <Select
               width={160}
-              value={highlight.fg ?? ''}
-              options={colorOptions(highlight.fg)}
+              value={shownFg ?? ''}
+              options={colorOptions(shownFg)}
               disabled={locked}
-              onChange={(fg) => setHighlight('fg', (fg || undefined) as NamedColor | undefined)}
+              onChange={(fg) =>
+                setHighlight(
+                  'fg',
+                  (isKey(shipFg) && fg === shown(shipFg) ? shipFg : fg || undefined) as
+                    | NamedColor
+                    | undefined,
+                )
+              }
             />
           </Row>
-          <Row label="Background">
+          <Row label="Background" description={changed('bg', colorWords)}>
             <Select
               width={160}
               value={highlight.bg ?? ''}
@@ -381,21 +896,21 @@ function TriggerAdvanced({
               onChange={(bg) => setHighlight('bg', (bg || undefined) as NamedColor | undefined)}
             />
           </Row>
-          <Row label="Bold">
+          <Row label="Bold" description={changed('bold', presetSwitch)}>
             <Toggle
               checked={Boolean(highlight.bold)}
               disabled={locked}
               onChange={(on) => setHighlight('bold', on)}
             />
           </Row>
-          <Row label="Underline">
+          <Row label="Underline" description={changed('underline', presetSwitch)}>
             <Toggle
               checked={Boolean(highlight.underline)}
               disabled={locked}
               onChange={(on) => setHighlight('underline', on)}
             />
           </Row>
-          <Row label="Inverse">
+          <Row label="Inverse" description={changed('inverse', presetSwitch)}>
             <Toggle
               checked={Boolean(highlight.inverse)}
               disabled={locked}
@@ -405,43 +920,54 @@ function TriggerAdvanced({
         </>
       )}
       <Row label="Send to pane" description="The pane that also gets the matching line, like chat.">
-        <Field
-          width="100%"
-          value={effectOf(t.actions, 'route')}
-          placeholder="No pane"
-          disabled={locked}
-          onChange={(pane) => setActions((a) => withEffect(a, 'route', pane))}
-        />
+        <UnderField changed={changed('route', presetText)}>
+          <Field
+            width="100%"
+            value={effectOf(t.actions, 'route')}
+            placeholder="No pane"
+            disabled={locked}
+            onChange={(pane) => setActions((a) => withEffect(a, 'route', pane))}
+          />
+        </UnderField>
       </Row>
       <CodeRow
         label="Lua script"
-        description="Runs on each match. The captures table holds what the pattern caught."
+        description={withChanged(
+          'Runs on each match. The captures table holds what the pattern caught.',
+          changed('script', (v) => (v ? 'a script of its own' : 'it empty')),
+        )}
         value={effectOf(t.actions, 'script')}
         readOnly={locked}
         onChange={(body) => setActions((a) => withEffect(a, 'script', body))}
       />
-      {extras.map((extra) => (
-        <Row key={extra.index} label={EFFECT_LABELS[extra.kind]}>
-          <FieldArea
-            className="st-auto-grow"
-            mono={extra.kind !== 'route'}
-            width="100%"
-            value={extra.value}
-            disabled={locked}
-            onChange={(next) => setActions((a) => withEffectAt(a, extra.index, next))}
-          />
-          {!locked && (
-            <button
-              type="button"
-              className="st-auto-iconbutton"
-              aria-label={`Remove ${EFFECT_LABELS[extra.kind].toLowerCase()}`}
-              onClick={() => setActions((a) => withEffectAt(a, extra.index, null))}
-            >
-              <CloseIcon size={12} />
-            </button>
-          )}
-        </Row>
-      ))}
+      {extras.map((extra, i) => {
+        const theirs = shipSends[extras.slice(0, i).filter((e) => e.kind === 'send').length];
+        const mine = extra.kind === 'send' && from !== null && !shipSends.includes(extra.value);
+        return (
+          <Row key={extra.index} label={EFFECT_LABELS[extra.kind]}>
+            <UnderField changed={mine ? <Changed>{presetText(theirs)}</Changed> : null}>
+              <FieldArea
+                className="st-auto-grow"
+                mono={extra.kind !== 'route'}
+                width="100%"
+                value={extra.value}
+                disabled={locked}
+                onChange={(next) => setActions((a) => withEffectAt(a, extra.index, next))}
+              />
+            </UnderField>
+            {!locked && (
+              <button
+                type="button"
+                className="st-auto-iconbutton"
+                aria-label={`Remove ${EFFECT_LABELS[extra.kind].toLowerCase()}`}
+                onClick={() => setActions((a) => withEffectAt(a, extra.index, null))}
+              >
+                <CloseIcon size={12} />
+              </button>
+            )}
+          </Row>
+        );
+      })}
       <AlertDetailRows
         alert={t.alert}
         disabled={locked}
@@ -457,15 +983,34 @@ function PatternsBlock({
   t,
   update,
   locked,
+  ship,
+  flag,
 }: {
-  t: TriggerRecord;
-  update: DetailProps<TriggerRecord>['update'];
+  t: TriggerCard;
+  update: DetailProps<TriggerCard>['update'];
   locked: boolean;
+  ship: TriggerRecord | null;
+  flag: Flag;
 }) {
   const headingId = useId();
   const main = mainPattern(t);
   const extra = t.patterns.slice(1);
-  const setPatterns = (fn: (rest: TriggerPattern[], v: TriggerRecord) => TriggerPattern[]) =>
+  // A fix that turned one of the preset's patterns past the main one on
+  // or off under your edit.
+  const fixes = (ship?.patterns.slice(1) ?? []).map((p) => {
+    const text = patternSource(p);
+    return flag(patternKey(text), (v) => (
+      <>
+        <span className="st-auto-mono">{text}</span> {patternOn(v) ? 'on' : 'off'}
+      </>
+    ));
+  });
+  const changed = fixes.some((f) => f !== null) ? (
+    fixes.map((f, i) => <Fragment key={i}>{f}</Fragment>)
+  ) : ship && morePatternsDiffer(t, ship) ? (
+    <Changed>{countPhrase(ship.patterns.length, PATTERN_NOUN)}</Changed>
+  ) : null;
+  const setPatterns = (fn: (rest: TriggerPattern[], v: TriggerCard) => TriggerPattern[]) =>
     update((v) => {
       const first = v.patterns[0] ?? mainPattern(v);
       return { ...v, patterns: [first, ...fn(v.patterns.slice(1), v)] };
@@ -477,7 +1022,9 @@ function PatternsBlock({
         <span id={headingId} className="st-row-label">
           More patterns
         </span>
-        <span className="st-row-desc">The trigger fires when any pattern that is on matches.</span>
+        <span className="st-row-desc">
+          {withChanged('The trigger fires when any pattern that is on matches.', changed)}
+        </span>
       </div>
       <ul className="st-auto-patterns">
         <li className="st-auto-pattern">

@@ -7,12 +7,15 @@ import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
 import { Resizable } from '../terminal/Resizable';
 import { ReconnectNotice } from './overlays/ReconnectNotice';
-import { UpdateNotice } from './overlays/UpdateNotice';
-import { Toasts } from './overlays/Toasts';
+import { CornerNotices } from './overlays/CornerNotices';
 import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
+import { GetStarted } from './getStarted/GetStarted';
+import { markDone, openList as openGetStarted } from './getStarted/getStartedStore';
+import { showMe } from './getStarted/showMe';
+import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 import { SnoopSplit } from './SnoopSplit';
@@ -22,6 +25,7 @@ import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
 import {
   panelWidthOf,
+  setPanelOpen,
   setPanelWidth,
   togglePanelOpen,
   usePanelLayout,
@@ -48,6 +52,7 @@ import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CoachRing } from '../ui/CoachRing';
 import { openSettingsTab } from '../lib/settingsLink';
 import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
@@ -434,6 +439,7 @@ function MainWindow() {
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: openHelpWindow,
+    openGetStarted,
     openFind,
     openSettings: openSettingsWindow,
     openSettingsTab,
@@ -469,6 +475,19 @@ function MainWindow() {
         .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
     },
   });
+
+  // Show me opens the panel or the terminal menu here (showMe.ts).
+  const showMeHere = (step: StepId) =>
+    showMe(step, {
+      openPanel: () => setPanelOpen(true),
+      openTerminalMenu: () => {
+        const area = terminalAreaRef.current?.getBoundingClientRect();
+        const term = termRef.current;
+        if (!area) return;
+        const last = term ? term.rowTop(term.getSize().rows - 1) : null;
+        setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
+      },
+    });
 
   // The window shortcuts, the macOS menu bar and #help.
   const { runCommand, themesChanged } = useAppCommands({
@@ -763,13 +782,28 @@ function MainWindow() {
       }
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
-      <ReconnectNotice
-        session={selected}
-        onTryAgain={() => void connection.connect()}
-        onError={handleError}
+      <CornerNotices
+        reconnect={
+          <ReconnectNotice
+            session={selected}
+            onTryAgain={() => void connection.connect()}
+            onError={handleError}
+          />
+        }
       />
-      <UpdateNotice />
-      <Toasts />
+      <GetStarted
+        play={{
+          live: connected,
+          character: connection.character,
+          connect: () => void connection.connect(),
+        }}
+        covered={promptCard !== null}
+        host={promptCardHost}
+        cell={cellSize}
+        show={promptShow}
+        onShowMe={showMeHere}
+        focusInput={focusInput}
+      />
       {terminalMenu && (
         <TerminalMenu
           x={terminalMenu.x}
@@ -782,6 +816,7 @@ function MainWindow() {
           onClose={() => setTerminalMenu(null)}
         />
       )}
+      <CoachRing />
       {promptCard && (
         // A selection mounts the card again for the session it brings to
         // the front, and the card it leaves puts that session's live
@@ -800,6 +835,7 @@ function MainWindow() {
           themeTerminalColors={themeTerminalColors}
           brightBold={brightBold}
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onPromptDone={() => markDone('prompt')}
           onClose={closePromptCard}
         />
       )}

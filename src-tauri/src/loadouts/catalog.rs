@@ -13,11 +13,13 @@ use vosh_automation::alias::{Alias, AliasStore};
 use vosh_automation::trigger::{Trigger, TriggerStore};
 
 use super::gating::apply_effective_state;
+use super::preset_edits::PresetEdits;
 use super::presets::hold_taken_keys;
 use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
 use crate::disk::paths::catalog_path;
+use crate::profile::file::ProfileConfig;
 use crate::profile::live::{Macro, Profile};
 
 /// The global catalog. Every alias, trigger, macro lives here as a
@@ -48,12 +50,18 @@ pub(crate) struct GlobalCatalog {
     /// out while it holds none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub alerts: BTreeMap<String, AlertParts>,
+    /// Your edits to the presets, the `[preset_edits]` table a profile
+    /// file holds in per profile mode. Every character shares the preset
+    /// triggers here, so they share one set of edits too. Left out while
+    /// it holds none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub preset_edits: PresetEdits,
 }
 
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
-    /// macros, enabled presets and alert presets. A save in loadout mode
-    /// writes this.
+    /// macros, enabled presets, alert presets and preset edits. A save in
+    /// loadout mode writes this.
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
@@ -61,7 +69,26 @@ impl GlobalCatalog {
             macros: profile.macros.clone(),
             enabled_presets: Some(profile.ui.enabled_presets.clone()),
             alerts: profile.alerts.clone(),
+            preset_edits: profile.preset_edits.clone(),
         }
+    }
+
+    /// Give `file`, the file of a profile no session plays, the presets
+    /// as the catalog runs them: its list of presets that are on, your
+    /// edits to them, and the preset triggers as installed, your edits in
+    /// them (Presets Q11). An export of that profile then carries the
+    /// presets you play, as an export of an open one does. A catalog that
+    /// has not taken the list yet leaves the file's own.
+    pub(crate) fn lay_presets_over_file(&self, file: &mut ProfileConfig) {
+        let Some(list) = &self.enabled_presets else {
+            return;
+        };
+        file.ui.enabled_presets.clone_from(list);
+        file.preset_edits.clone_from(&self.preset_edits);
+        let presets = self.triggers.iter().filter(|t| t.preset.is_some());
+        file.triggers
+            .retain(|t| !presets.clone().any(|p| p.name == t.name));
+        file.triggers.extend(presets.cloned());
     }
 }
 
@@ -119,8 +146,9 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
     // triggers, so the profile's own list gives way to it.
     if let Some(list) = &catalog.enabled_presets {
         p.ui.enabled_presets.clone_from(list);
-        // So does what each alert preset does.
+        // So do what each alert preset does and your edits to them all.
         p.alerts.clone_from(&catalog.alerts);
+        p.preset_edits.clone_from(&catalog.preset_edits);
     }
     if let Some(set) = set {
         apply_effective_state(set, p);
@@ -180,6 +208,9 @@ pub(crate) fn lay_catalog_change_over(
     }
     if after.alerts != before.alerts {
         p.alerts.clone_from(&after.alerts);
+    }
+    if after.preset_edits != before.preset_edits {
+        p.preset_edits.clone_from(&after.preset_edits);
     }
     if let Some(set) = set {
         apply_effective_state(set, p);
@@ -323,6 +354,44 @@ mod tests {
         q.alerts.insert("alert_tells".into(), tells);
         lay_catalog_over(&mut q, &GlobalCatalog::default(), None);
         assert_eq!(q.alerts.len(), 1);
+    }
+
+    #[test]
+    fn the_preset_edits_move_with_the_list_of_presets_that_are_on() {
+        use crate::loadouts::preset_edits::{EditRow, PresetEdit};
+        let off = PresetEdit {
+            triggers: std::collections::BTreeMap::from([(
+                "buff.sanctuary".into(),
+                std::collections::BTreeMap::from([(
+                    "enabled".into(),
+                    EditRow {
+                        value: false.into(),
+                        was: true.into(),
+                        seen: None,
+                    },
+                )]),
+            )]),
+            ..PresetEdit::default()
+        };
+        let catalog = GlobalCatalog {
+            enabled_presets: Some(vec!["disarm_buff_fade".into()]),
+            preset_edits: std::collections::BTreeMap::from([("disarm_buff_fade".into(), off)]),
+            ..GlobalCatalog::default()
+        };
+        let mut p = Profile::default();
+        lay_catalog_over(&mut p, &catalog, None);
+        assert_eq!(p.preset_edits, catalog.preset_edits);
+        assert_eq!(
+            GlobalCatalog::from_profile(&p).preset_edits,
+            catalog.preset_edits
+        );
+        // A change another open profile saved reaches this one.
+        let after = GlobalCatalog {
+            preset_edits: std::collections::BTreeMap::new(),
+            ..catalog.clone()
+        };
+        lay_catalog_change_over(&mut p, &catalog, &after, None);
+        assert!(p.preset_edits.is_empty(), "{:?}", p.preset_edits);
     }
 
     /// A macro of yours on `key`, or one the preset `preset` added.
