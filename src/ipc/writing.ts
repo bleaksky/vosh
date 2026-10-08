@@ -1,7 +1,8 @@
 // Calls and events of the writing card. A session's writer reads a text
 // from the game, sends one through the game's line editor, posts a note
 // or sends a text for its review, and says where it stands on
-// session://writing.
+// session://writing. writing.toml keeps your drafts and posts for each
+// character.
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -147,4 +148,60 @@ export async function onWriting(
     const { session: _session, ...state } = event.payload;
     cb(state as WritingState, sessionOf(event.payload));
   });
+}
+
+/** A draft or a post, `Draft` in src-tauri/src/writing.rs. */
+export interface Draft {
+  id: string;
+  kind: WritingKind;
+  to?: string;
+  subject?: string;
+  language?: string | null;
+  /** An application for a custom race, kept to 70 a line. */
+  custom_race?: boolean;
+  /** The room a bug or typo report began in. */
+  room?: string | null;
+  text: string[];
+  /** The game's copy of a text it saves in place. */
+  game?: string[] | null;
+  /** When it last changed, or when it posted, in Unix ms. */
+  at: number;
+}
+
+/** One character's writing, `Character` in writing.rs. */
+export interface WritingCharacter {
+  host: string;
+  port: number;
+  name: string;
+  race?: string | null;
+  level?: number | null;
+  beast?: string | null;
+  drafts: Draft[];
+  sent: Draft[];
+}
+
+/** writing.toml, `WritingFile` in writing.rs. */
+export interface WritingFile {
+  version: number;
+  /** The card checks spelling. */
+  spelling: boolean;
+  /** The guide shows beside the text. */
+  guide: boolean;
+  characters: Record<string, WritingCharacter>;
+}
+
+/** Every character's drafts and posts, with the card's switches. */
+export async function writingFileGet(): Promise<WritingFile> {
+  return invoke('writing_file_get');
+}
+
+/** Keep one character's drafts and posts. A character with nothing left
+ *  leaves the file. */
+export async function writingCharacterSet(character: WritingCharacter): Promise<void> {
+  await invoke('writing_character_set', { character });
+}
+
+/** Keep the card's Check spelling and whether its guide shows. */
+export async function writingSwitchesSet(spelling: boolean, guide: boolean): Promise<void> {
+  await invoke('writing_switches_set', { spelling, guide });
 }

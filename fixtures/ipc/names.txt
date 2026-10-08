@@ -165,8 +165,11 @@ command updater_install_and_relaunch()
 command vitals_snapshot_get(session?)
 command vitals_text_watch(session?, cols?)
 command window_backdrop_set(background?, appearance?)
+command writing_character_set(character)
+command writing_file_get()
 command writing_start(job, session?)
 command writing_stop(session?)
+command writing_switches_set(spelling, guide)
 command writing_take(id, session?)
 event session://alert app heard
 event session://alerts-ended app unheard
