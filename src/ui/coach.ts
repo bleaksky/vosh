@@ -86,5 +86,5 @@ export function tipPlace(
 
 /** The coach showing, or null. */
 export function useCoach(): Coach | null {
-  return useSyncExternalStore(coach.subscribe, coach.get);
+  return useSyncExternalStore(coach.subscribe, coach.get, coach.get);
 }
