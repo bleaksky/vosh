@@ -24,7 +24,7 @@
 //! - Else create an empty index with one "default" profile entry (its
 //!   file is created on the first save). A folder that holds nothing of
 //!   yours is a new install, which also gets a global.toml that starts it
-//!   on Triad.
+//!   on Triad and a profiles/default.toml with every preset off.
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +34,7 @@ use thiserror::Error;
 use crate::app::state::SharedState;
 use crate::disk::paths;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
+use crate::loadouts::presets::PRESETS_OFF;
 use crate::profile::file::{ConfigError, ProfileConfig};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::shared::{GlobalConfig, ScopeConfig};
@@ -214,9 +215,9 @@ fn read_saved(path: &Path) -> Result<SavedFile, ConfigError> {
 impl ProfileSet {
     /// Load (or migrate-and-load) the profile set rooted at the given
     /// app data directory. Always returns a valid set; on a fresh
-    /// install it returns a single-entry "default" set whose
-    /// profile file does not exist yet, beside a global.toml that holds
-    /// the theme a new install starts on.
+    /// install it returns a single-entry "default" set whose profile
+    /// file has every preset off, beside a global.toml that holds the
+    /// theme a new install starts on.
     pub(crate) fn load_or_migrate(root: PathBuf) -> Result<Self, ProfileSetError> {
         let index_path = paths::profiles_index_path(&root);
 
@@ -249,18 +250,12 @@ impl ProfileSet {
             let target = paths::profile_path(&root, DEFAULT_PROFILE_NAME);
             std::fs::rename(&legacy, &target)?;
         }
-        // global.toml holds the new install's theme before the index
-        // names a profile, so a crash before the first save keeps it,
-        // and a global.toml that does not save leaves the folder new for
-        // the next launch.
+        // global.toml holds the new install's theme and profiles/default.toml
+        // its presets, all off, before the index names a profile, so a
+        // crash before the first save keeps both. When either does not
+        // save, the folder stays new for the next launch.
         if new_install {
-            let global = GlobalConfig {
-                theme: Some(NEW_INSTALL_THEME.to_string()),
-                light_theme: Some(NEW_INSTALL_LIGHT_THEME.to_string()),
-                ..GlobalConfig::default()
-            };
-            let body = toml::to_string_pretty(&global)?;
-            crate::disk::atomic::write_with_backup(&paths::global_path(&root), &body)?;
+            write_new_install(&root)?;
         }
 
         let index = ProfilesIndex {
@@ -627,6 +622,30 @@ impl ProfileSet {
     }
 }
 
+/// Write what a new install starts with in the app data folder `root`:
+/// global.toml on Triad, and profiles/default.toml with every preset off.
+/// When the profile file does not save, global.toml goes too, so the
+/// folder still holds nothing of yours.
+fn write_new_install(root: &Path) -> Result<(), ProfileSetError> {
+    let global = GlobalConfig {
+        theme: Some(NEW_INSTALL_THEME.to_string()),
+        light_theme: Some(NEW_INSTALL_LIGHT_THEME.to_string()),
+        ..GlobalConfig::default()
+    };
+    let mut profile = ProfileConfig::fresh();
+    profile.ui.enabled_presets = vec![PRESETS_OFF.to_string()];
+    let global_body = toml::to_string_pretty(&global)?;
+    let profile_body = toml::to_string_pretty(&profile)?;
+    let global_path = paths::global_path(root);
+    crate::disk::atomic::write_with_backup(&global_path, &global_body)?;
+    let profile_path = paths::profile_path(root, DEFAULT_PROFILE_NAME);
+    if let Err(e) = crate::disk::atomic::write_with_backup(&profile_path, &profile_body) {
+        let _ = std::fs::remove_file(&global_path);
+        return Err(e.into());
+    }
+    Ok(())
+}
+
 /// True when the app data folder `root` holds no profiles.toml, no root
 /// profile.toml, no global.toml and nothing in profiles/, which only a
 /// new install does. A folder whose profiles.toml you deleted to recover
@@ -863,6 +882,34 @@ pub(crate) mod tests {
             let global = std::fs::read_to_string(paths::global_path(dir.path())).ok();
             let want = (kept == "global.toml").then(|| "marker = 1\n".to_string());
             assert_eq!(global, want, "{kept}");
+        }
+    }
+
+    #[test]
+    fn an_empty_folder_starts_with_every_preset_off() {
+        let dir = tempdir().unwrap();
+        ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let path = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
+        let config = ProfileConfig::load(&path).unwrap();
+        assert_eq!(config.ui.enabled_presets, [PRESETS_OFF]);
+    }
+
+    #[test]
+    fn a_folder_with_a_profile_keeps_its_presets() {
+        // Bug 5 recovery leaves the profile files, and the oldest builds
+        // kept one profile.toml at the root, which moves to default.toml.
+        for (kept, default_text) in [
+            ("profiles/foo.toml", None),
+            ("profile.toml", Some("marker = 1\n")),
+        ] {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join(kept);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "marker = 1\n").unwrap();
+            ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+            let default = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
+            let text = std::fs::read_to_string(default).ok();
+            assert_eq!(text.as_deref(), default_text, "{kept}");
         }
     }
 

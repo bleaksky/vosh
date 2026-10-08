@@ -361,6 +361,13 @@ mod tests {
         state
     }
 
+    /// The text of the active profile file in `dir`, which an edit to
+    /// another profile never moves.
+    fn active_text(dir: &std::path::Path) -> String {
+        let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+        std::fs::read_to_string(set.profile_path(DEFAULT_PROFILE_NAME)).unwrap()
+    }
+
     fn write_profile(dir: &std::path::Path, name: &str, config: &ProfileConfig) {
         let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         config.save(&set.profile_path(name)).unwrap();
@@ -416,6 +423,7 @@ mod tests {
     async fn an_inactive_edit_writes_its_file_and_never_the_live_profile() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
+        let active = active_text(dir.path());
         let mut config = ProfileConfig::default();
         config.ui.theme = "nord".into();
         config.profile_vars.insert("target".into(), "orc".into());
@@ -439,7 +447,7 @@ mod tests {
         // The live profile and the active file never moved.
         let live = state.selected_profile().await;
         assert_eq!(names(&live.ui.tracked_affects), ["Sanctuary"]);
-        assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
+        assert_eq!(active_text(dir.path()), active);
     }
 
     #[tokio::test]
@@ -463,12 +471,12 @@ mod tests {
     async fn an_edit_to_the_live_profile_is_handed_back_unwritten() {
         let dir = tempfile::tempdir().unwrap();
         let state = james_like_state(dir.path()).await;
+        let active = active_text(dir.path());
         let written = edit_inactive_profile(&state, DEFAULT_PROFILE_NAME, set_affects(&["Fly"]))
             .await
             .unwrap();
         assert!(matches!(written, Stored::Open(_)));
-        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
+        assert_eq!(active_text(dir.path()), active);
         assert!(
             edit_inactive_profile(&state, "Nobody", set_affects(&["Fly"]))
                 .await

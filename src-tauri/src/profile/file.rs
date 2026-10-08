@@ -1114,7 +1114,8 @@ mod prompt_tests {
     fn a_launch_with_no_profile_file_starts_fresh() {
         let dir = tempfile::tempdir().unwrap();
         let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        assert!(!set.active_path().exists());
+        // A profile the index lists with no file of its own.
+        std::fs::remove_file(set.active_path()).unwrap();
         let mut live = Profile::default();
         let leftover = &load_at_launch(&set, &mut live);
         assert!(leftover.is_empty(), "{leftover:?}");
