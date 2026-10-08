@@ -67,6 +67,17 @@ export async function searchLogPage(
   return invoke('logs_search_page', { pattern, ...options });
 }
 
+/** How many days Vosh keeps a log, or null to keep it forever. */
+export async function logsKeepGet(): Promise<number | null> {
+  return invoke('logs_keep_get');
+}
+
+/** Keep logs for 365, 90 or 30 days, or forever with null. Vosh then
+ *  deletes the logs past the span. */
+export async function logsKeepSet(days: number | null): Promise<void> {
+  return invoke('logs_keep_set', { days });
+}
+
 export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }

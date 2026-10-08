@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { listLogSessions } from '../../ipc/logs';
+import { listLogSessions, logsKeepGet, logsKeepSet } from '../../ipc/logs';
 import {
   profileGetScope,
   profileSetScope,
@@ -11,7 +11,7 @@ import { checkForUpdate, installUpdateAndRelaunch } from '../../ipc/updater';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
-import { savedLogsText } from './logView';
+import { isLocalHost, KEEP_LOGS, savedLogsText } from './logView';
 import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS } from '../../lib/knownWorlds';
 import { useSessions } from '../../stores/session/sessionsStore';
@@ -73,17 +73,13 @@ function GeneralSections({
         disabled={config === null}
       />
       <ScopeSection onError={onError} />
-      <Section
-        id="session-logs"
-        title="Session logs"
-        help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
-      >
-        <Row label="Saved logs" description={<SavedLogsCount onError={onError} />}>
-          <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>
-            Search logs…
-          </Button>
-        </Row>
-      </Section>
+      <SessionLogsSection
+        logSessions={config?.log_sessions ?? null}
+        onLogSessions={(on) => update({ log_sessions: on })}
+        disabled={config === null}
+        onError={onError}
+        onSearch={() => navigate({ group: 'general', section: 'logs' })}
+      />
       {!mac && <AdvancedSection target={target} navSeq={navSeq} />}
     </>
   );
@@ -385,6 +381,87 @@ function ScopeSection({ onError }: { onError: (message: string | null) => void }
 }
 
 // ── Session logs ───────────────────────────────────────────────────
+
+/** Saved logs with the way into the log view, Log sessions for the
+ *  profile Settings shows, and Keep logs for, which every profile
+ *  shares since they share one log file (D34). Log sessions reads the
+ *  world the selected session dials until you choose, on for a game and
+ *  off for this computer. */
+function SessionLogsSection({
+  logSessions,
+  onLogSessions,
+  disabled,
+  onError,
+  onSearch,
+}: {
+  logSessions: boolean | null;
+  onLogSessions: (on: boolean) => void;
+  disabled: boolean;
+  onError: (message: string | null) => void;
+  onSearch: () => void;
+}) {
+  const [target] = useSessionTarget();
+  const [keep, setKeep] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    logsKeepGet()
+      .then((days) => {
+        if (!cancelled) setKeep(days);
+      })
+      .catch((e) => onError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [onError]);
+
+  const pickKeep = async (value: string) => {
+    const days = value === 'forever' ? null : Number(value);
+    const before = keep;
+    setKeep(days);
+    try {
+      await logsKeepSet(days);
+      onError(null);
+    } catch (e) {
+      setKeep(before);
+      onError(String(e));
+    }
+  };
+
+  return (
+    <Section
+      id="session-logs"
+      title="Session logs"
+      help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
+    >
+      <Row label="Saved logs" description={<SavedLogsCount onError={onError} />}>
+        <Button onClick={onSearch}>Search logs…</Button>
+      </Row>
+      <Row
+        label="Log sessions"
+        description="Saves every line this character's sessions show, so you can search them later. Connections to this computer stay out until you turn it on."
+        anchor="log-sessions"
+      >
+        <Toggle
+          checked={logSessions ?? !isLocalHost(target.host)}
+          disabled={disabled}
+          onChange={onLogSessions}
+        />
+      </Row>
+      <Row
+        label="Keep logs for"
+        description="Vosh deletes logs older than this once a day. The first time it also tidies the file, and new game text waits until that's done."
+        anchor="keep-logs"
+      >
+        <Select
+          value={keep ? String(keep) : 'forever'}
+          disabled={keep === undefined}
+          options={KEEP_LOGS}
+          onChange={(v) => void pickKeep(v)}
+        />
+      </Row>
+    </Section>
+  );
+}
 
 /** How many logs and lines Vosh saved, leaving out connections to
  *  this machine the way the log view does. A log is one connection,

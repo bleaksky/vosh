@@ -10,6 +10,8 @@
 //! `search` runs the regex search the log view pages through, over the
 //! logs a `Scope` names.
 //! `lookup` reads the sessions that belong to a profile's characters.
+//! `retention` deletes whole logs past Keep logs for and gives the space
+//! back a little at a time.
 //! `forget` finds the lines where you sent a password and blanks them for
 //! good.
 
@@ -18,6 +20,7 @@ use thiserror::Error;
 
 mod forget;
 mod lookup;
+mod retention;
 mod search;
 mod sessions;
 mod sqlite;
@@ -25,7 +28,9 @@ mod sqlite;
 pub use forget::{Forgotten, PasswordLines};
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
 pub use search::{Scope, SearchHit, SearchOptions, SearchPage};
-pub use sessions::{sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT};
+pub use sessions::{
+    is_local_host, sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT,
+};
 
 #[derive(Debug, Error)]
 pub enum LogError {

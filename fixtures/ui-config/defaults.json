@@ -57,6 +57,7 @@
     "affects_running_out_hours": 2,
     "affects_almost_gone_hours": 1,
     "snoop_share": 0.4,
-    "snoop_folded": false
+    "snoop_folded": false,
+    "log_sessions": null
   }
 }

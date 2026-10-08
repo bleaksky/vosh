@@ -32,16 +32,18 @@ pub(super) struct LogSink {
 impl LogSink {
     /// Open the log's row for `session`'s connection to `host` on
     /// `port`, so every row the session writes attaches to it, and note it
-    /// on the session. With logging off, or a row that fails to open, the
-    /// session writes no rows.
+    /// on the session. With `logged` false, which Log sessions off gives,
+    /// with no log store, or with a row that fails to open, the session
+    /// writes no rows.
     pub(super) async fn open(
         logs: SharedLogStore,
+        logged: bool,
         session: &Session,
         scrollback_path: Option<PathBuf>,
         host: &str,
         port: u16,
     ) -> Self {
-        let id = {
+        let id = if logged {
             let mut guard = logs.lock().await;
             match guard.as_mut() {
                 Some(store) => match store.start_session(host, port, now_ms()) {
@@ -53,6 +55,8 @@ impl LogSink {
                 },
                 None => None,
             }
+        } else {
+            None
         };
         if let Some(id) = id {
             session.note_log(id);

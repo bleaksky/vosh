@@ -1,6 +1,6 @@
 //! Your logs. This module keeps the session log and the scrollback ring,
-//! and [`forget_passwords`] blanks the lines in that log where you sent a
-//! password.
+//! [`forget_passwords`] blanks the lines in that log where you sent a
+//! password, and [`retention`] deletes the logs past Keep logs for.
 //!
 //! The shared log store wraps `vosh_log::LogStore` in an async mutex so
 //! the session `io_loop`, the search commands, and the scrollback flush
@@ -10,6 +10,7 @@
 //! across runs as a plain text scrollback file.
 
 pub(crate) mod forget_passwords;
+pub(crate) mod retention;
 
 use std::collections::VecDeque;
 use std::sync::Arc;

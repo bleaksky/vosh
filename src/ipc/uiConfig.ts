@@ -562,6 +562,9 @@ export interface UiConfig {
   snoop_share: number;
   /** The snoop split folded to its strip. */
   snoop_folded: boolean;
+  /** Log sessions. Null until you choose, which logs every world but
+   *  this computer. */
+  log_sessions: boolean | null;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -676,6 +679,7 @@ export interface RawUiConfig {
   affects_almost_gone_hours?: number;
   snoop_share?: number;
   snoop_folded?: boolean;
+  log_sessions?: boolean | null;
 }
 
 /** A profile's UI config, the selected session's profile's when it
@@ -804,6 +808,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     affects_almost_gone_hours: thresholds.almost_gone,
     snoop_share: normalizeSnoopShare(cfg.snoop_share),
     snoop_folded: cfg.snoop_folded === true,
+    log_sessions: typeof cfg.log_sessions === 'boolean' ? cfg.log_sessions : null,
   };
 }
 

@@ -85,6 +85,16 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('general', 'session-logs'),
   },
   {
+    label: 'Log sessions',
+    keywords: 'log logging record save sessions localhost',
+    target: at('general', 'session-logs', 'log-sessions'),
+  },
+  {
+    label: 'Keep logs for',
+    keywords: 'log logs retention delete old days year forever space disk',
+    target: at('general', 'session-logs', 'keep-logs'),
+  },
+  {
     label: 'Search logs',
     keywords: 'log history find copy text save file export download txt colors',
     target: at('general', 'logs'),

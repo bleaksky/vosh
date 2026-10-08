@@ -7,6 +7,7 @@ mod echo;
 mod fake_mud;
 mod ipc_contract;
 mod latency;
+mod log_sessions;
 mod lua_panes;
 mod reconnect;
 mod sessions;

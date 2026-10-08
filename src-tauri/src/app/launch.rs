@@ -66,6 +66,8 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                     *logs.lock().await = Some(store);
                     *log_reader.lock().await = reader;
                 });
+                // Keep logs for, now and once a day.
+                crate::logs::retention::start(state);
             }
             Err(e) => {
                 error!(error = %e, "log store failed to open; logging disabled");

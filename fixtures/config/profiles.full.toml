@@ -5,6 +5,7 @@ migrations = [
     "prompt-line-triggers",
 ]
 notices = ["Vosh moved your prompt capture into the Default profile."]
+keep_logs_days = 90
 
 [[profile]]
 name = "default"

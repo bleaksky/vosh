@@ -27,6 +27,22 @@ const MONTHS = [
   'December',
 ];
 
+/** True when `host` names this computer, ignoring case, spaces and a
+ *  trailing dot, as vosh-log's is_local_host reads it. Log sessions
+ *  starts off for one (D34). */
+export function isLocalHost(host: string): boolean {
+  const clean = host.trim().replace(/\.$/, '').toLowerCase();
+  return clean === '127.0.0.1' || clean === 'localhost';
+}
+
+/** The choices of Keep logs for, as select values: days, or forever. */
+export const KEEP_LOGS: readonly { value: string; label: string }[] = [
+  { value: 'forever', label: 'Forever' },
+  { value: '365', label: '1 year' },
+  { value: '90', label: '90 days' },
+  { value: '30', label: '30 days' },
+];
+
 /** A count with thousands separators, like `708,350`. */
 export function formatCount(n: number): string {
   return NUMBER.format(n);

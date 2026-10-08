@@ -92,6 +92,11 @@ pub(crate) struct AppState {
     /// Where alert banners go, the system's, or in a test build a list
     /// the test reads. See [`crate::alert::banner`].
     pub(crate) banners: crate::alert::banner::Banners,
+    /// In a test build, log a connection to this computer whatever Log
+    /// sessions says, since the fake game runs here. On unless a test
+    /// turns it off to check the switch.
+    #[cfg(test)]
+    pub(crate) log_this_computer: AtomicBool,
     /// In a test build, the clock the redial waits on while a test holds
     /// one: each wait goes to the test, which ends it.
     #[cfg(test)]
@@ -444,6 +449,8 @@ impl Default for AppState {
             app_data: OnceLock::new(),
             focus: crate::alert::focus::Focus::default(),
             banners: crate::alert::banner::Banners::default(),
+            #[cfg(test)]
+            log_this_computer: AtomicBool::new(true),
             #[cfg(test)]
             redial_clock: std::sync::Mutex::new(None),
             #[cfg(test)]

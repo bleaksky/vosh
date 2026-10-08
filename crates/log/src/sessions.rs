@@ -41,11 +41,10 @@ fn session_row(row: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
 const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
 
 /// True when `host` names this machine, ignoring case, spaces, and a
-/// trailing dot. Test only. The log view leaves these sessions out in
-/// SQL through [`not_local_sql`], and the tests check both fold a host
-/// alike.
-#[cfg(test)]
-pub(crate) fn is_local_host(host: &str) -> bool {
+/// trailing dot. The app logs no connection to one unless the profile
+/// says to (D34). The log view leaves these sessions out in SQL through
+/// [`not_local_sql`], and the tests check both fold a host alike.
+pub fn is_local_host(host: &str) -> bool {
     let clean = host.trim().trim_end_matches('.').to_ascii_lowercase();
     LOCAL_HOSTS.contains(&clean.as_str())
 }

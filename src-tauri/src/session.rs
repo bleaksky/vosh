@@ -533,7 +533,23 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     // What the plugins printed at launch, if nothing showed it yet.
     crate::app::plugins::show_launch_lines(&app, session);
 
-    let log_sink = LogSink::open(state.logs.clone(), session, scrollback_path, &host, port).await;
+    // Log sessions decides whether the connection writes the log (D34).
+    let logged = crate::profile::ui::logs_connection(&session.lock_profile().await.ui, &host);
+    #[cfg(test)]
+    let logged = logged
+        || (vosh_log::is_local_host(&host)
+            && state
+                .log_this_computer
+                .load(std::sync::atomic::Ordering::Acquire));
+    let log_sink = LogSink::open(
+        state.logs.clone(),
+        logged,
+        session,
+        scrollback_path,
+        &host,
+        port,
+    )
+    .await;
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<OutgoingMsg>();
     let task = tokio::spawn(io_loop(

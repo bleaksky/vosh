@@ -6,6 +6,7 @@ import {
   logCountText,
   logDay,
   logEmptyText,
+  isLocalHost,
   logFileName,
   logMatcher,
   logPalette,
@@ -33,6 +34,16 @@ describe('savedLogsText', () => {
     expect(savedLogsText(1, 1, 'PC')).toBe('1 log and 1 line on this PC.');
     expect(savedLogsText(0, 0, 'Mac')).toBe('Vosh has not saved a log on this Mac yet.');
     expect(savedLogsText(0, 0, 'computer')).toBe('Vosh has not saved a log on this computer yet.');
+  });
+});
+
+describe('isLocalHost', () => {
+  it('reads a host the way vosh-log does', () => {
+    expect(isLocalHost('127.0.0.1')).toBe(true);
+    expect(isLocalHost(' LocalHost. ')).toBe(true);
+    expect(isLocalHost('play.theforsakenlands.com')).toBe(false);
+    expect(isLocalHost('localhost.example.org')).toBe(false);
+    expect(isLocalHost('127.0.0.2')).toBe(false);
   });
 });
 

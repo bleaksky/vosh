@@ -180,6 +180,32 @@ fn save(
         .unwrap_or_default())
 }
 
+/// How many days Vosh keeps a log, or None to keep it forever.
+#[tauri::command]
+pub(crate) async fn logs_keep_get(state: State<'_, SharedState>) -> Result<Option<u32>, String> {
+    Ok(state.loaded_profile_set().await?.keep_logs_days())
+}
+
+/// Keep logs for `days`, one of 365, 90 and 30, or forever with None,
+/// then delete the logs past the new span (D34).
+#[tauri::command]
+pub(crate) async fn logs_keep_set(
+    state: State<'_, SharedState>,
+    days: Option<u32>,
+) -> Result<(), String> {
+    if days.is_some_and(|d| !crate::logs::retention::KEEP_DAYS.contains(&d)) {
+        return Err("Vosh keeps logs for a year, 90 days, 30 days or forever.".to_string());
+    }
+    state
+        .loaded_profile_set()
+        .await?
+        .set_keep_logs_days(days)
+        .map_err(|e| e.to_string())?;
+    let shared: SharedState = state.inner().clone();
+    tauri::async_runtime::spawn(async move { crate::logs::retention::run(&shared).await });
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn logs_export(
     state: State<'_, SharedState>,

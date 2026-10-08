@@ -104,6 +104,7 @@ pub(crate) struct UiConfigPayload {
     /// The share of the terminal column the snoop split takes.
     pub snoop_share: f64,
     pub snoop_folded: bool,
+    pub log_sessions: Option<bool>,
 }
 
 impl UiConfigPayload {
@@ -171,6 +172,7 @@ impl UiConfigPayload {
             affects_almost_gone_hours: ui.affects_almost_gone_hours,
             snoop_share: ui.snoop_share,
             snoop_folded: ui.snoop_folded,
+            log_sessions: ui.log_sessions,
         }
     }
 }
@@ -257,6 +259,7 @@ pub(crate) enum UiField {
     AffectsAlmostGoneHours(u32),
     SnoopShare(f64),
     SnoopFolded(bool),
+    LogSessions(Option<bool>),
 }
 
 /// Save the fields a page names and leave every other one as it is, so
@@ -382,6 +385,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::AffectsAlmostGoneHours(v) => ui.affects_almost_gone_hours = v,
             UiField::SnoopShare(v) => ui.snoop_share = cfg::coerce_snoop_share(v),
             UiField::SnoopFolded(v) => ui.snoop_folded = v,
+            UiField::LogSessions(v) => ui.log_sessions = v,
         }
     }
     (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =

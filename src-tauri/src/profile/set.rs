@@ -129,6 +129,11 @@ pub(crate) struct ProfilesIndex {
     /// drops it on its next save.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub get_started: Option<GetStarted>,
+    /// Keep logs for, in days, once for the whole install, since every
+    /// profile shares logs.sqlite (D34). None keeps logs forever and
+    /// stays out of the file. An older build drops it on its next save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_logs_days: Option<u32>,
 }
 
 /// Get started as profiles.toml keeps it, once for the whole install.
@@ -289,6 +294,7 @@ impl ProfileSet {
                 at_launch: true,
                 done: Vec::new(),
             }),
+            keep_logs_days: None,
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -643,6 +649,22 @@ impl ProfileSet {
             .replace(GetStarted { at_launch, done });
         if let Err(e) = self.save_index() {
             self.index.get_started = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// How many days Vosh keeps a log, or None to keep it forever.
+    pub(crate) fn keep_logs_days(&self) -> Option<u32> {
+        self.index.keep_logs_days
+    }
+
+    /// Keep logs for `days`, or forever with None, and save the index.
+    /// An index that does not save keeps what it held.
+    pub(crate) fn set_keep_logs_days(&mut self, days: Option<u32>) -> Result<(), ProfileSetError> {
+        let before = std::mem::replace(&mut self.index.keep_logs_days, days);
+        if let Err(e) = self.save_index() {
+            self.index.keep_logs_days = before;
             return Err(e);
         }
         Ok(())

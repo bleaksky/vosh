@@ -429,6 +429,9 @@ fn full_ui() -> UiConfig {
         // the others.
         snoop_share: 0.4,
         snoop_folded: false,
+        // Written only once you choose, so None keeps the golden's
+        // bytes. profile/ui.rs tests the choice.
+        log_sessions: None,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),
@@ -856,6 +859,7 @@ fn full_index() -> ProfilesIndex {
             at_launch: false,
             done: vec!["connect".into()],
         }),
+        keep_logs_days: Some(90),
     }
 }
 
@@ -1007,10 +1011,12 @@ fn an_older_build_reads_the_session_list_and_drops_it_on_its_save() {
     );
 }
 
-/// [`full_index`] as 0.8.1 saves it, with no Get started.
+/// [`full_index`] as 0.8.1 saves it, with no Get started and no Keep
+/// logs for.
 fn index_without_get_started() -> ProfilesIndex {
     ProfilesIndex {
         get_started: None,
+        keep_logs_days: None,
         ..full_index()
     }
 }
