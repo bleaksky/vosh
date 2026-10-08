@@ -312,9 +312,10 @@
 
 /* A code at a line's start: a 6 px dot in its color at the gutter's
    left, so the text keeps its columns. A code inside a line an immortal
-   keeps: a dot of no width under the gap where it sits. */
+   keeps: a dot of no width under the gap where it sits. The start dot
+   places itself in its line, not on the text's baseline, so it sits
+   level with the line it colors. */
 .wr-code {
-  position: relative;
   display: inline-block;
   width: 0;
 }
