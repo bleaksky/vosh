@@ -834,7 +834,7 @@ When you snoop a player in the game, a split opens at the top of the terminal co
 - Your triggers, highlights, gags and sounds never act on snoop text, since you wrote them for your own screen. Your Lua still hears `Snoop.Start`, `Snoop.Stop` and `Snoop.Output` like any other GMCP.
 - Drag the line under the split to resize it. It starts at 40 percent of the column, and your profile keeps the size you pick. It keeps four rows and always leaves you six. Drag it to the top, choose `Fold` in the more menu, or double click the line to fold it to its strip, and double click again to open it.
 - Press `Cmd+J` on macOS or `Ctrl+J` elsewhere to move into the snoop, and again to step to the next tab. Press `Escape`, or just start typing, and you're back on the command line, so what you type always goes to your own character.
-- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Close it and the tabs come back to the split.
+- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Your profile remembers where you put the window and its size. Close it and the tabs come back to the split.
 
 Each session keeps its own snoops, and its row in the sessions sidebar shows an eye and how many run. A disconnect ends every snoop on that session.
 
