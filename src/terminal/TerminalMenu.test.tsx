@@ -1,5 +1,5 @@
 import type { WritingKind } from '../ipc/writing';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SETTINGS_GOTO_TAB } from '../ipc/events';
@@ -18,6 +18,12 @@ vi.mock('@tauri-apps/api/core', () => ({
     calls.log.push(`invoke ${cmd}`);
     return Promise.resolve();
   }),
+}));
+// The menu surface draws in place, so a static render shows the rows
+// and a mounted menu sits in the page the test made.
+vi.mock('react-dom', async (actual) => ({
+  ...(await actual<typeof import('react-dom')>()),
+  createPortal: (children: ReactNode) => children,
 }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn((event: string, payload: unknown) => {
@@ -48,12 +54,25 @@ const props = {
   onWrite: () => {},
 };
 
+/** The menu as markup. The surface names the page body it would draw
+ *  into, and the shortcuts the platform, which a bare page stands in
+ *  for. */
+function drawn(): string {
+  const page = globalThis as { document?: unknown };
+  page.document = { body: null, documentElement: { dataset: { platform: 'macos' } } };
+  try {
+    return renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+  } finally {
+    delete page.document;
+  }
+}
+
 describe('the terminal menu', () => {
   const labels = (html: string) =>
-    [...html.matchAll(/class="ov-menu-label">([^<]*)</g)].map((m) => m[1]);
+    [...html.matchAll(/class="menu-label">([^<]*)</g)].map((m) => m[1]);
 
   it('offers Customize prompt… and Write first, apart from the rest, on any row (P1, Note Editor Q2)', () => {
-    const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+    const html = drawn();
     expect(labels(html).slice(0, 3)).toEqual(['Customize prompt…', 'Write', 'Copy']);
     // A separator stands between it and Copy.
     const first = html.indexOf('Customize prompt…');
@@ -63,7 +82,7 @@ describe('the terminal menu', () => {
   });
 
   it('offers Settings apart after Find, with Clear scrollback still last', () => {
-    const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+    const html = drawn();
     expect(labels(html)).toEqual([
       'Customize prompt…',
       'Write',
@@ -77,13 +96,15 @@ describe('the terminal menu', () => {
     ]);
     // Settings sits in a group of its own, says it opens a menu, and
     // shows a chevron where the other rows show a shortcut.
-    const groups = html.split('class="ov-menu-group"').slice(1);
+    const groups = html.split('role="separator"');
     const settings = groups.find((g) => g.includes('>Settings<')) ?? '';
     expect(labels(settings)).toEqual(['Settings']);
     expect(settings).toContain('aria-haspopup="menu"');
     expect(settings).toContain('aria-expanded="false"');
     expect(settings).toContain('menu-chevron');
-    expect(settings).not.toContain('ov-menu-keys');
+    expect(settings).not.toContain('menu-keys');
+    // Clear scrollback, last, is drawn in the danger tone.
+    expect(groups.at(-1)).toContain('class="menu-item is-danger"');
   });
 });
 
@@ -139,11 +160,22 @@ function teachTheDom() {
     return false;
   };
   const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  // Focus moving to a row tells React, as the page does, so the row
+  // closes a list it does not open.
+  el.focus = function (this: FakeElement) {
+    if (!this.ownerDocument || this.ownerDocument.activeElement === this) return;
+    this.ownerDocument.activeElement = this;
+    const key = Object.keys(this).find((k) => k.startsWith('__reactProps$'));
+    const props = key ? (this as unknown as Record<string, { onFocus?: () => void }>)[key] : null;
+    props?.onFocus?.();
+  };
   el.getBoundingClientRect = function (this: FakeElement): Box {
     return boxes.get(this) ?? { left: 0, top: 0, right: 0, bottom: 0 };
   };
   el.closest = function (this: FakeElement, selector: string): FakeElement | null {
-    if (selector !== '[data-menu-surface]') throw new Error(`no closest for ${selector}`);
+    // The menu surface mark, or the menu a submenu row sits in.
+    if (selector !== '[data-menu-surface]' && selector !== 'menu')
+      throw new Error(`no closest for ${selector}`);
     return surfaceAround(this);
   };
   el.querySelectorAll = function (this: FakeElement, selector: string): FakeElement[] {
@@ -157,7 +189,7 @@ function teachTheDom() {
   const size = (pick: (s: { w: number; h: number }) => number) => ({
     configurable: true,
     get(this: FakeElement) {
-      return pick(this.nodeName === 'MENU' ? LIST : MENU);
+      return pick(this.getAttribute('aria-label') === 'Terminal' ? MENU : LIST);
     },
   });
   Object.defineProperty(
@@ -188,13 +220,30 @@ function on(el: FakeElement): Record<string, Handler> {
 /** The pointer moving over `el`. */
 const point = (el: FakeElement) => on(el).onPointerMove({ currentTarget: el });
 
-const keyEvent = (key: string) => ({
-  key,
-  isComposing: false,
-  target: doc.activeElement,
-  preventDefault() {},
-  stopPropagation() {},
-});
+const keyEvent = (key: string) => {
+  const e = {
+    key,
+    isComposing: false,
+    target: doc.activeElement,
+    stopped: false,
+    preventDefault() {},
+    stopPropagation() {
+      e.stopped = true;
+    },
+  };
+  return e;
+};
+
+/** Press `key` where focus is: the row under focus first, then the
+ *  menu surface around it, unless the row keeps it. */
+function press(key: string) {
+  const target = doc.activeElement as FakeElement | null;
+  const surface = surfaceAround(target);
+  if (!target || !surface) throw new Error('focus is outside every menu');
+  const e = keyEvent(key);
+  if (target !== surface) on(target).onKeyDown?.(e);
+  if (!e.stopped) on(surface).onKeyDown(e);
+}
 
 /** The one element under `root` that `match` finds. */
 function only(root: FakeNode, what: string, match: (el: FakeElement) => boolean): FakeElement {
@@ -214,10 +263,8 @@ interface Mounted {
   list: () => FakeElement | null;
   /** A row of the Settings list. */
   listRow: (label: string) => FakeElement;
-  /** Press a key in the terminal menu. */
+  /** Press a key where focus is, in the menu or the list. */
   key: (key: string) => Promise<void>;
-  /** Press a key in the Settings list. */
-  listKey: (key: string) => Promise<void>;
   /** Press Esc, which goes to the surface opened last. */
   escape: () => Promise<void>;
   onClose: ReturnType<typeof vi.fn>;
@@ -259,12 +306,7 @@ async function mount(x = 100, y = 100): Promise<Mounted> {
       if (!shown) throw new Error('the Settings list is shut');
       return only(shown, label, isRow(label));
     },
-    key: (k) => run(() => on(menu).onKeyDown(keyEvent(k))),
-    listKey: (k) => {
-      const shown = list();
-      if (!shown) throw new Error('the Settings list is shut');
-      return run(() => on(shown).onKeyDown(keyEvent(k)));
-    },
+    key: (k) => run(() => press(k)),
     escape: () => {
       const stack = windowListeners.get('keydown');
       if (!stack) throw new Error('the escape stack is not listening');
@@ -279,7 +321,9 @@ async function downToSettings(m: Mounted) {
   for (let i = 0; i < 8; i++) await m.key('ArrowDown');
 }
 
-const lit = (el: FakeElement) => (el.getAttribute('class') ?? '').split(' ').includes('is-active');
+/** The row under focus is lit, and so is a row while its list is open. */
+const lit = (el: FakeElement) =>
+  doc.activeElement === el || el.getAttribute('aria-expanded') === 'true';
 
 describe('the Settings list in the terminal menu', () => {
   beforeAll(async () => {
@@ -330,7 +374,9 @@ describe('the Settings list in the terminal menu', () => {
 
   it('opens from the keyboard on its first row and steps back out with ArrowLeft', async () => {
     const m = await mount();
+    // The menu opens with focus on itself and no row lit.
     expect(doc.activeElement).toBe(m.menu);
+    expect(m.list()).toBeNull();
     await downToSettings(m);
     const settings = m.row('Settings');
     expect(lit(settings)).toBe(true);
@@ -342,15 +388,14 @@ describe('the Settings list in the terminal menu', () => {
     expect(settings.getAttribute('aria-controls')).toBe(m.list()?.getAttribute('id'));
     expect(doc.activeElement).toBe(m.listRow('Triggers'));
 
-    await m.listKey('ArrowDown');
+    await m.key('ArrowDown');
     expect(doc.activeElement).toBe(m.listRow('Aliases'));
-    await m.listKey('End');
+    await m.key('End');
     expect(doc.activeElement).toBe(m.listRow('Help'));
 
-    await m.listKey('ArrowLeft');
+    await m.key('ArrowLeft');
     expect(m.list()).toBeNull();
-    expect(doc.activeElement).toBe(m.menu);
-    expect(lit(settings)).toBe(true);
+    expect(doc.activeElement).toBe(settings);
     expect(settings.getAttribute('aria-expanded')).toBe('false');
     expect(m.onClose).not.toHaveBeenCalled();
   });
@@ -358,31 +403,23 @@ describe('the Settings list in the terminal menu', () => {
   it('lights a row that takes focus, as Show me gives Customize prompt…, so Enter picks it', async () => {
     const m = await mount();
     const row = m.row('Customize prompt…');
-    await act(async () => {
-      row.focus();
-      on(row).onFocus();
-    });
+    await act(async () => row.focus());
     expect(lit(row)).toBe(true);
-    await m.key('Enter');
+    // In the page, Enter on the row under focus clicks it.
+    await act(async () => on(row).onClick());
     expect(m.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens on Enter and Space too, and ArrowLeft in the menu shuts it', async () => {
+  it('opens on Enter and Space too', async () => {
     const m = await mount();
     await downToSettings(m);
     for (const k of ['Enter', ' ']) {
       await m.key(k);
       expect(m.list(), k).not.toBeNull();
       expect(doc.activeElement, k).toBe(m.listRow('Triggers'));
-      await m.listKey('ArrowLeft');
+      await m.key('ArrowLeft');
       expect(m.list(), k).toBeNull();
     }
-    // Opened by pointing, the list leaves focus in the menu, where
-    // ArrowLeft shuts it.
-    await act(async () => point(m.row('Settings')));
-    expect(m.list()).not.toBeNull();
-    await m.key('ArrowLeft');
-    expect(m.list()).toBeNull();
     expect(m.onClose).not.toHaveBeenCalled();
   });
 
@@ -402,35 +439,33 @@ describe('the Settings list in the terminal menu', () => {
     await m.key('ArrowRight');
     await m.escape();
     expect(m.list()).toBeNull();
-    expect(doc.activeElement).toBe(m.menu);
-    expect(lit(m.row('Settings'))).toBe(true);
+    expect(doc.activeElement).toBe(m.row('Settings'));
     expect(m.onClose).not.toHaveBeenCalled();
     await m.escape();
     expect(m.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('closes one level per Esc pressed in the menu itself', async () => {
+  it('closes one level per Esc when pointing opened the list', async () => {
     const m = await mount();
     await act(async () => point(m.row('Settings')));
-    await m.key('Escape');
+    await m.escape();
     expect(m.list()).toBeNull();
     expect(m.onClose).not.toHaveBeenCalled();
-    await m.key('Escape');
+    await m.escape();
     expect(m.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens when you point at Settings, leaving focus in the menu', async () => {
+  it('opens when you point at Settings, leaving focus on the row', async () => {
     const m = await mount();
     await act(async () => point(m.row('Settings')));
     expect(m.list()).not.toBeNull();
-    expect(doc.activeElement).toBe(m.menu);
+    expect(doc.activeElement).toBe(m.row('Settings'));
     // ArrowRight then moves focus into the list already open.
     await m.key('ArrowRight');
     expect(doc.activeElement).toBe(m.listRow('Triggers'));
-    // Pointing at another row shuts it and gives the menu focus back.
+    // Pointing at another row shuts it and lights that row.
     await act(async () => point(m.row('Find in scrollback…')));
     expect(m.list()).toBeNull();
-    expect(doc.activeElement).toBe(m.menu);
     expect(lit(m.row('Find in scrollback…'))).toBe(true);
     // So do the arrow keys leaving Settings.
     await act(async () => point(m.row('Settings')));
@@ -465,45 +500,34 @@ describe('the Settings list in the terminal menu', () => {
     }
   });
 
-  it('keeps Settings lit while the pointer is in its list', async () => {
-    const m = await mount();
-    await act(async () => point(m.row('Settings')));
-    await act(async () => on(m.menu).onPointerLeave());
-    expect(lit(m.row('Settings'))).toBe(true);
-  });
-
-  it('keeps Settings the row the keys act on once the pointer leaves the menu', async () => {
+  it('keeps Settings the row the keys act on after pointing opens its list', async () => {
     const m = await mount();
     // The pointer opens the list, then stops in the gap or the list
     // padding, or moves past the list, without landing on a list row.
-    const pointAndLeave = async () => {
+    // Settings keeps focus, so it stays lit.
+    const pointAt = async () => {
       await act(async () => point(m.row('Settings')));
-      await act(async () => on(m.menu).onPointerLeave());
       expect(m.list()).not.toBeNull();
       expect(lit(m.row('Settings'))).toBe(true);
-      expect(doc.activeElement).toBe(m.menu);
+      expect(doc.activeElement).toBe(m.row('Settings'));
     };
 
     // ArrowRight, Enter and Space move into the list on its first row.
     for (const k of ['ArrowRight', 'Enter', ' ']) {
-      await pointAndLeave();
+      await pointAt();
       await m.key(k);
       expect(doc.activeElement, k).toBe(m.listRow('Triggers'));
-      await m.listKey('ArrowLeft');
+      await m.key('ArrowLeft');
       expect(m.list(), k).toBeNull();
     }
     expect(m.onClose).not.toHaveBeenCalled();
 
     // ArrowDown goes on to the row after Settings, not back to the top.
-    await pointAndLeave();
+    await pointAt();
     await m.key('ArrowDown');
     expect(m.list()).toBeNull();
     expect(lit(m.row('Clear scrollback'))).toBe(true);
     expect(lit(m.row('Settings'))).toBe(false);
-
-    // With the list shut, leaving the menu still clears the highlight.
-    await act(async () => on(m.menu).onPointerLeave());
-    expect(lit(m.row('Clear scrollback'))).toBe(false);
   });
 
   it('counts a press in the list as inside the menu', async () => {

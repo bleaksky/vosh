@@ -436,29 +436,9 @@
   vertical-align: -1px;
 }
 
-/* Menus (SPEC 7): the terminal right-click menu. 6 of inner padding,
-   30 tall rows at radius 8 with the text 12 in, shortcut hints on the
-   right in the tertiary tone, and separators inset 12 with 6 above and
-   below. The terminal menu keeps the ov-menu classes until it draws
-   through MenuSurface on the menu recipe above. */
-.ov-menu {
-  position: fixed;
-  z-index: 1000;
-  width: 232px;
-  padding: 6px;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  box-sizing: border-box;
-  outline: none;
-  font-family: var(--font-ui);
-  color: var(--text);
-}
-
-.ov-menu-group {
-  display: block;
-}
-
+/* The rows of the prompt card's menus, which keep the ov-menu classes
+   until they draw through MenuSurface on the menu recipe above. 30
+   tall at radius 8 with the text 12 in. */
 .ov-menu-item {
   display: flex;
   align-items: center;
@@ -481,10 +461,6 @@
   cursor: default;
 }
 
-.ov-menu-item.is-active {
-  background: var(--menu-hi);
-}
-
 .ov-menu-item[aria-disabled='true'] {
   color: var(--tertiary);
 }
@@ -498,26 +474,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ov-menu-keys {
-  flex: none;
-  margin: 0 0 0 12px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 400;
-  color: var(--tertiary);
-  white-space: nowrap;
-}
-
-.ov-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
 }
 
 /* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
