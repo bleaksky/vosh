@@ -56,7 +56,7 @@ const PANE_MAX_SPLIT_DEPTH: usize = 3;
 /// Weights past this are clamped so summing siblings stays finite.
 const PANE_MAX_WEIGHT: f64 = 1_000_000.0;
 
-/// The one-window panel for one profile: whether it shows, how wide
+/// The side panel for one profile: whether it shows, how wide
 /// it is, and the tree of panes inside it. The vitals footer is
 /// pinned below the tree and is not part of it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -112,13 +112,12 @@ fn default_pane_weight() -> f64 {
     1.0
 }
 
-/// The map's share of the stock layout, over affects. The approved
-/// boards give the Map pane 348 px and the Affects pane 315 px at
-/// 1280 by 800, which shows every Affects row the boards show.
+/// The map's share of the stock layout, over affects. At 1280 by 800
+/// this gives the Map pane 348 px and the Affects pane 315 px.
 const DEFAULT_MAP_WEIGHT: f64 = 0.525;
 const DEFAULT_AFFECTS_WEIGHT: f64 = 0.475;
 
-/// Map above affects, the stock layout in the approved mockups.
+/// Map above affects, the stock layout.
 fn default_pane_root() -> PaneNode {
     PaneNode::split(
         "root",
@@ -208,7 +207,7 @@ impl PaneLayoutPersist {
     }
 
     /// Seed a profile's tree from the old zone layout the first time
-    /// the profile opens in the one-window build. Mirrors how the old
+    /// the profile opens with panes. Mirrors how the old
     /// frontend read a dock layout: unknown ids and bad zones are
     /// skipped, and ids the list never mentions take their old default
     /// placement. Vitals is pinned now, the room strip moved into the

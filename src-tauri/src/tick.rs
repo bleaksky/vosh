@@ -181,9 +181,9 @@ pub(crate) struct TickRuntime {
     /// config turns on only while one is.
     pub in_session: bool,
     /// Whether the sun is up in the game, from the latest World.Time,
-    /// which day and night themes follow (Alerts Q16). A drop keeps it,
-    /// so the window holds what it showed until World.Time comes again
-    /// (Q15). None before the first.
+    /// which day and night themes follow. A drop keeps it,
+    /// so the window holds what it showed until World.Time comes again.
+    /// None before the first.
     pub daylight: Option<Daylight>,
 }
 
@@ -199,7 +199,7 @@ pub(crate) enum Daylight {
 
 /// `vosh://daylight-changed`: the game of a session turned to day or
 /// night. Every window hears it, and the page resolves day and night
-/// themes from the selected session's (Sessions Q23).
+/// themes from the selected session's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct DaylightPayload {
     pub(crate) phase: Daylight,
@@ -207,7 +207,7 @@ pub(crate) struct DaylightPayload {
 
 /// The first game hour of the day where World.Time names no sunlight.
 /// Aabahran always names it, and day begins with the hour 6 line, `The
-/// day has begun.`, so the fallback agrees with it (Alerts Q17).
+/// day has begun.`, so the fallback agrees with it.
 const DAY_FIRST_HOUR: i64 = 6;
 /// The first game hour of the night, the hour 19 line, `The night has
 /// begun.`.

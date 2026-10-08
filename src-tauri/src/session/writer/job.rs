@@ -13,7 +13,7 @@
 //! comes alone, and after three pulses with none, since the game writes
 //! one after anything it sends you while the editor is open, a say or a
 //! weather line included. Never more than two wait unconfirmed, and the
-//! `.s` that follows settles what landed (Description Editor Q5).
+//! `.s` that follows settles what landed.
 
 use std::collections::VecDeque;
 use std::time::Duration;

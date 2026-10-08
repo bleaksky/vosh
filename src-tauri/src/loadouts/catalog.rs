@@ -30,7 +30,7 @@ pub(crate) struct GlobalCatalog {
     #[serde(default)]
     pub aliases: Vec<Alias>,
     /// Every trigger. Room triggers go under `room_triggers` on disk, so
-    /// an older build still reads the file (D14), see
+    /// an older build still reads the file, see
     /// [`crate::profile::file::trigger_lists`].
     #[serde(flatten, with = "crate::profile::file::trigger_lists")]
     pub triggers: Vec<Trigger>,
@@ -81,7 +81,7 @@ impl GlobalCatalog {
     /// Give `file`, the file of a profile no session plays, the presets
     /// as the catalog runs them: its list of presets that are on, your
     /// edits to them, and the preset triggers as installed, your edits in
-    /// them (Presets Q11). An export of that profile then carries the
+    /// them. An export of that profile then carries the
     /// presets you play, as an export of an open one does. A catalog that
     /// has not taken the list yet leaves the file's own.
     pub(crate) fn lay_presets_over_file(&self, file: &mut ProfileConfig) {

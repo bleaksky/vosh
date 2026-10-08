@@ -1,10 +1,10 @@
 //! Plugins turned on and off and loaded again while you play, from the
-//! Scripts page in Settings. A plugin is on per profile (Q5 of the
-//! Scripts review), so the switch reaches the Lua engine of every session
-//! that plays the profile. Each engine keeps its own stops, so a plugin
-//! Vosh stopped in one session stays off there until a save or a reload
-//! loads it again (Q7). Install and Remove turn a plugin off in every
-//! profile, open or not (Q6).
+//! Scripts page in Settings. A plugin is on per profile, so the switch
+//! reaches the Lua engine of every session that plays the profile. Each
+//! engine keeps its own stops, so a plugin Vosh stopped in one session
+//! stays off there until a save or a reload
+//! loads it again. Install and Remove turn a plugin off in every
+//! profile, open or not, so new code never runs before you turn it on.
 
 use std::sync::Arc;
 
@@ -144,7 +144,7 @@ fn file_turns_on(set: &ProfileSet, profile: &str, name: &str) -> bool {
 }
 
 /// Turn the plugin `name` off in every profile, for Install and Remove,
-/// so its new code never runs until you turn it on (Q6). A profile a
+/// so its new code never runs until you turn it on. A profile a
 /// session plays drops it from its list in memory and saves, and the
 /// plugin unloads in each session on it. Any other profile has its file
 /// rewritten when the file turns the plugin on, and stays as it is when
@@ -229,8 +229,8 @@ async fn off_in(
 }
 
 /// [`super::plugin_on`] for the plugin `name`, with a note in the Output
-/// ring and the terminal once Vosh read it, as frame b1 of the Scripts
-/// design shows it: `Vosh reloaded vitals_alert.`
+/// ring and the terminal once Vosh read it, so you know the new code
+/// runs: `Vosh reloaded vitals_alert.`
 fn reload(
     p: &mut Profile,
     c: &mut Connection,

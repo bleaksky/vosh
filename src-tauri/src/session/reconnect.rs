@@ -1,10 +1,9 @@
-//! Auto reconnect (Alerts Q13 and Q14, with Sessions Q8 and Q10). After a
-//! drop while you play, Vosh dials the same world again, 3 seconds after
-//! the drop, then 6, 12, 24, 48 and 60 seconds after each try before, 8
-//! tries in all, one socket at a time. The series ends at the first try
-//! that connects, which reaches the game's first prompt, and you log in
-//! yourself, since Vosh sends nothing on a redial and stores no password.
-//! Each session runs a series of its own.
+//! Auto reconnect. After a drop while you play, Vosh dials the same world
+//! again, 3 seconds after the drop, then 6, 12, 24, 48 and 60 seconds
+//! after each try before, 8 tries in all, one socket at a time. The
+//! series ends at the first try that connects, which reaches the game's
+//! first prompt, and you log in yourself, since Vosh sends nothing on a
+//! redial and stores no password. Each session runs a series of its own.
 //!
 //! [`LinkWatch`] follows what decides it on the connection, under the
 //! connection lock the line pipeline takes anyway: whether you play, from
@@ -444,7 +443,7 @@ pub(crate) async fn after_drop<R: tauri::Runtime>(
 
 /// Whether another session on the host and port of `session` answered Y
 /// to the game's question in the seconds before, which closes this link
-/// with no line (Sessions Q8).
+/// with no line, since the character went to that session.
 fn took_elsewhere(state: &SharedState, session: &Session, now: Instant) -> bool {
     let Some(here) = session.live_address() else {
         return false;
@@ -463,9 +462,9 @@ fn took_elsewhere(state: &SharedState, session: &Session, now: Instant) -> bool 
 /// A login in `session` named `character`: every other session that
 /// plays that character on the same host and port loses it to this one,
 /// so its close counts as expected, and one waiting to redial stops and
-/// says so (Sessions Q8). A session at the account menu plays no
-/// character, so it loses none. Takes the session map, so call it with no
-/// lock held.
+/// says so, rather than take it back. A session at the account menu plays
+/// no character, so it loses none. Takes the session map, so call it with
+/// no lock held.
 pub(crate) async fn took_character<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &SharedState,
@@ -495,8 +494,8 @@ pub(crate) async fn took_character<R: tauri::Runtime>(
 
 /// Whether, since the drop `lost` names, another session on its host and
 /// port answered Y to the game's question, or plays its character there
-/// now. Either one took the character this series would redial (Sessions
-/// Q8). The Y names no character, so it counts for whichever character
+/// now. Either one took the character this series would redial. The Y
+/// names no character, so it counts for whichever character
 /// the game asked about.
 fn taken_since(state: &SharedState, session: &Session, lost: &Lost) -> bool {
     state.other_sessions(session.id).iter().any(|other| {

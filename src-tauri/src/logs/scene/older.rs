@@ -1,10 +1,9 @@
-//! The kind of a row an older build wrote, which stored none, read from
-//! its text (Q9 of the Alerts and Scenes review). Your prompt is a line
-//! the prompt capture of the profile reads, a line you sent starts with
-//! `> ` and kept no bytes, and a channel's line has the shape of the
-//! game's format strings in `act_comm.c` and `languages.c`. Text alone misses
-//! a prompt you changed since, and reads a faction's line as a clan's,
-//! since the two print alike.
+//! The kind of a row an older build wrote, which stored none, read from its
+//! text. Your prompt is a line the prompt capture of the profile reads, a
+//! line you sent starts with `> ` and kept no bytes, and a channel's line has
+//! the shape of the game's format strings in `act_comm.c` and `languages.c`.
+//! Text alone misses a prompt you changed since, and reads a faction's line
+//! as a clan's, since the two print alike.
 //!
 //! The rows before the log's first prompt are outside play, since the
 //! game prints no prompt until you play, and so are the rows after you

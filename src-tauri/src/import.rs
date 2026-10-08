@@ -116,7 +116,7 @@ pub(crate) struct TriggersMerged {
 /// One that takes the name of a preset trigger, any name in `presets`,
 /// the library's, or one the store holds for a preset, joins the clash
 /// list and leaves the preset's in place, its preset on or off, since
-/// the next install would put the preset's back (Presets board 5).
+/// the next install would put the preset's back.
 pub(crate) fn merge_triggers(
     store: &mut TriggerStore,
     triggers: &[Trigger],

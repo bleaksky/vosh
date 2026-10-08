@@ -1,5 +1,5 @@
-//! Your edits to the presets, the `[preset_edits]` table of the Presets
-//! review (Q1, Q2). Each row you changed keeps your value and the preset's
+//! Your edits to the presets, the `[preset_edits]` table. Each row you
+//! changed keeps your value and the preset's
 //! value you changed it from, so a fix to the preset still reaches every
 //! row you left alone, and Vosh can tell when a fix lands on a row you
 //! changed. The table sits beside the list of presets that are on, in the
@@ -90,8 +90,8 @@ fn merge_rows(held: &mut BTreeMap<String, EditRow>, sent: BTreeMap<String, EditR
     }
 }
 
-/// Orla's lilac line in Disarms and fading buffs, the color row of board
-/// 1, for the tests that carry a table from file to file.
+/// Orla's lilac line in Disarms and fading buffs, the color row of its
+/// card, for the tests that carry a table from file to file.
 #[cfg(test)]
 pub(crate) fn lilac_line() -> PresetEdits {
     let line = EditRow {

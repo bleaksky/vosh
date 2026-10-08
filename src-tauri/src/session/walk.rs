@@ -1,4 +1,4 @@
-//! The walker, the one speedwalk of a connection (Q14). It sends one step
+//! The walker, the one speedwalk of a connection. It sends one step
 //! at a time and keeps one step in flight. Each step waits for the
 //! Room.Info of the room it reaches, which the game sends with the look
 //! after a move, before the next step leaves. When the Map.Tiles that came

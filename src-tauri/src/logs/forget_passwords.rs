@@ -129,7 +129,7 @@ pub(crate) fn message(outcome: &Outcome) -> String {
         }
         Outcome::Found(found) if found.count() == 0 => NONE.to_string(),
         // The store calls one logged connection a session, but session
-        // means a tab now, so the line counts logs as Settings does (Q21).
+        // means a tab now, so the line counts logs as Settings does.
         Outcome::Found(found) => format!(
             "Vosh found {} where you sent a password, across {}. \
              Type #logs forget-passwords now to blank {}.",

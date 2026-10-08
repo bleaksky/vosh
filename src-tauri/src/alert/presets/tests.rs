@@ -47,7 +47,7 @@ fn every_preset_ships_off_and_raises_alerts_that_ring_nothing_until_you_turn_it_
     let mut watch = orla(&p);
     let now = Instant::now();
     // Each event still comes, with nothing on, so it marks the row of a
-    // session behind (Sessions Q9).
+    // session behind.
     let quiet = |alert: Option<Alert>| alert.is_some_and(|alert| alert.parts.is_silent());
     assert!(quiet(watch.gmcp(&p, &packet("chat/tell.gmcp"), None, now)));
     assert!(quiet(watch.gmcp(

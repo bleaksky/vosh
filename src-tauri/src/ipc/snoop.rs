@@ -1,5 +1,5 @@
-//! The commands for the players a session snoops (Snoop SN2 and SN5).
-//! The page reads every tab with its text the first time it shows a
+//! The commands for the players a session snoops. The page reads every
+//! tab with its text the first time it shows a
 //! session, then follows `session://snoop` and `session://snoop-output`.
 //! Stop asks the game to end a snoop, or every snoop, and Close drops an
 //! ended tab, or every ended tab, with its text. Each acts on the session

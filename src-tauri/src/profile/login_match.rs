@@ -211,7 +211,7 @@ impl ProfileSet {
     /// anyone logs in: one whose claim is pinned to that host and port,
     /// else one that claims the host on any port. A claim that names
     /// characters counts too, since the New session form picks before a
-    /// character logs in (Sessions Q2). None leaves the profile in front.
+    /// character logs in. None leaves the profile in front.
     pub(crate) fn resolve_before_login(&self, host: &str, port: u16) -> Option<String> {
         self.resolve(host, port, Claimant::Anyone)
     }
@@ -470,7 +470,8 @@ impl ProfileSet {
     /// - A claim with no world, port or character goes away.
     ///
     /// Writes the index once and never switches. No command calls it
-    /// since D7 dropped `profile_set_metadata`. Tests use it to set up
+    /// since `profile_set_metadata` went, and the field stays so your
+    /// text survives. Tests use it to set up
     /// claims under the login rules.
     #[cfg(test)]
     pub(crate) fn set_metadata(

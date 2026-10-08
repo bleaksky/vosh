@@ -630,10 +630,10 @@ fn process_line(
 /// Run the steps a line expanded to, in order: each command goes out as
 /// text and each script alias body runs where it stands, adding to `lua`
 /// what it asks for besides its sends and echo lines. A command that is a
-/// `#walk` runs it (Q16), and the steps after it ride in the walk, so
-/// they wait for it to end (Q28). Every other `#` command goes out as
-/// text, as it always did. The walker runs what a walk held this way
-/// once you arrive.
+/// `#walk` runs it, and the steps after it ride in the walk, so they wait
+/// for it to end and run where it takes you. Every other `#` command
+/// goes out as text, as it always did. The walker runs what a walk held
+/// this way once you arrive.
 pub(crate) fn run_expanded(
     profile: &mut Profile,
     c: &mut Connection,

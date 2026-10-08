@@ -1,4 +1,4 @@
-//! Keep logs for (D34). Once a day, and when you change it, Vosh deletes
+//! Keep logs for. Once a day, and when you change it, Vosh deletes
 //! each log that ended longer ago than you keep logs, whole, and gives
 //! the file's space back a little at a time, so the session's appends
 //! wait at most one short step. A file an older build wrote needs one

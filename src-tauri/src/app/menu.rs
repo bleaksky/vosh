@@ -1,7 +1,6 @@
-//! The macOS menu bar (the approved `MenuBar` board). Rust owns the menu,
-//! so it is there before the page loads and survives a page reload, and
-//! Settings, Help, Copy, Close session and Close window work whichever
-//! window is in front.
+//! The macOS menu bar. Rust owns the menu, so it is there before the page
+//! loads and survives a page reload, and Settings, Help, Copy, Close
+//! session and Close window work whichever window is in front.
 //!
 //! Vosh commands reach the main window as `vosh://app-menu` with the
 //! palette entry id as the payload, and shell/useAppCommands.ts runs them
@@ -42,7 +41,7 @@ pub(crate) struct MenuState {
     /// The sessions sidebar shows in the main window.
     pub(crate) sessions_shown: bool,
     /// How many snoop tabs the selected session has, live or ended. View
-    /// lists Go to snoop while there is one (Snoop SN7).
+    /// lists Go to snoop while there is one.
     #[serde(default)]
     pub(crate) snoops: usize,
 }
@@ -85,9 +84,8 @@ enum SessionRow {
     Separator,
 }
 
-/// The Session menu after Connect to, in the order board 4 of the
-/// Sessions review draws it. Disconnect follows on its own while a
-/// session is connected.
+/// The Session menu after Connect to, in the order it shows them.
+/// Disconnect follows on its own while a session is connected.
 #[cfg(target_os = "macos")]
 const SESSION_ROWS: [SessionRow; 10] = [
     SessionRow::Item("session-edit", "Edit connection…"),
@@ -104,7 +102,7 @@ const SESSION_ROWS: [SessionRow; 10] = [
 
 /// Whether the rows that move between sessions take a click: Next
 /// session, Previous session and Show sessions. One session has nowhere
-/// to step and no sidebar, so they show dimmed (Sessions Q12).
+/// to step and no sidebar, so they show dimmed.
 #[cfg(target_os = "macos")]
 fn between_sessions(state: &MenuState) -> bool {
     state.sessions >= 2
@@ -206,7 +204,7 @@ enum Route {
     /// Close what is in front. Settings and Help close. In the main
     /// window the command runs, Close window or Close session, and asks
     /// first while a session it ends is connected. So Close session never
-    /// closes a game from Settings (Sessions Q11).
+    /// closes a game from Settings.
     CloseFront,
     /// Copy in the window in front.
     Copy,
@@ -224,7 +222,7 @@ enum Route {
 
 /// Whether Quit hands the main window the question before it quits, by
 /// how many sessions are connected. Two or more ask, so one keeps the
-/// Quit it had before sessions (Sessions Q13).
+/// Quit it had before sessions.
 #[cfg(target_os = "macos")]
 const fn quit_asks(connected: usize) -> bool {
     connected >= 2

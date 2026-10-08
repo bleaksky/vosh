@@ -144,7 +144,7 @@ pub(crate) async fn session_rename<R: tauri::Runtime>(
 /// Move the session `session` names to the place `to` in the list, or to
 /// its end when `to` lies past it, as a drag of its row does. The
 /// selection stays, and profiles.toml keeps the order for the next
-/// launch (Q18).
+/// launch.
 #[tauri::command]
 pub(crate) async fn session_move<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -166,7 +166,7 @@ const NO_ADDRESS: &str = "Give the session a host and a port to dial.";
 
 /// Keep `host` on `port`, over TLS when `tls` says so, as where the
 /// session `session` names dials, without dialing, as the session form
-/// saves it. Each session keeps its own (board 7 and Q12). Its row names
+/// saves it. Each session keeps its own. Its row names
 /// that world from then on, and profiles.toml keeps it for the next
 /// launch while it keeps the list, see
 /// [`crate::profile::set::SessionEntry::list`]. A blank host or port 0
@@ -255,7 +255,7 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
 }
 
 /// Send a line you type into the game's line editor while it holds a
-/// text Vosh can name, exactly as typed (Description Editor Q3). No
+/// text Vosh can name, exactly as typed. No
 /// alias, variable, `#` command or semicolon split sees it, and its
 /// leading spaces stay, since every line there is part of your text. It
 /// goes to the log as typed.
@@ -373,8 +373,8 @@ pub(crate) async fn session_reconnect_cancel<R: tauri::Runtime>(
 }
 
 /// Whether `profile`, or the profile the selected session plays when it
-/// names none, dials again after the link drops while you play (Alerts
-/// Q14). On at first.
+/// names none, dials again after the link drops while you play. On at
+/// first.
 #[tauri::command]
 pub(crate) async fn reconnect_get(
     state: State<'_, SharedState>,

@@ -187,11 +187,11 @@ pub(crate) struct UiConfig {
     pub enabled_presets: Vec<String>,
     /// The dock layout the side panels had before panes. Nothing edits
     /// it now. `pane_layout` turns it into a pane tree for a profile
-    /// that has never saved one, and saves keep writing it through 1.0
-    /// (D13).
+    /// that has never saved one, and saves keep writing it through 1.0,
+    /// so a rollback still finds it.
     #[serde(default)]
     pub dock_layout: Vec<DockEntryPersist>,
-    /// The one-window panel's pane tree. Always per profile: it is
+    /// The side panel's pane tree. Always per profile: it is
     /// left out of `GlobalConfig`, `ScopeConfig` and
     /// `strip_global_fields`, so each character profile keeps its own
     /// panes. None until the first edit, and `pane_layout` migrates
@@ -310,9 +310,9 @@ pub(crate) struct UiConfig {
     #[serde(default = "default_input_echo_caret")]
     pub input_echo_caret: bool,
     /// Whether the old side panel zones filled the window height. The
-    /// one window panel has no such zones, so nothing reads it. Every
+    /// pane panel has no such zones, so nothing reads it. Every
     /// save writes back the value it loaded, so 0.7.2 keeps it on a
-    /// downgrade (D12, D14).
+    /// downgrade.
     #[serde(default)]
     pub side_panels_fill_height: bool,
     /// Milliseconds to wait between lines when sending a multi-line
@@ -330,7 +330,7 @@ pub(crate) struct UiConfig {
     pub spellcheck_prompt: bool,
     /// Offer the writing card in a notice when you open the game's line
     /// editor yourself on a text Vosh can name, `description edit` or
-    /// `note edit` (Description Editor Q3, Note Editor Q14). Default on.
+    /// `note edit` Default on.
     #[serde(default = "default_writing_offer")]
     pub writing_offer: bool,
     /// The writing card asks before it posts a note. Off, Post posts at
@@ -358,7 +358,7 @@ pub(crate) struct UiConfig {
     /// The old vitals bar look. The vitals under the panes read
     /// `vitals_density` and the rows after it instead, so nothing reads
     /// this. Every save writes back the table it loaded, so 0.7.2 keeps
-    /// it on a downgrade (D12, D14).
+    /// it on a downgrade.
     #[serde(default)]
     pub vitals: VitalsConfig,
     /// How the vitals under the panel's panes lay out: `rows` (one row
@@ -448,7 +448,7 @@ pub(crate) struct UiConfig {
     pub vitals_hit: bool,
     /// Where the old status bar drew the moons. The status line places
     /// them itself, so nothing reads this. Every save writes back the
-    /// value it loaded, so 0.7.2 keeps it on a downgrade (D12, D14).
+    /// value it loaded, so 0.7.2 keeps it on a downgrade.
     #[serde(default = "default_moons_position")]
     pub moons_position: String,
     /// Rendering style for tick / mud time chips. Values:
@@ -533,14 +533,14 @@ pub(crate) struct UiConfig {
     #[serde(default, skip_serializing_if = "is_false")]
     pub snoop_folded: bool,
     /// Log sessions: the session log keeps every line this profile's
-    /// sessions show (D34). None until you choose, which logs every
+    /// sessions show. None until you choose, which logs every
     /// connection but one to this computer, see [`logs_connection`].
     /// Your choice always wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log_sessions: Option<bool>,
     /// Scrollback size: how many lines both renderers keep above the
-    /// screen and the scrollback file keeps for the next launch (D40).
-    /// From 1,000 to 100,000, and 10,000, the default, is not written.
+    /// screen and the scrollback file keeps for the next launch. From
+    /// 1,000 to 100,000, and 10,000, the default, is not written.
     #[serde(
         default = "default_scrollback_lines",
         deserialize_with = "deserialize_scrollback_lines",
@@ -765,10 +765,10 @@ impl Default for VitalsConfig {
 
 impl VitalsConfig {
     /// The style that grew from these 0.7 vitals, which the gallery marks
-    /// Yours in 0.7 (Q13 of the Vitals Styles review). A template that was
-    /// on drew in place of every layout, so it gives `text`. Otherwise
-    /// `gauges`, `pips`, `line` for strip and inline, and `rows` for
-    /// stacked. Every profile saved `ember` by default, so it gives none.
+    /// Yours in 0.7. A template that was on drew in place of every layout,
+    /// so it gives `text`. Otherwise `gauges`, `pips`, `line` for strip
+    /// and inline, and `rows` for stacked. Every profile saved `ember` by
+    /// default, so it gives none.
     pub(crate) fn legacy_style(&self) -> Option<&'static str> {
         if self.template_enabled {
             return Some("text");
@@ -792,8 +792,7 @@ impl VitalsConfig {
 
 impl UiConfig {
     /// The text the Text style draws. Yours, or while you have none the
-    /// 0.7 template that was on (Q13 of the Vitals Styles review), or
-    /// Vosh's.
+    /// 0.7 template that was on, or Vosh's.
     pub(crate) fn vitals_text_drawn(&self) -> Cow<'_, str> {
         if !self.vitals_text.is_empty() {
             Cow::Borrowed(&self.vitals_text)
@@ -1031,14 +1030,15 @@ where
 
 /// Whether a connection to `host` writes the session log: your Log
 /// sessions choice, or until you choose, every host but this computer,
-/// such as a test server run beside Vosh (D34).
+/// such as a test server run beside Vosh, which would fill the log with
+/// tests.
 pub(crate) fn logs_connection(ui: &UiConfig, host: &str) -> bool {
     ui.log_sessions
         .unwrap_or_else(|| !vosh_log::is_local_host(host))
 }
 
 /// The lines of scrollback each terminal keeps until you pick another
-/// Scrollback size, the 10,000 both renderers kept before it (D40).
+/// Scrollback size, the 10,000 both renderers kept before it.
 pub(crate) const DEFAULT_SCROLLBACK_LINES: u32 = 10_000;
 
 fn default_scrollback_lines() -> u32 {
@@ -1074,8 +1074,7 @@ where
     })
 }
 
-/// The share of the terminal column a snoop split takes until you
-/// drag it (SN7).
+/// The share of the terminal column a snoop split takes until you drag it.
 pub(crate) const DEFAULT_SNOOP_SHARE: f64 = 0.4;
 
 fn default_snoop_share() -> f64 {
@@ -1344,7 +1343,7 @@ impl Default for UiConfig {
 
 /// The theme a file without the key reads, and the fallback. A new
 /// install starts on Triad instead, which `NEW_INSTALL_THEME` in
-/// profile/set.rs writes before the first launch (Themes review Q3).
+/// profile/set.rs writes before the first launch.
 fn default_theme() -> String {
     "obsidian-ember".to_string()
 }
@@ -1352,7 +1351,7 @@ fn default_theme() -> String {
 /// The light theme a file without the key reads. Vellum is retired, and
 /// the frontend shows Rubric for it (`RETIRED_THEMES` in themes.ts),
 /// while Vosh 0.8.1 still reads it as Vellum. A new install starts with
-/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs (Q4).
+/// Rubric itself, from `NEW_INSTALL_LIGHT_THEME` in profile/set.rs.
 fn default_light_theme() -> String {
     "vellum".to_string()
 }

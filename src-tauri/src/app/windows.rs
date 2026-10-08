@@ -166,14 +166,14 @@ pub(crate) struct AuxWindow {
     /// The page the bundle renders, `index.html?view=...`.
     url: Cow<'static, str>,
     title: Cow<'static, str>,
-    /// The default size, the approved boards' window.
+    /// The default size, the one its layout is drawn for.
     size: (f64, f64),
     /// The smallest size whose layout still fits.
     min_size: (f64, f64),
 }
 
-/// Settings, at the approved boards' 880×600. Under 820×560 its two
-/// column layouts no longer fit.
+/// Settings, at the 880×600 its layout is drawn for. Under 820×560 its
+/// two column layouts no longer fit.
 pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
     label: Cow::Borrowed("settings"),
     url: Cow::Borrowed("index.html?view=settings"),
@@ -182,7 +182,7 @@ pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
     min_size: (820.0, 560.0),
 };
 
-/// Help, at the approved Help boards' 1040×700. Under 860 wide the
+/// Help, at the 1040×700 its layout is drawn for. Under 860 wide the
 /// article no longer keeps its measure beside the 280 px sidebar.
 pub(crate) const HELP_WINDOW: AuxWindow = AuxWindow {
     label: Cow::Borrowed("help"),
@@ -197,8 +197,8 @@ pub(crate) const HELP_WINDOW: AuxWindow = AuxWindow {
 const SNOOP_PREFIX: &str = "snoop-";
 
 /// The snoop window of the session `session`, which Open in a window
-/// opens with every tab of the session in it (Snoop SN1), at the
-/// approved board's 760×480. Its title reads `Snoop, ` and the
+/// opens with every tab of the session in it, at the 760×480 its layout
+/// is drawn for. Its title reads `Snoop, ` and the
 /// session's label, `label`, so the Window menu and Mission Control can
 /// tell one apart from another. Under 480×240 the band no longer holds
 /// a few tabs and Stop over some rows of text.
@@ -375,7 +375,7 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
 /// popup hangs around alone after the user closes the main
 /// client. They go once the main window is gone, not at its close
 /// request, since the page holds that request while it asks whether
-/// to end a connected session (Sessions Q13), and Cancel keeps them.
+/// to end a connected session, and Cancel keeps them.
 pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
     // The focus rule of the alerts counts Vosh in front while any of its
     // windows has focus, Settings and Help included.

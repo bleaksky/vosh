@@ -1,6 +1,6 @@
 //! What each row the session logs is, so Save a scene can leave out your
 //! prompt, your commands, the lines outside play and the channels you
-//! pick (Q9 of the Alerts and Scenes review).
+//! pick.
 //!
 //! - A line outside play is login: before the game says you play, from
 //!   Char.Status or the vitals, and after you step away to the account

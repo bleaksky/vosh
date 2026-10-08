@@ -214,7 +214,7 @@ pub(crate) async fn logs_keep_get(state: State<'_, SharedState>) -> Result<Optio
 }
 
 /// Keep logs for `days`, one of 365, 90 and 30, or forever with None,
-/// then delete the logs past the new span (D34).
+/// then delete the logs past the new span.
 #[tauri::command]
 pub(crate) async fn logs_keep_set(
     state: State<'_, SharedState>,

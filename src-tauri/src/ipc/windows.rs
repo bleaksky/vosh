@@ -36,7 +36,7 @@ pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
     open_aux_window(&app, &HELP_WINDOW)
 }
 
-/// Open in a window, from the snoop split's menu (Snoop SN1). Every tab
+/// Open in a window, from the snoop split's menu. Every tab
 /// of `session`, or of the selected session with none, moves into the
 /// session's snoop window, which opens or comes forward, and the split
 /// closes. Closing the window brings the split back with the same tabs

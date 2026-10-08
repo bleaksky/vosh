@@ -1,5 +1,5 @@
 //! A Vosh profile export imported under Characters, as a new profile or
-//! over one you have (Scripts Q9, Q10 and Q26). [`super::plan`] works out
+//! over one you have. [`super::plan`] works out
 //! the file first, and the import writes under [`PERSIST_LOCK`], as every
 //! profile write does.
 

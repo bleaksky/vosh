@@ -1,5 +1,5 @@
 //! Banners on Windows and Linux, through tauri-plugin-notification, a
-//! toast on Windows and the freedesktop server on Linux (Alerts Q1). The
+//! toast on Windows and the freedesktop server on Linux. The
 //! plugin says banners are always allowed on the desktop, so Windows
 //! reads its own setting from `ToastNotifier.Setting`. A click on a toast
 //! of an installed Vosh starts the app again, since the toast has no

@@ -188,8 +188,8 @@ pub(crate) fn adopt_catalog_presets(
 }
 
 /// Hold off each preset macro on a key one of your macros uses, and turn
-/// every other preset macro on, so a key you already use stays yours
-/// (Scripts Q13). Yours keeps the key while it is on, off or in a group
+/// every other preset macro on, so a key you already use stays yours.
+/// Yours keeps the key while it is on, off or in a group
 /// that is off, except a group in `off`, which [`hold_profile_keys`]
 /// fills in loadout mode. A held macro saves with `enabled` false, so
 /// the command line and 0.8.1 both pass it over. Every step that changes
@@ -232,8 +232,8 @@ pub(crate) fn hold_profile_keys(p: &mut Profile) {
 ///
 /// `triggers` holds each preset it names whole, so a stored trigger of
 /// one of those presets whose name it does not carry comes out. A trigger
-/// a preset fix renamed or removed then leaves the store (Presets board
-/// 3, step 5). Returns the names that came out, so the page can name one
+/// a preset fix renamed or removed then leaves the store. Returns the
+/// names that came out, so the page can name one
 /// you edited.
 ///
 /// [`presets_install`]: crate::ipc::automation::presets_install
@@ -311,7 +311,7 @@ pub(crate) fn switch_presets(list: &[String], switches: &[PresetSwitch]) -> Vec<
 /// The macros half of [`presets_install`] over the live profile `p`.
 /// Each macro carries the id of its preset. It takes out every macro of
 /// those presets and adds `macros` in the order given, which for Numpad
-/// movement is the game's n e s w u d (Scripts board 7). A macro keeps
+/// movement is the game's n e s w u d. A macro keeps
 /// the group you put it in, as a preset trigger does, and one on a key of
 /// yours is held off, see [`hold_taken_keys`]. Returns the number
 /// installed.
@@ -407,7 +407,7 @@ pub(crate) fn remove_preset_macros(p: &mut Profile, preset: &str) -> usize {
 /// The body of [`macros_set`] over the live profile `p`. It finds and
 /// adds only your macros, so your macro and a preset macro on one key
 /// never overwrite each other. A preset macro takes only its group from you,
-/// as a preset trigger does (Scripts Q13).
+/// as a preset trigger does, so a key you use stays yours.
 ///
 /// [`macros_set`]: crate::ipc::automation::macros_set
 pub(crate) fn set_macro(
@@ -786,7 +786,7 @@ mod tests {
     }
 
     /// The keys Numpad movement binds and what each sends, in the game's
-    /// order n e s w u d (Scripts board 7).
+    /// order n e s w u d.
     const NUMPAD: [(&str, &str); 6] = [
         ("Numpad8", "n"),
         ("Numpad6", "e"),
@@ -963,8 +963,8 @@ mod tests {
         let [_, off] = on_and_off(&p);
         assert!(off.is_empty(), "{off:?}");
 
-        // Per profile mode keeps Q13, and rec keeps the key in a group
-        // that is off.
+        // Per profile mode keeps your key yours too, and rec keeps the
+        // key in a group that is off.
         p.on_catalog = false;
         hold_profile_keys(&mut p);
         let [_, off] = on_and_off(&p);

@@ -1,5 +1,5 @@
-//! The kinds of text the writing card takes, one row each (Note Editor
-//! Q13). Every kind goes through the game's one line editor
+//! The kinds of text the writing card takes, one row each. Every kind
+//! goes through the game's one line editor
 //! (`string_append`, `olc.c:3383`), and a row says how the card opens
 //! it, which line the game prints before its banner, the fields it sets
 //! at the game's prompt first, how it reads the text back and how it

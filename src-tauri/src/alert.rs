@@ -1,5 +1,4 @@
-//! Alerts that reach you while you look elsewhere (the Alerts and Scenes
-//! review, Q1 to Q6 and Q19, with Sessions Q10). An alert comes from a
+//! Alerts that reach you while you look elsewhere. An alert comes from a
 //! trigger's alert table, from one of the five alert presets, or from
 //! `mud.alert` in Lua, and each one rings the same way.
 //!
@@ -15,7 +14,7 @@
 //!   `session://alert`, which plays the tone. An alert that rings nothing
 //!   still tells the page through `session://mark` in a session you are
 //!   not looking at, once for each such alert with its source, so its row
-//!   counts and names what waits (Sessions Q9, S4).
+//!   counts and names what waits.
 //! - [`presets`] matches the five presets from GMCP, the text and the
 //!   link, and keeps the low latch, the Rust twin of `nextLow`. A preset
 //!   that is off still raises its alerts, with nothing on, so they mark.

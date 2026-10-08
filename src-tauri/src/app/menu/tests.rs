@@ -72,8 +72,8 @@ fn specs_map_mod_to_cmd() {
 
 #[test]
 fn show_sessions_binds_ctrl_cmd_s() {
-    // The key AppKit gives a standard Show Sidebar row (Sessions toggle
-    // T3). The spec names one key for macOS and one for the rest.
+    // The key AppKit gives a standard Show Sidebar row. The shortcut
+    // file names one key for macOS and one for the rest.
     use muda::accelerator::{Accelerator, Code, Modifiers};
     assert_eq!(spec_to_accelerator("Ctrl+Mod+S"), "Ctrl+Cmd+S");
     let parsed = Accelerator::from_str(accelerator("sessions-sidebar").unwrap()).unwrap();

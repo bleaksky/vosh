@@ -155,7 +155,7 @@ async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
 
 /// Your edits to the presets move to catalog.toml with the list of
 /// presets that are on, leave the profile file, and reach every
-/// character (Presets Q2).
+/// character.
 #[tokio::test]
 async fn a_loadout_save_keeps_the_preset_edits_in_the_catalog() {
     let dir = tempfile::tempdir().unwrap();
@@ -2486,7 +2486,7 @@ fn line_color(edits: &crate::loadouts::preset_edits::PresetEdits) -> Option<Stri
 
 /// Edits that differ ask which to keep, the one you pick goes to
 /// catalog.toml for every character, and the table leaves each profile
-/// file (Presets board 5).
+/// file.
 #[tokio::test]
 async fn the_preset_edits_you_pick_reach_every_character() {
     use super::apply::ConflictResolution;

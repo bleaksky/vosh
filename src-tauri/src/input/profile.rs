@@ -101,7 +101,7 @@ pub(super) fn slash_profile(
         },
         "reset" => {
             // What a fresh install gets: every preset off and no edits
-            // to come back when you turn one on (First Run Q11).
+            // to come back when you turn one on.
             let mut blank = ProfileConfig::default();
             blank.ui.enabled_presets = vec![PRESETS_OFF.to_string()];
             let tick_before = profile.tick.config.clone();
@@ -147,11 +147,11 @@ pub(super) fn load_profile_file(
 /// `[prompt]` table that a `#profile reset` or `#profile load` in
 /// `session` just laid over it, through [`hand_to_connection`] as that
 /// line did its own connection, and print in each a line that names
-/// `session` (Q31 of the sessions review). `tick_before` is the tick
-/// settings before the lines changed them, when they did. The sessions
-/// come from the map before the profile lock, each connection is locked
-/// in turn under it, never two at once, and the lines print once it lets
-/// go. Call with no lock held.
+/// `session`, so you see why its settings changed. `tick_before` is the
+/// tick settings before the lines changed them, when they did. The
+/// sessions come from the map before the profile lock, each connection
+/// is locked in turn under it, never two at once, and the lines print
+/// once it lets go. Call with no lock held.
 pub(crate) async fn hand_to_other_sessions<R: tauri::Runtime>(
     app: &AppHandle<R>,
     state: &AppState,

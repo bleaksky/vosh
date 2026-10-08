@@ -1,9 +1,9 @@
-//! Whether you look at a session, which decides what an alert does
-//! (Alerts Q2 with Sessions Q10). Vosh counts as in front while any of
-//! its windows has focus, Settings and Help included, and a session
-//! counts as in front only while Vosh does and the session is the one
-//! selected. Rust keeps the windows that have focus from
-//! `WindowEvent::Focused`, so the session decides alone.
+//! Whether you look at a session, which decides what an alert does.
+//! Vosh counts as in front while any of its windows has focus, Settings
+//! and Help included, and a session counts as in front only while Vosh
+//! does and the session is the one selected. Rust keeps the windows
+//! that have focus from `WindowEvent::Focused`, so the session decides
+//! alone.
 
 use std::collections::BTreeSet;
 use std::sync::Mutex;

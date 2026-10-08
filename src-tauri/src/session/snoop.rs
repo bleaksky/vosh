@@ -1,4 +1,4 @@
-//! The players a session snoops (Snoop SN3 and SN5). Aabahran sends
+//! The players a session snoops. Aabahran sends
 //! Snoop.Start and Snoop.Stop with the name of each player you start or
 //! stop snooping, and Snoop.Output with what that player's screen got,
 //! ANSI and all (gmcp.c `gmcp_send_snoop` and `gmcp_send_snoop_state`).
@@ -10,14 +10,14 @@
 //! The text never touches the line pipeline, so no trigger, highlight,
 //! gag or preset sound sees it. Lua still hears the packets through its
 //! GMCP handlers. Each whole line goes in the session log as its own row
-//! marked with the player's name (SN4), through [`Snoops::take_log`]. A
+//! marked with the player's name, through [`Snoops::take_log`]. A
 //! partial waits in the tab for its newline, or for the end of the snoop
 //! or the link. The session sends the tab list on `session://snoop`
 //! and new text on `session://snoop-output` once per read, and the page
 //! reads every tab with its text through `snoop_get`.
 //!
 //! Open in a window moves every tab of a session into a window of its
-//! own (SN1). [`Snoops`] keeps whether it is out, and the tab list
+//! own. [`Snoops`] keeps whether it is out, and the tab list
 //! carries it, so the split closes while the window is open and comes
 //! back with the same tabs once it closes.
 

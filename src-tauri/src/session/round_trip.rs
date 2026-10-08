@@ -1,4 +1,4 @@
-//! The round trip to the game (Round Trip Readout, approved October 7).
+//! The round trip to the game, which the status line shows.
 //! Every [`READ_EVERY`] the session loop reads the kernel's smoothed
 //! round trip time for the game socket, see [`kernel`]. The kernel only
 //! updates it as the game's machine acknowledges your bytes, so in a

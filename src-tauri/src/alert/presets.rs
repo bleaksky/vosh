@@ -1,9 +1,9 @@
-//! The five alert presets (Alerts Q5), matched from GMCP where the game
+//! The five alert presets, matched from GMCP where the game
 //! says it plainly. Each one is on while `ui.enabled_presets` lists its
 //! id, and the profile's `[alerts]` table says what it does. All five
 //! ship off, so none rings until you turn it on. A preset that is off
 //! still raises its alert, with nothing on, so the row of a session you
-//! are not looking at takes the dot all the same (Sessions Q9).
+//! are not looking at takes the dot all the same.
 //!
 //! - Tells you get: Comm.Channel with channel `tell` and direction
 //!   `received`, once per sender in 10 seconds.
