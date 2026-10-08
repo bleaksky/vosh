@@ -284,6 +284,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
         className="ov-find-btn"
         onClick={onClose}
         aria-label="Close find"
+        aria-keyshortcuts={ariaKeyshortcuts('Escape')}
         title="Close find (Esc)"
       >
         <svg {...ICON}>

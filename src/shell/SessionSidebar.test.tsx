@@ -131,7 +131,7 @@ describe('the sessions sidebar', () => {
     const html = draw(rows, 1);
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
-    expect(html).toContain('aria-label="New session"');
+    expect(html).toMatch(/aria-label="New session" aria-keyshortcuts="(Meta|Control)\+T"/);
     expect(html).not.toContain('Hide sessions');
     expect(html).toContain(
       '<h2 class="shell-sessions-head">Sessions<span class="st-visually-hidden">, </span><span class="shell-sessions-total">3</span></h2>',

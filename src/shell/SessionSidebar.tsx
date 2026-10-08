@@ -8,6 +8,7 @@ import {
   type PointerEvent,
 } from 'react';
 import type { SessionRow } from '../ipc/session';
+import { APP_SHORTCUTS } from '../lib/appMenu';
 import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
@@ -212,6 +213,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             type="button"
             className="shell-icon-button"
             aria-label="New session"
+            aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS['session-new'])}
             onClick={onNewSession}
           >
             <PlusIcon />
