@@ -6,7 +6,7 @@ Every window builds from the primitives in `src/ui`. Settings, Help and the prom
 import { Section, Row, Toggle, Select } from '../../ui';
 ```
 
-The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
+The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the shared tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
 
 Use monospace only for MUD text. That means patterns, sent commands, macro keys, host, and port. Everything else uses the UI font with tabular numbers, which the root already sets.
 

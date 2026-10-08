@@ -18,7 +18,7 @@ import { liftAtHue, parseHex, toHex } from '../theme/color';
 import type { XtermPalette } from '../theme/themes';
 
 // How your vitals read in the panel footer and in the status line, from
-// the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
+// the rows under Settings, Vitals. Values picks
 // the form of each number, Meter the line under it, and Warn before you
 // run low the thresholds that color it. Kept pure for the unit tests.
 

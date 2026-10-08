@@ -13,7 +13,7 @@ import {
   type VitalInks,
 } from './vitalsView';
 
-// What the eight styles of the More Vitals Styles review share. Your
+// What the eight drawn styles share. Your
 // opponent draws its name and its health on one line across the footer
 // with the style's own mark under them in warn, 10 above your vitals or
 // 10 under them. The row styles set each vital's label, mark and

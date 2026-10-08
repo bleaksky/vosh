@@ -57,8 +57,7 @@ export function EyeIcon({ size = 16 }: { size?: 12 | 16 }) {
 
 // Status line glyphs for the tick and the game time, drawn at 12 px.
 // Unlike the title band chevron, their strokes scale with the icon, 1.25
-// units on the 16 unit grid or about 0.94 px at 12 px, as the approved
-// drawing has them. Held at 1.25 px, the open sun under the horizon
+// units on the 16 unit grid or about 0.94 px at 12 px. Held at 1.25 px, the open sun under the horizon
 // fused with the horizon and its hole shrank to one device pixel.
 
 interface SmallIconProps {

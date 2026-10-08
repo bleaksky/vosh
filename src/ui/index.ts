@@ -1,6 +1,6 @@
 // The kit every window shares. Settings, Help and the prompt card build
-// from these, so each piece keeps its geometry and its One Window tokens
-// in one place. The controls draw from src/styles/controls.css, and the
+// from these, so each piece keeps its geometry and its shared tokens in
+// one place. The controls draw from src/styles/controls.css, and the
 // sections, cards and rows from src/styles/settings.css. README.md
 // beside this file lists each one and its props.
 //

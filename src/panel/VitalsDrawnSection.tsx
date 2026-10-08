@@ -23,7 +23,7 @@ import { VitalsRings } from './VitalsRings';
 import { VitalsTraces } from './VitalsTraces';
 import { VitalsVials } from './VitalsVials';
 
-// The footer of each style of the More Vitals Styles review, the
+// The footer of each drawn style, Bands to Orbs, the
 // section VitalsBlock draws for it: the row styles on the Gauges pads,
 // and the height each holds while it waits for your vitals.
 

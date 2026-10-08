@@ -431,8 +431,8 @@ export function TriangleIcon({ size = 16, className }: IconProps) {
   );
 }
 
-// The Settings group icons the Settings layout review added (October
-// 8). Prompt reuses TerminalIcon.
+// The icons of the Accessibility, Vitals and Logs groups in Settings.
+// Prompt reuses TerminalIcon.
 
 /** A figure in a ring: Accessibility. */
 export function AccessibilityIcon(props: IconProps) {

@@ -182,8 +182,8 @@ const obsidianEmber: AppTheme = {
     brightMagenta: '#d0aae2',
     brightCyan: '#9de3ee',
   },
-  // The ember accent, and the ember ink the approved canvas sets on
-  // accent buttons.
+  // The ember accent, and the dark ember ink that reads on accent
+  // buttons.
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 

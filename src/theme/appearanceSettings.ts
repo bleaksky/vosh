@@ -128,10 +128,10 @@ export function panelFontChoices(current: string, installed: readonly SystemFont
 
 // ── Size ─────────────────────────────────────────────────────────────
 
-/** The sizes the approved board offers, in points. */
+/** The sizes the Size select offers, in points. */
 export const TEXT_SIZES: readonly number[] = [11, 12, 13, 14, 15, 16, 18];
 
-/** What the Size select offers: the board's sizes plus your current
+/** What the Size select offers: those sizes plus your current
  *  size when it is not one of them, smallest first. */
 export function sizeChoices(current: number): Choice[] {
   const sizes = new Set<number>(TEXT_SIZES);

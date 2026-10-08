@@ -35,8 +35,8 @@ import {
   type ChatFilter,
 } from './chatFilter';
 
-// Channel chat, the line you had from May to September on the theme
-// (the approved Chat A board). Messages sit at the bottom like the
+// Channel chat, the line you had from May to September on the theme.
+// Messages sit at the bottom like the
 // terminal, one mono line each, [channel] Speaker: text in the color
 // the game prints that channel in, or the theme color you picked for it
 // under Channel colors in the pane menu, lifted where it would read

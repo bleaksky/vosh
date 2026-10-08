@@ -639,9 +639,9 @@ export function PromptCard({
     }
   };
 
-  // The keys that work on your design (section 7.1): Left and Right pick
-  // parts, Option with them moves one, Delete removes it, typing adds text
-  // at the caret, and Return adds a line break.
+  // The keys that work on your design. Left and Right pick parts, Option
+  // with them moves one, Delete removes it, typing adds text at the
+  // caret, and Return adds a line break.
   const designKeys = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!designing || view !== 'design') return false;
     const target = e.target as HTMLElement;

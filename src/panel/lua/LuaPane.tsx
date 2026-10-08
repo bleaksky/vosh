@@ -27,7 +27,7 @@ import { PaneHeader, PaneMeta } from '../PaneHeader';
 // While the plugin draws nothing, the pane says why: the plugin is off,
 // Vosh stopped it, or you removed it, which offers to close the pane. A
 // plugin that is on but has not drawn the pane yet leaves the body
-// empty, since no board draws that case.
+// empty, since there is nothing yet to say.
 
 export function LuaPane() {
   const leaf = usePaneLeaf();

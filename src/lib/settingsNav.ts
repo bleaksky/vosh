@@ -21,7 +21,7 @@ export type SettingsGroup =
 
 /** The eleven groups in nav order, with their visible names. `gap`
  *  starts a cluster, which the sidebar sets off with a 13 px gap and no
- *  heading (Settings layout Q9). */
+ *  heading. */
 export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string; gap?: boolean }[] = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
@@ -110,7 +110,8 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
   macros: { group: 'automation', section: 'macros' },
   timers: { group: 'automation', section: 'timers' },
   import: { group: 'automation', anchor: 'import' },
-  // The bare link opens the search, as it did in General (Q2).
+  // The bare link opens the search, as it did in General, so old links
+  // land where they always did.
   logs: { group: 'logs', section: 'search' },
 };
 
@@ -132,13 +133,13 @@ const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
   },
 };
 
-// Sections and rows that left their group in the Settings layout move
-// (answered October 8), keyed by the old link without its anchor, or
+// Sections and rows that left their group when Settings grew to eleven
+// groups, keyed by the old link without its anchor, or
 // with it for a single row. The anchor rides along unless the key names
 // one. Applied after MOVED_ANCHORS, so a link that moved twice lands
 // too, like input:advanced#prompt on the Prompt tab. Links live where
 // Vosh cannot rewrite them, palette Recent, a pending tab from an older
-// build and plugin code, so this table stays for good (Q11).
+// build and plugin code, so this table stays for good.
 const GROUP_MOVES: Readonly<Record<string, SettingsTarget>> = {
   'general:session-logs': { group: 'logs', section: 'session-logs' },
   'general:scrollback': { group: 'logs', section: 'scrollback' },
@@ -179,7 +180,7 @@ const GROUP_MOVES: Readonly<Record<string, SettingsTarget>> = {
   },
 };
 
-/** Where a target from before the Settings layout move lands now. */
+/** Where a target from before Settings had eleven groups lands now. */
 function movedSettingsTarget(target: SettingsTarget): SettingsTarget {
   const whole = GROUP_MOVES[formatSettingsTarget(target)];
   if (whole) return { ...whole };

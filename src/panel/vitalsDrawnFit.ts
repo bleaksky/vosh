@@ -5,7 +5,7 @@ import { maxOf } from './vitalsView';
 import { FOOTER_INSETS, LEDGER_GAP, type LedgerFigure, type MeasureText } from './vitalsLedgerFit';
 import { markRoom } from './vitalsMarksFit';
 
-// How the styles of the More Vitals Styles review fit the panel and
+// How the drawn styles, Bands to Orbs, fit the panel and
 // measure, and the height a footer holds while it waits for your
 // vitals. Every length that sits with the text scales with your panel
 // size, and the marks keep their px. Every fit measures each vital at

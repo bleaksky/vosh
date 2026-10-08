@@ -191,7 +191,7 @@ const PANE_TITLES: Record<OfferedPaneType, string> = {
 
 // Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
 // `settings-<id>`, a palette Recent id, so the old tab ids stay. The
-// Settings layout move (October 8) brought back the vitals row, now for
+// move to eleven Settings groups brought back the vitals row, now for
 // the Vitals tab, and added rows for Accessibility, Prompt and the Logs
 // tab. The logs row keeps its id and opens the search, as the bare
 // link does, so the Logs tab row names its first section.

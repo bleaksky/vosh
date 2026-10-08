@@ -30,13 +30,12 @@ export type VitalsFit =
   | { style: 'dials' | 'vials' | 'orbs'; fit: ColumnFit }
   | { style: 'rings'; fit: RingsFit };
 
-/** The row styles of the More Vitals Styles review, each vital's mark
+/** The drawn styles that keep a row for each vital, its mark
  *  between its label and its value, or under both. */
 const ROW_STYLES = ['ladders', 'blocks', 'traces', 'candles'] as const;
 type RowStyle = (typeof ROW_STYLES)[number];
 
-/** The styles of the More Vitals Styles review, which DrawnSection
- *  draws. */
+/** The drawn styles, which DrawnSection draws. */
 const DRAWN = ['bands', ...ROW_STYLES, 'dials', 'rings', 'vials', 'orbs'] as const;
 
 export type DrawnFit = Extract<VitalsFit, { style: (typeof DRAWN)[number] }>;

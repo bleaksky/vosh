@@ -21,8 +21,8 @@ import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from '../terminal/terminalRen
 
 // Hand the native surface the chrome colors the page derives with its
 // theme tokens: the split divider, the selection and its text, find
-// matches in ANSI yellow (28% for every match as Menus.dc.html draws them,
-// stronger for the current one), links in the accent, and the scrollbar
+// matches in ANSI yellow (28% for every match, so the text under them
+// still reads, stronger for the current one), links in the accent, and the scrollbar
 // in the tertiary tone. A lifted prompt's band takes the selected row
 // fill, with its inset ring on a light theme. Runs on every theme apply,
 // so light themes never get the renderer's dark defaults.

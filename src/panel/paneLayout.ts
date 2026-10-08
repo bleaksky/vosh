@@ -180,9 +180,9 @@ export function defaultLayout(): PaneLayout {
   };
 }
 
-// The map's share of the stock layout, over affects. The approved
-// boards give the Map pane 348 px and the Affects pane 315 px at 1280
-// by 800, which shows every Affects row the boards show.
+// The map's share of the stock layout, over affects. It gives the Map
+// pane 348 px and the Affects pane 315 px at 1280 by 800, which is
+// room for every Affects row.
 const DEFAULT_MAP_WEIGHT = 0.525;
 const DEFAULT_AFFECTS_WEIGHT = 0.475;
 

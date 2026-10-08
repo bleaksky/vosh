@@ -715,7 +715,7 @@ describe('Settings links', () => {
       if (settingsSubpage(target) !== null) {
         // The page inside the group takes the place of the group page.
         // The bare link logs opens the search, so the Logs page is
-        // the one its first section opens (Settings layout Q2).
+        // the one its first section opens.
         const page = target.group === 'logs' ? 'logs:session-logs' : target.group;
         const own = cold.get(page)?.anchors ?? [];
         expect(own.length, at).toBeGreaterThan(0);

@@ -1,8 +1,7 @@
 import { isTrackedRow, type AffectRow } from './affectsView';
 import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from '../paneTextSize';
 
-// Where each affect sits in the Affects pane (board Affects A, timers
-// first). Two columns of 22 px rows at 12 px: your tracked affects
+// Where each affect sits in the Affects pane, timers first. Two columns of 22 px rows at 12 px: your tracked affects
 // fill the top rows in your order, row by row, so each keeps its slot.
 // The rest sit under a hairline and fill down the left column, then
 // down the right, so the hours rise down each column.

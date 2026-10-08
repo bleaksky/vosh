@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) 
 vi.mock('@tauri-apps/api/event', () => ({ emit: vi.fn(() => Promise.resolve()) }));
 
 // A Settings section that has a help topic carries a book button at the
-// end of its heading, after its meta (the HelpLinks board).
+// end of its heading, after its meta.
 
 describe('a Settings section with help', () => {
   it('ends its heading with a book button named for what it opens', () => {

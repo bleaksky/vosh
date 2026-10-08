@@ -419,7 +419,7 @@ export interface StartRow {
   checked: boolean;
 }
 
-/** The rows of the start list and the Presets menu (section 7 step 5):
+/** The rows of the start list and the Presets menu, in order:
  *  Vosh's default, Yours, Your design before that when it exists, then
  *  the presets in their order, the designs other profiles hold for From
  *  another profile, and Start empty. An earlier design the same as the

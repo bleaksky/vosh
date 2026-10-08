@@ -6,12 +6,10 @@ import { Row, Section, Select, Toggle } from '../../ui';
 import type { SettingsPageProps } from '../pageTypes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 
-// Accessibility (Settings layout, answered October 8): the rows that
-// make the game easier to see, moved whole from Appearance with their
-// anchors (Q5, Q6). Color and contrast holds Color vision, Fit game
-// colors and Keep highlight colors readable. Motion holds Blinking
-// text. R25 adds the high contrast theme and the screen reader mode
-// here. Every row saves through the field it saved through on
+// Accessibility: the rows that make the game easier to see, moved whole
+// from Appearance with their anchors so old links still land. Color and
+// contrast holds Color vision, Fit game colors and Keep highlight colors
+// readable. Motion holds Blinking text. Every row saves through the field it saved through on
 // Appearance.
 
 const COLOR_VISIONS = [

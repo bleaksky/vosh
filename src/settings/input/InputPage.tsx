@@ -22,9 +22,9 @@ import {
 // Settings, Input. The Command line card holds the caret shape,
 // keep last command, chat spell check, the sent command color, and macro
 // echo. Writing card follows with the two rows for the card that opens
-// for note edit and description edit (Settings layout Q10). Advanced
-// opens on paste pacing. The Prompt section left for a tab of its own
-// (Q3, PromptPage.tsx). Every change saves on its own.
+// for note edit and description edit. Advanced opens on paste pacing.
+// The Prompt section has a tab of its own (PromptPage.tsx). Every
+// change saves on its own.
 
 const CARET_NAMES: Record<InputCursorStyle, string> = {
   block: 'Block',

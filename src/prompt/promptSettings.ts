@@ -93,7 +93,7 @@ export function gameDescription(world: string | null): string {
  *  point at its line. */
 export const POINT_DESCRIPTION = 'Point at it in Customize prompt and Vosh reads its numbers.';
 
-/** The sentence while you have prompts off in the game (section 3). */
+/** The sentence while you have prompts off in the game. */
 export const PROMPTS_OFF =
   'You turned prompts off in the game. Type prompt in the game to turn them back on.';
 
