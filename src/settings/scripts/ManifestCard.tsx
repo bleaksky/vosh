@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { pluginReveal, type PluginManifest } from '../../ipc/scripts';
 import { errorText } from '../../lib/text';
 import { Button, Card, CardNote, Field, FieldArea, Row, Select } from '../../ui';
-import { revealLabel } from './pluginState';
+import { revealLabel } from '../../lib/revealLabel';
 
 // The Manifest tab of a plugin's page (board 1). The fields Vosh keeps
 // in manifest.toml, edited in the page's draft. The name is the

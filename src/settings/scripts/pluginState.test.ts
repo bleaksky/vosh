@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LuaLine } from '../../ipc/scripts';
-import { errorMark, revealLabel, saveStatus, stopNote } from './pluginState';
+import { errorMark, saveStatus, stopNote } from './pluginState';
 
 // What a plugin's page says about the plugin, from its row and the
 // Output ring.
@@ -122,14 +122,5 @@ describe('saveStatus', () => {
   it('says when you saved, and whether the plugin loaded again', () => {
     expect(saveStatus({ at: at(21, 14, 31), reloaded: true })).toBe('Reloaded at 21:14');
     expect(saveStatus({ at: at(9, 5, 0), reloaded: false })).toBe('Saved at 09:05');
-  });
-});
-
-describe('revealLabel', () => {
-  it('names the file manager of each platform', () => {
-    expect(revealLabel('macos')).toBe('Show in Finder');
-    expect(revealLabel('windows')).toBe('Show in Explorer');
-    expect(revealLabel('linux')).toBe('Show the folder');
-    expect(revealLabel(undefined)).toBe('Show the folder');
   });
 });
