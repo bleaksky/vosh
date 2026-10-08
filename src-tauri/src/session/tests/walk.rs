@@ -9,7 +9,7 @@ use tokio::time::Instant;
 use vosh_automation::alias::ExpandStep;
 
 use crate::input::walk::{parse_steps, Route, WalkCommand, WalkPlan};
-use crate::session::walk::{answer, WalkOut, Walker, BACKSTOP, NOT_WALKING};
+use crate::session::walk::{answer, WalkOut, WalkProgress, Walker, Why, BACKSTOP, NOT_WALKING};
 use crate::tests::walk::{map_tiles, room_info, FOUNTAIN, ROAD};
 
 /// The room west of the Common Road, which the fixtures hold no tiles
@@ -493,4 +493,180 @@ fn tiles_count_only_for_the_room_info_after_them() {
     assert_eq!(w.command(status(), t), said(&[NOT_WALKING]));
     // A packet with no number changes nothing.
     assert_eq!(w.room_info(&Value::Null, t), WalkOut::default());
+}
+
+fn walking(done: usize, total: usize, left: &str, route: bool) -> WalkProgress {
+    WalkProgress::Walking {
+        done,
+        total,
+        left: left.to_string(),
+        route,
+    }
+}
+
+fn stopped(done: usize, total: usize, why: Why) -> WalkProgress {
+    WalkProgress::Stopped { done, total, why }
+}
+
+/// Something the walker hears.
+type Event = fn(&mut Walker, Instant);
+
+/// A click on the map from the fountain two rooms west.
+fn route_from(start: i64) -> WalkCommand {
+    WalkCommand::Start {
+        plan: WalkPlan {
+            steps: parse_steps("2w").expect("the steps read"),
+            route: Some(Route {
+                start,
+                rooms: vec![ROAD, ROAD_WEST],
+            }),
+        },
+        rest: Vec::new(),
+    }
+}
+
+#[test]
+fn progress_counts_each_landing_and_ends_idle_on_arrival() {
+    let t = Instant::now();
+    let mut w = standing_in(FOUNTAIN, t);
+    assert_eq!(w.progress(), WalkProgress::Idle);
+    let _ = w.command(start("2w2e", &[]), t);
+    assert_eq!(w.progress(), walking(0, 4, "2w2e", false));
+    let _ = arrive(&mut w, ROAD, t);
+    assert_eq!(w.progress(), walking(1, 4, "w2e", false));
+    let _ = arrive(&mut w, ROAD_WEST, t);
+    assert_eq!(w.progress(), walking(2, 4, "2e", false));
+    let _ = arrive(&mut w, ROAD, t);
+    assert_eq!(w.progress(), walking(3, 4, "e", false));
+    let _ = arrive(&mut w, FOUNTAIN, t);
+    assert_eq!(w.progress(), WalkProgress::Idle);
+
+    // A click says so, and the steps left read back as the walk.
+    let _ = w.command(route_from(FOUNTAIN), t);
+    assert_eq!(w.progress(), walking(0, 2, "2w", true));
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("99n51n e", &[]), t);
+    let WalkProgress::Walking { left, .. } = w.progress() else {
+        panic!("the walk is under way");
+    };
+    assert_eq!(left, "99n51ne");
+    assert_eq!(parse_steps(&left), parse_steps("99n51n e"));
+}
+
+#[test]
+fn progress_names_every_reason_a_walk_stops() {
+    let t = Instant::now();
+    let esc = WalkCommand::Stop {
+        key: true,
+        rest: Vec::new(),
+    };
+    let cases: [(&str, Event, WalkProgress); 7] = [
+        (
+            "a failure line",
+            |w, t| {
+                let _ = w.line("Alas, you cannot go that way.", t);
+            },
+            stopped(1, 3, Why::Plain),
+        ),
+        (
+            "another room",
+            |w, t| {
+                let _ = w.room_info(&room_info(4403), t);
+            },
+            stopped(1, 3, Why::Plain),
+        ),
+        (
+            "a fight",
+            |w, _| {
+                let _ = w.combat(&json!({"target": "a Blackwatch guard"}));
+            },
+            stopped(1, 3, Why::Plain),
+        ),
+        (
+            "sitting",
+            |w, _| {
+                let _ = w.state(&json!({"position": "sitting"}));
+            },
+            stopped(1, 3, Why::Plain),
+        ),
+        (
+            "a command",
+            |w, _| {
+                let _ = w.typed(b"look\r\n");
+            },
+            stopped(1, 3, Why::Plain),
+        ),
+        (
+            "the dark look",
+            |w, t| {
+                let _ = w.line("It is pitch black ... ", t);
+            },
+            stopped(2, 3, Why::LostSight),
+        ),
+        (
+            "the backstop",
+            |w, t| {
+                let _ = w.expire(t + BACKSTOP);
+            },
+            stopped(1, 3, Why::LostTrack),
+        ),
+    ];
+    for (what, event, progress) in cases {
+        let mut w = standing_in(FOUNTAIN, t);
+        let _ = w.command(start("3w", &[]), t);
+        let _ = arrive(&mut w, ROAD, t);
+        event(&mut w, t);
+        assert_eq!(w.progress(), progress, "{what}");
+    }
+
+    // Esc and `#walk stop` stop it plainly, and Esc with no walk leaves
+    // the last stop as it was.
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("2w", &[]), t);
+    let _ = w.command(esc.clone(), t);
+    assert_eq!(w.progress(), stopped(0, 2, Why::Plain));
+    let _ = w.command(esc, t);
+    assert_eq!(w.progress(), stopped(0, 2, Why::Plain));
+    let _ = w.line("Alas, you cannot go that way.", t);
+    let _ = w.command(start("e", &[]), t);
+    let _ = w.command(stop(), t);
+    assert_eq!(w.progress(), stopped(0, 1, Why::Plain));
+    // The next walk starts afresh.
+    let _ = w.line("Alas, you cannot go that way.", t);
+    let _ = w.command(start("w", &[]), t);
+    assert_eq!(w.progress(), walking(0, 1, "w", false));
+}
+
+#[test]
+fn progress_follows_a_click_that_takes_over() {
+    let t = Instant::now();
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("n", &[]), t);
+    // The walk under way shows until the step in flight lands.
+    let _ = w.command(route_from(FOUNTAIN), t);
+    assert_eq!(w.progress(), walking(0, 1, "n", false));
+    // The step failed, so you stand where the click was planned, and it
+    // takes over.
+    let _ = w.line("Alas, you cannot go that way.", t);
+    assert_eq!(w.progress(), walking(0, 2, "2w", true));
+    let _ = arrive(&mut w, ROAD, t);
+    assert_eq!(w.progress(), walking(1, 2, "w", true));
+
+    // A click that waits behind a walk you stopped shows as it waits.
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("2e", &[]), t);
+    let _ = w.command(stop(), t);
+    let _ = w.command(route_from(FOUNTAIN), t);
+    assert_eq!(w.progress(), walking(0, 2, "2w", true));
+    // The stopped step led elsewhere, so the click, planned from the
+    // fountain, drops, and nothing walks.
+    let _ = w.room_info(&room_info(4446), t);
+    assert_eq!(w.progress(), WalkProgress::Idle);
+
+    // Esc while the click waits stops it before its first step.
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(start("n", &[]), t);
+    let _ = w.command(route_from(FOUNTAIN), t);
+    let _ = w.command(stop(), t);
+    assert_eq!(w.progress(), stopped(0, 1, Why::Plain));
 }

@@ -27,6 +27,7 @@ export const RECONNECT = 'session://reconnect';
 
 export const LUA_OUTPUT = 'session://lua-output';
 export const VITALS_TEXT = 'session://vitals-text';
+export const WALK = 'session://walk';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';

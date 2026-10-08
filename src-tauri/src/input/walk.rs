@@ -164,6 +164,21 @@ pub(crate) fn parse_steps(text: &str) -> Result<Vec<Dir>, StepsError> {
     Ok(steps)
 }
 
+/// `steps` as a `#walk` string that [`parse_steps`] reads back, each run
+/// of one direction as its count and letter, like `3n2e`.
+pub(crate) fn steps_text(steps: &[Dir]) -> String {
+    let mut text = String::new();
+    for run in steps.chunk_by(|a, b| a == b) {
+        for part in run.chunks(MAX_COUNT as usize) {
+            if part.len() > 1 {
+                text.push_str(&part.len().to_string());
+            }
+            text.push(part[0].letter());
+        }
+    }
+    text
+}
+
 /// What Vosh cannot read at `at`: the run of letters around it, so
 /// `north` reads as itself and the `x` of `3x` alone, or the one
 /// character there when it is no letter.

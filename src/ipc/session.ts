@@ -14,6 +14,7 @@ import {
   SESSIONS_CHANGED,
   STATE,
   TARGET,
+  WALK,
 } from './events';
 
 /** The session the app starts with, `SessionId::FIRST` in
@@ -214,6 +215,29 @@ export async function sendMaskedInput(line: string, session?: number): Promise<v
 /// you are not walking.
 export async function stopWalk(session?: number): Promise<void> {
   await invoke('session_walk_stop', { session });
+}
+
+/** Where a walk stands, `WalkProgress` in src-tauri/src/session/walk.rs.
+ *  `left` is the steps still to go as a `#walk` string, and `route` is
+ *  true for a walk a click on the map started. */
+export type WalkProgress =
+  | { kind: 'idle' }
+  | { kind: 'walking'; done: number; total: number; left: string; route: boolean }
+  | {
+      kind: 'stopped';
+      done: number;
+      total: number;
+      why: 'plain' | 'lost_sight' | 'lost_track';
+    };
+
+/** Hear each change to where a session's walk stands, with that
+ *  session. A walk ends idle when it arrives or the connection drops. */
+export async function onWalk(
+  cb: (progress: WalkProgress, session: number) => void,
+): Promise<UnlistenFn> {
+  return listen<WalkProgress & { session?: number }>(WALK, (event) => {
+    cb(event.payload, sessionOf(event.payload));
+  });
 }
 
 /** What a GMCP package, the prompt values and the affect fulls carry,

@@ -168,6 +168,10 @@ pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 /// at full values with which of them read a fight. `onVitalsText`
 /// hears it.
 pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
+/// Where the walk stands, when that changed: idle, walking or stopped.
+/// The payload is a [`crate::session::walk::WalkProgress`]. `onWalk`
+/// hears it, and the map shows the Walking chip and the Stopped toast.
+pub(crate) const WALK: &str = "session://walk";
 
 // The lists.
 

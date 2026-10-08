@@ -42,7 +42,7 @@ use super::steps::{
     clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
     repaint_step, send_step, window_size_step,
 };
-use super::walk::{self, Walker};
+use super::walk::{self, WalkProgress, Walker};
 use super::{emit_input_mode, emit_state, now_ms, OutgoingMsg, StatePayload, TargetPayload};
 
 /// The 250 ms poll that drives the tick, the Lua timers and the Settings
@@ -83,6 +83,9 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// What the walker said during the read under way, which shows at
     /// its end.
     pub(super) walk_lines: Vec<String>,
+    /// Where the walk stood when the page last heard, see
+    /// [`Conn::tell_walk`].
+    pub(super) walk_told: WalkProgress,
 }
 
 impl<R: tauri::Runtime> Conn<R> {
@@ -90,6 +93,17 @@ impl<R: tauri::Runtime> Conn<R> {
     /// echo, landed since this loop last wrote, which closes the open row.
     pub(super) fn others_wrote(&self) -> bool {
         self.session.output_count() != self.seen_output
+    }
+
+    /// Tell the page where the walk stands when that changed. The loop
+    /// asks once at the end of each pass, which covers every event the
+    /// walker hears.
+    fn tell_walk(&mut self) {
+        let progress = self.walker.progress();
+        if progress != self.walk_told {
+            self.session.emit(&self.app, events::WALK, &progress);
+            self.walk_told = progress;
+        }
     }
 }
 
@@ -153,6 +167,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         settle: Settle::default(),
         walker: Walker::default(),
         walk_lines: Vec::new(),
+        walk_told: WalkProgress::Idle,
     };
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
@@ -446,7 +461,11 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 conn.settle.write_log(guard.as_mut(), &mut conn.perf);
             }
         }
+        conn.tell_walk();
     };
+    // The walk ends with the connection.
+    conn.walker = Walker::default();
+    conn.tell_walk();
 
     // A preview the card shows on your prompt goes with the connection,
     // so the live render goes back on the row first.

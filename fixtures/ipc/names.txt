@@ -177,6 +177,7 @@ event session://state app heard
 event session://target app heard
 event session://tick app heard
 event session://vitals-text app heard
+event session://walk app heard
 event vosh://affect-full-changed app heard
 event vosh://affects-display-changed app page heard
 event vosh://aliases-changed app heard
