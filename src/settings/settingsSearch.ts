@@ -105,6 +105,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('general', 'logs'),
   },
   {
+    label: 'Save a scene',
+    keywords: 'scene log share export html web page roleplay story download transcript',
+    target: at('general', 'scene'),
+  },
+  {
     label: 'GPU rendering',
     keywords: 'advanced webgl performance renderer graphics',
     target: at('general', 'advanced', 'gpu'),

@@ -21,6 +21,10 @@ import { openPaneSubmenu, type PaneSubmenuState } from '../panel/affects/affects
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';
+import { getUiConfig } from '../ipc/uiConfig';
+import { logsWorld } from '../settings/general/scene';
+import { getSelected, getSessions } from '../stores/session/sessionsStore';
+import { loadTarget, targetOf } from '../stores/session/useConnection';
 import { SETTINGS_MENU, type SettingsMenuRow } from './settingsMenu';
 import type { WritingKind } from '../ipc/writing';
 import { KINDS } from '../writing/kinds';
@@ -51,6 +55,9 @@ interface Item {
   /** Shortcut spec for the trailing hint, like 'Mod+C'. */
   keys?: string;
   danger?: boolean;
+  /** The row shows but does nothing, like Save a scene… while the
+   *  profile logs nothing. */
+  disabled?: boolean;
   /** The row opens a list beside the menu instead of running. */
   submenu?: Sub;
   run: () => void;
@@ -101,6 +108,23 @@ export function TerminalMenu({
   // The list open beside the menu, and whether it opened from the
   // keyboard and so takes focus.
   const [sub, setSub] = useState<PaneSubmenuState<Sub> | null>(null);
+  // Save a scene… shows disabled while the profile logs nothing on the
+  // world the selected session dials, which the menu reads as it opens
+  // (D34).
+  const [logged, setLogged] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    const row = getSessions().find((r) => r.id === getSelected()) ?? null;
+    const { host } = targetOf(row, loadTarget());
+    getUiConfig()
+      .then((config) => {
+        if (!cancelled) setLogged(logsWorld(config.log_sessions, host));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Clamp to the viewport once the menu has a measurable size. Re-runs
   // when a second right-click moves the anchor while the menu is open.
@@ -197,7 +221,15 @@ export function TerminalMenu({
       { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
       { id: 'select-all', label: 'Select all', keys: 'Mod+A', run: runSelectAll },
     ],
-    [{ id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind }],
+    [
+      { id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind },
+      {
+        id: 'scene',
+        label: 'Save a scene…',
+        disabled: !logged,
+        run: () => openSettingsTab('general:scene'),
+      },
+    ],
     [
       {
         id: 'settings',
@@ -237,7 +269,7 @@ export function TerminalMenu({
   // palette uses, so an action that moves focus wins over the menu.
   // Settings opens its list instead.
   const pick = (item: Item | undefined) => {
-    if (!item) return;
+    if (!item || item.disabled) return;
     if (!item.submenu) onClose();
     item.run();
   };
@@ -391,6 +423,7 @@ export function TerminalMenu({
                   type="button"
                   role="menuitem"
                   tabIndex={-1}
+                  aria-disabled={item.disabled || undefined}
                   aria-haspopup={item.submenu ? 'menu' : undefined}
                   aria-expanded={item.submenu ? sub?.which === item.submenu : undefined}
                   aria-controls={

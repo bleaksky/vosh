@@ -36,11 +36,12 @@ import {
   markMatches,
   parseLogLine,
 } from './logView';
+import { logsWorld } from './scene';
 import { useSessionTarget } from '../../stores/session/useConnection';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme, resolveThemeTerminalColors } from '../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
-import { CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../../ui';
+import { Button, CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../../ui';
 import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
 
@@ -56,7 +57,9 @@ import { menuBelow } from '../../ui/menuPlacement';
 // with your matches marked the way the find bar marks them, and
 // earlier matches load as you scroll up. Save as file writes what the
 // view reads to Downloads as plain text or with the game's colors
-// (D29), and Copy as text shows once you pick a log.
+// (D29). Copy as text and Save a scene… show once you pick a log, and
+// Save a scene… opens the scene page on it, unless Log sessions is off
+// for the profile, which leaves nothing to save.
 
 // A picked log's value in the scope select.
 const LOG_PREFIX = 'log:';
@@ -85,7 +88,12 @@ type Status =
   | { kind: 'saved'; name: string }
   | { kind: 'failed' };
 
-export function SessionLogs({ config, onError }: SettingsPageProps) {
+interface Props extends SettingsPageProps {
+  /** Open Save a scene on the log you picked. */
+  onSaveScene: (log: number) => void;
+}
+
+export function SessionLogs({ config, onError, onSaveScene }: Props) {
   const [sessions, setSessions] = useState<LogSession[]>([]);
   const [pattern, setPattern] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -93,6 +101,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
   const [pick, setPick] = useState<string>('week');
   const [target] = useSessionTarget();
   const { host, port } = target;
+  const logged = logsWorld(config?.log_sessions ?? null, host);
   const sessionId = pickedLog(pick);
   const range = sessionId === null ? (pick as LogRange) : null;
   const [lines, setLines] = useState<LogSearchHit[]>([]);
@@ -305,8 +314,10 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         return 'Copied as text';
       case 'saved':
         return `Saved ${status.name} in Downloads`;
-      case 'ready':
-        return logCountText(lines.length, total, shown?.pattern ?? '');
+      case 'ready': {
+        const text = logCountText(lines.length, total, shown?.pattern ?? '');
+        return logged ? text : `${text}. Logging is off for this profile`;
+      }
     }
   })();
 
@@ -379,6 +390,15 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
           >
             <CopyIcon />
           </button>
+        )}
+        {sessionId !== null && (
+          <Button
+            className="st-logs-scene"
+            disabled={!logged}
+            onClick={() => onSaveScene(sessionId)}
+          >
+            Save a scene…
+          </Button>
         )}
         <Select
           className="st-logs-scope"

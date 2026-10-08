@@ -31,18 +31,40 @@ import {
   Toggle,
 } from '../../ui';
 import { ReconnectRow } from './ReconnectRow';
+import { ScenePage } from './ScenePage';
 import { SessionLogs } from './SessionLogs';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
 // General (the approved SettingsGeneral board): where Connect dials,
 // updates, the settings every character shares, and the saved session
 // logs. Search logs… opens the log view inside General at
-// general:logs (SessionLogs.tsx). Windows and Linux add an Advanced
+// general:logs (SessionLogs.tsx), and Save a scene… there opens the
+// scene page at general:scene (ScenePage.tsx) on the log it picked.
+// Windows and Linux add an Advanced
 // disclosure at the end with the GPU rendering switch, which drives
 // the xterm renderer macOS does not show.
 
 export function GeneralPage(props: SettingsPageProps) {
-  if (settingsSubpage(props.target) !== null) return <SessionLogs {...props} />;
+  // The log Save a scene… in the log view picked, with the navigation
+  // that opens the scene page on it. A scene opened any other way, from
+  // the terminal's menu or search, opens on the selected session's
+  // newest log. Each navigation opens the page afresh.
+  const [sceneFrom, setSceneFrom] = useState<{ log: number; seq: number } | null>(null);
+  if (props.target.section === 'scene') {
+    const log = sceneFrom?.seq === props.navSeq ? sceneFrom.log : null;
+    return <ScenePage key={props.navSeq} {...props} log={log} />;
+  }
+  if (settingsSubpage(props.target) !== null) {
+    return (
+      <SessionLogs
+        {...props}
+        onSaveScene={(log) => {
+          setSceneFrom({ log, seq: props.navSeq + 1 });
+          props.navigate({ group: 'general', section: 'scene' });
+        }}
+      />
+    );
+  }
   return <GeneralSections {...props} />;
 }
 
