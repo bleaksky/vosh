@@ -16,6 +16,7 @@ pub mod designs;
 pub mod game;
 pub mod map_values;
 pub mod mud;
+mod rooms;
 pub mod wire;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};

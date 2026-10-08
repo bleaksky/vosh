@@ -504,8 +504,8 @@ impl Harness {
         self.screen_of(self.first)
     }
 
-    /// What the terminal of `session` shows, 100 wide, rows trimmed.
-    pub(crate) fn screen_of(&self, session: SessionId) -> Vec<String> {
+    /// The terminal of `session`, 100 wide, after all it heard.
+    fn grid_of(&self, session: SessionId) -> crate::native::grid::TermGrid {
         let mut grid = crate::native::grid::TermGrid::new(100, 200);
         for heard in self.heard() {
             match heard {
@@ -516,6 +516,30 @@ impl Harness {
                 Heard::Echo(..) | Heard::Event(..) => {}
             }
         }
+        grid
+    }
+
+    /// Each row the first session shows, trimmed, with the color of its
+    /// first character that is not a space, or None for a blank row.
+    pub(crate) fn screen_colors(
+        &self,
+    ) -> Vec<(String, Option<alacritty_terminal::vte::ansi::Color>)> {
+        let grid = self.grid_of(self.first);
+        (0..grid.screen_lines())
+            .map(|line| {
+                let row = grid.row_string(line);
+                let color = row
+                    .chars()
+                    .position(|c| c != ' ')
+                    .map(|col| grid.cell(line, col).1);
+                (row.trim_end().to_string(), color)
+            })
+            .collect()
+    }
+
+    /// What the terminal of `session` shows, 100 wide, rows trimmed.
+    pub(crate) fn screen_of(&self, session: SessionId) -> Vec<String> {
+        let grid = self.grid_of(session);
         let mut rows: Vec<String> = (0..grid.screen_lines())
             .map(|line| grid.row_string(line).trim_end().to_string())
             .collect();

@@ -8,6 +8,7 @@
 //! shows it. The profile folder and the log live in a temporary folder.
 
 pub(super) mod harness;
+mod room_colors;
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
