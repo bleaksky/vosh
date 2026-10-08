@@ -95,7 +95,7 @@ describe('the Style gallery', () => {
       'Text',
     ]);
     expect(html).toContain('data-st-anchor="style"');
-    expect(html).toContain('<legend class="st-visually-hidden">Style</legend>');
+    expect(html).toContain('<legend class="visually-hidden">Style</legend>');
   });
 
   it('checks the style you play, your density until you pick one', () => {

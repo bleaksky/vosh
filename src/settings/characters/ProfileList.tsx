@@ -462,7 +462,7 @@ export function ProfileList({
           ref={fileRef}
           type="file"
           accept=".toml"
-          className="st-visually-hidden"
+          className="visually-hidden"
           tabIndex={-1}
           aria-hidden="true"
           onChange={(e) => {

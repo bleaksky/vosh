@@ -113,7 +113,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
             ref={fileRef}
             type="file"
             accept=".xml,.mcl,.cfg,.txt,.tin"
-            className="st-visually-hidden"
+            className="visually-hidden"
             tabIndex={-1}
             aria-hidden="true"
             onChange={(e) => {

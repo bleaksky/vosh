@@ -196,7 +196,7 @@ export function PluginList({ plugins, onPlugins, onError, onChanged, onNew, onOp
             ref={fileRef}
             type="file"
             accept=".zip"
-            className="st-visually-hidden"
+            className="visually-hidden"
             tabIndex={-1}
             aria-hidden="true"
             onChange={(e) => {

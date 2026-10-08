@@ -56,18 +56,6 @@
   display: none;
 }
 
-.st-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* ── Sidebar ───────────────────────────────────────────────────────── */
 
 /* 200 wide on the panel ground with a 1 px separator at x 199. */

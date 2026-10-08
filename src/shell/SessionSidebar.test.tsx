@@ -134,7 +134,7 @@ describe('the sessions sidebar', () => {
     expect(html).toMatch(/aria-label="New session" aria-keyshortcuts="(Meta|Control)\+T"/);
     expect(html).not.toContain('Hide sessions');
     expect(html).toContain(
-      '<h2 class="shell-sessions-head">Sessions<span class="st-visually-hidden">, </span><span class="shell-sessions-total">3</span></h2>',
+      '<h2 class="shell-sessions-head">Sessions<span class="visually-hidden">, </span><span class="shell-sessions-total">3</span></h2>',
     );
   });
 
@@ -204,10 +204,10 @@ describe('the sessions sidebar', () => {
     lines.set(3, { who: 'Orla', text: 'The Bank of Aabahran', health: null, low: false });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
     expect(tolliver).toMatch(
-      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health"><span class="st-visually-hidden">Health <\/span>100%<\/span><\/button>$/,
+      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health"><span class="visually-hidden">Health <\/span>100%<\/span><\/button>$/,
     );
     expect(orla).toContain(
-      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low"><span class="st-visually-hidden">Health </span>18%</span>',
+      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low"><span class="visually-hidden">Health </span>18%</span>',
     );
     // With no health the line takes the right column too, and a session
     // you named starts it with its character.

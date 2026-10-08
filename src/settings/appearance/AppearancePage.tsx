@@ -325,7 +325,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
               ref={fileRef}
               type="file"
               accept={THEME_FILE_TYPES}
-              className="st-visually-hidden"
+              className="visually-hidden"
               tabIndex={-1}
               aria-hidden="true"
               onChange={(e) => {

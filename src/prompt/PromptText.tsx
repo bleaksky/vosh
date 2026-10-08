@@ -180,7 +180,7 @@ export function PromptText({
 
   return (
     <div className="pc-body pc-text">
-      <span id="pc-template-label" className="st-visually-hidden">
+      <span id="pc-template-label" className="visually-hidden">
         {fieldLabel}
       </span>
       <div
