@@ -328,7 +328,7 @@ Vosh never writes, rewrites or suggests a word. The red underlines come from you
 
 Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
 
-When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Edit in Vosh`. `Open editor` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
 
 ### 2.10 Write in the game
 
@@ -346,7 +346,7 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
 
-Typing `note edit`, `history edit` or another opener yourself brings the same `Edit in Vosh` notice as your description does.
+Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
 
 ### 2.11 Walk to a place
 

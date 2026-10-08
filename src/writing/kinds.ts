@@ -92,7 +92,7 @@ const BEAST_GUIDE: Guide = {
     },
     { head: 'The same rules', sub: 'Help beastdesc asks your beast to follow help description.' },
   ],
-  words: ['The game takes no dcheck for your beast.'],
+  words: ['There’s no dcheck for your beast description.'],
   help: 'beastdesc',
 };
 
@@ -103,7 +103,7 @@ const HISTORY_GUIDE: Guide = {
     'Personality is who you are and your quirks',
     'Purpose is your goal in life',
   ],
-  words: ['When it’s ready, send it for review and an immortal reads it.'],
+  words: ['When it’s ready, send it for review and an immortal will read it.'],
   help: 'history',
 };
 

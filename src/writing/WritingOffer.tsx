@@ -7,7 +7,7 @@ import { useWriting } from '../stores/session/writingStore';
 // The card's offer when you open the game's editor yourself on a text
 // Vosh can name (Description Editor Q3, Note Editor Q3, board 3). It is
 // the update notice's recipe at the terminal's lower right: the accent
-// dot, Edit in Vosh, Keep typing and Open editor. It goes when you
+// dot, Write this in Vosh?, Keep typing and Open in Vosh. It goes when you
 // choose, when anything else goes out after your line, and when the
 // game's prompt returns, since the writer takes the offer back then.
 // Settings › Input › Offer the card when the game's editor opens turns
@@ -35,7 +35,7 @@ export function WritingOffer({ onOpen }: { onOpen: (kind: WritingKind, offer: nu
   return (
     <div className="ov-update" role="status" aria-live="polite">
       <span className="ov-update-dot" aria-hidden="true" />
-      <span className="ov-update-msg">Edit in Vosh</span>
+      <span className="ov-update-msg">Write this in Vosh?</span>
       <span className="ov-update-actions">
         <button
           type="button"
@@ -51,7 +51,7 @@ export function WritingOffer({ onOpen }: { onOpen: (kind: WritingKind, offer: nu
           onMouseDown={keepCaret}
           onClick={() => onOpen(offer.kind, offer.id)}
         >
-          Open editor
+          Open in Vosh
         </button>
       </span>
     </div>

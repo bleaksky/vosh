@@ -485,8 +485,8 @@ export function WritingCard({
         kind: 'info',
         message: info.board
           ? `Saved ${name}’s ${info.title.toLowerCase()}`
-          : `Draft kept for ${name}`,
-        meta: `${counted.lines} ${counted.lines === 1 ? 'line' : 'lines'}, not ${info.board ? 'posted' : 'sent'}`,
+          : `Saved ${name}’s draft`,
+        meta: `${counted.lines} ${counted.lines === 1 ? 'line' : 'lines'}, not ${info.board ? 'posted' : 'sent'} yet`,
       });
     }
     onClose();
@@ -726,7 +726,7 @@ export function WritingCard({
         <div className="pc-rule" />
         <div className="pc-body">
           <p className="pc-copy">
-            Play a character first. The card keeps your writing for each one.
+            Log in with a character first. Vosh keeps your writing separate for each one.
           </p>
         </div>
       </div>

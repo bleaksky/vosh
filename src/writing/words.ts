@@ -88,8 +88,8 @@ export function lineNote(
     if (!words.includes(' ')) {
       return {
         note: {
-          lead: `Line ${n} has no space`,
-          rest: ` to break at before column ${width + 1}. Add one where you want the break.`,
+          lead: `Line ${n} has no space to break at.`,
+          rest: ' Add one where you want the line to end.',
           tone: 'bad',
         },
         rewrap: false,
@@ -98,8 +98,8 @@ export function lineNote(
     const past = cols - width;
     return {
       note: {
-        lead: `Line ${n} runs ${cols} columns`,
-        rest: `, ${spelled(past)} past ${width}.`,
+        lead: `Line ${n} is ${spelled(past)} ${past === 1 ? 'character' : 'characters'} too long.`,
+        rest: ` Lines stop at ${width}.`,
         tone: helpWidth ? 'bad' : 'warn',
       },
       rewrap: true,
@@ -109,8 +109,8 @@ export function lineNote(
     const what = { '.': 'a dot', '@': 'an @', '!': 'an !' }[line[0]] ?? 'a dot';
     return {
       note: {
-        lead: `Line ${n} starts with ${what}`,
-        rest: ', which the game’s editor reads as a command. Vosh sends it so the game keeps it as text.',
+        lead: `Line ${n} starts with ${what}.`,
+        rest: ' The game would take that as a command, so Vosh sends it in a way that keeps it as text.',
         tone: 'warn',
       },
       rewrap: false,
@@ -123,8 +123,8 @@ export function lineNote(
       note: {
         lead: `Line ${n} changes color partway through.`,
         rest: kept
-          ? ` The game keeps a color only at a line’s start, so the rest of the line stays ${kept}.`
-          : ' The game keeps a color only at a line’s start, so it drops this one.',
+          ? ` The game only keeps a color at the start of a line, so the rest stays ${kept}.`
+          : ' The game only keeps a color at the start of a line, so this one won’t show.',
         tone: 'warn',
       },
       rewrap: false,
@@ -134,8 +134,8 @@ export function lineNote(
   if (quotes > 0) {
     return {
       note: {
-        lead: `Line ${n} holds ${quotes === 1 ? 'a double quote' : 'double quotes'}`,
-        rest: `, which the game shows as ${quotes === 1 ? 'a single one' : 'single ones'}.`,
+        lead: `Line ${n} has ${quotes === 1 ? 'a double quote' : 'double quotes'}.`,
+        rest: ` The game turns ${quotes === 1 ? 'it into a single one' : 'them into single ones'}.`,
         tone: 'warn',
       },
       rewrap: false,
@@ -144,8 +144,8 @@ export function lineNote(
   if ([...line].some((c) => marksCharacter(c) === 'dropped')) {
     return {
       note: {
-        lead: `Line ${n} holds a character the game drops.`,
-        rest: ' Take it out or swap it for a plain one.',
+        lead: `Line ${n} has a character the game leaves out.`,
+        rest: ' Take it out or swap in a plain one.',
         tone: 'warn',
       },
       rewrap: false,
@@ -162,10 +162,10 @@ export function pasteNote(
   word: string | null,
 ): Note {
   const parts: string[] = [];
-  if (wrapped > 0) parts.push(`wrapped ${plural(wrapped, 'pasted line')} at ${width}`);
+  if (wrapped > 0) parts.push(`wrapped ${plural(wrapped, 'line')} of your paste at ${width}`);
   if (folded.length > 0) {
     const what = folded.map((f) => `${f.count} ${f.what}`).join(', ');
-    parts.push(`straightened ${what}${word ? `, in ${word}` : ''}`);
+    parts.push(`straightened ${what}${word ? ` in ${word}` : ''}`);
   }
   const said = parts.join(' and ');
   return { lead: '', rest: `Vosh ${said}.`, tone: 'info' };
@@ -188,12 +188,13 @@ export function metaLine(input: {
     if (job.action === 'send' || job.action === 'paste') return `Sending for ${name}`;
     return `Reading for ${name}`;
   }
-  if (input.dropped) return `${input.dropped.sent} of ${input.dropped.total} sent for ${name}`;
+  if (input.dropped)
+    return `${input.dropped.sent} of ${input.dropped.total} lines sent for ${name}`;
   if (input.done === 'posted') return `Posted for ${name}`;
   if (input.done === 'sent') return `Sent for ${name}`;
-  if (input.read) return `Read from the game for ${name}`;
+  if (input.read) return `From the game, for ${name}`;
   if (input.fresh) return `New draft for ${name}`;
-  return `Draft for ${name}, not ${board ? 'posted' : 'sent'}`;
+  return `${name}’s draft, not ${board ? 'posted' : 'sent'} yet`;
 }
 
 /** What the footer says while a job runs. */
@@ -202,19 +203,19 @@ export function progressLine(job: JobProgress): string {
     case 'sending':
       return `Sending line ${Math.min(job.sent + 1, job.total)} of ${job.total}`;
     case 'fields':
-      return 'Setting the note’s fields';
+      return 'Setting To and Subject';
     case 'opening':
       return 'Opening the game’s editor';
     case 'checking':
-      return 'Checking what the game holds';
+      return 'Checking what the game got';
     case 'closing':
-      return 'Leaving the game’s editor';
+      return 'Closing the game’s editor';
     case 'posting':
       return 'Posting';
     case 'reading':
       return 'Reading from the game';
     default:
-      return 'Waiting for the game’s prompt';
+      return 'Waiting for the game';
   }
 }
 
@@ -235,9 +236,9 @@ export function resultNote(result: JobResult, kind: WritingKind): Note | null {
   switch (result.kind) {
     case 'refused': {
       const where = {
-        to: 'The game turned To down.',
-        subject: 'The game turned the subject down.',
-        language: 'The game turned the language down.',
+        to: 'The game wouldn’t take that To.',
+        subject: 'The game wouldn’t take that subject.',
+        language: 'The game wouldn’t take that language.',
         editor: 'The game didn’t open its editor.',
         post:
           kind === 'application'
@@ -246,79 +247,79 @@ export function resultNote(result: JobResult, kind: WritingKind): Note | null {
       }[result.field];
       return {
         lead: where,
-        rest: ' Its reason is just below, and your draft is still here.',
+        rest: ' It says why just below. Your draft is safe.',
         tone: 'bad',
       };
     }
     case 'busy':
       return board
         ? {
-            lead: 'You’re in another editor in the game.',
-            rest: ' Type @ to finish it, then post.',
+            lead: 'You’re still in another editor in the game.',
+            rest: ' Type @ to close it, then post.',
             tone: 'warn',
           }
         : {
-            lead: 'The game is waiting in a line editor.',
-            rest: ' End it with @, then send.',
+            lead: 'The game’s editor is still open.',
+            rest: ' Type @ to close it, then send.',
             tone: 'warn',
           };
     case 'too_long':
       return {
-        lead: 'The game’s editor ran out of room',
-        rest: ` after line ${result.sent}. Cut the text down, then send it again.`,
+        lead: 'The game ran out of room',
+        rest: ` after line ${result.sent}. Make it shorter and send it again.`,
         tone: 'bad',
       };
     case 'failed':
       return failedNote(result.why, result.line);
     case 'stopped':
       return {
-        lead: `Stopped after ${plural(result.sent, 'line')}.`,
-        rest: board ? ' Nothing was posted.' : ' The game holds what it took.',
+        lead: `You stopped after ${plural(result.sent, 'line')}.`,
+        rest: board ? ' Nothing was posted.' : ' The game kept the lines it got.',
         tone: 'warn',
       };
     case 'dropped':
       if (board) {
         return result.posted
           ? {
-              lead: 'You were disconnected as the note posted.',
+              lead: 'Your connection dropped while this was posting.',
               rest: ' Check the board before you post it again.',
               tone: 'bad',
             }
           : {
-              lead: `You were disconnected after line ${result.sent}.`,
+              lead: `Your connection dropped after line ${result.sent}.`,
               rest: ' Nothing was posted.',
               tone: 'bad',
             };
       }
       return {
-        lead: `The link dropped after line ${result.sent}.`,
-        rest: ` The game holds those ${result.sent === 1 ? 'line' : `${result.sent} lines`}.`,
+        lead: `Your connection dropped after line ${result.sent}.`,
+        rest: ` The game kept ${result.sent === 1 ? 'that line' : `those ${result.sent} lines`}.`,
         tone: 'bad',
       };
     case 'found':
       return {
         lead: '',
-        rest: `Posted before the link dropped. It’s number ${result.number} on the board.`,
+        rest: `It went through before your connection dropped. It’s note ${result.number} on the board.`,
         tone: 'ok',
       };
     case 'cant_tell':
       return {
-        lead: 'You were disconnected as it posted.',
-        rest: ` The game won’t show you ${KINDS[kind].title.toLowerCase()}s, so Vosh can’t tell if it went.`,
+        lead: 'Your connection dropped while this was posting.',
+        rest: ` ${pluralTitle(kind)} don’t show up anywhere you can check, so there’s no telling if it went through.`,
         tone: 'warn',
       };
     case 'other_note': {
       const what = result.board ? KINDS[result.board].title.toLowerCase() : 'note';
       return {
-        lead: `You had ${/^[aeiou]/.test(what) ? 'an' : 'a'} ${what} started in the game.`,
-        rest: result.note ? ' It’s in your drafts now.' : ' Vosh couldn’t read it back.',
+        lead: `You’d already started ${/^[aeiou]/.test(what) ? 'an' : 'a'} ${what} in the game.`,
+        rest: result.note ? ' It’s in your drafts now.' : ' Vosh couldn’t get its text.',
         tone: 'warn',
       };
     }
     case 'offer_gone':
       return {
-        lead: 'The game’s editor moved on.',
-        rest: ' Open the card again from the menu.',
+        lead: 'Too late to open that one here.',
+        rest: ' Open the card again from the Write menu.',
         tone: 'warn',
       };
     default:
@@ -330,50 +331,56 @@ function failedNote(why: string, line: number | null): Note {
   switch (why) {
     case 'mend':
       return {
-        lead: `Line ${line ?? 1} still differs in the game.`,
-        rest: ' Vosh left the editor. Send again, or restore the game’s copy.',
+        lead: `Line ${line ?? 1} still isn’t right in the game.`,
+        rest: ' Vosh closed the editor. Send again, or put back what the game had.',
         tone: 'bad',
       };
     case 'no_mark':
       return {
-        lead: `Line ${line ?? 1} holds every mark Vosh could fix it with.`,
-        rest: ' Take out a quote or a bracket, then send again.',
+        lead: `Vosh couldn’t fix line ${line ?? 1}.`,
+        rest: ' It has every quote and bracket Vosh could use. Take one out and send again.',
         tone: 'bad',
       };
     case 'closed':
       return {
-        lead: 'The game’s editor closed before Vosh was done.',
+        lead: 'The game’s editor closed before Vosh finished.',
         rest: ' Send again to finish.',
         tone: 'bad',
       };
     case 'silent':
       return {
         lead: 'The game stopped answering.',
-        rest: ' Your draft is still here.',
+        rest: ' Your draft is safe.',
         tone: 'bad',
       };
     case 'differs':
       return {
         lead:
           line === null
-            ? 'The note in the game differs from yours,'
-            : `Line ${line} of the note in the game differs from yours,`,
-        rest: ' so Vosh cleared it and posted nothing.',
+            ? 'Your note came out different in the game,'
+            : `Line ${line} came out different in the game,`,
+        rest: ' so Vosh cleared the note and didn’t post it.',
         tone: 'bad',
       };
     case 'bad_dot':
       return {
-        lead: 'The game’s editor didn’t take a command.',
-        rest: ' Vosh left it. Your draft is still here.',
+        lead: 'The game’s editor didn’t understand a command.',
+        rest: ' Vosh closed it. Your draft is safe.',
         tone: 'bad',
       };
     default:
       return {
-        lead: 'Vosh couldn’t read your text from the game.',
+        lead: 'Vosh couldn’t get your text from the game.',
         rest: ' Try Read again.',
         tone: 'bad',
       };
   }
+}
+
+/** A board's kind in the plural, for a sentence's start. */
+function pluralTitle(kind: WritingKind): string {
+  const title = KINDS[kind].title;
+  return title.endsWith('y') ? `${title.slice(0, -1)}ies` : `${title}s`;
 }
 
 /** How many lines the game holds of `game`, for the header. */

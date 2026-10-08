@@ -79,7 +79,7 @@ export function moreRows(m: {
     { id: 'read', label: 'Read again from the game', disabled: !m.canRead },
     { id: 'rewrap', label: 'Rewrap all' },
     { id: 'preview', label: 'Preview as a looker sees it' },
-    { id: 'restore', label: 'Restore the game’s copy', disabled: !m.canRestore },
+    { id: 'restore', label: 'Put back what the game had', disabled: !m.canRestore },
     'separator',
     spelling,
     'separator',
