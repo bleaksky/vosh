@@ -5,8 +5,10 @@ import {
   INPUT_CURSOR_STYLES,
   type InputCursorStyle,
   type InputEchoMark,
+  type InputLineBackground,
 } from '../../ipc/uiConfig';
 import type { SettingsTarget } from '../../lib/settingsNav';
+import { sizeChoicesWithTerminal } from '../../theme/appearanceSettings';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme } from '../../theme/themes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
@@ -21,6 +23,7 @@ import {
   Row,
   Section,
   Segmented,
+  Select,
   Toggle,
   type SegmentedOption,
 } from '../../ui';
@@ -28,7 +31,9 @@ import {
 // Settings, Input. Sent commands holds how your commands echo in the
 // scrollback: the mark before them, its color, the command color, dim,
 // the mark at the start of the command line, and macro echo. Command
-// line holds the caret shape, keep last command and chat spell check.
+// line holds how the line looks (the caret, its blink and color, the
+// text color, the background and the size), keep last command and chat
+// spell check.
 // Writing card follows with the two rows for the card that opens for
 // note edit and description edit. Advanced opens on paste pacing. The
 // Prompt section has a tab of its own (PromptPage.tsx). Every change
@@ -58,6 +63,12 @@ const MARKS: readonly SegmentedOption<InputEchoMark>[] = [
   { value: 'off', label: 'Off' },
   { value: 'chevron', label: '›', name: 'Chevron' },
   { value: 'gt', label: '>', name: 'Greater than' },
+  { value: 'own', label: 'Your own' },
+];
+
+const BACKGROUNDS: readonly SegmentedOption<InputLineBackground>[] = [
+  { value: 'theme', label: 'Theme' },
+  { value: 'tint', label: 'Slight tint' },
   { value: 'own', label: 'Your own' },
 ];
 
@@ -91,8 +102,9 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
 
   if (!config) return null;
 
-  // Sent commands draw in the terminal's own text color until you pick
-  // one, and the mark in the theme's bright black.
+  // Sent commands and the line you type draw in the terminal's own text
+  // color until you pick one, the mark in the theme's bright black, and
+  // the caret in the accent.
   const { foreground: terminalText, brightBlack: markGrey } = findTheme(getCurrentThemeId()).xterm;
 
   return (
@@ -174,6 +186,66 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             options={CARETS}
             value={config.input_cursor_style}
             onChange={(id) => update({ input_cursor_style: id })}
+          />
+        </Row>
+        <Row label="Caret blinks" anchor="caret-blink">
+          <Toggle
+            checked={config.input_caret_blink}
+            onChange={(on) => update({ input_caret_blink: on })}
+          />
+        </Row>
+        <Row label="Caret color" anchor="caret-color">
+          <ColorField
+            value={config.input_caret_color ?? ''}
+            onChange={(color) => update({ input_caret_color: color || null })}
+            allowEmpty
+            placeholder="Theme accent"
+            emptySwatch="var(--accent)"
+            pickerLabel="Choose a caret color"
+          />
+        </Row>
+        <Row label="Text color" anchor="line-color">
+          <ColorField
+            value={config.input_line_color ?? ''}
+            onChange={(color) => update({ input_line_color: color || null })}
+            allowEmpty
+            placeholder="Theme default"
+            emptySwatch={terminalText}
+            pickerLabel="Choose a text color"
+          />
+        </Row>
+        <Row
+          label="Background"
+          description={
+            config.input_line_background === 'tint'
+              ? 'A touch of your theme’s accent, so the line stands apart from the game.'
+              : undefined
+          }
+          anchor="line-bg"
+        >
+          <Segmented
+            options={BACKGROUNDS}
+            value={config.input_line_background}
+            onChange={(pick) => update({ input_line_background: pick })}
+          />
+          {config.input_line_background === 'own' && (
+            <ColorField
+              value={config.input_line_background_color ?? ''}
+              onChange={(color) => update({ input_line_background_color: color || null })}
+              allowEmpty
+              width={110}
+              emptySwatch="var(--inputband)"
+              pickerLabel="Choose a background color"
+              aria-label="Your own background"
+            />
+          )}
+        </Row>
+        <Row label="Size" anchor="line-size">
+          <Select
+            value={String(config.input_line_size)}
+            options={sizeChoicesWithTerminal(config.input_line_size)}
+            onChange={(size) => update({ input_line_size: Number(size) })}
+            width={180}
           />
         </Row>
         <Row

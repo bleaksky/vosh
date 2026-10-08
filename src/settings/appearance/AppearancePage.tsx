@@ -4,7 +4,7 @@ import {
   fontChoices,
   pairChoices,
   panelFontChoices,
-  panelSizeChoices,
+  sizeChoicesWithTerminal,
   sizeChoices,
   themeCaption,
 } from '../../theme/appearanceSettings';
@@ -478,7 +478,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
         >
           <Select
             value={String(normalizePanelSize(config.panel_font_size))}
-            options={panelSizeChoices(config.panel_font_size)}
+            options={sizeChoicesWithTerminal(normalizePanelSize(config.panel_font_size))}
             onChange={(size) => update({ panel_font_size: Number(size) }, { now: true })}
           />
         </Row>
