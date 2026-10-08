@@ -43,12 +43,14 @@ npm run dev
 
 ## Checks
 
-CI runs these in this order. Run them before you push. The Rust steps need the built page, so `npm run build` comes before them.
+CI runs these in this order. Run them before you push. The Rust steps need the built page, so `npm run build` comes before them. `npm run knip` finds unused files, exports and dependencies, and `npm run css:usage` finds classes in `src/styles` that no file uses.
 
 ```
 npm run format:check
 npm run lint
 npm run typecheck
+npm run knip
+npm run css:usage
 npm test
 npm run build
 cargo fmt --all -- --check
@@ -56,7 +58,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-CI runs the page checks on Linux and the Rust checks on Linux, macOS, and Windows. The pre-commit hook runs prettier and eslint on the files you stage, and cargo fmt and clippy when you stage Rust.
+CI runs the page checks on Linux and builds the page once. The Rust checks run on Linux, macOS, and Windows with that page, so none of them builds it again. A cargo test holds package.json, package-lock.json, Cargo.toml and tauri.conf.json to one version. The release workflow runs the same checks before it builds. The pre-commit hook runs prettier on the web files you stage and eslint on the script files alone, and cargo fmt and clippy when you stage Rust.
 
 Auto fix what you can.
 

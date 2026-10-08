@@ -36,6 +36,7 @@ mudclient/
   vite.config.ts       Frontend bundler config.
   tsconfig.json        TypeScript config, with tsconfig.node.json.
   eslint.config.js     Lint config. Prettier reads .prettierrc.json.
+  knip.ts              Knip config for the unused code check.
   index.html           Vite entry point.
   docs/                requirements.md, architecture.md, renderer.md,
                        data-files.md, refactor-plan.md, and history/ for
@@ -68,6 +69,7 @@ mudclient/
   examples/lua/        A sample script.
   plugins/             A sample plugin.
   public/              Bundled fonts and the theme credits.
+  scripts/             css-usage.mjs, the unused class check.
   .github/workflows/   CI for the three platforms and the release build.
   .githooks/           Project pre-commit hook.
 ```
@@ -80,6 +82,7 @@ These work once `npm install` and `cargo fetch` have run at least once.
 - `npm run tauri dev` runs the full app (Rust backend plus web view).
 - `npm run tauri build` builds release binaries for the host platform.
 - `npm run lint`, `npm run format:check`, `npm run typecheck` cover frontend checks. `npm test` runs the frontend tests.
+- `npm run knip` and `npm run css:usage` find unused code, dependencies and CSS classes.
 - `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features -- -D warnings` cover Rust checks.
 - `npm run build` builds the page, which the app crate embeds. Run it before the Rust tests.
 - `cargo test --workspace` runs Rust tests. Single test by name: `cargo test --workspace <test_name>`.
