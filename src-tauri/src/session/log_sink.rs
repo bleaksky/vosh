@@ -74,9 +74,9 @@ impl LogSink {
         self.session.id
     }
 
-    /// Name the character the row belongs to, see [`LogSession::name`].
-    pub(super) async fn name(&mut self, character: &str) {
-        self.session.name(&self.logs, character).await;
+    /// The row and the character to name on it, see [`LogSession::name`].
+    pub(super) fn name(&mut self, character: &str) -> Option<(i64, String)> {
+        self.session.name(character)
     }
 
     /// Close the log's row, then save the scrollback ring so the next
@@ -114,23 +114,17 @@ impl LogSession {
         Self { id, named: false }
     }
 
-    /// Name the character the row belongs to, the first time Char.Status
-    /// names one, so the prompt lookup can tell whose session it was.
-    /// Char.Status comes again on later pulses, and those write nothing.
-    pub(super) async fn name(&mut self, logs: &crate::logs::SharedLogStore, character: &str) {
-        let Some(id) = self.id else {
-            return;
-        };
-        if self.named {
-            return;
+    /// The row and the character it belongs to, the first time
+    /// Char.Status names one, so the prompt lookup can tell whose session
+    /// it was. The name waits with the burst's rows, so a busy log never
+    /// holds the loop for it. Char.Status comes again on later pulses,
+    /// and those name nothing.
+    pub(super) fn name(&mut self, character: &str) -> Option<(i64, String)> {
+        let id = self.id?;
+        if std::mem::replace(&mut self.named, true) {
+            return None;
         }
-        self.named = true;
-        let mut guard = logs.lock().await;
-        if let Some(store) = guard.as_mut() {
-            if let Err(e) = store.set_session_character(id, character) {
-                warn!(error = %e, "failed to name the log session's character");
-            }
-        }
+        Some((id, character.to_string()))
     }
 }
 

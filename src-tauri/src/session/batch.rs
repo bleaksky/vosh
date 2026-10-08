@@ -89,7 +89,10 @@ pub(super) struct Settle {
     since: Option<Instant>,
     /// Log rows waiting for the log, oldest first.
     pub(super) log: Vec<vosh_log::LogEntry>,
-    /// When the oldest row waiting for the log joined the queue.
+    /// The log's row and the character Char.Status first named, waiting
+    /// for the log with the rows.
+    name: Option<(i64, String)>,
+    /// When the oldest row or name waiting for the log joined the queue.
     log_since: Option<Instant>,
 }
 
@@ -106,6 +109,17 @@ impl Settle {
         if !self.log.is_empty() {
             self.log_since.get_or_insert_with(Instant::now);
         }
+    }
+
+    /// The character to name on the log's row joins the queue.
+    pub(super) fn queue_name(&mut self, named: (i64, String)) {
+        self.name = Some(named);
+        self.log_since.get_or_insert_with(Instant::now);
+    }
+
+    /// Whether rows or a name wait for the log.
+    pub(super) fn owes_log(&self) -> bool {
+        !self.log.is_empty() || self.name.is_some()
     }
 
     /// Ask for the frame the output of `session` so far owes, if any.
@@ -151,18 +165,25 @@ impl Settle {
         }
     }
 
-    /// Write the waiting rows to the log, in one transaction.
+    /// Name the character on the log's row, then write the waiting rows
+    /// to the log, in one transaction.
     pub(super) fn write_log(
         &mut self,
         store: Option<&mut vosh_log::LogStore>,
         perf: &mut PerfCounters,
     ) {
         self.log_since = None;
+        let name = self.name.take();
         let rows = std::mem::take(&mut self.log);
-        if rows.is_empty() {
+        let Some(store) = store else {
             return;
+        };
+        if let Some((id, character)) = name {
+            if let Err(e) = store.set_session_character(id, &character) {
+                warn!(error = %e, "failed to name the log session's character");
+            }
         }
-        if let Some(store) = store {
+        if !rows.is_empty() {
             let append_t0 = std::time::Instant::now();
             perf.log_appends += rows.len() as u64;
             if let Err(e) = store.append_batch(&rows) {

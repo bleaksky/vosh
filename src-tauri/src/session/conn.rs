@@ -524,7 +524,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             }
             // Then the log takes the burst's rows once it is free, so a
             // busy log never holds the loop.
-            mut guard = log_store.lock(), if !conn.settle.log.is_empty() => {
+            mut guard = log_store.lock(), if conn.settle.owes_log() => {
                 conn.settle.write_log(guard.as_mut(), &mut conn.perf);
             }
         }

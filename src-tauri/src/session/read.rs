@@ -463,8 +463,8 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         conn.seen_output = emit_session_output(app, session, &out, &mut conn.settle);
     }
     conn.settle.queue_rows(log);
-    if let Some(character) = character {
-        log_sink.name(&character).await;
+    if let Some(named) = character.and_then(|character| log_sink.name(&character)) {
+        conn.settle.queue_name(named);
     }
     for trigger in gag_without_reader {
         session.emit(
