@@ -2081,7 +2081,12 @@ mod tests {
             }
             assert_eq!(
                 changed,
-                ["rubric", "solarized-light", "melange-light"],
+                [
+                    "rubric",
+                    "solarized-light",
+                    "high-contrast-light",
+                    "melange-light"
+                ],
                 "{plain}"
             );
         }
