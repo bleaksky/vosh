@@ -70,6 +70,7 @@ describe('PANE_MIN_H', () => {
       group: 94,
       chat: 120,
       imm: 94,
+      writing: 240,
       lua: 94,
     });
     expect(PANE_FLOOR_H).toBe(50);
@@ -513,6 +514,7 @@ describe('at your panel size', () => {
     expect(paneMinH('group', 16)).toBe(37 + 3 * 29);
     expect(paneMinH('imm', 16)).toBe(37 + 3 * 29);
     expect(paneMinH('lua', 16)).toBe(37 + 3 * 29);
+    expect(paneMinH('writing', 16)).toBe(240);
     expect(paneMinH('map', 16)).toBe(37 + 203);
     expect(paneMinH('chat', 16)).toBe(37 + 123);
     expect(paneFloorH(16)).toBe(37 + 29);

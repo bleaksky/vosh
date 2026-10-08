@@ -12,8 +12,10 @@ import {
   paneRef,
   type PaneLeaf,
   type PaneRef,
+  type OfferedPaneType,
   type PaneSplit,
   type PaneType,
+  isOfferedPaneType,
 } from './paneLayout';
 
 // Names for each pane type, shared by the pane headers, the pane menu,
@@ -25,6 +27,7 @@ export const PANE_LABELS: Record<PaneType, string> = {
   group: 'Group',
   chat: 'Chat',
   imm: 'Staff queues',
+  writing: 'Writing',
 };
 
 /** The name a pane goes by: its type's for a built-in pane, and for a
@@ -38,9 +41,9 @@ export function paneLabel(ref: PaneRef): string {
 /** Pane types this session offers. The staff queues pane only shows
  *  up once the server has sent Imm.Queues, which it does for
  *  immortals alone. */
-export function offeredPaneTypes(): PaneType[] {
+export function offeredPaneTypes(): OfferedPaneType[] {
   const staff = getImmState().received;
-  return PANE_TYPES.filter((t) => t !== 'imm' || staff);
+  return PANE_TYPES.filter(isOfferedPaneType).filter((t) => t !== 'imm' || staff);
 }
 
 // Whether the tree has room for another pane of type `t`: one it does
@@ -52,7 +55,7 @@ function hasRoomFor(tree: PaneSplit | null, t: PaneType): boolean {
 
 /** Offered pane types the tree has room for, in menu order: each one
  *  it does not show yet, and Chat while fewer than four show. */
-export function paneTypesToAdd(tree: PaneSplit | null): PaneType[] {
+export function paneTypesToAdd(tree: PaneSplit | null): OfferedPaneType[] {
   return offeredPaneTypes().filter((t) => hasRoomFor(tree, t));
 }
 
@@ -100,7 +103,7 @@ export function luaPanesToAdd(
 
 /** What Show here instead offers in place of a pane. */
 export interface PanesToShowInstead {
-  builtIns: PaneType[];
+  builtIns: OfferedPaneType[];
   lua: PaneRef[];
 }
 

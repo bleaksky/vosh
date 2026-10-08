@@ -435,6 +435,12 @@ fn full_ui() -> UiConfig {
         log_sessions: None,
         // The default keeps the golden's bytes. profile/ui.rs tests a size.
         scrollback_lines: 10_000,
+        // Written only once you move, size or pin the writing card, so
+        // the defaults keep the golden's bytes. profile/ui.rs tests them.
+        writing_card_left: None,
+        writing_card_top: None,
+        writing_card_rows: None,
+        writing_card_pinned: false,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),

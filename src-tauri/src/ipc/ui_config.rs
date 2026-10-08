@@ -107,6 +107,10 @@ pub(crate) struct UiConfigPayload {
     pub snoop_folded: bool,
     pub log_sessions: Option<bool>,
     pub scrollback_lines: u32,
+    pub writing_card_left: Option<f64>,
+    pub writing_card_top: Option<f64>,
+    pub writing_card_rows: Option<u32>,
+    pub writing_card_pinned: bool,
 }
 
 impl UiConfigPayload {
@@ -177,6 +181,10 @@ impl UiConfigPayload {
             snoop_folded: ui.snoop_folded,
             log_sessions: ui.log_sessions,
             scrollback_lines: ui.scrollback_lines,
+            writing_card_left: ui.writing_card_left,
+            writing_card_top: ui.writing_card_top,
+            writing_card_rows: ui.writing_card_rows,
+            writing_card_pinned: ui.writing_card_pinned,
         }
     }
 }
@@ -266,6 +274,10 @@ pub(crate) enum UiField {
     SnoopFolded(bool),
     LogSessions(Option<bool>),
     ScrollbackLines(u32),
+    WritingCardLeft(Option<f64>),
+    WritingCardTop(Option<f64>),
+    WritingCardRows(Option<u32>),
+    WritingCardPinned(bool),
 }
 
 /// Save the fields a page names and leave every other one as it is, so
@@ -405,6 +417,10 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::SnoopFolded(v) => ui.snoop_folded = v,
             UiField::LogSessions(v) => ui.log_sessions = v,
             UiField::ScrollbackLines(v) => ui.scrollback_lines = cfg::coerce_scrollback_lines(v),
+            UiField::WritingCardLeft(v) => ui.writing_card_left = cfg::coerce_writing_card_edge(v),
+            UiField::WritingCardTop(v) => ui.writing_card_top = cfg::coerce_writing_card_edge(v),
+            UiField::WritingCardRows(v) => ui.writing_card_rows = cfg::coerce_writing_card_rows(v),
+            UiField::WritingCardPinned(v) => ui.writing_card_pinned = v,
         }
     }
     (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =

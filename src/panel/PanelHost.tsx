@@ -28,6 +28,7 @@ import { PaneLeafContext } from './paneActions';
 import { dragSizes, layoutPanes, paneMinH, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PaneTextSizeContext, paneTextSize } from './paneTextSize';
+import { WritingPane } from '../writing/WritingPane';
 import { paneLabel } from './paneTypes';
 import { chatFilterIn, chatFilterLabel, chatLeaves } from './chat/chatFilter';
 import { usePaneMins } from './usePaneMins';
@@ -80,6 +81,7 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   group: () => <GroupPane />,
   chat: () => <ChatPane />,
   imm: () => <ImmPane />,
+  writing: () => <WritingPane />,
 };
 
 // Built-in panes in type order, then Lua panes, each by leafKey within

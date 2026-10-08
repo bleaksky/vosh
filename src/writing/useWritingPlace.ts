@@ -8,6 +8,8 @@ import type { CellSize } from '../prompt/pinnedDock';
 // view and the game's answers to what the card sends land there. In a
 // window too narrow for the card it spans the window 12 in from each
 // side, over the panel, and its text gets smaller to keep 80 columns.
+// That is the card's own place. Once you drag it somewhere else it goes
+// where you put it (cardPlace.ts), and Put the card back brings it here.
 
 /** The rows under the card that stay in view, your prompt's aside. */
 export const ROWS_IN_VIEW = 6;
@@ -21,6 +23,9 @@ export interface WritingPlace {
   right: number | null;
   bottom: number;
   maxHeight: number;
+  /** The window's size, which a card you moved stays inside. */
+  viewW: number;
+  viewH: number;
 }
 
 /** Where the card's foot goes, from the top of your prompt's row: 1 px
@@ -58,6 +63,8 @@ export function useWritingPlace(host: PromptCardHost, cell: CellSize | null, wid
       right: narrow ? 12 : null,
       bottom: window.innerHeight - edge,
       maxHeight: Math.max(0, edge - (rect.top + TOP_MARGIN)),
+      viewW: window.innerWidth,
+      viewH: window.innerHeight,
     });
   }, [host, cell, wide]);
 
@@ -78,4 +85,26 @@ export function useWritingPlace(host: PromptCardHost, cell: CellSize | null, wid
   }, [host, relayout]);
 
   return place;
+}
+
+/** The size of `el` as it lays out, following each resize, or null
+ *  until it has one. */
+export function useBoxSize(el: HTMLElement | null): { w: number; h: number } | null {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!el) {
+      setSize(null);
+      return;
+    }
+    const measure = () => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [el]);
+  return size;
 }

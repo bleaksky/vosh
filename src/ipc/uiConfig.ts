@@ -573,6 +573,16 @@ export interface UiConfig {
   /** Scrollback size: the lines each terminal keeps above the screen,
    *  and the scrollback file for the next launch, 1,000 to 100,000. */
   scrollback_lines: number;
+  /** Where you dragged the writing card, its left and top edges in CSS
+   *  pixels from the window's corner. Null until you move it, which
+   *  keeps the place over the terminal the card works out itself. */
+  writing_card_left: number | null;
+  writing_card_top: number | null;
+  /** The rows the writing card's text box shows, 6 to 500. Null until
+   *  you drag its foot, which lets the box grow with the text. */
+  writing_card_rows: number | null;
+  /** The writing card opens in its pane in the panel. */
+  writing_card_pinned: boolean;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -690,6 +700,10 @@ export interface RawUiConfig {
   snoop_folded?: boolean;
   log_sessions?: boolean | null;
   scrollback_lines?: number;
+  writing_card_left?: number | null;
+  writing_card_top?: number | null;
+  writing_card_rows?: number | null;
+  writing_card_pinned?: boolean;
 }
 
 /** A profile's UI config, the selected session's profile's when it
@@ -821,7 +835,27 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     snoop_folded: cfg.snoop_folded === true,
     log_sessions: typeof cfg.log_sessions === 'boolean' ? cfg.log_sessions : null,
     scrollback_lines: normalizeScrollbackLines(cfg.scrollback_lines),
+    writing_card_left: normalizeWritingCardEdge(cfg.writing_card_left),
+    writing_card_top: normalizeWritingCardEdge(cfg.writing_card_top),
+    writing_card_rows: normalizeWritingCardRows(cfg.writing_card_rows),
+    writing_card_pinned: cfg.writing_card_pinned === true,
   };
+}
+
+/** Read a stored writing card edge. Anything but a finite number is
+ *  null, the place the card works out itself. */
+export function normalizeWritingCardEdge(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(100_000, Math.max(-100_000, raw))
+    : null;
+}
+
+/** Read the writing card's stored rows, held to 6 to 500 as Rust holds
+ *  them. Anything but a number is null, a box that grows with the text. */
+export function normalizeWritingCardRows(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(500, Math.max(6, Math.round(raw)))
+    : null;
 }
 
 /** The lines a terminal keeps until you pick another Scrollback size. */

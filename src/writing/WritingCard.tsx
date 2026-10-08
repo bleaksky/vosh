@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type HTMLAttributes,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type { Draft, JobResult, WriteJob, WritingKind } from '../ipc/writing';
 import { sendInput } from '../ipc/session';
 import { stopAskingToPost } from '../ipc/uiConfig';
@@ -11,6 +21,7 @@ import { useRoom } from '../stores/gmcp/roomStore';
 import { useSessionConnection } from '../stores/session/connectionStore';
 import { useSelectedRow } from '../stores/session/sessionsStore';
 import { useWriting } from '../stores/session/writingStore';
+import { saveWritingCardPrefs, useWritingCardPrefs } from '../stores/config/writingCardStore';
 import { pushToast } from '../stores/toasts';
 import { Button } from '../ui';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -58,7 +69,23 @@ import {
 } from './cardDialogs';
 import { draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
-import { useWritingPlace } from './useWritingPlace';
+import { useBoxSize, useWritingPlace } from './useWritingPlace';
+import {
+  BOX_ROWS_MIN,
+  CARD_MARGIN,
+  DRAG_SLOP,
+  boxRowsFor,
+  clampPlace,
+  dragRows,
+  fitRows,
+  fitsMoved,
+  movedFit,
+  savedPlace,
+  startsMove,
+  type Point,
+} from './cardPlace';
+import { pinWritingPane, useWritingSlot } from './pinnedPane';
+import { usePanelLayout } from '../panel/panelLayoutStore';
 import {
   countLine,
   lineNote,
@@ -77,7 +104,12 @@ import {
 // rows, and keeps each draft for its character in writing.toml as you
 // type. Send to game and Post… run a job in the session's writer, which
 // drives the game's editor, and the game's answers show in the rows under
-// the card.
+// the card. You can drag it anywhere in the window by its header, drag
+// its box taller or shorter by the grip on its free edge, and pin it to
+// the panel, where it fills its own pane (cardPlace.ts, pinnedPane.ts).
+// The card draws through a portal into a box of its own, which moves
+// between the window and the pane's slot, so pinning never starts it
+// over.
 
 /** What the card was asked to open on. */
 export interface WritingRequest {
@@ -519,14 +551,56 @@ export function WritingCard({
   const naturalColumn = useMemo(() => columnWidth(fontFamily, fontSize), [fontFamily, fontSize]);
   const naturalWidth = 32 + 82 * naturalColumn + 32 + (guideOn ? 248 : 0);
   const place = useWritingPlace(host, cell, naturalWidth);
-  const narrow = place?.right !== null && place?.right !== undefined;
+  // Where you moved the card, how tall you made its box, and whether it
+  // lives in its pane in the panel. A pinned card floats while the
+  // panel is hidden, and goes back into its pane when the panel shows.
+  const prefs = useWritingCardPrefs();
+  const slot = useWritingSlot();
+  const docked = prefs.pinned && slot !== null;
+  // While the pane a pinned card opens into is on its way, the card waits
+  // unseen rather than flash over the terminal first.
+  const panel = usePanelLayout();
+  const awaitingPane = prefs.pinned && slot === null && (panel === null || panel.panel_open);
+  const [moving, setMoving] = useState<Point | null>(null);
+  const [sizing, setSizing] = useState<number | null>(null);
+  const viewW = place?.viewW ?? window.innerWidth;
+  const viewH = place?.viewH ?? window.innerHeight;
+  const view = { w: viewW, h: viewH };
+  const at = moving ?? savedPlace(prefs.left, prefs.top);
+  const roomy = fitsMoved(naturalWidth, viewW);
+  const moved = !docked && at !== null && roomy;
+  const narrow = !docked && !moved && place !== null && place.right !== null;
   const px = narrow ? 11 : fontSize;
   const lineH = Math.round(px * 1.3);
   const boxWidth = 32 + 82 * useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
   const fieldsH = info.board ? (info.room || draft.language !== null ? 102 : 68) : 0;
   const chrome = 46 + 1 + 1 + 52 + 12 + 16 + 10 + fieldsH;
-  const fit = place ? Math.floor((place.maxHeight - chrome) / lineH) : 12;
-  const boxRows = Math.max(6, Math.min(Math.max(lines.length, 6), fit));
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
+  const cardRefOf = useCallback((el: HTMLDivElement | null) => {
+    cardRef.current = el;
+    setCardEl(el);
+  }, []);
+  const cardSize = useBoxSize(cardEl);
+  const slotSize = useBoxSize(docked ? slot : null);
+  // A pinned header can wrap, so the rows take what it grows by.
+  const headSize = useBoxSize(
+    docked ? (cardEl?.querySelector<HTMLElement>('.pc-head') ?? null) : null,
+  );
+  const headGrew = Math.max(0, (headSize?.h ?? 46) - 46);
+  const fit = docked
+    ? fitRows((slotSize?.h ?? 0) - headGrew, chrome, lineH)
+    : moved
+      ? movedFit(viewH, chrome, lineH)
+      : place
+        ? fitRows(place.maxHeight, chrome, lineH)
+        : 12;
+  // A pinned box fills its pane. Rows you set hold the box at that
+  // height, and without them it grows with the text.
+  const rowsSet = sizing ?? prefs.rows;
+  const boxRows = docked ? Math.max(BOX_ROWS_MIN, fit) : boxRowsFor(rowsSet, lines.length, fit);
+  const boxMinRows = docked || rowsSet !== null ? boxRows : BOX_ROWS_MIN;
+  const movedAt = moved && at ? clampPlace(at, cardSize ?? { w: naturalWidth, h: 0 }, view) : null;
 
   // ── Footer ────────────────────────────────────────────────────────
   const busy = writing.game === 'editor' && !running;
@@ -686,7 +760,7 @@ export function WritingCard({
         },
       }),
   };
-  const more: MoreItem[] = moreRows({
+  const moreItems: MoreItem[] = moreRows({
     kind,
     language: hasLanguage,
     customRace: draft.custom_race === true,
@@ -697,6 +771,127 @@ export function WritingCard({
     canCheck: live && running === null && (matches || phase === 'sent'),
   }).map((row) => (row === 'separator' ? row : { ...row, run: moreActions[row.id] }));
 
+  // ── Moving, sizing and pinning ────────────────────────────────────
+  /** Back to the place over the terminal the card works out itself. */
+  const putBack = () => void saveWritingCardPrefs({ left: null, top: null }).catch(() => {});
+  const more: MoreItem[] =
+    !docked && prefs.left !== null && prefs.top !== null
+      ? [...moreItems, 'separator', { id: 'put-back', label: 'Put the card back', run: putBack }]
+      : moreItems;
+
+  const togglePin = () => {
+    void saveWritingCardPrefs({ pinned: !prefs.pinned }).catch(() => {});
+    if (!prefs.pinned) pinWritingPane();
+  };
+
+  // A press on the header that travels a few pixels moves the card. It
+  // stays whole in the window, and lands where you let go.
+  const moveRef = useRef<{ x: number; y: number; from: Point; to: Point | null } | null>(null);
+  const endMove = () => {
+    const d = moveRef.current;
+    moveRef.current = null;
+    if (d?.to) void saveWritingCardPrefs({ left: d.to.left, top: d.to.top }).catch(() => {});
+    setMoving(null);
+  };
+  const canMove = !docked && !folded && roomy && place !== null;
+  const drag: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'
+  > | null = canMove
+    ? {
+        onPointerDown: (e) => {
+          if (e.button !== 0 || !startsMove(e.target)) return;
+          const box = cardRef.current?.getBoundingClientRect();
+          if (!box) return;
+          moveRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            from: { left: box.left, top: box.top },
+            to: null,
+          };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        },
+        onPointerMove: (e) => {
+          const d = moveRef.current;
+          if (!d) return;
+          const dx = e.clientX - d.x;
+          const dy = e.clientY - d.y;
+          if (d.to === null && Math.hypot(dx, dy) < DRAG_SLOP) return;
+          const size = cardSize ?? { w: naturalWidth, h: 0 };
+          d.to = clampPlace({ left: d.from.left + dx, top: d.from.top + dy }, size, view);
+          setMoving(d.to);
+        },
+        onPointerUp: endMove,
+        onPointerCancel: endMove,
+        onDoubleClick: (e) => {
+          if (startsMove(e.target) && prefs.left !== null) putBack();
+        },
+      }
+    : null;
+
+  // The grip sits on the edge that moves: the foot of a card you moved,
+  // which hangs from its top, and the top of a card in its own place,
+  // whose foot stays over the six rows above your prompt. A pinned box
+  // fills its pane and takes no grip.
+  const gripEdge: 'foot' | 'top' | null =
+    docked || folded || preview ? null : moved ? 'foot' : 'top';
+  const sizeRef = useRef<{ y: number; rows: number; to: number | null } | null>(null);
+  const endSize = () => {
+    const d = sizeRef.current;
+    sizeRef.current = null;
+    document.body.style.cursor = '';
+    if (d?.to !== null && d?.to !== undefined) {
+      void saveWritingCardPrefs({ rows: d.to }).catch(() => {});
+    }
+    setSizing(null);
+  };
+  const grip = gripEdge && (
+    <div
+      className={`wr-grip is-${gripEdge}`}
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize the text box"
+      aria-valuemin={BOX_ROWS_MIN}
+      aria-valuemax={Math.max(BOX_ROWS_MIN, fit)}
+      aria-valuenow={boxRows}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        sizeRef.current = { y: e.clientY, rows: boxRows, to: null };
+        document.body.style.cursor = 'ns-resize';
+      }}
+      onPointerMove={(e) => {
+        const d = sizeRef.current;
+        if (!d) return;
+        d.to = dragRows(d.rows, e.clientY - d.y, lineH, fit, gripEdge === 'foot' ? 1 : -1);
+        setSizing(d.to);
+      }}
+      onPointerUp={endSize}
+      onPointerCancel={endSize}
+      // A double click lets the box grow with the text again.
+      onDoubleClick={() => void saveWritingCardPrefs({ rows: null }).catch(() => {})}
+    />
+  );
+
+  // The card's own box, which moves between the window and the pane.
+  // Focus inside it stays where it was across the move.
+  const [hostEl] = useState(() => {
+    const el = document.createElement('div');
+    el.className = 'wr-host';
+    document.body.appendChild(el);
+    return el;
+  });
+  useLayoutEffect(() => {
+    const parent = docked && slot ? slot : document.body;
+    if (hostEl.parentElement === parent) return;
+    const active = document.activeElement;
+    const inside = active instanceof HTMLElement && hostEl.contains(active);
+    parent.appendChild(hostEl);
+    if (inside) active.focus({ preventScroll: true });
+  }, [docked, slot, hostEl]);
+  useLayoutEffect(() => () => hostEl.remove(), [hostEl]);
+
   const guide =
     kind === 'application'
       ? applicationGuide(draft.subject ?? '', draft.custom_race === true)
@@ -704,7 +899,6 @@ export function WritingCard({
 
   // Read help folds the card to its header while the game prints the
   // help, keeping its top where it was (Description Editor board 5).
-  const cardRef = useRef<HTMLDivElement | null>(null);
   const [foldTop, setFoldTop] = useState<number | null>(null);
   const help = () => {
     void sendInput(`help ${guide.help}`, session).catch(() => {});
@@ -735,14 +929,21 @@ export function WritingCard({
     );
   }
 
+  const placed: CSSProperties = docked
+    ? {}
+    : movedAt
+      ? { left: movedAt.left, top: movedAt.top, maxHeight: viewH - 2 * CARD_MARGIN }
+      : {
+          ...(place?.right !== null && place?.right !== undefined
+            ? { left: place.left, right: place.right }
+            : { left: place?.left ?? 12 }),
+          ...(folded && foldTop !== null
+            ? { top: foldTop }
+            : { bottom: place?.bottom ?? 0, maxHeight: place?.maxHeight }),
+        };
   const style: CSSProperties = {
-    ...(place?.right !== null && place?.right !== undefined
-      ? { left: place.left, right: place.right }
-      : { left: place?.left ?? 12 }),
-    ...(folded && foldTop !== null
-      ? { top: foldTop }
-      : { bottom: place?.bottom ?? 0, maxHeight: place?.maxHeight }),
-    visibility: place && ready ? 'visible' : 'hidden',
+    ...placed,
+    visibility: (place || docked) && ready && prefs.loaded && !awaitingPane ? 'visible' : 'hidden',
     ['--wr-px' as string]: `${px}px`,
     ['--wr-lh' as string]: `${lineH}px`,
     ['--wr-family' as string]: fontFamily,
@@ -770,138 +971,149 @@ export function WritingCard({
 
   return (
     <>
-      <div
-        ref={cardRef}
-        className={`pc-card st-controls wr-card${folded ? ' is-folded' : ''}`}
-        role="dialog"
-        aria-label={info.title}
-        tabIndex={-1}
-        style={style}
-        onMouseUp={(e) => e.stopPropagation()}
-      >
-        <WritingHead
-          kind={kind}
-          title={info.title}
-          switchKinds={switchKinds}
-          onSwitch={(k) => {
-            switchTo(k);
-            readIfNoDraft(k, openDraft(k));
-          }}
-          meta={meta}
-          guide={file.guide}
-          preview={preview}
-          onPreview={() => setPreview(false)}
-          onGuide={() => keepSwitches(file.spelling, !file.guide)}
-          folded={folded}
-          onUnfold={() => setFolded(false)}
-          kinds={kindsMenu}
-          more={more}
-          moreLabel={`${info.title} options`}
-          onClose={close}
-        />
-        {!folded && (
-          <>
-            <div className="pc-rule" aria-hidden="true" />
-            <div className="wr-main">
-              <div className="pc-body wr-body">
-                {info.board && (
-                  <WritingFields
-                    to={draft.to ?? ''}
-                    toFixed={info.toImmortal}
-                    subject={subject}
-                    language={info.language && draft.language !== undefined ? draft.language : null}
-                    room={info.room ? (draft.room ?? room.info?.name ?? null) : null}
-                    bad={badField}
-                    readOnly={running !== null || sentView}
-                    onTo={(to) => {
-                      setBadField(null);
-                      setEnded(null);
-                      setDropped(null);
-                      keep({ ...draft, to });
-                    }}
-                    onSubject={(s) => {
-                      setBadField(null);
-                      setEnded(null);
-                      setDropped(null);
-                      keep({ ...draft, subject: s });
-                    }}
-                    onLanguage={(language) => {
-                      setBadField(null);
-                      setEnded(null);
-                      setDropped(null);
-                      keep({ ...draft, language });
-                    }}
-                    onText={() =>
-                      document.querySelector<HTMLElement>('.wr-card .cm-content')?.focus()
-                    }
-                  />
-                )}
-                {preview ? (
-                  <WritingPreview
-                    head={
-                      info.board
-                        ? [
-                            `${name}: ${subject}`,
-                            `To: ${info.toImmortal ? 'Immortal' : (draft.to ?? '')}`,
-                          ]
-                        : []
-                    }
-                    lines={lines}
-                    palette={env.palette}
-                    immortal={immortal}
-                    width={boxWidth}
-                  />
-                ) : (
-                  <WritingBox
-                    text={box}
-                    empty={
-                      kind === 'beast' && lines.every((l) => l.length === 0)
-                        ? {
-                            says: `Lookers see the game’s own line for your ${character?.beast ?? 'beast'}.`,
-                            line: character?.beast ? (BEAST_LOOKS[character.beast] ?? null) : null,
-                          }
-                        : null
-                    }
-                    width={width}
-                    helpWidth={helpWidth}
-                    immortal={immortal}
-                    spellcheck={file.spelling}
-                    readOnly={running !== null || sentView}
-                    sending={sending}
-                    cut={cut}
-                    palette={env.palette}
-                    label={info.title}
-                    rows={boxRows}
-                    minRows={6}
-                    onChange={onBoxChange}
-                    onCaret={setCaretRow}
-                    onPaste={(p: PasteNote) =>
-                      setPaste(pasteNote(p.wrapped, width, p.folded, p.word))
-                    }
-                  />
-                )}
-              </div>
-              {guideOn && <WritingGuide guide={guide} onHelp={help} />}
-            </div>
-            {running && running.total > 0 ? (
-              <div
-                className="wr-progress"
-                role="progressbar"
-                aria-valuenow={running.sent}
-                aria-valuemax={running.total}
-              >
-                <i style={{ width: `${(100 * running.sent) / running.total}%` }} />
-              </div>
-            ) : (
+      {createPortal(
+        <div
+          ref={cardRefOf}
+          className={`pc-card st-controls wr-card${folded ? ' is-folded' : ''}${docked ? ' is-pinned' : ''}${moving ? ' is-moving' : ''}`}
+          role="dialog"
+          aria-label={info.title}
+          tabIndex={-1}
+          style={style}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          <WritingHead
+            kind={kind}
+            title={info.title}
+            switchKinds={switchKinds}
+            onSwitch={(k) => {
+              switchTo(k);
+              readIfNoDraft(k, openDraft(k));
+            }}
+            meta={meta}
+            guide={file.guide}
+            preview={preview}
+            onPreview={() => setPreview(false)}
+            onGuide={() => keepSwitches(file.spelling, !file.guide)}
+            folded={folded}
+            onUnfold={() => setFolded(false)}
+            kinds={kindsMenu}
+            more={more}
+            moreLabel={`${info.title} options`}
+            pinned={prefs.pinned}
+            onPin={togglePin}
+            drag={drag}
+            onClose={close}
+          />
+          {!folded && (
+            <>
               <div className="pc-rule" aria-hidden="true" />
-            )}
-            <WritingFoot
-              left={preview ? <span className="pc-foot-note">{previewLine(kind)}</span> : left}
-              right={buttons}
-            />
-          </>
-        )}
-      </div>
+              <div className="wr-main">
+                <div className="pc-body wr-body">
+                  {info.board && (
+                    <WritingFields
+                      to={draft.to ?? ''}
+                      toFixed={info.toImmortal}
+                      subject={subject}
+                      language={
+                        info.language && draft.language !== undefined ? draft.language : null
+                      }
+                      room={info.room ? (draft.room ?? room.info?.name ?? null) : null}
+                      bad={badField}
+                      readOnly={running !== null || sentView}
+                      onTo={(to) => {
+                        setBadField(null);
+                        setEnded(null);
+                        setDropped(null);
+                        keep({ ...draft, to });
+                      }}
+                      onSubject={(s) => {
+                        setBadField(null);
+                        setEnded(null);
+                        setDropped(null);
+                        keep({ ...draft, subject: s });
+                      }}
+                      onLanguage={(language) => {
+                        setBadField(null);
+                        setEnded(null);
+                        setDropped(null);
+                        keep({ ...draft, language });
+                      }}
+                      onText={() =>
+                        document.querySelector<HTMLElement>('.wr-card .cm-content')?.focus()
+                      }
+                    />
+                  )}
+                  {preview ? (
+                    <WritingPreview
+                      head={
+                        info.board
+                          ? [
+                              `${name}: ${subject}`,
+                              `To: ${info.toImmortal ? 'Immortal' : (draft.to ?? '')}`,
+                            ]
+                          : []
+                      }
+                      lines={lines}
+                      palette={env.palette}
+                      immortal={immortal}
+                      width={boxWidth}
+                    />
+                  ) : (
+                    <WritingBox
+                      text={box}
+                      empty={
+                        kind === 'beast' && lines.every((l) => l.length === 0)
+                          ? {
+                              says: `Lookers see the game’s own line for your ${character?.beast ?? 'beast'}.`,
+                              line: character?.beast
+                                ? (BEAST_LOOKS[character.beast] ?? null)
+                                : null,
+                            }
+                          : null
+                      }
+                      width={width}
+                      helpWidth={helpWidth}
+                      immortal={immortal}
+                      spellcheck={file.spelling}
+                      readOnly={running !== null || sentView}
+                      sending={sending}
+                      cut={cut}
+                      palette={env.palette}
+                      label={info.title}
+                      rows={boxRows}
+                      minRows={boxMinRows}
+                      onChange={onBoxChange}
+                      onCaret={setCaretRow}
+                      onPaste={(p: PasteNote) =>
+                        setPaste(pasteNote(p.wrapped, width, p.folded, p.word))
+                      }
+                    />
+                  )}
+                </div>
+                {guideOn && <WritingGuide guide={guide} onHelp={help} />}
+              </div>
+              {running && running.total > 0 ? (
+                <div
+                  className="wr-progress"
+                  role="progressbar"
+                  aria-valuenow={running.sent}
+                  aria-valuemax={running.total}
+                >
+                  <i style={{ width: `${(100 * running.sent) / running.total}%` }} />
+                </div>
+              ) : (
+                <div className="pc-rule" aria-hidden="true" />
+              )}
+              <WritingFoot
+                left={preview ? <span className="pc-foot-note">{previewLine(kind)}</span> : left}
+                right={buttons}
+              />
+            </>
+          )}
+          {grip}
+        </div>,
+        hostEl,
+      )}
       {confirm && (
         <ConfirmDialog
           title={confirm.title}

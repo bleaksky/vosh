@@ -9,7 +9,7 @@ import { sendInput, type SessionRow } from '../../ipc/session';
 import type { SnoopTab } from '../../ipc/snoop';
 import { sessionLabel } from '../../lib/sessionLabel';
 import { setUiTheme } from '../../ipc/uiConfig';
-import type { PaneType } from '../../panel/paneLayout';
+import type { OfferedPaneType } from '../../panel/paneLayout';
 import {
   applyAndBroadcastTheme,
   applyThemePrefs,
@@ -129,9 +129,9 @@ export interface PaletteDeps {
   splitOpen?: boolean;
   toggleSplit?: () => void;
   /** Pane types that get a Show row, in order. */
-  paneTypes: readonly PaneType[];
-  paneVisible: (pane: PaneType) => boolean;
-  togglePane: (pane: PaneType) => void;
+  paneTypes: readonly OfferedPaneType[];
+  paneVisible: (pane: OfferedPaneType) => boolean;
+  togglePane: (pane: OfferedPaneType) => void;
   openHelp: () => void;
   /** Open Get started on its list. The row appears when the shell
    *  passes it. */
@@ -182,7 +182,7 @@ const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
   { show: 'pinned', title: 'Pin your prompt above the command line' },
 ];
 
-const PANE_TITLES: Record<PaneType, string> = {
+const PANE_TITLES: Record<OfferedPaneType, string> = {
   map: 'Show map',
   affects: 'Show affects',
   group: 'Show group',
