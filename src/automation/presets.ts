@@ -565,7 +565,7 @@ export const PRESETS: Preset[] = [
     category: 'events',
     name: 'Your damage verbs',
     description:
-      'Colors the damage verb amber in lines that start with Your, so your hits stand out ' +
+      'Colors the damage verb amber in lines that start with You, so your hits stand out ' +
       'and the rest of the line keeps its color.',
     // The top hit in dam_message in fight.c, on a villager, mob 5287 in
     // area/fortblac.are.
