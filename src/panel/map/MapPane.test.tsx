@@ -15,6 +15,9 @@ import { aabahranMapPacket, aabahranPacket } from '../../test/aabahranGmcp';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
 import { MapBandRows } from './MapPane';
 import { getCell, offFloorLayers, type MapTilesPayload } from './mapTiles';
+import { cameraFor, project, roofAt, sceneOf } from './map3dScene';
+import { DEFAULT_MAP_3D_VIEW, MAP_3D_VIEW_KEY, loadMap3dView } from './map3dView';
+import { MAP_STYLE_KEY } from './mapStyle';
 
 // The room store and the map view reach the Tauri bridge when they
 // start. MapBandRows draws from plain room data and never calls it. The
@@ -247,6 +250,8 @@ describe('a walk on the map', () => {
   /** The listeners each element of the drawing added. */
   const heard = new WeakMap<object, Map<string, Set<(e: unknown) => void>>>();
   const patched: [string, PropertyDescriptor | undefined][] = [];
+  /** What the map keeps in local storage. */
+  const stored = new Map<string, string>();
 
   function patch(name: string, value: PropertyDescriptor) {
     patched.push([name, Object.getOwnPropertyDescriptor(FakeElement.prototype, name)]);
@@ -271,7 +276,11 @@ describe('a walk on the map', () => {
     vi.stubGlobal('Element', FakeElement);
     vi.stubGlobal('HTMLElement', FakeElement);
     vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '', minHeight: '' }));
-    vi.stubGlobal('localStorage', { getItem: () => null, setItem() {}, removeItem() {} });
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+      removeItem: (key: string) => stored.delete(key),
+    });
     vi.stubGlobal('requestAnimationFrame', () => 0);
     vi.stubGlobal('cancelAnimationFrame', () => undefined);
     vi.stubGlobal(
@@ -318,6 +327,7 @@ describe('a walk on the map', () => {
   const cleanups: (() => Promise<void>)[] = [];
   afterEach(async () => {
     for (const clean of cleanups.splice(0)) await clean();
+    stored.clear();
   });
 
   /** Send a GMCP package to the first session, as the backend does. */
@@ -354,9 +364,18 @@ describe('a walk on the map', () => {
         const event = { type, button: 0, pointerId: 1, clientX: x, clientY: y, target: null };
         for (const fn of heard.get(host)?.get(type) ?? []) fn(event);
       });
-    /** The room at [row][col] on the canvas. */
-    const at = (row: number, col: number): [number, number] => [2 + 20 * col, -50 + 20 * row];
+    /** The room at [row][col] on the canvas, the middle of its roof in
+     *  3D. */
+    const at = (row: number, col: number): [number, number] => {
+      if (stored.get(MAP_STYLE_KEY) !== '3d') return [2 + 20 * col, -50 + 20 * row];
+      const view = loadMap3dView(localStorage);
+      const cam = cameraFor(WIDTH, HEIGHT, sceneOf(VAL_MIRAN, view.floors), view, 1);
+      const p = project(cam, col, row, roofAt(0));
+      return [p.x, p.y];
+    };
     return {
+      fire,
+      at,
       hover: (row: number, col: number) => fire('pointermove', ...at(row, col)),
       leave: () => fire('pointerleave', 0, 0),
       click: async (row: number, col: number) => {
@@ -518,5 +537,54 @@ describe('a walk on the map', () => {
     expect(view.chip()).toEqual(['2 steps left', '2w']);
     await progress({ kind: 'stopped', done: 1, total: 3, why: 'plain' });
     expect(view.chip()).toBeNull();
+  });
+
+  describe('in 3D', () => {
+    const turn = () => loadMap3dView(localStorage).turn;
+
+    it('offers the walk to the room whose roof is under the pointer', async () => {
+      stored.set(MAP_STYLE_KEY, '3d');
+      const view = await map();
+      await view.hover(6, 12);
+      expect(view.tip()).toEqual({ msg: 'Walk 6 steps', meta: '4n2e' });
+      await view.hover(10, 10);
+      expect(view.tip()).toBeNull();
+    });
+
+    it('walks a press and release that moves 3 px', async () => {
+      stored.set(MAP_STYLE_KEY, '3d');
+      const view = await map();
+      const before = (await routes()).length;
+      const [x, y] = view.at(6, 12);
+      await view.fire('pointerdown', x, y);
+      await view.fire('pointermove', x + 3, y);
+      await view.fire('pointerup', x + 3, y);
+      expect((await routes()).slice(before).map((r) => (r as { steps: string }).steps)).toEqual([
+        '4n2e',
+      ]);
+      expect(turn()).toBe(0);
+    });
+
+    it('turns the map for a drag of 10 px and walks nowhere', async () => {
+      stored.set(MAP_STYLE_KEY, '3d');
+      const view = await map();
+      const before = (await routes()).length;
+      const [x, y] = view.at(6, 12);
+      await view.fire('pointerdown', x, y);
+      await view.fire('pointermove', x + 10, y);
+      await view.fire('pointerup', x + 10, y);
+      expect((await routes()).length).toBe(before);
+      expect(turn()).toBe(5);
+    });
+
+    it('puts north back for a double click on bare ground, not on a room', async () => {
+      stored.set(MAP_STYLE_KEY, '3d');
+      stored.set(MAP_3D_VIEW_KEY, JSON.stringify({ ...DEFAULT_MAP_3D_VIEW, turn: 90 }));
+      const view = await map();
+      await view.fire('dblclick', ...view.at(10, 11));
+      expect(turn()).toBe(90);
+      await view.fire('dblclick', 3, 3);
+      expect(turn()).toBe(0);
+    });
   });
 });

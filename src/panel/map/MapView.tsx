@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { drawMap3D } from './map3dDraw';
+import { cameraFor, project, roofAt, roomAt as roomAt3d, sceneOf, type Camera } from './map3dScene';
 import { DEFAULT_MAP_3D_VIEW, MAP_3D_VIEW_KEY, loadMap3dView, type Map3dView } from './map3dView';
 import { MAP_COLORS, mapInks, mapThemeSignature } from './mapPalette';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from './mapStyle';
@@ -119,8 +120,8 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // canvas picks up the new --panel / --accent CSS vars that
   // MAP_COLORS reads through its getters.
   const [themeVersion, setThemeVersion] = useState(0);
-  // Where the pointer rests over a flat style, which shows the walk to
-  // the room under it.
+  // Where the pointer rests over the map, which shows the walk to the
+  // room under it.
   const [pointer, setPointer] = useState<MapPoint | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
 
@@ -153,7 +154,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   }, [view3d]);
 
   // Plain scroll and a pinch zoom the map in every style. In 3D a drag,
-  // a double click and the arrow keys turn and tilt it.
+  // a double click on bare ground and the arrow keys turn and tilt it.
   const is3d = style === '3d';
 
   /** Where a flat style puts the grid in a drawing of width by height. */
@@ -164,10 +165,31 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     const { row, col } = playerCellOf(tiles, rows, cols);
     return gridPlace(style, width, height, zoom, row, col, tilesetImage !== null);
   };
-  /** The grid cell at a point in a flat style. */
+  // The 3D scene, which finds the room under the pointer there.
+  const scene3d = useMemo(
+    () => (tiles && is3d ? sceneOf(tiles, view3d.floors) : null),
+    [tiles, is3d, view3d.floors],
+  );
+  /** The 3D camera for a drawing of width by height. */
+  const cameraIn = (width: number, height: number): Camera | null =>
+    scene3d && cameraFor(width, height, scene3d, view3d, zoom);
+  /** The grid cell at a point. In 3D only a room of your floor has one. */
   const spotAt = (at: MapPoint | null): GridSpot | null => {
-    const place = at && placeIn(at.width, at.height);
-    return at && place ? roomAt(place, at.x, at.y) : null;
+    if (!at) return null;
+    const cam = cameraIn(at.width, at.height);
+    if (cam && scene3d) {
+      const room = roomAt3d(cam, scene3d, at.x, at.y);
+      return room && { row: room.y, col: room.x };
+    }
+    const place = placeIn(at.width, at.height);
+    return place && roomAt(place, at.x, at.y);
+  };
+  /** Where the middle of a room draws, on its roof in 3D. */
+  const pointOf = (spot: GridSpot, width: number, height: number) => {
+    const cam = cameraIn(width, height);
+    if (cam) return project(cam, spot.col, spot.row, roofAt(0));
+    const place = placeIn(width, height);
+    return place && { x: place.ox + spot.col * place.pitch, y: place.oy + spot.row * place.pitch };
   };
   // The walk to the room under the pointer, if one is on offer. Your
   // room, empty ground and rooms on other floors offer none. It plans
@@ -202,6 +224,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     view: is3d ? view3d : null,
     setView: setView3d,
     onPoint: setPointer,
+    onRoom: (at) => spotAt(at) !== null,
     onPick: (at) => {
       // A click walks the plan for the room it lands on, from the room
       // the game last said you stand in, and the map keeps the route to
@@ -347,8 +370,9 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     drawRef.current();
   }, [tiles, view3d, mark]);
 
-  // The tip sits 16 px right of the room under the pointer and 50 px
-  // above it, or under it for a walk that stops at a door or a shore.
+  // The tip sits 16 px right of the room under the pointer, its roof in
+  // 3D, and 50 px above it, or under it for a walk that stops at a door
+  // or a shore.
   // Near the drawing's right edge it starts 200 px in from that edge,
   // and one that still runs past it flips to the left of the room.
   useLayoutEffect(() => {
@@ -356,10 +380,9 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     const container = containerRef.current;
     if (!tip || !container || !hover) return;
     const width = container.clientWidth;
-    const place = placeIn(width, container.clientHeight);
-    if (!place) return;
-    const x = place.ox + hover.target.col * place.pitch;
-    const y = place.oy + hover.target.row * place.pitch;
+    const at = pointOf(hover.target, width, container.clientHeight);
+    if (!at) return;
+    const { x, y } = at;
     let left = Math.min(Math.max(x + 16, 8), width - 200);
     if (left + tip.offsetWidth > width - 8) left = Math.max(8, x - 16 - tip.offsetWidth);
     tip.style.left = `${left}px`;

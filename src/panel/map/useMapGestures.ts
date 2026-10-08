@@ -6,10 +6,15 @@ import { NO_WHEEL_RUN, ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '.
 // scroll and a trackpad pinch zoom every style. Chromium sends a pinch
 // as a wheel event with ctrlKey set, and WebKit sends gesture events
 // with a scale, so both are read and the webview on each platform zooms
-// the same. In 3D a drag turns and tilts the map, a double click puts
-// north back at the top, and the arrow keys turn and tilt it while the
-// drawing has focus. In the flat styles the map hears where the pointer
-// is, and a press and release is a click, which walks.
+// the same. The map hears where the pointer is, and a press and release
+// is a click, which walks. In 3D a press that moves 4 px or more is a
+// drag instead, which turns and tilts the map, a double click on bare
+// ground puts north back at the top, and the arrow keys turn and tilt
+// it while the drawing has focus.
+
+/** How far a press in 3D moves before it turns the map instead of
+ *  walking. */
+const CLICK_SLOP_PX = 4;
 
 /** WebKit's gesture event, which the DOM types leave out. */
 interface GestureLike extends Event {
@@ -31,11 +36,14 @@ interface Options {
   /** The 3D view while the map draws in 3D, else null. */
   view: Map3dView | null;
   setView: Dispatch<SetStateAction<Map3dView>>;
-  /** Where the pointer is over a flat style, or null once it leaves the
-   *  drawing or rests on the map's button. */
+  /** Where the pointer is, or null once it leaves the drawing, rests
+   *  on the map's button or turns the 3D map. */
   onPoint: (at: MapPoint | null) => void;
-  /** A click on a flat style, where it was. */
+  /** A click, where it was. */
   onPick: (at: MapPoint) => void;
+  /** Whether a point lands on a room, so a double click there walks
+   *  and leaves the 3D view as it is. */
+  onRoom: (at: MapPoint) => boolean;
 }
 
 export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Options): void {
@@ -51,10 +59,19 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     if (!el) return;
     let wheel = NO_WHEEL_RUN;
     let pinchFrom: number | null = null;
-    let drag: { id: number; x: number; y: number } | null = null;
+    /** A press in 3D: where it went down, where it was last, and
+     *  whether it has moved far enough to turn the map. */
+    let drag: {
+      id: number;
+      x0: number;
+      y0: number;
+      x: number;
+      y: number;
+      turning: boolean;
+    } | null = null;
     /** The pointer pressed on a flat style, which a release makes a click. */
     let press: number | null = null;
-    const pointAt = (e: PointerEvent): MapPoint => {
+    const pointAt = (e: MouseEvent): MapPoint => {
       const box = el.getBoundingClientRect();
       return {
         x: e.clientX - box.left,
@@ -101,34 +118,43 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
         press = e.pointerId;
         return;
       }
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      const { clientX: x, clientY: y } = e;
+      drag = { id: e.pointerId, x0: x, y0: y, x, y, turning: false };
       el.setPointerCapture?.(e.pointerId);
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!latest.current.view) {
+      if (!drag || e.pointerId !== drag.id || !latest.current.view) {
         latest.current.onPoint(onControl(e) ? null : pointAt(e));
         return;
       }
-      if (!drag || e.pointerId !== drag.id || !latest.current.view) return;
-      const dx = e.clientX - drag.x;
-      const dy = e.clientY - drag.y;
-      drag = { ...drag, x: e.clientX, y: e.clientY };
+      // The map holds still until the press moves 4 px, then follows
+      // the pointer from where it went down.
+      const { clientX: x, clientY: y } = e;
+      if (!drag.turning && Math.hypot(x - drag.x0, y - drag.y0) < CLICK_SLOP_PX) return;
+      if (!drag.turning) latest.current.onPoint(null);
+      const dx = x - drag.x;
+      const dy = y - drag.y;
+      drag = { ...drag, x, y, turning: true };
       if (dx !== 0 || dy !== 0) latest.current.setView((v) => dragView(v, dx, dy));
     };
     const onPointerUp = (e: PointerEvent) => {
-      if (press !== null && e.pointerId === press && e.type === 'pointerup') {
+      const up = e.type === 'pointerup' && !onControl(e);
+      if (press !== null && e.pointerId === press) {
         press = null;
-        if (!latest.current.view && !onControl(e)) latest.current.onPick(pointAt(e));
+        if (up && !latest.current.view) latest.current.onPick(pointAt(e));
         return;
       }
       press = null;
       if (!drag || e.pointerId !== drag.id) return;
+      const click = !drag.turning;
       drag = null;
       if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      if (click && up && latest.current.view) latest.current.onPick(pointAt(e));
     };
     const onPointerLeave = () => latest.current.onPoint(null);
     const onDoubleClick = (e: MouseEvent) => {
-      if (latest.current.view && !onControl(e)) latest.current.setView(resetView);
+      if (!latest.current.view || onControl(e)) return;
+      if (!latest.current.onRoom(pointAt(e))) latest.current.setView(resetView);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const v = latest.current.view;
