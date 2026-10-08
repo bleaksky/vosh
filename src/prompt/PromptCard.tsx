@@ -7,12 +7,10 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { moveTriggerToPrompts } from '../automation/automationTriggers';
 import { vitalsLegacyText, type CardBinding } from './cardBinding';
 import type { CellSize } from './pinnedDock';
 import {
   type CardRequest,
-  cardShowState,
   headerButtons,
   moreItems,
   openingStep,
@@ -20,9 +18,6 @@ import {
   cardNames,
   vitalsStartRows,
   VITALS_MORE,
-  withDesign,
-  withShow,
-  withStart,
   type CardStep,
   type MoreItemId,
 } from './cardRules';
@@ -39,7 +34,7 @@ import {
   step as stepPick,
   type Pointing,
 } from './promptPieces';
-import { notMatchingLine, shownPreview } from './promptSettings';
+import { shownPreview } from './promptSettings';
 import { sessionIdentityGet, type SessionIdentity } from '../ipc/characters';
 import { profilesList } from '../ipc/profiles';
 import {
@@ -84,13 +79,8 @@ import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
 import { CardMenu } from './CardMenu';
-import { LineTriggers } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
-import { PromptPicker } from './PromptPicker';
-import { PromptPieceBody } from './PromptPiece';
-import { DesignFoot, TextFoot } from './PromptFoot';
-import { DrawOff, Starts } from './PromptStarts';
-import { PromptText } from './PromptText';
+import { restBody } from './promptRest';
 
 // The prompt card. It opens from the terminal menu on any row, the
 // palette, or Customize… in Settings, over your prompt: 4 px above the
@@ -171,10 +161,6 @@ interface PromptCardProps {
   onPromptDone?: () => void;
   onClose: () => void;
 }
-
-/** What the Lament preview hides, under the card at rest. */
-const LAMENT_NOTE =
-  "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
 
 export function PromptCard({
   session,
@@ -700,134 +686,47 @@ export function PromptCard({
         body = stepBody;
         break;
       case 'start':
-      case 'rest': {
-        // With drawing off the card says so at rest, and Edit as text
-        // still works on the design you keep.
-        const drawOff = !config.draw && step === 'rest' && view === 'design';
-        let content: ReactNode;
-        if (drawOff) {
-          content = (
-            <DrawOff
-              name={owner}
-              other={!forsaken}
-              confirming={confirmForget}
-              onForget={() => setConfirmForget(true)}
-            />
-          );
-        } else if (view === 'picker' && state) {
-          content = (
-            <PromptPicker
-              session={session}
-              state={state}
-              preview={drawn}
-              env={env}
-              cellW={cellW}
-              refresh={refresh}
-              onInsert={insertValue}
-              onInsertLayout={insertLayout}
-              focusSearch={pickerKeys}
-            />
-          );
-        } else if (view === 'text') {
-          content = (
-            <PromptText
-              template={config.template}
-              tokens={described?.data.tokens ?? []}
-              describedFor={described?.template ?? ''}
-              onChange={(next) => save(withDesign(config, next))}
-              onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
-              onInsertValue={() => openPicker('text')}
-              insertRef={insertRef}
-              caretRef={textCaret}
-              focusRequest={textFocus}
-              onFocusTaken={() => setTextFocus(0)}
-              fieldLabel={vitals ? 'Vitals text' : undefined}
-            />
-          );
-        } else if (pickedPiece) {
-          content = (
-            <PromptPieceBody
-              key={pickedPiece.piece}
-              piece={pickedPiece}
-              env={env}
-              onEdit={(op) => edit([op])}
-              onInsertValue={() => openPicker('design')}
-            />
-          );
-        } else {
-          content = (
-            <Starts
-              session={session}
-              mode={step}
-              config={config}
-              presets={presets}
-              designs={designs}
-              own={vitalsStarts}
-              values={(state?.packages.length ?? 0) > 0 ? 'live' : 'sample'}
-              refresh={refresh}
-              env={env}
-              cellW={cellW}
-              restHint={vitals ? 'Click any part of your vitals to change it.' : undefined}
-              note={step === 'rest' && drawn === 'lament' ? LAMENT_NOTE : null}
-              promptsOff={
-                !vitals && (state?.status.status === 'prompts_off' || (show?.promptsOff ?? false))
-              }
-              notMatching={
-                !vitals && state?.status.status === 'not_matching'
-                  ? notMatchingLine(state.status.last_match_at)
-                  : null
-              }
-              onPick={(row) => {
-                setPointing(NOWHERE);
-                // Picking a start is how you ask Vosh to draw it, so
-                // drawing turns on. Same as the game follows the game,
-                // and Start empty keeps its empty design.
-                save(withStart(config, row), true, row.template === '');
-              }}
-              onInsertValue={() => openPicker('design')}
-            >
-              <LineTriggers
-                triggers={lineTriggers}
-                onMove={async (name) => {
-                  await moveTriggerToPrompts(name);
-                  setLineTriggers((list) => list.filter((t) => t.name !== name));
-                }}
-              />
-            </Starts>
-          );
-        }
-        body = (
-          <>
-            {content}
-            <div className="pc-rule" aria-hidden="true" />
-            {vitals ? (
-              <TextFoot
-                note={shownIn === 'status' ? 'Draws in your status line' : 'Draws in your panel'}
-                preview={drawn}
-                forsaken={forsaken}
-                onPreview={setPreview}
-                onDone={onClose}
-              />
-            ) : (
-              <DesignFoot
-                draw={config.draw}
-                onDraw={(draw) => save({ ...config, draw })}
-                show={config.show}
-                showState={cardShowState(show, config.capture)}
-                onShow={(place) => save(withShow(config, place))}
-                preview={drawn}
-                forsaken={forsaken}
-                onPreview={setPreview}
-                onDone={() => {
-                  onPromptDone?.();
-                  onClose();
-                }}
-              />
-            )}
-          </>
-        );
+      case 'rest':
+        body = restBody({
+          step,
+          config,
+          view,
+          session,
+          state,
+          show,
+          vitals,
+          forsaken,
+          drawn,
+          env,
+          cellW,
+          refresh,
+          owner,
+          confirmForget,
+          setConfirmForget,
+          pickerKeys,
+          insertValue,
+          insertLayout,
+          openPicker,
+          described,
+          insertRef,
+          textCaret,
+          textFocus,
+          setTextFocus,
+          pickedPiece,
+          setPointing,
+          presets,
+          designs,
+          vitalsStarts,
+          lineTriggers,
+          setLineTriggers,
+          shownIn,
+          save,
+          edit,
+          setPreview,
+          onPromptDone,
+          onClose,
+        });
         break;
-      }
     }
   }
 
