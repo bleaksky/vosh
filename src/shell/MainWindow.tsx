@@ -11,6 +11,7 @@ import { CornerNotices } from './overlays/CornerNotices';
 import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
+import { readPrompt } from '../terminal/readerVoice';
 import { ScreenReaderFeed } from '../terminal/ScreenReaderFeed';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
@@ -77,6 +78,7 @@ import {
 import { getSnoops } from '../stores/session/snoopStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
+import { useScreenReader } from '../stores/config/screenReaderStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
 import { PromptDock } from '../prompt/PromptDock';
@@ -139,6 +141,8 @@ function MainWindow() {
   // Show your vitals in on Status line.
   const vitalsPlace = useVitalsOptions().place;
   const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
+  // Read your prompt shows in the palette while the reader is on.
+  const readerOn = useScreenReader().screen_reader;
   // The sidebar hands the caret back to the command line as it goes.
   const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen, () =>
     inputRef.current?.focus(),
@@ -522,6 +526,7 @@ function MainWindow() {
       beast: hasBeast(charStatus.race, charStatus.level),
       open: (kind) => openWriting(kind),
     },
+    readPrompt: readerOn ? readPrompt : undefined,
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
       const session = getSelected();

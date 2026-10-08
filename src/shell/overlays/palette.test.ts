@@ -353,6 +353,28 @@ describe('paletteSections', () => {
     expect(goTo[1].meta).toBeUndefined();
   });
 
+  it('finds Read your prompt with its key while the screen reader is on', () => {
+    const readPrompt = vi.fn();
+    const entries = buildPaletteEntries(deps({ readPrompt }));
+    expect(flat(paletteSections(entries, '', [])).map((r) => r.id)).not.toContain('read-prompt');
+    for (const word of ['read your prompt', 'screen reader', 'voiceover']) {
+      const view = paletteSections(entries, word, []).find((s) => s.label === 'View');
+      expect(
+        view?.rows.map((r) => r.id),
+        word,
+      ).toContain('read-prompt');
+    }
+    const row = entries.find((r) => r.id === 'read-prompt');
+    expect(row?.title).toBe('Read your prompt');
+    expect(row?.keys).toBe('Mod+Shift+P');
+    void row?.run();
+    expect(readPrompt).toHaveBeenCalled();
+    expect(buildPaletteEntries(deps()).some((r) => r.id === 'read-prompt')).toBe(false);
+    expect(
+      buildPaletteEntries(deps({ readPrompt: undefined })).some((r) => r.id === 'read-prompt'),
+    ).toBe(false);
+  });
+
   it('hides search only rows until you type, then ranks matches by section', () => {
     const entries = buildPaletteEntries(deps());
     expect(flat(paletteSections(entries, '', [])).some((r) => r.searchOnly)).toBe(false);

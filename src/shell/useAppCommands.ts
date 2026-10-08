@@ -18,6 +18,7 @@ import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import type { MacroKeys } from '../input/useMacroKeys';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
+import { getScreenReader } from '../stores/config/screenReaderStore';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
 import { getSnoops, useSnoops } from '../stores/session/snoopStore';
 import { goTo, sessionAt, sessionStep } from '../stores/session/sessionsStore';
@@ -142,6 +143,8 @@ export function useAppCommands({
   //   Mod+\        open or close the scrollback split
   //   Mod+J        into the snoop, and in a snoop to the next tab. With
   //                no snoop open the key stays the page's.
+  //   Mod+Shift+P  read your prompt aloud, while the screen reader is
+  //                on. With it off the key stays the page's.
   //   Mod+T        new session
   //   Mod+W        close the session, or the window with one session
   //   Mod+Shift+W  close the window
@@ -178,7 +181,7 @@ export function useAppCommands({
       const hit = resolveShortcut(
         press,
         () => macroKeys.bound(canonicalKeyFromEvent(e)),
-        () => getSnoops().tabs.length > 0,
+        (id) => (id === 'snoop' ? getSnoops().tabs.length > 0 : getScreenReader().screen_reader),
       );
       if (!hit) return;
       e.preventDefault();

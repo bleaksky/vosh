@@ -79,6 +79,7 @@ const WINDOW_SHORTCUTS: readonly AppShortcutId[] = [
   'close-window',
   'session-next',
   'session-previous',
+  'read-prompt',
 ];
 
 // The keys that act on sessions, otty's keys (Sessions Q11), and the
@@ -201,17 +202,22 @@ export function settingsShortcutOf(
   );
 }
 
+/** A key that waits for what it acts on, and stays the page's until
+ *  then. */
+export type WaitingShortcutId = 'snoop' | 'read-prompt';
+
 /** What a primary modifier key press means in the main window. Null
  *  leaves the key to the page. `macroBound` says whether the selected
  *  session's profile binds a macro to this press, and is asked only for
- *  a session or Settings key. `snooping` says whether the selected session has a
- *  snoop open. Without one the snoop key stays the page's, so a macro
- *  on Ctrl+J on Windows and Linux keeps working. `mac` picks the
- *  platform's specs. */
+ *  a session or Settings key. `offered` says whether a waiting key has
+ *  what it acts on: the snoop key a snoop the selected session has open,
+ *  the prompt key the screen reader, while it is on. Until then the key
+ *  stays the page's, so a macro on Ctrl+J or Ctrl+Shift+P on Windows and
+ *  Linux keeps working. `mac` picks the platform's specs. */
 export function resolveShortcut(
   press: ShortcutPress,
   macroBound: () => boolean = () => false,
-  snooping: () => boolean = () => false,
+  offered: (id: WaitingShortcutId) => boolean = () => false,
   mac: boolean = isMacPlatform(),
 ): ShortcutHit | null {
   const { key, code, shift } = press;
@@ -234,7 +240,7 @@ export function resolveShortcut(
     const physical = PHYSICAL_KEYS[spec.key];
     if (spec.shift !== shift || spec.ctrl !== ctrl) continue;
     if (physical ? code !== physical : spec.key !== key) continue;
-    if (id === 'snoop' && !snooping()) return null;
+    if ((id === 'snoop' || id === 'read-prompt') && !offered(id)) return null;
     return isSessionShortcut(id) && macroBound() ? { kind: 'macro' } : { kind: 'run', id };
   }
   return null;
