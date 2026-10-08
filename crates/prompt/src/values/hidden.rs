@@ -2,7 +2,7 @@
 //! the fresh prompt values, and where a fresh capture disagrees with
 //! GMCP.
 //!
-//! The lamented tears rule (H7 in section 1.2 of the build spec) lives
+//! The lamented tears rule (H7 below) lives
 //! here. The older server build sends true values under the song, and
 //! only Char.Affects naming it tells Vosh the game means to hide them.
 
@@ -16,7 +16,7 @@ use crate::values::format::lang_game;
 use crate::values::gmcp::{self, Affects, CHAR_STATE, CHAR_WORTH, ROOM_WEATHER, WORLD_TIME};
 
 /// Which values the game hides right now. Worked out from the latest
-/// packets and the fresh prompt values, never stored (D23).
+/// packets and the fresh prompt values, never stored.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Hidden {
     pub hp: bool,
@@ -84,7 +84,7 @@ impl Vars {
     }
 
     // -----------------------------------------------------------------
-    // Hidden (section 1.2)
+    // Hidden
     // -----------------------------------------------------------------
 
     pub(super) fn work_out_hidden(&self) -> Hidden {
@@ -164,10 +164,9 @@ impl Vars {
         // overrides.rs, since it shows what the song hides while no packet
         // names the song. The two differ on Char.Combat. Here a path that
         // reads the whole packet or the whole tank hides too, through the
-        // resolver's `path_hidden`, and the preview hides only their
-        // health and condition keys. Both stay as they are (refactor plan
-        // D26), since a merge would change what the live prompt or the
-        // preview draws.
+        // resolver's `path_hidden`, and the preview hides only their health
+        // and condition keys. Both stay as they are, since a merge would
+        // change what the live prompt or the preview draws.
         let h7 = a_flag || affects.as_ref().is_some_and(names_lament);
         // Z, Group.Info is {}.
         let z = group.as_ref().is_some_and(|g| g.empty);

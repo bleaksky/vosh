@@ -1,5 +1,5 @@
 //! The custom prompt of the live profile: its saved `[prompt]` table and
-//! the session's variables (section 5, live state).
+//! the session's variables.
 //!
 //! The table lasts as long as the profile. The variables last as long as
 //! the connection, and a profile switch keeps the GMCP packets while it
@@ -34,7 +34,7 @@ use replies::Observer;
 use status::Misses;
 pub(crate) use status::StatusReport;
 
-/// The clock pieces a design reads (decision 6). While it reads one, the
+/// The clock pieces a design reads. While it reads one, the
 /// session repaints your idle prompt as what the piece shows changes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Clock {
@@ -70,7 +70,7 @@ pub struct PromptEngine {
     /// The open card chose Aabahran's code reader on a host Vosh does not
     /// know, with More > Use Forsaken Lands prompt codes…, so the Forsaken
     /// Lands rules hold until the card lets it go or another profile takes
-    /// over (D17). A connection keeps it, since the card stays open across
+    /// over. A connection keeps it, since the card stays open across
     /// one.
     reader: bool,
     /// The prompt vars the webview last heard.
@@ -138,14 +138,14 @@ impl PromptEngine {
     }
 
     /// Take what you chose in `chosen`, the table another engine on the
-    /// same profile holds after you changed it there (Q29 of the sessions
-    /// review). The switch, where your prompt shows, whether the design
-    /// follows the game, a design you wrote, the earlier designs and a
-    /// capture you set come from `chosen`. What this engine's own game
-    /// supplied stays: its Aabahran codes, with when and how Vosh learned
-    /// them, while the chosen codes follow the game too, a capture its
-    /// game decides while the chosen one is the game's as well, and the
-    /// design written from its codes while the design follows the game.
+    /// same profile holds after you changed it there. The switch, where
+    /// your prompt shows, whether the design follows the game, a design you
+    /// wrote, the earlier designs and a capture you set come from `chosen`.
+    /// What this engine's own game supplied stays: its Aabahran codes, with
+    /// when and how Vosh learned them, while the chosen codes follow the
+    /// game too, a capture its game decides while the chosen one is the
+    /// game's as well, and the design written from its codes while the
+    /// design follows the game.
     pub fn take_choice(&mut self, mut chosen: PromptConfig) {
         chosen.capture = match (chosen.capture, &self.config.capture) {
             (CaptureConfig::Aabahran(theirs), CaptureConfig::Aabahran(mine))
@@ -210,7 +210,7 @@ impl PromptEngine {
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
     /// is for, and a change compiles the capture again. Char.Prompt is
     /// the game's own word on your prompt settings, which an aabahran
-    /// capture follows and a migrated capture switches to (D10).
+    /// capture follows and a migrated capture switches to.
     pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
         let observed = self.vars.observe(package, data, at);
         if observed.pulse {
@@ -362,14 +362,14 @@ impl PromptEngine {
         Some(now)
     }
 
-    /// Whether the Forsaken Lands rules hold (D17): the host is The
+    /// Whether the Forsaken Lands rules hold: the host is The
     /// Forsaken Lands, the capture reads Aabahran's codes, or the open
     /// card chose the code reader.
     pub fn forsaken(&self) -> bool {
         self.vars.forsaken()
     }
 
-    /// The open card chose Aabahran's code reader, or let it go (D17).
+    /// The open card chose Aabahran's code reader, or let it go.
     /// While it holds, the Forsaken Lands rules hold, so the observer
     /// reads the game's replies to `prompt` for the card's fields.
     pub fn set_reader(&mut self, on: bool) {
@@ -380,7 +380,7 @@ impl PromptEngine {
     /// A connection opened. It starts with no packets and no values.
     /// `known_host` is whether the host is The Forsaken Lands. A preview
     /// the open card set stays, since the card can be open as you
-    /// connect (D9), and the first prompt draws what it shows.
+    /// connect, and the first prompt draws what it shows.
     pub fn connect(&mut self, known_host: bool) {
         self.vars.disconnect();
         self.stage.reset();

@@ -1,5 +1,5 @@
 //! A capture for a game Vosh has no codes for, built from the line you
-//! point at (section 3, generic capture for other games, and P15).
+//! point at.
 //!
 //! Digit runs become `(-?\d+)`, runs of spaces become ` +`, everything
 //! else is escaped, and the line is anchored at both ends. So a prompt the

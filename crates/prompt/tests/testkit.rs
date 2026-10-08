@@ -1,5 +1,5 @@
 //! The fake Aabahran in the test kit plays the game as the server writes
-//! it (section 9 of the build spec): the wire order, `do_prompt` and
+//! it: the wire order, `do_prompt` and
 //! `do_fprompt` on each build, Char.Prompt on the new build alone, the
 //! packages that keep coming with prompts off, the hidden and lament
 //! packets, and prompts that read back through the compiler.

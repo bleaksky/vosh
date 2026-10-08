@@ -356,7 +356,7 @@ fn the_engine_keeps_the_preview_until_the_connection_goes() {
 fn a_package_older_builds_send_feeds_a_new_build_field_only_on_the_new_build() {
     // Older builds send Char.Combat and Room.Info too, but only the new
     // build puts your tank in Char.Combat and only it reads Exits from
-    // Room.Info (D26), so there those fields come from your prompt alone.
+    // Room.Info, so there those fields come from your prompt alone.
     let mut vars = Vars::new(true);
     feed(&mut vars, "char-vitals.gmcp");
     feed(&mut vars, "char-combat.gmcp");

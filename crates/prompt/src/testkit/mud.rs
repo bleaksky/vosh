@@ -1,5 +1,4 @@
-//! A fake Aabahran that plays one connection (section 9 of the build
-//! spec).
+//! A fake Aabahran that plays one connection.
 //!
 //! [`Mud`] answers what a client sends with the bytes the game would
 //! write, in the game's wire order. The game writes each GMCP packet

@@ -1,5 +1,4 @@
-//! A capture built from a line another game prints (section 3, generic
-//! capture for other games, and P15).
+//! A capture built from a line another game prints.
 
 use std::collections::BTreeMap;
 

@@ -1,4 +1,4 @@
-//! The hidden model (section 1.2 of the build spec) against the Aabahran
+//! The hidden model against the Aabahran
 //! packets: the new build's flags, the derived terms for 243cac5c and the
 //! older build, and one change per socket read.
 

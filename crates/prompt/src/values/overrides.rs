@@ -64,7 +64,7 @@ impl Overrides {
     }
 }
 
-/// One of the previews the card's footer offers (section 7 step 8).
+/// One of the previews the card's footer offers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Preview {
@@ -122,7 +122,7 @@ impl Preview {
 }
 
 /// Your health as the game counts a tank's, `100 * hit / max` with
-/// integer division (correction 28), or the game's own percent when no
+/// integer division, or the game's own percent when no
 /// max is known.
 fn tank_pct(value: &Value) -> Option<i64> {
     match value {
@@ -155,11 +155,11 @@ pub struct PromptPreview {
     #[serde(default)]
     pub overrides: Option<Overrides>,
     /// Draw each value with nothing to show as its label, so the card can
-    /// point at it (D4).
+    /// point at it.
     #[serde(default)]
     pub placeholders: bool,
     /// Show the lines the game sent in place of your design, so the
-    /// card's marks sit on them (P2 and P3).
+    /// card's marks sit on them.
     #[serde(default)]
     pub raw: bool,
 }
@@ -190,16 +190,15 @@ impl PromptPreview {
 }
 
 /// True for a field lamented tears hides: your vitals, your tank's and
-/// your opponent's health, your affects and your group (section 1.2).
+/// your opponent's health, your affects and your group.
 ///
 /// The live prompt works this out from the packets instead, in
-/// `work_out_hidden` (H7 in hidden.rs). The preview keeps this list
-/// because it shows what the song hides while no packet names the song.
-/// The two differ on Char.Combat. This list hides only its health and
-/// condition keys, and the live rule also hides a path that reads the
-/// whole packet or the whole tank. Both stay as they are (refactor plan
-/// D26), since a merge would change what the preview or the live prompt
-/// draws.
+/// `work_out_hidden` (H7 in hidden.rs). The preview keeps this list because
+/// it shows what the song hides while no packet names the song. The two
+/// differ on Char.Combat. This list hides only its health and condition
+/// keys, and the live rule also hides a path that reads the whole packet or
+/// the whole tank. Both stay as they are, since a merge would change what
+/// the preview or the live prompt draws.
 pub fn lament_hides(field: &FieldRef) -> bool {
     let name = field.name.as_str();
     if Pair::of(name).is_some() {

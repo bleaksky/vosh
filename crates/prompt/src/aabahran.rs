@@ -1,6 +1,6 @@
 //! What Vosh knows about Aabahran alone.
 //!
-//! The PROMPT line compiler (section 3) lives here. It is pure. The
+//! The PROMPT line compiler lives here. It is pure. The
 //! session feeds it your settings and matches lines with what it returns.
 //!
 //! - [`lex`] stores a setting you typed as `do_prompt` does, and reads

@@ -2,7 +2,7 @@
 //! and handing the settings the game shows to your capture. An aabahran
 //! capture that follows the game takes settings that differ from its
 //! own, and a capture migrated from a trigger switches to Aabahran's
-//! codes (D10).
+//! codes.
 
 use chrono::{DateTime, FixedOffset};
 
@@ -153,8 +153,8 @@ impl PromptEngine {
     }
 
     /// Switch the pattern the move from a capture trigger wrote to
-    /// Aabahran's codes, which follow the game from then on (D10, James
-    /// on 2026-09-30). The first PROMPT the game shows under the
+    /// Aabahran's codes, which follow the game from then on, as James
+    /// asked on 2026-09-30. The first PROMPT the game shows under the
     /// Forsaken Lands rules does it, from Char.Prompt or from the reply
     /// the observer reads. A fight prompt alone says too little. Without
     /// one from the game, the fight prompt is the one the game showed

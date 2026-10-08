@@ -5,7 +5,7 @@
 //! keeps the pulse, which a Char.Vitals packet starts, and the latest
 //! Char.Prompt with the time it came and whether it was the first since
 //! the socket connected. A Char.Prompt this session is the sign of the
-//! new server build (decision 8), which [`crate::values`] reads behind the
+//! new server build, which [`crate::values`] reads behind the
 //! Forsaken Lands rules.
 //!
 //! Paths reach into any packet, `Char.Affects.affects[name=sanctuary].level`,

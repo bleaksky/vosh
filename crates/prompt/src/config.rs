@@ -1,4 +1,4 @@
-//! The `[prompt]` table of a profile file (section 5 of the build spec).
+//! The `[prompt]` table of a profile file.
 //!
 //! ```toml
 //! [prompt]
@@ -70,10 +70,10 @@ pub const DEFAULT_DESIGN: &str = concat!(
     " ",
 );
 
-/// Vosh's vitals text, the one the Text vitals style starts from and
-/// Reset to default puts back (board 5 of the Vitals Styles review). In
-/// a fight a row comes first with your opponent and its health on the
-/// right. Then your health, mana and moves, each current over max.
+/// Vosh's vitals text, the one the Text vitals style starts from and Reset
+/// to default puts back. In a fight a row comes first with your opponent
+/// and its health on the right. Then your health, mana and moves, each
+/// current over max.
 pub const DEFAULT_VITALS_TEXT: &str = concat!(
     "%{if:fight}%opponent%{right}%c_yellow%{opponent_hp:pct}%%%c_default%nl%{end}",
     "%{c:hp:game}%hp%c_gray/%{maxhp}hp%c_default ",
@@ -363,7 +363,7 @@ impl CaptureConfig {
     }
 
     /// The capture reads Aabahran's codes, which makes the Forsaken Lands
-    /// rules hold on any host (D17).
+    /// rules hold on any host.
     pub fn is_aabahran(&self) -> bool {
         matches!(self, Self::Aabahran(_))
     }
@@ -372,14 +372,14 @@ impl CaptureConfig {
     /// wrote, `kind = "regex"` with `source = "migrated"`. A pattern you
     /// set with `#prompt {regex}` has source typed, and `#unprompt` leaves
     /// none, so neither counts. The first PROMPT the game shows under the
-    /// Forsaken Lands rules switches it to Aabahran's codes (D10).
+    /// Forsaken Lands rules switches it to Aabahran's codes.
     pub fn is_migrated(&self) -> bool {
         matches!(self, Self::Regex(capture) if capture.source == Some(CaptureSource::Migrated))
     }
 
     /// The game the engine plays decides this capture: Aabahran's codes
     /// while they follow the game, or the pattern the move from a capture
-    /// trigger wrote, which the first PROMPT the game shows replaces (D10).
+    /// trigger wrote, which the first PROMPT the game shows replaces.
     pub(crate) fn game_decides(&self) -> bool {
         match self {
             Self::Aabahran(codes) => codes.follow_game,

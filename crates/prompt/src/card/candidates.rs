@@ -1,8 +1,8 @@
-//! The candidates ring as the card reads it (section 4 of the build
-//! spec): `prompt_candidates` groups the entries by their shape with the
-//! digits masked, and `prompt_capture_check` counts how a capture matches
-//! them and the lines in your scrollback. Each entry it reads carries a
-//! [`Mark`] for what each value printed.
+//! The candidates ring as the card reads it: `prompt_candidates` groups the
+//! entries by their shape with the digits masked, and
+//! `prompt_capture_check` counts how a capture matches them and the lines
+//! in your scrollback. Each entry it reads carries a [`Mark`] for what each
+//! value printed.
 //!
 //! The ring holds what came right before each of your sends and each GA
 //! or EOR, so its entries are your prompts. A line in the scrollback that

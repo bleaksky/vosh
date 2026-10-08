@@ -28,7 +28,7 @@ pub(crate) const TRUST_BACKTICKS: i64 = 55;
 impl Who {
     /// Who the prompt is for, from the packets the game sent: the level
     /// in Char.Status, and Char.State, whose language is empty while you
-    /// control a mobile (correction 27). Without a packet Vosh takes you
+    /// control a mobile. Without a packet Vosh takes you
     /// for a mortal in your own body.
     pub(crate) fn from_packets(level: Option<i64>, language: Option<&str>) -> Self {
         Self {

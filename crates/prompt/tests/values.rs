@@ -18,7 +18,7 @@ use vosh_prompt::{
 };
 
 // ---------------------------------------------------------------------
-// Sources, their order and freshness (section 1.1)
+// Sources, their order and freshness
 // ---------------------------------------------------------------------
 
 #[test]
@@ -457,7 +457,7 @@ fn pulses_follow_sends_until_the_game_sends_char_vitals() {
 }
 
 // ---------------------------------------------------------------------
-// Char.Prompt and the new build sign (D24)
+// Char.Prompt and the new build sign
 // ---------------------------------------------------------------------
 
 #[test]
@@ -1020,7 +1020,7 @@ fn prompt_only_fields_read_the_capture() {
 }
 
 // ---------------------------------------------------------------------
-// The catalog (section 1.3)
+// The catalog
 // ---------------------------------------------------------------------
 
 #[test]

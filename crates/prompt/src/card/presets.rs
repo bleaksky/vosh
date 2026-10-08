@@ -1,5 +1,4 @@
-//! Designs Vosh ships (section 7.1 of the build spec and the 2026-09-30
-//! addendum, item 10): its default, and the ones the card offers to
+//! Designs Vosh ships: its default, and the ones the card offers to
 //! start from. The default's text, [`DEFAULT_DESIGN`], lives in
 //! [`crate::config`] with the table that takes it.
 //!
@@ -52,7 +51,7 @@ fn preset(id: &'static str, label: &'static str, template: impl Into<String>) ->
 }
 
 /// Vosh's default design, [`DEFAULT_DESIGN`], which leads every list of
-/// presets, for every game (section 7.1).
+/// presets, for every game.
 fn default_design() -> Preset {
     preset("default", "Vosh's default", DEFAULT_DESIGN)
 }

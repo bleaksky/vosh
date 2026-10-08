@@ -604,7 +604,7 @@ impl<'a> Resolver<'a> {
             Some(t) => is(exits_value(t)),
         };
         // Room.Info only on the new build, which leaves out the exits %e
-        // would not show (decision 7).
+        // would not show.
         let from_room = || {
             if !self.vars.new_build() {
                 return Got::Nothing;
