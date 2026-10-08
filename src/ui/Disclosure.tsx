@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
+import { useId, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
 import { cx } from './cx';
 import { ChevronRightIcon } from './icons';
 
@@ -20,7 +20,9 @@ export interface DisclosureProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 /** A row sized button that opens more settings, like the boards'
  *  `Advanced` row: the label and description on the left and a 16 px
  *  chevron right in the tertiary color that turns down while open. As
- *  the last child of a Card it takes the card's bottom corners. */
+ *  the last child of a Card it takes the card's bottom corners. The
+ *  label is its name, and the description and the note are read after
+ *  it as the description. */
 export function Disclosure({
   label,
   description,
@@ -28,21 +30,39 @@ export function Disclosure({
   anchor,
   note,
   className,
+  'aria-describedby': describedBy,
   ...rest
 }: DisclosureProps) {
+  const id = useId();
+  const labelId = `${id}-label`;
+  const descId = description !== undefined ? `${id}-desc` : undefined;
+  const noteId = note !== undefined ? `${id}-note` : undefined;
+  const describedByIds = [descId, noteId, describedBy].filter(Boolean).join(' ') || undefined;
   return (
     <button
       type="button"
       {...rest}
       className={cx('st-disclosure', className)}
       aria-expanded={expanded}
+      aria-labelledby={labelId}
+      aria-describedby={describedByIds}
       data-st-anchor={anchor}
       data-st-flash={anchor ? '' : undefined}
     >
       <span className="st-row-text">
-        <span className="st-row-label">{label}</span>
-        {description !== undefined && <span className="st-row-desc">{description}</span>}
-        {note}
+        <span id={labelId} className="st-row-label">
+          {label}
+        </span>
+        {description !== undefined && (
+          <span id={descId} className="st-row-desc">
+            {description}
+          </span>
+        )}
+        {note !== undefined && (
+          <span id={noteId} className="st-disclosure-note">
+            {note}
+          </span>
+        )}
       </span>
       <ChevronRightIcon className="st-disclosure-chevron" />
     </button>

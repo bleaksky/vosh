@@ -550,6 +550,12 @@
   text-align: left;
 }
 
+/* Holds the note only so the button can point its description at it.
+ * It draws no box, so an empty note adds no gap. */
+.st-disclosure-note {
+  display: contents;
+}
+
 .st-disclosure-chevron {
   flex: none;
   color: var(--tertiary);

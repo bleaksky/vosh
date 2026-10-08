@@ -332,14 +332,14 @@ describe('the suggested ring in the Automation list', () => {
     const row = new RegExp(`data-uid="${uid}"[^]*?</button>`).exec(html)?.[0] ?? '';
     return {
       dot: /class="(st-auto-dot[^"]*)"/.exec(row)?.[1],
-      heard: />(On|Off|Suggested, off)</.exec(row)?.[1],
+      heard: />(Enabled|Off|Suggested, off)</.exec(row)?.[1],
     };
   };
 
   it('rings a suggested row only while it is off', () => {
     expect(dot('a')).toEqual({ dot: 'st-auto-dot is-off is-suggested', heard: 'Suggested, off' });
     expect(dot('b')).toEqual({ dot: 'st-auto-dot is-off', heard: 'Off' });
-    expect(dot('c')).toEqual({ dot: 'st-auto-dot', heard: 'On' });
+    expect(dot('c')).toEqual({ dot: 'st-auto-dot', heard: 'Enabled' });
   });
 
   it('draws the ring in the accent where the off ring sits', () => {

@@ -120,7 +120,9 @@ const ListRow = memo(function ListRow({
           className={cx('st-auto-dot', !enabled && 'is-off', suggested && 'is-suggested')}
           aria-hidden="true"
         />
-        <VisuallyHidden>{enabled ? 'On' : suggested ? 'Suggested, off' : 'Off'}</VisuallyHidden>
+        <VisuallyHidden>
+          {enabled ? 'Enabled' : suggested ? 'Suggested, off' : 'Off'}
+        </VisuallyHidden>
         {noteId && (
           <span id={noteId} hidden>
             {warnNote}
