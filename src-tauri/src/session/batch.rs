@@ -22,6 +22,9 @@ pub(super) struct ReadBatch {
     pub(super) out: Output,
     /// Log rows, written in one transaction once the socket is quiet.
     pub(super) log: Vec<vosh_log::LogEntry>,
+    /// Where the rows since the last prompt or GA start in `log`, for a
+    /// Comm.Channel packet that comes after its line.
+    pub(super) since_prompt: usize,
     /// A prompt var changed or a prompt was read, so the prompt vars go
     /// out after the output even when they read the same.
     pub(super) prompt_vars: bool,
@@ -56,6 +59,7 @@ impl ReadBatch {
         Self {
             out: Output::new(closed),
             log: Vec::new(),
+            since_prompt: 0,
             prompt_vars: false,
             lua_panes: false,
             snoop: false,

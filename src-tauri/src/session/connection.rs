@@ -118,6 +118,11 @@ pub(crate) struct Connection {
     /// [`crate::session::reconnect::LinkWatch`]. The loop takes it as the
     /// connection ends.
     pub(crate) link: super::reconnect::LinkWatch,
+    /// What tells the rows the session logs apart, the Comm.Channel
+    /// packets waiting for their line among it. See
+    /// [`crate::session::log_kinds::LogKinds`]. It starts over at each
+    /// connect.
+    pub(crate) log_kinds: super::log_kinds::LogKinds,
     /// The newest `[lua]` lines the session printed and the lines you
     /// typed in the Scripts console, which the Scripts page shows. A
     /// disconnect keeps them, so the lines plugins print at launch and

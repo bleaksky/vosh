@@ -415,6 +415,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         character,
         hold: _,
         gmcp,
+        since_prompt: _,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
