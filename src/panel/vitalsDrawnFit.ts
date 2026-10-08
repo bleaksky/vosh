@@ -1,4 +1,4 @@
-import type { Vital } from '../ipc/uiConfig';
+import type { Vital } from '../ipc/uiConfigVitals';
 import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { textPx } from './paneTextSize';
 import { maxOf } from './vitalsView';

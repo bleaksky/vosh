@@ -43,13 +43,15 @@ import { screenReaderOf } from './screenReader';
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,
-  vitalsOptionsOf,
-  vitalsTextOf,
   type FontChange,
   type UiConfig,
+} from './uiConfig';
+import {
+  vitalsOptionsOf,
+  vitalsTextOf,
   type VitalsOptions,
   type VitalsTextChange,
-} from './uiConfig';
+} from './uiConfigVitals';
 
 function fontChangeOf(config: UiConfig): FontChange {
   return {

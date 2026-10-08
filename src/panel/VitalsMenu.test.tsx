@@ -4,7 +4,7 @@ import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VITALS_OPTIONS_CHANGED } from '../ipc/events';
-import { DEFAULT_VITALS_OPTIONS, VITALS_STYLES, type VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, VITALS_STYLES, type VitalsOptions } from '../ipc/uiConfigVitals';
 import { openSettingsTab } from '../lib/settingsLink';
 import { VitalsChoiceItems, VitalsMenu } from './VitalsMenu';
 import {
@@ -43,7 +43,7 @@ vi.mock('../ui/MenuSurface', async (actual) => ({
 // The options the menu reads, the defaults unless a test picks others.
 const shown = vi.hoisted(() => ({ options: null as VitalsOptions | null }));
 vi.mock('../stores/config/vitalsOptionsStore', async () => {
-  const { DEFAULT_VITALS_OPTIONS: defaults } = await import('../ipc/uiConfig');
+  const { DEFAULT_VITALS_OPTIONS: defaults } = await import('../ipc/uiConfigVitals');
   const get = () => shown.options ?? defaults;
   return { useVitalsOptions: get, getVitalsOptions: get };
 });

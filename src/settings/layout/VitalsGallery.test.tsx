@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { normalizeUiConfig, VITALS_STYLES, type UiConfig } from '../../ipc/uiConfig';
+import { normalizeUiConfig, type UiConfig } from '../../ipc/uiConfig';
+import { VITALS_STYLES } from '../../ipc/uiConfigVitals';
 import { nextVitals, type Vitals } from '../../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../../terminal/bandCells';
 import { VitalsTiles } from './VitalsGallery';

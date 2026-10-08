@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { readPanelFace, readPanelGameFace, textWidth, usePanelFaceVersion } from './panelFace';
-import type { Vital, VitalsOptions } from '../ipc/uiConfig';
+import type { Vital, VitalsOptions } from '../ipc/uiConfigVitals';
 import { useCombat, useFight, type CombatOpponent, type Fight } from '../stores/gmcp/combatStore';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import {

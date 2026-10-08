@@ -6,7 +6,7 @@ import { GroupPaneView } from '../../panel/group/GroupPane';
 import { PaneLeafContext } from '../../panel/paneActions';
 import { VitalsBlock } from '../../panel/VitalsFooter';
 import type { PaneLeaf } from '../../panel/paneLayout';
-import { DEFAULT_VITALS_OPTIONS } from '../../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS } from '../../ipc/uiConfigVitals';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 
 // Drives the four stores that OR in the hidden state through a fake

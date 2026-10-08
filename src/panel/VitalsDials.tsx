@@ -1,4 +1,4 @@
-import type { VitalsValues } from '../ipc/uiConfig';
+import type { VitalsValues } from '../ipc/uiConfigVitals';
 import {
   Columns,
   DrawnOpponent,

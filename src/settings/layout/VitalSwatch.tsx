@@ -1,5 +1,5 @@
 import { useRef, useState, type CSSProperties } from 'react';
-import type { Vital } from '../../ipc/uiConfig';
+import type { Vital } from '../../ipc/uiConfigVitals';
 import { VITAL_LABELS } from '../../panel/vitalsView';
 import { ANSI_SLOT_LABELS } from '../../theme/appearanceSettings';
 import { ANSI_SLOTS, type AnsiSlot } from '../../theme/baseAnsi';

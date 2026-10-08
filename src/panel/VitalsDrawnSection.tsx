@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
-import type { VitalsValues } from '../ipc/uiConfig';
+import type { VitalsValues } from '../ipc/uiConfigVitals';
 import type { Fight } from '../stores/gmcp/combatStore';
 import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { VitalsBands } from './VitalsBands';

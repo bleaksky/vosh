@@ -1,11 +1,11 @@
+import { getUiConfig } from '../../ipc/uiConfig';
 import {
   DEFAULT_VITALS_OPTIONS,
-  getUiConfig,
   subscribeVitalsOptionsChanged,
   vitalsOptionsOf,
   type VitalsColors,
   type VitalsOptions,
-} from '../../ipc/uiConfig';
+} from '../../ipc/uiConfigVitals';
 import { createConfigStore } from './configStore';
 
 // The active profile's vitals options for the panel footer, the status

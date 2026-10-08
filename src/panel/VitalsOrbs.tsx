@@ -1,4 +1,4 @@
-import type { VitalsValues } from '../ipc/uiConfig';
+import type { VitalsValues } from '../ipc/uiConfigVitals';
 import { Columns, DrawnOpponent, DrawnVitals, type DrawnVitalsProps } from './VitalsDrawn';
 import { ORB, ORB_FOE, ORB_NARROW, type ColumnFit } from './vitalsDrawnFit';
 import { Glass } from './VitalsGlass';

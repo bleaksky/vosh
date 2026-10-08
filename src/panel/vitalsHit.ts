@@ -1,4 +1,4 @@
-import type { Vital } from '../ipc/uiConfig';
+import type { Vital } from '../ipc/uiConfigVitals';
 
 // Show each hit. A hit leaves the
 // part it took pale between the new fill and the old one for 600 ms,

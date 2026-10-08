@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { VitalsOpponent, VitalsValues } from '../ipc/uiConfig';
+import type { VitalsOpponent, VitalsValues } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { HitGhost } from './HitGhost';
 import { hitFill, type HitView, type HitViews } from './vitalsHit';

@@ -1,4 +1,4 @@
-import type { VitalsValues } from '../ipc/uiConfig';
+import type { VitalsValues } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 import { ledgerFigure, ledgerFit, type LedgerFit, type MeasureText } from './vitalsLedgerFit';

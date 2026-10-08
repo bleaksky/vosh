@@ -1,4 +1,4 @@
-import type { VitalsValues } from '../ipc/uiConfig';
+import type { VitalsValues } from '../ipc/uiConfigVitals';
 import { HitGhost } from './HitGhost';
 import { Columns, DrawnOpponent, DrawnVitals, type DrawnVitalsProps } from './VitalsDrawn';
 import { VIAL_HEIGHT, VIAL_WIDTH, type ColumnFit } from './vitalsDrawnFit';
