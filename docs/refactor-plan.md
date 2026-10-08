@@ -1576,6 +1576,11 @@ Where it departs, for you to check.
 - The lit row stays lit after the pointer leaves the menu, since it is the row under focus.
 - Presets holds the start list with its samples, not rows, so it keeps 468 through `.menu.pc-presets-menu`, beside the `.menu.wr-menu-wide` exception. Board 01 does not draw it.
 - The name menu no longer lights the checked name. Its check marks it, and the light follows focus alone.
+- The menu you open by right clicking a session row in the sidebar now closes on a window resize and when the window loses focus too. The old one moved with the window and stayed open.
+- Tab in the terminal menu now closes it, as Tab closes every other menu. The old one held Tab and stayed open.
+- The arrow keys in the terminal menu now pass over Save a scene… while it is greyed out, as every other menu passes a greyed row. The old one stopped on it.
+
+The review fixes on top of it. The session popover's list lit a row under a resting pointer as well as the row under focus, so it now lights a row by focus alone, and pointing at a row's close button focuses that row (ca57fda2). ArrowLeft again shuts a Settings or Write list you opened by pointing in the terminal menu, with the test that held it restored (a92d3f04). Tests now point at a session row, a More styles row and a name menu row and check each took the focus (ca57fda2, f22feb99).
 
 At this close every gate passed on 037daa79 on the first run. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 4,086 tests passed and 173 skipped, cargo fmt, clippy on macOS and for Windows, and the workspace tests with 2,770 passed and 6 ignored. The six menu frames shot in dark and light against the board. The pane, terminal and card menus match it pixel for pixel, and Add a pane, the session menu and the connection buttons match it in the menu and differ only in the window behind. docs/architecture.md names none of the four menus, so it stays.
 
