@@ -32,6 +32,7 @@
     "input_echo_caret": true,
     "paste_line_delay_ms": 500,
     "spellcheck_prompt": false,
+    "writing_offer": true,
     "input_cursor_style": "block",
     "vitals_density": "rows",
     "vitals_values": "current-max",

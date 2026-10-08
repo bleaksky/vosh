@@ -25,6 +25,7 @@ import {
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
+  WRITING_OFFER_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_CHANGED,
@@ -148,6 +149,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     before?.paste_line_delay_ms,
   );
   await emitChanged(SPELLCHECK_PROMPT_CHANGED, config.spellcheck_prompt, before?.spellcheck_prompt);
+  await emitChanged(WRITING_OFFER_CHANGED, config.writing_offer, before?.writing_offer);
   await emitChanged(
     INPUT_CURSOR_STYLE_CHANGED,
     config.input_cursor_style,

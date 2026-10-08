@@ -391,6 +391,7 @@ fn full_ui() -> UiConfig {
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,
+        writing_offer: false,
         input_cursor_style: "underline_thick".into(),
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,

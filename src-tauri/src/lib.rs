@@ -26,6 +26,7 @@ mod sessions;
 #[cfg(test)]
 mod tests;
 mod tick;
+mod writing;
 
 use app::state::{AppState, SharedState};
 use app::system_fonts::handle_font_uri;

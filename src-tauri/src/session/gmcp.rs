@@ -187,6 +187,13 @@ async fn walk_gmcp<R: tauri::Runtime>(
             return Ok(());
         }
         "Room.Info" => conn.walker.room_info(&msg.data, Instant::now()),
+        // Char.Vitals comes only with the game's own prompt
+        // (`gmcp.c:935`), so the editor and the pager closed.
+        "Char.Vitals" => {
+            let send = conn.writer.tick(Instant::now());
+            conn.writer_send.extend(send);
+            return Ok(());
+        }
         "Char.Combat" => conn.walker.combat(&msg.data),
         "Char.State" => conn.walker.state(&msg.data),
         _ => return Ok(()),

@@ -16,3 +16,4 @@ mod upgrade_order;
 mod vitals_text;
 pub(crate) mod walk;
 mod wizard_roundtrip;
+mod writing;

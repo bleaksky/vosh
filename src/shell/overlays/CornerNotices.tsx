@@ -26,11 +26,13 @@ const SLOTS: readonly { id: string; Notice: ComponentType }[] = [
 
 // The corner of the terminal column, 16 in from its right edge and 16
 // above the input band. The toasts stack above the notices, and the
-// stack grows up as each one shows.
-export function CornerNotices({ reconnect }: { reconnect?: ReactNode }) {
+// stack grows up as each one shows. The writing card's offer sits on
+// top, since it comes and goes with the game's editor.
+export function CornerNotices({ reconnect, offer }: { reconnect?: ReactNode; offer?: ReactNode }) {
   return (
     <div className="ov-corner">
       <Toasts />
+      {offer}
       {reconnect}
       {SLOTS.map(({ id, Notice }) => (
         <Notice key={id} />

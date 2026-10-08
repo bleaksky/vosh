@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -12,7 +13,13 @@ import {
   nativeSurfaceScroll,
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
-import { sendInput, sendMaskedInput, stopWalk } from '../ipc/session';
+import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
+import { writingStart } from '../ipc/writing';
+import { useWriting, writingOf } from '../stores/session/writingStore';
+import { loadWriting, useWritingFile } from '../writing/draftsStore';
+import { pasted } from '../writing/text';
+import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
+import { EditorMarks } from './EditorMarks';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
 import {
   draftAfterMaskChange,
@@ -91,6 +98,15 @@ const CHAT_PREFIXES: RegExp[] = [
   /^emote\b/i,
   /^pmote\b/i,
 ];
+
+/** The writing card drives the game's editor in `session`, so its other
+ *  sends wait. */
+function writingHolds(session: number): boolean {
+  const job = writingOf(session).job;
+  return job !== null && job.action !== 'paste';
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 function looksLikeChat(line: string): boolean {
   const trimmed = line.trimStart();
@@ -197,6 +213,29 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const isQuickKey = (word: string) =>
     getTargetState().quick_keys.some((q) => q.name === word && q.verb.length > 0);
 
+  // The game's line editor, open on a text Vosh names, after you kept
+  // typing there: each line goes raw, and the line shows the tick and
+  // the count (Description Editor Q3). The card's Check spelling covers
+  // it, since all you type there is your text.
+  const writing = useWriting();
+  const editor = editorLineOf(writing);
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const writingFile = useWritingFile();
+  const editing = editor !== null;
+  useEffect(() => {
+    if (editing) void loadWriting();
+  }, [editing]);
+  const [field, setField] = useState<HTMLTextAreaElement | null>(null);
+  // One callback for the life of the row, so a render hands the
+  // textarea over once and not on each pass.
+  const fieldRef = useCallback((el: HTMLTextAreaElement | null) => {
+    inputRef.current = el;
+    setField(el);
+  }, []);
+  const cell = useFieldCell(editing ? field : null);
+  const editorText = value.split('\n').pop() ?? '';
+
   const {
     spellcheckPrompt,
     cursorStyle,
@@ -274,7 +313,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
     if (plan.echo !== null) onLocalEcho?.(plan.echo, to);
     try {
-      await (plan.masked ? sendMaskedInput(line, to) : sendInput(line, to));
+      if (plan.masked) await sendMaskedInput(line, to);
+      else if (editorRef.current) await sendRawInput(line, to);
+      else await sendInput(line, to);
     } catch (e) {
       onError?.(String(e), to);
     }
@@ -300,6 +341,16 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     const text = event.clipboardData.getData('text');
     if (!text.includes('\n') && !text.includes('\r')) return;
     event.preventDefault();
+    // In the game's editor a paste wraps and folds as the card's does,
+    // keeps its empty lines, and goes on the game's > (board 3).
+    const open = editorRef.current;
+    if (open) {
+      const lines = pasted(text, open.width).rows.map((row) => row.text);
+      void writingStart({ id: Date.now(), kind: open.kind, action: 'paste', lines }, session).catch(
+        (e: unknown) => onError?.(String(e), session),
+      );
+      return;
+    }
     const lines = text
       .replace(/\r\n?/g, '\n')
       .split('\n')
@@ -329,6 +380,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
     setPasteBurst({ sent: 0, total });
     for (let i = 0; i < total; i++) {
+      if (pasteCancelRef.current) break;
+      // The writing card holds the session's other sends while it
+      // drives the game's editor, a paste in flight among them (Q6).
+      while (writingHolds(to) && !pasteCancelRef.current) await sleep(100);
       if (pasteCancelRef.current) break;
       await submitLine(lines[i], to);
       setPasteBurst({ sent: i + 1, total });
@@ -539,7 +594,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // lines, plus the backend still splits `;` within each). A bare
       // Enter on an empty prompt sends one blank line, which advances
       // MUD prompts and paginated output.
-      const composedLines = composed.split('\n').filter((l) => l.trim().length > 0);
+      // In the game's editor an empty line is a paragraph break, which
+      // goes too.
+      const composedLines = editorRef.current
+        ? composed.split('\n')
+        : composed.split('\n').filter((l) => l.trim().length > 0);
       if (composedLines.length === 0) {
         await submitLine('', session);
       } else {
@@ -639,12 +698,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         // so the attribute triggers the squiggle pass; plain MUD
         // commands skip it so the prompt stays clean.
         <textarea
-          ref={(el) => {
-            inputRef.current = el;
-          }}
+          ref={fieldRef}
           rows={1}
           value={value}
-          spellCheck={spellcheckPrompt && looksLikeChat(value)}
+          spellCheck={editor ? writingFile.spelling : spellcheckPrompt && looksLikeChat(value)}
+          style={editor ? washPast(editorText, editor, cell) : undefined}
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
@@ -666,6 +724,15 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         />
       )}
       {!passwordMode && <div className="input-caret-mirror" aria-hidden="true" ref={mirrorRef} />}
+      {!passwordMode && editor && (
+        <EditorMarks field={field} cell={cell} line={editorText} editor={editor} />
+      )}
+      {writing.held > 0 && (
+        <span className="wr-held" aria-live="polite">
+          <span className="wr-held-dot" aria-hidden="true" />
+          {heldLine(writing.held)}
+        </span>
+      )}
       {!passwordMode && caretPos && (
         <span
           ref={caretRef}

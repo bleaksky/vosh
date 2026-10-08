@@ -753,3 +753,41 @@ describe('the theme on screen', () => {
     expect(checked.map((e) => e.id)).toEqual(['theme-rubric']);
   });
 });
+
+describe('the writing card’s rows', () => {
+  it('offers a row for each kind, named for what you do, found as you type', () => {
+    const opened: string[] = [];
+    const rows = buildPaletteEntries(
+      deps({
+        writing: {
+          kinds: ['note', 'journal', 'application', 'idea', 'bug', 'typo'],
+          beast: false,
+          open: (kind) => opened.push(kind),
+        },
+      }),
+    );
+    const writing = rows.filter((row) => row.id.startsWith('write-'));
+    expect(writing.map((row) => row.title)).toEqual([
+      'Write a note…',
+      'Write a journal entry…',
+      'Write an application…',
+      'Write an idea…',
+      'Report a bug…',
+      'Report a typo…',
+      'Edit your description…',
+      'Edit your history…',
+      'Edit your personality…',
+      'Edit your purpose…',
+    ]);
+    expect(writing.every((row) => row.section === 'input' && row.searchOnly)).toBe(true);
+    writing.find((row) => row.title === 'Report a bug…')?.run();
+    expect(opened).toEqual(['bug']);
+  });
+
+  it('adds the beast for a werebeast', () => {
+    const rows = buildPaletteEntries(
+      deps({ writing: { kinds: ['note'], beast: true, open: () => {} } }),
+    );
+    expect(rows.some((row) => row.title === 'Edit your beast description…')).toBe(true);
+  });
+});

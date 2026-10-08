@@ -2,6 +2,8 @@ import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
+import type { WritingKind } from '../../ipc/writing';
+import { KINDS } from '../../writing/kinds';
 import { sendInput, type SessionRow } from '../../ipc/session';
 import type { SnoopTab } from '../../ipc/snoop';
 import { sessionLabel } from '../../lib/sessionLabel';
@@ -166,6 +168,10 @@ export interface PaletteDeps {
    *  which leaves Draw your prompt out. */
   promptDraw?: boolean | null;
   setPromptDraw?: (on: boolean) => void;
+  /** The writing card: the boards you write on, whether you have a beast
+   *  to describe, and how to open it on a kind. The Input rows for each
+   *  kind appear when the shell passes it. */
+  writing?: { kinds: WritingKind[]; beast: boolean; open: (kind: WritingKind) => void };
 }
 
 const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
@@ -261,6 +267,24 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       searchOnly: true,
       run: () => open('text'),
     });
+  }
+
+  // The writing card's rows, one for each kind, named for what you do,
+  // so bug finds Report a bug… (Note Editor Q2).
+  if (deps.writing) {
+    const { kinds, beast, open } = deps.writing;
+    const shown: WritingKind[] = [...kinds, 'description', 'history', 'personality', 'purpose'];
+    if (beast) shown.push('beast');
+    for (const kind of shown) {
+      entries.push({
+        id: `write-${kind}`,
+        section: 'input',
+        title: KINDS[kind].palette,
+        keywords: `write ${KINDS[kind].keywords}`,
+        searchOnly: true,
+        run: () => open(kind),
+      });
+    }
   }
 
   if (deps.togglePanel) {

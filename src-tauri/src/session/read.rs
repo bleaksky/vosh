@@ -32,6 +32,7 @@ use super::steps::{
     clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
 };
 use super::walk::{self, WalkOut};
+use super::writer::game_text::GameLine;
 use super::{emit_input_mode, GagWithoutReaderPayload, RoutedPayload};
 
 pub(super) const READ_BUFFER_BYTES: usize = 8 * 1024;
@@ -47,12 +48,32 @@ impl<R: tauri::Runtime> Conn<R> {
         self.perf.bytes_in += bytes.len() as u64;
         let events = self.parser.feed(bytes);
         let mut batch = ReadBatch::new(self.others_wrote());
+        // The text of the read, for the writer, which counts a `> ` that
+        // came alone in it.
+        let mut text = Vec::new();
         for event in events {
+            if let TelnetEvent::Data(data) = &event {
+                if self.writer.watching() {
+                    text.extend_from_slice(data);
+                }
+            }
             if let Err(e) = handle_event(self, log_sink, event, &mut batch).await {
                 warn!(error = %e, "event handling failed");
                 break;
             }
         }
+        // Where the game takes your input now, from the partial the read
+        // ended on, before the prompt step takes it.
+        let partial = self
+            .accumulator
+            .partial()
+            .map(vosh_protocol::ansi::plain_text)
+            .unwrap_or_default();
+        let text = vosh_protocol::ansi::plain_text(&text);
+        let send = self
+            .writer
+            .read_end(&text, &partial, self.stream.lines_out(), Instant::now());
+        self.writer_send.extend(send);
         if let Err(e) = end_read(self, log_sink, &mut batch).await {
             warn!(error = %e, "prompt handling at the end of a read failed");
         }
@@ -114,6 +135,10 @@ async fn handle_event<R: tauri::Runtime>(
                     .walker
                     .watching()
                     .then(|| walk::answer(&plain, ended.as_deref()).to_string());
+                if conn.writer.watching() {
+                    let out = conn.stream.lines_out();
+                    conn.writer.line(&GameLine::new(&plain, &line.bytes), out);
+                }
                 let trigger_t0 = std::time::Instant::now();
                 // The tick step for a line that matches the Reset on
                 // pattern comes under the same locks as the triggers and

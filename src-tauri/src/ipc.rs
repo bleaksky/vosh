@@ -23,6 +23,7 @@ pub(crate) mod updater;
 pub(crate) mod vitals;
 pub(crate) mod windows;
 pub(crate) mod wizard;
+pub(crate) mod writing;
 
 /// Your Downloads folder, where Export to Downloads saves a profile or a
 /// plugin, or the sentence a command returns when the system names none.
@@ -72,8 +73,15 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_connect,
         session::session_send_input,
         session::session_send_masked,
+        session::session_send_raw,
         session::session_walk_route,
         session::session_walk_stop,
+        writing::writing_start,
+        writing::writing_stop,
+        writing::writing_take,
+        writing::writing_file_get,
+        writing::writing_character_set,
+        writing::writing_switches_set,
         session::session_set_window_size,
         session::session_disconnect,
         session::session_reconnect_now,

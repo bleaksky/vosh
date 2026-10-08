@@ -196,6 +196,13 @@ pub(crate) const VITALS_TEXT: &str = "session://vitals-text";
 /// hears it, and the map shows the Walking chip and the Stopped toast.
 pub(crate) const WALK: &str = "session://walk";
 
+/// The payload is a [`crate::session::writer::WritingState`], where the
+/// game takes your input, the card's offer, the job under way, how many
+/// sends wait for it and how the last one ended. `onWriting` hears it,
+/// and the writing card, the offer notice and the command line follow
+/// it.
+pub(crate) const WRITING: &str = "session://writing";
+
 // The lists.
 
 /// Sent to every window when the trigger list changed. The payload is an

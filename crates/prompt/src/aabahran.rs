@@ -7,8 +7,9 @@
 //!   it in the two passes the game prints it in.
 //! - [`codes`] holds every value code, the field it fills and the
 //!   pattern Vosh reads it with.
-//! - `colors` holds the backtick colors the game sends and rebuilds
-//!   your codes from them.
+//! - [`colors`] holds the backtick colors the game sends and rebuilds
+//!   your codes from them, for your PROMPT setting and for a text the
+//!   writing card reads back.
 //! - [`shapes`] compiles your settings into the shapes Vosh recognizes
 //!   your prompt by, with the settle flag of each.
 //! - [`observer`] reads the lines the game answers `prompt` and
@@ -21,7 +22,7 @@
 //! are.
 
 pub mod codes;
-pub(crate) mod colors;
+pub mod colors;
 pub mod damage;
 pub mod lex;
 pub mod observer;

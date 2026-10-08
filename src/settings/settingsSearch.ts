@@ -390,6 +390,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'command-line', 'spellcheck'),
   },
   {
+    label: 'Offer the card when the game’s editor opens',
+    description:
+      'Type note edit or description edit and Vosh offers to open it in its writing card.',
+    keywords: 'writing card editor note description history notice offer',
+    target: at('input', 'command-line', 'writing-offer'),
+  },
+  {
     label: 'Mark your commands',
     description:
       'Draws a grey › before each command you send, except after a prompt that already ends in >.',

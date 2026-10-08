@@ -19,6 +19,10 @@ interface Props {
   confirmDisabled?: boolean;
   /** Fields between the body and the buttons, like New plugin's Name. */
   children?: ReactNode;
+  /** Where the card sits, from the window's right and bottom, for a
+   *  confirm over the foot of the card that asks, like the writing
+   *  card's Post…. It sits in the window's middle without one. */
+  at?: { right: number; bottom: number };
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -45,6 +49,7 @@ export function ConfirmDialog({
   tone = 'danger',
   confirmDisabled = false,
   children,
+  at,
   onConfirm,
   onCancel,
 }: Props) {
@@ -80,7 +85,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="ov-confirm-layer"
+      className={cx('ov-confirm-layer', at && 'is-placed')}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -89,6 +94,7 @@ export function ConfirmDialog({
       <div
         ref={cardRef}
         className="ov-confirm"
+        style={at ? { position: 'fixed', right: at.right, bottom: at.bottom } : undefined}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
