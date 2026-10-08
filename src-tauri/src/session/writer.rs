@@ -5,8 +5,9 @@
 //!
 //! It also notices when a line you typed opened the game's editor on a
 //! text it can name, and offers the card while nothing else went out
-//! after that line. Until the game's prompt returns, the page sends
-//! what you type there raw and counts it against the text's width.
+//! after that line, for a text the card takes. Until the game's prompt
+//! returns, the page sends what you type there raw and counts it against
+//! the text's width.
 //!
 //! While a job runs, every other send of the session waits: what
 //! triggers, timers, Lua and `#walk` send stays in the stream's hold and
@@ -246,7 +247,7 @@ impl Writer {
             .map(|kind| Opener {
                 kind,
                 out,
-                named: kind.names_itself().is_none(),
+                named: kind.names_itself().is_empty(),
                 beast: None,
             });
         if !self.job.as_ref().is_some_and(Job::in_editor) {
@@ -280,9 +281,10 @@ impl Writer {
             job.line(line);
         }
         if let Some(opener) = &mut self.opener {
-            if let Some(names) = opener.kind.names_itself() {
-                if let Some(rest) = line.plain.strip_prefix(names) {
-                    opener.named = true;
+            let names = opener.kind.names_itself();
+            if let Some(rest) = names.iter().find_map(|n| line.plain.strip_prefix(n)) {
+                opener.named = true;
+                if opener.kind == Kind::Beast {
                     opener.beast = rest
                         .strip_suffix('.')
                         .map(str::to_string)
@@ -342,7 +344,7 @@ impl Writer {
             if !open.listed && (waits || paged) {
                 open.listed = true;
                 open.pager = paged;
-                if out == open.out && self.job.is_none() {
+                if out == open.out && self.job.is_none() && open.kind.card() {
                     self.next_offer += 1;
                     open.offer = Some(self.next_offer);
                 }
@@ -446,6 +448,12 @@ impl Writer {
                         self.begin(spec, now, &mut send);
                     }
                     self.went(&send);
+                    return send;
+                }
+                // The card drives only the texts it takes, and the page
+                // asks nothing else of the rest.
+                if !spec.kind.card() {
+                    self.finish(spec.id, JobResult::Busy);
                     return send;
                 }
                 match self.game {

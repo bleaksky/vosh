@@ -9,8 +9,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WRITING } from './events';
 import { sessionOf } from './session';
 
-/** A text the game's editor holds, `Kind` in
- *  src-tauri/src/session/writer/kinds.rs. */
+/** A text the card takes, a `Kind` in
+ *  src-tauri/src/session/writer/kinds.rs whose card() is true. */
 export type WritingKind =
   | 'description'
   | 'beast'
@@ -26,6 +26,11 @@ export type WritingKind =
   | 'news'
   | 'changes'
   | 'penalty';
+
+/** A text the game's editor holds, every `Kind`. A tome, a cabal vote,
+ *  paper and a pet's description get only the command line's count
+ *  until the card takes them (Note Editor Q4). */
+export type EditorKind = WritingKind | 'tome' | 'vote' | 'paper' | 'pet';
 
 /** What a job asks of the game, `Action` in payloads.rs. */
 export type WritingAction =
@@ -134,7 +139,7 @@ export interface JobProgress {
 export interface WritingState {
   game: GameInput;
   /** The text the game's editor holds, while Vosh can name it. */
-  editor: WritingKind | null;
+  editor: EditorKind | null;
   /** The card's offer, after you opened the editor yourself. */
   offer: { id: number; kind: WritingKind } | null;
   job: JobProgress | null;
@@ -146,8 +151,12 @@ export interface WritingState {
   decided: { id: number; kind: WritingKind } | null;
 }
 
+/** A paste into the editor you opened yourself, which can hold a text
+ *  the card does not take. */
+export type PasteJob = Omit<WriteJob, 'kind' | 'action'> & { kind: EditorKind; action: 'paste' };
+
 /** Start a job in a session's writer. It starts at the game's prompt. */
-export async function writingStart(job: WriteJob, session?: number): Promise<void> {
+export async function writingStart(job: WriteJob | PasteJob, session?: number): Promise<void> {
   await invoke('writing_start', { job, session });
 }
 

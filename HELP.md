@@ -388,6 +388,8 @@ You can move the card, resize its box and pin it to the panel for any kind, as W
 
 Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
 
+The card doesn't take tomes, cabal votes, paper or your pet's description yet. When you open one with `scribe text`, `vote edit`, `write edit` or `petedit desc`, no notice comes, and the command line counts each line you type to 75 all the same.
+
 ### 2.11 Walk to a place
 
 <!-- id: play.walk -->

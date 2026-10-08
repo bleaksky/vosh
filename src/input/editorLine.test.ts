@@ -18,6 +18,13 @@ describe('the command line in the game’s editor', () => {
     expect(editorLineOf({ ...open, job })).toBeNull();
   });
 
+  it('counts a tome, a vote, paper and a pet in warn, since no help sets their width', () => {
+    for (const kind of ['tome', 'vote', 'paper', 'pet'] as const) {
+      const open = { ...WRITING_IDLE, game: 'editor' as const, editor: kind };
+      expect(editorLineOf(open)).toEqual({ kind, width: 75, helpWidth: false });
+    }
+  });
+
   it('counts the line in danger past a width a help sets, and in warn otherwise', () => {
     const desc = { kind: 'description' as const, width: 75, helpWidth: true };
     const note = { kind: 'note' as const, width: 75, helpWidth: false };

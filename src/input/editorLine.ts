@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState, type CSSProperties } from 'react';
 import type { WritingState } from '../ipc/writing';
-import { KINDS } from '../writing/kinds';
+import { cardTakes, KINDS } from '../writing/kinds';
 import { columns, startsAsCommand } from '../writing/text';
 
 // The command line while the game's own line editor holds a text Vosh
@@ -20,7 +20,8 @@ export interface EditorLine {
 
 export function editorLineOf(writing: WritingState): EditorLine | null {
   if (writing.editor === null || writing.job !== null) return null;
-  return { kind: writing.editor, width: 75, helpWidth: KINDS[writing.editor].helpWidth };
+  const kind = writing.editor;
+  return { kind, width: 75, helpWidth: cardTakes(kind) && KINDS[kind].helpWidth };
 }
 
 /** The count at the line's right and its tone: past the width it reads

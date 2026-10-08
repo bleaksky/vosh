@@ -1036,6 +1036,80 @@ fn hears_the_game_decide_a_check_while_nothing_runs() {
     assert_eq!(t.done(), None);
 }
 
+fn names_a_tome_after_its_line_and_offers_no_card() {
+    let mut t = Table::new();
+    t.typed("scribe text");
+    t.opens(&[], &[""]);
+    // The game names a tome before its banner.
+    assert_eq!(t.writer.state(0).editor, None);
+    t.tick();
+    t.typed("scri te");
+    t.game(&["Enter the contents of the tome."], "");
+    t.opens(&[], &[""]);
+    let state = t.writer.state(0);
+    assert_eq!(state.editor, Some(Kind::Tome));
+    assert_eq!(state.offer, None);
+    // You type into it raw, and a paste goes on the game's >.
+    assert_eq!(t.typed("The first page."), b"The first page.\r\n");
+    let lines = ["The first page.", "The second."];
+    assert_eq!(
+        t.run(WriterCommand::Start(job(
+            2,
+            Kind::Tome,
+            Action::Paste,
+            &lines
+        ))),
+        lines
+    );
+    t.took();
+    t.took();
+    assert_eq!(t.done(), Some(JobResult::Pasted));
+}
+
+fn names_paper_after_one_of_its_three_lines() {
+    let mut t = Table::new();
+    t.typed("write edit dwarvish");
+    t.opens(&[], &[""]);
+    assert_eq!(t.writer.state(0).editor, None);
+    t.tick();
+    for line in [
+        "You begin writing in Dwarvish on scrap paper.",
+        "You continue writing in Dwarvish on scrap paper.",
+        "You decide to write in Dwarvish instead of common.",
+    ] {
+        t.typed("wr edit dwarvish");
+        t.game(&[line, ""], "");
+        t.opens(&[], &[""]);
+        let state = t.writer.state(0);
+        assert_eq!(state.editor, Some(Kind::Paper));
+        assert_eq!(state.offer, None);
+        t.tick();
+    }
+}
+
+fn names_a_vote_or_a_pet_on_the_banner_alone() {
+    let mut t = Table::new();
+    for (line, kind) in [("vot e", Kind::Vote), ("pete desc", Kind::Pet)] {
+        t.typed(line);
+        t.opens(&[], &[""]);
+        let state = t.writer.state(0);
+        assert_eq!(state.editor, Some(kind));
+        assert_eq!(state.offer, None);
+        t.tick();
+    }
+}
+
+fn drives_no_text_the_card_does_not_take() {
+    let mut t = Table::new();
+    assert_eq!(
+        t.run(WriterCommand::Start(job(1, Kind::Pet, Action::Send, &TEXT))),
+        Vec::<String>::new()
+    );
+    assert_eq!(t.done(), Some(JobResult::Busy));
+    assert_eq!(t.tick(), Vec::<String>::new());
+    assert_eq!(t.writer.state(0).job, None);
+}
+
 /// Each test once in each [`Order`].
 macro_rules! in_every_order {
     ($($name:ident),* $(,)?) => {
@@ -1096,4 +1170,8 @@ in_every_order!(
     says_when_the_list_holds_no_such_note,
     cannot_tell_on_a_board_only_immortals_read,
     hears_the_game_decide_a_check_while_nothing_runs,
+    names_a_tome_after_its_line_and_offers_no_card,
+    names_paper_after_one_of_its_three_lines,
+    names_a_vote_or_a_pet_on_the_banner_alone,
+    drives_no_text_the_card_does_not_take,
 );
