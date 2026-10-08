@@ -28,7 +28,15 @@ export type WritingKind =
   | 'penalty';
 
 /** What a job asks of the game, `Action` in payloads.rs. */
-export type WritingAction = 'read' | 'send' | 'post' | 'check' | 'clear' | 'paste';
+export type WritingAction =
+  | 'read'
+  | 'send'
+  | 'post'
+  | 'check'
+  | 'clear'
+  | 'paste'
+  /** Look for your note on the board's list after a drop. */
+  | 'find';
 
 /** A job for the writer, `WriteJob` in payloads.rs. */
 export interface WriteJob {
@@ -87,7 +95,12 @@ export type JobResult =
     }
   | { kind: 'stopped'; sent: number }
   | { kind: 'dropped'; sent: number; posted: boolean }
-  | { kind: 'offer_gone' };
+  | { kind: 'offer_gone' }
+  /** The board lists your note with the draft's subject as `number`. */
+  | { kind: 'found'; number: number }
+  | { kind: 'not_found' }
+  /** The board's list is one you cannot read. */
+  | { kind: 'cant_tell' };
 
 /** Where the game takes what you send. */
 export type GameInput = 'unknown' | 'prompt' | 'editor' | 'pager';
