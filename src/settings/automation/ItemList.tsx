@@ -117,7 +117,11 @@ const ListRow = memo(function ListRow({
         {meta && <span className={cx('st-auto-row-meta', monoMeta && 'st-auto-mono')}>{meta}</span>}
         {edited && <PencilIcon size={12} className="st-auto-mark" />}
         <span
-          className={cx('st-auto-dot', !enabled && 'is-off', suggested && 'is-suggested')}
+          className={cx(
+            'st-auto-dot dot',
+            enabled ? 'is-success' : 'is-off',
+            suggested && 'is-accent',
+          )}
           aria-hidden="true"
         />
         <VisuallyHidden>{enabled ? 'On' : suggested ? 'Suggested, off' : 'Off'}</VisuallyHidden>

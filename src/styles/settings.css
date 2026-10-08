@@ -1500,16 +1500,14 @@
 }
 
 /* A profile a session plays. Every row keeps the slot so names line
-   up. */
+   up, and the dot takes 6 px of the row so the names sit where they
+   did. */
 .st-profile-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
+  margin: 0 -1px;
 }
 
-.st-profile-dot.is-active {
-  background: var(--accent);
+.st-profile-dot:not(.is-accent) {
+  visibility: hidden;
 }
 
 .st-profile-name {
@@ -2124,25 +2122,11 @@
   color: var(--tertiary);
 }
 
-/* On is a filled success dot, off a hollow tertiary ring. */
+/* On is a filled success dot, off a hollow ring. A preset suggested
+   for your world wears the accent ring while it is off (First Run
+   board 4). */
 .st-auto-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-left: auto;
-  border-radius: 4px;
-  background: var(--success);
-}
-
-.st-auto-dot.is-off {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
-}
-
-/* A preset suggested for your world wears the accent ring while it is
-   off (First Run board 4). */
-.st-auto-dot.is-off.is-suggested {
-  box-shadow: inset 0 0 0 1.25px var(--accent);
 }
 
 /* The pencil of an item you edited sits just before its dot (Presets
@@ -2276,13 +2260,7 @@
 }
 
 .st-warn-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 /* The way to fix it, at the end of a warn note. */
@@ -2773,16 +2751,6 @@
   gap: 6px;
   color: var(--warn-text);
   white-space: normal;
-}
-
-.st-prompt-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 /* The command that fixes codes that run together, at the block's full

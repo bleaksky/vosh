@@ -44,7 +44,7 @@ export function CodesMetaLine({ meta }: { meta: CodesMeta }) {
     <>
       {meta.tone === 'warn' ? (
         <p className="st-prompt-meta is-warn" role="status">
-          <span className="st-prompt-dot" aria-hidden="true" />
+          <span className="st-warn-dot dot is-warn" aria-hidden="true" />
           <span>{meta.text}</span>
         </p>
       ) : (
@@ -317,7 +317,7 @@ export function LineRow({
         ))}
         {notMatching ? (
           <span className="st-prompt-line-meta is-warn" role="status">
-            <span className="st-prompt-dot" aria-hidden="true" />
+            <span className="st-warn-dot dot is-warn" aria-hidden="true" />
             <span>{notMatching}</span>
           </span>
         ) : (

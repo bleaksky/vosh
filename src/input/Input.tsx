@@ -725,7 +725,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       )}
       {writing.held > 0 && (
         <span className="wr-held" aria-live="polite">
-          <span className="wr-held-dot" aria-hidden="true" />
+          <span className="wr-held-dot dot is-warn" aria-hidden="true" />
           {heldLine(writing.held)}
         </span>
       )}

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { buildSections, sectionKeyOf, type ListEntry } from '../../automation/automationList';
+import controlsCss from '../../styles/controls.css?raw';
 import settingsCss from '../../styles/settings.css?raw';
 import { ItemList, type ItemListProps } from './ItemList';
 import { HIDES_PROMPT_NOTE } from './TriggersEditor';
@@ -337,14 +338,15 @@ describe('the suggested ring in the Automation list', () => {
   };
 
   it('rings a suggested row only while it is off', () => {
-    expect(dot('a')).toEqual({ dot: 'st-auto-dot is-off is-suggested', heard: 'Suggested, off' });
-    expect(dot('b')).toEqual({ dot: 'st-auto-dot is-off', heard: 'Off' });
-    expect(dot('c')).toEqual({ dot: 'st-auto-dot', heard: 'On' });
+    expect(dot('a')).toEqual({ dot: 'st-auto-dot dot is-off is-accent', heard: 'Suggested, off' });
+    expect(dot('b')).toEqual({ dot: 'st-auto-dot dot is-off', heard: 'Off' });
+    expect(dot('c')).toEqual({ dot: 'st-auto-dot dot is-success', heard: 'On' });
   });
 
   it('draws the ring in the accent where the off ring sits', () => {
-    expect(settingsCss).toMatch(
-      /\.st-auto-dot\.is-off\.is-suggested \{\s*box-shadow: inset 0 0 0 1\.25px var\(--accent\);\s*\}/,
+    expect(controlsCss).toMatch(/\.dot\.is-accent \{\s*--dot: var\(--accent\);\s*\}/);
+    expect(controlsCss).toMatch(
+      /\.dot\.is-off \{\s*background: transparent;\s*box-shadow: inset 0 0 0 1\.25px var\(--dot, var\(--tertiary\)\);\s*\}/,
     );
   });
 
@@ -367,7 +369,7 @@ describe('the pencil of an edited preset', () => {
 
   it('draws the pencil before the dot and names the row edited', () => {
     expect(row('a')).toMatch(
-      /Disarms and fading buffs<span class="visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot"/,
+      /Disarms and fading buffs<span class="visually-hidden">, edited<\/span><\/span><svg width="12" height="12"[^>]*class="st-auto-mark"[^]*?<\/svg><span class="st-auto-dot dot is-success"/,
     );
     expect(row('b')).not.toMatch(/st-auto-mark|edited/);
   });

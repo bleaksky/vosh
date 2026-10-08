@@ -317,7 +317,7 @@ export function Starts({
     <div className="pc-body">
       {promptsOff || notMatching ? (
         <p className="pc-hint is-warn" role="status">
-          <span className="pc-warn-dot" aria-hidden="true" />
+          <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
           <span>
             {promptsOff
               ? 'You turned prompts off in the game. Type prompt in the game to turn them back on.'

@@ -486,7 +486,7 @@
   text-decoration-thickness: 1px;
 }
 
-/* A code at a line's start: a 6 px dot in its color at the gutter's
+/* A code at a line's start: an 8 px dot in its color at the gutter's
    left, so the text keeps its columns, drawn by the gutter so it stays
    put while the text scrolls. A code inside a line an immortal keeps: a
    dot of no width under the gap where it sits. */
@@ -496,13 +496,10 @@
 }
 
 .wr-code-dot {
+  --dot: var(--wr-code);
   position: absolute;
-  left: 3px;
-  top: calc(var(--wr-lh, 17px) / 2 - 3px);
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--wr-code);
+  left: 2px;
+  top: calc(var(--wr-lh, 17px) / 2 - 4px);
 }
 
 .wr-code-inner {
@@ -656,20 +653,7 @@
 }
 
 .wr-note-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  margin: 0 1px 0 2px;
-  border-radius: 3px;
-  background: var(--danger);
-}
-
-.wr-note-dot.is-warn {
-  background: var(--warn);
-}
-
-.wr-note-dot.is-info {
-  background: var(--accent);
+  margin: 0 0 0 1px;
 }
 
 .wr-note-msg {
@@ -796,9 +780,7 @@
   pointer-events: none;
 }
 
+/* The 8 px dot takes 6 px of the row, so the words sit where they did. */
 .wr-held-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--warn);
+  margin: 0 -1px;
 }

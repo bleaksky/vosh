@@ -2,6 +2,13 @@ import type { ReactNode } from 'react';
 import { CheckIcon } from '../ui';
 import type { Note } from './words';
 
+/** The dot for each tone of a note that is not a plain ok. */
+const NOTE_DOT: Record<Exclude<Note['tone'], 'ok'>, string> = {
+  bad: 'is-danger',
+  warn: 'is-warn',
+  info: 'is-accent',
+};
+
 // The writing card's footer (Description Editor board 1): on the left
 // the count, or what is wrong with the line the caret is on, or what a
 // send left, and on the right the fix beside the card's main button.
@@ -17,7 +24,7 @@ export function FootNote({ note }: { note: Note }) {
   }
   return (
     <span className="wr-note">
-      <span className={`wr-note-dot is-${note.tone}`} aria-hidden="true" />
+      <span className={`wr-note-dot dot ${NOTE_DOT[note.tone]}`} aria-hidden="true" />
       <span className="wr-note-msg">
         {note.lead && <b>{note.lead}</b>}
         {note.rest}
