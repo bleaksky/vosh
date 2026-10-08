@@ -198,6 +198,42 @@
   background: var(--accent-soft);
   color: var(--text);
 }
+/* Coloring as you type. The layer draws a colored copy of the line
+   under the textarea, with its font, padding, wrap and width, which
+   Input.tsx measures from the textarea. While it draws, the textarea
+   text and its selected text go transparent, so the colors show through
+   and the soft accent still marks a selection. --type-alias, --type-hash
+   and --type-chat come in inline from your colors or the theme's
+   terminal cyan, magenta and yellow. */
+.input-type-layer {
+  position: absolute;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--line-text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.35;
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+.input-type-alias {
+  color: var(--type-alias, var(--line-text));
+}
+.input-type-hash {
+  color: var(--type-hash, var(--line-text));
+}
+.input-type-chat {
+  color: var(--type-chat, var(--line-text));
+}
+.input-type-unknown {
+  color: var(--type-unknown, var(--danger-text));
+}
+.input-row.is-typed textarea,
+.input-row.is-typed textarea::selection {
+  color: transparent;
+}
 /* Top-align the row only while composing multiple lines so the prompt,
    gutter, and first text line share a baseline. Single-line prompts keep
    the default centered layout untouched. */

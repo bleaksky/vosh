@@ -35,6 +35,7 @@ import { useCaret } from './useCaret';
 import { useCommandHistory } from './useCommandHistory';
 import { useInputPreferences } from './useInputPreferences';
 import type { MacroKeys } from './useMacroKeys';
+import { TypeColorLayer } from './TypeColorLayer';
 import { useTabCompletion } from './useTabCompletion';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
@@ -144,6 +145,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     spellcheckPrompt,
     cursorStyle,
     lineLook,
+    typeColors,
+    knownWords,
     lineMark,
     keepLastRef,
     pasteDelayRef,
@@ -632,10 +635,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // single-line. The gutter only renders once a second line exists so a
   // normal single command prompt stays clean.
   const lineCount = passwordMode ? 1 : value.split('\n').length;
+  // Coloring as you type draws on a typed command, never on a password
+  // or a line of the game's editor, once Vosh has said what it knows.
+  const typedWords = typeColors.on && !passwordMode && !editor ? knownWords : null;
 
   return (
     <div
-      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}`}
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}${typedWords ? ' is-typed' : ''}`}
       style={look.style}
     >
       {lineMark && (
@@ -721,6 +727,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
             measureCaret();
           }}
         />
+      )}
+      {typedWords && (
+        <TypeColorLayer field={field} value={value} words={typedWords} colors={typeColors} />
       )}
       {!passwordMode && <div className="input-caret-mirror" aria-hidden="true" ref={mirrorRef} />}
       {!passwordMode && editor && (

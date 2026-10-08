@@ -22,6 +22,8 @@ import {
 } from '../stores/config/echoMarkStore';
 import { useLineLook } from '../stores/config/lineLookStore';
 import { useLineMark } from '../stores/config/lineMarkStore';
+import { useTypeColors } from '../stores/config/typeColorsStore';
+import { useKnownWords } from '../stores/session/knownWordsStore';
 
 /** The command line settings. The ones that change what the row draws
  *  come back as state, and the rest as refs the handlers read when they
@@ -60,6 +62,9 @@ export function useInputPreferences() {
   // How the row looks: the caret blink and color, the text color, the
   // background and the size.
   const lineLook = useLineLook();
+  // Color commands as you type, and the words Vosh knows that judge it.
+  const typeColors = useTypeColors();
+  const knownWords = useKnownWords();
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -112,6 +117,8 @@ export function useInputPreferences() {
     spellcheckPrompt,
     cursorStyle,
     lineLook,
+    typeColors,
+    knownWords,
     lineMark: lineMarkOn ? markText(markOptions) : '',
     keepLastRef,
     pasteDelayRef,

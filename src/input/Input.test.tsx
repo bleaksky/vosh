@@ -35,7 +35,11 @@ vi.mock('@tauri-apps/api/core', () => ({
           input_line_background_color: null,
           input_line_size: 0,
         }
-      : null,
+      : cmd === 'input_known_words'
+        ? { aliases: ['eb'], commands: ['alias', 'walk'] }
+        : cmd === 'writing_file_get'
+          ? { version: 1, spelling: false, guide: true, characters: {} }
+          : null,
 }));
 
 function fire(event: string, payload: unknown): void {
@@ -46,6 +50,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const doc = new FakeDocument();
 let createRoot: typeof import('react-dom/client').createRoot;
 let Input: typeof import('./Input').Input;
+type InputHandle = import('./Input').InputHandle;
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -68,7 +73,7 @@ beforeAll(async () => {
   vi.stubGlobal('HTMLTextAreaElement', FakeElement);
   vi.stubGlobal('getComputedStyle', () => ({ fontSize: '14px' }));
   // The caret measures where the stand in DOM lays nothing out, so every
-  // box sits at the origin.
+  // box sits at the origin. The coloring layer writes its scrollTop.
   for (const name of [
     'selectionStart',
     'selectionEnd',
@@ -79,8 +84,18 @@ beforeAll(async () => {
     'scrollTop',
     'clientWidth',
   ]) {
-    Object.defineProperty(FakeElement.prototype, name, { value: 0, configurable: true });
+    Object.defineProperty(FakeElement.prototype, name, {
+      value: 0,
+      configurable: true,
+      writable: true,
+    });
   }
+  // The game editor measures a column on a canvas the stand in DOM
+  // does not draw.
+  Object.defineProperty(FakeElement.prototype, 'getContext', {
+    value: () => null,
+    configurable: true,
+  });
   ({ createRoot } = await import('react-dom/client'));
   ({ Input } = await import('./Input'));
 });
@@ -103,9 +118,11 @@ function styleOf(el: FakeElement | undefined): string {
 async function mountLine(enabled = false) {
   const host = doc.createElement('div');
   const root = createRoot(host as unknown as HTMLElement);
+  const handle: { current: InputHandle | null } = { current: null };
   await act(async () => {
     root.render(
       createElement(Input, {
+        ref: handle,
         enabled,
         macroKeys: { command: () => undefined, bound: () => false },
       }),
@@ -123,6 +140,22 @@ async function mountLine(enabled = false) {
     row: () => byClass('input-row')?.getAttribute('class'),
     rowStyle: () => styleOf(byClass('input-row')),
     caret: () => byClass('input-caret')?.getAttribute('class'),
+    /** The colored runs the layer draws, as text|class, or null with no
+     *  layer. */
+    layer: () => {
+      const el = byClass('input-type-layer');
+      if (!el) return null;
+      return el.childNodes.map((n) =>
+        n instanceof FakeElement ? `${n.textContent}|${n.getAttribute('class')}` : n.textContent,
+      );
+    },
+    spellCheck: () =>
+      findAll(host, (el) => el.tagName === 'TEXTAREA')[0]?.getAttribute('spellcheck'),
+    type: (text: string) =>
+      act(async () => {
+        handle.current?.insert(text);
+        await settle();
+      }),
     unmount: () => act(async () => root.unmount()),
   };
 }
@@ -212,6 +245,91 @@ describe('the look of the command line', () => {
     expect(line.rowStyle()).toBe('fontSize:17px');
     await look({ size: 0 });
     expect(line.rowStyle()).toBe('');
+    await line.unmount();
+  });
+});
+
+const typeColors = (on: boolean) =>
+  act(async () => {
+    fire('vosh://input-type-colors-changed', { on });
+    await settle();
+  });
+
+describe('coloring as you type', () => {
+  it('colors an alias, a # command, a chat line and an unknown # command', async () => {
+    const line = await mountLine();
+    await typeColors(true);
+    await line.type('look');
+    expect(line.layer()).toEqual(['look']);
+    expect(line.row()).toBe('input-row is-typed');
+    await line.type('eb');
+    expect(line.layer()).toEqual(['eb|input-type-alias']);
+    await line.type('#walk 3n2e');
+    expect(line.layer()).toEqual(['#walk|input-type-hash', ' 3n2e']);
+    await line.type('say The day has begun.');
+    expect(line.layer()).toEqual(['say The day has begun.|input-type-chat']);
+    await line.type('#walkies');
+    expect(line.layer()).toEqual(['#walkies|input-type-unknown']);
+    await line.type('Eb');
+    expect(line.layer()).toEqual(['Eb']);
+    await line.unmount();
+  });
+
+  it('judges each line of a compose', async () => {
+    const line = await mountLine();
+    await typeColors(true);
+    await line.type("eb\n'hello");
+    expect(line.layer()).toEqual(['eb|input-type-alias', '\n', "'hello|input-type-chat"]);
+    await line.unmount();
+  });
+
+  it('keeps spell check on for a chat line', async () => {
+    const line = await mountLine();
+    await act(async () => fire('vosh://spellcheck-prompt-changed', true));
+    await typeColors(true);
+    await line.type('tell Maren hi');
+    expect(line.layer()).toEqual(['tell Maren hi|input-type-chat']);
+    expect(line.spellCheck()).toBe('true');
+    await line.unmount();
+  });
+
+  it('draws no layer while off, on a password or in the game editor', async () => {
+    const line = await mountLine();
+    await typeColors(false);
+    await line.type('eb');
+    expect(line.layer()).toBeNull();
+    expect(line.row()).toBe('input-row');
+    await typeColors(true);
+    expect(line.layer()).not.toBeNull();
+    await act(async () => fire('session://input-mode', { session: 1, password: true }));
+    expect(line.layer()).toBeNull();
+    await act(async () => fire('session://input-mode', { session: 1, password: false }));
+    await act(async () =>
+      fire('session://writing', {
+        session: 1,
+        game: 'editor',
+        editor: 'description',
+        offer: null,
+        job: null,
+        held: 0,
+        done: null,
+      }),
+    );
+    expect(line.layer()).toBeNull();
+    expect(line.row()).toBe('input-row');
+    await act(async () =>
+      fire('session://writing', {
+        session: 1,
+        game: 'unknown',
+        editor: null,
+        offer: null,
+        job: null,
+        held: 0,
+        done: null,
+      }),
+    );
+    await typeColors(false);
+    expect(line.layer()).toBeNull();
     await line.unmount();
   });
 });
