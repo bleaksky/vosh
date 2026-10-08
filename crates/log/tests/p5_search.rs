@@ -39,7 +39,7 @@ use std::time::{Duration, Instant};
 
 use regex::RegexBuilder;
 use rusqlite::{Connection, OpenFlags};
-use vosh_log::{LogEntry, LogStore, SearchOptions, SearchPage};
+use vosh_log::{LogEntry, LogStore, Scope, SearchOptions, SearchPage};
 
 /// Searches of each query on the connection after the fresh one.
 const REPS: usize = 5;
@@ -664,9 +664,12 @@ fn options(case_sensitive: bool, session_id: Option<i64>, before: Option<i64>) -
     SearchOptions {
         case_sensitive,
         max_results: PAGE,
-        session_id,
+        scope: Scope {
+            logs: session_id.map(|id| vec![id]),
+            hide_local: true,
+            ..Scope::default()
+        },
         before_line_id: before,
-        hide_local: true,
     }
 }
 
@@ -688,9 +691,12 @@ fn scan(
     let mut matched = 0u64;
     for (at, row) in week.rows.iter().enumerate().rev() {
         let id = at as i64 + 1;
-        if o.session_id.is_some_and(|s| s != row.session)
+        if o.scope
+            .logs
+            .as_ref()
+            .is_some_and(|l| !l.contains(&row.session))
             || o.before_line_id.is_some_and(|b| id >= b)
-            || (o.hide_local && local(row.session))
+            || (o.scope.hide_local && local(row.session))
             || !regex.is_match(&row.text)
         {
             continue;
@@ -880,7 +886,17 @@ fn p5_search_a_heavy_week() {
     // each session's line count.
     if runs(SESSION_LIST) {
         let store = LogStore::open(&path).expect("the log");
-        let (took, rows) = timed(|| store.list_sessions(0, true).expect("the sessions"));
+        let (took, rows) = timed(|| {
+            store
+                .list_sessions(
+                    0,
+                    &Scope {
+                        hide_local: true,
+                        ..Scope::default()
+                    },
+                )
+                .expect("the sessions")
+        });
         let got: Vec<(i64, i64)> = rows.iter().map(|r| (r.id, r.line_count)).collect();
         let want: Vec<(i64, i64)> = week
             .sessions

@@ -676,7 +676,10 @@ impl Harness {
         }
         let guard = self.state.logs.lock().await;
         let store = guard.as_ref().expect("the log");
-        let id = store.list_sessions(0, false).expect("the sessions")[0].id;
+        let id = store
+            .list_sessions(0, &vosh_log::Scope::default())
+            .expect("the sessions")[0]
+            .id;
         store
             .export_session(id, false)
             .expect("the rows")

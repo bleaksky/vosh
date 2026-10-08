@@ -7,7 +7,8 @@
 //! `sessions` starts, ends and lists sessions, writes each game line with
 //! its plain text and its raw bytes, and exports a session. It also owns
 //! the `> ` rows that record what you sent.
-//! `search` runs the regex search the log view pages through.
+//! `search` runs the regex search the log view pages through, over the
+//! logs a `Scope` names.
 //! `lookup` reads the sessions that belong to a profile's characters.
 //! `forget` finds the lines where you sent a password and blanks them for
 //! good.
@@ -23,7 +24,7 @@ mod sqlite;
 
 pub use forget::{Forgotten, PasswordLines};
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
-pub use search::{SearchHit, SearchOptions, SearchPage};
+pub use search::{Scope, SearchHit, SearchOptions, SearchPage};
 pub use sessions::{sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT};
 
 #[derive(Debug, Error)]
@@ -32,6 +33,9 @@ pub enum LogError {
     Sqlite(#[from] rusqlite::Error),
     #[error("regex: {0}")]
     Regex(#[from] regex::Error),
+    /// A search stopped because a newer one replaced it.
+    #[error("stopped: a newer search replaced this one")]
+    Stopped,
 }
 
 pub type Result<T> = std::result::Result<T, LogError>;

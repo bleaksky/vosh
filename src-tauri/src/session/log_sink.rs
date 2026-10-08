@@ -30,12 +30,13 @@ pub(super) struct LogSink {
 }
 
 impl LogSink {
-    /// Open the log's row for a connection to `host` on `port`, so every
-    /// row the session writes attaches to it. With logging off, or a row
-    /// that fails to open, the session writes no rows.
+    /// Open the log's row for `session`'s connection to `host` on
+    /// `port`, so every row the session writes attaches to it, and note it
+    /// on the session. With logging off, or a row that fails to open, the
+    /// session writes no rows.
     pub(super) async fn open(
         logs: SharedLogStore,
-        scrollback: SharedScrollback,
+        session: &Session,
         scrollback_path: Option<PathBuf>,
         host: &str,
         port: u16,
@@ -53,10 +54,13 @@ impl LogSink {
                 None => None,
             }
         };
+        if let Some(id) = id {
+            session.note_log(id);
+        }
         Self {
             logs,
             session: LogSession::new(id),
-            scrollback,
+            scrollback: session.scrollback.clone(),
             scrollback_path,
         }
     }

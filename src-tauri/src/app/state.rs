@@ -30,6 +30,9 @@ pub(crate) struct AppState {
     /// can read the whole log, so reads take their own lock and never
     /// hold up the live session. WAL lets both run at once.
     pub(crate) log_reader: SharedLogStore,
+    /// Counts the log searches the view started. A search reads on while
+    /// the count is its own, so the next keystroke's search stops it.
+    pub(crate) log_searches: AtomicU64,
     pub(crate) plugins: SharedPluginManager,
     /// Catalog of named profiles. Loaded (or migrated from the legacy
     /// single-file layout) once at startup; commands mutate it under
@@ -428,6 +431,7 @@ impl Default for AppState {
             sessions: std::sync::Mutex::new(Sessions::default()),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
+            log_searches: AtomicU64::new(0),
             plugins: SharedPluginManager::default(),
             profile_set: Arc::new(Mutex::new(None)),
             affect_file: crate::affects::full::FullFile::default(),

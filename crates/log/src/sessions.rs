@@ -8,7 +8,7 @@ use rusqlite::OptionalExtension;
 use serde::Serialize;
 use vosh_protocol::ansi::plain_text;
 
-use crate::{LogStore, Result};
+use crate::{LogStore, Result, Scope};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionRow {
@@ -248,15 +248,10 @@ impl LogStore {
         self.append(session_id, ts_ms, &text, Some(raw))
     }
 
-    /// List sessions newest first, capped at `limit` rows. A zero limit
-    /// returns all sessions. `hide_local` leaves out sessions to this
-    /// machine (see `LOCAL_HOSTS`).
-    pub fn list_sessions(&self, limit: usize, hide_local: bool) -> Result<Vec<SessionRow>> {
-        let filter = if hide_local {
-            format!("WHERE {}", not_local_sql())
-        } else {
-            String::new()
-        };
+    /// List the logs in `scope` newest first, capped at `limit` rows. A
+    /// zero limit returns them all.
+    pub fn list_sessions(&self, limit: usize, scope: &Scope) -> Result<Vec<SessionRow>> {
+        let (filter, values) = scope.session_filter(1);
         let cap = if limit == 0 {
             String::new()
         } else {
@@ -271,7 +266,7 @@ impl LogStore {
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
-            .query_map([], session_row)?
+            .query_map(rusqlite::params_from_iter(values), session_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
@@ -387,7 +382,7 @@ pub(crate) mod tests {
         let a = s.start_session("a", 1, 100).unwrap();
         let b = s.start_session("b", 2, 200).unwrap();
         let c = s.start_session("c", 3, 150).unwrap();
-        let rows = s.list_sessions(0, false).unwrap();
+        let rows = s.list_sessions(0, &Scope::default()).unwrap();
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![b, c, a]);
     }
 
@@ -515,14 +510,18 @@ pub(crate) mod tests {
     #[test]
     fn list_sessions_can_hide_local_sessions() {
         let (s, mud, later) = store_with_local_sessions();
-        assert_eq!(s.list_sessions(0, false).unwrap().len(), 5);
-        let rows = s.list_sessions(0, true).unwrap();
+        assert_eq!(s.list_sessions(0, &Scope::default()).unwrap().len(), 5);
+        let hidden = Scope {
+            hide_local: true,
+            ..Scope::default()
+        };
+        let rows = s.list_sessions(0, &hidden).unwrap();
         assert_eq!(
             rows.iter().map(|r| r.id).collect::<Vec<_>>(),
             vec![later, mud]
         );
         assert!(rows.iter().all(|r| r.line_count == 3));
-        let capped = s.list_sessions(1, true).unwrap();
+        let capped = s.list_sessions(1, &hidden).unwrap();
         assert_eq!(capped.iter().map(|r| r.id).collect::<Vec<_>>(), vec![later]);
     }
 
