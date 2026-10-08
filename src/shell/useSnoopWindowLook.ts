@@ -13,16 +13,18 @@ import { subscribeCustomThemesChanged } from '../ipc/theme';
 import {
   getUiConfig,
   subscribeUiConfigReplaced,
+  TERMINAL_LINE_HEIGHTS,
+  type TerminalLineHeight,
+  type UiConfig,
+} from '../ipc/uiConfig';
+import {
   subscribeBaseAnsiChanged,
   subscribeColorVisionChanged,
   subscribeFitGameColorsChanged,
   subscribeFontChanged,
   subscribeTerminalLineHeightChanged,
   subscribeThemeTerminalColorsChanged,
-  TERMINAL_LINE_HEIGHTS,
-  type TerminalLineHeight,
-  type UiConfig,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigEvents';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
 import { showAfterThemePaint } from '../lib/reveal';

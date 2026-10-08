@@ -1,5 +1,5 @@
-// The UI config as every window reads it, the events that carry each
-// field, and the calls that save some of its fields alone.
+// The UI config as every window reads it and the calls that save some
+// of its fields alone. uiConfigEvents.ts hears one field at a time.
 
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -21,33 +21,7 @@ import {
   type AffectsStyle,
   type TrackedAffect,
 } from './affects';
-import {
-  BASE_ANSI_CHANGED,
-  BLINK_TEXT_CHANGED,
-  BRIGHT_BOLD_CHANGED,
-  CHAT_COLORS_CHANGED,
-  CHIP_STYLE_CHANGED,
-  COLOR_VISION_CHANGED,
-  ECHO_MACROS_CHANGED,
-  FIT_GAME_COLORS_CHANGED,
-  FONT_CHANGED,
-  GAME_TIME_CHANGED,
-  INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
-  INPUT_ECHO_COLOR_CHANGED,
-  KEEP_LAST_CHANGED,
-  PASTE_LINE_DELAY_CHANGED,
-  READABLE_HIGHLIGHTS_CHANGED,
-  SCROLLBACK_LINES_CHANGED,
-  SPELLCHECK_PROMPT_CHANGED,
-  WRITING_OFFER_CHANGED,
-  WRITING_ASK_POST_CHANGED,
-  SPLIT_DIVIDER_CHANGED,
-  TERMINAL_LINE_HEIGHT_CHANGED,
-  THEME_TERMINAL_COLORS_CHANGED,
-  TICK_COUNT_CHANGED,
-  UI_CONFIG_REPLACED,
-} from './events';
+import { CHAT_COLORS_CHANGED, UI_CONFIG_REPLACED, WRITING_ASK_POST_CHANGED } from './events';
 import { THEME_PREFS_FIELDS, type CustomTheme, type ThemeChoice } from './theme';
 import {
   normalizeVitalsColors,
@@ -669,16 +643,6 @@ export function normalizeSnoopShare(raw: unknown): number {
     : DEFAULT_SNOOP_SHARE;
 }
 
-/** What FONT_CHANGED carries. */
-export interface FontChange {
-  family: string;
-  size: number;
-  /** The Panel font as saved (panelFont.ts). */
-  panel: string;
-  /** The panel size as saved, 0 for the terminal size (panelSize.ts). */
-  panelSize: number;
-}
-
 /** Hear that the backend replaced the live profile's whole UI config,
  *  on a profile switch, a #profile load or reset, or an import. It
  *  comes after the events that carry the panes, the tracked affects,
@@ -724,46 +688,6 @@ export async function setUiFields(fields: UiFields, profile?: string | null): Pr
   });
 }
 
-/** Hear a new chip style saved from Settings. The Settings save emits
- *  it to every window, so the main window's status line follows at
- *  once. */
-export async function subscribeChipStyleChanged(
-  cb: (value: ChipStyle) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(CHIP_STYLE_CHANGED, (event) => {
-    cb(normalizeChipStyle(event.payload));
-  });
-}
-
-/** Hear a new tick count saved from Settings. The Settings save emits
- *  it to every window, so the main window's status line follows at
- *  once. */
-export async function subscribeTickCountChanged(
-  cb: (value: TickCount) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(TICK_COUNT_CHANGED, (event) => {
-    cb(normalizeTickCount(event.payload));
-  });
-}
-
-/** Hear a new game time clock saved from Settings, or the one a
- *  profile switch brings. The Settings save emits it to every window,
- *  so the main window's status line follows at once. */
-export async function subscribeGameTimeChanged(cb: (value: GameTime) => void): Promise<UnlistenFn> {
-  return listen<unknown>(GAME_TIME_CHANGED, (event) => {
-    cb(normalizeGameTime(event.payload));
-  });
-}
-
-/** Hear a new terminal line height saved from Settings. */
-export async function subscribeTerminalLineHeightChanged(
-  cb: (value: TerminalLineHeight) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(TERMINAL_LINE_HEIGHT_CHANGED, (event) => {
-    cb(normalizeTerminalLineHeight(event.payload));
-  });
-}
-
 /** The chat pane's channel colors for the live profile, as the backend
  *  holds them. chatColors.ts normalizeChatColors reads the table. */
 export async function getChatColorsTable(): Promise<unknown> {
@@ -791,146 +715,9 @@ export async function subscribeChatColorsChanged(
   });
 }
 
-/** Hear Scrollback size change. */
-export async function subscribeScrollbackLinesChanged(
-  cb: (lines: number) => void,
-): Promise<UnlistenFn> {
-  return listen<number>(SCROLLBACK_LINES_CHANGED, (event) => {
-    cb(normalizeScrollbackLines(event.payload));
-  });
-}
-
-/** Hear the Blinking text choice change, null for none. */
-export async function subscribeBlinkTextChanged(
-  cb: (value: boolean | null) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean | null>(BLINK_TEXT_CHANGED, (event) => {
-    cb(typeof event.payload === 'boolean' ? event.payload : null);
-  });
-}
-
-export async function subscribeBrightBoldChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(BRIGHT_BOLD_CHANGED, (event) => {
-    cb(Boolean(event.payload));
-  });
-}
-
-/** Hear Fit game colors change, saved in Settings or brought by
- *  another profile. */
-export async function subscribeFitGameColorsChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(FIT_GAME_COLORS_CHANGED, (event) => {
-    cb(event.payload !== false);
-  });
-}
-
-/** Hear the color vision change, saved in Settings or brought by
- *  another profile. */
-export async function subscribeColorVisionChanged(
-  cb: (value: ColorVision) => void,
-): Promise<UnlistenFn> {
-  return listen<string>(COLOR_VISION_CHANGED, (event) => {
-    cb(toColorVision(event.payload));
-  });
-}
-
-/** Hear Keep highlight colors readable change, saved in Settings or
- *  brought by another profile. */
-export async function subscribeReadableHighlightsChanged(
-  cb: (value: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(READABLE_HIGHLIGHTS_CHANGED, (event) => {
-    cb(event.payload !== false);
-  });
-}
-
-export async function subscribeSplitDividerChanged(
-  cb: (color: string | null) => void,
-): Promise<UnlistenFn> {
-  return listen<string | null>(SPLIT_DIVIDER_CHANGED, (event) => {
-    cb(typeof event.payload === 'string' && event.payload.length > 0 ? event.payload : null);
-  });
-}
-
-export async function subscribeBaseAnsiChanged(
-  cb: (colors: string[] | null) => void,
-): Promise<UnlistenFn> {
-  return listen<unknown>(BASE_ANSI_CHANGED, (event) => {
-    const p = event.payload;
-    cb(
-      Array.isArray(p) && p.length === 16 && p.every((c) => typeof c === 'string')
-        ? (p as string[])
-        : null,
-    );
-  });
-}
-
-/** Hear the terminal font and size and the panel font and size saved in
- *  Settings. */
-export function subscribeFontChanged(cb: (change: FontChange) => void): Promise<UnlistenFn> {
-  return listen<FontChange>(FONT_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Keep last command change. */
-export function subscribeKeepLastChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(KEEP_LAST_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Use the theme's colors for MUD text change. */
-export function subscribeThemeTerminalColorsChanged(
-  cb: (on: boolean) => void,
-): Promise<UnlistenFn> {
-  return listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Sent command color change, null for the default. */
-export function subscribeInputEchoColorChanged(
-  cb: (color: string | null) => void,
-): Promise<UnlistenFn> {
-  return listen<string | null>(INPUT_ECHO_COLOR_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Show the commands your macros send change. */
-export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Mark your commands change. */
-export function subscribeInputEchoCaretChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Wait between pasted lines change, in ms. */
-export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
-  return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Check spelling when you chat change. */
-export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Offer the card when the game's editor opens change. */
-export function subscribeWritingOfferChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(WRITING_OFFER_CHANGED, (event) => cb(event.payload));
-}
-
 /** Turn Ask before you post off from the writing card, and tell every
  *  window, since setUiFields tells none. */
 export async function stopAskingToPost(): Promise<void> {
   await setUiFields({ writing_ask_post: false });
   await emit(WRITING_ASK_POST_CHANGED, false);
-}
-
-/** Hear Ask before you post change. */
-export function subscribeWritingAskPostChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(WRITING_ASK_POST_CHANGED, (event) => cb(event.payload));
-}
-
-/** Hear Caret shape change. */
-export function subscribeInputCursorStyleChanged(cb: (style: string) => void): Promise<UnlistenFn> {
-  return listen<string>(INPUT_CURSOR_STYLE_CHANGED, (event) => cb(event.payload));
 }

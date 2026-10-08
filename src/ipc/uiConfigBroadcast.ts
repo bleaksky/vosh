@@ -40,12 +40,8 @@ import {
   VITALS_TEXT_CHANGED,
 } from './events';
 import { screenReaderOf } from './screenReader';
-import {
-  fetchUiConfig,
-  subscribeUiConfigReplaced,
-  type FontChange,
-  type UiConfig,
-} from './uiConfig';
+import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from './uiConfig';
+import { type FontChange } from './uiConfigEvents';
 import {
   vitalsOptionsOf,
   vitalsTextOf,

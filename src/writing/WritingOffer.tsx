@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react';
-import { getUiConfig, subscribeWritingOfferChanged } from '../ipc/uiConfig';
+import { getUiConfig } from '../ipc/uiConfig';
+import { subscribeWritingOfferChanged } from '../ipc/uiConfigEvents';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import type { WritingKind } from '../ipc/writing';
 import { useWriting } from '../stores/session/writingStore';
