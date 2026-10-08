@@ -172,7 +172,7 @@ describe('the snoop split', () => {
       '<button type="button" role="tab" class="snoop-tab" aria-selected="true" title="Tolliver">',
     );
     expect(html).toContain(
-      '<div class="snoop-end"><div class="snoop-act"><button type="button" class="snoop-btn">Stop</button></div>' +
+      '<div class="snoop-end"><div class="snoop-act"><button type="button" class="btn is-small">Stop</button></div>' +
         MORE,
     );
     expect(html).toContain('<div class="snoop-body"><div data-term="Tolliver"></div></div>');
@@ -194,7 +194,7 @@ describe('the snoop split', () => {
         '<button type="button" role="tab" class="snoop-tab is-ended" aria-selected="true" title="Maren, ended 2 min ago">',
     });
     expect(html).toContain(
-      '<div class="snoop-act"><span class="snoop-meta">Ended 2 min ago</span><button type="button" class="snoop-btn">Close</button></div>',
+      '<div class="snoop-act"><span class="snoop-meta">Ended 2 min ago</span><button type="button" class="btn is-small">Close</button></div>',
     );
     // Every tab keeps its terminal, and the one in front shows.
     expect(html).toContain(

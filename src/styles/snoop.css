@@ -197,23 +197,6 @@
   white-space: nowrap;
 }
 
-.snoop-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--r-row);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--sep);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 /* The well: your terminal's 16 side insets and 6 at the foot. Whole rows
    only, as xterm draws them, kept to the bottom like your terminal's. */
 .snoop-body {
