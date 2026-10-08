@@ -87,7 +87,7 @@ function props<T>(el: FakeElement): T {
 
 async function draw() {
   const { SessionLogs } = await import('./SessionLogs');
-  const errors: string[] = [];
+  const errors: (string | null)[] = [];
   const page: SettingsPageProps & { onSaveScene: (log: number) => void } = {
     target: { group: 'general', section: 'logs' },
     navSeq: 1,
@@ -114,7 +114,7 @@ async function draw() {
       await settle(20);
     });
   };
-  const items = () => findAll(container, (el) => el.getAttribute('role')?.startsWith('menuitem'));
+  const items = () => findAll(container, (el) => !!el.getAttribute('role')?.startsWith('menuitem'));
   const item = (text: string) => items().find((el) => el.textContent === text) as FakeElement;
   return {
     errors,
