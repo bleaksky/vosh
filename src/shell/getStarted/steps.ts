@@ -149,3 +149,10 @@ export function stepMeta(id: StepId, host: string, facts: GetStartedFacts): stri
 export function doneCount(steps: readonly Step[], done: readonly string[]): number {
   return steps.filter((step) => done.includes(step.id)).length;
 }
+
+/** How far you are, as the card's header and its notice say it: how
+ *  many steps, or how many are done. */
+export function progress(steps: readonly Step[], done: readonly string[]): string {
+  const count = doneCount(steps, done);
+  return count === 0 ? `${steps.length} steps` : `${count} of ${steps.length} done`;
+}

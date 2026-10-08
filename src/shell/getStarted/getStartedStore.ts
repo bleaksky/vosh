@@ -9,6 +9,7 @@ import { onGmcpPackage, type ConnectionTarget } from '../../ipc/session';
 import { onGameLine } from '../../ipc/terminal';
 import { loadTarget, subscribeConnectionTarget } from '../../stores/session/useConnection';
 import { createStore } from '../../stores/store';
+import { pushToast } from '../../stores/toasts';
 import { doneByFacts, onForsakenLands, type GetStartedFacts, type StepId } from './steps';
 
 // Where Get started stands in the main window. profiles.toml keeps the
@@ -93,11 +94,13 @@ export function unfold(): void {
   if (store.get().shows === 'folded') update({ shows: 'open' });
 }
 
-/** End Get started, from Close or Done. It no longer opens at launch. */
+/** End Get started, from Close or Done, on the card or the notice. It
+ *  no longer opens at launch, and a toast says where it lives (board 1). */
 export function end(): void {
   const { saved } = store.get();
   update({ shows: 'shut', page: null });
   if (saved?.atLaunch) save({ ...saved, atLaunch: false });
+  pushToast({ kind: 'info', message: 'Get started closed', meta: 'Help opens it again' });
 }
 
 /** Whether a game line or packet may still finish the connect step. */

@@ -181,6 +181,15 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** An open ring: a step still to do, where a done one takes the check. */
+export function RingIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="5.25" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 /** Two sheets, the front one whole: copy. */
 export function CopyIcon(props: IconProps) {
   return (

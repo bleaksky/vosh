@@ -11,6 +11,9 @@ import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
+import { GetStarted } from './getStarted/GetStarted';
+import { fold as foldGetStarted } from './getStarted/getStartedStore';
+import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 import { TitleBand } from './TitleBand';
@@ -18,6 +21,7 @@ import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
 import {
   panelWidthOf,
+  setPanelOpen,
   setPanelWidth,
   togglePanelOpen,
   usePanelLayout,
@@ -44,7 +48,7 @@ import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { openSettingsTab } from '../lib/settingsLink';
-import { requestSessionMenu } from '../lib/appMenu';
+import { ADD_PANE_MENU_EVENT, requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
@@ -451,6 +455,24 @@ function MainWindow() {
     },
   });
 
+  // Show me on a step of Get started folds the card and opens what the
+  // step is about, as a click would (First Run Q3).
+  const showMe = (step: StepId) => {
+    foldGetStarted();
+    if (step === 'panes') {
+      setPanelOpen(true);
+      requestAnimationFrame(() => window.dispatchEvent(new Event(ADD_PANE_MENU_EVENT)));
+    } else if (step === 'affects') {
+      openSettingsTab('characters#tracked');
+    } else if (step === 'prompt') {
+      const area = terminalAreaRef.current?.getBoundingClientRect();
+      const term = termRef.current;
+      if (!area) return;
+      const last = term ? term.rowTop(term.getSize().rows - 1) : null;
+      setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
+    }
+  };
+
   // The window shortcuts, the macOS menu bar and #help.
   const { runCommand, themesChanged } = useAppCommands({
     connection,
@@ -735,6 +757,19 @@ function MainWindow() {
       panel={<PanelHost promptShow={promptShow} textSize={panelTextPx} textColors={textColors} />}
     >
       <CornerNotices />
+      <GetStarted
+        play={{
+          live: connected,
+          character: connection.character,
+          connect: () => void connection.connect(),
+        }}
+        covered={promptCard !== null}
+        host={promptCardHost}
+        cell={cellSize}
+        show={promptShow}
+        onShowMe={showMe}
+        focusInput={focusInput}
+      />
       {terminalMenu && (
         <TerminalMenu
           x={terminalMenu.x}

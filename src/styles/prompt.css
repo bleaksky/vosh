@@ -1702,3 +1702,206 @@
   white-space: pre;
   text-overflow: ellipsis;
 }
+
+/* Get started (First Run boards 1 to 5) on the prompt card's recipe, in
+   its place over the terminal. The steps take the palette row recipe of
+   the start list: 36 slots, a 34 row inset 8, the mark at 10, the name
+   at 42, the meta in the tertiary tone and keycaps 20 square. The row in
+   focus wears the palette's selected fill. */
+.gs-steps {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-steps.is-after {
+  margin-top: 0;
+}
+
+.gs-steps > li {
+  height: 36px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+}
+
+.gs-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  padding: 0 12px 0 34px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.gs-step:hover,
+.gs-step.is-current {
+  background: var(--menu-hi);
+}
+
+.gs-step:focus-visible {
+  background: var(--menu-hi);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.gs-mark {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: block;
+  color: var(--tertiary);
+}
+
+.gs-step.is-done .gs-mark {
+  color: var(--accent);
+}
+
+.gs-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.gs-keys {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+.gs-chev {
+  display: block;
+  flex: none;
+  margin-left: 8px;
+  color: var(--tertiary);
+}
+
+.gs-caps {
+  height: 30px;
+  margin: 4px 0 0;
+  padding: 8.85px 0 0 42px;
+  box-sizing: border-box;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+/* A preset the card suggests: its name and switch, its description, and
+   its sample in the box the Presets page draws. A hairline parts two. */
+.gs-sec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 28px;
+  margin-top: 12px;
+}
+
+.gs-sec-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.gs-sugs {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gs-sec + .gs-sugs {
+  margin-top: 0;
+}
+
+.gs-sug {
+  position: relative;
+  padding: 12px 0 14px;
+}
+
+.gs-sug.is-only {
+  padding-bottom: 0;
+}
+
+.gs-sug + .gs-sug::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--sep);
+  content: '';
+}
+
+.gs-sug-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.gs-sug-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.gs-sug-top .st-toggle {
+  margin-left: auto;
+}
+
+.gs-sug-line {
+  margin: 2px 0 0;
+  padding-right: 54px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.gs-sample {
+  margin-top: 8px;
+}
+
+/* The Chat pane's own line sits on the panel's ground. */
+.gs-sample.is-panel {
+  background: var(--panel);
+}
+
+.gs-end {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}

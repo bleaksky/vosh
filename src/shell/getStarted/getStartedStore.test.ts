@@ -140,13 +140,19 @@ describe('Get started store', () => {
     ]);
   });
 
-  it('ends with at_launch off, and opens on its list again from Help', async () => {
+  it('ends with at_launch off and a toast, and opens on its list again from Help', async () => {
+    vi.stubGlobal('window', globalThis);
     const s = await mounted({ atLaunch: true, done: [] });
+    const { getToasts } = await import('../../stores/toasts');
     await vi.waitFor(() => expect(s.getGetStarted().shows).toBe('open'));
     s.showPage('panes');
     s.end();
     expect(s.getGetStarted().shows).toBe('shut');
     expect(saves().at(-1)).toEqual(['get_started_set', { atLaunch: false, done: [] }]);
+    expect(getToasts().at(-1)).toMatchObject({
+      message: 'Get started closed',
+      meta: 'Help opens it again',
+    });
     fire('vosh://get-started-open', null);
     expect(s.getGetStarted()).toMatchObject({ shows: 'open', page: null });
   });

@@ -17,19 +17,20 @@ export type CardAnchor =
  *  terminal beside the panel, and follow it as the window or the
  *  terminal area resizes and as anything in `after` changes: the step,
  *  a new prompt state (`refresh`), the view, the design or the preview.
- *  Null until the card is first placed. */
+ *  Get started sits in the same place and names none of them. Null
+ *  until the card is first placed. */
 export function useCardPlace(
   host: PromptCardHost,
   cell: CellSize | null,
   show: PromptShowState | null,
   beside: boolean,
-  after: {
+  after: Partial<{
     step: CardStep | null;
     refresh: number;
     view: CardView;
     template: string;
     drawn: PromptPreviewName;
-  },
+  }> = {},
 ) {
   const { step, refresh, view, template, drawn } = after;
   const [anchor, setAnchor] = useState<CardAnchor | null>(null);
