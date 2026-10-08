@@ -1,3 +1,4 @@
+import { startCharStatusStore } from './gmcp/charStatusStore';
 import { startChatStore } from './gmcp/chatStore';
 import { startGroupStore } from './gmcp/groupStore';
 import { startImmStore } from './gmcp/immStore';
@@ -29,6 +30,7 @@ import { startVitalsOptionsStore } from './config/vitalsOptionsStore';
 import { startVitalsStore } from './gmcp/vitalsStore';
 import { startVitalsTextStore } from './session/vitalsTextStore';
 import { startWalkStore } from './session/walkStore';
+import { startWritingStore } from './session/writingStore';
 import { startWorldStore } from './gmcp/worldStore';
 
 // Start every pane and status line store once, at launch, so packages
@@ -74,4 +76,6 @@ export function startStores(): void {
   startPluginRowsStore();
   startSnoopStore();
   startWalkStore();
+  startCharStatusStore();
+  startWritingStore();
 }
