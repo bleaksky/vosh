@@ -15,6 +15,8 @@ const bus = vi.hoisted(() => ({
   written: new Map<object, string[]>(),
   /** What each region writer wrote of the pane's own, by the xterm. */
   local: new Map<object, string[]>(),
+  /** Each mark a region writer was given, in order. */
+  marks: [] as string[],
   /** Scrollback loads held until a test answers them, while it holds. */
   hold: false,
   /** How wide each new xterm is. */
@@ -123,6 +125,9 @@ vi.mock('./terminalRegion', () => ({
     }
     local(text: string) {
       this.own.push(text);
+    }
+    setEchoMark(mark: string) {
+      bus.marks.push(mark);
     }
     pad() {}
     onErase() {}
@@ -464,6 +469,39 @@ describe('Scrollback size', () => {
     expect(bus.written.size).toBe(1);
     expect(ready).toHaveLength(1);
     expect(loads()).toBe(before);
+    await act(async () => root.unmount());
+  });
+});
+
+describe('the mark your echo starts with', () => {
+  it('reaches the writer, a change to it, and a writer built to fill anew', async () => {
+    const { Terminal } = await import('./Terminal');
+    const chevron = '\x1b[90m\u203a \x1b[0m';
+    const gt = '\x1b[90m> \x1b[0m';
+    bus.marks.length = 0;
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () =>
+      root.render(
+        createElement(Terminal, {
+          session: 1,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          lineHeight: 1.2,
+          themeTerminalColors: true,
+        }),
+      ),
+    );
+    expect(bus.marks).toEqual([chevron]);
+    for (const cb of bus.handlers.get('vosh://input-echo-mark-changed') ?? []) {
+      cb({ payload: { mark: 'gt', text: '', color: null, dim: false } });
+    }
+    expect(bus.marks.at(-1)).toBe(gt);
+    // A theme change after a wash fills anew with a new writer.
+    themeChanged('obsidian-ember');
+    output(1, SANCTUARY);
+    const given = bus.marks.length;
+    await act(async () => themeChanged('vellum'));
+    expect(bus.marks.slice(given)).toEqual([gt]);
     await act(async () => root.unmount());
   });
 });
