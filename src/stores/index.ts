@@ -9,6 +9,7 @@ import { startAffectsStore } from './gmcp/affectsStore';
 import { startChatColorsStore } from './config/chatColorsStore';
 import { startChipStyleStore } from './config/chipStyleStore';
 import { startCombatStore } from './gmcp/combatStore';
+import { startEchoMarkStore } from './config/echoMarkStore';
 import { startConnectionStore } from './session/connectionStore';
 import { startGameTimeStore } from './config/gameTimeStore';
 import { startGamePromptStore } from './gmcp/gamePromptStore';
@@ -74,6 +75,7 @@ export function startStores(): void {
   startTickCountStore();
   startGameTimeStore();
   startChipStyleStore();
+  startEchoMarkStore();
   startPinnedPromptStore();
   startInputModeStore();
   startLuaPanesStore();

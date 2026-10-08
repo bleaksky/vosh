@@ -21,8 +21,8 @@ import {
   FONT_CHANGED,
   GAME_TIME_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
+  INPUT_ECHO_MARK_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -41,6 +41,7 @@ import {
 } from './events';
 import { screenReaderOf } from './screenReader';
 import {
+  echoMarkOptionsOf,
   fetchUiConfig,
   subscribeUiConfigReplaced,
   vitalsOptionsOf,
@@ -155,10 +156,13 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(SPLIT_DIVIDER_CHANGED, config.split_divider_color, before?.split_divider_color);
   await emitChanged(INPUT_ECHO_COLOR_CHANGED, config.input_echo_color, before?.input_echo_color);
   await emitChanged(ECHO_MACROS_CHANGED, config.echo_macros, before?.echo_macros);
+  // The mark, its text, its color and Dim go out as one, so an echo
+  // never mixes an old mark with a new color.
   await emitChanged(
-    INPUT_ECHO_CARET_CHANGED,
-    config.input_echo_mark !== 'off',
-    before && before.input_echo_mark !== 'off',
+    INPUT_ECHO_MARK_CHANGED,
+    echoMarkOptionsOf(config),
+    before ? echoMarkOptionsOf(before) : undefined,
+    deepEqual,
   );
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,

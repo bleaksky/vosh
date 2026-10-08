@@ -33,8 +33,8 @@ import {
   FONT_CHANGED,
   GAME_TIME_CHANGED,
   INPUT_CURSOR_STYLE_CHANGED,
-  INPUT_ECHO_CARET_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
+  INPUT_ECHO_MARK_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -215,6 +215,47 @@ export type InputEchoMark = (typeof INPUT_ECHO_MARKS)[number];
 export function normalizeInputEchoMark(value: unknown): InputEchoMark {
   return INPUT_ECHO_MARKS.find((mark) => mark === value) ?? 'chevron';
 }
+
+/** The mark your echo starts with and whether the command after it
+ *  draws faint, sent to every window as one. */
+export interface EchoMarkOptions {
+  mark: InputEchoMark;
+  /** Your own text, drawn only while `mark` is `own`. */
+  text: string;
+  /** Hex color of the mark, or null for the theme's bright black. */
+  color: string | null;
+  dim: boolean;
+}
+
+/** The echo mark options as UiConfig keeps them. */
+export function echoMarkOptionsOf(
+  config: Pick<
+    UiConfig,
+    'input_echo_mark' | 'input_echo_mark_text' | 'input_echo_mark_color' | 'input_echo_dim'
+  >,
+): EchoMarkOptions {
+  return {
+    mark: config.input_echo_mark,
+    text: config.input_echo_mark_text,
+    color: config.input_echo_mark_color,
+    dim: config.input_echo_dim,
+  };
+}
+
+/** Read echo mark options off the bus, filling anything missing or
+ *  unknown with the defaults. */
+export function normalizeEchoMarkOptions(raw: unknown): EchoMarkOptions {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    mark: normalizeInputEchoMark(o.mark),
+    text: typeof o.text === 'string' ? o.text : '',
+    color: typeof o.color === 'string' && o.color.length > 0 ? o.color : null,
+    dim: o.dim === true,
+  };
+}
+
+/** The echo mark options of a profile that never changed them. */
+export const DEFAULT_ECHO_MARK_OPTIONS: EchoMarkOptions = normalizeEchoMarkOptions({});
 
 /** Where your vitals show, under the panel's panes or in the status
  *  line. */
@@ -1220,9 +1261,13 @@ export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<U
   return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
 }
 
-/** Hear Mark your commands change. */
-export function subscribeInputEchoCaretChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>(INPUT_ECHO_CARET_CHANGED, (event) => cb(event.payload));
+/** Hear Mark your commands, Mark color or Dim sent commands change. */
+export function subscribeInputEchoMarkChanged(
+  cb: (options: EchoMarkOptions) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(INPUT_ECHO_MARK_CHANGED, (event) =>
+    cb(normalizeEchoMarkOptions(event.payload)),
+  );
 }
 
 /** Hear Wait between pasted lines change, in ms. */

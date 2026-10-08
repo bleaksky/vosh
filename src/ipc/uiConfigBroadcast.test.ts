@@ -247,7 +247,12 @@ describe('a replaced UI config', () => {
     expect(sentBeforeApply).toBe(0);
     const payloads = new Map(sent.mock.calls.map(([event, payload]) => [event, payload]));
     expect(payloads.get('vosh://echo-macros-changed')).toBe(false);
-    expect(payloads.get('vosh://input-echo-caret-changed')).toBe(false);
+    expect(payloads.get('vosh://input-echo-mark-changed')).toEqual({
+      mark: 'off',
+      text: '',
+      color: null,
+      dim: false,
+    });
     expect(payloads.get('vosh://paste-line-delay-changed')).toBe(200);
     expect(payloads.get('vosh://spellcheck-prompt-changed')).toBe(true);
     expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');

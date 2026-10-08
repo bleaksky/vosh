@@ -7,7 +7,6 @@ import {
   normalizeInputCursorStyle,
   subscribeEchoMacrosChanged,
   subscribeInputCursorStyleChanged,
-  subscribeInputEchoCaretChanged,
   subscribeInputEchoColorChanged,
   subscribeKeepLastChanged,
   subscribePasteLineDelayChanged,
@@ -15,6 +14,7 @@ import {
   type InputCursorStyle,
 } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
+import { getEchoMarkOptions, subscribeEchoMarkOptions } from '../stores/config/echoMarkStore';
 
 /** The command line settings. The two that change what the row draws
  *  come back as state, and the rest as refs the handlers read when they
@@ -43,7 +43,7 @@ export function useInputPreferences() {
   const echoMacrosRef = useRef<boolean>(true);
   // Mark your commands, a grey caret before each echo (default on).
   // Same load + subscribe pattern as keepLast.
-  const echoCaretRef = useRef<boolean>(true);
+  const echoCaretRef = useRef<boolean>(getEchoMarkOptions().mark !== 'off');
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -53,7 +53,6 @@ export function useInputPreferences() {
         pasteDelayRef.current = cfg.paste_line_delay_ms;
         echoColorRef.current = cfg.input_echo_color;
         echoMacrosRef.current = cfg.echo_macros;
-        echoCaretRef.current = cfg.input_echo_mark !== 'off';
         setSpellcheckPrompt(cfg.spellcheck_prompt);
         setCursorStyle(cfg.input_cursor_style);
       })
@@ -83,9 +82,13 @@ export function useInputPreferences() {
   useTauriEvent(subscribeEchoMacrosChanged, (on) => {
     echoMacrosRef.current = Boolean(on);
   });
-  useTauriEvent(subscribeInputEchoCaretChanged, (on) => {
-    echoCaretRef.current = Boolean(on);
-  });
+  useEffect(
+    () =>
+      subscribeEchoMarkOptions(() => {
+        echoCaretRef.current = getEchoMarkOptions().mark !== 'off';
+      }),
+    [],
+  );
 
   return {
     spellcheckPrompt,

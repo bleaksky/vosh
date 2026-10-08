@@ -70,6 +70,7 @@ async function load() {
     target: await import('./session/targetStore'),
     tick: await import('./session/tickStore'),
     chipStyle: await import('./config/chipStyleStore'),
+    echoMark: await import('./config/echoMarkStore'),
     tickCount: await import('./config/tickCountStore'),
     gameTime: await import('./config/gameTimeStore'),
     vitalsOptions: await import('./config/vitalsOptionsStore'),
@@ -599,6 +600,39 @@ describe('stores on the event bus', () => {
     fire('vosh://profile-switched', 'Ilsabet');
     await settle();
     expect(s.chipStyle.getChipStyle()).toBe('icon_value');
+  });
+
+  it('follow the echo mark Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', {
+      tracked_affects: [],
+      input_echo_mark: 'own',
+      input_echo_mark_text: 'you:',
+    });
+    const s = await load();
+    expect(s.echoMark.getEchoMarkOptions()).toEqual({
+      mark: 'own',
+      text: 'you:',
+      color: null,
+      dim: false,
+    });
+    const sent = { mark: 'gt', text: 'you:', color: '#c6a46a', dim: true };
+    fire('vosh://input-echo-mark-changed', sent);
+    const heard = s.echoMark.getEchoMarkOptions();
+    expect(heard).toEqual(sent);
+    // The same options again keep the snapshot.
+    fire('vosh://input-echo-mark-changed', { ...sent });
+    expect(s.echoMark.getEchoMarkOptions()).toBe(heard);
+    fire('vosh://input-echo-mark-changed', { mark: 'caret' });
+    expect(s.echoMark.getEchoMarkOptions()).toEqual({
+      mark: 'chevron',
+      text: '',
+      color: null,
+      dim: false,
+    });
+    commands.set('ui_get_config', { tracked_affects: [], input_echo_mark: 'off' });
+    fire('vosh://profile-switched', 'Orla');
+    await settle();
+    expect(s.echoMark.getEchoMarkOptions().mark).toBe('off');
   });
 
   it('follow the tick count Settings saves and each profile keeps', async () => {
