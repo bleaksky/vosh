@@ -373,12 +373,15 @@ describe('control washes', () => {
     });
   }
 
+  // High Contrast Light pins white paper, where its fields stand on the
+  // 3:1 edge it pins.
   it('fields a light theme on its raised paper, never on white', () => {
-    const light = BUILTIN_THEMES.map((t) => themeTokens(t)).filter((t) => t.appearance === 'light');
+    const light = BUILTIN_THEMES.filter((t) => themeTokens(t).appearance === 'light');
     expect(light.length).toBeGreaterThan(0);
-    for (const t of light) {
-      expect(t.field).toBe(t.raised);
-      expect(t.field).not.toBe('#ffffff');
+    for (const theme of light) {
+      const t = themeTokens(theme);
+      expect(t.field, theme.id).toBe(t.raised);
+      if (theme.chrome?.edge === undefined) expect(t.field, theme.id).not.toBe('#ffffff');
     }
   });
 
@@ -688,6 +691,7 @@ describe('Solarized', () => {
     expect(BUILTIN_THEMES.filter((t) => t.fitGameColors === false).map((t) => t.id)).toEqual([
       'solarized-dark',
       'high-contrast',
+      'high-contrast-light',
     ]);
   });
 
@@ -856,10 +860,10 @@ describe('color vision swaps', () => {
     }
     return h.toString(16).padStart(8, '0');
   };
-  // Board 14 rebuilt High Contrast, so the digests below hold every
-  // other theme to the commit they name.
-  const REBUILT = ['high-contrast'];
-  const kept = (themes: readonly AppTheme[]) => themes.filter((t) => !REBUILT.includes(t.id));
+  // Board 14 rebuilt High Contrast and added High Contrast Light, so the
+  // digests below hold every other theme to the commit they name.
+  const BOARD_14 = ['high-contrast', 'high-contrast-light'];
+  const kept = (themes: readonly AppTheme[]) => themes.filter((t) => !BOARD_14.includes(t.id));
   const sees = (p: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
     seenApart(hex(p[a]), hex(p[b]), vision);
   const apart = (p: XtermPalette, a: Slot, b: Slot) => deltaEOk(hex(p[a]), hex(p[b]));
@@ -899,7 +903,7 @@ describe('color vision swaps', () => {
     }),
   );
 
-  // The 24 themes one-window (c5a6ebd0) shipped, less the rebuilt ones,
+  // The 24 themes one-window (c5a6ebd0) shipped, less High Contrast,
   // their Typical fits and their play palettes with Fit game colors on,
   // digested from that commit's themes.ts. Typical plays them byte for
   // byte as it did.
@@ -920,12 +924,14 @@ describe('color vision swaps', () => {
     }
   });
 
-  // The 26 themes one-window (a206426c) ships, less the rebuilt ones,
+  // The 26 themes one-window (a206426c) ships, less High Contrast,
   // their Typical fits, their play palettes with Fit game colors on and
-  // their window tokens, digested from that commit. Color vision changes none of them.
+  // their window tokens, digested from that commit. Color vision
+  // changes none of them.
   it('fits and paints Typical byte for byte as at a206426c', () => {
     const shipped = kept(BUILTIN_THEMES);
     expect(shipped).toHaveLength(25);
+    expect(BUILTIN_THEMES).toHaveLength(27);
     expect(digest(JSON.stringify(shipped.map((t) => [t.id, t.fitted ?? null])))).toBe('6dc6293a');
     expect(digest(JSON.stringify(shipped.map((t) => [t.id, playPalette(t, true)])))).toBe(
       '3fcb0e5b',

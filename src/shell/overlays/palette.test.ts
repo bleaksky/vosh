@@ -674,6 +674,7 @@ describe('theme order', () => {
       'Green Screen',
       'Harbor Dark',
       'High Contrast',
+      'High Contrast Light',
       'Iceberg Dark',
       'Kanso Zen',
       'Melange Dark',

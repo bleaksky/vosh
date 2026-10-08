@@ -844,6 +844,64 @@ const highContrast: AppTheme = {
   },
 };
 
+// ── High Contrast Light ─────────────────────────────────────────────
+// The light half of the pair (Board 14). Black on white, with the
+// terminal colors of Modus Operandi, the light Modus theme, built to
+// WCAG AAA. The chrome is pinned the way High Contrast pins it, so every
+// text tone reads 7:1 or better and the lines read 3:1.
+const highContrastLight: AppTheme = {
+  id: 'high-contrast-light',
+  label: 'High Contrast Light',
+  description: 'Black on white, every text color 7:1 or better.',
+  source: 'the Modus themes',
+  author: 'Protesilaos Stavrou',
+  license: 'GPL-3.0-or-later',
+  xterm: {
+    background: '#ffffff',
+    foreground: '#000000',
+    cursor: '#0031a9',
+    cursorAccent: '#ffffff',
+    selectionBackground: '#b5d5ff',
+    selectionForeground: '#000000',
+    black: '#000000',
+    red: '#a60000',
+    green: '#006800',
+    yellow: '#6f5500',
+    blue: '#0031a9',
+    magenta: '#721045',
+    cyan: '#005e8b',
+    white: '#3d3d3d',
+    brightBlack: '#595959',
+    brightRed: '#972500',
+    brightGreen: '#00663f',
+    brightYellow: '#884900',
+    brightBlue: '#3548cf',
+    brightMagenta: '#531ab6',
+    brightCyan: '#005f5f',
+    brightWhite: '#000000',
+  },
+  fitGameColors: false,
+  chrome: {
+    raised: '#ffffff',
+    text: '#000000',
+    secondary: '#262626',
+    tertiary: '#4d4d4d',
+    title: '#262626',
+    accent: '#0031a9',
+    onAccent: '#ffffff',
+    danger: '#a60000',
+    dangerText: '#a60000',
+    warn: '#5c4600',
+    warnText: '#5c4600',
+    success: '#005a00',
+    sep: '#6e6e6e',
+    edge: '#6e6e6e',
+    keyRing: '#6e6e6e',
+    selection: '#b5d5ff',
+    selectionText: '#000000',
+  },
+};
+
 // ── Rosé Pine ───────────────────────────────────────────────────────
 // The main Rosé Pine variant as its own terminal ports ship it. The
 // cursor is a neutral highlight, so the chrome takes iris as its
@@ -1565,6 +1623,7 @@ export const BUILTIN_THEMES: AppTheme[] = [
   tangoDark,
   classicVivid,
   highContrast,
+  highContrastLight,
   everforestDark,
   greenScreen,
   srcery,
@@ -1877,6 +1936,20 @@ const VISION_FITS: Readonly<Record<string, Readonly<Record<OtherVision, VisionRo
     },
     tritanopia: {
       published: '. . #f57172 . . #c381c7 #ff8cc1 . . . #f69a9b . . #cda0ef #ffb8df . .',
+    },
+  },
+  'high-contrast-light': {
+    deuteranopia: {
+      published:
+        '. . #a40900 #007eba #6e5400 #4917a1 #64003a #04608d . . #872700 #003c6c . #5b3bca #4b04ab . .',
+    },
+    protanopia: {
+      published:
+        '. . #990800 #007db8 #745a09 #4220a7 . #025f8c . . #620700 #003e75 . #5542d0 #4f10b0 . .',
+    },
+    tritanopia: {
+      published:
+        '. . #b11810 . #896e26 #6b007e #983663 . . . #a12f0e . #99581a #8126b1 #7c0058 . .',
     },
   },
   'everforest-dark': {

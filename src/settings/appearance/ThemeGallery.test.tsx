@@ -31,6 +31,17 @@ describe('ThemeGallery', () => {
       { value: 'dusk', name: 'dusk' },
     ]);
   });
+
+  it('shows the High Contrast pair side by side', () => {
+    const html = renderToStaticMarkup(
+      <ThemeGallery themes={galleryThemes(BUILTIN_THEMES, [])} selected="nord" onPick={() => {}} />,
+    );
+    const list = radios(html).map((r) => r.value);
+    const at = list.indexOf('high-contrast');
+    expect(at).toBeGreaterThan(-1);
+    expect(list[at + 1]).toBe('high-contrast-light');
+    expect(radios(html)[at + 1].name).toBe('High Contrast Light');
+  });
 });
 
 describe('the Vision preview', () => {

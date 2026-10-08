@@ -461,6 +461,8 @@ describe('Draining chips', () => {
     'classic-vivid danger': '4.60 to 3.81',
     'high-contrast warn': '10.74 to 6.50',
     'high-contrast danger': '7.51 to 5.32',
+    'high-contrast-light warn': '7.15 to 5.38',
+    'high-contrast-light danger': '5.85 to 4.96',
     'everforest-dark warn': '5.08 to 3.57',
     'everforest-dark danger': '4.53 to 3.63',
     'green-screen warn': '12.78 to 7.21',

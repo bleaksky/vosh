@@ -18,6 +18,7 @@
     { "theme": "tango-dark", "background": "#2e3436" },
     { "theme": "classic-vivid", "background": "#0a0a0a" },
     { "theme": "high-contrast", "background": "#0a0a0a" },
+    { "theme": "high-contrast-light", "background": "#ffffff" },
     { "theme": "everforest-dark", "background": "#2d353b" },
     { "theme": "green-screen", "background": "#0a0e0b" },
     { "theme": "srcery", "background": "#121110" },
