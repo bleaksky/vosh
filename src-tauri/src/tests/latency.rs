@@ -48,6 +48,12 @@ struct Harness {
 impl Harness {
     /// Connect the session to a game on a local port, with a log.
     async fn new() -> Self {
+        Self::with_log(|_| {}).await
+    }
+
+    /// Connect as [`Self::new`] does, once `seed` has written to the log,
+    /// with a second connection to it for searches, as the app opens.
+    async fn with_log(seed: impl FnOnce(&mut vosh_log::LogStore)) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("a local port");
@@ -55,7 +61,10 @@ impl Harness {
         let dir = tempfile::tempdir().expect("a temporary folder");
         let state: SharedState = Arc::new(AppState::default());
         let log = dir.path().join("pinned-session-log.db");
-        *state.logs.lock().await = Some(vosh_log::LogStore::open(&log).expect("the log"));
+        let mut writer = vosh_log::LogStore::open(&log).expect("the log");
+        seed(&mut writer);
+        *state.logs.lock().await = Some(writer);
+        *state.log_reader.lock().await = Some(vosh_log::LogStore::open(&log).expect("a reader"));
 
         let app = mock_builder()
             .build(mock_context(noop_assets()))
@@ -452,6 +461,94 @@ async fn your_line_reaches_the_game_before_its_log_row() {
     drop(busy);
     assert!(heard, "the game heard nothing while the log was busy");
     assert_eq!(h.log_rows(1).await, vec!["> look".to_string()]);
+    h.disconnect().await;
+}
+
+/// A search through every log you kept leaves the game and its log
+/// alone. While the search holds the read connection, the writer stays
+/// free, your line reaches the game, the reply shows and your line's row
+/// lands. A new search then stops it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_search_never_holds_up_the_game_or_its_log() {
+    let _grid = crate::native::grid::lock_shared_grid_for_test();
+    crate::native::grid::blank_shared_grid_for_test(100, 40);
+    let mut h = Harness::with_log(|writer| {
+        let id = writer
+            .start_session("127.0.0.1", 4000, 0)
+            .expect("an older log");
+        let rows: Vec<_> = (0..500_000)
+            .map(|n| vosh_log::LogEntry {
+                session_id: id,
+                ts_ms: n,
+                text: format!("  Line {n} of the description of Market Street."),
+                raw: None,
+            })
+            .collect();
+        writer.append_batch(&rows).expect("the rows");
+    })
+    .await;
+
+    // All time with a count, for a line no row holds, so it reads every
+    // row until a new search replaces it.
+    let search = {
+        let state = h.state.clone();
+        tokio::spawn(async move {
+            crate::ipc::logs::search_page(
+                &state,
+                "Maren bows".into(),
+                false,
+                50,
+                crate::ipc::logs::LogScope::default(),
+                None,
+                None,
+                true,
+            )
+            .await
+        })
+    };
+    let deadline = tokio::time::Instant::now() + WAIT;
+    while h.state.log_reader.try_lock().is_ok() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the search never took the reader"
+        );
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert!(
+        h.state.logs.try_lock().is_ok(),
+        "the search holds the writer"
+    );
+
+    h.type_line("look").await;
+    assert!(
+        h.game_hears(b"look\r\n", WAIT).await,
+        "the game never heard look"
+    );
+    assert_eq!(h.log_rows(1).await, vec!["> look".to_string()]);
+    let before = h.frames();
+    h.game_writes(&room("Market Street", 2)).await;
+    h.until_shown("Line 1 of the description of Market Street.")
+        .await;
+    let deadline = tokio::time::Instant::now() + WAIT;
+    while h.frames() == before {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the reply drew no frame"
+        );
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert!(
+        !search.is_finished(),
+        "the search ended before the game answered"
+    );
+
+    h.state.log_searches.fetch_add(1, Ordering::AcqRel);
+    let stopped = search
+        .await
+        .expect("the search task")
+        .expect_err("a stopped search");
+    assert!(stopped.starts_with("stopped"), "{stopped}");
     h.disconnect().await;
 }
 
