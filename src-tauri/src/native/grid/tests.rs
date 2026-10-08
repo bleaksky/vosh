@@ -1804,3 +1804,28 @@ fn your_echo_reads_its_row_once_the_live_render_is_back() {
         );
     }
 }
+
+#[test]
+fn scrollback_size_sets_the_history_a_grid_keeps() {
+    let mut g = TermGrid::new(80, 24);
+    g.set_history(1_000);
+    for i in 0..3_000 {
+        g.feed(format!("line {i}\r\n").as_bytes());
+    }
+    assert_eq!(g.scrollback_len(), 1_000);
+    g.set_history(20_000);
+    for i in 0..15_000 {
+        g.feed(format!("more {i}\r\n").as_bytes());
+    }
+    assert_eq!(g.scrollback_len(), 16_000);
+    // A grid made after the session set its size keeps it from the start.
+    let mut held = SessionGrid {
+        history: Some(1_000),
+        ..SessionGrid::default()
+    };
+    let grid = held.written();
+    for i in 0..3_000 {
+        grid.feed(format!("line {i}\r\n").as_bytes());
+    }
+    assert_eq!(grid.scrollback_len(), 1_000);
+}

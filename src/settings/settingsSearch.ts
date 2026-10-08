@@ -95,6 +95,11 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('general', 'session-logs', 'keep-logs'),
   },
   {
+    label: 'Scrollback size',
+    keywords: 'scrollback history lines terminal buffer memory',
+    target: at('general', 'scrollback', 'scrollback-size'),
+  },
+  {
     label: 'Search logs',
     keywords: 'log history find copy text save file export download txt colors',
     target: at('general', 'logs'),

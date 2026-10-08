@@ -105,6 +105,7 @@ pub(crate) struct UiConfigPayload {
     pub snoop_share: f64,
     pub snoop_folded: bool,
     pub log_sessions: Option<bool>,
+    pub scrollback_lines: u32,
 }
 
 impl UiConfigPayload {
@@ -173,6 +174,7 @@ impl UiConfigPayload {
             snoop_share: ui.snoop_share,
             snoop_folded: ui.snoop_folded,
             log_sessions: ui.log_sessions,
+            scrollback_lines: ui.scrollback_lines,
         }
     }
 }
@@ -260,6 +262,7 @@ pub(crate) enum UiField {
     SnoopShare(f64),
     SnoopFolded(bool),
     LogSessions(Option<bool>),
+    ScrollbackLines(u32),
 }
 
 /// Save the fields a page names and leave every other one as it is, so
@@ -290,10 +293,17 @@ async fn set_fields(
     profile: Option<String>,
 ) -> Result<Vec<(SessionId, VitalsText)>, String> {
     let sessions = state.all_sessions();
-    let (open, drawn) = {
+    let (open, drawn, resized) = {
         let mut p = state.lock_named(profile).await?;
         let text = p.ui.vitals_text.clone();
+        let lines = p.ui.scrollback_lines;
         apply_fields(&mut p.ui, fields);
+        // A new Scrollback size reaches every session on the profile.
+        let resized: Vec<_> = if p.ui.scrollback_lines == lines {
+            Vec::new()
+        } else {
+            p.players(&sessions).cloned().collect()
+        };
         let mut drawn = Vec::new();
         if p.ui.vitals_text != text {
             let now = tokio::time::Instant::now();
@@ -304,8 +314,12 @@ async fn set_fields(
                 }
             }
         }
-        (p.open().clone(), drawn)
+        (p.open().clone(), drawn, (resized, p.ui.scrollback_lines))
     };
+    let (resized, lines) = resized;
+    for session in resized {
+        crate::logs::keep_scrollback_lines(&session, lines).await;
+    }
     persist_profile(state, &open).await;
     Ok(drawn)
 }
@@ -386,6 +400,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::SnoopShare(v) => ui.snoop_share = cfg::coerce_snoop_share(v),
             UiField::SnoopFolded(v) => ui.snoop_folded = v,
             UiField::LogSessions(v) => ui.log_sessions = v,
+            UiField::ScrollbackLines(v) => ui.scrollback_lines = cfg::coerce_scrollback_lines(v),
         }
     }
     (ui.affects_running_out_hours, ui.affects_almost_gone_hours) =

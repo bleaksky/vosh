@@ -11,7 +11,8 @@ import { checkForUpdate, installUpdateAndRelaunch } from '../../ipc/updater';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
-import { isLocalHost, KEEP_LOGS, savedLogsText } from './logView';
+import { isLocalHost, KEEP_LOGS, SCROLLBACK_SIZES, savedLogsText } from './logView';
+import { DEFAULT_SCROLLBACK_LINES } from '../../ipc/uiConfig';
 import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS } from '../../lib/knownWorlds';
 import { useSessions } from '../../stores/session/sessionsStore';
@@ -80,6 +81,24 @@ function GeneralSections({
         onError={onError}
         onSearch={() => navigate({ group: 'general', section: 'logs' })}
       />
+      <Section
+        id="scrollback"
+        title="Scrollback"
+        help={{ topic: 'play.scroll-back', subject: 'scrollback' }}
+      >
+        <Row
+          label="Scrollback size"
+          description="How many lines you can scroll back through in the terminal. Vosh keeps them for your next launch too."
+          anchor="scrollback-size"
+        >
+          <Select
+            value={String(config?.scrollback_lines ?? DEFAULT_SCROLLBACK_LINES)}
+            disabled={config === null}
+            options={SCROLLBACK_SIZES}
+            onChange={(v) => update({ scrollback_lines: Number(v) })}
+          />
+        </Row>
+      </Section>
       {!mac && <AdvancedSection target={target} navSeq={navSeq} />}
     </>
   );

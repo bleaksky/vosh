@@ -43,6 +43,11 @@ export const KEEP_LOGS: readonly { value: string; label: string }[] = [
   { value: '30', label: '30 days' },
 ];
 
+/** The choices of Scrollback size, in lines (D40). */
+export const SCROLLBACK_SIZES: readonly { value: string; label: string }[] = [
+  1_000, 5_000, 10_000, 25_000, 50_000, 100_000,
+].map((n) => ({ value: String(n), label: `${NUMBER.format(n)} lines` }));
+
 /** A count with thousands separators, like `708,350`. */
 export function formatCount(n: number): string {
   return NUMBER.format(n);

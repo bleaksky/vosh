@@ -388,6 +388,10 @@ pub(crate) async fn show_selection<R: tauri::Runtime>(
 
 /// Read the lines the scrollback file of `session` kept into its ring.
 async fn read_scrollback(session: &Session, app_data: &Path) {
+    // The profile's Scrollback size first, so a ring larger than the
+    // default reads its whole file.
+    let lines = session.lock_profile().await.ui.scrollback_lines;
+    crate::logs::keep_scrollback_lines(session, lines).await;
     let path = paths::scrollback_path(app_data, session.id);
     if let Ok(bytes) = std::fs::read(&path) {
         session.scrollback.lock().await.load_from_bytes(&bytes);

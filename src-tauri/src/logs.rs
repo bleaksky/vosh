@@ -19,8 +19,9 @@ use tokio::sync::Mutex;
 
 pub(crate) type SharedLogStore = Arc<Mutex<Option<vosh_log::LogStore>>>;
 
-/// Maximum number of terminal lines kept in the persistent scrollback.
-const SCROLLBACK_CAP: usize = 10_000;
+/// The lines the ring keeps until the session says, the default
+/// Scrollback size.
+const SCROLLBACK_CAP: usize = crate::profile::ui::DEFAULT_SCROLLBACK_LINES as usize;
 
 /// A line the ring keeps that Collapse repeated lines made something of:
 /// whether it starts a run of repeated lines or joins the run the screen
@@ -40,7 +41,7 @@ struct RingRun {
     gen: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Scrollback {
     lines: VecDeque<Vec<u8>>,
     /// The run of repeated lines the screen ends on, while Collapse
@@ -48,9 +49,34 @@ pub(crate) struct Scrollback {
     run: Option<RingRun>,
     /// The ring changed since its file was last written.
     changed: bool,
+    /// The most lines the ring keeps, Scrollback size (D40).
+    cap: usize,
+}
+
+impl Default for Scrollback {
+    fn default() -> Self {
+        Self {
+            lines: VecDeque::new(),
+            run: None,
+            changed: false,
+            cap: SCROLLBACK_CAP,
+        }
+    }
 }
 
 impl Scrollback {
+    /// Keep at most `lines`, dropping the oldest past it now.
+    pub(crate) fn set_cap(&mut self, lines: usize) {
+        self.cap = lines.max(1);
+        while self.lines.len() > self.cap {
+            self.lines.pop_front();
+            self.changed = true;
+        }
+        if self.run.is_some_and(|run| run.after >= self.lines.len()) {
+            self.run = None;
+        }
+    }
+
     /// Forget every line, for Clear scrollback. The next launch restores
     /// nothing from before it.
     pub(crate) fn clear(&mut self) {
@@ -67,10 +93,10 @@ impl Scrollback {
 
     pub(crate) fn push(&mut self, raw_line: Vec<u8>) {
         self.changed = true;
-        if self.lines.len() == SCROLLBACK_CAP {
+        if self.lines.len() >= self.cap {
             self.lines.pop_front();
             // The run's line was the oldest, and left with it.
-            if self.run.is_some_and(|run| run.after + 1 >= SCROLLBACK_CAP) {
+            if self.run.is_some_and(|run| run.after + 1 >= self.cap) {
                 self.run = None;
             }
         }
@@ -235,6 +261,14 @@ pub(crate) async fn save_changed_scrollback(state: &crate::app::state::SharedSta
     .await;
 }
 
+/// Keep `lines` of scrollback in `session`: its ring, and so its file,
+/// and its native grid. xterm follows the same field on the page (D40).
+pub(crate) async fn keep_scrollback_lines(session: &crate::sessions::Session, lines: u32) {
+    session.scrollback.lock().await.set_cap(lines as usize);
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::set_history(session.id, lines as usize);
+}
+
 /// On the way out: end each log still open, since a quit while connected
 /// never reaches the end of the session loop, and write the scrollback
 /// that changed, so the next launch shows what you saw last.
@@ -275,6 +309,29 @@ mod tests {
             s.lines.back().unwrap(),
             format!("line {}", SCROLLBACK_CAP + 4).as_bytes()
         );
+    }
+
+    #[test]
+    fn a_smaller_size_drops_the_oldest_lines() {
+        let mut s = Scrollback::default();
+        for i in 0..10 {
+            s.push(format!("line {i}").into_bytes());
+        }
+        let _ = s.take_changed();
+        s.set_cap(4);
+        assert_eq!(
+            s.lines().collect::<Vec<_>>(),
+            [&b"line 6"[..], b"line 7", b"line 8", b"line 9"]
+        );
+        assert!(s.take_changed().is_some());
+        s.push(b"line 10".to_vec());
+        assert_eq!(s.lines.len(), 4);
+        assert_eq!(s.lines.front().unwrap(), b"line 7");
+        s.set_cap(20_000);
+        for i in 0..15_000 {
+            s.push(format!("more {i}").into_bytes());
+        }
+        assert_eq!(s.lines.len(), 15_004);
     }
 
     #[test]

@@ -432,6 +432,8 @@ fn full_ui() -> UiConfig {
         // Written only once you choose, so None keeps the golden's
         // bytes. profile/ui.rs tests the choice.
         log_sessions: None,
+        // The default keeps the golden's bytes. profile/ui.rs tests a size.
+        scrollback_lines: 10_000,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),

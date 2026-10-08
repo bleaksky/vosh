@@ -38,6 +38,7 @@ import {
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
+  SCROLLBACK_LINES_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
   WRITING_OFFER_CHANGED,
   SPLIT_DIVIDER_CHANGED,
@@ -565,6 +566,9 @@ export interface UiConfig {
   /** Log sessions. Null until you choose, which logs every world but
    *  this computer. */
   log_sessions: boolean | null;
+  /** Scrollback size: the lines each terminal keeps above the screen,
+   *  and the scrollback file for the next launch, 1,000 to 100,000. */
+  scrollback_lines: number;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -680,6 +684,7 @@ export interface RawUiConfig {
   snoop_share?: number;
   snoop_folded?: boolean;
   log_sessions?: boolean | null;
+  scrollback_lines?: number;
 }
 
 /** A profile's UI config, the selected session's profile's when it
@@ -809,7 +814,19 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     snoop_share: normalizeSnoopShare(cfg.snoop_share),
     snoop_folded: cfg.snoop_folded === true,
     log_sessions: typeof cfg.log_sessions === 'boolean' ? cfg.log_sessions : null,
+    scrollback_lines: normalizeScrollbackLines(cfg.scrollback_lines),
   };
+}
+
+/** The lines a terminal keeps until you pick another Scrollback size. */
+export const DEFAULT_SCROLLBACK_LINES = 10_000;
+
+/** Read a stored scrollback size, held to 1,000 to 100,000 as Rust holds
+ *  it. Anything that is not a number is the default. */
+export function normalizeScrollbackLines(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(100_000, Math.max(1_000, Math.round(raw)))
+    : DEFAULT_SCROLLBACK_LINES;
 }
 
 /** The share of the terminal column a snoop split takes until you drag
@@ -975,6 +992,15 @@ export async function subscribeVitalsTextChanged(
       vitals_text: typeof raw?.vitals_text === 'string' ? raw.vitals_text : '',
       vitals_text_previous: normalizeVitalsTextPrevious(raw?.vitals_text_previous),
     });
+  });
+}
+
+/** Hear Scrollback size change. */
+export async function subscribeScrollbackLinesChanged(
+  cb: (lines: number) => void,
+): Promise<UnlistenFn> {
+  return listen<number>(SCROLLBACK_LINES_CHANGED, (event) => {
+    cb(normalizeScrollbackLines(event.payload));
   });
 }
 

@@ -58,6 +58,7 @@
     "affects_almost_gone_hours": 1,
     "snoop_share": 0.4,
     "snoop_folded": false,
-    "log_sessions": null
+    "log_sessions": null,
+    "scrollback_lines": 10000
   }
 }

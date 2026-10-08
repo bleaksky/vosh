@@ -565,6 +565,7 @@ function MainWindow() {
     themeTerminalColors,
     brightBold,
     blinkText,
+    scrollbackLines,
   } = useUiConfigFollow({ onThemesChanged: themesChanged });
   // The terminal settings the Text style of your vitals draws with, in
   // the footer or the status line.
@@ -690,6 +691,7 @@ function MainWindow() {
               lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
               blinkText={blinkText}
+              scrollback={scrollbackLines}
               quiet
               onReady={(handle) => {
                 historyTermRef.current = handle;
@@ -719,6 +721,7 @@ function MainWindow() {
               lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
               blinkText={blinkText}
+              scrollback={scrollbackLines}
               onReady={onTerminalReady(id)}
               onScrollbackLoaded={onScrollbackLoaded(id)}
               onResultsChanged={(event) => onFindResults(id, event)}

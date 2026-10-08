@@ -10,6 +10,7 @@ import {
   AFFECTS_DISPLAY_CHANGED,
   BASE_ANSI_CHANGED,
   BLINK_TEXT_CHANGED,
+  SCROLLBACK_LINES_CHANGED,
   BRIGHT_BOLD_CHANGED,
   CHIP_STYLE_CHANGED,
   COLOR_VISION_CHANGED,
@@ -126,6 +127,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   // Your choice as you made it. Each window reads its own system's
   // reduce motion setting to resolve none.
   await emitChanged(BLINK_TEXT_CHANGED, config.blink_text, before?.blink_text);
+  await emitChanged(SCROLLBACK_LINES_CHANGED, config.scrollback_lines, before?.scrollback_lines);
   await emitChanged(FIT_GAME_COLORS_CHANGED, config.fit_game_colors, before?.fit_game_colors);
   await emitChanged(COLOR_VISION_CHANGED, config.color_vision, before?.color_vision);
   await emitChanged(

@@ -240,6 +240,8 @@ Scrollback opens in a split above the live terminal, so old output stays readabl
 
 The live tail never scrolls away while the split is open. New output keeps landing there, and the lines you type show in the history too, so the record stays continuous.
 
+The terminal keeps 10,000 lines to scroll back through. To keep more or fewer, open Settings, choose General, and pick a size from 1,000 to 100,000 lines in `Scrollback size`. Both renderers and the scrollback Vosh restores at your next launch follow it, and a smaller size drops the oldest lines. Each character keeps its own. Times stay in the session log, under Settings, General, then `Search logs…`.
+
 Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text, and a line the game sends again and again takes one row. A line that reads exactly as the line right above it, colors included, joins it, and the row shows a gray count in front, like `(3) You are hungry.` The count climbs in place as more arrive. Any other line ends the run, a blank one too, and so do the lines you type, a reply from Vosh itself and a prompt that stays in the text. A pinned prompt leaves the text, so a run goes on past it. Type `compact` in Aabahran to drop the blank line before each prompt, and a run goes on from one round to the next. Your session log keeps every line, and your triggers fire on each one. It is off until you turn it on.
 
 Two rows under it set what collapses around a fight. `In a fight` covers every line that arrives while you are fighting, and starts on `Collapse`. Pick `Show every line` and each line of a fight keeps its own row. `Attack lines` covers each hit and miss the game shows you, yours, the ones on you and the ones you watch, in a fight or not. It starts on `Show every line`, so two blows show as two lines and never as `(2) Your slash DISMEMBERS a Blackwatch guard!`, where the count is easy to miss. While `In a fight` shows every line, attack lines show every line too, and the row says so.
@@ -1024,7 +1026,7 @@ Inside that folder.
 - `global.toml` holds cross profile UI preferences.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
-- `scrollback.txt` keeps the last 10,000 terminal lines of the first session you opened across restarts, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Vosh writes each one when a connection ends, every few minutes while it runs, and as you quit, so a crash loses at most a few minutes of it. Closing a session deletes its file.
+- `scrollback.txt` keeps the newest terminal lines of the first session you opened across restarts, as many as `Scrollback size` says, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Vosh writes each one when a connection ends, every few minutes while it runs, and as you quit, so a crash loses at most a few minutes of it. Closing a session deletes its file.
 - `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
 - `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.
