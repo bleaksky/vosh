@@ -1,5 +1,4 @@
 import {
-  createContext,
   Fragment,
   useContext,
   useEffect,
@@ -71,7 +70,6 @@ import {
   Disclosure,
   Field,
   FieldArea,
-  PencilIcon,
   PlusIcon,
   Row,
   Segmented,
@@ -94,7 +92,7 @@ import {
   type TriggerCard,
 } from '../../automation/presetEdits';
 import { runPresetPlan } from '../../automation/presetPlan';
-import { presetById, type Preset } from '../../automation/presets';
+import { presetById } from '../../automation/presets';
 import {
   presetEditsGet,
   presetEditsSet,
@@ -108,6 +106,21 @@ import { AlertDetailRows, AlertPartsOn, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
 import { CodeRow, FixChoice, GroupField, NumberField } from './fields';
 import { DraftEditor } from './DraftEditor';
+import {
+  alsoSends,
+  colorKeys,
+  joinNodes,
+  morePatternsDiffer,
+  OpenPresetContext,
+  opensAdvanced,
+  PATTERN_NOUN,
+  presetSwitch,
+  presetText,
+  withChanged,
+  type Flag,
+  type FromPreset,
+} from './triggerChanged';
+import { AdvancedCount, Changed, UnderField } from './TriggerChangeNotes';
 import type { DetailProps, EditorProps, KindSpec, TriggersLink } from './types';
 
 /** What the list loaded beside the triggers: your preset edits, and each
@@ -345,88 +358,12 @@ function colorOptions(current: string | undefined): readonly SelectOption[] {
   return [...COLOR_OPTIONS, { value: current, label: current }];
 }
 
-/** Opens a preset's card in Presets, by id, from the note at the head
- *  of a preset trigger's card. */
-const OpenPresetContext = createContext<(id: string) => void>(() => {});
-
-const PATTERN_NOUN = { one: 'pattern', many: 'patterns' };
-const CHANGE_NOUN = { one: 'change', many: 'changes' };
-
-/** The rows under Advanced, by the key their edits keep. */
-const ADVANCED_ROWS = [
-  'priority',
-  'target',
-  'fg',
-  'bg',
-  'bold',
-  'underline',
-  'inverse',
-  'route',
-  'script',
-] as const;
-
-/** The rows under Advanced past ADVANCED_ROWS whose fix opens it. */
-const opensAdvanced = (key: string, main: string) =>
-  (ADVANCED_ROWS as readonly string[]).includes(key) ||
-  (key.startsWith('pattern:') && key !== main);
-
-/** What a flagged row shows, or null for a row no fix flags: `say` puts
- *  the preset's value now in words. */
-type Flag = (key: string, say: (value: EditValue) => ReactNode) => ReactNode;
-
-/** How a changed row says what the preset has. */
-function Changed({ children }: { children: ReactNode }) {
-  return <span className="st-auto-changed">Changed. The preset has {children}.</span>;
-}
-
-/** The preset's text, in the MUD font, or that it leaves it empty. */
-function presetText(value: EditValue | undefined): ReactNode {
-  const text = typeof value === 'string' ? value : '';
-  return text ? <span className="st-auto-mono">{text}</span> : 'it empty';
-}
-
-const presetSwitch = (value: EditValue | undefined) => (value === true ? 'it on' : 'it off');
-
 /** Whether a pattern row's value has the pattern on. */
 const patternOn = (value: EditValue) =>
   typeof value === 'object' && !Array.isArray(value) && value.enabled !== false;
 
 const modeLabel = (value: EditValue) =>
   MATCH_MODE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
-
-/** A text row's field with the line under it that says what the preset
- *  has, once you changed it. */
-function UnderField({ changed, children }: { changed: ReactNode; children: ReactNode }) {
-  if (changed === null) return children;
-  return (
-    <div className="st-auto-stack">
-      {children}
-      <p className="st-auto-under">{changed}</p>
-    </div>
-  );
-}
-
-/** `description` with the line of a changed row after it, or either one
- *  alone. */
-function withChanged(description: ReactNode, changed: ReactNode): ReactNode {
-  if (changed === null) return description;
-  return (
-    <>
-      {description}
-      {changed}
-    </>
-  );
-}
-
-/** What a preset trigger's card knows of its preset: the trigger as
- *  the preset ships it, each row you changed with the preset's value,
- *  and the color your swatch or the preset gives each key. */
-interface FromPreset {
-  preset: Preset;
-  ship: TriggerRecord;
-  changed: Rows;
-  colorOf: (key: string) => string;
-}
 
 /** The card for the selected trigger. A preset trigger edits as yours
  *  do, all but its name, and each row you changed says what the preset
@@ -662,22 +599,6 @@ export function TriggerDetail({
   );
 }
 
-/** The color keys of `preset` that `template` names, in its order. */
-function colorKeys(preset: Preset, template: string): string[] {
-  const keys = [...template.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
-  return [...new Set(keys)].filter((key) => Object.hasOwn(preset.colors, key));
-}
-
-/** `parts` joined as a sentence joins them, `a and b`, `a, b, and c`. */
-function joinNodes(parts: readonly ReactNode[]): ReactNode {
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {i === 0 ? '' : i === parts.length - 1 ? (parts.length > 2 ? ', and ' : ' and ') : ', '}
-      {part}
-    </Fragment>
-  ));
-}
-
 const styleLabel = (value: EditValue) =>
   TRIGGER_STYLE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
 
@@ -685,48 +606,6 @@ const styleLabel = (value: EditValue) =>
  *  changed. */
 const partsOn = (alert: AlertParts | undefined) =>
   [Boolean(alert?.banner), alert?.sound !== undefined, alert?.attention !== undefined].join();
-
-/** The rows under Advanced that differ from the preset, the count a
- *  closed Advanced shows beside the pencil so no edit hides there. */
-function AdvancedCount({ t, from }: { t: TriggerRecord; from: FromPreset | null }) {
-  if (!from) return null;
-  const rows = ADVANCED_ROWS.filter((key) => Object.hasOwn(from.changed, key)).length;
-  const count = rows + (morePatternsDiffer(t, from.ship) ? 1 : 0) + alsoChanges(t, from.ship);
-  if (count === 0) return null;
-  return (
-    <span className="st-auto-count">
-      <PencilIcon size={12} />
-      {countPhrase(count, CHANGE_NOUN)}
-    </span>
-  );
-}
-
-/** Each pattern past the main one, and whether the main one is on. */
-function morePatterns(t: TriggerRecord): string {
-  return JSON.stringify([
-    mainPattern(t).enabled,
-    ...t.patterns.slice(1).map((p) => [patternSource(p), p.enabled]),
-  ]);
-}
-
-const morePatternsDiffer = (t: TriggerRecord, ship: TriggerRecord) =>
-  morePatterns(t) !== morePatterns(ship);
-
-/** The commands of each Also send. */
-const alsoSends = (t: TriggerRecord) =>
-  extraEffects(t.actions)
-    .filter((e) => e.kind === 'send')
-    .map((e) => e.value);
-
-/** How many Also send rows differ from the preset's: the ones you
- *  changed or added, or the ones you took out where those are more. */
-function alsoChanges(t: TriggerRecord, ship: TriggerRecord): number {
-  const mine = alsoSends(t);
-  const theirs = alsoSends(ship);
-  const added = mine.filter((c) => !theirs.includes(c)).length;
-  const gone = theirs.filter((c) => !mine.includes(c)).length;
-  return Math.max(added, gone);
-}
 
 /** The Pattern row: the label and what the mode does on the left with
  *  the mode beside them, and the main pattern at full width under both.
