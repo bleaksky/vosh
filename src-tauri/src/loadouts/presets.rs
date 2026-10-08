@@ -327,6 +327,49 @@ pub(crate) fn install_preset_macros(p: &mut Profile, macros: Vec<Macro>) -> Resu
     Ok(installed)
 }
 
+/// Give the preset tag back to the macros of a preset that came back
+/// through a build that drops it. 0.8.1 has no `preset` field, so a save
+/// there writes each preset macro as one of yours, the held ones still
+/// off. A preset of `macros` is taken as come back when `p` holds no
+/// macro tagged with it and holds, for each of its macros, one of yours
+/// on the same key with the same command. Each such copy takes the tag,
+/// so [`install_preset_macros`] replaces it, with its group kept, and
+/// your own macro on the key keeps it. A preset you turn on finds its
+/// macros tagged by the install that turns it on, so only the launch
+/// that installs the presets already on runs this, and a preset you turn
+/// on never takes a macro of yours that happens to match. Returns the
+/// number tagged.
+pub(crate) fn retag_returned_macros(p: &mut Profile, macros: &[Macro]) -> usize {
+    let presets: BTreeSet<&str> = macros.iter().filter_map(|m| m.preset.as_deref()).collect();
+    let mut tagged = 0;
+    for id in presets {
+        if p.macros.iter().any(|m| m.preset.as_deref() == Some(id)) {
+            continue;
+        }
+        let mut copies: Vec<usize> = Vec::new();
+        for want in macros.iter().filter(|m| m.preset.as_deref() == Some(id)) {
+            let copy = p.macros.iter().enumerate().position(|(i, m)| {
+                m.preset.is_none()
+                    && m.key == want.key
+                    && m.command == want.command
+                    && !copies.contains(&i)
+            });
+            match copy {
+                Some(i) => copies.push(i),
+                None => {
+                    copies.clear();
+                    break;
+                }
+            }
+        }
+        for i in &copies {
+            p.macros[*i].preset = Some(id.to_string());
+        }
+        tagged += copies.len();
+    }
+    tagged
+}
+
 /// Take out every macro the preset `preset` added. Your macros stay as
 /// they are. Returns the number removed.
 pub(crate) fn remove_preset_macros(p: &mut Profile, preset: &str) -> usize {
@@ -797,6 +840,63 @@ mod tests {
         let before = p.macros.clone();
         assert!(install_preset_macros(&mut p, vec![yours("Numpad5", "look")]).is_err());
         assert_eq!(p.macros, before);
+    }
+
+    #[test]
+    fn preset_macros_back_from_0_8_1_take_their_preset_back() {
+        // Your rec on Numpad3 holds the preset d off, and you put n in a
+        // group.
+        let mut p = Profile::default();
+        p.macros.push(yours("Numpad3", "rec"));
+        install_preset_macros(&mut p, numpad()).unwrap();
+        let travel = Some("travel".to_string());
+        set_macro(
+            &mut p,
+            "Numpad8",
+            "n",
+            travel,
+            None,
+            Some("numpad_movement"),
+        )
+        .unwrap();
+        let before = p.macros.clone();
+
+        // 0.8.1 drops the tag as it reads the file and saves the six as
+        // macros of yours, d still off.
+        for m in &mut p.macros {
+            m.preset = None;
+        }
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 6);
+        install_preset_macros(&mut p, numpad()).unwrap();
+        assert_eq!(p.macros, before);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+
+        // Turning the preset off leaves your rec alone.
+        remove_preset_macros(&mut p, "numpad_movement");
+        assert_eq!(p.macros, [yours("Numpad3", "rec")]);
+    }
+
+    #[test]
+    fn your_own_macros_never_join_a_preset() {
+        // The preset still holds its macros, so your copies stay yours.
+        let mut p = Profile::default();
+        p.macros.push(yours("Numpad8", "n"));
+        install_preset_macros(&mut p, numpad()).unwrap();
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
+
+        // Five of the six keys are not the whole preset.
+        let mut p = Profile::default();
+        p.macros
+            .extend(NUMPAD[..5].iter().map(|(k, c)| yours(k, c)));
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
+        assert!(p.macros.iter().all(|m| m.preset.is_none()));
+
+        // A command you changed is yours too.
+        let mut p = Profile::default();
+        p.macros.extend(NUMPAD.iter().map(|(k, c)| yours(k, c)));
+        p.macros[0].command = "north".into();
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
     }
 
     #[test]
