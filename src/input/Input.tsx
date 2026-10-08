@@ -20,6 +20,7 @@ import { writingStart } from '../ipc/writing';
 import { useWriting, writingOf } from '../stores/session/writingStore';
 import { loadWriting, useWritingFile } from '../writing/draftsStore';
 import { pasted } from '../writing/text';
+import { looksLikeChat } from './chatLine';
 import { editorLineOf, heldLine, useFieldCell, washPast } from './editorLine';
 import { EditorMarks } from './EditorMarks';
 import { canonicalKeyFromEvent } from '../automation/macroKeys';
@@ -74,33 +75,6 @@ interface Props {
   fontKey?: string;
 }
 
-// Regex set for "is this line chat-like?" — when the toggle in
-// Settings is on and one of these matches the current input, the
-// webview's native spell-check flips on for the prompt. Otherwise
-// MUD verbs like `kill` / `oload` would light up red on every line.
-const CHAT_PREFIXES: RegExp[] = [
-  /^say\b/i,
-  /^'/, // `'hello` = say hello (FL-style say shortcut)
-  /^"/, // `"hello` = say hello on some MUDs
-  /^tell\s+\S+\s/i,
-  /^t\s+\S+\s/i,
-  /^reply\b/i,
-  /^r\s+/i,
-  /^whisper\s+\S+\s/i,
-  /^chat\b/i,
-  /^gossip\b/i,
-  /^;/, // `;hello` = gossip on some servers
-  /^ooc\b/i,
-  /^clan\b/i,
-  /^cb\b/i,
-  /^imm(talk)?\b/i,
-  /^immchat\b/i,
-  /^immtell\b/i,
-  /^quote\b/i,
-  /^emote\b/i,
-  /^pmote\b/i,
-];
-
 /** The writing card drives the game's editor in `session`, so its other
  *  sends wait. */
 function writingHolds(session: number): boolean {
@@ -125,12 +99,6 @@ function rowLook(look: LineLook): { classes: string; style: CSSProperties | unde
     classes: look.background === 'tint' ? ' is-tint' : own ? ' is-own' : '',
     style: Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined,
   };
-}
-
-function looksLikeChat(line: string): boolean {
-  const trimmed = line.trimStart();
-  if (trimmed.length === 0) return false;
-  return CHAT_PREFIXES.some((re) => re.test(trimmed));
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
