@@ -20,6 +20,13 @@ import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
  *  nothing for reads quiet. */
 const states = vi.hoisted(() => new Map<number, Partial<SessionRowState>>());
 
+/** How many snoops run in each session, by id, faked. */
+const snoops = vi.hoisted(() => new Map<number, number>());
+
+vi.mock('../stores/session/snoopStore', () => ({
+  useLiveSnoops: (session: number) => snoops.get(session) ?? 0,
+}));
+
 /** Whether you hold ⌘, faked. */
 const mod = vi.hoisted(() => ({ held: false }));
 
@@ -105,6 +112,7 @@ const buttons = (html: string) =>
 afterEach(() => {
   states.clear();
   lines.clear();
+  snoops.clear();
   mod.held = false;
   vi.unstubAllGlobals();
 });
@@ -214,6 +222,22 @@ describe('the sessions sidebar', () => {
     );
     expect(build).toContain('class="shell-sessions-row is-new"');
     expect(build).not.toContain('shell-sessions-count');
+  });
+
+  it('shows the eye and the count of live snoops before the waiting count, as Snoop board 05 draws it', () => {
+    snoops.set(1, 2);
+    snoops.set(2, 1);
+    states.set(2, { waiting: ['preset:alert_tells'] });
+    const [tolliver, orla, build] = buttons(draw(rows, 1));
+    const eye = (words: string) =>
+      `<span class="shell-sessions-snoops" role="img" aria-label="${words}"><svg width="12" height="12"`;
+    expect(tolliver).toContain(eye('2 snoops'));
+    expect(tolliver).toContain('</svg><span>2</span></span></span>');
+    expect(orla).toContain(eye('1 snoop'));
+    expect(orla).toContain(
+      '</svg><span>1</span></span><span class="shell-sessions-count" role="img" aria-label="1 waiting">1</span></span>',
+    );
+    expect(build).not.toContain('shell-sessions-snoops');
   });
 
   it('stops the count at 9+, and says the whole of it', () => {

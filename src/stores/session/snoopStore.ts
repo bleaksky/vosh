@@ -147,7 +147,8 @@ export function useLiveSnoops(session: number): number {
       }),
     [session],
   );
-  return useSyncExternalStore(subscribe, () => liveSnoops(session));
+  const count = () => liveSnoops(session);
+  return useSyncExternalStore(subscribe, count, count);
 }
 
 /** Put the tab of `name` in front in the session in front. */
