@@ -1,177 +1,292 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { MigrationPlan } from '../../ipc/wizard';
-import { AppliedNotice, PlanView } from './MigrationWizard';
+import type { MigrationConflict, MigrationPlan } from '../../ipc/wizard';
+import { WizardDialog, type WizardDialogProps } from './MigrationWizard';
 
-// The wizard reaches the Tauri bridge only when it analyzes or applies.
-// PlanView, under test, draws from the plan it is given.
+// The preview as markup. Effects do not run here, so neither the plan
+// read nor the focus trap starts, and each test hands the dialog the
+// state it draws.
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Default and the Healer both have kk, the Healer with it turned off, and
-// each has its own version of the greet trigger.
-const PLAN: MigrationPlan = {
-  source_profiles: ['default', 'Healer'],
-  auto_resolved: {
-    aliases: [{ name: 'kk', group: '(default)' }],
-    triggers: [
-      { name: 'greet', group: '(default)' },
-      { name: 'greet (Healer)', group: '(Healer)' },
-    ],
-    macros: [],
-  },
-  conflicts: [],
-  loadouts: [
-    { name: 'default', enabled_groups: ['(default)'] },
-    { name: 'Healer', enabled_groups: ['(Healer)'] },
-  ],
-  shared_presets: ['healing_basics', 'herb_labels'],
-  profile_presets: [['healing_basics'], ['healing_basics', 'herb_labels']],
-};
-
-function draw(plan: MigrationPlan): string {
-  return renderToStaticMarkup(
-    <PlanView plan={plan} picks={{}} onPick={() => undefined} disabled={false} />,
-  );
-}
-
-describe('the shared catalog preview', () => {
-  it('says what folds into one item without a question', () => {
-    const html = draw(PLAN);
-    // Copies that differ in whether they are on, and triggers with
-    // versions of their own, fold without a question, so the preview
-    // no longer calls every item unique or byte identical.
-    expect(html).not.toMatch(/byte-identical|group\s+retagging/);
-    expect(html).toContain('whether they are on');
-    expect(html).toContain('A trigger that differs between profiles keeps each version');
-    expect(html).toContain('No conflicts. Every alias and macro is the same in each profile');
-  });
-
-  it('writes no dashes', () => {
-    expect(draw(PLAN)).not.toMatch(/[‒-―]/);
-    expect(draw(CONFLICT_PLAN)).not.toMatch(/[‒-―]/);
-  });
+const trigger = (pattern: string) => ({
+  name: 'Recast armor',
+  patterns: [{ kind: 'substring', pattern }],
+  command: 'cast armor',
 });
 
-// Default kept its kk off, and only the Healer's version was on.
-const CONFLICT_PLAN: MigrationPlan = {
-  ...PLAN,
-  auto_resolved: { aliases: [], triggers: [], macros: [] },
+// Tolliver had Recast armor on and Maren off, and Maren's F1 looks
+// where Orla's scans. Orla keeps the Herb labels Tolliver turns on.
+const PLAN: MigrationPlan = {
+  source_profiles: ['Tolliver', 'Maren', 'Orla'],
+  auto_resolved: {
+    aliases: [{ name: 'eb', group: null }],
+    triggers: [
+      { name: 'Eat when hungry', group: 'idle' },
+      { name: 'Drink when thirsty', group: 'idle' },
+    ],
+    macros: [{ key: 'F2', group: null }],
+  },
   conflicts: [
     {
-      kind: 'alias',
-      name: 'kk',
-      default_source: 'Healer',
+      kind: 'trigger',
+      name: 'Recast armor',
+      default_source: 'Tolliver',
       variants: [
         {
-          source_profile: 'default',
-          switched_on: false,
-          item: { kind: 'alias', item: { name: 'kk', expansion: 'kick %1' } },
+          source_profile: 'Tolliver',
+          switched_on: true,
+          item: { kind: 'trigger', item: trigger('You feel less protected.') },
         },
         {
-          source_profile: 'Healer',
+          source_profile: 'Maren',
+          switched_on: false,
+          item: { kind: 'trigger', item: trigger('You feel less protected.') },
+        },
+      ],
+    },
+    {
+      kind: 'macro',
+      name: 'F1',
+      default_source: 'Orla',
+      variants: [
+        {
+          source_profile: 'Maren',
           switched_on: true,
-          item: { kind: 'alias', item: { name: 'kk', expansion: 'kick 1.' } },
+          item: { kind: 'macro', item: { key: 'F1', command: 'look' } },
+        },
+        {
+          source_profile: 'Orla',
+          switched_on: true,
+          item: { kind: 'macro', item: { key: 'F1', command: 'scan' } },
         },
       ],
     },
   ],
+  loadouts: [
+    { name: 'Tolliver', enabled_groups: ['combat'] },
+    { name: 'Maren', enabled_groups: ['combat', 'idle'] },
+    { name: 'Orla', enabled_groups: [] },
+  ],
+  shared_presets: ['healing_basics', 'herb_labels'],
+  profile_presets: [
+    ['healing_basics', 'herb_labels'],
+    ['healing_basics', 'herb_labels', 'disarm_buff_fade'],
+    ['healing_basics'],
+  ],
 };
 
-describe('a conflict in the shared catalog preview', () => {
-  it('picks the one version that was on until you pick another', () => {
-    const checked = (draw(CONFLICT_PLAN).match(/<input[^>]*>/g) ?? [])
-      .filter((input) => input.includes('checked=""'))
-      .map((input) => /value="([^"]*)"/.exec(input)?.[1]);
-    expect(checked).toEqual(['Healer']);
+const none = () => undefined;
+
+function draw(state: Partial<WizardDialogProps> = {}): string {
+  return renderToStaticMarkup(
+    <WizardDialog
+      plan={PLAN}
+      picks={{}}
+      error={null}
+      applying={false}
+      applied={false}
+      onPick={none}
+      onApply={none}
+      onQuit={none}
+      onClose={none}
+      {...state}
+    />,
+  );
+}
+
+/** Each row's label, description and control text, in order. */
+function rows(html: string) {
+  return [
+    ...html.matchAll(
+      /class="st-row-label">([^<]*)<\/label>(?:<span[^>]*class="st-row-desc">([^<]*)<\/span>)?<\/div>(?:<div class="st-row-control">(.*?)<\/div>)?<\/div>/g,
+    ),
+  ].map(([, label, desc, control]) => ({
+    label,
+    desc: desc ?? '',
+    control: (control ?? '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  }));
+}
+
+/** The pressed segment of the row labelled `label`. */
+function pressed(html: string, label: string): string[] {
+  const at = html.indexOf(`>${label}</label>`);
+  const row = html.slice(at, html.indexOf('class="st-row-label"', at + 1) >>> 0);
+  return [...row.matchAll(/aria-pressed="true"[^>]*>([^<]*)</g)].map((m) => m[1]);
+}
+
+/** The text a player reads, tags gone. */
+function text(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ');
+}
+
+describe('the shared catalog preview', () => {
+  it('is a modal dialog named by its head', () => {
+    const html = draw();
+    expect(html).toMatch(/role="dialog" aria-modal="true" aria-labelledby="[^"]+"/);
+    expect(html).toContain('<h2 id="');
+    expect(html).toContain('class="ov-confirm-title">Share one catalog</h2>');
+    expect(html).toContain(
+      'Vosh merges the aliases, triggers and macros of Tolliver, Maren, and Orla into one catalog, with a loadout for each character. Nothing changes until you apply it.',
+    );
   });
 
-  it('shows which version each profile had on', () => {
-    const html = draw(CONFLICT_PLAN);
-    expect(html).toContain('Healer</span><span class="migration-variant-state is-on">on</span>');
-    expect(html).toContain('default</span><span class="migration-variant-state">off</span>');
-    expect(html).toContain('When only one version is on, the wizard picks it for you.');
+  it('asks for the version to keep first, with the default pressed', () => {
+    const html = draw();
+    const sections = [...html.matchAll(/class="st-section-title">([^<]*)</g)].map((m) => m[1]);
+    expect(sections).toEqual([
+      'Pick the version to keep',
+      'Merged as they are',
+      'A loadout for each character',
+    ]);
+    expect(html).toContain('<span class="st-meta">2 to pick</span>');
+    expect(pressed(html, 'Recast armor')).toEqual(['Tolliver']);
+    expect(pressed(html, 'F1')).toEqual(['Orla']);
+    expect(pressed(draw({ picks: { 'macro::F1': 'Maren' } }), 'F1')).toEqual(['Maren']);
+    expect(html).not.toContain('type="radio"');
+  });
+
+  it('says what kind each item is and what differs', () => {
+    const [armor, f1] = rows(draw());
+    expect(armor).toEqual({
+      label: 'Recast armor',
+      desc: 'Trigger. On for Tolliver, off for Maren.',
+      control: 'Tolliver Maren',
+    });
+    expect(f1.desc).toBe('Macro. Maren sends look, Orla sends scan.');
   });
 
   it('names what each version of a preset changed, as its card does', () => {
     const line = { value: '#8fa7d9', was: 'fg:178' };
     const off = { enabled: { value: false, was: true } };
-    const html = draw({
-      ...PLAN,
-      conflicts: [
+    const preset: MigrationConflict = {
+      kind: 'preset',
+      name: 'disarm_buff_fade',
+      default_source: 'Tolliver',
+      variants: [
         {
-          kind: 'preset',
-          name: 'disarm_buff_fade',
-          default_source: 'default',
-          variants: [
-            {
-              source_profile: 'default',
-              switched_on: true,
-              item: {
-                kind: 'preset',
-                item: { colors: { line }, triggers: { 'buff.sanctuary': off } },
-              },
+          source_profile: 'Tolliver',
+          switched_on: true,
+          item: { kind: 'preset', item: { colors: { line }, triggers: { 'buff.sanctuary': off } } },
+        },
+        {
+          source_profile: 'Maren',
+          switched_on: true,
+          item: {
+            kind: 'preset',
+            item: {
+              colors: { line },
+              triggers: { 'buff.sanctuary': off, 'buff.stoneskin': off },
             },
-            {
-              source_profile: 'Healer',
-              switched_on: true,
-              item: {
-                kind: 'preset',
-                item: {
-                  colors: { line },
-                  triggers: { 'buff.sanctuary': off, 'buff.stoneskin': off },
-                },
-              },
-            },
-          ],
+          },
         },
       ],
-    });
-    const bodies = [...html.matchAll(/migration-variant-body">([^<]*)</g)].map((m) => m[1]);
-    expect(bodies).toEqual(['The line color, buff.sanctuary', '1 color and 2 triggers']);
-  });
-});
-
-describe('the shared presets in the preview', () => {
-  it('says the preset list is shared and who gains or loses which preset', () => {
-    const html = draw(PLAN);
-    expect(html).toContain(
-      'Loadout mode keeps one list of presets that are on, and every character shares it.',
-    );
-    // Default gains the herb labels, and the Healer keeps what it had.
-    expect(html).toContain(
-      '<span class="migration-loadout-name">default</span><span class="migration-preset-verb">gains</span><span class="migration-group-tag">Herb labels</span>',
-    );
-    expect(html).not.toContain(
-      '<span class="migration-loadout-name">Healer</span><span class="migration-preset-verb">',
+    };
+    const [row] = rows(draw({ plan: { ...PLAN, conflicts: [preset] } }));
+    expect(row.desc).toBe(
+      'Preset. Tolliver changes the line color and buff.sanctuary, Maren changes 1 color and 2 triggers.',
     );
   });
 
-  it('says so when no character gains or loses a preset', () => {
-    const html = draw({
-      ...PLAN,
-      shared_presets: ['healing_basics'],
-      profile_presets: [['healing_basics'], ['healing_basics']],
-    });
-    expect(html).toContain('Every character has the same presets on as now.');
+  it('picks from a select past four profiles', () => {
+    const names = ['Tolliver', 'Maren', 'Orla', 'Tolliver 2', 'Maren 2'];
+    const wide: MigrationConflict = {
+      kind: 'macro',
+      name: 'F1',
+      default_source: 'Orla',
+      variants: names.map((name) => ({
+        source_profile: name,
+        switched_on: true,
+        item: { kind: 'macro', item: { key: 'F1', command: `say ${name}` } },
+      })),
+    };
+    const html = draw({ plan: { ...PLAN, conflicts: [wide] } });
+    expect(html).not.toContain('st-seg');
+    expect(html).toContain('<span class="st-meta">1 to pick</span>');
+    const options = [...html.matchAll(/<option value="([^"]*)"( selected="")?/g)];
+    expect(options.map((m) => m[1])).toEqual(names);
+    expect(options.filter((m) => m[2]).map((m) => m[1])).toEqual(['Orla']);
   });
-});
 
-describe('the wizard once the move is done', () => {
-  const html = renderToStaticMarkup(<AppliedNotice />);
-
-  it('says the preset list is shared', () => {
-    expect(html).toContain('Every character now shares one list of presets that are on.');
-    expect(html).not.toContain('kept every other setting');
+  it('leaves the pick out when nothing is in conflict', () => {
+    const html = draw({ plan: { ...PLAN, conflicts: [] } });
+    expect(html).not.toContain('Pick the version to keep');
+    expect(html).toContain('Merged as they are');
   });
 
-  it('says Vosh saves nothing you change before you quit', () => {
-    expect(html).toContain(
-      'Vosh does not save the changes you make before you quit, so quit Vosh below and open it again to use the catalog.',
+  it('counts what merges as it is', () => {
+    const merged = rows(draw()).slice(2, 5);
+    expect(merged).toEqual([
+      { label: 'Aliases', desc: '', control: '1' },
+      { label: 'Triggers', desc: 'Eat when hungry, Drink when thirsty', control: '2' },
+      { label: 'Macros', desc: '', control: '1' },
+    ]);
+  });
+
+  it('gives each character a loadout and says who gains or loses a preset', () => {
+    expect(rows(draw()).slice(5)).toEqual([
+      { label: 'Tolliver', desc: '', control: 'Turns on combat' },
+      {
+        label: 'Maren',
+        desc: 'Loses Disarms and fading buffs.',
+        control: 'Turns on combat and idle',
+      },
+      { label: 'Orla', desc: 'Gains Herb labels.', control: 'Turns on no groups' },
+    ]);
+  });
+
+  it('holds Apply off until the plan loads and while it applies', () => {
+    const loading = draw({ plan: null });
+    expect(text(loading)).toContain('Reading your profiles…');
+    expect(loading).toContain('of your profiles into one catalog');
+    expect(loading).toMatch(/<button type="button" disabled="" class="btn is-primary">Apply</);
+    const applying = draw({ applying: true });
+    expect(applying).toMatch(/disabled="" class="btn is-primary">Applying…</);
+    expect(applying).toMatch(/disabled="" class="btn">Cancel</);
+    expect(draw()).toMatch(/<button type="button" class="btn is-primary">Apply</);
+    expect(text(draw())).toContain(
+      'Vosh keeps a copy of each profile, then asks you to reopen it.',
     );
-    expect(html).not.toMatch(/[;‒-―]/);
+  });
+
+  it('shows an error as a warn note', () => {
+    const html = draw({ plan: null, error: 'Vosh could not read the profile Orla.' });
+    expect(html).toContain('st-card-note is-warn');
+    expect(text(html)).toContain('Vosh could not read the profile Orla.');
+    expect(html).not.toContain('Reading your profiles');
+  });
+
+  it('offers Quit Vosh once the catalog is saved', () => {
+    const html = draw({ applied: true });
+    expect(html).toContain('class="ov-confirm-title">Your catalog is saved</h2>');
+    expect(text(html)).toContain(
+      'Nothing you change now saves until you reopen Vosh, and your old profiles wait in profiles/legacy.',
+    );
+    const buttons = [...html.matchAll(/class="(btn[^"]*)">([^<]*)</g)].map(
+      (m) => `${m[1]} ${m[2]}`,
+    );
+    expect(buttons).toEqual(['btn Close', 'btn is-primary Quit Vosh']);
+    expect(html).not.toContain('st-section');
+  });
+
+  it('writes no dashes, semicolons or old wording in any state', () => {
+    for (const html of [
+      draw(),
+      draw({ plan: null }),
+      draw({ applying: true }),
+      draw({ applied: true }),
+      draw({ plan: null, error: 'Vosh could not read the profile Orla.' }),
+    ]) {
+      const words = text(html);
+      expect(words).not.toMatch(/[‐-―;]|\s-\s/);
+      expect(words).not.toMatch(/Path B|global catalog/i);
+      expect(html).not.toMatch(/migration-|settings-/);
+    }
   });
 });

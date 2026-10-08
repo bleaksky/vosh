@@ -79,6 +79,7 @@ async function corner() {
 /** The buttons of the card as AlertNotice draws it now. */
 async function buttons(): Promise<ReactElement<{ onClick: () => void }>[]> {
   const { AlertNotice } = await import('./AlertNotice');
+  const { Button } = await import('../../ui');
   let card: ReactNode = null;
   const Capture = () => (card = AlertNotice());
   renderToStaticMarkup(<Capture />);
@@ -86,7 +87,7 @@ async function buttons(): Promise<ReactElement<{ onClick: () => void }>[]> {
   const walk = (node: ReactNode) =>
     Children.forEach(node, (child) => {
       if (!isValidElement<{ children?: ReactNode; onClick: () => void }>(child)) return;
-      if (child.type === 'button') found.push(child);
+      if (child.type === Button) found.push(child);
       walk(child.props.children);
     });
   walk(card);
@@ -108,8 +109,8 @@ describe('the alert notice', () => {
     expect(html).toContain('<span class="ov-update-meta">to Tolliver</span>');
     expect(html.match(/<button/g)).toHaveLength(2);
     expect(html).toContain(
-      '<span class="ov-update-actions"><button type="button" class="ov-button">Close</button>' +
-        '<button type="button" class="ov-button">Show</button></span>',
+      '<span class="ov-update-actions"><button type="button" class="btn">Close</button>' +
+        '<button type="button" class="btn">Show</button></span>',
     );
     expect(html).not.toContain('is-primary');
   });

@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react';
 import { stopWalk, type WalkProgress } from '../../ipc/session';
 import { getSelected } from '../../stores/session/sessionsStore';
+import { Button } from '../../ui';
 
 // Where a walk stands, at the bottom of the map. While you walk it is the Walking chip on the update
 // notice's shape, since it holds Stop, with the steps left as a #walk
@@ -22,14 +23,12 @@ export function WalkStatus({ progress }: { progress: WalkProgress }) {
         </span>
         <span className="ov-update-meta is-mono">{progress.left}</span>
         <span className="ov-update-actions">
-          <button
-            type="button"
-            className="ov-button"
+          <Button
             onMouseDown={keepCaret}
             onClick={() => void stopWalk(getSelected()).catch(() => {})}
           >
             Stop
-          </button>
+          </Button>
         </span>
       </div>
     );
@@ -37,7 +36,7 @@ export function WalkStatus({ progress }: { progress: WalkProgress }) {
   if (progress.kind === 'stopped') {
     return (
       <div className="walk-chip ov-toast" role="status">
-        <span className="ov-toast-dot" aria-hidden="true" />
+        <span className="ov-toast-dot dot is-accent" aria-hidden="true" />
         <span className="ov-toast-msg">
           {progress.why === 'lost_track'
             ? 'Stopped'

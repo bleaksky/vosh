@@ -215,7 +215,7 @@ fn middle_click(session: SessionId) {
     if offset > 0 {
         grid::scroll_to_bottom(session);
     } else {
-        grid::scroll_page(session, true);
+        grid::scroll_page(session, true, split_ratio());
     }
     redraw_now();
     // A middle click never reaches pointer_up, so it sends the event that

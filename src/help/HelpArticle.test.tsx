@@ -22,7 +22,7 @@ function draw(shown: HelpTopic, query = '', current = 0): string {
       query={query}
       current={current}
       outline={outlineFor(shown)}
-      markColors={{ fill: 'rgba(196, 178, 138, 0.28)', ring: '#c4b28a' }}
+      markColors={{ fill: 'rgba(196, 178, 138, 0.28)', current: 'rgba(196, 178, 138, 0.6)' }}
     />,
   );
 }
@@ -61,7 +61,7 @@ describe('a help topic', () => {
     expect(show).toMatch(/<ul><li>/);
     const send = draw(topic('play.send-commands'));
     expect(send).toContain(
-      '<kbd class="hp-keys"><kbd class="st-keycap">Shift</kbd><kbd class="st-keycap">Enter</kbd></kbd>',
+      '<kbd class="keys"><kbd class="keycap">Shift</kbd><kbd class="keycap">Enter</kbd></kbd>',
     );
   });
 
@@ -80,7 +80,7 @@ describe('a help topic', () => {
     expect(countMatches(luaTopic, 'weather')).toBe(4);
   });
 
-  it('marks every match, and rings the one you are on', () => {
+  it('marks every match, and fills the one you are on stronger', () => {
     const shown = topic('shape.prompt-show');
     const html = draw(shown, 'prompt');
     const marks = html.match(/<mark class="hp-mark"/g) ?? [];
@@ -93,6 +93,16 @@ describe('a help topic', () => {
     expect(html.match(/data-current=""/g)).toHaveLength(1);
     const third = draw(shown, 'prompt', 2);
     expect(third).toMatch(/data-match="2" data-current=""/);
+  });
+
+  it('fills the match you are on in yellow at 60 with no ring', () => {
+    const html = draw(topic('shape.prompt-show'), 'prompt');
+    expect(html).toContain('--hp-mark:rgba(196, 178, 138, 0.28)');
+    expect(html).toContain('--hp-mark-current:rgba(196, 178, 138, 0.6)');
+    expect(html).not.toContain('--hp-mark-ring');
+    const rule = /\.hp-mark\[data-current\]\s*\{([^}]*)\}/.exec(helpCss)?.[1] ?? '';
+    expect(rule).toContain('background: var(--hp-mark-current');
+    expect(rule).not.toContain('box-shadow');
   });
 
   it('marks nothing without words', () => {
@@ -121,7 +131,7 @@ describe('the Get started topic', () => {
   it('draws Open Get started as a primary button between its paragraphs', () => {
     const html = draw(topic('get-connected.get-started'));
     expect(html).toContain(
-      'again here.</p><div class="hp-actions"><button type="button" class="st-button st-button-primary">Open Get started</button></div><p>A new install',
+      'again here.</p><div class="hp-actions"><button type="button" class="btn is-primary">Open Get started</button></div><p>A new install',
     );
     expect(html).toContain('<th scope="col">Where it lives</th>');
     expect(helpCss).toMatch(/\.hp-actions \{[^}]*margin: 16px 0 0;/);
@@ -130,7 +140,7 @@ describe('the Get started topic', () => {
   it('marks the button when you search for its words', () => {
     const shown = topic('get-connected.get-started');
     expect(draw(shown, 'open get')).toContain(
-      '<button type="button" class="st-button st-button-primary"><mark class="hp-mark" data-match="0" data-current="">Open Get</mark> started</button>',
+      '<button type="button" class="btn is-primary"><mark class="hp-mark" data-match="0" data-current="">Open Get</mark> started</button>',
     );
     expect(countMatches(shown, 'open get')).toBe(1);
   });

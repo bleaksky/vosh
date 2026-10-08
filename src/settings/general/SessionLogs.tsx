@@ -18,7 +18,7 @@ import {
   type LogSearchHit,
   type LogSession,
 } from '../../ipc/logs';
-import { parseHex, toRgba } from '../../theme/color';
+import { findMarks } from '../../theme/findMarks';
 import {
   groupLogDays,
   LOG_PAGE_SIZE,
@@ -259,10 +259,9 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
   const brightBold = config?.bright_bold ?? false;
   const { palette, mark } = useMemo(() => {
     const xterm = findTheme(themeId).xterm;
-    const yellow = parseHex(xterm.yellow);
     return {
       palette: logPalette(xterm, themeColors, baseAnsi),
-      mark: yellow ? toRgba(yellow, 0.28) : undefined,
+      mark: findMarks(xterm)?.match,
     };
   }, [themeId, themeColors, baseAnsi]);
 
@@ -440,7 +439,7 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
           <MenuItem
             checked={saveTimes}
             onSelect={() => setSaveTimes((on) => !on)}
-            trailing={saveTimes ? <CheckIcon className="pane-menu-check" /> : null}
+            trailing={saveTimes ? <CheckIcon className="menu-check" /> : null}
           >
             Include times
           </MenuItem>

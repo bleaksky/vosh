@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { ConnectionTarget } from '../ipc/session';
 import { parseTarget } from '../stores/session/useConnection';
+import { Button } from '../ui';
 
 // The host, port and TLS form the session popover swaps in for its list,
 // for Edit connection… and New session…. Rows a form adds sit between
@@ -101,12 +102,10 @@ export function ConnectionForm({
       </div>
       {children}
       <div className="shell-form-actions">
-        <button type="button" className="shell-btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="shell-btn shell-btn-primary" disabled={!parsed}>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" type="submit" disabled={!parsed}>
           {submitLabel}
-        </button>
+        </Button>
       </div>
     </form>
   );

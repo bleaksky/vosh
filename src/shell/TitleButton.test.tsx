@@ -130,7 +130,11 @@ describe('the session button in the title band', () => {
       findAll(host, (el) => el.nodeName === 'BUTTON')[0]?.getAttribute('aria-label');
     const count = () =>
       findAll(host, (el) => el.getAttribute('class') === 'shell-sessions-count')[0]?.textContent;
-    return { root, label, count };
+    const dot = () =>
+      findAll(host, (el) => el.getAttribute('class')?.startsWith('dot ') ?? false)[0]?.getAttribute(
+        'class',
+      );
+    return { root, label, count, dot };
   }
 
   it('leaves the band and the window title as they were when a session behind drops', async () => {
@@ -167,10 +171,15 @@ describe('the session button in the title band', () => {
     await act(async () => {
       connected(TOLLIVER);
       login(TOLLIVER, 'Tolliver');
+    });
+    // The dot is full only while connected, and a ring otherwise.
+    expect(band.dot()).toBe('dot is-success');
+    await act(async () => {
       drop('server closed connection');
       redial({ kind: 'waiting', try: 1, tries: 8, seconds: 5 });
     });
     expect(band.label()).toBe('Not connected. server closed connection');
+    expect(band.dot()).toBe('dot is-off is-danger');
     expect(titles.at(-1)).toBe('Vosh');
 
     // A try dials, ends its link with no reason, then says why it failed.
@@ -185,6 +194,7 @@ describe('the session button in the title band', () => {
       });
     });
     expect(band.label()).toBe('Connecting to The Forsaken Lands');
+    expect(band.dot()).toBe('dot is-off is-success');
     await act(async () => {
       drop(null);
       redial({ kind: 'failed', try: 1, tries: 8, reason: 'the game refused the connection' });
@@ -198,6 +208,7 @@ describe('the session button in the title band', () => {
       drop(null);
     });
     expect(band.label()).toBe('Not connected');
+    expect(band.dot()).toBe('dot is-off');
     await act(async () => band.root.unmount());
   });
 

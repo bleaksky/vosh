@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import frameCss from '../styles/frame.css?raw';
 import sessionsCss from '../styles/sessions.css?raw';
+import tokensCss from '../styles/tokens.css?raw';
 import { AppShell } from './AppShell';
 import { SessionsToggle } from './SessionsToggle';
 
@@ -38,11 +39,22 @@ function rule(css: string, selector: string): string {
   return css.slice(at, css.indexOf('}', at));
 }
 
-/** One px value from a rule, the first of a shorthand like padding. */
+/** A z-index layer token's value in tokens.css. */
+function layer(name: string): number {
+  const found = tokensCss.match(new RegExp(`\\n\\s*${name}:\\s*(\\d+);`));
+  expect(found, name).not.toBeNull();
+  return Number(found?.[1]);
+}
+
+/** One px value from a rule, the first of a shorthand like padding. A
+    layer token, alone or in a calc with a step, reads as its number. */
 function px(css: string, selector: string, property: string, index = 0): number {
   const found = rule(css, selector).match(new RegExp(`\\n\\s*${property}:\\s*([^;]+);`));
   expect(found, `${selector} ${property}`).not.toBeNull();
-  const parts = (found?.[1] ?? '').trim().split(/\s+/);
+  const value = (found?.[1] ?? '').trim();
+  const token = value.match(/^(?:calc\()?var\((--z-[a-z-]+)\)(?:\s*\+\s*(\d+)\))?$/);
+  if (token) return layer(token[1]) + Number(token[2] ?? 0);
+  const parts = value.split(/\s+/);
   return Number.parseFloat(parts[Math.min(index, parts.length - 1)]);
 }
 

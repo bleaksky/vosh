@@ -1,9 +1,7 @@
 /* Settings window. The frame, the sidebar, the content column, the
    sections, cards and rows, and each page. Every rule sits under an st-
    class and reads the shared tokens. The controls the pages draw live
-   in controls.css. The root is not under .settings-app. That wrapper
-   and .settings-btn live in migration.css, for the migration wizard
-   ImportPanel opens. */
+   in controls.css. */
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
@@ -31,28 +29,6 @@
   .st-app {
     overflow: clip;
   }
-}
-
-/* Window edge for the frameless window on Windows and Linux. macOS
-   draws the titled frame's own rim and corners, and WebView2 cannot
-   composite behind rounded corners, so Windows stays square. */
-.st-app::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--edge);
-  pointer-events: none;
-}
-
-[data-platform='macos'] .st-app,
-[data-platform='windows'] .st-app {
-  border-radius: 0;
-}
-
-[data-platform='macos'] .st-app::after {
-  display: none;
 }
 
 /* ── Sidebar ───────────────────────────────────────────────────────── */
@@ -130,9 +106,6 @@
 }
 
 .st-search-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
   margin-left: 6px;
 }
 
@@ -298,7 +271,7 @@
   pointer-events: none;
 }
 
-.st-who .shell-dot {
+.st-who .dot {
   margin-right: 6px;
 }
 
@@ -319,11 +292,6 @@
   margin-left: 8px;
   padding-left: 8px;
   box-shadow: inset 1px 0 0 var(--divider);
-}
-
-/* A page holds the profile while the selected session plays another. */
-.st-who .shell-dot.is-held {
-  background: var(--warn);
 }
 
 .st-who-note {
@@ -1329,14 +1297,14 @@
   opacity: 0.45;
 }
 
-/* The color list: the pane menu 232 wide, Default on a dashed ring, and
+/* The color list: the menu 232 wide, Default on a dashed ring, and
    after a color its mark in the tertiary tone and the check on your
    pick. */
-.pane-menu.st-vital-colors {
+.menu.st-vital-colors {
   width: 232px;
 }
 
-.pane-menu-swatch.is-default {
+.menu-swatch.is-default {
   box-shadow: none;
   outline: 1.25px dashed var(--tertiary);
   outline-offset: -1.25px;
@@ -1355,7 +1323,7 @@
   line-height: 16px;
 }
 
-.pane-menu-item:focus .st-vital-color-mark {
+.menu-item:focus .st-vital-color-mark {
   color: var(--secondary);
 }
 
@@ -1540,16 +1508,14 @@
 }
 
 /* A profile a session plays. Every row keeps the slot so names line
-   up. */
+   up, and the dot takes 6 px of the row so the names sit where they
+   did. */
 .st-profile-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
+  margin: 0 -1px;
 }
 
-.st-profile-dot.is-active {
-  background: var(--accent);
+.st-profile-dot:not(.is-accent) {
+  visibility: hidden;
 }
 
 .st-profile-name {
@@ -1746,7 +1712,7 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 20;
+  z-index: var(--z-overlay);
   min-width: 200px;
   max-height: 222px;
   margin: 0;
@@ -1776,7 +1742,7 @@
 }
 
 .st-suggest-item[aria-selected='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* Panel layout: the 180×110 schematic and a column beside it that
@@ -1850,21 +1816,24 @@
 
 /* ── Input (SettingsInput) ───────────────────────────────────────── */
 
-/* The caret shapes, each drawn at the command line's real size, 7.8 by
-   17, in the secondary color, and in the accent while chosen. */
+/* The caret shapes, each one cell of your terminal font like the
+   command line's caret, in the secondary color, and in the accent while
+   chosen. */
 .st-caret {
   position: relative;
   display: block;
-  width: 7.8px;
-  height: 17px;
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
+  width: var(--caret-w);
+  height: var(--caret-h);
 }
 
 .st-caret-shape {
   position: absolute;
   top: 0;
   left: 0;
-  width: 7.8px;
-  height: 17px;
+  width: var(--caret-w);
+  height: var(--caret-h);
   background: currentColor;
 }
 
@@ -1878,17 +1847,17 @@
 }
 
 .st-caret-half_block {
-  top: 8.5px;
-  height: 8.5px;
+  top: calc(var(--caret-h) - round(down, var(--caret-h) / 2, 1px));
+  height: round(down, var(--caret-h) / 2, 1px);
 }
 
 .st-caret-underline {
-  top: 15px;
+  top: calc(var(--caret-h) - 2px);
   height: 2px;
 }
 
 .st-caret-underline_thick {
-  top: 13px;
+  top: calc(var(--caret-h) - 4px);
   height: 4px;
 }
 
@@ -2163,25 +2132,10 @@
   color: var(--tertiary);
 }
 
-/* On is a filled success dot, off a hollow tertiary ring. */
+/* On is a filled success dot, off a hollow ring. A preset suggested
+   for your world wears the accent ring while it is off. */
 .st-auto-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-left: auto;
-  border-radius: 4px;
-  background: var(--success);
-}
-
-.st-auto-dot.is-off {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
-}
-
-/* A preset suggested for your world wears the accent ring while it is
-   off. */
-.st-auto-dot.is-off.is-suggested {
-  box-shadow: inset 0 0 0 1.25px var(--accent);
 }
 
 /* The pencil of an item you edited sits just before its dot. */
@@ -2214,14 +2168,14 @@
 
 /* A quiet button with no ring in the secondary color, like Edit all
    as JSON… and Clear over the Scripts Console. */
-.st-button.st-auto-quiet {
+.btn.st-auto-quiet {
   padding: 0 10px;
   box-shadow: none;
   color: var(--secondary);
   font-weight: 400;
 }
 
-.st-button.st-auto-quiet:hover {
+.btn.st-auto-quiet:hover {
   color: var(--text);
 }
 
@@ -2314,17 +2268,11 @@
 }
 
 .st-warn-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 /* The way to fix it, at the end of a warn note. */
-.st-card-note.is-warn > .st-button {
+.st-card-note.is-warn > .btn {
   flex: none;
   align-self: center;
   margin-left: auto;
@@ -2492,7 +2440,7 @@
   line-height: 16px;
 }
 
-.st-auto-keypair.is-warn .st-keycap {
+.st-auto-keypair.is-warn .keycap {
   border-color: var(--warn);
   color: var(--warn-text);
 }
@@ -2808,16 +2756,6 @@
   gap: 6px;
   color: var(--warn-text);
   white-space: normal;
-}
-
-.st-prompt-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  margin-top: 3.5px;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 /* The command that fixes codes that run together, at the block's full

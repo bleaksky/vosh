@@ -20,7 +20,7 @@ describe('Toasts', () => {
     const html = renderToStaticMarkup(<Toasts />);
     expect(html).toContain('<button type="button" class="ov-toast is-info" title="Dismiss">');
     expect(html).toMatch(
-      /<div class="ov-toast has-action is-info">.*Moved.*<button type="button" class="ov-button">Undo<\/button><\/div>/,
+      /<div class="ov-toast has-action is-info">.*Moved.*<button type="button" class="btn">Undo<\/button><\/div>/,
     );
   });
 });

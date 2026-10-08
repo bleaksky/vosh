@@ -3,6 +3,7 @@ import { getUiConfig, subscribeWritingOfferChanged } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import type { WritingKind } from '../ipc/writing';
 import { useWriting } from '../stores/session/writingStore';
+import { Button } from '../ui';
 
 // The card's offer when you open the game's editor yourself on a text
 // Vosh can name. It is the update notice's recipe at the terminal's
@@ -33,25 +34,19 @@ export function WritingOffer({ onOpen }: { onOpen: (kind: WritingKind, offer: nu
   if (!on || !offer || offer.id === kept) return null;
   return (
     <div className="ov-update" role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-dot dot is-accent" aria-hidden="true" />
       <span className="ov-update-msg">Write this in Vosh?</span>
       <span className="ov-update-actions">
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={() => setKept(offer.id)}
-        >
+        <Button onMouseDown={keepCaret} onClick={() => setKept(offer.id)}>
           Keep typing
-        </button>
-        <button
-          type="button"
-          className="ov-button is-primary"
+        </Button>
+        <Button
+          variant="primary"
           onMouseDown={keepCaret}
           onClick={() => onOpen(offer.kind, offer.id)}
         >
           Open in Vosh
-        </button>
+        </Button>
       </span>
     </div>
   );

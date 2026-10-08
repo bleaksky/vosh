@@ -63,7 +63,7 @@ describe('the Settings sidebar', () => {
   it('names the search shortcut apart, with its keycaps out of the name', () => {
     const html = draw('general');
     expect(html).toMatch(/role="combobox"[^>]*aria-keyshortcuts="Meta\+F"/);
-    expect(html).toContain('<span class="st-search-keys" aria-hidden="true">');
+    expect(html).toContain('<span class="keys st-search-keys" aria-hidden="true">');
   });
 
   it('gives each group its own glyph, and Prompt the terminal glyph Help draws for Play', () => {

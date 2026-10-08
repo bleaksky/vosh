@@ -4,8 +4,8 @@
    and the line you drag to resize it. Then the session popover's list
    of sessions, which takes the sidebar's place while it is folded, and
    the total the session button shows then. Loads last, after frame.css.
-   Every rule sits under a shell-sessions- class, or a shell-menu- class
-   only that list uses. */
+   Every rule sits under a shell-sessions- class, a shell-menu- class
+   only that list uses, or the menu.is-listed popover that holds it. */
 
 /* 220 of rows on the panel ground, then a 1 px --sep line at x 220,
    drawn inset the way the Settings sidebar draws its own. */
@@ -192,21 +192,6 @@
 
 .shell-sessions-mark.is-triangle {
   color: var(--danger);
-}
-
-.shell-sessions-dot {
-  display: block;
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-}
-
-.shell-sessions-mark.is-live .shell-sessions-dot {
-  background: var(--success);
-}
-
-.shell-sessions-mark.is-off .shell-sessions-dot {
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
 }
 
 /* The name, and a port that tells the session apart in quiet meta
@@ -460,7 +445,7 @@
    pointer passes through it. */
 .shell-sessions-card {
   position: fixed;
-  z-index: 800;
+  z-index: var(--z-card);
   box-sizing: border-box;
   width: 264px;
   padding: 12px 14px 10px;
@@ -586,19 +571,8 @@
   background: var(--accent);
 }
 
-/* The session popover's list of sessions while the sidebar is folded.
-   SESSIONS in the palette's caps style heads it. */
-.shell-menu-head {
-  margin: 0;
-  padding: 7px 12px 3px;
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--tertiary);
-  white-space: nowrap;
-}
-
+/* The session popover's list of sessions while the sidebar is folded,
+   under the menu-head SESSIONS (overlays.css). */
 /* Each row takes the sidebar's two lines on the menu's recipe, 44 high
    inside the menu's 6, its mark 10 in and its right column 12 in.
    The name keeps the text tone and line two the tertiary
@@ -627,29 +601,35 @@
   cursor: default;
 }
 
-.shell-menu-session:focus-visible,
-.shell-menu-session-slot:hover .shell-menu-session {
-  background: var(--menu-hi);
+/* The row under focus is lit, and only that one. The pointer moves the
+   focus, so a row under a resting pointer goes dark once the arrow keys
+   move on. */
+.shell-menu-session:focus {
+  background: var(--hover);
   outline: none;
 }
 
-.shell-menu-session .shell-sessions-end .pane-menu-check {
+.shell-menu-session .shell-sessions-end .menu-check {
   margin: 0 -4px 0 0;
+}
+
+.shell-menu-session .shell-sessions-end .menu-keys {
+  margin: 0;
 }
 
 /* A list too long for the window scrolls with no bar, as the sidebar's
    does, between SESSIONS and the rows under it, which stay put. It
    keeps two rows in view in the shortest window. */
-.shell-menu.is-listed {
+.menu.is-listed {
   display: flex;
   flex-direction: column;
 }
 
-.shell-menu.is-listed > * {
+.menu.is-listed > * {
   flex: none;
 }
 
-.shell-menu.is-listed > .shell-menu-sessions {
+.menu.is-listed > .shell-menu-sessions {
   flex: 0 1 auto;
   min-height: 60px;
   overflow-y: auto;
@@ -716,7 +696,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 30;
+  z-index: var(--z-overlay);
   display: flex;
   flex-direction: column;
   min-height: 0;

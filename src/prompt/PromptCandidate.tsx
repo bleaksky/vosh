@@ -107,7 +107,7 @@ export function MatchRow({ check, index, onStep, warning }: MatchRowProps) {
   if (warning) {
     text = (
       <p className="pc-match-text is-warn is-wrap">
-        <span className="pc-warn-dot" aria-hidden="true" />
+        <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
         <span>{warning}</span>
       </p>
     );
@@ -116,7 +116,7 @@ export function MatchRow({ check, index, onStep, warning }: MatchRowProps) {
     text = (
       <div className={`pc-match-text${tone === 'warn' ? ' is-warn' : ''}`}>
         {tone === 'ok' && <CheckIcon className="pc-match-check" />}
-        {tone === 'warn' && <span className="pc-warn-dot" aria-hidden="true" />}
+        {tone === 'warn' && <span className="pc-warn-dot dot is-warn" aria-hidden="true" />}
         <p>
           {matchLines(check).map((sentence, i) => (
             <span key={i}>

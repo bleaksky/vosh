@@ -274,14 +274,12 @@ describe('the sessions sidebar', () => {
     const [live, login, dialing, failed, off] = buttons(draw(marked, 1));
     const mark = (kind: string, words: string) =>
       `"><span class="shell-sessions-mark is-${kind}" role="img" aria-label="${words}">`;
-    expect(live).toContain(mark('live', 'Playing') + '<span class="shell-sessions-dot"></span>');
+    expect(live).toContain(mark('live', 'Playing') + '<span class="dot is-success"></span>');
     expect(login).toContain(mark('hand', 'Logging in') + '<svg');
     expect(dialing).toContain(mark('spinner', 'Connecting') + '<svg');
     expect(failed).toContain(mark('triangle', 'Connect again') + '<svg');
     expect(off).toContain('class="shell-sessions-row is-off"');
-    expect(off).toContain(
-      mark('off', 'Not connected') + '<span class="shell-sessions-dot"></span>',
-    );
+    expect(off).toContain(mark('off', 'Not connected') + '<span class="dot is-off"></span>');
     expect(off).toContain('<span class="shell-sessions-port">1825</span>');
   });
 
@@ -385,6 +383,9 @@ describe('renaming and moving a session in its row', () => {
     el.select = () => undefined;
     // The list scrolls, and a dragged row asks for frames.
     el.scrollTop = 0;
+    // The row menu measures itself as it opens, 232 wide by the recipe.
+    el.offsetWidth = 232;
+    el.offsetHeight = 0;
     vi.stubGlobal('requestAnimationFrame', () => 0);
     el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
       for (let n = other; n; n = n.parentNode) if (n === this) return true;
@@ -689,7 +690,7 @@ describe('renaming and moving a session in its row', () => {
     await m.run(() => second.focus());
     await open();
     expect(rename().textContent).toBe('Rename session…F2');
-    expect(findAll(rename(), hasClass('shell-menu-kbd'))[0]?.textContent).toBe('F2');
+    expect(findAll(rename(), hasClass('menu-keys'))[0]?.textContent).toBe('F2');
   });
 
   it('opens the row menu at the pointer on a right click, as board 9 draws it', async () => {
@@ -707,6 +708,7 @@ describe('renaming and moving a session in its row', () => {
     expect(prevented).toBe(true);
     const menu = only(doc.body, 'the row menu', (el) => el.getAttribute('role') === 'menu');
     expect(menu.getAttribute('aria-label')).toBe('Session options');
+    expect([menu.style.left, menu.style.top]).toEqual(['146px', '120px']);
     const items = findAll(menu, (el) => el.getAttribute('role') === 'menuitem');
     expect(items.map((el) => el.textContent)).toEqual([
       'Rename session…',
@@ -714,7 +716,7 @@ describe('renaming and moving a session in its row', () => {
       'Disconnect',
       'Close session',
     ]);
-    expect(findAll(menu, hasClass('shell-menu-sep'))).toHaveLength(1);
+    expect(findAll(menu, hasClass('menu-sep'))).toHaveLength(1);
 
     // Rename session… closes the menu, brings the row to the front and
     // turns its name into a field.

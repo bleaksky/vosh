@@ -233,7 +233,7 @@ export function AppShell({
   return (
     <main
       ref={rootRef}
-      className="shell"
+      className="shell window-edge"
       data-panel={panelOpen ? 'open' : 'hidden'}
       data-lead={sessionsToggle === null ? undefined : sessions === null ? 'band' : 'sidebar'}
       style={frame}

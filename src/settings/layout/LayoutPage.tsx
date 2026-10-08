@@ -97,7 +97,7 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
           anchor="show-panel"
         >
           <span className="st-control-group">
-            <span className="st-keys" aria-hidden="true">
+            <span className="keys" aria-hidden="true">
               {shortcutKeys(PANEL_KEYS, mac).map((key) => (
                 <Keycap key={key}>{key}</Keycap>
               ))}

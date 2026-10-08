@@ -17,12 +17,12 @@
 }
 
 /* On paper a field is the raised paper, so it takes a hairline ring.
-   The segmented track takes the black wash of the menu highlight, so
-   the pressed segment on the raised paper stands out of it. */
+   The segmented track takes the black wash of the hover, so the
+   pressed segment on the raised paper stands out of it. */
 :root[data-appearance='light'] .st-app,
 :root[data-appearance='light'] .st-controls {
   --st-fill-ring: inset 0 0 0 1px var(--sep);
-  --st-seg-track: var(--menu-hi);
+  --st-seg-track: var(--hover);
   --st-seg-ring: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
   --st-selrow-ring: 0 0 0 1px var(--sep);
 }
@@ -380,7 +380,11 @@
   pointer-events: none;
 }
 
-.st-button {
+/* One button for every window. The default has no fill and a
+   hairline ring. Primary fills with the accent, danger keeps the ring
+   and takes the danger text, and small is the 24 tall size for the
+   snoop strip and the prompt card foot. */
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -391,6 +395,7 @@
   border: 0;
   border-radius: var(--r-row);
   background: transparent;
+  box-shadow: inset 0 0 0 1px var(--sep);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -399,35 +404,44 @@
   white-space: nowrap;
 }
 
-.st-button-secondary {
-  box-shadow: inset 0 0 0 1px var(--sep);
-}
-
-.st-button-secondary:hover,
-.st-button-danger:hover {
+/* A disabled button takes no hover fill. */
+.btn:where(:enabled):hover {
   background: var(--hover);
 }
 
-.st-button-primary {
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn.is-primary {
   background: var(--accent);
+  box-shadow: none;
   color: var(--on-accent);
 }
 
-.st-button-danger {
+.btn.is-danger {
   color: var(--danger-text);
 }
 
-.st-button-iconed {
+.btn.is-small {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.btn.has-icon {
   gap: 6px;
   padding: 0 12px 0 10px;
 }
 
-.st-button-icon {
+.btn-icon {
   display: flex;
   color: var(--secondary);
 }
 
-.st-button:disabled,
+.btn:disabled,
 .st-seg-item:disabled,
 .st-select-input:disabled,
 .st-field:disabled,
@@ -435,11 +449,7 @@
   opacity: 0.45;
 }
 
-.st-button:disabled:hover {
-  background: transparent;
-}
-
-.st-keycap {
+.keycap {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -457,21 +467,59 @@
   font-weight: 400;
 }
 
-.st-keycap-glyph {
+.keycap.is-glyph {
   width: 20px;
   padding: 0;
 }
 
-/* A row of keycaps 4 apart, and a shortcut set 12 before its toggle
-   (Show the panel on Layout). Inline, they end a row's line (Read your
-   prompt on Accessibility). */
-.st-keys {
-  display: flex;
+/* A row of keycaps 4 apart. It works as a <kbd> wrapper and inside
+   running text. The place that sets a row sets its margin. */
+.keys {
+  display: inline-flex;
+  flex: none;
   gap: 4px;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  white-space: nowrap;
 }
 
+/* A status dot. The tone sets --dot, and is-off draws the same tone as
+   a ring, so a ring alone is tertiary. The place that sets a dot sets
+   its margin. */
+.dot {
+  display: block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--dot, var(--tertiary));
+}
+
+.dot.is-success {
+  --dot: var(--success);
+}
+
+.dot.is-warn {
+  --dot: var(--warn);
+}
+
+.dot.is-danger {
+  --dot: var(--danger);
+}
+
+.dot.is-accent {
+  --dot: var(--accent);
+}
+
+.dot.is-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px var(--dot, var(--tertiary));
+}
+
+/* Keycaps that end a line of running text (Read your prompt on
+   Accessibility) sit on its middle. */
 .st-keys-inline {
-  display: inline-flex;
   vertical-align: middle;
 }
 
@@ -615,7 +663,6 @@
 
 /* Visible focus on every control: a 2 px accent outline 2 px out. */
 .st-nav-item:focus-visible,
-.st-button:focus-visible,
 .st-seg-item:focus-visible,
 .st-select-input:focus-visible,
 .st-field:focus-visible,

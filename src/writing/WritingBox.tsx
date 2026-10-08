@@ -362,7 +362,7 @@ class Num extends GutterMarker {
     el.className = `wr-num${this.state ? ` is-${this.state}` : ''}`;
     if (this.code) {
       const dot = document.createElement('span');
-      dot.className = 'wr-code-dot';
+      dot.className = 'wr-code-dot dot';
       dot.title = `\`${this.code.code}`;
       dot.style.setProperty('--wr-code', this.code.color);
       el.appendChild(dot);

@@ -32,7 +32,7 @@ function rows(platform: string) {
   );
   return {
     label: /<menu aria-label="([^"]*)">/.exec(html)?.[1],
-    rows: [...html.matchAll(/class="pane-menu-text">([^<]*)<|role="separator"/g)].map(
+    rows: [...html.matchAll(/class="menu-label">([^<]*)<|role="separator"/g)].map(
       ([, text]) => text ?? '—',
     ),
   };

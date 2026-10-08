@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { menuBelow, placeMenu, submenuAt } from './menuPlacement';
+import { menuBelow, menuUnder, placeMenu, submenuAt } from './menuPlacement';
 
 // A 1280 by 800 window, a menu 200 by 300.
 const W = 200;
@@ -79,5 +79,40 @@ describe('menuBelow', () => {
     expect(placeMenu(menuBelow(button), W, H, VW, VH)).toEqual({ left: 812, top: 120 });
     const low = { left: 1200, right: 1228, top: 700, bottom: 724 };
     expect(placeMenu(menuBelow(low), W, H, VW, VH)).toEqual({ left: 1028, top: 396 });
+  });
+});
+
+describe('menuUnder', () => {
+  // A title band button, 28 by 28, and a menu 272 by 300.
+  const size = { width: 272, height: H };
+  const viewport = { width: VW, height: VH };
+  const at = (left: number) => ({
+    getBoundingClientRect: () => ({ left, right: left + 28, top: 6, bottom: 34 }),
+  });
+
+  it('hangs centered under its button, its height kept 8 above the foot', () => {
+    expect(menuUnder(at(600), 'center', 12)(size, viewport)).toEqual({
+      left: 478,
+      top: 46,
+      maxHeight: 746,
+    });
+  });
+
+  it('lines up right edges, and stays 8 inside the window', () => {
+    expect(menuUnder(at(1100), 'end', 6)(size, viewport)).toEqual({
+      left: 856,
+      top: 40,
+      maxHeight: 752,
+    });
+    expect(menuUnder(at(1250), 'center', 12)(size, viewport).left).toBe(1000);
+    expect(menuUnder(at(20), 'center', 12)(size, viewport).left).toBe(8);
+  });
+
+  it('sits at the top left with no button', () => {
+    expect(menuUnder(null, 'end', 12)(size, viewport)).toEqual({
+      left: 8,
+      top: 8,
+      maxHeight: 784,
+    });
   });
 });

@@ -123,7 +123,7 @@ async function header(list: SessionRow[], dirty = false) {
         classOf(el),
         el.textContent,
       ]),
-    dot: () => findAll(container, (el) => classOf(el).startsWith('shell-dot')).map(classOf)[0],
+    dot: () => findAll(container, (el) => classOf(el).startsWith('dot')).map(classOf)[0],
     /** Save or discard, which leaves the page clean. */
     letGo: () => draw(false),
   };
@@ -138,7 +138,7 @@ describe('the Settings header', () => {
 
   it('names the selected session and its profile', async () => {
     const shown = await header([TOLLIVER, { ...ORLA, selected: true }]);
-    expect(shown.dot()).toBe('shell-dot is-connected');
+    expect(shown.dot()).toBe('dot is-success');
     expect(shown.parts()).toEqual([
       ['st-who-name', 'Orla'],
       ['st-who-profile', 'Build'],
@@ -158,7 +158,7 @@ describe('the Settings header', () => {
   it('names a session before login by its world and port', async () => {
     const login = { ...ORLA, character: null, connected: false, selected: true };
     const shown = await header([TOLLIVER, login]);
-    expect(shown.dot()).toBe('shell-dot is-idle');
+    expect(shown.dot()).toBe('dot is-off');
     expect(shown.parts()[0]).toEqual(['st-who-name', 'The Forsaken Lands 1825']);
   });
 
@@ -173,14 +173,14 @@ describe('a page with unsaved edits', () => {
   it('holds its profile and says so until you save or discard', async () => {
     const shown = await header([{ ...TOLLIVER, selected: true }, ORLA], true);
     await send([TOLLIVER, { ...ORLA, selected: true }]);
-    expect(shown.dot()).toBe('shell-dot is-held');
+    expect(shown.dot()).toBe('dot is-warn');
     expect(shown.parts()).toEqual([
       ['st-who-name', 'Tolliver'],
       ['st-who-profile', 'Default'],
       ['st-who-note', 'Save or discard to follow Orla'],
     ]);
     await shown.letGo();
-    expect(shown.dot()).toBe('shell-dot is-connected');
+    expect(shown.dot()).toBe('dot is-success');
     expect(shown.parts()).toEqual([
       ['st-who-name', 'Orla'],
       ['st-who-profile', 'Build'],

@@ -114,6 +114,13 @@ export function pointerLeft(row: Element): void {
   if (held?.row === row) drop();
 }
 
+/** The pointer is on a row drawn without MenuItem, in a menu with no
+ *  submenu, as the prompt card's More styles and name menus draw theirs.
+ *  The row takes the highlight, so the pointer and the keys share one. */
+export function focusUnderPointer(e: { currentTarget: HTMLElement }): void {
+  if (document.activeElement !== e.currentTarget) e.currentTarget.focus();
+}
+
 /** Forget the trail and anything held. For tests. */
 export function resetMenuAim(): void {
   drop();

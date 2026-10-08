@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
@@ -14,7 +14,9 @@ import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
 import { SessionRowBody, WaitingCount } from './SessionRowBody';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { pointAt, pointerLeft } from '../ui/menuAim';
+import { ShellMenu } from './ShellMenu';
 
 // The session popover under the title button: Connect to the selected
 // session's world or Disconnect, Edit connection, Rename session, and
@@ -156,8 +158,10 @@ export function SessionMenu({
     >
       {listSessions && (
         <>
-          <p className="shell-menu-head">Sessions</p>
-          <div className="shell-menu-sessions">
+          <li role="none" className="menu-head">
+            Sessions
+          </li>
+          <li role="none" className="shell-menu-sessions">
             {rows.map((row, i) => (
               <SessionItem
                 key={row.id}
@@ -169,31 +173,31 @@ export function SessionMenu({
                 onCloseSession={() => run(() => onCloseSession?.(row.id))}
               />
             ))}
-          </div>
-          <ShellMenuSeparator />
+          </li>
+          <MenuSeparator />
         </>
       )}
       {!live && (
-        <ShellMenuItem shortcut={APP_SHORTCUTS.connect} onSelect={() => run(connection.connect)}>
+        <MenuItem keys={APP_SHORTCUTS.connect} onSelect={() => run(connection.connect)}>
           Connect to {worldName(target.host)}
-        </ShellMenuItem>
+        </MenuItem>
       )}
-      <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
-      <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
+      <MenuItem onSelect={() => setMode('edit')}>Edit connection…</MenuItem>
+      <MenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
-      </ShellMenuItem>
+      </MenuItem>
       {/* No line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
-      {!listSessions && <ShellMenuSeparator />}
-      <ShellMenuItem shortcut={APP_SHORTCUTS['session-new']} onSelect={() => run(openNewSession)}>
+      {!listSessions && <MenuSeparator />}
+      <MenuItem keys={APP_SHORTCUTS['session-new']} onSelect={() => run(openNewSession)}>
         New session…
-      </ShellMenuItem>
+      </MenuItem>
       {(live || redialing) && (
         <>
-          <ShellMenuSeparator />
-          <ShellMenuItem danger onSelect={() => run(connection.disconnect)}>
+          <MenuSeparator />
+          <MenuItem danger onSelect={() => run(connection.disconnect)}>
             Disconnect
-          </ShellMenuItem>
+          </MenuItem>
         </>
       )}
     </ShellMenu>
@@ -216,36 +220,56 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
   const look = rowLook(useSessionRow(row.id), row, current);
   const keys = place <= 9 ? `Mod+${place}` : null;
   const end = current ? (
-    <CheckIcon className="pane-menu-check" />
+    <CheckIcon className="menu-check" />
   ) : look.count > 0 ? (
     <WaitingCount count={look.count} />
   ) : (
     keys && (
-      <kbd className="shell-menu-kbd" aria-hidden="true">
+      <kbd className="menu-keys" aria-hidden="true">
         {shortcutLabel(keys)}
       </kbd>
     )
   );
+  // The pointer on the row gives it the focus, so the pointer and the
+  // arrow keys share one highlight.
+  const point = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const el = e.currentTarget;
+    pointAt(el, () => {
+      if (document.activeElement !== el) el.focus();
+    });
+  };
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const focusRow = () => {
+    const el = rowRef.current;
+    if (el && document.activeElement !== el) el.focus();
+  };
   return (
     <div className="shell-menu-session-slot">
       <button
+        ref={rowRef}
         type="button"
         role="menuitem"
         className="shell-menu-session"
         aria-current={current ? 'true' : undefined}
         aria-keyshortcuts={keys ? ariaKeyshortcuts(keys) : undefined}
+        tabIndex={-1}
+        onPointerEnter={point}
+        onPointerMove={point}
+        onPointerLeave={(e) => pointerLeft(e.currentTarget)}
         onClick={onSelect}
       >
         <SessionRowBody row={row} rows={rows} mark={look.mark} end={end} />
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
         only under the pointer, so the arrow keys pass it by, and ⌘W
-        closes the session in front from the keyboard. */}
+        closes the session in front from the keyboard. Pointing at it
+        lights its row. */}
       <button
         type="button"
         className="shell-menu-session-close"
         aria-label="Close session"
         tabIndex={-1}
+        onPointerEnter={focusRow}
         onClick={onCloseSession}
       >
         <CloseIcon />

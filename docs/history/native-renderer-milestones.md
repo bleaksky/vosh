@@ -73,8 +73,10 @@ This log names files and choices that have since moved or changed.
     and orientation (the y-flip) need eyes. No styles/scroll yet.
 - **M3 — scroll + selection. DONE.** The wheel scrolls through scrollback
   (fractional accumulator so trackpad deltas are not rounded away),
-  PageUp/PageDown page the grid and Escape snaps to the live tail, drag
-  selects cells (highlighted with the theme selection color), and the
+  PageUp/PageDown page the grid by the history rows you can see less one,
+  so the first PageUp opens the split and pages, and Escape snaps to the
+  live tail, drag selects cells (highlighted with the theme selection
+  color), and the
   selection copies on release and on Cmd+C / Ctrl+C via NSPasteboard.
   Native NAWS sizes the grid to the pane so output fills the width.
 - **M5 — split-scrollback, native. DONE (shipped with M3).** Scrolling up

@@ -10,5 +10,5 @@ export function Keycap({ children, className }: { children: ReactNode; className
   // One glyph, like ⇧ or ⌘, sits in a square 20 wide even when it is
   // wider than the padding leaves room for. A word like Ctrl grows.
   const glyph = typeof children === 'string' && [...children].length === 1;
-  return <kbd className={cx('st-keycap', glyph && 'st-keycap-glyph', className)}>{children}</kbd>;
+  return <kbd className={cx('keycap', glyph && 'is-glyph', className)}>{children}</kbd>;
 }

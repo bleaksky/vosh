@@ -60,7 +60,7 @@ export function SessionMark({ mark }: { mark: RowMark }) {
       ) : mark === 'triangle' ? (
         <TriangleIcon />
       ) : (
-        <span className="shell-sessions-dot" />
+        <span className={mark === 'live' ? 'dot is-success' : 'dot is-off'} />
       )}
     </span>
   );

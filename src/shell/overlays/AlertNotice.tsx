@@ -4,6 +4,7 @@ import {
   showAlertNotice,
   useAlertNotice,
 } from '../../stores/session/alertNoticeStore';
+import { Button } from '../../ui';
 
 // A press on Close or Show leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
@@ -19,26 +20,16 @@ export function AlertNotice() {
   if (!notice) return null;
   return (
     <div className="ov-update" role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-dot dot is-accent" aria-hidden="true" />
       <span className="ov-update-msg">{notice.title}</span>
       {notice.label !== null && <span className="ov-update-meta">to {notice.label}</span>}
       <span className="ov-update-actions">
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={closeAlertNotice}
-        >
+        <Button onMouseDown={keepCaret} onClick={closeAlertNotice}>
           Close
-        </button>
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={showAlertNotice}
-        >
+        </Button>
+        <Button onMouseDown={keepCaret} onClick={showAlertNotice}>
           Show
-        </button>
+        </Button>
       </span>
     </div>
   );

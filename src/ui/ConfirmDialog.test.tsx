@@ -9,8 +9,8 @@ const none = () => undefined;
 
 /** The card's buttons, each with its class and whether it is off. */
 function buttons(html: string) {
-  return [...html.matchAll(/<button type="button" class="([^"]*)"( disabled="")?>([^<]*)</g)].map(
-    ([, cls, off, label]) => ({ cls, off: off !== undefined, label }),
+  return [...html.matchAll(/<button type="button"( disabled="")? class="([^"]*)">([^<]*)</g)].map(
+    ([, off, cls, label]) => ({ cls, off: off !== undefined, label }),
   );
 }
 
@@ -26,8 +26,8 @@ describe('ConfirmDialog', () => {
       />,
     );
     expect(buttons(html)).toEqual([
-      { cls: 'ov-button', off: false, label: 'Cancel' },
-      { cls: 'ov-button is-danger', off: false, label: 'Delete' },
+      { cls: 'btn', off: false, label: 'Cancel' },
+      { cls: 'btn is-danger', off: false, label: 'Delete' },
     ]);
   });
 
@@ -44,8 +44,8 @@ describe('ConfirmDialog', () => {
       />,
     );
     expect(buttons(html)).toEqual([
-      { cls: 'ov-button', off: false, label: 'Cancel' },
-      { cls: 'ov-button is-primary', off: true, label: 'Create' },
+      { cls: 'btn', off: false, label: 'Cancel' },
+      { cls: 'btn is-primary', off: true, label: 'Create' },
     ]);
   });
 
@@ -86,8 +86,8 @@ describe('ConfirmDialog', () => {
       />,
     );
     expect(buttons(html)).toEqual([
-      { cls: 'ov-button', off: false, label: 'Not now' },
-      { cls: 'ov-button is-primary', off: false, label: 'Continue' },
+      { cls: 'btn', off: false, label: 'Not now' },
+      { cls: 'btn is-primary', off: false, label: 'Continue' },
     ]);
   });
 });

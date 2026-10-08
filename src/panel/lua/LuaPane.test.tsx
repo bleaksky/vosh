@@ -165,7 +165,7 @@ describe('LuaPaneView', () => {
   it('offers to close the pane of a plugin you removed', () => {
     const html = body(draw(undefined, null));
     expect(html).toContain('You removed weather_pane, so nothing fills this pane.');
-    expect(html).toContain('class="st-button st-button-secondary">Close pane</button>');
+    expect(html).toContain('class="btn">Close pane</button>');
     pressed.onClick?.();
     expect(close).toHaveBeenCalledTimes(1);
   });

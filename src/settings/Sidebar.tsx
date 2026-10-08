@@ -159,7 +159,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
           onKeyDown={onKeyDown}
         />
         {!searching && (
-          <span className="st-search-keys" aria-hidden="true">
+          <span className="keys st-search-keys" aria-hidden="true">
             {shortcutKeys('Mod+F', mac).map((key) => (
               <Keycap key={key}>{key}</Keycap>
             ))}

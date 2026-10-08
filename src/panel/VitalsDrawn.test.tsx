@@ -243,7 +243,7 @@ describe('Rings', () => {
 
   it('keeps only the keys where a label would not fit, the label left to a screen reader', () => {
     const html = draw({ style: 'rings', fit: 'keys' });
-    expect(all(html, /panel-vitals-label-hidden">([^<]+)/g)).toEqual(['Health', 'Mana', 'Moves']);
+    expect(all(html, /visually-hidden">([^<]+)/g)).toEqual(['Health', 'Mana', 'Moves']);
   });
 
   it('holds the taller of the glyph and the legend while it waits', () => {

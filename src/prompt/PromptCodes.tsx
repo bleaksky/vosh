@@ -289,7 +289,7 @@ export function CodesRead({
         {report?.error && (
           <div className="pc-match">
             <p className="pc-match-text is-warn is-wrap">
-              <span className="pc-warn-dot" aria-hidden="true" />
+              <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
               <span>{report.error.message}</span>
             </p>
           </div>
@@ -318,7 +318,7 @@ export function CodesRead({
           <div key={`${row.which}-${row.span[0]}-${row.label}`} className="pc-legend-warning">
             <LegendRow row={row} tag={tagOf(row)} />
             <p>
-              <span className="pc-warn-dot" aria-hidden="true" />
+              <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
               <span>{row.warning}</span>
             </p>
           </div>
@@ -403,7 +403,7 @@ export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
   return (
     <div className="pc-d6">
       <p className="pc-d6-text">
-        <span className="pc-warn-dot" aria-hidden="true" />
+        <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
         <span>
           These triggers matched your prompt as a line. Vosh now sends your prompt only to Prompts
           triggers.

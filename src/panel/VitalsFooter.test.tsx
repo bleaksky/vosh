@@ -204,7 +204,7 @@ describe('VitalsBlock', () => {
   it('keeps the names for a screen reader when One line drops the labels', () => {
     const html = draw({}, { density: 'line', fit: 'values' });
     expect(html.match(/panel-vitals-item is-bare/g)).toHaveLength(3);
-    expect(html).toContain('<span class="panel-vitals-label-hidden">Health</span>');
+    expect(html).toContain('<span class="visually-hidden">Health</span>');
   });
 
   it('draws One line without meters at the dense pitch', () => {

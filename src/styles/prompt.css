@@ -137,7 +137,7 @@
    Settings primitives, so it carries .st-controls for their fills. */
 .pc-card {
   position: fixed;
-  z-index: 900;
+  z-index: calc(var(--z-card) + 100);
   display: flex;
   flex-direction: column;
   width: 560px;
@@ -203,12 +203,12 @@
   flex: 1 1 auto;
 }
 
-.pc-head .st-button {
+.pc-head .btn {
   margin-right: 4px;
 }
 
 .pc-head .st-icon-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-rule {
@@ -274,14 +274,13 @@
   margin-left: auto;
 }
 
-/* The compact menu buttons at the foot (MenuButton), where your prompt
-   shows and the preview, in the 12/500 face of a segmented control, the
-   chevron in the secondary tone. */
-.pc-menu-button {
+/* The small menu buttons at the foot (MenuButton), where your prompt
+   shows and the preview. The small button sets 24 tall at 12/500. This
+   rule keeps 6 at the right for the chevron, in the secondary tone, and
+   takes two classes so it outranks .btn.is-small. */
+.btn.pc-menu-button {
   gap: 2px;
   padding: 0 6px 0 10px;
-  font-size: 12px;
-  line-height: 16px;
 }
 
 /* Preview: before the preview it reads, in the secondary tone. */
@@ -295,7 +294,7 @@
 }
 
 .pc-menu-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-menu-button[aria-disabled='true'] {
@@ -486,13 +485,7 @@
 }
 
 .pc-warn-dot {
-  display: block;
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 4px 4px 0;
-  border-radius: 4px;
-  background: var(--warn);
 }
 
 .pc-match-text.is-wrap {
@@ -548,7 +541,7 @@
   white-space: pre;
 }
 
-.pc-command .st-button {
+.pc-command .btn {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -691,7 +684,7 @@
 
 .pc-name-button:hover,
 .pc-name-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -757,7 +750,7 @@
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
 .pc-start[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-start-check {
@@ -832,77 +825,27 @@
   margin: 12px 0 0 -12px;
 }
 
-.pc-forget .st-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+.pc-forget .btn[aria-expanded='true'] {
+  background: var(--hover);
 }
 
-/* Menus the card opens: More, Presets, From another profile and the name
-   menu, on the ov-menu recipe. */
-.pc-menu {
-  position: fixed;
-  z-index: 1000;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  box-sizing: border-box;
-  outline: none;
-  font-family: var(--font-ui);
-  color: var(--text);
+/* Presets holds the start list with its samples, not rows, so it keeps
+   the list's own width past the one menu's 320. */
+.menu.pc-presets-menu {
+  width: 468px;
+  max-width: 468px;
 }
 
-.pc-menu > li {
-  display: block;
-  margin: 0;
-  padding: 0;
-}
-
-.pc-menu > li.pc-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
-}
-
-.pc-menu .ov-menu-item:hover,
-.pc-menu .ov-menu-item:focus-visible {
-  background: var(--menu-hi);
-}
-
-.pc-menu .pc-starts {
+.pc-presets-menu .pc-starts {
   margin: 0;
   padding: 0;
 }
 
 /* The name menu: radio rows with the check column, and a GMCP name in
    the terminal's face with its package where a menu puts shortcuts. */
-.pc-name-item {
+.menu-item.pc-name-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-name-item:hover,
-.pc-name-item:focus-visible,
-.pc-name-item[aria-checked='true'] {
-  background: var(--menu-hi);
+  padding-left: 36px;
 }
 
 .pc-name-item .pc-start-check {
@@ -1162,30 +1105,10 @@
 /* Its menu: rows of the name menu with the check column at 12, each
    style drawn in its own style. A check marks what is on,
    and the highlight follows the pointer and the keys alone. */
-.pc-style-item {
+.menu-item.pc-style-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-style-item:hover,
-.pc-style-item:focus-visible {
-  background: var(--menu-hi);
+  justify-content: flex-start;
+  padding-left: 36px;
 }
 
 .pc-style-item .pc-start-check {
@@ -1356,7 +1279,7 @@
 
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-picker-name {
@@ -1452,7 +1375,7 @@
 }
 
 .pc-form.is-on {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* A sample sits on the terminal's ground, as it draws in the text. */
@@ -1591,7 +1514,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 850;
+  z-index: calc(var(--z-card) + 50);
   width: 0;
   height: 0;
   pointer-events: none;
@@ -1631,7 +1554,7 @@
 
 .pc-mark-return {
   position: fixed;
-  z-index: 850;
+  z-index: calc(var(--z-card) + 50);
   display: block;
   margin: 0;
   padding: 0;
@@ -1765,11 +1688,11 @@
 
 .gs-step:hover,
 .gs-step.is-current {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .gs-step:focus-visible {
-  background: var(--menu-hi);
+  background: var(--hover);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
@@ -1804,9 +1727,6 @@
 }
 
 .gs-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
   margin-left: 12px;
 }
 

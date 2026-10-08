@@ -424,7 +424,7 @@ async function mountEditor(
       const dot = findAll(row, (el) => hasClass(el, 'st-auto-dot'))[0];
       return {
         ...(findAll(row, (el) => hasClass(el, 'st-auto-mark')).length > 0 ? { edited: true } : {}),
-        suggested: hasClass(dot, 'is-suggested'),
+        suggested: hasClass(dot, 'is-accent'),
         anchor: row.getAttribute('data-st-anchor'),
         selected: row.getAttribute('aria-current') === 'true',
       };

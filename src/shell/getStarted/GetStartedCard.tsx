@@ -297,7 +297,7 @@ function StepList({
           <span className="gs-name">{s.title}</span>
           {meta && <span className="gs-meta">{meta}</span>}
           {dials ? (
-            <span className="gs-keys" aria-hidden="true">
+            <span className="keys gs-keys" aria-hidden="true">
               {shortcutKeys(APP_SHORTCUTS.connect).map((key) => (
                 <Keycap key={key}>{key}</Keycap>
               ))}

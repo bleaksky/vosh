@@ -17,6 +17,12 @@ import { seenApart, VISION_SLACK } from './gameFit';
 import { DEFAULT_THEME_ID, findTheme, themeTokens } from './themes';
 import tokensCss from '../styles/tokens.css?raw';
 
+const SHEETS = import.meta.glob<string>('../**/*.css', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
 const hex = (h: string): Rgb => {
   const c = parseHex(h);
   if (!c) throw new Error(`not hex ${h}`);
@@ -52,10 +58,9 @@ describe('derivation rules', () => {
 
   it('steps the lines and fills off the ground in lightness', () => {
     const t = deriveChrome(ember);
-    expect([t.sep, t.divider, t.hover, t.selrow, t.raised, t.inputband]).toEqual([
+    expect([t.sep, t.divider, t.selrow, t.raised, t.inputband]).toEqual([
       '#1b1a19',
       '#100f0e',
-      '#0b0b0a',
       '#121110',
       '#100f0e',
       '#080807',
@@ -67,10 +72,9 @@ describe('derivation rules', () => {
     // step keeps the alpha it takes on Ember's #050403 and a menu still
     // stands off the ground.
     const t = deriveChrome({ ...ember, background: '#000000' });
-    expect([t.sep, t.divider, t.hover, t.selrow, t.raised, t.inputband]).toEqual([
+    expect([t.sep, t.divider, t.selrow, t.raised, t.inputband]).toEqual([
       '#161616',
       '#0b0b0b',
-      '#070707',
       '#0d0d0d',
       '#0b0b0b',
       '#040404',
@@ -83,6 +87,9 @@ describe('derivation rules', () => {
   it('lays the control washes in white on dark and black on light', () => {
     expect(deriveChrome(ember).track).toBe('rgba(255, 255, 255, 0.158)');
     expect(deriveChrome(paper).track).toBe('rgba(0, 0, 0, 0.141)');
+    // One hover wash for every row, button and menu.
+    expect(deriveChrome(ember).hover).toBe('rgba(255, 255, 255, 0.081)');
+    expect(deriveChrome(ember, { hover: '#222222' }).hover).toBe('#222222');
     // A pin wins as it stands.
     expect(deriveChrome(ember, { edge: '#333333' }).edge).toBe('#333333');
   });
@@ -305,6 +312,14 @@ describe('the stylesheet defaults', () => {
     for (const key of CHROME_COLOR_KEYS) {
       const name = tokenVarName(key);
       expect(css.get(name)?.toLowerCase(), name).toBe(derived[name].toLowerCase());
+    }
+  });
+
+  it('name no token that is gone', () => {
+    // The menu highlight merged into the one hover wash.
+    expect(Object.keys(SHEETS)).toContain('../styles/controls.css');
+    for (const [name, sheet] of Object.entries(SHEETS)) {
+      expect(sheet, name).not.toMatch(/--menu-hi\b/);
     }
   });
 

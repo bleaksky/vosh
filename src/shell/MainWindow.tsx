@@ -681,7 +681,7 @@ function MainWindow() {
             onClose={closeFind}
           />
         ))}
-      <ScrollDepth findOpen={findOpen} />
+      <ScrollDepth findOpen={findOpen} history={historyScrollPos} />
       {/* The containing block for the scrollback split, where the well
           splits wrapper was. It never changes, so opening the split or
           toggling the panel never remounts the live Terminal. */}
@@ -724,11 +724,6 @@ function MainWindow() {
               onScrollbackLoaded={onHistoryLoaded}
               onScrollPosition={onHistoryScroll}
             />
-            {historyScrollPos && historyScrollPos.max > 0 && (
-              <div className="scrollback-indicator" aria-live="polite">
-                ↑ {historyScrollPos.back} / {historyScrollPos.max}
-              </div>
-            )}
           </Resizable>
         )}
         {/* One live terminal for each session this window opened, keyed

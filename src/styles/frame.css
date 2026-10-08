@@ -31,31 +31,6 @@
   }
 }
 
-/* Window edge for the frameless window on Windows and Linux, drawn over
-   the bands and the panel but under every floating surface. */
-.shell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 60;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--edge);
-  pointer-events: none;
-}
-
-/* macOS gives the main window a titled frame. The system rounds the
-   corners, draws the rim, and masks the page, so the page draws
-   neither. WebView2 cannot composite behind a rounded frameless
-   window, so Windows stays square with the hairline. */
-[data-platform='macos'] .shell,
-[data-platform='windows'] .shell {
-  border-radius: 0;
-}
-
-[data-platform='macos'] .shell::after {
-  display: none;
-}
-
 /* The sessions sidebar spans every row of the first column, so its
    ground runs to the top edge under the traffic lights. */
 .shell-slot-sessions {
@@ -92,13 +67,14 @@
 
 /* The ring sits inside the cell, as the band's buttons do. The well,
    the snoop and the prompt's rows (9) paint over the slot's own
-   outline, so it draws on a layer above them, under the find toolbar
-   (50) and every floating surface. */
+   outline, so the ring takes their 9 and, coming after every child of
+   the slot, paints over them. It stays under the find bar on the in
+   pane layer and every floating surface. */
 .shell-slot-term:focus-visible::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 9;
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   pointer-events: none;
@@ -222,7 +198,7 @@
   position: absolute;
   top: 4px;
   left: 10px;
-  z-index: 31;
+  z-index: calc(var(--z-overlay) + 1);
   display: flex;
   align-items: center;
   height: 24px;
@@ -327,30 +303,6 @@
 
 .shell-title-button.is-open {
   background: var(--selrow);
-}
-
-.shell-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-
-.shell-dot.is-connected {
-  background: var(--success);
-}
-
-.shell-dot.is-connecting {
-  border: 1.25px solid var(--success);
-}
-
-.shell-dot.is-idle {
-  border: 1.25px solid var(--tertiary);
-}
-
-.shell-dot.is-error {
-  border: 1.25px solid var(--danger);
 }
 
 .shell-title-name {
@@ -567,110 +519,6 @@
   color: var(--warn);
 }
 
-/* Words a screen reader hears and the line does not show. */
-.shell-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* ── Title band menus ──────────────────────────────────────────────── */
-
-/* Menus on the floating ground: padding 6, rows 30 tall
-   with radius 8, the label 12 inside the row, shortcuts in tertiary at
-   the right, 1 px --divider separators. */
-.shell-menu {
-  position: fixed;
-  z-index: 800;
-  box-sizing: border-box;
-  padding: 6px;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  color: var(--text);
-  font-family: var(--font-ui);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.shell-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-row);
-  box-sizing: border-box;
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 400;
-  text-align: left;
-  outline: none;
-}
-
-.shell-menu-item:hover:not(:disabled),
-.shell-menu-item:focus-visible {
-  background: var(--menu-hi);
-}
-
-.shell-menu-item.is-danger {
-  color: var(--danger-text);
-}
-
-.shell-menu-item:disabled {
-  color: var(--tertiary);
-}
-
-.shell-menu-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.shell-menu-kbd {
-  flex: none;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--tertiary);
-  white-space: nowrap;
-}
-
-.shell-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
-}
-
-.shell-menu-note {
-  margin: 0;
-  padding: 7px 12px;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--tertiary);
-}
-
-.shell-menu-side {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-}
-
 /* The connection form the session menu swaps in. Fields, buttons, and
    the toggle are the shared controls. Host and port are text for the
    MUD, so they take the terminal face. */
@@ -840,34 +688,4 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.shell-btn {
-  height: 28px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-row);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--sep);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-}
-
-.shell-btn-primary {
-  background: var(--accent);
-  box-shadow: none;
-  color: var(--on-accent);
-}
-
-.shell-btn:disabled {
-  opacity: 0.45;
-}
-
-.shell-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }

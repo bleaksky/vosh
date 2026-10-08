@@ -16,13 +16,14 @@ const rgb = (color: string, ground?: Rgb): Rgb => {
 };
 
 /** The grounds text sits on: the window, menus and dialogs, the input
- *  band, a selected row, and the hovered row of a menu. */
+ *  band, a selected row, and a hovered row on the window or a menu. */
 const grounds = (t: ChromeTokens): Record<string, Rgb> => ({
   bg: rgb(t.bg),
   raised: rgb(t.raised),
   inputband: rgb(t.inputband),
   selrow: rgb(t.selrow),
-  menuHi: rgb(t.menuHi, rgb(t.raised)),
+  hover: rgb(t.hover, rgb(t.bg)),
+  menuHover: rgb(t.hover, rgb(t.raised)),
 });
 
 const TEXT_TONES = [
@@ -41,16 +42,14 @@ const BOARD: Record<string, Partial<ChromeTokens>> = {
   'high-contrast': {
     inputband: '#101010',
     selrow: '#1a1a1a',
-    hover: '#131313',
-    menuHi: 'rgba(255, 255, 255, 0.082)',
+    hover: 'rgba(255, 255, 255, 0.082)',
     field: 'rgba(255, 255, 255, 0.071)',
     divider: '#181818',
   },
   'high-contrast-light': {
     inputband: '#f6f6f6',
     selrow: '#ffffff',
-    hover: '#f1f1f1',
-    menuHi: 'rgba(0, 0, 0, 0.049)',
+    hover: 'rgba(0, 0, 0, 0.049)',
     field: '#ffffff',
     divider: '#eaeaea',
   },

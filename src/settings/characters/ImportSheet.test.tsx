@@ -82,7 +82,7 @@ function draw(f: ImportFile, profiles: ProfileEntry[] = PROFILES): string {
 
 /** The primary button, its label and whether it is off. */
 function primary(html: string) {
-  const [tag, label] = /<button[^>]*st-button-primary[^>]*>([^<]*)</.exec(html) ?? [];
+  const [tag, label] = /<button[^>]*btn is-primary[^>]*>([^<]*)</.exec(html) ?? [];
   return { label, off: tag?.includes('disabled=""') ?? null };
 }
 

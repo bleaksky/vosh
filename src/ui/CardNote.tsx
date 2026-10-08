@@ -16,7 +16,7 @@ export function CardNote({
   if (tone === 'warn') {
     return (
       <p className="st-card-note is-warn">
-        <span className="st-warn-dot" aria-hidden="true" />
+        <span className="st-warn-dot dot is-warn" aria-hidden="true" />
         <span>{children}</span>
         {action}
       </p>

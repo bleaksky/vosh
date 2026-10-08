@@ -172,7 +172,7 @@ describe('the snoop split', () => {
       '<button type="button" role="tab" class="snoop-tab" aria-selected="true" title="Tolliver">',
     );
     expect(html).toContain(
-      '<div class="snoop-end"><div class="snoop-act"><button type="button" class="snoop-btn">Stop</button></div>' +
+      '<div class="snoop-end"><div class="snoop-act"><button type="button" class="btn is-small">Stop</button></div>' +
         MORE,
     );
     expect(html).toContain('<div class="snoop-body"><div data-term="Tolliver"></div></div>');
@@ -194,7 +194,14 @@ describe('the snoop split', () => {
         '<button type="button" role="tab" class="snoop-tab is-ended" aria-selected="true" title="Maren, ended 2 min ago">',
     });
     expect(html).toContain(
-      '<div class="snoop-act"><span class="snoop-meta">Ended 2 min ago</span><button type="button" class="snoop-btn">Close</button></div>',
+      '<div class="snoop-act"><span class="snoop-meta">Ended 2 min ago</span><button type="button" class="btn is-small">Close</button></div>',
+    );
+    // A live tab has the success dot, an ended one the ring.
+    expect(html).toContain(
+      'title="Tolliver, quiet 3 min"><span class="snoop-mark"><span class="dot is-success"></span>',
+    );
+    expect(html).toContain(
+      'title="Maren, ended 2 min ago"><span class="snoop-mark"><span class="dot is-off"></span>',
     );
     // Every tab keeps its terminal, and the one in front shows.
     expect(html).toContain(
@@ -498,10 +505,6 @@ describe('the snoop sheet', () => {
       snoopCss.match(
         new RegExp(`\\n${selector.replace(/[.[\]'=:()]/g, '\\$&')} \\{([^}]*)\\}`),
       )?.[1];
-    expect(rule('.snoop-dot')).toMatch(/width: 8px;[\s\S]*background: var\(--success\);/);
-    expect(rule('.snoop-tab.is-ended .snoop-dot')).toContain(
-      'box-shadow: inset 0 0 0 1.25px var(--tertiary);',
-    );
     expect(rule('.snoop-tab.is-unread::after')).toMatch(
       /width: 6px;[\s\S]*background: var\(--accent\);/,
     );

@@ -66,7 +66,7 @@ export function AccessibilityPage({ config, setConfig, onError }: SettingsPagePr
           description={
             <>
               Your prompt comes every pulse. Off reads it only when you press{' '}
-              <span className="st-keys st-keys-inline">
+              <span className="keys st-keys-inline">
                 {shortcutKeys(APP_SHORTCUTS['read-prompt']).map((key) => (
                   <Keycap key={key}>{key}</Keycap>
                 ))}

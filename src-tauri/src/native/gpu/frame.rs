@@ -25,7 +25,7 @@ use super::style::{
 };
 use super::{Drawn, Placement};
 use crate::native::grid::find::FindMatch;
-use crate::native::grid::{TermGrid, Underline};
+use crate::native::grid::{TermGrid, Underline, SPLIT_MIN_ROWS};
 
 /// One quad instance. `offset` is the top-left in surface pixels and `size`
 /// its width/height. The fragment shader samples the atlas coverage across
@@ -121,7 +121,7 @@ pub(super) fn split_regions(
 ) -> (Vec<Region>, Option<f32>) {
     let rows = grid.screen_lines();
     let offset = grid.display_offset() as i32;
-    let split = offset > 0 && rows >= 6 && !finding;
+    let split = offset > 0 && rows >= SPLIT_MIN_ROWS && !finding;
     let divider_px = if split {
         let raw = split_ratio * surface_h as f32;
         Some(raw.clamp(cell_h, surface_h as f32 - cell_h).round())

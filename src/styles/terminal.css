@@ -111,28 +111,6 @@
   flex: 0 0 2px;
 }
 
-/* Scroll-depth indicator in the top-right of the history pane.
-   Absolutely positioned so it overlays the xterm without affecting
-   the row count FitAddon calculates. The right offset has to clear
-   the xterm viewport scrollbar gutter — overlay scrollbars on macOS
-   take 0px when idle but Windows / Linux scrollbars eat ~10-17px
-   permanently. 24px keeps the indicator clean of the gutter on
-   every platform without measurable visual cost. */
-.scrollback-indicator {
-  position: absolute;
-  top: 4px;
-  right: 24px;
-  font-size: 0.78em;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--secondary);
-  background: rgba(0, 0, 0, 0.45);
-  padding: 2px 8px;
-  border-radius: 3px;
-  pointer-events: none;
-  user-select: none;
-  z-index: 5;
-}
-
 /* The sizer is the flex item that takes the pane's space, and only
    its rect matters. paneSizer.ts writes that rect in whole pixels onto
    the host, and FitAddon counts rows from the host's size. The host is

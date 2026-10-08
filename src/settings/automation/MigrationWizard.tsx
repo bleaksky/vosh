@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { type TriggerPattern } from '../../ipc/automation';
 import type { PresetEdit } from '../../ipc/presetEdits';
 import { appQuit } from '../../ipc/windows';
 import {
   migrationAnalyze,
   migrationApply,
+  type MigrationConflict,
   type MigrationConflictResolution,
   type MigrationItemKind,
   type MigrationPlan,
@@ -13,34 +14,38 @@ import { patternSource } from '../../automation/automationTriggers';
 import { changesLine } from '../../automation/presetEdits';
 import { PRESETS, presetById } from '../../automation/presets';
 import { presetChanges } from '../../automation/wizardPresets';
+import { useEscape } from '../../lib/escapeStack';
+import { listJoin } from '../../lib/text';
+import { Button, Card, CardNote, Row, Section, Segmented, Select } from '../../ui';
+import { DIALOG_FOCUSABLE, trapDialogFocus } from '../../ui/dialogFocus';
 
 /** The id of every preset in the library this build installs from. */
 const LIBRARY = PRESETS.map((p) => p.id);
+
+/** A conflict with more versions than this picks from a select, since
+ *  a segmented control that wide no longer fits the row. */
+const MOST_SEGMENTS = 4;
+
+/** Names the Merged as they are rows list before they count the rest. */
+const MOST_NAMES = 4;
 
 interface Props {
   onClose: () => void;
 }
 
-// Wizard for the Path B migration. Shows the analyzer's plan in three
-// sections (auto-resolved, conflicts, derived loadouts), lets the user
-// pick a winner per conflict via a radio per source, then runs the
-// apply step which copies the per-profile files into profiles/legacy/,
-// writes catalog.toml + loadouts.toml, and takes the aliases, triggers,
-// and macros out of each profile file, which keeps every other setting.
-// Every character then shares one preset list, and the preview says who
-// gains or loses a preset by it.
-// The runtime stays in legacy mode until the user relaunches Vosh: the
-// wizard switches to a
-// "Migration complete" state with a [quit Vosh] button. Path B mode
-// activates on the next launch when the startup hook picks up the
-// freshly-written catalog.toml.
+// The shared catalog preview, a 600 wide dialog over Settings built
+// from the kit. It reads the plan, asks you to pick the version to keep
+// of each item your profiles hold differently, and lists what merges as
+// it is and the loadout each character gets. Apply copies each profile
+// file to profiles/legacy, writes catalog.toml and loadouts.toml, and
+// takes the aliases, triggers and macros out of each profile file,
+// which keeps every other setting. The running app keeps its profiles
+// until you open Vosh again, so the done state offers Quit Vosh.
 export function MigrationWizard({ onClose }: Props) {
   const [plan, setPlan] = useState<MigrationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(true);
-  // Map of conflict-key -> chosen source profile. Missing entries
-  // fall back to the analyzer's default, the one version that was on
-  // when exactly one was.
+  // Each conflict's chosen profile by conflictKey. The analyzer's
+  // default seeds it, the one version that was on when exactly one was.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -50,22 +55,11 @@ export function MigrationWizard({ onClose }: Props) {
     void (async () => {
       try {
         const p = await migrationAnalyze(LIBRARY);
-        if (!cancelled) {
-          setPlan(p);
-          setPending(false);
-          // Seed picks with each conflict's default so the submission
-          // payload is explicit even when the user does not interact.
-          const seed: Record<string, string> = {};
-          for (const c of p.conflicts) {
-            seed[conflictKey(c.kind, c.name)] = c.default_source;
-          }
-          setPicks(seed);
-        }
+        if (cancelled) return;
+        setPlan(p);
+        setPicks(Object.fromEntries(p.conflicts.map((c) => [conflictKey(c), c.default_source])));
       } catch (e) {
-        if (!cancelled) {
-          setError(String(e));
-          setPending(false);
-        }
+        if (!cancelled) setError(String(e));
       }
     })();
     return () => {
@@ -73,30 +67,29 @@ export function MigrationWizard({ onClose }: Props) {
     };
   }, []);
 
-  const resolutions = useMemo<MigrationConflictResolution[]>(() => {
-    if (!plan) return [];
-    return plan.conflicts.map((c) => ({
-      kind: c.kind,
-      name: c.name,
-      source_profile: picks[conflictKey(c.kind, c.name)] ?? c.default_source,
-    }));
-  }, [plan, picks]);
+  const resolutions = useMemo<MigrationConflictResolution[]>(
+    () =>
+      (plan?.conflicts ?? []).map((c) => ({
+        kind: c.kind,
+        name: c.name,
+        source_profile: picks[conflictKey(c)] ?? c.default_source,
+      })),
+    [plan, picks],
+  );
 
-  const handleApply = async () => {
-    if (!plan) return;
+  const apply = async () => {
     setApplying(true);
     setError(null);
     try {
       await migrationApply(resolutions, LIBRARY);
       setApplied(true);
-      setApplying(false);
     } catch (e) {
       setError(String(e));
-      setApplying(false);
     }
+    setApplying(false);
   };
 
-  const handleQuit = async () => {
+  const quit = async () => {
     try {
       await appQuit();
     } catch (e) {
@@ -105,85 +98,141 @@ export function MigrationWizard({ onClose }: Props) {
   };
 
   return (
-    <div className="migration-wizard-backdrop" onClick={onClose}>
+    <WizardDialog
+      plan={plan}
+      picks={picks}
+      error={error}
+      applying={applying}
+      applied={applied}
+      onPick={(key, source) => setPicks((prev) => ({ ...prev, [key]: source }))}
+      onApply={() => void apply()}
+      onQuit={() => void quit()}
+      onClose={onClose}
+    />
+  );
+}
+
+export interface WizardDialogProps {
+  /** Null while Vosh reads your profiles. */
+  plan: MigrationPlan | null;
+  picks: Record<string, string>;
+  error: string | null;
+  applying: boolean;
+  applied: boolean;
+  onPick: (key: string, source: string) => void;
+  onApply: () => void;
+  onQuit: () => void;
+  onClose: () => void;
+}
+
+/** The dialog for a state of the preview. Focus starts on its first
+ *  control and moves to the new first control as the plan loads and as
+ *  Apply finishes. Esc and a press outside cancel, except while Apply
+ *  runs. Enter on the card's text does nothing, so only the Apply
+ *  button applies. */
+export function WizardDialog({
+  plan,
+  picks,
+  error,
+  applying,
+  applied,
+  onPick,
+  onApply,
+  onQuit,
+  onClose,
+}: WizardDialogProps) {
+  const titleId = useId();
+  const bodyId = useId();
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const cancel = () => {
+    if (!applying) onClose();
+  };
+  useEscape(true, cancel);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    return card ? trapDialogFocus(document, card, () => undefined) : undefined;
+  }, []);
+
+  const phase = applied ? 'done' : plan ? 'plan' : 'loading';
+  useEffect(() => {
+    cardRef.current?.querySelector<HTMLElement>(DIALOG_FOCUSABLE)?.focus({ preventScroll: true });
+  }, [phase]);
+
+  return (
+    <div
+      className="ov-confirm-layer ov-wizard-layer"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) cancel();
+      }}
+      onMouseUp={(e) => e.stopPropagation()}
+    >
       <div
-        className="migration-wizard"
+        ref={cardRef}
+        className="ov-confirm ov-wizard"
+        tabIndex={-1}
         role="dialog"
-        aria-label="Path B migration"
-        onClick={(e) => e.stopPropagation()}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
       >
-        <header className="migration-wizard-header">
-          <span className="migration-wizard-title">migrate to global catalog</span>
-          <button type="button" className="migration-wizard-close" onClick={onClose}>
-            close
-          </button>
-        </header>
-
-        <div className="migration-wizard-body">
-          {pending && <div className="migration-wizard-status">analyzing profiles...</div>}
-          {error && <div className="migration-wizard-error">[error] {error}</div>}
-          {applied && <AppliedNotice />}
-          {!applied && plan && (
-            <PlanView
-              plan={plan}
-              picks={picks}
-              onPick={(key, source) => setPicks((prev) => ({ ...prev, [key]: source }))}
-              disabled={applying}
-            />
-          )}
+        <div className="ov-wizard-head">
+          <h2 id={titleId} className="ov-confirm-title">
+            {applied ? 'Your catalog is saved' : 'Share one catalog'}
+          </h2>
+          <p id={bodyId} className="ov-confirm-body">
+            {applied ? DONE_BODY : introLine(plan)}
+          </p>
         </div>
-
-        <footer className="migration-wizard-footer">
+        {(!applied || error) && (
+          <div className="st-content ov-wizard-body">
+            {error && (
+              <Card>
+                <CardNote tone="warn">{error}</CardNote>
+              </Card>
+            )}
+            {applied ? null : plan ? (
+              <PlanView plan={plan} picks={picks} onPick={onPick} disabled={applying} />
+            ) : (
+              !error && <CardNote>Reading your profiles…</CardNote>
+            )}
+          </div>
+        )}
+        <div className="ov-wizard-foot">
           {applied ? (
             <>
-              <span className="migration-wizard-hint">
-                Path B activates the next time you launch Vosh.
-              </span>
-              <button
-                type="button"
-                className="settings-btn migration-apply-btn"
-                onClick={() => void handleQuit()}
-              >
-                quit Vosh
-              </button>
+              <Button onClick={onClose}>Close</Button>
+              <Button variant="primary" onClick={onQuit}>
+                Quit Vosh
+              </Button>
             </>
           ) : (
             <>
-              <span className="migration-wizard-hint">
-                Applying moves your aliases, triggers, and macros into one shared catalog, and every
-                character then shares one list of presets that are on. Every other setting stays
-                with its profile, and Vosh copies each profile file to profiles/legacy first.
+              <span className="st-row-desc">
+                Vosh keeps a copy of each profile, then asks you to reopen it.
               </span>
-              <button
-                type="button"
-                className="settings-btn migration-apply-btn"
-                disabled={!plan || applying}
-                onClick={() => void handleApply()}
-              >
-                {applying ? 'applying...' : 'apply migration'}
-              </button>
+              <Button disabled={applying} onClick={onClose}>
+                Cancel
+              </Button>
+              <Button variant="primary" disabled={!plan || applying} onClick={onApply}>
+                {applying ? 'Applying…' : 'Apply'}
+              </Button>
             </>
           )}
-        </footer>
+        </div>
       </div>
     </div>
   );
 }
 
-/** What the wizard says once it wrote its files. Nothing the session
- *  changes saves until Vosh opens again, and the main window says so too. */
-export function AppliedNotice() {
-  return (
-    <div className="migration-wizard-status migration-wizard-applied">
-      <div className="migration-wizard-applied-title">migration complete.</div>
-      <div className="migration-wizard-applied-body">
-        Vosh saved the shared catalog and a loadout for each profile. Every character now shares one
-        list of presets that are on. Each profile kept its other settings, and a full copy of each
-        old profile file waits in profiles/legacy. Vosh does not save the changes you make before
-        you quit, so quit Vosh below and open it again to use the catalog.
-      </div>
-    </div>
-  );
+const DONE_BODY =
+  'Vosh saved the catalog and a loadout for each character. Nothing you change now saves until you reopen Vosh, and your old profiles wait in profiles/legacy.';
+
+/** The head's line, which names the profiles once the plan names them. */
+function introLine(plan: MigrationPlan | null): string {
+  const names = plan && plan.source_profiles.length > 0 ? plan.source_profiles : null;
+  const whose = names ? `of ${listJoin(names)}` : 'of your profiles';
+  return `Vosh merges the aliases, triggers and macros ${whose} into one catalog, with a loadout for each character. Nothing changes until you apply it.`;
 }
 
 interface PlanViewProps {
@@ -193,208 +242,131 @@ interface PlanViewProps {
   disabled: boolean;
 }
 
+/** The three sections of the plan. */
 export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
-  const autoResolvedTotal =
-    plan.auto_resolved.aliases.length +
-    plan.auto_resolved.triggers.length +
-    plan.auto_resolved.macros.length;
+  const { aliases, triggers, macros } = plan.auto_resolved;
+  const changes = presetChanges(plan);
   return (
     <>
-      <Section title="source profiles">
-        {plan.source_profiles.length === 0 ? (
-          <Empty>no profiles found</Empty>
-        ) : (
-          <ul className="migration-list">
-            {plan.source_profiles.map((p) => (
-              <li key={p} className="migration-list-item">
-                {p}
-              </li>
-            ))}
-          </ul>
-        )}
+      {plan.conflicts.length > 0 && (
+        <Section
+          title="Pick the version to keep"
+          actions={<span className="st-meta">{plan.conflicts.length} to pick</span>}
+        >
+          {plan.conflicts.map((c) => {
+            const key = conflictKey(c);
+            const chosen = picks[key] ?? c.default_source;
+            const options = c.variants.map((v) => ({
+              value: v.source_profile,
+              label: v.source_profile,
+              disabled,
+            }));
+            return (
+              <Row key={key} label={c.name} description={conflictLine(c)}>
+                {options.length > MOST_SEGMENTS ? (
+                  <Select
+                    value={chosen}
+                    disabled={disabled}
+                    options={options}
+                    onChange={(source) => onPick(key, source)}
+                  />
+                ) : (
+                  <Segmented
+                    value={chosen}
+                    options={options}
+                    onChange={(source) => onPick(key, source)}
+                  />
+                )}
+              </Row>
+            );
+          })}
+        </Section>
+      )}
+
+      <Section title="Merged as they are">
+        <Row label="Aliases">
+          <span className="st-meta">{aliases.length}</span>
+        </Row>
+        <Row label="Triggers" description={namesLine(triggers.map((t) => t.name))}>
+          <span className="st-meta">{triggers.length}</span>
+        </Row>
+        <Row label="Macros">
+          <span className="st-meta">{macros.length}</span>
+        </Row>
       </Section>
 
-      <Section title={`auto-resolved (${autoResolvedTotal})`}>
-        <div className="migration-counts">
-          <CountChip label="aliases" count={plan.auto_resolved.aliases.length} />
-          <CountChip label="triggers" count={plan.auto_resolved.triggers.length} />
-          <CountChip label="macros" count={plan.auto_resolved.macros.length} />
-        </div>
-        <div className="migration-hint">
-          Items only one profile has, and items each profile that has them holds with the same
-          content. Copies that differ only in their folder or in whether they are on become one
-          item, and each profile keeps it on or off as it had it. A trigger that differs between
-          profiles keeps each version, and the copies of a preset trigger become the library
-          version.
-        </div>
+      <Section title="A loadout for each character">
+        {plan.loadouts.map((l) => {
+          const change = changes.find((c) => c.profile === l.name);
+          return (
+            <Row key={l.name} label={l.name} description={change && presetLine(change)}>
+              <span className="st-meta">
+                {l.enabled_groups.length > 0
+                  ? `Turns on ${listJoin(l.enabled_groups)}`
+                  : 'Turns on no groups'}
+              </span>
+            </Row>
+          );
+        })}
       </Section>
-
-      <Section title={`conflicts (${plan.conflicts.length})`}>
-        {plan.conflicts.length === 0 ? (
-          <Empty>
-            No conflicts. Every alias and macro is the same in each profile that has it, apart from
-            its folder and whether it is on.
-          </Empty>
-        ) : (
-          <ul className="migration-conflict-list">
-            {plan.conflicts.map((c) => {
-              const key = conflictKey(c.kind, c.name);
-              const chosen = picks[key] ?? c.default_source;
-              return (
-                <li key={key} className="migration-conflict">
-                  <div className="migration-conflict-head">
-                    <span className={`migration-kind-tag migration-kind-${c.kind}`}>
-                      {kindLabel(c.kind)}
-                    </span>
-                    <span className="migration-conflict-name">{c.name}</span>
-                  </div>
-                  <ul className="migration-variant-list">
-                    {c.variants.map((v) => (
-                      <li key={v.source_profile} className="migration-variant">
-                        <label className="migration-variant-radio">
-                          <input
-                            type="radio"
-                            name={key}
-                            value={v.source_profile}
-                            checked={chosen === v.source_profile}
-                            onChange={() => onPick(key, v.source_profile)}
-                            disabled={disabled}
-                          />
-                          <span className="migration-variant-source">{v.source_profile}</span>
-                          <span
-                            className={`migration-variant-state${v.switched_on ? ' is-on' : ''}`}
-                          >
-                            {v.switched_on ? 'on' : 'off'}
-                          </span>
-                        </label>
-                        <span className="migration-variant-body">
-                          {summarizeVariant(c.kind, c.name, v)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {plan.conflicts.length > 0 && (
-          <div className="migration-hint">
-            Pick the version to keep. When only one version is on, the wizard picks it for you. The
-            copies in profiles/legacy keep every version.
-          </div>
-        )}
-      </Section>
-
-      <Section title={`derived loadouts (${plan.loadouts.length})`}>
-        {plan.loadouts.length === 0 ? (
-          <Empty>no loadouts would be created.</Empty>
-        ) : (
-          <ul className="migration-loadout-list">
-            {plan.loadouts.map((l) => (
-              <li key={l.name} className="migration-loadout">
-                <div className="migration-loadout-head">
-                  <span className="migration-loadout-name">{l.name}</span>
-                  {l.description && <span className="migration-loadout-desc">{l.description}</span>}
-                </div>
-                <div className="migration-loadout-groups">
-                  {l.enabled_groups.length === 0 ? (
-                    <span className="migration-hint-inline">(no groups)</span>
-                  ) : (
-                    l.enabled_groups.map((g) => (
-                      <span key={g} className="migration-group-tag">
-                        {g}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="migration-hint">
-          Each loadout turns on the groups its profile had on. Every loadout starts off, so each
-          profile keeps on the items it has on now, at launch and when you switch.
-        </div>
-      </Section>
-
-      <SharedPresets plan={plan} />
     </>
   );
 }
 
-/** Who gains and who loses which preset once every character shares one
- *  preset list. */
-function SharedPresets({ plan }: { plan: MigrationPlan }) {
-  const changes = presetChanges(plan);
-  const tags = (names: string[]) =>
-    names.map((name) => (
-      <span key={name} className="migration-group-tag">
-        {name}
-      </span>
-    ));
-  return (
-    <Section title="shared presets">
-      {changes.length === 0 ? (
-        <Empty>Every character has the same presets on as now.</Empty>
-      ) : (
-        <ul className="migration-loadout-list">
-          {changes.map((c) => (
-            <li key={c.profile} className="migration-loadout migration-preset-change">
-              <span className="migration-loadout-name">{c.profile}</span>
-              {c.gains.length > 0 && (
-                <>
-                  <span className="migration-preset-verb">gains</span>
-                  {tags(c.gains)}
-                </>
-              )}
-              {c.loses.length > 0 && (
-                <>
-                  <span className="migration-preset-verb">loses</span>
-                  {tags(c.loses)}
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="migration-hint">
-        Loadout mode keeps one list of presets that are on, and every character shares it. The list
-        holds every preset that any profile file has on now. A profile that never saved a file has
-        every preset on.
-      </div>
-    </Section>
-  );
+/** A few names, then how many more. */
+function namesLine(names: string[]): string {
+  if (names.length <= MOST_NAMES) return names.join(', ');
+  return `${names.slice(0, MOST_NAMES).join(', ')} and ${names.length - MOST_NAMES} more`;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="migration-section">
-      <h3 className="migration-section-title">{title}</h3>
-      {children}
-    </section>
-  );
+/** The presets a character gains and loses once every character shares
+ *  one preset list, like `Gains Herb labels.` */
+function presetLine(change: { gains: string[]; loses: string[] }): string {
+  return [
+    change.gains.length > 0 && `Gains ${listJoin(change.gains)}.`,
+    change.loses.length > 0 && `Loses ${listJoin(change.loses)}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
-function CountChip({ label, count }: { label: string; count: number }) {
-  return (
-    <span className="migration-count-chip">
-      <span className="migration-count-chip-n">{count}</span>
-      <span className="migration-count-chip-l">{label}</span>
-    </span>
-  );
+const KIND_NAMES: Record<MigrationItemKind, string> = {
+  alias: 'Alias',
+  trigger: 'Trigger',
+  macro: 'Macro',
+  preset: 'Preset',
+};
+
+const KIND_VERBS: Record<MigrationItemKind, string> = {
+  alias: 'sends',
+  trigger: 'matches',
+  macro: 'sends',
+  preset: 'changes',
+};
+
+/** A conflict's kind and what differs between its versions, like
+ *  `Macro. Maren sends look, Orla sends scan.` or, for versions that
+ *  differ only in whether they are on, `Trigger. On for Tolliver, off
+ *  for Maren.` */
+function conflictLine(c: MigrationConflict): string {
+  const bodies = c.variants.map((v) => summarizeVariant(c.kind, c.name, v));
+  const on = c.variants.filter((v) => v.switched_on).map((v) => v.source_profile);
+  const off = c.variants.filter((v) => !v.switched_on).map((v) => v.source_profile);
+  let differs: string;
+  if (new Set(bodies).size > 1) {
+    differs = c.variants
+      .map((v, n) => `${v.source_profile} ${KIND_VERBS[c.kind]} ${bodies[n] || 'nothing'}`)
+      .join(', ');
+  } else if (on.length > 0 && off.length > 0) {
+    differs = `On for ${listJoin(on)}, off for ${listJoin(off)}`;
+  } else {
+    differs = 'Each profile has its own version';
+  }
+  return `${KIND_NAMES[c.kind]}. ${differs}${/[.!?…]$/.test(differs) ? '' : '.'}`;
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="migration-empty">{children}</div>;
-}
-
-function kindLabel(kind: MigrationItemKind): string {
-  return kind;
-}
-
-function conflictKey(kind: MigrationItemKind, name: string): string {
-  return `${kind}::${name}`;
+function conflictKey(c: { kind: MigrationItemKind; name: string }): string {
+  return `${c.kind}::${c.name}`;
 }
 
 function summarizeVariant(
@@ -403,25 +375,26 @@ function summarizeVariant(
   v: { item: { kind: MigrationItemKind; item: Record<string, unknown> } },
 ): string {
   const item = v.item.item;
-  if (kind === 'alias') {
-    const expansion = (item.expansion ?? '') as string;
-    return expansion.length > 80 ? `${expansion.slice(0, 80)}…` : expansion;
-  }
+  if (kind === 'alias') return clip((item.expansion ?? '') as string);
   if (kind === 'trigger') {
     const patterns = (item.patterns ?? []) as TriggerPattern[];
-    const first = patterns.length > 0 ? patternSource(patterns[0]) : '';
-    return first.length > 80 ? `${first.slice(0, 80)}…` : first;
+    return clip(patterns.length > 0 ? patternSource(patterns[0]) : '');
   }
   if (kind === 'preset') return versionChanges(name, item as PresetEdit);
-  const command = (item.command ?? '') as string;
-  return command.length > 80 ? `${command.slice(0, 80)}…` : command;
+  return clip((item.command ?? '') as string);
+}
+
+function clip(text: string): string {
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
 /** What a version of a preset changed, as the Your changes line of the
- *  preset's card names it, like `The line color, buff.sanctuary`. */
+ *  preset's card names it, inside a sentence, like `the line color and
+ *  buff.sanctuary`. */
 function versionChanges(id: string, edit: PresetEdit): string {
   const preset = presetById(id);
   const line = preset && changesLine(preset, edit);
   if (!line) return '';
-  return 'count' in line ? line.count : [...line.colors, ...line.triggers].join(', ');
+  if ('count' in line) return line.count;
+  return listJoin([...line.colors, ...line.triggers]).replace(/^The /, 'the ');
 }

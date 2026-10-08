@@ -385,7 +385,7 @@ export function ProfileList({
                       onKeyDown={onRowKey}
                     >
                       <span
-                        className={cx('st-profile-dot', plays && 'is-active')}
+                        className={cx('st-profile-dot dot', plays && 'is-accent')}
                         aria-hidden="true"
                       />
                       <span className="st-profile-name">

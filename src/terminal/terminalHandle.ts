@@ -8,7 +8,9 @@ import {
   type RegionOnScreen,
   type ScreenCell,
 } from '../prompt/promptPointer';
-import { hexToRgba } from '../theme/color';
+import { solidFindMarks } from '../theme/findMarks';
+import { getCurrentThemeId } from '../theme/theme';
+import { findTheme } from '../theme/themes';
 import type { PaneSizer } from './paneSizer';
 import type { BufferView, LineMark } from './splitDrag';
 import type { RegionWriter } from './terminalRegion';
@@ -144,28 +146,36 @@ export interface HandleParts {
   session: number;
 }
 
-// Match-highlight colors. Read from CSS vars at search time so a
-// theme switch picks up the new accent on the next find call.
-// Hard-coded fallbacks keep matches visible if the var lookup
-// returns empty (early-mount race in WKWebView).
-export const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
-  const rootStyle = getComputedStyle(document.documentElement);
-  const accent = rootStyle.getPropertyValue('--accent').trim() || '#7aa2f7';
-  // The SearchAddon draws non-active matches BELOW the text and the
-  // active match ABOVE it. So a non-active match can carry an accent
-  // tint (the glyphs paint on top and stay legible), but the active
-  // match must have NO top fill — any fill there sits over the
-  // glyphs and washes them out, which is the unreadable highlight
-  // bug. The active match is marked instead by a solid accent
-  // outline (and its own tint shows through from the below-text
-  // highlight layer the addon also draws for it).
+// The ground under the text as #rrggbb. While the pane lifts your prompt
+// the terminal's ground is the theme's own color with a zero alpha byte, so
+// that byte is dropped. A ground that does not parse is the theme's.
+const solidGround = (background: string | undefined, theme: string): string => {
+  const m = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(background ?? '');
+  return m ? `#${m[1]}` : theme;
+};
+
+/** How a find marks matches in an xterm terminal. */
+export const searchDecorations = (
+  term: Pick<Terminal, 'options'>,
+): NonNullable<ISearchOptions['decorations']> => {
+  // Every match fills in the theme's ANSI yellow at 28% and the match you
+  // are on at 60%, the way Help, the session logs page and the native grid
+  // mark them. The search addon takes only #rrggbb, so the fills are laid
+  // over the terminal's own ground. The addon registers the active
+  // match on the top layer, but the renderer resolves a decoration
+  // backgroundColor as the cell background, so the glyphs still paint over
+  // the stronger fill and stay legible. The theme is read at each find, so
+  // a theme switch shows on the next one.
+  const { xterm } = findTheme(getCurrentThemeId());
+  const ground = solidGround(term.options.theme?.background, xterm.background);
+  // Theme yellows are always #rrggbb, so the marks always build. The
+  // yellow itself stands in only to satisfy the addon's types.
+  const marks = solidFindMarks(xterm, ground) ?? { match: xterm.yellow, current: xterm.yellow };
   return {
-    matchBackground: hexToRgba(accent, 0.28),
-    matchBorder: hexToRgba(accent, 0.5),
-    matchOverviewRuler: accent,
-    activeMatchBackground: 'transparent',
-    activeMatchBorder: accent,
-    activeMatchColorOverviewRuler: accent,
+    matchBackground: marks.match,
+    matchOverviewRuler: xterm.yellow,
+    activeMatchBackground: marks.current,
+    activeMatchColorOverviewRuler: xterm.yellow,
   };
 };
 
@@ -266,14 +276,14 @@ export function terminalHandle(parts: HandleParts): TerminalHandle {
         regex: opts?.regex ?? false,
         wholeWord: opts?.wholeWord ?? false,
         caseSensitive: opts?.caseSensitive ?? false,
-        decorations: searchDecorations(),
+        decorations: searchDecorations(term),
       }),
     findPrevious: (query, opts) =>
       searchAddon.findPrevious(query, {
         regex: opts?.regex ?? false,
         wholeWord: opts?.wholeWord ?? false,
         caseSensitive: opts?.caseSensitive ?? false,
-        decorations: searchDecorations(),
+        decorations: searchDecorations(term),
       }),
     clearSearch: () => searchAddon.clearDecorations(),
     clearSelection: () => term.clearSelection(),

@@ -6,7 +6,7 @@ Every window builds from the primitives in `src/ui`. Settings, Help and the prom
 import { Section, Row, Toggle, Select } from '../../ui';
 ```
 
-The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the shared tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the interim rules in `migration.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
+The control styles live in `src/styles/controls.css`, and the section, card and row styles in `src/styles/settings.css`. Every class starts with `st-` and reads only the shared tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). Do not add a `settings-` class to new markup.
 
 Use monospace only for MUD text. That means patterns, sent commands, macro keys, host, and port. Everything else uses the UI font with tabular numbers, which the root already sets.
 
@@ -74,7 +74,8 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `Button` forwards its ref.
 
-- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
+- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, the ring kept).
+- `small` makes it 24 tall at 12/500 with 10 side padding, like the prompt card foot.
 - `icon` adds a leading 16 px icon in the secondary color, like `New profile`.
 
 `IconButton` is a 28×24 button that shows only a 16 px icon, the one the window controls use. It forwards its ref.
@@ -82,7 +83,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `label` is its accessible name, like `Ilsabet options` or `Move Haste up`. It is required, since the button shows no text.
 - `icon` is the icon.
 
-`Keycap` draws one key. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
+`Keycap` draws one key. Set a row of them in a `keys` wrapper, a `<kbd>` or a `<span>`, which spaces them 4 apart, and put the margin on a class of its own. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
 
 `Chip` is a pill with an optional close button.
 
@@ -111,7 +112,7 @@ A row whose content sits under its label line at full width, like the prompt tem
 
 `CoachRing` is Show me's ring, mounted once in each window. `showCoach({ find, line })` rings what `find` returns once it draws, 2 px out in the accent with one pulse, moves focus to the first of them and sets `line` beside it on the toast recipe. The pick, Esc, a press anywhere or a target that leaves the page clears it. `menuRows(menu, labels)` finds rows of an open menu by their labels. A Settings anchor with `data-st-coach` rings the same way when a deep link reaches it.
 
-`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
+`VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off. It renders a span with the `visually-hidden` class from base.css. A label, a legend, a live paragraph or a span that hides only in some styles wears the class by name.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.
 

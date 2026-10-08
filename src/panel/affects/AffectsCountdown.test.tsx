@@ -87,7 +87,7 @@ function draw(
 function cellsOf(html: string): string[] {
   const out: string[] = [];
   const cell =
-    /<li class="pane-countdown-cell pane-affect-(\w+)[^"]*"[^>]*>(?:<span class="pane-affect-mark is-(\w+)"[^>]*><\/span>)?<span class="pane-countdown-line"><span class="pane-countdown-name">([^<]*)(?:<span class="pane-sr">([^<]*)<\/span>)?<\/span><span class="pane-countdown-hours([^"]*)"[^>]*>([^<]*)<\/span><\/span>(?:<span class="pane-countdown-meter"[^>]*><span class="pane-countdown-fill" style="width:([^%]*)%"><\/span><\/span>)?<\/li>/g;
+    /<li class="pane-countdown-cell pane-affect-(\w+)[^"]*"[^>]*>(?:<span class="pane-affect-mark is-(\w+)"[^>]*><\/span>)?<span class="pane-countdown-line"><span class="pane-countdown-name">([^<]*)(?:<span class="visually-hidden">([^<]*)<\/span>)?<\/span><span class="pane-countdown-hours([^"]*)"[^>]*>([^<]*)<\/span><\/span>(?:<span class="pane-countdown-meter"[^>]*><span class="pane-countdown-fill" style="width:([^%]*)%"><\/span><\/span>)?<\/li>/g;
   for (const m of html.matchAll(cell)) {
     const tone = m[5].trim().replace('is-', '');
     const meter = m[7] === undefined ? 'no meter' : `${m[7]}%`;

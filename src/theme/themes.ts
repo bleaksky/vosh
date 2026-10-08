@@ -2339,6 +2339,12 @@ export function migrateCustomChrome(chrome: Record<string, string> | undefined):
   if (!legacy && (src.appearance === 'dark' || src.appearance === 'light')) {
     out.appearance = src.appearance;
   }
+  // The menu highlight became the one hover wash, so a pin on it
+  // carries over as the hover unless the map pins that too.
+  const menuHi = src.menuHi;
+  if (!legacy && out.hover === undefined && typeof menuHi === 'string' && menuHi.trim() !== '') {
+    out.hover = menuHi;
+  }
   return out as ChromeOverrides;
 }
 

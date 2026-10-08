@@ -26,7 +26,7 @@ describe('the preset fix notice', () => {
       '<span class="ov-update-msg">A preset fix changed a row you edited</span>',
     );
     expect(html).toContain('<span class="ov-update-meta is-mono">disarm.secondary</span>');
-    expect(html).toMatch(/>Close<\/button><button[^>]*class="ov-button is-primary"[^>]*>Show</);
+    expect(html).toMatch(/>Close<\/button><button[^>]*class="btn is-primary"[^>]*>Show</);
   });
 
   it('keeps the notice until you close it, past a run that tells nothing', () => {

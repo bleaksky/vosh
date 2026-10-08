@@ -21,7 +21,9 @@ import {
 import { numberRuns } from './promptScreen';
 import { parseSgrCells } from '../terminal/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, Field } from '../ui';
-import { CardMenu, MenuSeparator } from './CardMenu';
+import { MenuSeparator } from '../ui/MenuSurface';
+import { focusUnderPointer } from '../ui/menuAim';
+import { CardMenu } from './CardMenu';
 import { MatchRow } from './PromptCandidate';
 import { CellLine } from './PromptCells';
 
@@ -314,7 +316,6 @@ export function PointName({
         <CardMenu
           anchor={menu.anchor}
           place="below-start"
-          width={208}
           label={`Name for ${current.text}`}
           onClose={() => {
             setMenu(null);
@@ -336,7 +337,8 @@ export function PointName({
               <button
                 type="button"
                 role="menuitem"
-                className="pc-name-item"
+                className="menu-item pc-name-item"
+                onPointerMove={focusUnderPointer}
                 onClick={() => setOther('')}
               >
                 <span>Other name…</span>
@@ -366,7 +368,8 @@ export function PointName({
             <button
               type="button"
               role="menuitem"
-              className="pc-name-item"
+              className="menu-item pc-name-item"
+              onPointerMove={focusUnderPointer}
               onClick={() => choose(menu.number, '')}
             >
               <span>Leave out</span>
@@ -378,7 +381,7 @@ export function PointName({
   );
 }
 
-function NameGroup({
+export function NameGroup({
   first,
   choices,
   current,
@@ -401,7 +404,8 @@ function NameGroup({
               role="menuitemradio"
               aria-checked={checked}
               aria-label={choice.package ? `${choice.name} from ${choice.package}` : undefined}
-              className="pc-name-item"
+              className="menu-item pc-name-item"
+              onPointerMove={focusUnderPointer}
               onClick={() => onChoose(choice.name)}
             >
               {checked && <CheckIcon className="pc-start-check" />}

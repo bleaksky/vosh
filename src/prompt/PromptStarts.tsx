@@ -6,6 +6,7 @@ import { type PromptConfig, type PromptDesign, type PromptPreset } from '../ipc/
 import { promptRenderMany } from '../ipc/promptDesign';
 import { parseSgrCells, shownColumns, type Cell } from '../terminal/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '../ui';
+import { MenuItem } from '../ui/MenuSurface';
 import { CardMenu } from './CardMenu';
 import { CellLine } from './PromptCells';
 
@@ -164,25 +165,21 @@ function StartList({
             <CardMenu
               anchor={others_}
               place="beside"
-              width={232}
               label="From another profile"
               onClose={() => setOthers(null)}
             >
               {others.map((row) => (
-                <li key={row.id} role="none">
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={row.checked}
-                    className="ov-menu-item"
-                    onClick={() => {
-                      setOthers(null);
-                      onPick(row);
-                    }}
-                  >
-                    <span className="ov-menu-label">{row.label}</span>
-                  </button>
-                </li>
+                <MenuItem
+                  key={row.id}
+                  radio
+                  checked={row.checked}
+                  onSelect={() => {
+                    setOthers(null);
+                    onPick(row);
+                  }}
+                >
+                  {row.label}
+                </MenuItem>
               ))}
             </CardMenu>
           )}
@@ -320,7 +317,7 @@ export function Starts({
     <div className="pc-body">
       {promptsOff || notMatching ? (
         <p className="pc-hint is-warn" role="status">
-          <span className="pc-warn-dot" aria-hidden="true" />
+          <span className="pc-warn-dot dot is-warn" aria-hidden="true" />
           <span>
             {promptsOff
               ? 'You turned prompts off in the game. Type prompt in the game to turn them back on.'
@@ -347,8 +344,8 @@ export function Starts({
         <CardMenu
           anchor={presetsAt}
           place="above-start"
-          width={468}
           label="Presets"
+          className="pc-presets-menu"
           onClose={() => setPresetsAt(null)}
         >
           <li role="none">

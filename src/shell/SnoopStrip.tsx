@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { snoopClose, snoopStop, snoopWindowOpen } from '../ipc/snoop';
 import { selectSnoop, type Snoops } from '../stores/session/snoopStore';
 import { pushToast } from '../stores/toasts';
+import { Button } from '../ui';
 import { MoreIcon } from '../ui/icons';
 import { SnoopMenu, type SnoopPick } from './SnoopMenu';
 import { EyeIcon } from './icons';
@@ -141,7 +142,7 @@ export function SnoopStrip({ session, snoops, split, onFind, onCaret }: Props) {
             }}
           >
             <span className="snoop-mark">
-              <span className="snoop-dot" />
+              <span className={tab.live ? 'dot is-success' : 'dot is-off'} />
             </span>
             <span className="snoop-name">{tab.name}</span>
           </button>
@@ -151,9 +152,9 @@ export function SnoopStrip({ session, snoops, split, onFind, onCaret }: Props) {
         {front && !narrow && (
           <div ref={actRef} className="snoop-act" {...drag}>
             {!front.live && <span className="snoop-meta">{endedLine(front, now)}</span>}
-            <button type="button" className="snoop-btn" onClick={stopFront}>
+            <Button small onClick={stopFront}>
               {front.live ? 'Stop' : 'Close'}
-            </button>
+            </Button>
           </div>
         )}
         <button

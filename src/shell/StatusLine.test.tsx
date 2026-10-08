@@ -216,14 +216,14 @@ describe('StatusVitals', () => {
     it('hides the name and drops a Target item on another mob', () => {
       const html = at({ names: false });
       expect(html).toContain(
-        '<span class="shell-status-foe"><span class="shell-sr">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
+        '<span class="shell-status-foe"><span class="visually-hidden">a Blackwatch guard</span><span class="shell-status-value is-warn is-bare">54%</span>',
       );
       expect(html).not.toContain('Target');
     });
 
     it('keeps each label for a screen reader once it goes', () => {
       expect(at({ labels: false })).toContain(
-        '<span class="shell-status-vital"><span class="shell-sr">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
+        '<span class="shell-status-vital"><span class="visually-hidden">Health</span><span class="shell-status-value is-low is-bare">159 / 1020</span></span>',
       );
     });
 

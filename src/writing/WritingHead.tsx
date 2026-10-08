@@ -127,7 +127,7 @@ export function WritingHead({
       trailing={
         <span className="wr-mend">
           {meta && <span className="wr-mmeta">{meta}</span>}
-          <ChevronRightIcon className="pane-menu-chevron" />
+          <ChevronRightIcon className="menu-chevron" />
         </span>
       }
     >
@@ -153,7 +153,7 @@ export function WritingHead({
         label={sub.which === 'new' ? 'New' : sub.which === 'sent' ? 'Sent' : 'Other characters'}
         nested
         autoFocus={sub.focus}
-        className={`pane-menu-sub${sub.which === 'new' ? '' : ' wr-menu-wide'}`}
+        className={`menu-sub${sub.which === 'new' ? '' : ' wr-menu-wide'}`}
         at={at}
         onClose={() => setSub(null)}
       >
@@ -214,12 +214,13 @@ export function WritingHead({
       ) : (
         <>
           {preview && (
-            <Button className="wr-small is-pressed" aria-pressed onClick={onPreview}>
+            <Button small className="is-pressed" aria-pressed onClick={onPreview}>
               Preview
             </Button>
           )}
           <Button
-            className={`wr-small${guide ? ' is-pressed' : ''}`}
+            small
+            className={guide ? 'is-pressed' : undefined}
             aria-pressed={guide}
             onClick={onGuide}
           >
