@@ -1036,6 +1036,16 @@ fn hears_the_game_decide_a_check_while_nothing_runs() {
     assert_eq!(t.done(), None);
 }
 
+fn numbers_a_decision_apart_from_one_on_an_earlier_connection() {
+    let mut first = Table::new();
+    first.pulse(&["Orla has judged your look worthy."]);
+    let before = first.writer.state(0).decided.expect("a decision");
+    let mut again = Table::new();
+    again.pulse(&["Orla has judged your look worthy."]);
+    let after = again.writer.state(0).decided.expect("a decision");
+    assert_ne!(after.id, before.id);
+}
+
 fn names_a_tome_after_its_line_and_offers_no_card() {
     let mut t = Table::new();
     t.typed("scribe text");
@@ -1170,6 +1180,7 @@ in_every_order!(
     says_when_the_list_holds_no_such_note,
     cannot_tell_on_a_board_only_immortals_read,
     hears_the_game_decide_a_check_while_nothing_runs,
+    numbers_a_decision_apart_from_one_on_an_earlier_connection,
     names_a_tome_after_its_line_and_offers_no_card,
     names_paper_after_one_of_its_three_lines,
     names_a_vote_or_a_pet_on_the_banner_alone,

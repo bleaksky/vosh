@@ -48,6 +48,7 @@ mod openers;
 pub(crate) mod payloads;
 mod plan;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -67,6 +68,11 @@ pub(crate) use payloads::Action;
 /// back with Nagle off (`comm.c:1134`), and its next pulse comes 250 ms
 /// later (`merc.h:407`), so the pulse ends well inside this.
 const GRACE: Duration = Duration::from_millis(100);
+
+/// The number the next decided check takes, across every connection.
+/// Each connection builds its own writer, so a count in the writer would
+/// start again at 1 after a reconnect.
+static NEXT_DECIDED: AtomicU64 = AtomicU64::new(1);
 
 /// How long a prompt tick with no text before or after it waits for some
 /// before it fires, four pulses. With the prompt off and compact on, a
@@ -114,7 +120,9 @@ pub(crate) struct Done {
     pub(crate) result: JobResult,
 }
 
-/// The game decided a check of a text, with the writer's number for it.
+/// The game decided a check of a text, with a number no other decision
+/// in this run of Vosh shares, so the page tells a new connection's first
+/// decision from the last one it heard in the same session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Decided {
     pub(crate) id: u64,
@@ -184,7 +192,6 @@ pub(crate) struct Writer {
     done: Option<Done>,
     next_offer: u64,
     decided: Option<Decided>,
-    next_decided: u64,
     /// The game's prompt tick, until the text of its pulse is in.
     armed: Option<Armed>,
     /// Text came since the writer last sent.
@@ -266,9 +273,8 @@ impl Writer {
     /// check.
     pub(crate) fn heard(&mut self, plain: &str) {
         if let Some(kind) = decided(plain) {
-            self.next_decided += 1;
             self.decided = Some(Decided {
-                id: self.next_decided,
+                id: NEXT_DECIDED.fetch_add(1, Ordering::Relaxed),
                 kind,
             });
         }
