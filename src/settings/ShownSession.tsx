@@ -33,11 +33,10 @@ export function ShownSession() {
     : rows
         .filter((r) => r.id !== session && r.profile === profile)
         .map((r) => sessionLabel(r, rows).name);
-  let dot = row?.connected ? 'is-connected' : 'is-idle';
-  if (held) dot = 'is-held';
+  const tone = held ? 'is-warn' : row?.connected ? 'is-success' : 'is-off';
   return (
     <span className="st-who">
-      <span className={`shell-dot ${dot}`} aria-hidden="true" />
+      <span className={`dot ${tone}`} aria-hidden="true" />
       {name && <span className="st-who-name">{name}</span>}
       <span className="st-who-profile">{profileDisplayName(profile)}</span>
       {also.length > 0 && <span className="st-who-also">Also in {listJoin(also)}</span>}

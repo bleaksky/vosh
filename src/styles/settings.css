@@ -269,7 +269,7 @@
   pointer-events: none;
 }
 
-.st-who .shell-dot {
+.st-who .dot {
   margin-right: 6px;
 }
 
@@ -290,11 +290,6 @@
   margin-left: 8px;
   padding-left: 8px;
   box-shadow: inset 1px 0 0 var(--divider);
-}
-
-/* A page holds the profile while the selected session plays another. */
-.st-who .shell-dot.is-held {
-  background: var(--warn);
 }
 
 .st-who-note {

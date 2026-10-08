@@ -37,7 +37,7 @@ export function WalkStatus({ progress }: { progress: WalkProgress }) {
   if (progress.kind === 'stopped') {
     return (
       <div className="walk-chip ov-toast" role="status">
-        <span className="ov-toast-dot" aria-hidden="true" />
+        <span className="ov-toast-dot dot is-accent" aria-hidden="true" />
         <span className="ov-toast-msg">
           {progress.why === 'lost_track'
             ? 'Stopped'

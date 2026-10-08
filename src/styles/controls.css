@@ -484,6 +484,39 @@
   white-space: nowrap;
 }
 
+/* A status dot. The tone sets --dot, and is-off draws the same tone as
+   a ring, so a ring alone is tertiary. The place that sets a dot sets
+   its margin. */
+.dot {
+  display: block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--dot, var(--tertiary));
+}
+
+.dot.is-success {
+  --dot: var(--success);
+}
+
+.dot.is-warn {
+  --dot: var(--warn);
+}
+
+.dot.is-danger {
+  --dot: var(--danger);
+}
+
+.dot.is-accent {
+  --dot: var(--accent);
+}
+
+.dot.is-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px var(--dot, var(--tertiary));
+}
+
 .st-control-group {
   display: flex;
   align-items: center;

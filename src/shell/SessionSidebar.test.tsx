@@ -260,14 +260,12 @@ describe('the sessions sidebar', () => {
     const [live, login, dialing, failed, off] = buttons(draw(marked, 1));
     const mark = (kind: string, words: string) =>
       `"><span class="shell-sessions-mark is-${kind}" role="img" aria-label="${words}">`;
-    expect(live).toContain(mark('live', 'Playing') + '<span class="shell-sessions-dot"></span>');
+    expect(live).toContain(mark('live', 'Playing') + '<span class="dot is-success"></span>');
     expect(login).toContain(mark('hand', 'Logging in') + '<svg');
     expect(dialing).toContain(mark('spinner', 'Connecting') + '<svg');
     expect(failed).toContain(mark('triangle', 'Connect again') + '<svg');
     expect(off).toContain('class="shell-sessions-row is-off"');
-    expect(off).toContain(
-      mark('off', 'Not connected') + '<span class="shell-sessions-dot"></span>',
-    );
+    expect(off).toContain(mark('off', 'Not connected') + '<span class="dot is-off"></span>');
     expect(off).toContain('<span class="shell-sessions-port">1825</span>');
   });
 

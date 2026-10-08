@@ -112,7 +112,10 @@ function ToastBody({ toast: t }: { toast: Toast }): ReactNode {
           <path d="M3.5 8.5l3 3 6-7" />
         </svg>
       ) : (
-        <span className="ov-toast-dot" aria-hidden="true" />
+        <span
+          className={`ov-toast-dot dot ${t.kind === 'error' ? 'is-danger' : 'is-accent'}`}
+          aria-hidden="true"
+        />
       )}
       <span className="ov-toast-msg">{t.message}</span>
       {t.meta && (

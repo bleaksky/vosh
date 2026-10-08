@@ -143,7 +143,7 @@ export function SnoopStrip({ session, snoops, split, onFind, onCaret }: Props) {
             }}
           >
             <span className="snoop-mark">
-              <span className="snoop-dot" />
+              <span className={tab.live ? 'dot is-success' : 'dot is-off'} />
             </span>
             <span className="snoop-name">{tab.name}</span>
           </button>

@@ -20,7 +20,7 @@ export function AlertNotice() {
   if (!notice) return null;
   return (
     <div className="ov-update" role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-dot dot is-accent" aria-hidden="true" />
       <span className="ov-update-msg">{notice.title}</span>
       {notice.label !== null && <span className="ov-update-meta">to {notice.label}</span>}
       <span className="ov-update-actions">

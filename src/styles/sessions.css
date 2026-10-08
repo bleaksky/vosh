@@ -196,21 +196,6 @@
   color: var(--danger);
 }
 
-.shell-sessions-dot {
-  display: block;
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-}
-
-.shell-sessions-mark.is-live .shell-sessions-dot {
-  background: var(--success);
-}
-
-.shell-sessions-mark.is-off .shell-sessions-dot {
-  box-shadow: inset 0 0 0 1.25px var(--tertiary);
-}
-
 /* The name, and a port that tells the session apart in quiet meta
    beside it, kept whole while the name ends in an ellipsis. */
 .shell-sessions-name {

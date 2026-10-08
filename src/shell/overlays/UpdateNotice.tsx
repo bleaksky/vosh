@@ -70,7 +70,10 @@ export function UpdateNotice() {
 
   return (
     <div className={`ov-update${error ? ' is-error' : ''}`} role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span
+        className={`ov-update-dot dot ${error ? 'is-danger' : 'is-accent'}`}
+        aria-hidden="true"
+      />
       <span className="ov-update-msg">{message}</span>
       {meta && (
         <span className="ov-update-meta" title={error ?? undefined}>

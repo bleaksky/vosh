@@ -286,30 +286,6 @@
   background: var(--selrow);
 }
 
-.shell-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-
-.shell-dot.is-connected {
-  background: var(--success);
-}
-
-.shell-dot.is-connecting {
-  border: 1.25px solid var(--success);
-}
-
-.shell-dot.is-idle {
-  border: 1.25px solid var(--tertiary);
-}
-
-.shell-dot.is-error {
-  border: 1.25px solid var(--danger);
-}
-
 .shell-title-name {
   margin-left: 6px;
   min-width: 0;

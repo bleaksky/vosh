@@ -16,7 +16,7 @@ export function GetStartedNotice() {
   if (view.shows !== 'folded') return null;
   return (
     <div className="ov-update" role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-dot dot is-accent" aria-hidden="true" />
       <span className="ov-update-msg">Get started</span>
       <span className="ov-update-meta">
         {progress(stepsFor(view.target), view.saved?.done ?? [])}

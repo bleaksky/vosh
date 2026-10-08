@@ -636,16 +636,7 @@
 }
 
 .ov-toast-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 0 4px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.ov-toast.is-error .ov-toast-dot {
-  background: var(--danger);
 }
 
 .ov-toast-msg {
@@ -862,27 +853,7 @@
 }
 
 .ov-update-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
   margin: 0 4px;
-  border-radius: 4px;
-  background: var(--accent);
-}
-
-.ov-update.is-error .ov-update-dot {
-  background: var(--danger);
-}
-
-/* A redial that dials rings in the success tone, as the title band's
-   connecting dot does. */
-.ov-update.is-wait .ov-update-dot {
-  background: none;
-  border: 1.25px solid var(--success);
-}
-
-.ov-update.is-warn .ov-update-dot {
-  background: var(--warn);
 }
 
 .ov-update-msg {

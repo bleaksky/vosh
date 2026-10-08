@@ -21,7 +21,7 @@ export function PresetFixNotice() {
   if (!notice) return null;
   return (
     <div className="ov-update is-warn" role="status" aria-live="polite">
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-dot dot is-warn" aria-hidden="true" />
       <span className="ov-update-msg">{notice.message}</span>
       <span className={`ov-update-meta${notice.mono ? ' is-mono' : ''}`}>{notice.meta}</span>
       <span className="ov-update-actions">

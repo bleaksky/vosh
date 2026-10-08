@@ -56,13 +56,17 @@ export function ReconnectNotice({ session, onTryAgain, onError }: Props) {
     message = `Vosh stopped after ${redial.tries} tries`;
   }
 
+  const dialing = redial.kind === 'dialing';
   return (
     <div
-      className={`ov-update ${redial.kind === 'dialing' ? 'is-wait' : 'is-error'}`}
+      className={`ov-update ${dialing ? 'is-wait' : 'is-error'}`}
       role="status"
       aria-live="polite"
     >
-      <span className="ov-update-dot" aria-hidden="true" />
+      <span
+        className={`ov-update-dot dot ${dialing ? 'is-off is-success' : 'is-danger'}`}
+        aria-hidden="true"
+      />
       <span className="ov-update-msg">{message}</span>
       {meta && <span className="ov-update-meta">{meta}</span>}
       <span className="ov-update-actions">

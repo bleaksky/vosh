@@ -29,6 +29,14 @@ interface Props {
 
 type DotKind = 'connected' | 'connecting' | 'idle' | 'error';
 
+/** The dot for each state: full when connected, a ring otherwise. */
+const DOT_TONE: Record<DotKind, string> = {
+  connected: 'is-success',
+  connecting: 'is-off is-success',
+  idle: 'is-off',
+  error: 'is-off is-danger',
+};
+
 export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleButton(
   { connection, open, folded, onToggle },
   ref,
@@ -90,7 +98,7 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
       title={status.kind === 'error' ? status.message : undefined}
       onClick={onToggle}
     >
-      <span className={`shell-dot is-${dot}`} aria-hidden="true" />
+      <span className={`dot ${DOT_TONE[dot]}`} aria-hidden="true" />
       <span className="shell-title-name">{primary}</span>
       {secondary && <span className="shell-title-world">{secondary}</span>}
       <span className="shell-title-chevron">
