@@ -1659,7 +1659,7 @@ Size. Feature work, sized with its boards.
 
 #### R26. Signed packages on every platform (required)
 
-Work. macOS signing and notarization, for which the release workflow already passes the secrets. Windows signing with the certificate from D38. The dmg, msi, nsis, deb, rpm and AppImage targets are already set. The release workflow builds a draft, and you publish.
+Work. macOS signing and notarization, for which the release workflow already passes the secrets. Windows builds ship unsigned for now, as D38 was answered on October 8, and README says so. The dmg, msi, nsis, deb, rpm and AppImage targets are already set. The release workflow builds a draft, and you publish.
 
 Checks. The Phase 11 demo. Each package installs and launches on its platform, Gatekeeper accepts the macOS build, and Windows reports a valid signature.
 
@@ -1876,6 +1876,7 @@ D38. Windows signing (R26). Blocks 1.0.
 - A. Choose a certificate service and add its secret to the release workflow.
 - B. Ship 1.0 unsigned on Windows and say so in README.
 - Recommendation. A, chosen early, since issuing a certificate can take days.
+- Answered October 8, 2026. Option B for now, since a certificate costs money. Windows builds of 1.0 ship unsigned, README says so and says how to get past SmartScreen, and the release workflow keeps a place for the certificate so A can follow later without other changes.
 
 ## Part 6. Risks and how the phases guard against them
 
