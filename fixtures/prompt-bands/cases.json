@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written. The band under a lifted prompt, shared by layoutBands and widenNewest in src/lib/promptBands.ts and by band_rects and widen_newest in src-tauri/src/native/gpu/bands.rs, so xterm and the native grid draw the same bands. Rows are buffer rows, and viewport_y is the first row the viewport shows. Every length is in CSS px at 1x. The native grid draws in device px, so its test runs each case at 2x as well and expects every length doubled. reach is what the prompt card adds to the newest band, none when it is left out. constants holds the reaches both sides declare.",
+  "notes": "Hand written. The band under a lifted prompt, shared by layoutBands and widenNewest in src/terminal/xterm/liftBands.ts and by band_rects and widen_newest in src-tauri/src/native/gpu/bands.rs, so xterm and the native grid draw the same bands. Rows are buffer rows, and viewport_y is the first row the viewport shows. Every length is in CSS px at 1x. The native grid draws in device px, so its test runs each case at 2x as well and expects every length doubled. reach is what the prompt card adds to the newest band, none when it is left out. constants holds the reaches both sides declare.",
   "constants": {
     "band_x": 4,
     "band_y": 2,
