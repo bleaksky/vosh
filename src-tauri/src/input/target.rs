@@ -23,16 +23,7 @@ pub(super) fn is_target_keyword(name: &str) -> bool {
 /// but resolves `room_idx` to whichever char contains "gris" so the
 /// `>` marker shows on the right chip. First match wins.
 fn refresh_target_idx(c: &mut Connection) {
-    c.target.room_idx = match &c.target.name {
-        None => None,
-        Some(name) => {
-            let lower = name.to_ascii_lowercase();
-            c.room_chars
-                .iter()
-                .position(|ch| ch.name.to_ascii_lowercase().contains(&lower))
-                .map(|i| i + 1)
-        }
-    };
+    c.target.room_idx = target_place(c.target.name.as_deref(), &c.room_chars);
     // Mirror the user target into the session's variables so `${target}`
     // works in alias expansions and Lua `mud.var("target")` reads it.
     // Clearing the target removes the variable rather than leaving it
@@ -45,6 +36,16 @@ fn refresh_target_idx(c: &mut Connection) {
     } else {
         c.vars.remove("target");
     }
+}
+
+/// The place from 1 in `chars` of the target `name`, the first whose
+/// name holds it, ignoring case, as `refresh_target_idx` finds it.
+pub(crate) fn target_place(name: Option<&str>, chars: &[RoomChar]) -> Option<usize> {
+    let lower = name?.to_ascii_lowercase();
+    chars
+        .iter()
+        .position(|ch| ch.name.to_ascii_lowercase().contains(&lower))
+        .map(|i| i + 1)
 }
 
 /// The characters a Room.Chars packet lists, in its order. An entry

@@ -12,7 +12,9 @@ use serde_json::json;
 use tauri::{AppHandle, Manager};
 use tokio::time::Instant;
 use tracing::{info, warn};
-use vosh_protocol::telnet::Negotiator;
+use vosh_protocol::telnet::{
+    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator,
+};
 
 use crate::app::state::SharedState;
 use crate::input;
@@ -24,12 +26,13 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::conn::Conn;
-use super::connection::Connection;
+use super::connection::{Connection, RoomChar};
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
 use super::now_ms;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
+use super::steps::recolor_target;
 use super::vitals_text;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
@@ -82,7 +85,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight, vitals_text, snooped, picked) = {
+    let (tick_step, script_apply, daylight, vitals_text, snooped, picked, recolored) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -105,6 +108,11 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             batch.log.extend(c.snoops.take_log(log_id, at));
         }
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
+        // A Room.Chars that follows a look an earlier read showed colors
+        // your target's line in it again.
+        let recolored = (msg.package == "Room.Chars")
+            .then(|| recolor_target(&p, &mut c, &mut batch.out))
+            .flatten();
         // A tell you got or a fight that starts on you rings its preset.
         apply
             .alerts
@@ -122,8 +130,13 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             vitals_text,
             snooped,
             picked,
+            recolored,
         )
     };
+    // The ring keeps the line as the screen shows it now.
+    if let Some(row) = recolored {
+        conn.session.scrollback.lock().await.recolor(&row);
+    }
     batch.snoop |= snooped;
     vitals_text::emit(&conn.app, &conn.session, vitals_text);
     if let Some(phase) = daylight {
@@ -293,16 +306,9 @@ pub(super) fn gmcp_step(
         if let Some(arr) = msg.data.as_array() {
             // The look this packet goes with lists one line for each
             // entry after its things.
-            c.room_block.room_chars(arr.len());
+            let _ = c.room_block.room_chars(arr.len());
             let chars = input::target::read_room_chars(arr);
             input::target::set_room_chars(c, chars);
-        }
-    }
-    // A look in the room this names gives each person a place in the
-    // Room.Chars that came with it.
-    if msg.package == "Room.Info" {
-        if let Some(name) = msg.data.get("name").and_then(|n| n.as_str()) {
-            c.room_block.room_info(name);
         }
     }
     // The look this packet goes with lists a line for each long text its
@@ -317,6 +323,53 @@ pub(super) fn gmcp_step(
     let outcome = c.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, c, outcome);
     (tick_step, apply)
+}
+
+/// For each event of one read, the people of the next Room.Chars packet
+/// in it with no GA or EOR between, as each event finds them ahead. Where
+/// the game sends a look's packets after its people, the packet that
+/// places your target follows the lines it places, mostly in the same
+/// read, so a line reads it before it shows. Empty when the read holds no
+/// Room.Chars, so an event past the end has none ahead.
+pub(super) fn room_chars_ahead(events: &[TelnetEvent]) -> Vec<Option<Arc<[RoomChar]>>> {
+    if !events
+        .iter()
+        .any(|event| room_chars_payload(event).is_some())
+    {
+        return Vec::new();
+    }
+    let mut ahead = vec![None; events.len()];
+    let mut next: Option<Arc<[RoomChar]>> = None;
+    for (i, event) in events.iter().enumerate().rev() {
+        ahead[i].clone_from(&next);
+        if let Some(payload) = room_chars_payload(event) {
+            next = vosh_protocol::gmcp::parse(payload)
+                .ok()
+                .filter(|msg| msg.package == "Room.Chars")
+                .and_then(|msg| {
+                    msg.data
+                        .as_array()
+                        .map(|arr| input::target::read_room_chars(arr).into())
+                });
+        } else if matches!(event, TelnetEvent::Command(byte)
+            if *byte == telnet_codes::GA || *byte == telnet_codes::EOR)
+        {
+            next = None;
+        }
+    }
+    ahead
+}
+
+/// The payload of a GMCP packet that can be a Room.Chars.
+fn room_chars_payload(event: &TelnetEvent) -> Option<&[u8]> {
+    match event {
+        TelnetEvent::Subnegotiation { option, payload }
+            if *option == telnet_option::GMCP && payload.starts_with(b"Room.Chars") =>
+        {
+            Some(payload)
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn hello_subnegotiation() -> Vec<u8> {

@@ -545,6 +545,7 @@
     },
     {
       "name": "since d50e4a24 the packets follow the look, so every line before them lists the room",
+      "target": "a villager",
       "events": [
         {
           "line": "\u001b[38;5;255m\u001b[0;1;30mThe Bank of Aabahran\u001b[0;0m\u001b[0;0m",
@@ -585,6 +586,7 @@
         {
           "line": "A Blackwatch villager scurries about, taking care of business.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 5287"
         },
         {
@@ -670,6 +672,7 @@
     },
     {
       "name": "a move west into a full room after packets that follow, which name no count of the room you left",
+      "target": "werebeast",
       "events": [
         {
           "line": "\u001b[38;5;220m\u001b[0;1;33mNearing the Crossroads\u001b[0;0m\u001b[0;0m",
@@ -794,6 +797,7 @@
         {
           "line": "A young werebeast stands here, leaning on his spear.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 6904, which resets in room 6909"
         },
         {
@@ -1030,7 +1034,7 @@
     },
     {
       "name": "an immortal's goto from the bank to the crossroads after packets that follow",
-      "target": "a villager",
+      "target": "werebeast",
       "events": [
         {
           "line": "\u001b[38;5;255m\u001b[0;1;30mThe Bank of Aabahran\u001b[0;0m\u001b[0;0m [Room 5279]",
@@ -1195,6 +1199,7 @@
         {
           "line": "A young werebeast stands here, leaning on his spear.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 6904, which resets in room 6909"
         },
         {
@@ -1472,7 +1477,7 @@
       ]
     },
     {
-      "name": "a look after a look in the same room gives your target its place where the packets follow",
+      "name": "a look and a look again in the same room each give your target its place where the packets follow",
       "target": "werebeast",
       "events": [
         {
@@ -1529,6 +1534,7 @@
         {
           "line": "A young werebeast stands here, leaning on his spear.",
           "room": true,
+          "target": true,
           "from": "char_to_char, the long text of mob 6904, which resets in room 6909"
         },
         {
