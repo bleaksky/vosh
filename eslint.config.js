@@ -29,7 +29,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['vite.config.ts'],
+    files: ['vite.config.ts', 'knip.ts'],
     languageOptions: {
       parser: tseslint.parser,
       globals: globals.node,
