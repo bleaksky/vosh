@@ -147,3 +147,67 @@ impl NamedColor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{wash_field, NamedColor};
+
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        cases: Vec<Case>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Case {
+        name: String,
+        ground: String,
+        palette: Vec<String>,
+        washes: Vec<Wash>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Wash {
+        color: NamedColor,
+        tint: String,
+        field: String,
+    }
+
+    fn rgb(hex: &str) -> (u8, u8, u8) {
+        let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
+        (byte(1), byte(3), byte(5))
+    }
+
+    #[test]
+    fn wash_tints_and_fields_match_the_shared_fixture() {
+        let fixture: Fixture =
+            serde_json::from_str(include_str!("../../../../fixtures/wash/fields.json")).unwrap();
+        assert!(!fixture.cases.is_empty());
+        for case in &fixture.cases {
+            let colors: Vec<NamedColor> = case.washes.iter().map(|w| w.color).collect();
+            assert_eq!(
+                colors,
+                NamedColor::ALL,
+                "{} lists every color in order",
+                case.name
+            );
+            assert_eq!(case.palette.len(), 16, "{} has 16 colors", case.name);
+            let ground = rgb(&case.ground);
+            for (wash, mark) in case.washes.iter().zip(&case.palette) {
+                assert_eq!(
+                    wash.color.wash_tint(),
+                    rgb(&wash.tint),
+                    "{} {:?} tint",
+                    case.name,
+                    wash.color
+                );
+                assert_eq!(
+                    wash_field(rgb(mark), ground),
+                    rgb(&wash.field),
+                    "{} {:?} field",
+                    case.name,
+                    wash.color
+                );
+            }
+        }
+    }
+}
