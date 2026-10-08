@@ -683,7 +683,10 @@ Themes recolor the whole window, the terminal included. They live in Settings un
 - Click a theme in the gallery. Each one draws in its own colors with its name under it, and your own themes follow the built in ones. The theme applies at once and saves. The arrow keys move the pick too.
 - Read the line under the gallery. It describes the theme on screen and, for a built in theme, names where its colors come from, who made them, and the license they carry.
 - Use the `Vision` switch above the gallery to see every theme as a player with deuteranopia, protanopia or tritanopia sees it. It starts on your `Color vision` and only previews, so it changes no theme.
-- Turn on `Follow system appearance` to switch between the `Light theme` and the `Dark theme` you pick under it whenever your system does.
+- Pick how the window changes theme in `Switch themes`. `Off` keeps the theme you click. `With the system` switches between the `Light theme` and the `Dark theme` you pick under it whenever your system does. `With the game` shows your `Day theme` from the game's dawn and your `Night theme` from its dusk, so the window turns about every 6 minutes.
+- Pick the `Day theme` and the `Night theme` from any theme, light or dark. Both start on the theme showing, so nothing changes until you pick. A click in the gallery fills whichever one is showing now.
+- Choose a pair close in tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes read as evening coming on, where a dark and a light one flash at every turn.
+- Go offline and the window keeps the theme it showed last, through a relaunch too, until the game names the time again.
 - Click `Import…` to read a Ghostty, iTerm2, Kitty, or Alacritty theme file. Vosh adds it to your own themes and switches to it.
 - Or choose `Choose theme` in the View menu or the palette, which lists every theme.
 
