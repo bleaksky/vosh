@@ -720,7 +720,7 @@ pub(crate) struct VitalsConfig {
     /// CSS font-family stack used **only** for the bar glyphs (the
     /// label / percent / numeric / delta columns still use the app
     /// font). Empty means "use the app font." Useful when the user
-    /// wants `Berkeley` `Mono` or `JetBrains` `Mono` just for the bar to
+    /// wants `JetBrains` `Mono` just for the bar to
     /// get clean partial-block / braille rendering while keeping a
     /// different font for the rest of the UI.
     #[serde(default)]
@@ -1683,14 +1683,15 @@ fn default_font_family() -> String {
     "\"JetBrainsMono Bundled\", Menlo, Consolas, ui-monospace, monospace".to_string()
 }
 
-/// The default font list while Vosh bundled Berkeley Mono. Profile files
-/// saved then hold it where you never picked a font, and it keeps
-/// rendering as Berkeley Mono where you have it installed.
+/// The default font list before the current one.
+/// Profile files saved then hold it where you never picked a font, and
+/// it draws as the default list does now (`rendered_families` in
+/// native/gpu/atlas.rs and `renderFontStack` in src/lib/fontLoader.ts).
 pub(crate) const RETIRED_DEFAULT_FONT_FAMILY: &str =
     "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace";
 
 /// Whether `family` is the default font list, this one or the one before
-/// Vosh stopped bundling Berkeley Mono.
+/// it.
 pub(crate) fn is_default_font_family(family: &str) -> bool {
     family == default_font_family() || family == RETIRED_DEFAULT_FONT_FAMILY
 }

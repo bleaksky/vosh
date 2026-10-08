@@ -1022,7 +1022,8 @@ mod tests {
     #[test]
     fn a_file_with_the_default_from_before_takes_the_shared_font() {
         let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
-        // Saved while Vosh bundled Berkeley Mono, with no font picked.
+        // Saved with the default from before JetBrains Mono, with no
+        // font picked.
         let mut ui = UiConfig {
             font_family: RETIRED_DEFAULT_FONT_FAMILY.to_string(),
             ..UiConfig::default()
@@ -1030,8 +1031,8 @@ mod tests {
         assert!(shared.hand_out(&mut ui, "alt"));
         assert_eq!(ui.font_family, "Iosevka");
         assert_eq!(ui.font_size, 16);
-        // A Berkeley Mono you picked is your own and stays.
-        let picked = "\"BerkeleyMono Bundled\", Menlo, monospace";
+        // A font you picked is your own and stays.
+        let picked = "\"Fira Code\", Menlo, monospace";
         let mut own = UiConfig {
             font_family: picked.to_string(),
             ..UiConfig::default()

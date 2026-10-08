@@ -1,0 +1,60 @@
+Icon glyphs in the bundled JetBrains Mono
+
+Vosh ships JetBrains Mono 2.304 as patched by Nerd Fonts 3.4.0
+(https://github.com/ryanoasis/nerd-fonts). JetBrains Mono itself comes
+under the SIL Open Font License 1.1. Its text sits beside the font files
+as OFL.txt, and an installed Vosh holds it as JetBrainsMono-OFL.txt.
+
+The Nerd Fonts patch adds icon glyphs from the sets below, and each set
+keeps its own license. The licenses come from the glyph list in the Nerd
+Fonts license-audit.md. Every license text in this folder is copied
+unchanged from the Nerd Fonts repository at tag v3.4.0, with line ends
+made LF. NerdFonts-LICENSE.txt is the license of the Nerd Fonts project
+itself. It covers the patcher and the glyphs Nerd Fonts drew.
+
+Codicons (https://github.com/microsoft/vscode-codicons)
+    CC BY 4.0, in Codicons-LICENSE.txt
+
+Devicons (https://github.com/devicons/devicon)
+    MIT
+
+Font Awesome (https://github.com/FortAwesome/Font-Awesome)
+    CC BY 4.0 for the icons, in FontAwesome-LICENSE.txt
+
+Font Awesome Extension (https://github.com/AndreLZGava/font-awesome-extension)
+    MIT
+
+Font Logos (https://github.com/lukas-w/font-logos)
+    Unlicensed, as the Nerd Fonts glyph list puts it
+
+IEC Power Symbols (https://github.com/jloughry/Unicode)
+    MIT
+
+Material Design Icons (https://github.com/Templarian/MaterialDesign-Font)
+    Apache 2.0, in MaterialDesignIcons-LICENSE.txt
+
+Octicons (https://github.com/primer/octicons)
+    MIT, in Octicons-LICENSE.txt
+
+Pomicons (https://github.com/gabrielelana/pomicons)
+    SIL OFL 1.1 with Reserved Font Name Pomicons, in Pomicons-LICENSE.txt
+
+Powerline Extra Symbols (https://github.com/ryanoasis/powerline-extra-symbols)
+    MIT, in PowerlineExtraSymbols-LICENSE.txt
+
+Powerline Symbols (https://github.com/powerline/powerline)
+    MIT, in PowerlineSymbols-LICENSE.txt
+
+Seti UI and the Nerd Fonts originals (https://github.com/jesseweed/seti-ui)
+    MIT, in NerdFonts-LICENSE.txt for the originals
+
+Weather Icons (https://github.com/erikflowers/weather-icons)
+    SIL OFL 1.1, in WeatherIcons-OFL.txt
+
+Extra glyphs from Hack (https://github.com/source-foundry/Hack)
+    MIT
+
+The Nerd Fonts repository holds no separate license text for Devicons,
+Font Awesome Extension, Font Logos, IEC Power Symbols, Seti UI or the
+extra glyphs from Hack. Their upstream projects hold their copyright
+notices.

@@ -216,7 +216,7 @@ fn blink_flips_every_600_ms_on_the_wall_clock() {
     );
 }
 
-/// Berkeley Mono at 12 CSS px and line height 1.2, the cell xterm
+/// A 12 CSS px font at line height 1.2, the cell xterm
 /// reports: 7 by 18 at 1x with the baseline on row 13, and 14 by 34
 /// at 2x with the baseline on row 26.
 fn decor_1x() -> Decor {
@@ -319,7 +319,7 @@ fn every_line_is_one_css_pixel_thick_and_stays_in_its_cell() {
 
 #[test]
 fn the_curl_keeps_a_css_pixel_clear_of_the_letters() {
-    // Berkeley Mono at 12 CSS px: line heights 1, 1.1, and 1.2 at 1x
+    // A 12 CSS px font: line heights 1, 1.1, and 1.2 at 1x
     // and 2x, as (cell width, cell height, baseline, scale).
     for (cell_w, cell_h, baseline, scale) in [
         (7, 15, 11, 1.0),
@@ -576,27 +576,24 @@ fn font_lists_match_the_shared_fixtures() {
 }
 
 #[test]
-fn a_berkeley_name_without_the_font_lands_on_the_bundled_jetbrains_mono() {
+fn the_retired_lists_land_on_the_bundled_jetbrains_mono() {
     hand_in_bundled_jetbrains();
-    let fonts = AtlasFonts::load("\"Berkeley Mono Vosh Test\", Menlo, monospace")
-        .expect("Vosh bundles JetBrains Mono");
-    assert_eq!(
-        fonts.regular.postscript_name().as_deref(),
-        Some("JetBrainsMonoNF-Regular")
-    );
-    assert_eq!(
-        fonts.bold.postscript_name().as_deref(),
-        Some("JetBrainsMonoNF-Bold")
-    );
-    // The retired bundled name takes an installed Berkeley Mono, and
-    // JetBrains Mono on a machine without one.
-    let retired = AtlasFonts::load("\"BerkeleyMono Bundled\", Menlo, monospace")
-        .expect("Vosh bundles JetBrains Mono");
-    let face = retired.regular.postscript_name().unwrap_or_default();
-    assert!(
-        face.starts_with("BerkeleyMono") || face == "JetBrainsMonoNF-Regular",
-        "{face}"
-    );
+    for stack in [
+        "\"BerkeleyMono Bundled\", Menlo, monospace",
+        "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace",
+    ] {
+        let fonts = AtlasFonts::load(stack).expect("Vosh bundles JetBrains Mono");
+        assert_eq!(
+            fonts.regular.postscript_name().as_deref(),
+            Some("JetBrainsMonoNF-Regular"),
+            "{stack}"
+        );
+        assert_eq!(
+            fonts.bold.postscript_name().as_deref(),
+            Some("JetBrainsMonoNF-Bold"),
+            "{stack}"
+        );
+    }
 }
 
 fn paint(r: u8, g: u8, b: u8, a: f32) -> Paint {

@@ -137,10 +137,9 @@ fn enumerate_fonts() -> Vec<FontEntry> {
 /// CoreText's font descriptors through [`regular_descriptor`]. It loads
 /// no font, where font-kit read every file of the family and took
 /// about 2 s for the whole list. It reads the regular face, not the
-/// first one CoreText lists: `BerkeleyMono Nerd Font` lists Italic
-/// first, and only its Regular face says it is monospace, so the first
-/// face left it out of the Font list. An unknown family is not
-/// monospace.
+/// first one CoreText lists: some families list Italic first, and only
+/// their Regular face says it is monospace, so the first face left them
+/// out of the Font list. An unknown family is not monospace.
 #[cfg(target_os = "macos")]
 fn is_family_monospace(family: &str) -> bool {
     use core_text::font_descriptor::kCTFontMonoSpaceTrait;
@@ -153,7 +152,7 @@ fn is_family_monospace(family: &str) -> bool {
 /// picks the face [`regular_face`] names: upright, with weight and
 /// width nearest normal. It reads no font file. Do not swap in
 /// `CTFontDescriptorCreateMatchingFontDescriptor`, which picks Medium
-/// for `BerkeleyMono Nerd Font`. None for an unknown family.
+/// for some families. None for an unknown family.
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 fn regular_descriptor(
@@ -576,8 +575,8 @@ mod tests {
 
     #[test]
     fn the_regular_face_is_upright_with_normal_weight_and_width() {
-        // BerkeleyMono Nerd Font lists Italic first, and only its Regular
-        // face says it is monospace.
+        // A family that lists Italic first, where only the Regular face
+        // says it is monospace.
         let faces = [
             face(true, 0.0, 0.0, false),
             face(false, 0.4, 0.0, false),
@@ -595,18 +594,6 @@ mod tests {
         let same = [face(false, 0.0, 0.0, true), face(false, 0.0, 0.0, false)];
         assert_eq!(regular_face(&same), Some(0));
         assert_eq!(regular_face(&[]), None);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn berkeley_mono_nerd_font_lists_as_monospace_where_it_is_installed() {
-        let family = "BerkeleyMono Nerd Font";
-        let installed = SystemSource::new()
-            .all_families()
-            .is_ok_and(|families| families.iter().any(|f| f == family));
-        if installed {
-            assert!(is_family_monospace(family));
-        }
     }
 
     #[test]

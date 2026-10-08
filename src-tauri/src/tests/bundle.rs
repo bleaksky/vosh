@@ -1,7 +1,8 @@
 //! What the bundle ships. The fonts in `public/fonts` reach every build,
-//! so their license has to sit beside them and in the package, and no
-//! font we hold no license for may ride along. D10 removed Berkeley Mono,
-//! and these tests keep it out. The store text has to describe the app
+//! so their license has to sit beside them and in the package, and so do
+//! the licenses of the icon glyphs the Nerd Fonts patch adds. No font we
+//! hold no license for may ride along. D10 removed Berkeley Mono, and
+//! these tests keep it out. The store text has to describe the app
 //! as it ships, too.
 
 use std::fs;
@@ -65,6 +66,49 @@ fn font_license_ships_in_the_bundle() {
     );
 }
 
+/// The files in `public/fonts/nerd-fonts`: the credits that name each
+/// icon glyph set the Nerd Fonts patch adds, and the license texts the
+/// Nerd Fonts repository holds for them at v3.4.0.
+const NERD_FONTS_FILES: [&str; 10] = [
+    "CREDITS.txt",
+    "Codicons-LICENSE.txt",
+    "FontAwesome-LICENSE.txt",
+    "MaterialDesignIcons-LICENSE.txt",
+    "NerdFonts-LICENSE.txt",
+    "Octicons-LICENSE.txt",
+    "Pomicons-LICENSE.txt",
+    "PowerlineExtraSymbols-LICENSE.txt",
+    "PowerlineSymbols-LICENSE.txt",
+    "WeatherIcons-OFL.txt",
+];
+
+#[test]
+fn icon_glyph_licenses_ship_in_the_bundle() {
+    let doc = conf();
+    let resources = doc
+        .pointer("/bundle/resources")
+        .and_then(Value::as_object)
+        .expect("tauri.conf.json has no bundle.resources map");
+    let credits = fs::read_to_string(manifest_dir().join("../public/fonts/nerd-fonts/CREDITS.txt"))
+        .expect("public/fonts/nerd-fonts/CREDITS.txt opens");
+    for name in NERD_FONTS_FILES {
+        let source = format!("../public/fonts/nerd-fonts/{name}");
+        let target = format!("licenses/nerd-fonts/{name}");
+        assert_eq!(
+            resources.get(&source).and_then(Value::as_str),
+            Some(target.as_str()),
+            "bundle.resources should copy {source} to {target}"
+        );
+        let text = fs::read(manifest_dir().join(&source))
+            .unwrap_or_else(|e| panic!("{source} does not open, {e}"));
+        assert!(!text.is_empty(), "{source} is empty");
+        assert!(
+            name == "CREDITS.txt" || credits.contains(name),
+            "CREDITS.txt never names {name}. Say which glyph set it covers."
+        );
+    }
+}
+
 #[test]
 fn no_berkeley_mono_ships() {
     let public = manifest_dir().join("../public");
@@ -85,22 +129,36 @@ fn no_berkeley_mono_ships() {
 }
 
 #[test]
-fn public_fonts_hold_jetbrains_mono_and_its_license() {
+fn public_fonts_hold_jetbrains_mono_and_the_licenses() {
     let dir = manifest_dir().join("../public/fonts");
     let mut names: Vec<String> = files_under(&dir)
         .iter()
         .map(|p| {
+            // Forward slashes on Windows too.
             p.strip_prefix(&dir)
                 .expect("under public/fonts")
                 .to_string_lossy()
-                .into_owned()
+                .replace('\\', "/")
         })
         .collect();
     names.sort();
+    let mut want: Vec<String> = [
+        "JetBrainsMonoNerdFont-Bold.ttf",
+        "JetBrainsMonoNerdFont-Regular.ttf",
+        "OFL.txt",
+    ]
+    .iter()
+    .map(|name| (*name).to_string())
+    .chain(
+        NERD_FONTS_FILES
+            .iter()
+            .map(|name| format!("nerd-fonts/{name}")),
+    )
+    .collect();
+    want.sort();
     assert_eq!(
-        names,
-        ["JetBrainsMonoNerdFont-Bold.ttf", "JetBrainsMonoNerdFont-Regular.ttf", "OFL.txt"],
-        "public/fonts should hold only the two JetBrains Mono files and their license. Each font needs a license before it ships."
+        names, want,
+        "public/fonts should hold only the two JetBrains Mono files, their license and the icon glyph licenses. Each font needs a license before it ships."
     );
 }
 

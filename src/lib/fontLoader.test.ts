@@ -60,11 +60,11 @@ describe('renderFontStack', () => {
 
   it('quotes each family but the generic ones', () => {
     expect(renderFontStack('"BerkeleyMono Bundled", Menlo, monospace')).toBe(
-      '"BerkeleyMono Nerd Font", "Berkeley Mono", "JetBrainsMono Bundled", "Menlo", monospace',
+      '"JetBrainsMono Bundled", "Menlo", monospace',
     );
   });
 
-  it('hands back a list without Berkeley Mono exactly as saved', () => {
+  it('hands back an ordinary list exactly as saved', () => {
     const stack = "'Fira Code',Menlo,  monospace";
     expect(renderFontStack(stack)).toBe(stack);
   });

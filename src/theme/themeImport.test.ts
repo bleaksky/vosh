@@ -187,7 +187,7 @@ describe('parseThemeFile edge cases', () => {
     );
     const text = [
       '# my config',
-      'font-family = "Berkeley Mono"',
+      'font-family = "Iosevka Term"',
       'background = 101010',
       'foreground = "#EEEEEE"',
       ...palette,

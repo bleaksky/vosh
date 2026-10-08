@@ -61,27 +61,27 @@ function fakeTerm(list: string, loaded: Set<string>, rows: Record<string, number
 }
 
 const BUNDLED = 'JetBrainsMono Bundled';
-const BERKELEY = 'BerkeleyMono Nerd Font';
-const LIST = `"${BERKELEY}", "Berkeley Mono", "${BUNDLED}", Menlo, monospace`;
-const ROWS = { [BERKELEY]: 19, [BUNDLED]: 21.5 };
+const INSTALLED = 'Iosevka Term';
+const LIST = `"${INSTALLED}", "Fira Code", "${BUNDLED}", Menlo, monospace`;
+const ROWS = { [INSTALLED]: 19, [BUNDLED]: 21.5 };
 
 /** Let the pending promise callbacks run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('the terminal cell after a face loads', () => {
   it('measures the face that loads after the terminal took the list', async () => {
-    const fonts = fakeFonts([BERKELEY]);
+    const fonts = fakeFonts([INSTALLED]);
     fonts.loaded.add(BUNDLED);
     const term = fakeTerm(LIST, fonts.loaded, ROWS);
     let fits = 0;
     remeasureWhenLoaded(fonts.set, term, () => fits++);
     // The page mints the faces after the terminal took the list, in the
     // same commit.
-    fonts.minted.add(BERKELEY);
+    fonts.minted.add(INSTALLED);
     expect(term.row).toBe(21.5);
 
     await settle();
-    expect(fonts.asked).toEqual([`14px "${BERKELEY}"`]);
+    expect(fonts.asked).toEqual([`14px "${INSTALLED}"`]);
     expect(term.row).toBe(21.5);
     expect(fits).toBe(0);
 
@@ -93,9 +93,9 @@ describe('the terminal cell after a face loads', () => {
   });
 
   it('drops a remeasure a newer font or an unmount made stale', async () => {
-    const fonts = fakeFonts([BERKELEY]);
+    const fonts = fakeFonts([INSTALLED]);
     fonts.loaded.add(BUNDLED);
-    fonts.minted.add(BERKELEY);
+    fonts.minted.add(INSTALLED);
     const term = fakeTerm(LIST, fonts.loaded, ROWS);
     let fits = 0;
     const cancel = remeasureWhenLoaded(fonts.set, term, () => fits++);
@@ -109,14 +109,10 @@ describe('the terminal cell after a face loads', () => {
 
   it('walks past a face this machine lacks to the one that draws', async () => {
     const fonts = fakeFonts([]);
-    fonts.minted.add(BERKELEY);
-    fonts.minted.add('Berkeley Mono');
+    fonts.minted.add(INSTALLED);
+    fonts.minted.add('Fira Code');
     await loadDrawnFace(fonts.set, 14, LIST);
-    expect(fonts.asked).toEqual([
-      `14px "${BERKELEY}"`,
-      '14px "Berkeley Mono"',
-      `14px "${BUNDLED}"`,
-    ]);
+    expect(fonts.asked).toEqual([`14px "${INSTALLED}"`, '14px "Fira Code"', `14px "${BUNDLED}"`]);
   });
 
   it('stops at a generic family', async () => {

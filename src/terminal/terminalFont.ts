@@ -3,7 +3,7 @@
 // measures as the next family in the list that has loaded, and xterm
 // keeps that cell until the pane changes size. The page mints the faces
 // a saved list names only after the terminal takes the list, so on a
-// first launch your installed Berkeley Mono measured as the bundled
+// first launch an installed font you picked measured as the bundled
 // JetBrains Mono and the rows sat wider apart than on every later launch.
 // WebKit fires no loadingdone for a face the page loads on its own, so
 // the terminal asks for the face itself and measures once it has loaded.

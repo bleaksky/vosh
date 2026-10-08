@@ -495,49 +495,46 @@ impl AtlasFonts {
 /// The CSS family of the font Vosh bundles.
 const BUNDLED_FAMILY: &str = "JetBrainsMono Bundled";
 
-/// The family Berkeley Mono went by while Vosh bundled it, which saved
-/// font lists still name.
-const RETIRED_BERKELEY: &str = "BerkeleyMono Bundled";
+/// The family name of the font Vosh bundled before its current one, which
+/// saved font lists still name. Vosh never ships it again, so the name
+/// stands for [`BUNDLED_FAMILY`].
+const RETIRED_BUNDLED: &str = "BerkeleyMono Bundled";
 
-/// The installed families that stand in for [`RETIRED_BERKELEY`]: the
-/// Nerd Font build Vosh bundled, then the family the foundry sells.
-const BERKELEY_FAMILIES: [&str; 2] = ["BerkeleyMono Nerd Font", "Berkeley Mono"];
+/// The default font list from those days. A profile that never picked a
+/// font still holds it, and it draws as [`DEFAULT_FAMILIES`] does.
+const RETIRED_DEFAULT: &str =
+    "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace";
+
+/// The families of the default font list.
+const DEFAULT_FAMILIES: [&str; 5] = [
+    BUNDLED_FAMILY,
+    "Menlo",
+    "Consolas",
+    "ui-monospace",
+    "monospace",
+];
 
 /// The families both renderers try, in order, for the saved CSS font
-/// list `stack`. Vosh no longer ships Berkeley Mono, so a Berkeley name
-/// stands for your installed copy, and [`BUNDLED_FAMILY`] follows each
-/// run of Berkeley names for a machine without one.
-/// [`RETIRED_BERKELEY`] becomes [`BERKELEY_FAMILIES`]. A repeated name
-/// drops out. `renderFontStack` in fontLoader.ts gives the webview the
-/// same list, so xterm and the atlas land on the same face and cell.
+/// list `stack`. [`RETIRED_DEFAULT`] becomes [`DEFAULT_FAMILIES`], and
+/// [`RETIRED_BUNDLED`] becomes [`BUNDLED_FAMILY`]. A repeated name drops
+/// out. `renderFontStack` in fontLoader.ts gives the webview the same
+/// list, so xterm and the atlas land on the same face and cell.
 pub(super) fn rendered_families(stack: &str) -> Vec<String> {
-    fn push(out: &mut Vec<String>, name: &str) {
-        if !out.iter().any(|f| f.eq_ignore_ascii_case(name)) {
-            out.push(name.to_string());
-        }
+    if stack.trim().eq_ignore_ascii_case(RETIRED_DEFAULT) {
+        return DEFAULT_FAMILIES.map(String::from).to_vec();
     }
-    let mut out = Vec::new();
-    let mut after_berkeley = false;
+    let mut out: Vec<String> = Vec::new();
     for raw in stack.split(',') {
-        let name = raw.trim().trim_matches('"').trim_matches('\'').trim();
+        let mut name = raw.trim().trim_matches('"').trim_matches('\'').trim();
         if name.is_empty() {
             continue;
         }
-        let berkeley = name.to_ascii_lowercase().contains("berkeley");
-        if after_berkeley && !berkeley {
-            push(&mut out, BUNDLED_FAMILY);
+        if name.eq_ignore_ascii_case(RETIRED_BUNDLED) {
+            name = BUNDLED_FAMILY;
         }
-        after_berkeley = berkeley;
-        if name.eq_ignore_ascii_case(RETIRED_BERKELEY) {
-            for family in BERKELEY_FAMILIES {
-                push(&mut out, family);
-            }
-        } else {
-            push(&mut out, name);
+        if !out.iter().any(|f| f.eq_ignore_ascii_case(name)) {
+            out.push(name.to_string());
         }
-    }
-    if after_berkeley {
-        push(&mut out, BUNDLED_FAMILY);
     }
     out
 }
