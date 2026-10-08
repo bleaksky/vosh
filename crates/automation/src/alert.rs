@@ -16,7 +16,7 @@
 //! ```
 //!
 //! A table a build does not know is skipped, so a build up to 0.8.1
-//! still reads a trigger with an alert and keeps its actions (D14). A
+//! still reads a trigger with an alert and keeps its actions. A
 //! sound or an attention this build does not know reads as none, so one
 //! value never fails the whole file.
 

@@ -24,7 +24,7 @@ use crate::trigger::action::TriggerAction;
 /// keeps what you typed in `text` and the regex it compiles to in
 /// `pattern`. Builds up to 0.8.1 know no mode and read `pattern` as a
 /// regex, so they match the same lines and their next save keeps the
-/// trigger, as a Regex row (D14). `PatternRaw` says how a row reads.
+/// trigger, as a Regex row. `PatternRaw` says how a row reads.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "PatternRaw")]
 pub struct TriggerPattern {
@@ -249,8 +249,8 @@ pub struct Trigger {
     pub target: TriggerTarget,
     /// The alert the trigger rings when it matches, kept in a table of
     /// its own beside the actions, so a build that knows no alert skips
-    /// it and still reads the trigger (D14). It rides on the match, not on
-    /// the line showing, so a trigger that hides its line still rings.
+    /// it and still reads the trigger. It rides on the match, not on the
+    /// line showing, so a trigger that hides its line still rings.
     pub alert: Option<AlertParts>,
 }
 
