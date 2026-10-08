@@ -60,9 +60,9 @@ import { afterDrop, findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
 import {
   changedAsk,
-  checkAnswer,
   checkAsk,
   checkedNote,
+  checkHeld,
   CLEAR_ASK,
   clearOtherAsk,
   DELETE_ASK,
@@ -398,11 +398,11 @@ export function WritingCard({
         setEnded({ note: postedNote(k, result.forum, result.vote), actions: [] });
         return;
       case 'checked':
-        // A check the game holds waits until the immortals decide. One
-        // that went through or was decided leaves none waiting.
+        // The game holds a check that went through, or one it already
+        // had, until the immortals decide. Only a decided one leaves none.
         if (world && name) {
           const c = characterOf(getWritingFile(), world, name);
-          const next = withCheckWaiting(c, k, checkAnswer(result.lines) === 'waits');
+          const next = withCheckWaiting(c, k, checkHeld(result.lines));
           if (next !== c) keepCharacter(next);
         }
         setPhase('checked');

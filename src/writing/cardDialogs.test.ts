@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WritingCharacter } from '../ipc/writing';
-import { checkAnswer, checkedNote, sentNote } from './cardDialogs';
+import { checkAnswer, checkedNote, checkHeld, sentNote } from './cardDialogs';
 import { checkWaits, withCheckWaiting } from './draftsStore';
 
 // The game's answers to dcheck (recycle.c) and history check
@@ -66,6 +66,34 @@ describe('sentNote', () => {
   it('warns about a miss whether or not a check waits', () => {
     expect(sentNote(4, false, 'history')).toEqual(sentNote(4, false, null));
     expect(sentNote(4, false, null).tone).toBe('warn');
+  });
+});
+
+describe('checkHeld', () => {
+  it('keeps a check that went through waiting, as one already held', () => {
+    expect(checkHeld([AT_EASE])).toBe(true);
+    expect(
+      checkHeld(['Your description has been sent for approval. ALL dcheck submissions will']),
+    ).toBe(true);
+    expect(checkHeld([SUBMITTED])).toBe(true);
+    expect(checkHeld([INTENTIONS])).toBe(true);
+  });
+
+  it('leaves none waiting once the immortals decided', () => {
+    expect(checkHeld([APPROVED])).toBe(false);
+    expect(checkHeld([RECOGNIZE])).toBe(false);
+  });
+
+  it('marks a check that went through as waiting for the next send', () => {
+    const orla: WritingCharacter = {
+      host: 'example.org',
+      port: 9999,
+      name: 'Orla',
+      drafts: [],
+      sent: [],
+    };
+    const after = withCheckWaiting(orla, 'description', checkHeld([AT_EASE]));
+    expect(checkWaits(after, 'description')).toBe(true);
   });
 });
 

@@ -176,6 +176,14 @@ export function checkAnswer(lines: readonly string[]): 'waits' | 'decided' | 'se
   return 'sent';
 }
 
+/** Whether the game holds a check after it answered one. A check that
+ *  went through waits for the immortals just as one it already held,
+ *  since the game keeps it until they decide (recycle.c:3333,
+ *  act_comm.c:5163). Only an answer that says they decided leaves none. */
+export function checkHeld(lines: readonly string[]): boolean {
+  return checkAnswer(lines) !== 'decided';
+}
+
 /** The game's answer to dcheck or history check, in short. */
 export function checkedNote(kind: WritingKind, lines: readonly string[]): Note {
   const description = kind === 'description';
