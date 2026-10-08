@@ -12,7 +12,9 @@
 pub(crate) mod forget_passwords;
 pub(crate) mod retention;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -40,6 +42,17 @@ struct RingRun {
     after: usize,
     gen: u64,
 }
+
+/// The bytes of a ring at one moment, numbered in the order the copies
+/// were taken, so a later copy always wins on disk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Snapshot {
+    seq: u64,
+    bytes: Vec<u8>,
+}
+
+/// The number the next [`Snapshot`] takes.
+static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug)]
 pub(crate) struct Scrollback {
@@ -85,10 +98,26 @@ impl Scrollback {
         self.changed = true;
     }
 
-    /// The bytes the scrollback file should hold when the ring changed
-    /// since the last call, see [`Scrollback::dump`].
-    pub(crate) fn take_changed(&mut self) -> Option<Vec<u8>> {
-        std::mem::take(&mut self.changed).then(|| self.dump())
+    /// What the scrollback file should hold when the ring changed since
+    /// the last call, see [`Scrollback::snapshot`].
+    pub(crate) fn take_changed(&mut self) -> Option<Snapshot> {
+        self.changed.then(|| self.snapshot())
+    }
+
+    /// What the scrollback file should hold now, see
+    /// [`Scrollback::dump`]. The ring reads as unchanged after it.
+    pub(crate) fn snapshot(&mut self) -> Snapshot {
+        self.changed = false;
+        Snapshot {
+            seq: NEXT_SNAPSHOT.fetch_add(1, Ordering::Relaxed),
+            bytes: self.dump(),
+        }
+    }
+
+    /// Say the file is behind the ring again, after a write that failed,
+    /// so the next pass tries it again.
+    pub(crate) fn mark_changed(&mut self) {
+        self.changed = true;
     }
 
     pub(crate) fn push(&mut self, raw_line: Vec<u8>) {
@@ -222,43 +251,70 @@ pub(crate) type SharedScrollback = Arc<Mutex<Scrollback>>;
 /// crash loses at most this much of it.
 const SAVE_EVERY: std::time::Duration = std::time::Duration::from_secs(3 * 60);
 
-/// Write `bytes` to the scrollback file at `path` whole: to a file beside
-/// it first, then over it in one step, so a crash mid write leaves the
-/// last file as it was.
-pub(crate) fn write_scrollback(path: &std::path::Path, bytes: &[u8]) {
+/// The snapshot each scrollback file last took. Its lock lets one write
+/// run at a time, so writers never meet on a file.
+static WRITTEN: std::sync::Mutex<BTreeMap<PathBuf, u64>> = std::sync::Mutex::new(BTreeMap::new());
+
+/// Write `snapshot` to the scrollback file at `path` whole: to a file
+/// beside it first, then over it in one step, so a crash mid write leaves
+/// the last file as it was. A snapshot older than the one the file holds
+/// writes nothing. False when the write failed, so the caller can mark
+/// its ring changed and try again later.
+pub(crate) fn write_scrollback(path: &Path, snapshot: &Snapshot) -> bool {
+    let mut written = WRITTEN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if written.get(path).is_some_and(|&seq| seq >= snapshot.seq) {
+        return true;
+    }
     let mut next = path.as_os_str().to_owned();
-    next.push(".next");
-    let next = std::path::PathBuf::from(next);
-    let written = std::fs::write(&next, bytes).and_then(|()| std::fs::rename(&next, path));
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&next);
-        tracing::warn!(path = %path.display(), error = %e, "scrollback write failed");
+    next.push(format!(".{}.next", snapshot.seq));
+    let next = PathBuf::from(next);
+    let result = std::fs::write(&next, &snapshot.bytes).and_then(|()| std::fs::rename(&next, path));
+    match result {
+        Ok(()) => {
+            written.insert(path.to_path_buf(), snapshot.seq);
+            true
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&next);
+            tracing::warn!(path = %path.display(), error = %e, "scrollback write failed");
+            false
+        }
     }
 }
 
 /// Write the scrollback file of each session whose ring changed since its
 /// file was last written. The session loop never waits on it: each ring
 /// is locked only to copy its bytes, and the writes run on the blocking
-/// pool.
+/// pool. A ring whose write failed reads as changed again.
 pub(crate) async fn save_changed_scrollback(state: &crate::app::state::SharedState) {
     let Some(dir) = state.app_data.get().cloned() else {
         return;
     };
     let mut files = Vec::new();
     for session in state.all_sessions() {
-        if let Some(bytes) = session.scrollback.lock().await.take_changed() {
-            files.push((crate::disk::paths::scrollback_path(&dir, session.id), bytes));
+        let snapshot = session.scrollback.lock().await.take_changed();
+        if let Some(snapshot) = snapshot {
+            let path = crate::disk::paths::scrollback_path(&dir, session.id);
+            files.push((session.scrollback.clone(), path, snapshot));
         }
     }
     if files.is_empty() {
         return;
     }
-    let _ = tokio::task::spawn_blocking(move || {
-        for (path, bytes) in files {
-            write_scrollback(&path, &bytes);
-        }
+    let failed = tokio::task::spawn_blocking(move || {
+        files
+            .into_iter()
+            .filter(|(_, path, snapshot)| !write_scrollback(path, snapshot))
+            .map(|(ring, ..)| ring)
+            .collect::<Vec<_>>()
     })
-    .await;
+    .await
+    .unwrap_or_default();
+    for ring in failed {
+        ring.lock().await.mark_changed();
+    }
 }
 
 /// Keep `lines` of scrollback in `session`: its ring, and so its file,
@@ -342,12 +398,17 @@ mod tests {
         assert_eq!(s.take_changed(), None, "the file holds what it read");
         s.push(b"Orla nods.".to_vec());
         assert_eq!(
-            s.take_changed().as_deref(),
+            s.take_changed().map(|snapshot| snapshot.bytes).as_deref(),
             Some(&b"Maren waves.\r\nOrla nods.\r\n"[..])
         );
         assert_eq!(s.take_changed(), None);
+        s.mark_changed();
+        assert!(s.take_changed().is_some(), "a failed write tries again");
         s.clear();
-        assert_eq!(s.take_changed().as_deref(), Some(&b""[..]));
+        assert_eq!(
+            s.take_changed().map(|snapshot| snapshot.bytes).as_deref(),
+            Some(&b""[..])
+        );
     }
 
     #[tokio::test]
@@ -379,9 +440,48 @@ mod tests {
         let dir = tempfile::tempdir().expect("a temporary folder");
         let path = dir.path().join("scrollback.txt");
         std::fs::write(&path, b"old\r\n").unwrap();
-        write_scrollback(&path, b"new\r\n");
+        let mut ring = Scrollback::default();
+        ring.push(b"new".to_vec());
+        assert!(write_scrollback(&path, &ring.snapshot()));
         assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn the_newer_scrollback_wins_whichever_write_lands_last() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let mut ring = Scrollback::default();
+        ring.push(b"Maren waves.".to_vec());
+        let older = ring.snapshot();
+        ring.push(b"Orla nods.".to_vec());
+        let newer = ring.snapshot();
+        for (name, first, second) in [
+            ("in-order.txt", &older, &newer),
+            ("out-of-order.txt", &newer, &older),
+        ] {
+            let path = dir.path().join(name);
+            assert!(write_scrollback(&path, first));
+            assert!(write_scrollback(&path, second));
+            assert_eq!(
+                std::fs::read(&path).unwrap(),
+                b"Maren waves.\r\nOrla nods.\r\n",
+                "{name}"
+            );
+        }
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names.len(), 2, "no temp file is left: {names:?}");
+    }
+
+    #[test]
+    fn a_failed_scrollback_write_says_so() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let path = dir.path().join("missing").join("scrollback.txt");
+        let mut ring = Scrollback::default();
+        ring.push(b"Tolliver leaves north.".to_vec());
+        assert!(!write_scrollback(&path, &ring.snapshot()));
     }
 
     #[test]

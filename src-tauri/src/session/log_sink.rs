@@ -81,7 +81,8 @@ impl LogSink {
 
     /// Close the log's row, then save the scrollback ring so the next
     /// launch can restore it. A failure here only warns, so the session
-    /// still ends and says so.
+    /// still ends and says so, and a ring it could not save reads as
+    /// changed, so the next pass or the quit tries again.
     pub(super) async fn close(self) {
         if let Some(sid) = self.session.id {
             let mut guard = self.logs.lock().await;
@@ -92,12 +93,15 @@ impl LogSink {
             }
         }
         if let Some(path) = self.scrollback_path {
-            let bytes = {
-                let mut ring = self.scrollback.lock().await;
-                let _ = ring.take_changed();
-                ring.dump()
-            };
-            crate::logs::write_scrollback(&path, &bytes);
+            let snapshot = self.scrollback.lock().await.snapshot();
+            let written = tokio::task::spawn_blocking(move || {
+                crate::logs::write_scrollback(&path, &snapshot)
+            })
+            .await
+            .unwrap_or(false);
+            if !written {
+                self.scrollback.lock().await.mark_changed();
+            }
         }
     }
 }
