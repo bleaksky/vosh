@@ -12,7 +12,7 @@ import { recentNames } from './recentNames';
  *  Input calls complete on Tab, with -1 for Shift+Tab, and resetCycle on
  *  every other key and edit and on each selection. complete answers
  *  whether it took the key. It leaves it, so the focus moves on (Q22),
- *  only while no cycle runs and no word sits before the caret. */
+ *  only while no cycle runs and the line is blank. */
 export function useTabCompletion(
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement>,
   value: string,
@@ -75,6 +75,8 @@ export function useTabCompletion(
     if (!el) return false;
     const caret = el.selectionStart ?? value.length;
     const state = tabStateRef.current;
+    // Only a blank line lets the key go. A Tab mid-line stays here.
+    if (!state && value.trim() === '') return false;
     if (state) {
       // Cycle within the existing match set.
       if (state.matches.length === 0) return true;
@@ -100,7 +102,7 @@ export function useTabCompletion(
     let start = caret;
     while (start > 0 && /\S/.test(value[start - 1])) start -= 1;
     const prefix = value.slice(start, caret);
-    if (prefix.length === 0) return false;
+    if (prefix.length === 0) return true;
     const matches = buildTabMatches(prefix);
     if (matches.length === 0) return true;
     const idx = step >= 0 ? 0 : matches.length - 1;

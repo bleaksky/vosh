@@ -81,9 +81,15 @@ describe('Tab on the command line', () => {
     await line.type('');
     expect(await line.tab()).toBe(false);
     expect(await line.tab(-1)).toBe(false);
-    // A space before the caret leaves no word to complete either.
-    await line.type('kill ');
+    await line.type('   ');
     expect(await line.tab()).toBe(false);
+    await line.unmount();
+  });
+
+  it('keeps the key mid-line with no word before the caret', async () => {
+    const line = await mount();
+    await line.type('kill ');
+    expect(await line.tab()).toBe(true);
     expect(line.now().value).toBe('kill ');
     await line.unmount();
   });
