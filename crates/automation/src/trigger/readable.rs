@@ -29,7 +29,7 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use crate::trigger::color::NamedColor;
+use crate::trigger::color::{wash_field, NamedColor};
 
 /// An sRGB color, one byte per channel.
 pub type Rgb = (u8, u8, u8);
@@ -278,11 +278,13 @@ enum Under {
     /// The terminal ground: no background.
     #[default]
     Ground,
-    /// A wash, which carries one of the [`NamedColor::wash_tint`] signals.
-    /// The two renderers draw it apart. The native one paints the field
-    /// from the ground, 18 percent of the way toward the mark color, so the
-    /// ground stands in for it there. xterm.js draws the tint itself, a
-    /// quarter strength color such as #333300 for yellow.
+    /// A wash, which carries one of the [`NamedColor::wash_tint`] signals,
+    /// held here as the canonical color of its mark. Both renderers paint
+    /// the field the tint signals, the ground moved [`wash_field`] toward
+    /// the theme's color for the mark, and never the tint itself. The
+    /// session knows the ground but not the theme's palette, so the
+    /// canonical mark stands in for the theme's, close enough at 18
+    /// percent off the ground.
     Wash(Rgb),
     /// A true color or a 256 color past the 16.
     Fixed(Rgb),
@@ -327,8 +329,12 @@ enum Kind {
     Underline,
 }
 
-fn is_wash(rgb: Rgb) -> bool {
-    NamedColor::ALL.iter().any(|c| c.wash_tint() == rgb)
+/// The canonical color of the mark whose wash tint is `rgb`, if any.
+fn wash_mark(rgb: Rgb) -> Option<Rgb> {
+    NamedColor::ALL
+        .iter()
+        .find(|c| c.wash_tint() == rgb)
+        .map(|c| c.rgb())
 }
 
 fn channels(r: &str, g: &str, b: &str) -> Option<Rgb> {
@@ -442,15 +448,14 @@ fn readable_on(asked: Rgb, under: Under, ground: Rgb) -> Rgb {
         Under::Fixed(rgb) => lift_to_contrast(asked, rgb),
         // The theme's own background, the theme's to keep readable.
         Under::Palette => asked,
-        // The same bytes go to both renderers, so a lift has to read on
-        // the ground the native renderer paints and on the tint xterm.js
-        // draws. When the lift reads on only one, the color asked for
-        // stays. The tint is always dark, so on a light theme that is
-        // nearly every color.
-        Under::Wash(tint) => {
-            let lifted = lift_to_contrast(lift_to_contrast(asked, ground), tint);
+        // Both renderers paint the field near the ground, so a lift has
+        // to read on the ground and on the field. When the lift reads on
+        // only one, the color asked for stays.
+        Under::Wash(mark) => {
+            let field = wash_field(mark, ground);
+            let lifted = lift_to_contrast(lift_to_contrast(asked, ground), field);
             let reads = |on: Rgb| contrast(lifted, on) >= READABLE_CONTRAST;
-            if reads(ground) && reads(tint) {
+            if reads(ground) && reads(field) {
                 lifted
             } else {
                 asked
@@ -467,11 +472,7 @@ fn paint(rgb: Rgb) -> Paint {
 }
 
 fn fixed_under(rgb: Rgb) -> Under {
-    if is_wash(rgb) {
-        Under::Wash(rgb)
-    } else {
-        Under::Fixed(rgb)
-    }
+    wash_mark(rgb).map_or(Under::Fixed(rgb), Under::Wash)
 }
 
 fn indexed_under(index: Option<u8>) -> Under {
@@ -1100,40 +1101,48 @@ mod tests {
         );
     }
 
-    /// `color` as text on a yellow wash, and the wash tint.
-    fn on_a_wash(color: Rgb) -> (String, Rgb) {
-        let tint = NamedColor::Yellow.wash_tint();
-        let ((tr, tg, tb), (r, g, b)) = (tint, color);
-        let line = format!("\x1b[33;48;2;{tr};{tg};{tb}m\x1b[38;2;{r};{g};{b}mrain\x1b[0m");
-        (line, tint)
+    /// `color` as text on a yellow wash.
+    fn on_a_wash(color: Rgb) -> String {
+        let (tr, tg, tb) = NamedColor::Yellow.wash_tint();
+        let (r, g, b) = color;
+        format!("\x1b[33;48;2;{tr};{tg};{tb}m\x1b[38;2;{r};{g};{b}mrain\x1b[0m")
+    }
+
+    /// The field both renderers paint for a yellow wash on `ground`.
+    fn yellow_field(ground: Rgb) -> Rgb {
+        wash_field(NamedColor::Yellow.rgb(), ground)
     }
 
     #[test]
-    fn a_wash_keeps_the_color_asked_for_when_no_lift_reads_under_both_renderers() {
-        // xterm.js draws the tint itself, #333300, and the weather blue
-        // reads there at about 5.4:1. The lift Vellum wants, #5a709e,
-        // would fall to about 2.6:1 on it, so the blue stays.
-        let (line, tint) = on_a_wash(WEATHER);
-        assert_eq!(tint, (0x33, 0x33, 0x00));
-        assert!(contrast(WEATHER, tint) >= READABLE_CONTRAST);
-        assert!(contrast(lift_to_contrast(WEATHER, VELLUM), tint) < READABLE_CONTRAST);
-        assert_eq!(lift_sgr(&line, VELLUM), line);
-        // On a dark ground the blue reads on the ground and the tint alike.
+    fn a_wash_keeps_the_color_asked_for_when_it_reads_on_the_ground_and_the_field() {
+        // On Nord a pale blue reads on the ground and on the yellow field
+        // alike, so it stays.
+        let pale = (0xc0, 0xd0, 0xf0);
+        let line = on_a_wash(pale);
+        assert!(contrast(pale, NORD) >= READABLE_CONTRAST);
+        assert!(contrast(pale, yellow_field(NORD)) >= READABLE_CONTRAST);
         assert_eq!(lift_sgr(&line, NORD), line);
     }
 
     #[test]
-    fn a_wash_lifts_a_color_to_read_on_the_ground_and_the_tint() {
-        // A dim blue fades on Nord and on the tint. The lift reads on both,
-        // since both renderers draw the same bytes.
-        let dim = (0x30, 0x40, 0x80);
-        let (line, tint) = on_a_wash(dim);
-        let out = lift_sgr(&line, NORD);
-        let (r, g, b) = readable_on(dim, Under::Wash(tint), NORD);
-        assert_ne!((r, g, b), dim);
-        assert!(contrast((r, g, b), NORD) >= READABLE_CONTRAST);
-        assert!(contrast((r, g, b), tint) >= READABLE_CONTRAST);
-        assert_eq!(out, line.replace("48;64;128", &format!("{r};{g};{b}")));
+    fn a_wash_lifts_a_color_to_read_on_the_ground_and_the_field() {
+        // The weather blue fades on Vellum and on the pale yellow field
+        // over it, and a dim blue fades on Nord and its field. Each lift
+        // reads on both, since both renderers paint the field.
+        let wash = NamedColor::Yellow.rgb();
+        for (color, ground) in [(WEATHER, VELLUM), ((0x30, 0x40, 0x80), NORD)] {
+            let line = on_a_wash(color);
+            let field = yellow_field(ground);
+            let (r, g, b) = readable_on(color, Under::Wash(wash), ground);
+            assert_ne!((r, g, b), color);
+            assert!(contrast((r, g, b), ground) >= READABLE_CONTRAST);
+            assert!(contrast((r, g, b), field) >= READABLE_CONTRAST);
+            let (cr, cg, cb) = color;
+            assert_eq!(
+                lift_sgr(&line, ground),
+                line.replace(&format!("{cr};{cg};{cb}m"), &format!("{r};{g};{b}m"))
+            );
+        }
     }
 
     #[test]
