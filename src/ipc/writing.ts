@@ -60,6 +60,9 @@ export interface WriteJob {
   name?: string | null;
   /** Trust 55 and up, where the game keeps a code anywhere in a line. */
   immortal?: boolean;
+  /** For a find, how many notes of yours with this subject the board
+   *  listed just before the post. Only more than that counts as found. */
+  baseline?: number | null;
 }
 
 /** A note as the game's show prints it, `ShownNote` in game_text.rs. */
@@ -94,9 +97,12 @@ export type JobResult =
       line: number | null;
     }
   | { kind: 'stopped'; sent: number }
-  | { kind: 'dropped'; sent: number; posted: boolean }
+  /** `baseline` counts your notes with this subject the board listed
+   *  just before the post, when Vosh could read the list. */
+  | { kind: 'dropped'; sent: number; posted: boolean; baseline?: number | null }
   | { kind: 'offer_gone' }
-  /** The board lists your note with the draft's subject as `number`. */
+  /** The board lists more notes of yours with the draft's subject than
+   *  before the post, the last as `number`. */
   | { kind: 'found'; number: number }
   | { kind: 'not_found' }
   /** The board's list is one you cannot read. */

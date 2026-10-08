@@ -1623,6 +1623,7 @@ describe('the help on the writing card', () => {
     const text = topic('play.write-in-the-game').body;
     expect(text).toContain('`Post…` asks first');
     expect(text).toContain("`Don't ask again`");
+    expect(text).toContain('Just before it posts, Vosh lists your own notes on that board');
     expect(text).toContain('`Ask before you post` in Settings, Input');
     expect(text).toContain('Vosh keeps your last 20 for each character');
   });

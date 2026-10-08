@@ -473,6 +473,7 @@ impl Writer {
                 JobResult::Dropped {
                     sent: 0,
                     posted: false,
+                    baseline: spec.baseline,
                 },
             );
         }

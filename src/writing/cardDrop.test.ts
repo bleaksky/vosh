@@ -7,6 +7,7 @@ const look: WriteJob = { id: 2, kind: 'journal', action: 'find', subject: 'The G
 const waiting: Find = {
   drop: { sent: 19, total: 19 },
   subject: 'The Great Milieu',
+  baseline: 1,
   started: true,
 };
 
@@ -37,16 +38,38 @@ describe('the card after a drop', () => {
   });
 
   it('waits for the board’s list after a drop that came as it posted', () => {
-    const next = afterDrop(null, { kind: 'dropped', sent: 19, posted: true }, post, 'journal', 19);
+    const next = afterDrop(
+      null,
+      { kind: 'dropped', sent: 19, posted: true, baseline: 1 },
+      post,
+      'journal',
+      19,
+    );
     expect(next).toEqual({
       dropped: { sent: 19, total: 19 },
-      find: { drop: { sent: 19, total: 19 }, subject: 'The Great Milieu', started: false },
+      find: {
+        drop: { sent: 19, total: 19 },
+        subject: 'The Great Milieu',
+        baseline: 1,
+        started: false,
+      },
       ended: {
         note: expect.objectContaining({ lead: 'Your connection dropped while this was posting.' }),
         actions: [],
       },
       posted: false,
     });
+  });
+
+  it('keeps the count from before the post when a find drops too', () => {
+    const next = afterDrop(
+      waiting,
+      { kind: 'dropped', sent: 0, posted: false, baseline: null },
+      look,
+      'journal',
+      19,
+    );
+    expect(next?.find?.baseline).toBe(1);
   });
 
   it('looks for the subject the post went out with', () => {

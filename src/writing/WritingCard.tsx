@@ -401,7 +401,7 @@ export function WritingCard({
     const now = findToStart(find, live, writing.job !== null);
     if (!now) return;
     setFind({ ...now, started: true });
-    run({ kind, action: 'find', name, subject: now.subject, immortal });
+    run({ kind, action: 'find', name, subject: now.subject, immortal, baseline: now.baseline });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [find, live, writing.job]);
 

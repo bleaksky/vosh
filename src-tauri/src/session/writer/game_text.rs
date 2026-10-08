@@ -338,9 +338,9 @@ pub(crate) fn list_row(plain: &str) -> Option<ListRow<'_>> {
     })
 }
 
-/// The number of the last note `name` sent with `subject` in a reply to
-/// `list`, the note's language after the subject aside.
-pub(crate) fn listed_note(lines: &[GameLine], name: &str, subject: &str) -> Option<usize> {
+/// The numbers of the notes `name` sent with `subject` in a reply to
+/// `list`, in order, the note's language after the subject aside.
+pub(crate) fn listed_notes(lines: &[GameLine], name: &str, subject: &str) -> Vec<usize> {
     let titled = |listed: &str| {
         listed == subject
             || listed
@@ -354,7 +354,7 @@ pub(crate) fn listed_note(lines: &[GameLine], name: &str, subject: &str) -> Opti
         .filter_map(|l| list_row(&l.plain))
         .filter(|row| row.sender == name && titled(row.subject))
         .map(|row| row.number)
-        .next_back()
+        .collect()
 }
 
 /// `text` as the game shows it, without its backtick codes, each of
@@ -509,8 +509,8 @@ mod tests {
             line(" [  1N] Orla: About the gate (foreign)"),
             line(" [  2 ] Orla: About the gate now"),
         ];
-        assert_eq!(listed_note(&rows, "Orla", "About the gate"), Some(1));
-        assert_eq!(listed_note(&rows, "Orla", "About"), None);
+        assert_eq!(listed_notes(&rows, "Orla", "About the gate"), vec![1]);
+        assert_eq!(listed_notes(&rows, "Orla", "About"), Vec::<usize>::new());
         assert_eq!(uncoded("`!Red`` then plain"), "Red then plain");
     }
 }

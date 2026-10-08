@@ -264,9 +264,19 @@ impl World {
                 if self.board.is_empty() {
                     return self.prompt("There are no notes for you.");
                 }
+                // `list from` a name prints only that sender's rows, each
+                // with its number on the board, and nothing when none
+                // match (`recycle.c:4013`, `4089`).
+                let from = argument.strip_prefix("from ");
                 let mut rows = String::new();
                 for (n, (sender, subject)) in self.board.iter().enumerate() {
+                    if from.is_some_and(|from| !sender.eq_ignore_ascii_case(from)) {
+                        continue;
+                    }
                     let _ = write!(rows, " [ {n:>3}N] {sender}: {subject}\n\r");
+                }
+                if rows.is_empty() {
+                    return self.prompt("");
                 }
                 rows.truncate(rows.len() - 2);
                 self.prompt(&rows)
@@ -695,6 +705,7 @@ async fn a_note_posts_in_every_order_of_the_prompt_tick() {
                 ".s",
                 "@",
                 "note show",
+                "note list from Orla",
                 "note post"
             ],
             "{order:?}"
@@ -757,7 +768,10 @@ async fn the_find_after_a_drop_reads_the_list_in_every_order_of_the_prompt_tick(
         let found = h.done_of(5).await;
         assert_eq!(found["kind"], "found", "{order:?} {found}");
         assert_eq!(found["number"], 0, "{order:?} {found}");
-        assert_eq!(h.heard().last().map(String::as_str), Some("note list"));
+        assert_eq!(
+            h.heard().last().map(String::as_str),
+            Some("note list from Orla")
+        );
         assert_eq!(h.world.lock().expect("the world").links, 2);
         h.finish().await;
     }

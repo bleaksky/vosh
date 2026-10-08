@@ -19,6 +19,9 @@ export interface Drop {
 export interface Find {
   drop: Drop;
   subject: string;
+  /** How many notes of yours with the subject the board listed just
+   *  before the post, or null when Vosh couldn't read the list. */
+  baseline: number | null;
   started: boolean;
 }
 
@@ -48,7 +51,12 @@ export function afterDrop(
       if (result.posted || job.action === 'find') {
         return {
           dropped: drop,
-          find: { drop, subject: find?.subject ?? job.subject ?? '', started: false },
+          find: {
+            drop,
+            subject: find?.subject ?? job.subject ?? '',
+            baseline: find ? find.baseline : (result.baseline ?? null),
+            started: false,
+          },
           ended: { note: note({ ...result, posted: true }), actions: [] },
           posted: false,
         };
