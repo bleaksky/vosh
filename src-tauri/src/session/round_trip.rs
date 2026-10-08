@@ -4,7 +4,11 @@
 //! updates it as the game acknowledges your bytes, so in a hard stall it
 //! stays low. The loop also times your oldest send the game has not
 //! answered yet and takes that wait when it is longer, so a stall counts
-//! up live. Each reading goes to the status line on
+//! up live. That wait counts only while the kernel still holds bytes the
+//! game's machine has not acknowledged. Once it has them the game has
+//! your line, and The Forsaken Lands holds a line it read while a skill
+//! lags you (`ch->wait` in comm.c) and answers none until the lag ends,
+//! so typing ahead during a bash is no stall, see [`reading`]. Each reading goes to the status line on
 //! `session://round-trip` and into the [`RoundTrip`] the connection
 //! keeps, which `#lag` reads.
 //!
@@ -33,6 +37,24 @@ const USUAL_OVER: Duration = Duration::from_secs(600);
 
 /// The stalls of a connection `#lag` lists, the newest.
 const KEPT_STALLS: usize = 20;
+
+/// The reading at `now` from what the kernel says of the socket and
+/// `unanswered`, when the oldest line the game has not answered left.
+/// Nothing in flight means the game's machine has every line, so the
+/// wait for its answer is the game's and starts over with your next
+/// line. Otherwise the wait counts when it is longer than the round
+/// trip.
+pub(crate) fn reading(
+    kernel: kernel::Reading,
+    unanswered: &mut Option<Instant>,
+    now: Instant,
+) -> Duration {
+    if !kernel.in_flight {
+        *unanswered = None;
+    }
+    let waited = unanswered.map_or(Duration::ZERO, |sent| now.duration_since(sent));
+    kernel.round_trip.max(waited)
+}
 
 /// What `session://round-trip` carries beside the session: the reading
 /// in whole milliseconds, or null once the connection ends.
@@ -202,6 +224,31 @@ mod tests {
 
     fn clock(h: u32, m: u32, s: u32) -> NaiveTime {
         NaiveTime::from_hms_opt(h, m, s).expect("a time")
+    }
+
+    #[test]
+    fn a_wait_counts_only_while_the_link_still_carries_your_line() {
+        let sent = Instant::now();
+        let now = sent + ms(1500);
+        let link = |in_flight| kernel::Reading {
+            round_trip: ms(38),
+            in_flight,
+        };
+
+        // The game's machine has not acknowledged the line, so the
+        // network holds it and the wait is a stall.
+        let mut unanswered = Some(sent);
+        assert_eq!(reading(link(true), &mut unanswered, now), ms(1500));
+        assert_eq!(unanswered, Some(sent));
+
+        // It has the line, and the game holds it while a skill lags you.
+        // The reading is the link's, and the wait starts over.
+        assert_eq!(reading(link(false), &mut unanswered, now), ms(38));
+        assert_eq!(unanswered, None);
+
+        // A wait shorter than the round trip reads the round trip.
+        let mut unanswered = Some(now - ms(10));
+        assert_eq!(reading(link(true), &mut unanswered, now), ms(38));
     }
 
     /// A connection at 19:42 that took `readings`, one every two seconds

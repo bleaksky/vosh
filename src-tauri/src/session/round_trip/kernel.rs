@@ -2,19 +2,33 @@
 //! Readout P3). Every TCP connection keeps one, so reading it sends
 //! nothing over the wire. macOS reports `tcpi_srtt` in milliseconds
 //! through `TCP_CONNECTION_INFO`, Linux `tcpi_rtt` in microseconds
-//! through `TCP_INFO`, and Windows `RttUs` through `SIO_TCP_INFO`. Any
-//! other system, or a call that fails, reports nothing, and the status
-//! line then shows no reading.
+//! through `TCP_INFO`, and Windows `RttUs` through `SIO_TCP_INFO`. The
+//! same call says whether bytes you sent still wait for the game's
+//! machine to acknowledge them, `tcpi_snd_sbbytes` on macOS,
+//! `tcpi_unacked` on Linux and `BytesInFlight` on Windows. Any other
+//! system, or a call that fails, reports nothing, and the status line
+//! then shows no reading.
 
 use std::time::Duration;
 
 use tokio::net::TcpStream;
 
-/// The smoothed round trip time of `tcp`, or None where the system
-/// does not say.
+/// What the kernel says of a game socket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Reading {
+    /// The smoothed round trip time.
+    pub(crate) round_trip: Duration,
+    /// Bytes you sent wait for the game's machine to acknowledge them.
+    /// Once they are acknowledged the game has your line, and any wait
+    /// for its answer is the game's own, as while a skill lags you.
+    pub(crate) in_flight: bool,
+}
+
+/// What the kernel says of `tcp`, or None where the system does not
+/// say.
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
-pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
+pub(crate) fn read(tcp: &TcpStream) -> Option<Reading> {
     use std::os::fd::AsRawFd;
     // SAFETY: tcp_connection_info is plain old data, so all zeros is a
     // valid value, and getsockopt writes at most `len` bytes into it
@@ -30,14 +44,17 @@ pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
             &raw mut len,
         )
     };
-    (rc == 0).then(|| Duration::from_millis(u64::from(info.tcpi_srtt)))
+    (rc == 0).then(|| Reading {
+        round_trip: Duration::from_millis(u64::from(info.tcpi_srtt)),
+        in_flight: info.tcpi_snd_sbbytes > 0,
+    })
 }
 
-/// The smoothed round trip time of `tcp`, or None where the system
-/// does not say.
+/// What the kernel says of `tcp`, or None where the system does not
+/// say.
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
-pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
+pub(crate) fn read(tcp: &TcpStream) -> Option<Reading> {
     use std::os::fd::AsRawFd;
     // SAFETY: tcp_info is plain old data, so all zeros is a valid
     // value, and getsockopt writes at most `len` bytes into it on the
@@ -53,14 +70,17 @@ pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
             &raw mut len,
         )
     };
-    (rc == 0).then(|| Duration::from_micros(u64::from(info.tcpi_rtt)))
+    (rc == 0).then(|| Reading {
+        round_trip: Duration::from_micros(u64::from(info.tcpi_rtt)),
+        in_flight: info.tcpi_unacked > 0,
+    })
 }
 
-/// The smoothed round trip time of `tcp`, or None where the system
-/// does not say, as on Windows before 10 1703.
+/// What the kernel says of `tcp`, or None where the system does not
+/// say, as on Windows before 10 1703.
 #[cfg(windows)]
 #[allow(unsafe_code)]
-pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
+pub(crate) fn read(tcp: &TcpStream) -> Option<Reading> {
     use std::os::windows::io::AsRawSocket;
     use windows_sys::Win32::Networking::WinSock::{TCP_INFO_v0, WSAIoctl, SIO_TCP_INFO};
     // Version 0 of the TCP_INFO structure.
@@ -84,11 +104,14 @@ pub(crate) fn read(tcp: &TcpStream) -> Option<Duration> {
             None,
         )
     };
-    (rc == 0).then(|| Duration::from_micros(u64::from(info.RttUs)))
+    (rc == 0).then(|| Reading {
+        round_trip: Duration::from_micros(u64::from(info.RttUs)),
+        in_flight: info.BytesInFlight > 0,
+    })
 }
 
 /// Other systems report nothing.
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
-pub(crate) fn read(_tcp: &TcpStream) -> Option<Duration> {
+pub(crate) fn read(_tcp: &TcpStream) -> Option<Reading> {
     None
 }

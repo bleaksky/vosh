@@ -39,8 +39,10 @@ pub(crate) struct Stream {
     /// and those triggers, timers, the tick and Lua send. A telnet answer
     /// ends no line, so it never counts.
     last_line: Option<Instant>,
-    /// When the oldest line of yours the game has not answered yet left.
-    /// Any bytes from the game answer it.
+    /// When the oldest line of yours the game has not answered yet left,
+    /// while the network still carries it. Any bytes from the game
+    /// answer it, and a line the game's machine acknowledged reached the
+    /// game, so a wait after that is the game's, not the link's.
     unanswered: Option<Instant>,
 }
 
@@ -70,11 +72,18 @@ impl Stream {
     }
 
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        let line = buf.ends_with(b"\n");
+        // Every line before this one reached the game, so the wait
+        // starts over with it. Typing ahead while a skill lags you sends
+        // lines the game holds unanswered, and they never count.
+        if line && self.kernel().is_some_and(|k| !k.in_flight) {
+            self.unanswered = None;
+        }
         match &mut self.io {
             Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
             Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
         }
-        if buf.ends_with(b"\n") {
+        if line {
             let now = Instant::now();
             self.last_line = Some(now);
             self.unanswered.get_or_insert(now);
@@ -84,17 +93,26 @@ impl Stream {
 
     /// The round trip to the game at `now`: the kernel's smoothed round
     /// trip time for the socket, or how long the oldest line the game has
-    /// not answered has waited when that is longer. None where the system
-    /// does not say. See [`super::round_trip`].
-    pub(crate) fn round_trip(&self, now: Instant) -> Option<Duration> {
+    /// not answered has waited when that is longer and the network still
+    /// carries it. A line the game's machine acknowledged reached the
+    /// game, so its wait stops counting. None where the system does not
+    /// say. See [`super::round_trip`].
+    pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Duration> {
+        let kernel = self.kernel()?;
+        Some(super::round_trip::reading(
+            kernel,
+            &mut self.unanswered,
+            now,
+        ))
+    }
+
+    /// What the kernel says of the game socket, None where it does not.
+    fn kernel(&self) -> Option<super::round_trip::kernel::Reading> {
         let tcp = match &self.io {
             Io::Tcp(s) => s,
             Io::Tls(s) => s.get_ref().0,
         };
-        let waited = self
-            .unanswered
-            .map_or(Duration::ZERO, |sent| now.duration_since(sent));
-        super::round_trip::kernel::read(tcp).map(|kernel| kernel.max(waited))
+        super::round_trip::kernel::read(tcp)
     }
 
     /// When a line of yours last left for the game, None before the first.
@@ -181,14 +199,17 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::time::Instant;
 
+    use super::super::round_trip::SLOW;
     use super::connect;
 
-    /// The kernel reads the round trip on the systems Vosh ships for, and
-    /// a line the game has not answered counts up past it until the game
-    /// writes back.
+    /// The kernel reads the round trip on the systems Vosh ships for. A
+    /// line the game's machine acknowledged reached the game, so while
+    /// the game holds it unanswered, as it holds what you type ahead
+    /// while a skill lags you (`ch->wait` in comm.c), the reading stays
+    /// the link's and no stall counts.
     #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[tokio::test]
-    async fn the_round_trip_counts_up_while_the_game_has_not_answered() {
+    async fn a_line_the_game_holds_is_no_stall() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("a port");
         let port = listener.local_addr().expect("an address").port();
         let game = tokio::spawn(async move { listener.accept().await.expect("a client").0 });
@@ -196,14 +217,19 @@ mod tests {
         let mut game = game.await.expect("the game task");
 
         let fine = stream.round_trip(Instant::now()).expect("a reading");
-        assert!(fine < Duration::from_millis(300), "{fine:?}");
+        assert!(fine < SLOW, "{fine:?}");
 
+        // A bash lags you, and you type ahead. The game reads both lines
+        // and answers neither for 400 ms.
+        stream.write_all(b"kick\r\n").await.expect("the line");
         stream.write_all(b"look\r\n").await.expect("the line");
-        let mut line = [0u8; 6];
-        game.read_exact(&mut line).await.expect("the game hears it");
+        let mut lines = [0u8; 12];
+        game.read_exact(&mut lines)
+            .await
+            .expect("the game hears them");
         tokio::time::sleep(Duration::from_millis(400)).await;
-        let waiting = stream.round_trip(Instant::now()).expect("a reading");
-        assert!(waiting >= Duration::from_millis(400), "{waiting:?}");
+        let held = stream.round_trip(Instant::now()).expect("a reading");
+        assert!(held < SLOW, "{held:?}");
 
         game.write_all(b"You see Tolliver here.\r\n")
             .await
@@ -211,6 +237,6 @@ mod tests {
         let mut buf = [0u8; 64];
         assert!(stream.read(&mut buf).await.expect("the answer") > 0);
         let answered = stream.round_trip(Instant::now()).expect("a reading");
-        assert!(answered < Duration::from_millis(300), "{answered:?}");
+        assert!(answered < SLOW, "{answered:?}");
     }
 }
