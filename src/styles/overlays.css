@@ -611,6 +611,44 @@
   font-variant-numeric: normal;
 }
 
+/* Show me (First Run Q3, board 2). A 2 px accent ring 2 px out from
+   what to pick, over the menus, with one pulse, and its line on the
+   toast recipe beside it. Neither takes a press. */
+.cm-ring {
+  position: fixed;
+  z-index: 1050;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--accent);
+  pointer-events: none;
+  animation: cm-pulse 700ms ease-out 1;
+}
+
+@keyframes cm-pulse {
+  from {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.cm-tip {
+  position: fixed;
+  z-index: 1050;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-ring {
+    animation: none;
+  }
+}
+
 /* Confirm dialog. No scrim: the layer is clear and only catches a
    press outside the card. */
 .ov-confirm-layer {
