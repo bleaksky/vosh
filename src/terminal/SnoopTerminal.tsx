@@ -113,8 +113,6 @@ export function SnoopTerminal({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<() => void>(() => {});
-  const shownRef = useRef(shown);
-  shownRef.current = shown;
   const tintedRef = useRef(themeTerminalColors);
   tintedRef.current = themeTerminalColors;
   const calls = useRef({ onReady, onRowHeight, onFindResults });
@@ -200,10 +198,13 @@ export function SnoopTerminal({
       write(text);
     });
 
-    // Cmd C or Ctrl C copies what you selected here, and the caret goes
-    // back to the command line.
+    // Cmd C or Ctrl C copies what you selected here while the caret is
+    // here, and the caret goes back to the command line. xterm keeps a
+    // selection once the caret leaves, and a copy elsewhere is left to
+    // copy what you selected there.
     const onCopyKey = (event: KeyboardEvent) => {
-      if (!shownRef.current || event.altKey || !(event.metaKey || event.ctrlKey)) return;
+      if (!host.contains(document.activeElement)) return;
+      if (event.altKey || !(event.metaKey || event.ctrlKey)) return;
       if (event.key.toLowerCase() !== 'c') return;
       const selection = term.getSelection();
       if (!selection) return;

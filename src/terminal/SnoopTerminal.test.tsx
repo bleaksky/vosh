@@ -17,8 +17,11 @@ const fake = vi.hoisted(() => ({
     disposed: boolean;
     focused: boolean;
     keys: ((event: KeyboardEvent) => boolean) | null;
+    selected: string;
   }[],
   sent: [] as string[],
+  keydowns: new Set<(event: KeyboardEvent) => void>(),
+  copied: [] as string[],
   texts: new Map<string, string>(),
   listeners: new Set<(session: number, name: string, text: string, whole: boolean) => void>(),
 }));
@@ -40,6 +43,7 @@ vi.mock('@xterm/xterm', () => {
     disposed = false;
     focused = false;
     keys: ((event: KeyboardEvent) => boolean) | null = null;
+    selected = '';
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
       fake.terms.push(this);
@@ -62,7 +66,7 @@ vi.mock('@xterm/xterm', () => {
     }
     scrollToBottom() {}
     getSelection() {
-      return '';
+      return this.selected;
     }
     dispose() {
       this.disposed = true;
@@ -106,13 +110,25 @@ beforeAll(async () => {
     document: doc,
     location: { protocol: 'about:' },
     HTMLIFrameElement: class {},
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type: string, cb: (event: KeyboardEvent) => void) {
+      if (type === 'keydown') fake.keydowns.add(cb);
+    },
+    removeEventListener(type: string, cb: (event: KeyboardEvent) => void) {
+      if (type === 'keydown') fake.keydowns.delete(cb);
+    },
     dispatchEvent(event: Event) {
       fake.sent.push(event.type);
     },
   });
-  vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  vi.stubGlobal('navigator', {
+    userAgent: 'node',
+    platform: '',
+    clipboard: {
+      writeText: async (text: string) => {
+        fake.copied.push(text);
+      },
+    },
+  });
   const storage = { getItem: () => null, setItem() {}, removeItem() {} };
   vi.stubGlobal('localStorage', storage);
   vi.stubGlobal('sessionStorage', storage);
@@ -126,6 +142,12 @@ beforeAll(async () => {
   vi.stubGlobal('Node', FakeNode);
   vi.stubGlobal('Element', FakeElement);
   vi.stubGlobal('HTMLElement', FakeElement);
+  // The copy key looks for the caret in the snoop.
+  const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  el.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+    for (let n = other; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  };
   ({ createRoot } = await import('react-dom/client'));
 });
 
@@ -138,6 +160,8 @@ beforeEach(() => {
   fake.texts.clear();
   fake.listeners.clear();
   fake.sent.length = 0;
+  fake.copied.length = 0;
+  doc.activeElement = null;
 });
 
 const STAFF = 1;
@@ -164,7 +188,12 @@ async function mount(name: string) {
     ),
   );
   const term = fake.terms[fake.terms.length - 1];
-  return { term, unmount: () => act(() => root.unmount()), text: () => term.written.join('') };
+  return {
+    term,
+    view: host.firstChild as FakeElement,
+    unmount: () => act(() => root.unmount()),
+    text: () => term.written.join(''),
+  };
 }
 
 describe('a snoop terminal', () => {
@@ -241,6 +270,40 @@ describe('a snoop terminal', () => {
     expect(keys(key('l', { type: 'keyup' }))).toBe(true);
     expect(fake.sent).toHaveLength(2);
     unmount();
+  });
+
+  it('copies what you selected here only while the caret is here', async () => {
+    const before = fake.keydowns.size;
+    const { term, view, unmount } = await mount('Maren');
+    term.selected = 'The day has begun.';
+    let prevented = 0;
+    const press = () => {
+      const event = {
+        type: 'keydown',
+        key: 'c',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        preventDefault: () => (prevented += 1),
+      } as unknown as KeyboardEvent;
+      for (const cb of fake.keydowns) cb(event);
+    };
+    // xterm keeps the selection once the caret leaves. Ctrl C in the
+    // command line copies what you selected there.
+    doc.createElement('input').focus();
+    press();
+    expect(prevented).toBe(0);
+    expect(fake.copied).toEqual([]);
+    expect(fake.sent).toEqual([]);
+    // With the caret here it copies the snoop and hands the caret back.
+    view.focus();
+    press();
+    await Promise.resolve();
+    expect(prevented).toBe(1);
+    expect(fake.copied).toEqual(['The day has begun.']);
+    expect(fake.sent).toEqual(['vosh:focus-input']);
+    unmount();
+    expect(fake.keydowns.size).toBe(before);
   });
 
   it('leaves out every part of your automation that paints your terminal', () => {
