@@ -561,6 +561,7 @@ fn span_at(piece: usize, col: usize, width: usize) -> Span {
         bold: false,
         italic: false,
         underline: false,
+        push: false,
         look: crate::render::SgrState::default(),
     }
 }

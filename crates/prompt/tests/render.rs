@@ -1022,6 +1022,15 @@ fn each_row_pushes_on_its_own_and_only_its_first_push_counts() {
         .map(|s| (s.piece, s.row, s.col, s.width))
         .collect();
     assert_eq!(pushes, [(1, 0, 1, 8), (5, 1, 1, 7), (7, 1, 9, 0)]);
+    // Only the push that took the spaces says so, for the band to find
+    // the gap it closes when the row is too wide for it.
+    let marked: Vec<usize> = out
+        .spans
+        .iter()
+        .filter(|s| s.push)
+        .map(|s| s.piece)
+        .collect();
+    assert_eq!(marked, [1, 5]);
     // A push at the end of a row fills it to the edge, and a push in a
     // condition that does not hold pushes nothing.
     assert_eq!(draw_at("ab%{right}", &values, Some(5)).plain, "ab   ");
