@@ -1,4 +1,4 @@
-//! Tier 3 native terminal renderer (see docs/native-renderer.md).
+//! The native terminal renderer (see docs/renderer.md).
 //!
 //! The wgpu cell renderer: turns `grid`'s cells into pixels. The
 //! pipeline reads the grid each frame and draws a background quad plus a

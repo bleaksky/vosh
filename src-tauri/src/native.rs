@@ -1,4 +1,4 @@
-//! The native terminal renderer (see docs/native-renderer.md). It builds
+//! The native terminal renderer (see docs/renderer.md). It builds
 //! only on macOS. Windows and Linux draw the terminal with xterm. The
 //! grid alone also builds for the tests on every platform, since the
 //! session tests read it.

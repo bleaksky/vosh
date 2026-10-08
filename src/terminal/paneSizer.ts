@@ -45,7 +45,7 @@ export class PaneSizer {
   private lastW = 0;
   private lastH = 0;
   // The native wgpu surface hears this pane's screen rectangle, so its
-  // grid tracks the terminal (docs/native-renderer.md). Live pane only,
+  // grid tracks the terminal (docs/renderer.md). Live pane only,
   // and only while the surface draws it.
   //
   // The rows the pinned band borrows go along, so the grid gives them

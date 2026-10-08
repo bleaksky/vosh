@@ -1,4 +1,4 @@
-//! Tier 3 native terminal renderer (see docs/native-renderer.md).
+//! The native terminal renderer (see docs/renderer.md).
 //!
 //! Wraps `alacritty_terminal`'s `Term` so the post-telnet byte stream
 //! (the same bytes Vosh hands xterm) builds a real cell grid: characters,

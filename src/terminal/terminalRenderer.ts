@@ -3,7 +3,7 @@
 export const NATIVE_FAILED_KEY = 'vosh.nativesurface.failed';
 
 // The native wgpu terminal surface. It is on by default on macOS, where
-// it draws what xterm draws (docs/native-renderer.md). There
+// it draws what xterm draws (docs/renderer.md). There
 // vosh.nativesurface '0' falls back to xterm. Windows and Linux always
 // draw with xterm and never read the flag. Vosh keeps no native surface
 // for them, and in native mode the page waits for the surface to size
