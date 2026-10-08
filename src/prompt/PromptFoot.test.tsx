@@ -64,7 +64,7 @@ describe('the Preview button', () => {
       const html = draw(value);
       expect(html, value).toMatch(
         new RegExp(
-          `<button[^>]*class="st-button st-button-secondary pc-menu-button"[^>]*>` +
+          `<button[^>]*class="btn pc-menu-button"[^>]*>` +
             `<span><span class="pc-menu-button-lead">Preview: </span>${label}</span><svg`,
         ),
       );
@@ -83,8 +83,8 @@ describe('the Preview button', () => {
     const preview = draw('now');
     const place = renderToStaticMarkup(foot(false));
     const button = (html: string) => /<button[^>]*aria-haspopup="menu"[^>]*>/.exec(html)?.[0];
-    expect(button(preview)).toContain('class="st-button st-button-secondary pc-menu-button"');
-    expect(button(place)).toContain('class="st-button st-button-secondary pc-menu-button"');
+    expect(button(preview)).toContain('class="btn pc-menu-button"');
+    expect(button(place)).toContain('class="btn pc-menu-button"');
   });
 });
 

@@ -118,7 +118,7 @@ describe('the Get started topic', () => {
   it('draws Open Get started as a primary button between its paragraphs', () => {
     const html = draw(topic('get-connected.get-started'));
     expect(html).toContain(
-      'again here.</p><div class="hp-actions"><button type="button" class="st-button st-button-primary">Open Get started</button></div><p>A new install',
+      'again here.</p><div class="hp-actions"><button type="button" class="btn is-primary">Open Get started</button></div><p>A new install',
     );
     expect(html).toContain('<th scope="col">Where it lives</th>');
     expect(helpCss).toMatch(/\.hp-actions \{[^}]*margin: 16px 0 0;/);
@@ -127,7 +127,7 @@ describe('the Get started topic', () => {
   it('marks the button when you search for its words', () => {
     const shown = topic('get-connected.get-started');
     expect(draw(shown, 'open get')).toContain(
-      '<button type="button" class="st-button st-button-primary"><mark class="hp-mark" data-match="0" data-current="">Open Get</mark> started</button>',
+      '<button type="button" class="btn is-primary"><mark class="hp-mark" data-match="0" data-current="">Open Get</mark> started</button>',
     );
     expect(countMatches(shown, 'open get')).toBe(1);
   });

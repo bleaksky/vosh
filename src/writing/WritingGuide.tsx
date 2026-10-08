@@ -30,7 +30,7 @@ export function WritingGuide({ guide, onHelp }: { guide: Guide; onHelp: () => vo
           {words}
         </p>
       ))}
-      <Button className="wr-small wr-guide-help" onClick={onHelp}>
+      <Button small className="wr-guide-help" onClick={onHelp}>
         Read help {guide.help}
       </Button>
     </aside>

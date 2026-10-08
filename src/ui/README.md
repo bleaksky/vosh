@@ -74,7 +74,8 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `Button` forwards its ref.
 
-- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
+- `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, the ring kept).
+- `small` makes it 24 tall at 12/500 with 10 side padding, like the prompt card foot.
 - `icon` adds a leading 16 px icon in the secondary color, like `New profile`.
 
 `IconButton` is a 28×24 button that shows only a 16 px icon, the one the window controls use. It forwards its ref.

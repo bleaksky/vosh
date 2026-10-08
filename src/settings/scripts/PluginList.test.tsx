@@ -121,9 +121,7 @@ describe('the Plugins section', () => {
     expect(html).toContain('data-st-anchor="plugins"');
     expect(html).toMatch(/<h2[^>]*>Plugins<\/h2>/);
     expect(html).toMatch(/<button[^>]*>Install…<\/button><input type="file" accept=".zip"/);
-    expect(html).toMatch(
-      /class="st-button st-button-secondary st-button-iconed">.*New plugin<\/button>/,
-    );
+    expect(html).toMatch(/class="btn has-icon">.*New plugin<\/button>/);
     expect(html).toContain('aria-label="Help on Lua scripts"');
   });
 

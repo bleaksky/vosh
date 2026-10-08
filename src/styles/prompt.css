@@ -204,7 +204,7 @@
   flex: 1 1 auto;
 }
 
-.pc-head .st-button {
+.pc-head .btn {
   margin-right: 4px;
 }
 
@@ -548,7 +548,7 @@
   white-space: pre;
 }
 
-.pc-command .st-button {
+.pc-command .btn {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -829,7 +829,7 @@
   margin: 12px 0 0 -12px;
 }
 
-.pc-forget .st-button[aria-expanded='true'] {
+.pc-forget .btn[aria-expanded='true'] {
   background: var(--menu-hi);
 }
 
