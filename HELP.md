@@ -325,6 +325,9 @@ Vosh's writing card helps you write the description others see when they look at
 - While Vosh sends, your triggers, timers, Lua and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
 - Your description doesn't need approval to change. Send it to the game as often as you like, and when you're ready, pick `Send for approval…` in the card's `⋯` menu. It sends `dcheck` after you confirm, and the game takes one check at a time.
 - A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
+- Drag the card by its header to put it anywhere in the window. Double click the header, or pick `Put the card back` in the `⋯` menu, and it goes back over the terminal.
+- Drag the grip on the card's edge to make the box taller or shorter. It runs along the top while the card sits over the terminal and along the bottom once you've moved it. Double click it and the box grows with your text again.
+- The pin beside `Close` moves the card into a Writing pane in the panel, so the whole terminal stays in view. Press it again to float the card over the terminal. Vosh remembers where you put the card, how tall you made the box and whether you pinned it.
 
 Vosh never writes, rewrites or suggests a word. The red underlines come from your system's own spell check, and `Check spelling` in the card's `⋯` menu turns them off.
 
@@ -348,6 +351,8 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 - Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` in the `⋯` menu sends your history to the immortals, once.
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
+
+You can move the card, resize its box and pin it to the panel for any kind, as Write your description shows.
 
 Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
 
