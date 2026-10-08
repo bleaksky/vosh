@@ -30,7 +30,7 @@ use crate::profile::live::Profile;
 use crate::profile::switch::read_shared_layer;
 use crate::prompt::request_prompt_repaint;
 use crate::script::{run_alias_body, ApplyResult};
-use crate::session::connection::Connection;
+use crate::session::connection::{Connection, QuickKey};
 use crate::session::effects::{collect_script_result, run_lines_locked, Collected, LinesRun};
 use crate::sessions::Session;
 use crate::tick::TickConfig;
@@ -283,6 +283,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     // The line runs the way a line from a timer, the tick or Lua runs.
     let (
         open,
+        quick,
         LinesRun {
             apply,
             shown,
@@ -292,6 +293,9 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
     ) = {
         let mut profile = session.lock_profile().await;
         let mut connection = session.connection.lock();
+        // A quick key echoes its command from here, since the page leaves
+        // its echo out, so that echo lands after the prompt.
+        let quick = fires_quick_key(&connection, line);
         let run = run_lines_locked(
             state,
             &mut profile,
@@ -299,7 +303,7 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
             [(LineFrom::You, line)],
             shared_layer.as_ref(),
         );
-        (profile.open().clone(), run)
+        (profile.open().clone(), quick, run)
     };
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there. A typed
@@ -314,24 +318,31 @@ pub(crate) async fn run_typed_line<R: tauri::Runtime>(
         session.emit(app, events::TARGET, &payload);
     }
 
-    deliver_script_result(app, session, apply.ran_under(&open)).await
+    deliver_script_result(app, session, apply.ran_under(&open), quick).await
 }
 
 /// Apply a script result outside the session loop, the way every path
 /// applies one, then print its echo lines on the terminal, send its bytes
 /// to the game `session` runs and hand a `#walk` to its walker after them.
-/// With no connection the terminal says so.
+/// With no connection the terminal says so. `quick` says the lines start
+/// with a quick key's echo, which lands after the prompt. Any other line
+/// starts a row of its own.
 async fn deliver_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Arc<Session>,
     apply: ApplyResult,
+    quick: bool,
 ) -> Result<(), String> {
     let Collected {
         bytes,
         echoes,
         walk,
     } = collect_script_result(app, session, apply).await;
-    output::echo_lines(app, session, &echoes);
+    if quick {
+        output::echo_command(app, session, &echoes);
+    } else {
+        output::echo_lines(app, session, &echoes);
+    }
 
     if bytes.is_empty() && walk.is_none() {
         return Ok(());
@@ -584,12 +595,7 @@ fn process_line(
     // then to the MUD if no alias matches), so a default-but-unused
     // name like `gg` does not shadow a user alias of the same name
     // with a "no verb is set" error.
-    if let Some(qk) = c
-        .target
-        .quick_keys
-        .iter()
-        .find(|q| q.name == head && !q.verb.is_empty())
-    {
+    if let Some(qk) = quick_key(c, head) {
         let target = c.target.name.clone().unwrap_or_default();
         if target.is_empty() {
             return InputResult::error("no target — set one with `tar <name|index>` first");
@@ -682,6 +688,26 @@ fn split_first_word(input: &str) -> (&str, &str) {
         }
         None => (trimmed, ""),
     }
+}
+
+/// The quick key a line that starts with `head` fires: one of that
+/// name with a verb set.
+fn quick_key<'a>(c: &'a Connection, head: &str) -> Option<&'a QuickKey> {
+    c.target
+        .quick_keys
+        .iter()
+        .find(|q| q.name == head && !q.verb.is_empty())
+}
+
+/// Whether `line`, typed, fires a quick key, whose echo Vosh draws in
+/// place of the page's, as [`process_line`] reads it: its first word
+/// names a quick key and it is neither a `#` command nor a target word.
+fn fires_quick_key(c: &Connection, line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let (head, _) = split_first_word(trimmed);
+    !trimmed.starts_with('#')
+        && !matches!(head, "tar" | "tarn" | "tarp" | "tarclear")
+        && quick_key(c, head).is_some()
 }
 
 /// The echo of a command you send, as the command line draws it: a grey

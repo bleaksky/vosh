@@ -1863,3 +1863,55 @@ fn page_up_opens_the_split_by_one_page_and_page_down_comes_back() {
     scroll_page(ONE, false, 0.66);
     assert_eq!(current_display_offset(ONE), 0);
 }
+
+/// A line Vosh prints about itself, which starts a row of its own.
+fn own_line(line: &str) -> Output {
+    let mut out = text(format!("{line}\r\n").as_bytes());
+    out.fresh = true;
+    out
+}
+
+#[test]
+fn a_line_vosh_prints_starts_a_row_after_a_prompt_that_came_after_your_echo() {
+    let mut g = TermGrid::new(40, 10);
+    g.session_output(&text(b"room\r\n"));
+    g.local_write(b"#walk stop\r\n");
+    g.session_output(&text(b"<1020hp 800m> "));
+    g.session_output(&own_line("[walk] You are not walking."));
+    assert_eq!(
+        screen(&g),
+        [
+            "room",
+            "#walk stop",
+            "<1020hp 800m>",
+            "[walk] You are not walking."
+        ]
+    );
+}
+
+#[test]
+fn a_line_vosh_prints_adds_no_blank_row_at_a_row_start_or_after_held_line_ends() {
+    let mut g = TermGrid::new(40, 10);
+    g.session_output(&text(b"<1020hp 800m> "));
+    g.local_write(b"#walk stop\r\n");
+    g.session_output(&own_line("[walk] You are not walking."));
+    g.session_output(&held(b"room", b"\r\n"));
+    g.session_output(&own_line("[lua] boom"));
+    assert_eq!(
+        screen(&g),
+        [
+            "<1020hp 800m> #walk stop",
+            "[walk] You are not walking.",
+            "room",
+            "[lua] boom"
+        ]
+    );
+}
+
+#[test]
+fn the_echo_of_a_command_vosh_draws_itself_stays_after_the_prompt() {
+    let mut g = TermGrid::new(40, 10);
+    g.session_output(&text(b"<1020hp 800m> "));
+    g.session_output(&text(b"kick goblin\r\n"));
+    assert_eq!(screen(&g), ["<1020hp 800m> kick goblin"]);
+}

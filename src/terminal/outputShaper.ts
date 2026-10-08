@@ -114,6 +114,7 @@ export class OutputShaper {
     if (restore !== undefined) output.restore = restore;
     if (hold.length > 0) output.hold = hold;
     if (out.pinRow !== undefined) output.pinRow = out.pinRow;
+    if (out.fresh === true && wrapped.length > 0) output.fresh = true;
     return { output, text };
   }
 }

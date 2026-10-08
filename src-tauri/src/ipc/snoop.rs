@@ -52,7 +52,7 @@ pub(crate) async fn snoop_stop<R: tauri::Runtime>(
     let echo = command_echo(&line, &session.lock_profile().await.ui);
     session.connection.lock().snoops.stopping(name);
     snoop::emit_changes(&app, &session);
-    output::echo_lines(&app, &session, &[echo]);
+    output::echo_command(&app, &session, &[echo]);
     let current = session.slot.lock().await;
     let sent = current
         .as_ref()

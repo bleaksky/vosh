@@ -143,6 +143,11 @@ export interface RegionOutput {
   /** Whether a pinned prompt's row is open after this output. Absent,
    *  whatever lands closes it. */
   pinRow?: boolean;
+  /** The text starts a row of its own, as a line Vosh prints about
+   *  itself does: a line end goes first when the cursor sits past the
+   *  start of a row and no held line ends come first. The same rule as
+   *  `Output::fresh` in crates/prompt/src/stage/output.rs. */
+  fresh?: boolean;
 }
 
 /** What `text` does to the row a pinned prompt left open. The prompt is
@@ -530,8 +535,9 @@ export class RegionWriter {
     }
     const { replace } = item.out;
     const readsBuffer =
-      replace !== undefined &&
-      (replace.gen === this.openGen || (replace.fresh && replace.text.length > 0));
+      (item.out.fresh === true && item.out.text.length > 0) ||
+      (replace !== undefined &&
+        (replace.gen === this.openGen || (replace.fresh && replace.text.length > 0)));
     if (readsBuffer) this.afterParse(() => this.apply(item.out, true));
     else this.apply(item.out, false);
   }
@@ -569,8 +575,12 @@ export class RegionWriter {
         this.pendingHold = replace.tail ?? '';
       }
     }
-    if (out.text.length > 0) this.landText(out.text, () => this.settle(out, true));
-    else this.settle(out, false);
+    if (out.text.length > 0) {
+      // Held line ends end their row, which xterm has not parsed yet.
+      const fresh = out.fresh === true && parsed && !this.writeHold();
+      const lead = fresh && this.term.buffer.active.cursorX !== 0 ? '\r\n' : '';
+      this.landText(lead + out.text, () => this.settle(out, true));
+    } else this.settle(out, false);
   }
 
   /** Keep what `out` says about the line ends to hold, the pinned row and

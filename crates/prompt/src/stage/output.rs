@@ -85,6 +85,12 @@ pub struct Output {
     /// renderers keep every byte, and on a repaint of the band alone,
     /// which leaves the row as each renderer has it.
     pub pin_row: Option<bool>,
+    /// The bytes start a row of their own, as a line Vosh prints about
+    /// itself does. Each renderer writes a line end before them when its
+    /// cursor sits past the start of a row, such as after a game prompt
+    /// that landed after your echo, and nothing when line ends it held
+    /// back come first or the cursor already starts a row.
+    pub fresh: bool,
     /// The row a prompt this output pinned left is still open, so the
     /// line end the next write would end it with writes nothing.
     pub(super) row_open: bool,
