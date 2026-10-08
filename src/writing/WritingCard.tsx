@@ -24,7 +24,6 @@ import { stopsAsking, useAskPost } from './askPost';
 import { DontAskAgain } from './DontAskAgain';
 import {
   characterOf,
-  checkWaits,
   getWritingFile,
   keepCharacter,
   keepSwitches,
@@ -33,52 +32,44 @@ import {
   onlyDraft,
   posted,
   useWritingFile,
-  withCheckWaiting,
   withDraft,
-  withoutDraft,
   type World,
 } from './draftsStore';
-import { BEAST_LOOKS, hasBeast, keepsCodes, KINDS, switchOf, widthOf, writable } from './kinds';
-import { cutLine, count, rewrapAll, rewrapParagraph, spamRun, storedBytes, type Row } from './text';
+import { BEAST_LOOKS, hasBeast, keepsCodes, KINDS, switchOf, widthOf } from './kinds';
+import {
+  cutLine,
+  count,
+  rewrapAll,
+  rewrapParagraph,
+  sameLines,
+  spamRun,
+  storedBytes,
+  type Row,
+} from './text';
+import { endJob } from './writingJobEnd';
+import { kindsMenuFor, moreItemsFor, type MenuCard } from './writingMenus';
 import { WritingBox, type BoxText, type PasteNote } from './WritingBox';
 import { WritingFields, type FieldName } from './WritingFields';
 import { FootCount, FootNote, WritingFoot } from './WritingFoot';
 import { WritingGuide } from './WritingGuide';
 import { WritingPreview } from './WritingPreview';
-import { WritingHead, type KindsMenu, type MoreItem } from './WritingHead';
-import { afterDrop, findToStart, type Drop, type Find } from './cardDrop';
+import { WritingHead, type MoreItem } from './WritingHead';
+import { findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
 import {
-  changedAsk,
   checkAsk,
-  checkedNote,
-  checkHeld,
-  CLEAR_ASK,
   clearOtherAsk,
-  DELETE_ASK,
   postAsk,
   postStillAsks,
-  postedNote,
   readAgainAsk,
-  sameNoteAsk,
-  sentNote,
   type Ask,
 } from './cardDialogs';
-import { checkable, draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
+import { checkable } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
 import { useWritingFrame } from './useWritingFrame';
 import { CARD_MARGIN } from './cardPlace';
 import { BoxGrip, RowGrip } from './WritingGrips';
-import {
-  countLine,
-  lineNote,
-  metaLine,
-  pasteNote,
-  previewLine,
-  resultNote,
-  roomFor,
-  type Note,
-} from './words';
+import { countLine, lineNote, metaLine, pasteNote, previewLine, roomFor, type Note } from './words';
 
 // The writing card. One card for every text the game's line editor
 // takes, your description, a note on any board, your history, with the
@@ -125,9 +116,6 @@ interface Confirm extends Ask {
 const rowsOf = (text: readonly string[]): Row[] =>
   text.map((line) => ({ text: line, flows: false }));
 const linesOf = (rows: readonly Row[]): string[] => rows.map((r) => r.text);
-const sameLines = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length &&
-  a.every((line, k) => line.replace(/ +$/, '') === b[k].replace(/ +$/, ''));
 
 export function WritingCard({
   session,
@@ -254,7 +242,31 @@ export function WritingCard({
   const cut = storedBytes(lines) > roomLeft ? cutLine(lines, roomLeft) : null;
   const spam = info.board ? spamRun(lines) : null;
 
-  const done = (result: JobResult, job: WriteJob) => onDone(result, job);
+  // ── A job's end ───────────────────────────────────────────────────
+  const done = (result: JobResult, job: WriteJob) =>
+    endJob(result, job, {
+      find,
+      lines,
+      kind,
+      draft,
+      world,
+      name,
+      openDraft,
+      switchTo,
+      show,
+      keep,
+      markPosted,
+      run,
+      saveShown,
+      setBadField,
+      setDropped,
+      setFind,
+      setEnded,
+      setReadNow,
+      setAdopt,
+      setConfirm,
+      setPhase,
+    });
   const jobs = useWritingJob(session, writing, done);
   const running = jobs.running;
 
@@ -295,121 +307,6 @@ export function WritingCard({
     setDropped(null);
     setFind(null);
     setPreview(false);
-  }
-
-  // ── A job's end ───────────────────────────────────────────────────
-  function onDone(result: JobResult, job: WriteJob) {
-    setBadField(null);
-    setDropped(null);
-    const k = job.kind;
-    const drop = afterDrop(find, result, job, k, lines.length);
-    if (drop) {
-      setDropped(drop.dropped);
-      setFind(drop.find);
-      setEnded(drop.ended);
-      if (drop.posted) markPosted();
-      return;
-    }
-    switch (result.kind) {
-      case 'read': {
-        const note = result.note;
-        const text = note ? note.lines : result.lines;
-        const next: Draft = {
-          ...(k === kind ? draft : openDraft(k)),
-          kind: k,
-          text,
-          game: KINDS[k].board ? null : text,
-          ...(note ? { to: note.to, subject: note.subject, language: note.language } : {}),
-        };
-        if (k !== kind) switchTo(k, next);
-        else show(text);
-        keep(next);
-        if (result.beast && world && name) {
-          const c = characterOf(getWritingFile(), world, name);
-          if (c.beast !== result.beast) keepCharacter({ ...c, beast: result.beast });
-        }
-        setReadNow(true);
-        setAdopt(note !== null);
-        setEnded(null);
-        return;
-      }
-      case 'changed':
-        keep({ ...draft, game: result.lines });
-        setConfirm({ ...changedAsk(k), run: () => run({ ...job, base: null }) });
-        return;
-      case 'sent': {
-        keep({ ...draft, game: result.lines });
-        setPhase('sent');
-        const waits =
-          world && name ? checkWaits(characterOf(getWritingFile(), world, name), k) : false;
-        setEnded({
-          note: sentNote(
-            result.lines.length,
-            sameLines(
-              result.lines,
-              lines.map((l) => l.replace(/"/g, "'")),
-            ),
-            waits ? k : null,
-          ),
-          actions: [],
-        });
-        return;
-      }
-      case 'posted':
-        markPosted();
-        setEnded({ note: postedNote(k, result.forum, result.vote), actions: [] });
-        return;
-      case 'checked':
-        // The game holds a check that went through, or one it already
-        // had, until the immortals decide. Only a decided one leaves none.
-        if (world && name) {
-          const c = characterOf(getWritingFile(), world, name);
-          const next = withCheckWaiting(c, k, checkHeld(result.lines));
-          if (next !== c) keepCharacter(next);
-        }
-        setPhase('checked');
-        setEnded({ note: checkedNote(k, result.lines), actions: [] });
-        return;
-      case 'same_note':
-        setConfirm({
-          ...sameNoteAsk(k, result.note.subject),
-          run: () => {
-            saveShown(k, result.note);
-            run({ ...job, clear_first: true });
-          },
-        });
-        return;
-      case 'other_note':
-        if (result.board && result.note) saveShown(result.board, result.note);
-        setEnded({
-          note: resultNote(result, k) ?? { lead: '', rest: '', tone: 'warn' },
-          actions: result.board ? ['clear-other'] : [],
-          other: result.board,
-        });
-        return;
-      case 'cleared':
-        setEnded(null);
-        return;
-      case 'refused':
-        if (result.field === 'to' || result.field === 'subject' || result.field === 'language') {
-          setBadField(result.field);
-        }
-        setEnded({
-          note: resultNote(result, k)!,
-          actions: result.field === 'post' ? ['done'] : [],
-        });
-        return;
-      case 'stopped':
-        setEnded({
-          note: resultNote(result, k)!,
-          actions: KINDS[k].board ? [] : ['restore', 'again'],
-        });
-        return;
-      default: {
-        const note = resultNote(result, k);
-        if (note) setEnded({ note, actions: [] });
-      }
-    }
   }
 
   /** The note is on its board: it moves to Sent. */
@@ -667,89 +564,35 @@ export function WritingCard({
     dropped,
   });
 
-  const kindsMenu: KindsMenu = {
-    drafts: draftRows(character?.drafts ?? [], draft.id),
-    boards: writable(level),
-    aboutYou: ['description', 'history'],
-    sent: sentRows(character?.sent ?? []),
-    others: otherRows(file, character),
-    onDraft: (id) => {
-      const d = character?.drafts.find((x) => x.id === id);
-      if (d) switchTo(d.kind, d);
-    },
-    onNew: (k) => {
-      const d = KINDS[k].board
-        ? newDraft(k, KINDS[k].room ? (room.info?.name ?? null) : null)
-        : openDraft(k);
-      switchTo(k, d);
-      readIfNoDraft(k, d);
-    },
-    onSent: (id) => {
-      const d = character?.sent.find((x) => x.id === id);
-      if (!d) return;
-      switchTo(d.kind, d);
-      setSentView(true);
-    },
-    onOther: (key) => {
-      const them = file.characters[key];
-      if (!them) return;
-      setOther({ world: { host: them.host, port: them.port }, name: them.name });
-      const d = them.drafts.find((x) => KINDS[x.kind].board) ?? them.drafts[0];
-      if (d) switchTo(d.kind, d);
-    },
-  };
-
-  const hasLanguage = draft.language !== null && draft.language !== undefined;
-  const moreActions: Record<MoreAction, () => void> = {
-    language: () => keep({ ...draft, language: hasLanguage ? null : '' }),
-    race: () => keep({ ...draft, custom_race: !draft.custom_race }),
-    rewrap: rewrapEvery,
-    preview: () => setPreview(true),
-    spelling: () => keepSwitches(!file.spelling, file.guide),
-    copy: () => void navigator.clipboard.writeText(lines.join('\n')).catch(() => {}),
-    'copy-draft': () =>
-      switchTo(kind, {
-        ...draft,
-        ...newDraft(kind),
-        to: draft.to ?? '',
-        subject: draft.subject ?? '',
-        text: lines,
-      }),
-    delete: () =>
-      setConfirm({
-        ...DELETE_ASK,
-        run: () => {
-          if (world && name)
-            keepCharacter(withoutDraft(characterOf(getWritingFile(), world, name), draft.id));
-          switchTo(kind, newDraft(kind));
-        },
-      }),
-    read: readAgain,
-    check,
-    restore: () => {
-      if (!draft.game) return;
-      show(draft.game);
-      keep({ ...draft, text: draft.game });
-    },
-    clear: () =>
-      setConfirm({
-        ...CLEAR_ASK,
-        run: () => {
-          show([]);
-          keep({ ...draft, text: [] });
-        },
-      }),
-  };
-  const moreItems: MoreItem[] = moreRows({
+  const menuCard: MenuCard = {
+    character,
+    draft,
+    level,
+    file,
+    roomName: room.info?.name ?? null,
     kind,
-    language: hasLanguage,
-    customRace: draft.custom_race === true,
-    spelling: file.spelling,
+    lines,
+    world,
+    name,
     sentView,
-    canRead: live && running === null,
-    canRestore: !!draft.game && !sameLines(lines, draft.game),
+    live,
+    running,
     canCheck,
-  }).map((row) => (row === 'separator' ? row : { ...row, run: moreActions[row.id] }));
+    openDraft,
+    switchTo,
+    readIfNoDraft,
+    keep,
+    show,
+    rewrapEvery,
+    readAgain,
+    check,
+    setSentView,
+    setOther,
+    setPreview,
+    setConfirm,
+  };
+  const kindsMenu = kindsMenuFor(menuCard);
+  const moreItems = moreItemsFor(menuCard);
 
   const more: MoreItem[] =
     !docked && prefs.left !== null && prefs.top !== null
