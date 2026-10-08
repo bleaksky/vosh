@@ -9,7 +9,10 @@
 //!
 //! The text never touches the line pipeline, so no trigger, highlight,
 //! gag or preset sound sees it. Lua still hears the packets through its
-//! GMCP handlers. The session sends the tab list on `session://snoop`
+//! GMCP handlers. Each whole line goes in the session log as its own row
+//! marked with the player's name (SN4), through [`Snoops::take_log`]. A
+//! partial waits in the tab for its newline, or for the end of the snoop
+//! or the link. The session sends the tab list on `session://snoop`
 //! and new text on `session://snoop-output` once per read, and the page
 //! reads every tab with its text through `snoop_get`.
 
@@ -49,6 +52,9 @@ struct Tab {
     lines: VecDeque<String>,
     /// The text after the last `\n`.
     partial: String,
+    /// How many bytes of the partial are in the log already, which the
+    /// end of a snoop or a link puts there.
+    logged: usize,
 }
 
 impl Tab {
@@ -59,16 +65,20 @@ impl Tab {
             last_output_ms: None,
             lines: VecDeque::new(),
             partial: String::new(),
+            logged: 0,
         }
     }
 
     /// Add `text` as the game sent it, keeping the newest [`MAX_LINES`]
-    /// lines.
-    fn push(&mut self, text: &str) {
+    /// lines. Returns the text of the lines it ended that the log does
+    /// not have yet.
+    fn push(&mut self, text: &str) -> String {
+        let mut ended = String::new();
         let mut rest = text;
         while let Some(end) = rest.find('\n') {
             let mut line = std::mem::take(&mut self.partial);
             line.push_str(&rest[..=end]);
+            ended.push_str(&line[std::mem::take(&mut self.logged)..]);
             self.lines.push_back(line);
             rest = &rest[end + 1..];
         }
@@ -76,6 +86,15 @@ impl Tab {
         while self.lines.len() > MAX_LINES {
             self.lines.pop_front();
         }
+        ended
+    }
+
+    /// The snoop ended, so the part of the partial the log does not have
+    /// yet goes in it. The partial stays in the text.
+    fn end_log(&mut self) -> String {
+        let rest = self.partial[self.logged..].to_string();
+        self.logged = self.partial.len();
+        rest
     }
 
     fn text(&self) -> String {
@@ -149,6 +168,9 @@ pub(crate) struct Snoops {
     tabs: Vec<Tab>,
     list_changed: bool,
     output: Vec<SnoopOutputPayload>,
+    /// Text for the log, each with the name of its player, in the order
+    /// it ended.
+    log: Vec<(String, String)>,
 }
 
 impl Snoops {
@@ -173,6 +195,19 @@ impl Snoops {
         true
     }
 
+    /// Keep the text a tab ended for the log.
+    fn keep_for_log(&mut self, at: usize, text: String) {
+        if !text.is_empty() {
+            self.log.push((self.tabs[at].name.clone(), text));
+        }
+    }
+
+    /// End the log of the tab at `at`, see [`Tab::end_log`].
+    fn end_log(&mut self, at: usize) {
+        let rest = self.tabs[at].end_log();
+        self.keep_for_log(at, rest);
+    }
+
     fn find(&mut self, name: &str) -> Option<&mut Tab> {
         self.tabs.iter_mut().find(|tab| tab.name == name)
     }
@@ -193,6 +228,7 @@ impl Snoops {
         let Some(at) = self.tabs.iter().position(|tab| tab.name == name) else {
             return;
         };
+        self.end_log(at);
         match self.tabs[at].state {
             State::Stopping => self.remove(at),
             State::Live => self.tabs[at].state = State::Ended { at_ms: now_ms },
@@ -204,12 +240,16 @@ impl Snoops {
     /// A player's screen got `text`. Text for a player with no tab opens
     /// one, since the game only sends it for a snoop.
     fn output(&mut self, name: &str, text: &str, now_ms: i64) {
-        if self.find(name).is_none() {
-            self.tabs.push(Tab::new(name));
-        }
-        let tab = self.find(name).expect("the tab");
-        tab.push(text);
-        tab.last_output_ms = Some(now_ms);
+        let at = match self.tabs.iter().position(|tab| tab.name == name) {
+            Some(at) => at,
+            None => {
+                self.tabs.push(Tab::new(name));
+                self.tabs.len() - 1
+            }
+        };
+        let ended = self.tabs[at].push(text);
+        self.tabs[at].last_output_ms = Some(now_ms);
+        self.keep_for_log(at, ended);
         self.list_changed = true;
         match self.output.iter_mut().find(|o| o.name == name) {
             Some(sent) => sent.text.push_str(text),
@@ -226,8 +266,12 @@ impl Snoops {
     }
 
     /// The link ended at `now_ms`, and every snoop with it. A live one
-    /// stays as ended, and one you pressed Stop on goes.
+    /// stays as ended, and one you pressed Stop on goes. The partial of
+    /// each goes in the log.
     pub(crate) fn link_ended(&mut self, now_ms: i64) {
+        for at in 0..self.tabs.len() {
+            self.end_log(at);
+        }
         let before = self.tabs.len();
         self.tabs.retain(|tab| tab.state != State::Stopping);
         let mut changed = self.tabs.len() != before;
@@ -260,6 +304,29 @@ impl Snoops {
             self.remove(at);
             self.list_changed = true;
         }
+    }
+
+    /// The session log rows for the snoop text that ended since the
+    /// last call, at `ts_ms`, for the log's row `session_id`. With no
+    /// row the session writes no log, and the text goes.
+    pub(crate) fn take_log(
+        &mut self,
+        session_id: Option<i64>,
+        ts_ms: i64,
+    ) -> Vec<vosh_log::LogEntry> {
+        let text = std::mem::take(&mut self.log);
+        let Some(session_id) = session_id else {
+            return Vec::new();
+        };
+        text.iter()
+            .flat_map(|(name, text)| vosh_log::snoop_rows(name, text))
+            .map(|(text, raw)| vosh_log::LogEntry {
+                session_id,
+                ts_ms,
+                text,
+                raw: Some(raw),
+            })
+            .collect()
     }
 
     /// Every tab with its text, in the order they started.
@@ -453,6 +520,69 @@ mod tests {
         assert!(kept.starts_with("\r3\n\r4\n"), "{:?}", &kept[..12]);
         assert!(kept.ends_with("\r<612hp 480m 702mv> "));
         assert_eq!(kept.matches('\n').count(), MAX_LINES);
+    }
+
+    /// The text and raw rows `take_log` gives for session 1.
+    fn logged(s: &mut Snoops) -> Vec<(String, String)> {
+        s.take_log(Some(1), 9)
+            .into_iter()
+            .map(|row| {
+                let raw = String::from_utf8(row.raw.expect("raw")).expect("utf8");
+                (row.text, raw)
+            })
+            .collect()
+    }
+
+    fn texts(s: &mut Snoops) -> Vec<String> {
+        logged(s).into_iter().map(|(text, _)| text).collect()
+    }
+
+    #[test]
+    fn whole_lines_go_to_the_log_and_the_partial_waits_for_its_newline() {
+        let mut s = Snoops::default();
+        start(&mut s, "Maren");
+        output(
+            &mut s,
+            "Maren",
+            "\u{1b}[0;33mA Trail\u{1b}[0;0m\n\r  This",
+            1,
+        );
+        assert_eq!(
+            logged(&mut s),
+            [(
+                "Maren| A Trail".to_string(),
+                "Maren| \u{1b}[0;33mA Trail\u{1b}[0;0m".to_string()
+            )]
+        );
+        output(&mut s, "Maren", " is a path.\n\r", 2);
+        assert_eq!(texts(&mut s), ["Maren|   This is a path."]);
+        // The ring keeps the text as sent, with no mark.
+        assert!(!s.all()[0].text.contains("Maren|"));
+        // With no log row the text goes.
+        output(&mut s, "Maren", "gone\n\r", 3);
+        assert!(s.take_log(None, 9).is_empty());
+        assert_eq!(texts(&mut s), Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_end_of_a_snoop_or_the_link_logs_the_partial_once() {
+        let mut s = Snoops::default();
+        start(&mut s, "Tolliver");
+        start(&mut s, "Orla");
+        output(&mut s, "Tolliver", "<612hp 480m 702mv> ", 1);
+        output(&mut s, "Orla", "Orla is here.\n\r<20hp ", 1);
+        assert_eq!(texts(&mut s), ["Orla| Orla is here."]);
+        stop(&mut s, "Tolliver", 2);
+        assert_eq!(texts(&mut s), ["Tolliver| <612hp 480m 702mv> "]);
+        s.link_ended(3);
+        assert_eq!(texts(&mut s), ["Orla| <20hp "]);
+        s.link_ended(4);
+        assert_eq!(texts(&mut s), Vec::<String>::new());
+        // A repeat snoop logs only what follows the partial it ended on.
+        start(&mut s, "Orla");
+        output(&mut s, "Orla", "30m>\n\r", 5);
+        assert_eq!(texts(&mut s), ["Orla| 30m>"]);
+        assert!(s.all()[1].text.ends_with("<20hp 30m>\n\r"));
     }
 
     #[test]

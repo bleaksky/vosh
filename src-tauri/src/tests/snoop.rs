@@ -2,7 +2,8 @@
 //! client that names Snoop in Core.Supports, so Vosh asks for it on
 //! every connect. Each session keeps a tab for each player it snoops,
 //! whose text never reaches the line pipeline, and the page hears the
-//! tabs and the text (Snoop SN3 and SN5).
+//! tabs and the text (Snoop SN3 and SN5). Each line goes in the session
+//! log marked with the player name (SN4).
 
 use serde_json::{json, Value as Json};
 use tauri::Manager;
@@ -272,5 +273,67 @@ async fn a_cut_link_ends_every_snoop_and_the_ring_keeps_five_thousand_lines() {
         tabs(h) == [tab("Tolliver", false), tab("Maren", false)]
     })
     .await;
+    h.finish(grid).await;
+}
+
+/// The rows of the log a search for `pattern` finds, as text and raw.
+/// None while the session writes to the log.
+fn log_rows(h: &Harness, pattern: &str) -> Option<Vec<(String, String)>> {
+    let guard = h.state.logs.try_lock().ok()?;
+    let store = guard.as_ref().expect("the log");
+    let hits = store
+        .search(pattern, &vosh_log::SearchOptions::default())
+        .expect("the search");
+    let rows = hits.into_iter().map(|hit| {
+        let raw = String::from_utf8_lossy(&hit.raw.unwrap_or_default()).into_owned();
+        (hit.text, raw)
+    });
+    Some(rows.collect())
+}
+
+/// Wait until a search for `pattern` finds `count` rows, and return them.
+async fn until_logged(h: &Harness, pattern: &str, count: usize) -> Vec<(String, String)> {
+    h.until(&format!("{count} rows for {pattern}"), |h| {
+        log_rows(h, pattern).is_some_and(|rows| rows.len() == count)
+    })
+    .await;
+    log_rows(h, pattern).expect("the rows")
+}
+
+// The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_snoop_line_goes_in_the_log_marked_with_the_name() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = snooping().await;
+    h.servers[0].push(&packet(OUTPUT));
+    read_on(&h, "Maren walks in.").await;
+    let marked = r"^Tolliver\|";
+    let rows = until_logged(&h, marked, 11).await;
+    assert_eq!(rows[0].0, "Tolliver| A Ramshackle Tent City");
+    assert_eq!(
+        rows[0].1,
+        "Tolliver| \u{1b}[38;5;82m\u{1b}[0;33mA Ramshackle Tent City\u{1b}[0;0m\u{1b}[0;0m"
+    );
+    assert_eq!(rows[6].0, "Tolliver| ");
+    assert_eq!(
+        rows[9].0,
+        "Tolliver| [KNIGHT] A ward of Praetorian guards stand in support."
+    );
+    // The prompt waits in the tab for its newline, the ring keeps no
+    // mark, and your own lines carry none.
+    assert!(!rows.iter().any(|(text, _)| text.contains("<612hp")));
+    assert!(!got(&h).await[0]["text"]
+        .as_str()
+        .expect("the text")
+        .contains("Tolliver|"));
+    until_logged(&h, "^Maren walks in", 1).await;
+
+    // The end of the link puts the partial in the log.
+    h.servers[0].cut();
+    h.until("the ended tab", |h| tabs(h) == [tab("Tolliver", false)])
+        .await;
+    let rows = until_logged(&h, marked, 12).await;
+    assert_eq!(rows[11].0, "Tolliver| <612hp 480m 702mv> ");
     h.finish(grid).await;
 }

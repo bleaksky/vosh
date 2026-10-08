@@ -58,8 +58,11 @@ pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Snoop 1",
 ];
 
+/// Take one GMCP packet. `log_id` is the session log's row, which the
+/// rows of a snooped player's lines attach to.
 pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     conn: &mut Conn<R>,
+    log_id: Option<i64>,
     payload: &[u8],
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
@@ -88,8 +91,13 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let now = Instant::now();
         c.link.gmcp(&msg.package);
         // A snoop's text goes to its tab and never to the line pipeline.
-        // Lua still hears the packet below.
-        let snooped = c.snoops.gmcp(&msg.package, &msg.data, now_ms());
+        // Lua still hears the packet below. Its whole lines go in the log
+        // with this read's rows.
+        let at = now_ms();
+        let snooped = c.snoops.gmcp(&msg.package, &msg.data, at);
+        if snooped {
+            batch.log.extend(c.snoops.take_log(log_id, at));
+        }
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
         // A tell you got or a fight that starts on you rings its preset.
         apply

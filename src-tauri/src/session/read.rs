@@ -152,7 +152,7 @@ async fn handle_event<R: tauri::Runtime>(
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             conn.perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(conn, &payload, batch).await?;
+            handle_gmcp(conn, log_sink.id(), &payload, batch).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
