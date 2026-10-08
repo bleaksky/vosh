@@ -247,7 +247,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     label: 'Style',
     description: 'Each tile draws your vitals in one style. Pick the one your panel shows.',
     keywords:
-      'vitals style gallery rows one line ledger gauges pips text look density compact health mana moves',
+      'vitals style gallery rows one line ledger gauges pips bands ladders blocks traces dials rings vials orbs candles text look density compact health mana moves',
     target: at('layout', 'vitals', 'style'),
   },
   {

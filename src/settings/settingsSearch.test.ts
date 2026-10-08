@@ -137,6 +137,22 @@ describe('searchSettingsRows', () => {
     expect(labels('repeated')[0]).toBe('Collapse repeated lines');
   });
 
+  it('finds the vitals gallery by each style', () => {
+    for (const style of [
+      'bands',
+      'ladders',
+      'blocks',
+      'traces',
+      'dials',
+      'rings',
+      'vials',
+      'orbs',
+      'candles',
+    ]) {
+      expect(labels(style), style).toContain('Style');
+    }
+  });
+
   it('finds Show each hit under Customize vitals', () => {
     expect(labels('trail')).toEqual(['Show each hit']);
     expect(labels('hit')).toContain('Show each hit');
