@@ -1,4 +1,9 @@
-import { listMacros, subscribeMacrosChanged, type Macro } from '../../ipc/automation';
+import {
+  listMacros,
+  subscribeMacroGroupsChanged,
+  subscribeMacrosChanged,
+  type Macro,
+} from '../../ipc/automation';
 import { createConfigStore } from '../../stores/config/configStore';
 import { getShownProfile, isShownHeld, subscribeShownMoves } from '../shownProfile';
 
@@ -9,7 +14,9 @@ import { getShownProfile, isShownHeld, subscribeShownMoves } from '../shownProfi
 // holds another. It loads on first use, reads again when Settings moves
 // to another profile, and takes each list the backend sends after a
 // change, which names the profile in front. While Settings holds
-// another, that list is not the one it shows, so it waits.
+// another, that list is not the one it shows, so it waits. A macro group
+// that turns reads it again too, since in loadout mode it can hand a key
+// between your macro and a preset macro.
 
 const store = createConfigStore<Macro[]>({
   initial: [],
@@ -18,7 +25,10 @@ const store = createConfigStore<Macro[]>({
     subscribeMacrosChanged((macros) => {
       if (!isShownHeld()) put(macros);
     }),
-  moved: subscribeShownMoves,
+  reread: (again) => {
+    subscribeShownMoves(again);
+    void subscribeMacroGroupsChanged(() => again());
+  },
 });
 
 export const useMacroList = store.use;

@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written. Each case is a macros store as Rust leaves it, with the six macros of the Numpad movement preset, and kept names the keys of that preset a macro of yours keeps, in the preset's order. A test in src-tauri/src/loadouts/presets.rs runs hold_taken_keys over every case, which leaves it as it is, with a preset macro off exactly on those keys. src/automation/automationRecords.test.ts holds keysYourMacrosKeep to the same keys and the preset rows to the library. src/settings/automation/MacrosEditor.test.tsx mounts the first case, the store Scripts board 7 draws.",
+  "notes": "Hand written. Each case is a macros store as Rust leaves it, with the six macros of the Numpad movement preset, and kept names the keys of that preset a macro of yours keeps, in the preset's order. A test in src-tauri/src/loadouts/presets.rs runs hold_taken_keys over every case, with the macro groups in off left out as loadout mode leaves out the groups a character keeps off, which leaves it as it is, with a preset macro off exactly on those keys. src/automation/automationRecords.test.ts holds keysYourMacrosKeep to the same keys and the preset rows to the library. src/settings/automation/MacrosEditor.test.tsx mounts the first case, the store Scripts board 7 draws.",
   "preset": "numpad_movement",
   "cases": [
     {
@@ -36,6 +36,20 @@
       "macros": [
         { "key": "F1", "command": "score" },
         { "key": "Numpad5", "command": "look" },
+        { "key": "Numpad8", "command": "n", "preset": "numpad_movement" },
+        { "key": "Numpad6", "command": "e", "preset": "numpad_movement" },
+        { "key": "Numpad2", "command": "s", "preset": "numpad_movement" },
+        { "key": "Numpad4", "command": "w", "preset": "numpad_movement" },
+        { "key": "Numpad9", "command": "u", "preset": "numpad_movement" },
+        { "key": "Numpad3", "command": "d", "preset": "numpad_movement" }
+      ],
+      "kept": []
+    },
+    {
+      "about": "Loadout mode. Another character's rec sits on Numpad3 in a group this one keeps off, so the preset's d keeps the key here.",
+      "off": ["(Healer)"],
+      "macros": [
+        { "key": "Numpad3", "command": "rec", "group": "(Healer)" },
         { "key": "Numpad8", "command": "n", "preset": "numpad_movement" },
         { "key": "Numpad6", "command": "e", "preset": "numpad_movement" },
         { "key": "Numpad2", "command": "s", "preset": "numpad_movement" },

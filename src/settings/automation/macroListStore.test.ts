@@ -12,6 +12,7 @@ const fake = vi.hoisted(() => ({
   reads: [] as (string | null | undefined)[],
   changed: null as ((m: Macro[]) => void) | null,
   moved: null as (() => void) | null,
+  groups: null as (() => void) | null,
 }));
 
 vi.mock('../../ipc/automation', () => ({
@@ -21,6 +22,10 @@ vi.mock('../../ipc/automation', () => ({
   },
   subscribeMacrosChanged: async (cb: (m: Macro[]) => void) => {
     fake.changed = cb;
+    return () => undefined;
+  },
+  subscribeMacroGroupsChanged: async (cb: () => void) => {
+    fake.groups = cb;
     return () => undefined;
   },
 }));
@@ -73,6 +78,14 @@ describe('the macro list Settings reads', () => {
     // Now the front list is the one it shows.
     fake.changed?.([macro('F2', 'flee')]);
     expect(store.get()).toEqual([macro('F2', 'flee')]);
+
+    // A macro group that turns can hand a key to a preset macro in
+    // loadout mode, so the list comes again.
+    fake.lists.set('Default', [macro('Numpad3', 'd')]);
+    fake.groups?.();
+    await settle();
+    expect(fake.reads).toEqual(['Build', 'Default', 'Default']);
+    expect(store.get()).toEqual([macro('Numpad3', 'd')]);
     stop();
   });
 });
