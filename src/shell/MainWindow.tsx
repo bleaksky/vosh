@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Terminal } from '../terminal/Terminal';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 import { Input, type InputHandle } from '../input/Input';
 import { useMacroKeys } from '../input/useMacroKeys';
-import { Resizable } from '../terminal/Resizable';
 import { ReconnectNotice } from './overlays/ReconnectNotice';
 import { CornerNotices } from './overlays/CornerNotices';
-import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
-import { ScrollDepth } from '../terminal/ScrollDepth';
 import { readPrompt } from '../terminal/readerVoice';
 import { ScreenReaderFeed } from '../terminal/ScreenReaderFeed';
 import { AppShell } from './AppShell';
@@ -37,15 +33,10 @@ import { promptConfigGet, promptConfigSet } from '../ipc/prompt';
 import { disconnectSession } from '../ipc/session';
 import { snoopClose, snoopStop, snoopWindowOpen } from '../ipc/snoop';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
-import { useTauriEvent } from '../ipc/useTauriEvent';
 import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
-import { subscribeMigrationApplied } from '../ipc/wizard';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
 import { pushToast } from '../stores/toasts';
-import { useSceneSaved } from './useSceneSaved';
-import { showMigrationApplied } from './launchNotices';
-import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -72,14 +63,13 @@ import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useScreenReader } from '../stores/config/screenReaderStore';
 import { useEscape } from '../lib/escapeStack';
 import { usePromptShow } from '../prompt/showState';
-import { PromptDock } from '../prompt/PromptDock';
 import { PromptCard } from '../prompt/PromptCard';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
 import { WritingCard } from '../writing/WritingCard';
 import { WritingOffer } from '../writing/WritingOffer';
 import { hasBeast } from '../writing/kinds';
-import { useAlertTones } from './useAlertTones';
+import { terminalArea } from './terminalArea';
 import { useAppCommands } from './useAppCommands';
 import { useCardRequests } from './useCardRequests';
 import { useClosing } from './useClosing';
@@ -89,6 +79,7 @@ import { useScrollbackSplit } from './useScrollbackSplit';
 import { useSessionTerminals } from './useSessionTerminals';
 import { useSessionsSidebar } from './useSessionsSidebar';
 import { useUiConfigFollow } from './useUiConfigFollow';
+import { useWindowNotices } from './useWindowNotices';
 import { useWindowFocus } from './useWindowFocus';
 
 // Hide or show the panel. When focus sat on the title band's toggle or
@@ -446,32 +437,8 @@ function MainWindow() {
     focusInput,
   });
 
-  // Play the tone of each alert a session rings.
-  useAlertTones();
-
-  // Say when Settings saved a scene, with a button that shows the file.
-  useSceneSaved();
-
-  useEffect(() => {
-    // The game sent a new prompt setting and your capture follows it.
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void startGamePromptToasts().then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  // The shared catalog wizard wrote its files. Nothing this session
-  // changes saves until Vosh opens again, so say so in the terminal and
-  // in a toast that stays up.
-  useTauriEvent(subscribeMigrationApplied, () => {
-    showMigrationApplied(writeLive);
-  });
+  // The tones, toasts and notices the window raises on its own.
+  useWindowNotices(writeLive);
 
   const inputElement = (
     <Input
@@ -496,121 +463,42 @@ function MainWindow() {
     />
   );
 
-  const terminalAreaElement = (
-    <div
-      ref={terminalAreaRef}
-      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
-      onMouseUp={handleTerminalMouseUp}
-      onContextMenu={(event) => {
-        // Replace the webview's default context menu with ours.
-        event.preventDefault();
-        setTerminalMenu({ x: event.clientX, y: event.clientY });
-      }}
-    >
-      {/* Each opened session with its find bar open keeps it, with its
-          query, and the selected session's shows. */}
-      {[...finds]
-        .filter(([id]) => opened.includes(id))
-        .map(([id, results]) => (
-          <FindToolbar
-            key={id}
-            ref={id === selected ? findToolbarRef : undefined}
-            hidden={id !== selected}
-            results={results}
-            onFindNext={(query, opts) => submitFind(query, opts, 'next')}
-            onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
-            onClose={closeFind}
-          />
-        ))}
-      <ScrollDepth findOpen={findOpen} history={historyScrollPos} />
-      {/* The containing block for the scrollback split, where the well
-          splits wrapper was. It never changes, so opening the split or
-          toggling the panel never remounts the live Terminal. */}
-      <div className="terminal-well">
-        {splitOpen && (
-          // History pane is a Resizable so the user can drag the
-          // divider between history and live to set the split ratio.
-          // anchor=top places the panel at the top with the drag
-          // handle on the bottom edge facing the live pane below.
-          // Lazy mount. A hidden Terminal cannot be measured by
-          // FitAddon (its container is display:none, bounding rect
-          // 0x0) so writes wrap at 1-3 columns and the scrollback
-          // arrives mangled. The initial scroll runs in
-          // onScrollbackLoaded — onReady fires before loadScrollback
-          // resolves, and a scrollPages call on an empty terminal
-          // is a no-op that the next write would override anyway.
-          <Resizable
-            storageKey="vosh.layout.splitHistoryHeight"
-            defaultSize={240}
-            minSize={80}
-            maxSize={1200}
-            reservePx={120}
-            className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
-            handleLabel="resize scrollback split"
-            snapPx={() => termRef.current?.cellHeight() ?? 0}
-          >
-            <Terminal
-              key={selected}
-              session={selected}
-              fontFamily={renderFamily}
-              fontSize={fontSize}
-              lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
-              themeTerminalColors={themeTerminalColors}
-              blinkText={blinkText}
-              scrollback={scrollbackLines}
-              quiet
-              onReady={(handle) => {
-                historyTermRef.current = handle;
-              }}
-              onScrollbackLoaded={onHistoryLoaded}
-              onScrollPosition={onHistoryScroll}
-            />
-          </Resizable>
-        )}
-        {/* One live terminal for each session this window opened, keyed
-            by session, so a selection only shows one and hides another.
-            A session launch restored opens as its first selection
-            finishes, and its scrollback loads then. */}
-        <div className="terminal-pane terminal-pane-live">
-          {opened.map((id) => (
-            <Terminal
-              key={id}
-              session={id}
-              shown={id === selected}
-              fontFamily={renderFamily}
-              fontSize={fontSize}
-              lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
-              themeTerminalColors={themeTerminalColors}
-              blinkText={blinkText}
-              scrollback={scrollbackLines}
-              onReady={onTerminalReady(id)}
-              onScrollbackLoaded={onScrollbackLoaded(id)}
-              onResultsChanged={(event) => onFindResults(id, event)}
-              onCellSize={setCellSize}
-              lifted={promptLifted}
-              lentRows={dockLent}
-              anchorBottom={dockShows}
-            />
-          ))}
-        </div>
-      </div>
-      {/* Your prompt pinned above the command line. It takes one row from
-          the terminal only while your prompt shows pinned and a prompt
-          is pinned, and borrows the rows past its first from the bottom
-          of the live pane. */}
-      {promptPinned && promptShow && cellSize && (
-        <PromptDock
-          state={promptShow}
-          cell={cellSize}
-          fontSize={fontSize}
-          themeTerminalColors={themeTerminalColors}
-          brightBold={brightBold}
-          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
-          blinkText={blinkText}
-        />
-      )}
-    </div>
-  );
+  const terminalAreaElement = terminalArea({
+    terminalAreaRef,
+    splitOpen,
+    handleTerminalMouseUp,
+    setTerminalMenu,
+    finds,
+    opened,
+    selected,
+    findToolbarRef,
+    submitFind,
+    closeFind,
+    findOpen,
+    historyScrollPos,
+    historyReady,
+    termRef,
+    renderFamily,
+    fontSize,
+    terminalLineHeight,
+    themeTerminalColors,
+    blinkText,
+    scrollbackLines,
+    historyTermRef,
+    onHistoryLoaded,
+    onHistoryScroll,
+    onTerminalReady,
+    onScrollbackLoaded,
+    onFindResults,
+    setCellSize,
+    promptLifted,
+    dockLent,
+    dockShows,
+    promptPinned,
+    promptShow,
+    cellSize,
+    brightBold,
+  });
 
   // The sessions sidebar, in its column or over the terminal. Over the
   // terminal it takes the keyboard as it slides in, and picking a row or
