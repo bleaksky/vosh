@@ -15,6 +15,7 @@ import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
+import { SnoopSplit } from './SnoopSplit';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
@@ -724,6 +725,16 @@ function MainWindow() {
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
+        />
+      }
+      snoop={
+        <SnoopSplit
+          session={selected}
+          fontFamily={renderFamily}
+          fontSize={fontSize}
+          lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
+          themeTerminalColors={themeTerminalColors}
+          onCaret={focusInput}
         />
       }
       terminal={terminalAreaElement}

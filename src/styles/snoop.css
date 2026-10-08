@@ -1,0 +1,186 @@
+/* The snoop split at the top of the terminal column (Snoop SN1, SN2 and
+   SN3, boards 01 and 03). A 32 strip with the eye, a tab for each
+   snooped player, and Stop or Close, then the snoop's own terminal in the
+   well's insets, closed by the pane handle's 1 px line. It paints the
+   terminal's ground, so it stays opaque while the native surface draws
+   your terminal under the page. */
+
+.snoop {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--sep);
+  background: var(--xterm-bg);
+}
+
+.snoop-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--band);
+  padding: 0 10px 0 12px;
+  font-family: var(--font-ui);
+}
+
+.snoop-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  color: var(--tertiary);
+}
+
+.snoop-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.snoop-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.snoop-tab[aria-selected='true'] {
+  flex-shrink: 0;
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The sessions sidebar's mark: a dot while the snoop runs, a ring once
+   it ended. */
+.snoop-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.snoop-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--success);
+}
+
+.snoop-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A tab behind with lines you have not read. */
+.snoop-tab.is-unread {
+  color: var(--text);
+}
+
+.snoop-tab.is-unread::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.snoop-tab.is-ended {
+  color: var(--tertiary);
+}
+
+.snoop-tab.is-ended[aria-selected='true'] {
+  color: var(--secondary);
+}
+
+.snoop-tab.is-ended .snoop-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.25px var(--tertiary);
+}
+
+.snoop-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.snoop-meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.snoop-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The well: your terminal's 16 side insets and 6 at the foot. Whole rows
+   only, as xterm draws them, kept to the bottom like your terminal's. */
+.snoop-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+@supports (overflow: clip) {
+  .snoop-body {
+    overflow: clip;
+    overflow-clip-margin: content-box;
+  }
+}
+
+.snoop-term {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.snoop-term[hidden] {
+  display: none;
+}

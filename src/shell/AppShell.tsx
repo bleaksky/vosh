@@ -70,6 +70,11 @@ interface Props {
   /** Keep the width a drag or a key gave the sidebar. */
   onSessionsWidth?: (px: number) => void;
   titleBand: ReactNode;
+  /** The snoop split, at the top of the terminal column, or null. It
+   *  renders first in the terminal's slot, so the terminal keeps its
+   *  parent and its place among the slot's children as the split comes
+   *  and goes, and never remounts. */
+  snoop?: ReactNode;
   terminal: ReactNode;
   input: ReactNode;
   statusLine: ReactNode;
@@ -102,6 +107,7 @@ export function AppShell({
   sessionsWidth = SESSIONS_WIDTH_STOCK,
   onSessionsWidth,
   titleBand,
+  snoop = null,
   terminal,
   input,
   statusLine,
@@ -237,7 +243,10 @@ export function AppShell({
         />
       )}
       <div className="shell-slot-band">{titleBand}</div>
-      <div className="shell-slot-term">{terminal}</div>
+      <div className="shell-slot-term">
+        {snoop}
+        {terminal}
+      </div>
       <div className="shell-slot-input">{input}</div>
       <div className="shell-slot-status">{statusLine}</div>
       <aside ref={panelRef} className="shell-slot-panel" aria-label="Panel">

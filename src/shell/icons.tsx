@@ -17,8 +17,9 @@ import {
 } from './tickRing';
 
 // The glyphs only the main window draws, the panel toggle in the title
-// band, Hide sessions and the snoop eye in the sessions sidebar, and the
-// tick and the game time in the status line. They draw on Glyph from ui/icons.tsx, where
+// band, Hide sessions and the snoop eye in the sessions sidebar, the eye
+// again on the snoop strip, and the tick and the game time in the status
+// line. They draw on Glyph from ui/icons.tsx, where
 // the title band finds its other icons.
 
 export function PanelIcon() {
