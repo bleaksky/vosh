@@ -1,4 +1,4 @@
-//! Config golden files (R2 of the refactor plan).
+//! Config golden files.
 //!
 //! Each golden in `fixtures/config` holds the exact bytes Vosh writes for
 //! one config file: a profile file, global.toml, loadouts.toml,
@@ -308,8 +308,8 @@ fn full_theme() -> CustomTheme {
             ("accent".into(), "#ff9e64".into()),
             ("surface".into(), "#16161e".into()),
         ]),
-        // Decision Q2 of the Themes review keeps the game color fit of an
-        // imported theme with it. Two slots of this theme's real fit.
+        // An imported theme keeps its game color fit with it. Two slots
+        // of this theme's real fit.
         fitted: BTreeMap::from([
             ("brightBlack".into(), "#94989f".into()),
             ("red".into(), "#cb7b74".into()),
@@ -526,7 +526,7 @@ fn full_triggers() -> Vec<Trigger> {
             preset: Some("sent_tells".into()),
             group: Some("comms".into()),
             target: TriggerTarget::Prompt,
-            // The alert table of Alerts Q6, which 0.8.1 skips.
+            // The alert table, which 0.8.1 skips.
             alert: Some(AlertParts {
                 banner: true,
                 sound: Some("chime".into()),
@@ -552,7 +552,8 @@ fn full_triggers() -> Vec<Trigger> {
             target: TriggerTarget::Line,
             alert: None,
         },
-        // A Room trigger, which goes under `room_triggers` (D14).
+        // A Room trigger, which goes under `room_triggers`, so a
+        // rollback still reads the file.
         Trigger {
             name: "room-items".into(),
             patterns: vec![TriggerPattern::regex("^.+$")],
@@ -597,7 +598,7 @@ fn full_macros() -> Vec<Macro> {
             preset: None,
         },
         // A preset macro on a key no macro of yours uses is on, and one
-        // on a key yours uses is held off (Scripts board 7).
+        // on a key yours uses is held off.
         Macro {
             key: "Numpad8".into(),
             command: "n".into(),
@@ -670,14 +671,14 @@ fn full_profile() -> ProfileConfig {
         prompt: None,
         alerts: full_alerts(),
         preset_edits: full_preset_edits(),
-        // Reconnect when the link drops, turned off (Alerts Q14).
+        // Reconnect when the link drops, turned off.
         reconnect: OnSwitch(false),
     };
     config.set_prompt(full_prompt());
     config
 }
 
-/// What two alert presets do, the `[alerts]` table of Alerts Q5.
+/// What two alert presets do, the `[alerts]` table.
 fn full_alerts() -> BTreeMap<String, AlertParts> {
     BTreeMap::from([
         (
@@ -701,9 +702,9 @@ fn full_alerts() -> BTreeMap<String, AlertParts> {
     ])
 }
 
-/// Your edits to Disarms and fading buffs, the `[preset_edits]` table of
-/// the Presets review's board 5: a color, a trigger switch, a Replace
-/// with, and a Then send a later fix flagged.
+/// Your edits to Disarms and fading buffs, the `[preset_edits]` table: a
+/// color, a trigger switch, a Replace with, and a Then send a later fix
+/// flagged.
 fn full_preset_edits() -> PresetEdits {
     let row = |value: toml::Value, was: toml::Value| EditRow {
         value,
@@ -797,8 +798,8 @@ fn full_loadouts() -> LoadoutSet {
         active: vec!["warrior".into(), "shared".into()],
         dormant: true,
         loadouts: vec![
-            // The three empty tables a loadout writes today, which D12
-            // with D14 takes out in its own commit.
+            // A loadout with only its name, which writes no empty
+            // tables.
             Loadout::empty("shared"),
             Loadout {
                 name: "warrior".into(),
@@ -873,8 +874,8 @@ fn full_index() -> ProfilesIndex {
     }
 }
 
-/// [`full_index`] with three sessions open, the second selected (Q16),
-/// and no Get started.
+/// [`full_index`] with three sessions open, the second selected, and no
+/// Get started.
 fn sessions_index() -> ProfilesIndex {
     let world = || Some("play.theforsakenlands.com".to_string());
     ProfilesIndex {
@@ -928,7 +929,7 @@ fn a_profile_file_writes_these_bytes() {
 
 /// Export to Downloads writes the full profile's bytes, then the
 /// `[vosh_export]` table with its world and the one character of its two
-/// you ticked (Scripts Q10). A profile reads the export as the profile
+/// you ticked. A profile reads the export as the profile
 /// alone, and the table reads back.
 #[test]
 fn an_export_writes_these_bytes() {
@@ -1387,7 +1388,7 @@ fn a_catalog_without_enabled_presets_still_loads() {
     assert!(leftover.is_empty(), "{leftover:?}");
 }
 
-// ---- Rolling back (D14).
+// ---- Rolling back to an older build.
 
 /// A trigger as 0.8.0 and 0.7.2 read it. Their target knows `line` and
 /// `prompt` and nothing else, and a `room` fails the whole file. They

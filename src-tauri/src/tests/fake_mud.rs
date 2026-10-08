@@ -663,7 +663,7 @@ async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
     assert!(leftover.is_empty(), "{leftover:?}");
 
     // More > Use Forsaken Lands prompt codes… in the card, then prompt in
-    // the game: the reply fills the card's fields (P2).
+    // the game: the reply fills the card's fields.
     crate::ipc::prompt::prompt_code_reader_set(h.app.state(), true, None)
         .await
         .expect("the card chose the code reader");
@@ -1637,7 +1637,7 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
     })
     .await;
     // Out of a fight the band is the vitals row alone, as the gallery
-    // mockup draws it.
+    // draws it.
     let band = pins(&h).pop().expect("a band");
     assert_eq!(band, "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ");
     // In a fight the tank row comes first. Solo you are the tank.

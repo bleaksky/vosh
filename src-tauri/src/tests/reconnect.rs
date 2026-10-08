@@ -1,7 +1,7 @@
-//! Auto reconnect through the real session against the fake game (Alerts
-//! Q13 and Q14, Sessions Q8 and Q10). Each redial waits on a clock the
-//! test holds, so a test reads every wait the series asks for and ends it
-//! at once, while each try dials the fake game for real.
+//! Auto reconnect through the real session against the fake game. Each
+//! redial waits on a clock the test holds, so a test reads every wait the
+//! series asks for and ends it at once, while each try dials the fake
+//! game for real.
 
 use std::time::Duration;
 
@@ -162,7 +162,7 @@ async fn eight_failed_tries_stop_and_say_so() {
     assert_eq!(rang(&h), ["Connection lost", "Vosh stopped trying"]);
     // The tries forgot the character on the live connection, and the row
     // still names the character Orla played, so two sessions that redial
-    // on one world read apart (Sessions Q10, board 3). Each banner names
+    // on one world read apart. Each banner names
     // the session as its row reads.
     assert_eq!(character_of(&h, h.first), None);
     let row = h.state.session_rows().into_iter().find(|r| r.id == h.first);

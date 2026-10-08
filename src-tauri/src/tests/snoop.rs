@@ -2,8 +2,8 @@
 //! client that names Snoop in Core.Supports, so Vosh asks for it on
 //! every connect. Each session keeps a tab for each player it snoops,
 //! whose text never reaches the line pipeline, and the page hears the
-//! tabs and the text (Snoop SN3 and SN5). Each line goes in the session
-//! log marked with the player name (SN4).
+//! tabs and the text. Each line goes in the session
+//! log marked with the player name.
 
 use serde_json::{json, Value as Json};
 use tauri::Manager;

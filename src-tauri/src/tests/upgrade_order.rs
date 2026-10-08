@@ -1,4 +1,4 @@
-//! The order launch runs its upgrades in (R2 of the refactor plan).
+//! The order launch runs its upgrades in.
 //!
 //! The setup steps in app/launch.rs run `load`. It finishes a shared
 //! catalog wizard run that stopped and reads the profile set. Then it

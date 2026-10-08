@@ -1,4 +1,4 @@
-//! Log sessions (D34). A connection writes the session log unless its
+//! Log sessions. A connection writes the session log unless its
 //! profile turns Log sessions off, and until you choose, a connection to
 //! this computer writes none. Each test runs the real session loop with
 //! the mock runtime against a game on a local port.
