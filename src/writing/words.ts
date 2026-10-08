@@ -364,3 +364,11 @@ function failedNote(why: string, line: number | null): Note {
 export function lineCount(lines: readonly string[]): number {
   return count(lines, 75).lines;
 }
+
+/** What the footer says under the preview. */
+export function previewLine(kind: WritingKind): string {
+  if (!KINDS[kind].board) return 'This is how a looker sees it';
+  if (KINDS[kind].toImmortal || kind === 'application')
+    return 'This is how the immortals will see it';
+  return 'This is how readers will see it';
+}

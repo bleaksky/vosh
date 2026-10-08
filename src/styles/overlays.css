@@ -674,6 +674,11 @@
   background: transparent;
 }
 
+.ov-confirm-layer.is-placed {
+  display: block;
+  padding: 0;
+}
+
 .ov-confirm {
   width: min(320px, 100%);
   padding: 16px;

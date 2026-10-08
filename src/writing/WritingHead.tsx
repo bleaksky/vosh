@@ -47,6 +47,10 @@ interface Props {
   meta: string;
   guide: boolean;
   onGuide: () => void;
+  /** Preview stays pressed in the header while it shows, and a press
+   *  goes back to writing (Note Editor board 4). */
+  preview: boolean;
+  onPreview: () => void;
   folded: boolean;
   onUnfold: () => void;
   kinds: KindsMenu;
@@ -69,6 +73,8 @@ export function WritingHead({
   meta,
   guide,
   onGuide,
+  preview,
+  onPreview,
   folded,
   onUnfold,
   kinds,
@@ -218,6 +224,11 @@ export function WritingHead({
         <IconButton label="Unfold the card" icon={<ChevronDownIcon />} onClick={onUnfold} />
       ) : (
         <>
+          {preview && (
+            <Button className="wr-small is-pressed" aria-pressed onClick={onPreview}>
+              Preview
+            </Button>
+          )}
           <Button
             className={`wr-small${guide ? ' is-pressed' : ''}`}
             aria-pressed={guide}

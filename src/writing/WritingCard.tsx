@@ -54,7 +54,16 @@ import {
 import { draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
 import { useWritingPlace } from './useWritingPlace';
-import { countLine, lineNote, metaLine, pasteNote, resultNote, roomFor, type Note } from './words';
+import {
+  countLine,
+  lineNote,
+  metaLine,
+  pasteNote,
+  previewLine,
+  resultNote,
+  roomFor,
+  type Note,
+} from './words';
 
 // The writing card (Description Editor and Note Editor reviews). One card
 // for every text the game's line editor takes, your description, a note
@@ -119,8 +128,14 @@ export function WritingCard({
   renderer,
   onClose,
 }: Props) {
+  // The card opens once writing.toml is read, so it opens on your draft.
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    void loadWriting();
+    let alive = true;
+    void loadWriting().then(() => alive && setReady(true));
+    return () => {
+      alive = false;
+    };
   }, []);
   const file = useWritingFile();
   const row = useSelectedRow();
@@ -220,17 +235,17 @@ export function WritingCard({
   // ── Opening ───────────────────────────────────────────────────────
   const opened = useRef(-1);
   useEffect(() => {
-    if (opened.current === request.n) return;
-    const first = opened.current === -1;
+    if (!ready || opened.current === request.n) return;
     opened.current = request.n;
-    if (!first) switchTo(request.kind);
+    const d = openDraft(request.kind);
+    switchTo(request.kind, d);
     if (request.offer !== undefined) {
       jobs.take(request.offer, { kind: request.kind, action: 'read', name });
       return;
     }
-    if (first) readIfNoDraft(request.kind, openDraft(request.kind));
+    readIfNoDraft(request.kind, d);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request.n]);
+  }, [request.n, ready]);
 
   /** With no draft, a text the game saves in place reads from the game
    *  once its prompt shows (Description Editor Q4). */
@@ -394,6 +409,9 @@ export function WritingCard({
           subject: draft.subject ?? '',
           language: info.language ? (draft.language ?? null) : null,
           adopt,
+          // After a drop the game holds the note the card put there,
+          // which Post again clears with no question (Note Editor board 8).
+          clear_first: ended?.actions.includes('again') ?? false,
         }),
     });
 
@@ -420,7 +438,9 @@ export function WritingCard({
     if (kept && differs && name) {
       pushToast({
         kind: 'info',
-        message: `Draft kept for ${name}`,
+        message: info.board
+          ? `Saved ${name}’s ${info.title.toLowerCase()}`
+          : `Draft kept for ${name}`,
         meta: `${counted.lines} ${counted.lines === 1 ? 'line' : 'lines'}, not ${info.board ? 'posted' : 'sent'}`,
       });
     }
@@ -672,13 +692,23 @@ export function WritingCard({
     ...(folded && foldTop !== null
       ? { top: foldTop }
       : { bottom: place?.bottom ?? 0, maxHeight: place?.maxHeight }),
-    visibility: place ? 'visible' : 'hidden',
+    visibility: place && ready ? 'visible' : 'hidden',
     ['--wr-px' as string]: `${px}px`,
     ['--wr-lh' as string]: `${lineH}px`,
     ['--wr-family' as string]: fontFamily,
     ['--wr-fg' as string]: env.fg,
     ['--wr-ground' as string]: env.bg,
   };
+
+  // A confirm sits over the card's foot, 12 in from its right, as the
+  // boards draw it.
+  const cardBox = confirm ? cardRef.current?.getBoundingClientRect() : null;
+  const confirmAt = cardBox
+    ? {
+        right: window.innerWidth - cardBox.right + 12,
+        bottom: window.innerHeight - cardBox.bottom + 60,
+      }
+    : null;
 
   const sending =
     running && running.stage === 'sending' ? { sent: running.sent, current: running.sent } : null;
@@ -705,6 +735,8 @@ export function WritingCard({
           }}
           meta={meta}
           guide={file.guide}
+          preview={preview}
+          onPreview={() => setPreview(false)}
           onGuide={() => keepSwitches(file.spelling, !file.guide)}
           folded={folded}
           onUnfold={() => setFolded(false)}
@@ -804,16 +836,8 @@ export function WritingCard({
               <div className="pc-rule" aria-hidden="true" />
             )}
             <WritingFoot
-              left={left}
-              right={
-                preview ? (
-                  <Button variant="primary" onClick={() => setPreview(false)}>
-                    Back to writing
-                  </Button>
-                ) : (
-                  buttons
-                )
-              }
+              left={preview ? <span className="pc-foot-note">{previewLine(kind)}</span> : left}
+              right={buttons}
             />
           </>
         )}
@@ -831,6 +855,7 @@ export function WritingCard({
             go();
           }}
           onCancel={() => setConfirm(null)}
+          {...(confirmAt ? { at: confirmAt } : {})}
         />
       )}
     </>
