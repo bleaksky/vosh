@@ -1,9 +1,9 @@
-/* One Window overlays: the command palette, the terminal menu, the
-   find bar, toasts, the update and reconnect notices, the confirm
-   dialog, and the scroll depth chip. Every floating surface takes the
-   SPEC 3 recipe (--raised ground, radius 16, --shadow-float) and reads
-   only the One Window tokens. Class names carry the ov- prefix so
-   nothing in the interim migration.css reaches them. */
+/* Overlays: the command palette, the terminal menu, the find bar,
+   toasts, the update and reconnect notices, the confirm dialog, and the
+   scroll depth chip. Every floating surface takes the floating recipe
+   (--raised ground, radius 16, --shadow-float) and reads only the
+   shared tokens. Class names carry the ov- prefix so nothing in the
+   interim migration.css reaches them. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40
@@ -83,7 +83,7 @@
   padding: 0 4px;
 }
 
-/* Command palette (SPEC 7). 560 wide, centered on the window, top at
+/* Command palette. 560 wide, centered on the window, top at
    15% of the window height. The search row is 46 tall with the icon
    at x 14 and the text at x 45. Rows sit in 36 slots with a 34
    highlight inset 8, text at x 42, a check at x 18, and keycaps ending
@@ -290,7 +290,7 @@
   color: var(--tertiary);
 }
 
-/* Menus (SPEC 7): the terminal right-click menu. 6 of inner padding,
+/* Menus: the terminal right-click menu. 6 of inner padding,
    30 tall rows at radius 8 with the text 12 in, shortcut hints on the
    right in the tertiary tone, and separators inset 12 with 6 above and
    below. The ov-menu classes suit any other floating menu too. */
@@ -373,7 +373,7 @@
   background: var(--sep);
 }
 
-/* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
+/* Find bar. 40 tall, 8 below the band, its right edge 16
    in from the panel. Controls are 28 by 24 at radius 8, 8 apart. */
 .ov-find {
   position: absolute;
@@ -485,7 +485,7 @@
   background: var(--sep);
 }
 
-/* The three match toggles draw their glyphs as text (SPEC 6). On is
+/* The three match toggles draw their glyphs as text. On is
    the selected row fill, ringed on light themes where that fill is
    white on white. */
 .ov-find-toggle {
@@ -628,15 +628,15 @@
   margin-left: 8px;
 }
 
-/* Prompt codes in a toast read in the terminal's face (P14). */
+/* Prompt codes in a toast read in the terminal's face. */
 .ov-toast-meta.is-mono {
   font-family: var(--font-mud);
   font-variant-numeric: normal;
 }
 
-/* Show me (First Run Q3, board 2). A 2 px accent ring 2 px out from
-   what to pick, over the menus, with one pulse, and its line on the
-   toast recipe beside it. Neither takes a press. */
+/* Show me. A 2 px accent ring 2 px out from what to pick, over the
+   menus, with one pulse, and its line on the toast recipe beside it.
+   Neither takes a press. */
 .cm-ring {
   position: fixed;
   z-index: 1050;
@@ -765,7 +765,7 @@
   margin-top: 12px;
 }
 
-/* Buttons (SPEC 4): 28 tall, radius 8, 13 medium. The default is the
+/* Buttons: 28 tall, radius 8, 13 medium. The default is the
    secondary look, a ring and no fill. Danger keeps the ring and takes
    the danger text. */
 .ov-button {

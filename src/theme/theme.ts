@@ -12,9 +12,9 @@
 // With the game, theme_follow `game`, it is `day_theme` or
 // `night_theme`, whichever matches the selected session's daylight
 // (stores/session/daylightStore), and the store swaps them at the
-// game's dawn and dusk. Before the game says, it is the side last shown,
-// which the paint cache keeps through a drop and a relaunch (Alerts
-// Q15).
+// game's dawn and dusk. Before the game says, it is the side last
+// shown, which the paint cache keeps through a drop and a relaunch, so
+// a window never flashes the other side first.
 //
 // Every window paints the chrome for your color vision, from UiConfig
 // color_vision, which swaps the status colors (theme/chrome). A window

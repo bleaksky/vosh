@@ -1,4 +1,4 @@
-// Marked regions in xterm (the prompt build spec, D22 and section 4).
+// Marked regions in xterm.
 //
 // The session marks where a region it may replace later starts, with the
 // private mark ESC ] 7717 ; o ; G BEL. A drawn prompt, a partial line

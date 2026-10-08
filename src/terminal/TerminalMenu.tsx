@@ -75,20 +75,20 @@ const LIST_ID: Record<Sub, string> = {
 /** How close the menu may sit to the window edge after clamping. */
 const EDGE_MARGIN = 8;
 
-// Right-click menu for the terminal (SPEC 7 menus, Menus board): a
-// 232 wide floating surface with 6 of inner padding, 30 tall rows,
-// shortcut hints on the right in the platform's glyphs, and hairline
-// separators. Customize prompt… comes first on every row, since Vosh
-// may not know yet which row is your prompt, and opens the prompt card
-// over it (P1). Write under it opens the kinds of text the writing card
-// takes (Note Editor Q2). Settings opens a list beside the menu, built like the
-// pane menus' submenus, that goes straight to Triggers, Aliases, Macros
-// and Timers, to each Settings page, and to Help. Clear scrollback is
-// the one destructive item and comes last. Every action routes through
-// the same path the keyboard uses (the native copy command, the input
-// row's insert, the find bar, the palette's Settings links), so the
-// menu never grows a second implementation. It takes focus while open
-// so the arrow keys and Enter drive it, then hands focus back.
+// Right-click menu for the terminal: a 232 wide floating surface with 6
+// of inner padding, 30 tall rows, shortcut hints on the right in the
+// platform's glyphs, and hairline separators. Customize prompt… comes
+// first on every row, since Vosh may not know yet which row is your
+// prompt, and opens the prompt card over it. Write under it opens the
+// kinds of text the writing card takes. Settings opens a list beside
+// the menu, built like the pane menus' submenus, that goes straight to
+// Triggers, Aliases, Macros and Timers, to each Settings page, and to
+// Help. Clear scrollback is the one destructive item and comes last.
+// Every action routes through the same path the keyboard uses (the
+// native copy command, the input row's insert, the find bar, the
+// palette's Settings links), so the menu never grows a second
+// implementation. It takes focus while open so the arrow keys and Enter
+// drive it, then hands focus back.
 export function TerminalMenu({
   x,
   y,
@@ -109,8 +109,7 @@ export function TerminalMenu({
   // keyboard and so takes focus.
   const [sub, setSub] = useState<PaneSubmenuState<Sub> | null>(null);
   // Save a scene… shows disabled while the profile logs nothing on the
-  // world the selected session dials, which the menu reads as it opens
-  // (D34).
+  // world the selected session dials, which the menu reads as it opens.
   const [logged, setLogged] = useState(true);
   useEffect(() => {
     let cancelled = false;

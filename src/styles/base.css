@@ -13,8 +13,8 @@ body,
   height: 100%;
   background: transparent;
   color: var(--text);
-  /* Inter draws only text outside every window root, until D23
-     retires it with the migration wizard. Each window root sets
+  /* Inter draws only text outside every window root, until it
+     goes with the migration wizard. Each window root sets
      --font-ui, and the terminal and the panes set their own faces. The
      13 px holds whatever terminal size you pick. */
   font-family: var(--font-chrome);

@@ -3,10 +3,10 @@ import type { Terminal } from '@xterm/xterm';
 import type { XtermBlink } from './xtermBlink';
 
 /** xterm's WebGL renderer for one pane. Only the pane that shows holds
- *  it (Q6 of the Sessions review): `load` gives it the renderer as it
- *  shows, after its first fit, and `release` hands it back to xterm's DOM
- *  renderer as it hides. A window keeps a terminal for each session it
- *  opened, and WebView2 allows about 16 live GL contexts. */
+ *  it: `load` gives it the renderer as it shows, after its first fit,
+ *  and `release` hands it back to xterm's DOM renderer as it hides. A
+ *  window keeps a terminal for each session it opened, and WebView2
+ *  allows about 16 live GL contexts. */
 export interface XtermWebgl {
   load(): void;
   release(): void;

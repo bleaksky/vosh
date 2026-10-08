@@ -1,15 +1,13 @@
-/* The One Window panel (SPEC 9 and 10): split panes over pinned
-   vitals, and the floating pane menus. Values are the approved
-   mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
-   Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
-   a row with a status marker puts the 8 px marker at x 18 and its
-   text at x 34, all at a 12 px panel. Every pane draws in the panel
-   faces and at the panel size, which Settings, Appearance, Panel text
-   picks. As designed, the default Font, keeps the system face for the
-   headers, labels, counts and rows and the terminal face for the game
-   text, and any other pick draws both in one face. The size starts at
-   12 px. The text, the rows, and the gaps between them scale with the
-   size (.panel-host). */
+/* The panel: split panes over pinned vitals, and the floating pane
+   menus. Colors are tokens only. Dense rows are 22 px, pane headers 28
+   px, text starts at x 18, and a row with a status marker puts the 8 px
+   marker at x 18 and its text at x 34, all at a 12 px panel. Every pane
+   draws in the panel faces and at the panel size, which Settings,
+   Appearance, Panel text picks. As designed, the default Font, keeps
+   the system face for the headers, labels, counts and rows and the
+   terminal face for the game text, and any other pick draws both in one
+   face. The size starts at 12 px. The text, the rows, and the gaps
+   between them scale with the size (.panel-host). */
 
 /* The shell's panel slot supplies the ground, the 1 px left edge, and
    the band's 32 px above the first pane. Every pane's text takes the
@@ -741,15 +739,15 @@
   white-space: nowrap;
 }
 
-/* Ledger, Gauges and Pips (Vitals Styles, board 1). Each vital carries
-   its tone as custom properties: the mark, the label and the value. The
-   mark rests in a quiet tone, a color you picked colors the mark and
-   the label, low turns the mark danger and the value danger text, warn
-   turns both warn, and your opponent draws its name in text and its
-   health in warn. A value the game hides reads a tertiary `?` over an
-   empty mark. Each style sets its quiet tone in --vital-quiet, secondary
-   unless it says otherwise. VitalsFooter sets --vitals-min-height only while it waits
-   for your vitals. */
+/* Ledger, Gauges and Pips. Each vital carries its tone as custom
+   properties: the mark, the label and the value. The mark rests in a
+   quiet tone, a color you picked colors the mark and the label, low
+   turns the mark danger and the value danger text, warn turns both
+   warn, and your opponent draws its name in text and its health in
+   warn. A value the game hides reads a tertiary `?` over an empty mark.
+   Each style sets its quiet tone in --vital-quiet, secondary unless it
+   says otherwise. VitalsFooter sets --vitals-min-height only while it
+   waits for your vitals. */
 .vitals-tone {
   --vital-mark: var(--vital-ink, var(--vital-quiet, var(--secondary)));
   --vital-label: var(--vital-ink, var(--vital-quiet, var(--secondary)));
@@ -1089,13 +1087,12 @@
   margin-top: 4px;
 }
 
-/* The styles of the More Vitals Styles review. Each mark rests in the
-   secondary tone, as Gauges and Pips do, or your color, and each vital
-   carries mixes of it: --vital-soft for an empty unit, as an unlit Pips
-   disc is, and --vital-rim for the glass of Vials and Orbs. Your
-   opponent draws its name and health on one line across the footer and
-   the style's own mark under them in warn, 10 above your vitals or 10
-   under them. */
+/* The other vitals styles. Each mark rests in the secondary tone, as
+   Gauges and Pips do, or your color, and each vital carries mixes of
+   it: --vital-soft for an empty unit, as an unlit Pips disc is, and
+   --vital-rim for the glass of Vials and Orbs. Your opponent draws its
+   name and health on one line across the footer and the style's own
+   mark under them in warn, 10 above your vitals or 10 under them. */
 .vitals-drawn {
   padding: 0 12px 0 18px;
   font-size: var(--mud-text);
@@ -1847,7 +1844,7 @@
 
 /* While the vitals text card is open each part of your text takes a
    click, and the part you picked takes the ring the card draws round a
-   part of your prompt (board 5 of the Vitals Styles review). */
+   part of your prompt. */
 .panel-vitals-text-part {
   cursor: default;
 }
@@ -1860,7 +1857,7 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-/* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
+/* ── Pane menus (the menu recipe) ────────────────────────────────── */
 
 /* Menus keep the system face whatever the Panel font, like every other
    menu. */

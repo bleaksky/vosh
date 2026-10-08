@@ -2,8 +2,8 @@
    Pinned). The dock sits in the terminal area under the text and is as
    tall as the band it draws now. It takes one row of room under the
    terminal and reaches up over the terminal's bottom for the rows past
-   the first, which the terminal gives up. The band is the edit band of
-   the prompt boards: --selrow at radius 4, reaching 4 px past the text on
+   the first, which the terminal gives up. The band is the edit band:
+   --selrow at radius 4, reaching 4 px past the text on
    each side and 2 px above and below its rows, its bottom 9.5 px above
    the input band. PromptDock.tsx sets its size and puts each character on
    the terminal's cell grid.
@@ -27,8 +27,8 @@
   background: var(--selrow);
 }
 
-/* A white band on paper needs the light float ring to read, drawn inside
-   the band so its size stays the board's. */
+/* A white band on paper needs the light float ring to read, drawn
+   inside the band so its size stays the same. */
 :root[data-appearance='light'] .prompt-band {
   box-shadow: inset 0 0 0 1px var(--edge);
 }
@@ -130,12 +130,11 @@
   text-overflow: ellipsis;
 }
 
-/* The prompt card (section 7 of the prompt build spec, boards P1 to P15).
-   A floating card on the SPEC 3 recipe, 560 wide, its left edge 12 px in
-   from the terminal and its bottom 4 px above the row right above your
-   prompt (useCardPlace.ts places it). Header 46, a hairline, the body, a
-   hairline, footer 52. It composes the Settings primitives, so it carries
-   .st-controls for their fills. */
+/* The prompt card. A floating card on the floating recipe, 560 wide,
+   its left edge 12 px in from the terminal and its bottom 4 px above
+   the row right above your prompt (useCardPlace.ts places it). Header
+   46, a hairline, the body, a hairline, footer 52. It composes the
+   Settings primitives, so it carries .st-controls for their fills. */
 .pc-card {
   position: fixed;
   z-index: 900;
@@ -155,8 +154,8 @@
   color: var(--text);
 }
 
-/* Get started slides down and fades as it folds to its notice (First
-   Run Q14). GetStarted.tsx sets the class only when your system lets
+/* Get started slides down and fades as it folds to its notice.
+   GetStarted.tsx sets the class only when your system lets
    things move, so the slide needs no media query, and the end of the
    slide unmounts the card. */
 .pc-card.is-folding {
@@ -350,7 +349,8 @@
   color: var(--tertiary);
 }
 
-/* P2: a label column of 88 and a field of 440, mono for the codes. */
+/* Your prompt setting: a label column of 88 and a field of 440, mono
+   for the codes. */
 .pc-field-row {
   display: flex;
   align-items: center;
@@ -374,9 +374,9 @@
   margin-left: 88px;
 }
 
-/* The candidate box (A2's recipe): the terminal ground with the hairline
-   ring, radius 8, the prompt as the game sent it from x 10, each value in
-   the selection token, and its name under it. */
+/* The candidate box: the terminal ground with the hairline ring, radius
+   8, the prompt as the game sent it from x 10, each value in the
+   selection token, and its name under it. */
 .pc-box {
   position: relative;
   width: 528px;
@@ -448,8 +448,8 @@
   color: var(--tertiary);
 }
 
-/* The match line beside the stepper. A sentence takes a line, so a fight
-   count sits under the match count (P3c). */
+/* The match line beside the stepper. A sentence takes a line, so a
+   fight count sits under the match count. */
 .pc-match {
   display: flex;
   align-items: flex-start;
@@ -650,7 +650,8 @@
   color: var(--secondary);
 }
 
-/* B2's line: the check and how often the line came. */
+/* The line Vosh proposes as your prompt: the check and how often the
+   line came. */
 .pc-seen {
   display: flex;
   align-items: center;
@@ -661,8 +662,8 @@
   color: var(--secondary);
 }
 
-/* P15: a menu button under each number, 20 tall, its name 6 px in so it
-   starts under the first digit. */
+/* On another game, a menu button under each number, 20 tall, its name 6
+   px in so it starts under the first digit. */
 .pc-name-button {
   position: absolute;
   display: flex;
@@ -703,8 +704,9 @@
   outline-offset: 1px;
 }
 
-/* The start list (P4): the palette row recipe, a name over its sample in
-   the terminal's face, slots 48, a two line sample 65.5, the check at 10. */
+/* The start list: the palette row recipe, a name over its sample in
+   the terminal's face, slots 48, a two line sample 65.5, the check
+   at 10. */
 .pc-starts {
   margin: 8px 0 0;
   padding: 0 8px;
@@ -750,7 +752,7 @@
 }
 
 /* The checked start is the row the list stands on, as the palette's
-   selected row is (P4). */
+   selected row is. */
 .pc-start:hover,
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
@@ -778,8 +780,8 @@
   white-space: nowrap;
 }
 
-/* The sample's glyphs are placed cells with no baseline, so the tag sits
-   from the top, 3 px under the sample's as P4 sets it. */
+/* The sample's glyphs are placed cells with no baseline, so the tag
+   sits from the top, 3 px under the sample's. */
 .pc-start-sample {
   display: flex;
   align-items: flex-start;
@@ -824,7 +826,8 @@
   color: var(--secondary);
 }
 
-/* P11: the danger text button sits with its text on the copy's edge. */
+/* Drawing off: the danger text button sits with its text on the
+   copy's edge. */
 .pc-forget {
   margin: 12px 0 0 -12px;
 }
@@ -922,10 +925,9 @@
   padding: 3px 6px;
 }
 
-/* A part you picked (P5, P7, P8a, P8b, P10). The name line, then rows
-   on a label column of 88: Show as, When, Width or Style, Color with its
-   hint, and the actions 16 below. Rows sit 8 apart and the first 12 under
-   the name line. */
+/* A part you picked. The name line, then rows on a label column of 88:
+   Show as, When, Width or Style, Color with its hint, and the actions
+   16 below. Rows sit 8 apart and the first 12 under the name line. */
 .pc-piece-name {
   display: flex;
   align-items: baseline;
@@ -1158,7 +1160,7 @@
 }
 
 /* Its menu: rows of the name menu with the check column at 12, each
-   style drawn as the styles board draws it. A check marks what is on,
+   style drawn in its own style. A check marks what is on,
    and the highlight follows the pointer and the keys alone. */
 .pc-style-item {
   position: relative;
@@ -1237,8 +1239,8 @@
 }
 
 /* The Underline row's kinds, each word drawn in its own line: 1 px, 3
-   below the baseline, through the descenders, as the styles board draws
-   them. A color of its own draws the line in it. */
+   below the baseline, through the descenders. A color of its own draws
+   the line in it. */
 .pc-line {
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
@@ -1253,7 +1255,7 @@
   margin-top: 16px;
 }
 
-/* P14: you turned prompts off in the game, in place of the hint, with
+/* You turned prompts off in the game, in place of the hint, with
    the status dot 4 px either side and 6 before the sentence. */
 .pc-hint.is-warn {
   display: flex;
@@ -1267,7 +1269,7 @@
   margin: 4px 4px 0;
 }
 
-/* P8c: what the Lament preview hides, under the hint at rest. */
+/* What the Lament preview hides, under the hint at rest. */
 .pc-rest-note {
   margin: 4px 0 0;
   font-size: 11px;
@@ -1275,12 +1277,12 @@
   color: var(--secondary);
 }
 
-/* 12 after Back as P6 draws it: Back's own 4 px margin and these 8. */
+/* 12 after Back: Back's own 4 px margin and these 8. */
 .pc-title.is-picker {
   margin-left: 8px;
 }
 
-/* Insert value… (P6, P6b): a list of 248 on the left, the highlighted
+/* Insert value…: a list of 248 on the left, the highlighted
    field's forms in 264 on the right, 16 apart. */
 .pc-body.pc-picker {
   display: flex;
@@ -1492,7 +1494,7 @@
   color: var(--text);
 }
 
-/* Edit as text (P9): the design in the terminal's face, wrapping only
+/* Edit as text: the design in the terminal's face, wrapping only
    between tokens, then the help, the token rows, and Insert value…. */
 .pc-text-field {
   width: 528px;
@@ -1606,7 +1608,7 @@
 /* The marks over the terminal cannot redraw the glyphs under them, so
    where a mark in the window takes the opaque selection, these take the
    accent tint. A value Vosh reads on the game's own line while the card
-   reads your codes takes the tint alone (P2, P3). */
+   reads your codes takes the tint alone. */
 .pc-mark-value,
 .pc-mark-token,
 .pc-mark-return[aria-pressed='true'] {
@@ -1649,8 +1651,8 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* The D6 row: Line triggers that matched your prompt, in the start list
-   on first use. */
+/* The Line triggers row: Line triggers that matched your prompt, in the
+   start list on first use. */
 .pc-d6 {
   margin: 12px 16px 4px;
 }
@@ -1719,11 +1721,11 @@
   text-overflow: ellipsis;
 }
 
-/* Get started (First Run boards 1 to 5) on the prompt card's recipe, in
-   its place over the terminal. The steps take the palette row recipe of
-   the start list: 36 slots, a 34 row inset 8, the mark at 10, the name
-   at 42, the meta in the tertiary tone and keycaps 20 square. The row in
-   focus wears the palette's selected fill. */
+/* Get started on the prompt card's recipe, in its place over the
+   terminal. The steps take the palette row recipe of the start list: 36
+   slots, a 34 row inset 8, the mark at 10, the name at 42, the meta in
+   the tertiary tone and keycaps 20 square. The row in focus wears the
+   palette's selected fill. */
 .gs-steps {
   margin: 8px 0 0;
   padding: 0;

@@ -1,12 +1,11 @@
-/* One Window design tokens. src/theme/theme.ts writes the color tokens
-   on :root at runtime from theme/chrome's derivation of the active
-   terminal theme. The values below are Obsidian Ember's, the fallback
-   theme a config without a theme key reads, and a test in
-   theme/chrome.test.ts holds them to that derivation. They paint only
-   until the startup paint or the config brings your theme. A new
-   install starts on Triad, and its window stays hidden until the
-   config paints Triad, for half a second at most. Every new component
-   reads these names and nothing else. */
+/* Design tokens. src/theme/theme.ts writes the color tokens on :root at
+   runtime from theme/chrome's derivation of the active terminal theme.
+   The values below are Obsidian Ember's, the fallback theme a config
+   without a theme key reads, and a test in theme/chrome.test.ts holds
+   them to that derivation. They paint only until the startup paint or
+   the config brings your theme. A new install starts on Triad, and its
+   window stays hidden until the config paints Triad, for half a second
+   at most. Every new component reads these names and nothing else. */
 
 :root {
   --bg: #050403;
@@ -86,7 +85,7 @@
   --panel-w: 300px;
 
   /* Inter and the wizard's shadow. Only html and body in base.css and
-     the migration wizard read them, until D23 retires both. New chrome
+     the migration wizard read them, until the wizard goes. New chrome
      takes --font-ui, and a new floating surface --shadow-float. */
   --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --float:
@@ -94,15 +93,14 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
-   --ring-float is the edge alone, a fixed black ring outside and on
-   dark the theme's --edge inside, and --shadow-float the whole recipe.
-   --edge is also the 1 px edge a prompt band on paper draws inside
-   itself to read on its ground. A color swatch rings in --key-ring.
-   --mark-tint is a mark over terminal text it cannot redraw, the prompt
-   card's marks on your prompt, where the opaque selection would hide the
-   glyphs. The text selected in a session's name field takes it too, the
-   accent tint board 9 of the Sessions review draws there. */
+/* Floating recipe: menus, the palette, popovers, dialogs. --ring-float
+   is the edge alone, a fixed black ring outside and on dark the theme's
+   --edge inside, and --shadow-float the whole recipe. --edge is also
+   the 1 px edge a prompt band on paper draws inside itself to read on
+   its ground. A color swatch rings in --key-ring. --mark-tint is a mark
+   over terminal text it cannot redraw, the prompt card's marks on your
+   prompt, where the opaque selection would hide the glyphs. The text
+   selected in a session's name field takes it too, the accent tint. */
 :root,
 :root[data-appearance='dark'] {
   --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px var(--edge);
