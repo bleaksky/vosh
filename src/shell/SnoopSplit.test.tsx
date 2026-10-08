@@ -9,14 +9,16 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { SnoopSplit } from './SnoopSplit';
 import { endedLine, tabTitle } from './snoopLine';
 
-// The snoop split of boards 01 and 03 of the Snoop review. The snoop
-// store, the saved share and the minute clock are faked, and each snoop
+// The snoop split of boards 01, 03 and 04 of the Snoop review. The snoop
+// store, the saved size and the minute clock are faked, and each snoop
 // terminal stands in as a plain element that names its player, so what
 // shows is what the split draws.
 
 const fake = vi.hoisted(() => ({
   snoops: { tabs: [], windowed: false, selected: null, unread: new Set() } as unknown as Snoops,
-  share: 0.4,
+  size: { share: 0.4, folded: false },
+  saves: [] as unknown[],
+  folds: [] as boolean[],
   selected: [] as string[],
   stops: [] as unknown[],
   closes: [] as unknown[],
@@ -28,8 +30,12 @@ const MIN = 60_000;
 vi.mock('../stores/session/snoopStore', () => ({
   useSnoops: () => fake.snoops,
   selectSnoop: (name: string) => fake.selected.push(name),
+  setSnoopsFolded: (on: boolean) => fake.folds.push(on),
 }));
-vi.mock('../stores/config/snoopShareStore', () => ({ useSnoopShare: () => fake.share }));
+vi.mock('../stores/config/snoopSizeStore', () => ({
+  useSnoopSize: () => fake.size,
+  saveSnoopSize: async (size: unknown) => void fake.saves.push(size),
+}));
 vi.mock('./sessionLine', async (actual) => ({
   ...(await actual<typeof import('./sessionLine')>()),
   useMinuteClock: () => NOW,
@@ -88,7 +94,9 @@ function tabs(html: string): Record<string, string> {
 }
 
 beforeEach(() => {
-  fake.share = 0.4;
+  fake.size = { share: 0.4, folded: false };
+  fake.saves.length = 0;
+  fake.folds.length = 0;
   fake.selected.length = 0;
   fake.stops.length = 0;
   fake.closes.length = 0;
@@ -116,8 +124,11 @@ describe('the snoop split', () => {
       '<div class="snoop-end"><button type="button" class="snoop-btn">Stop</button></div>',
     );
     expect(html).toContain('<div class="snoop-body"><div data-term="Tolliver"></div></div>');
+    expect(html).toContain(
+      '<div class="snoop-handle resizable-handle" role="separator" aria-orientation="horizontal" aria-label="Snoop height"></div>',
+    );
 
-    fake.share = 0.25;
+    fake.size = { share: 0.25, folded: false };
     expect(draw()).toContain('style="height:25%"');
   });
 
@@ -142,6 +153,21 @@ describe('the snoop split', () => {
   it('brightens a tab behind with lines you have not read', () => {
     snoops([live('Tolliver'), live('Maren'), live('Orla')], 'Tolliver', ['Maren']);
     expect(tabs(draw()).Maren).toContain('class="snoop-tab is-unread"');
+  });
+
+  it('folds to the strip, every tab kept with its mark and unread dot', () => {
+    fake.size = { share: 0.4, folded: true };
+    snoops([live('Tolliver'), live('Maren'), live('Orla')], 'Tolliver', ['Maren']);
+    const html = draw();
+    expect(html).toContain(
+      '<section class="snoop is-folded" style="height:33px" aria-label="Snoop">',
+    );
+    expect(Object.keys(tabs(html))).toEqual(['Tolliver', 'Maren', 'Orla']);
+    expect(tabs(html).Maren).toContain('class="snoop-tab is-unread"');
+    // No terminal shows while folded, and each keeps its lines.
+    expect(html).toContain(
+      '<div data-term="Tolliver" hidden=""></div><div data-term="Maren" hidden=""></div><div data-term="Orla" hidden=""></div>',
+    );
   });
 });
 
@@ -199,10 +225,16 @@ describe('the strip buttons', () => {
     const button = (text: string) =>
       findAll(host, (el) => el.nodeName === 'BUTTON' && el.textContent === text)[0];
     const press = async (text: string) => {
-      on(button(text)).onClick();
+      act(() => on(button(text)).onClick());
       await Promise.resolve();
     };
-    return { press, carets: () => carets, unmount: () => act(() => root.unmount()) };
+    const handle = () => findAll(host, (el) => el.getAttribute('role') === 'separator')[0];
+    return {
+      press,
+      handle,
+      carets: () => carets,
+      unmount: () => act(() => root.unmount()),
+    };
   }
 
   it('stops the snoop in front with its player and hands the caret back', async () => {
@@ -224,6 +256,17 @@ describe('the strip buttons', () => {
     expect(fake.closes).toEqual([[1, 'Maren']]);
     expect(fake.stops).toEqual([]);
     split.unmount();
+  });
+
+  describe('the line under the split', () => {
+    it('folds or unfolds on a double click and tells the store', async () => {
+      snoops([live('Tolliver')], 'Tolliver');
+      const split = await mount();
+      expect(fake.folds).toEqual([false]);
+      act(() => on(split.handle()).onDoubleClick());
+      expect(fake.saves).toEqual([{ share: 0.4, folded: true }]);
+      split.unmount();
+    });
   });
 });
 

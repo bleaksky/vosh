@@ -1,9 +1,9 @@
-/* The snoop split at the top of the terminal column (Snoop SN1, SN2 and
-   SN3, boards 01 and 03). A 32 strip with the eye, a tab for each
-   snooped player, and Stop or Close, then the snoop's own terminal in the
-   well's insets, closed by the pane handle's 1 px line. It paints the
-   terminal's ground, so it stays opaque while the native surface draws
-   your terminal under the page. */
+/* The snoop split at the top of the terminal column (Snoop SN1, SN2, SN3
+   and SN7, boards 01, 03 and 04). A 32 strip with the eye, a tab for
+   each snooped player, and Stop or Close, then the snoop's own terminal
+   in the well's insets, closed by the pane handle's 1 px line. It paints the terminal's ground, so it stays opaque while the
+   native surface draws your terminal under the page. It sits over the
+   terminal area, so the line's grab area reaches past its edge. */
 
 .snoop {
   position: relative;
@@ -13,6 +13,33 @@
   min-height: 0;
   border-bottom: 1px solid var(--sep);
   background: var(--xterm-bg);
+  z-index: 3;
+}
+
+/* Folded to the strip and its line. */
+.snoop.is-folded .snoop-body {
+  display: none;
+}
+
+/* The line drags like the scrollback split's: a grab area 3 px past
+   each side of it and the accent tick on hover, longer while you drag
+   (terminal.css .resizable-handle). */
+.snoop > .snoop-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 7px;
+  cursor: row-resize;
+}
+
+.snoop > .snoop-handle::after {
+  width: 24px;
+  height: 2px;
+}
+
+.snoop > .snoop-handle.is-dragging::after {
+  width: 56px;
 }
 
 .snoop-strip {
@@ -158,6 +185,7 @@
 /* The well: your terminal's 16 side insets and 6 at the foot. Whole rows
    only, as xterm draws them, kept to the bottom like your terminal's. */
 .snoop-body {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
@@ -181,6 +209,12 @@
   justify-content: flex-end;
 }
 
+/* A tab behind keeps the size of the one in front, unseen. */
 .snoop-term[hidden] {
-  display: none;
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  visibility: hidden;
 }

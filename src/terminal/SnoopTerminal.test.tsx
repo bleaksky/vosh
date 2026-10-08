@@ -49,6 +49,7 @@ vi.mock('@xterm/xterm', () => {
       this.written = [];
     }
     onResize = none;
+    scrollToBottom() {}
     getSelection() {
       return '';
     }

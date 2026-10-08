@@ -35,18 +35,30 @@ import { WordWrapper } from './wordWrap';
 // It starts from every line its tab holds in the snoop store, then
 // writes each new piece. A snapshot the store takes in place of what it
 // held writes the tab afresh.
+//
+// The split reads its row height, to size itself in whole rows.
 
 interface Props {
   session: number;
   /** The snooped player, whose text this terminal shows. */
   name: string;
-  /** Whether its tab is in front. A terminal behind keeps writing, and
-   *  fits once it shows. */
+  /** Whether its tab is in front. A terminal behind keeps writing, at
+   *  the size of the one in front. */
   shown: boolean;
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
   themeTerminalColors: boolean;
+  /** The row height in CSS px, each time a fit changes it. */
+  onRowHeight?: (height: number) => void;
+}
+
+/** The cell height in CSS px, as FitAddon reads it from xterm's
+ *  renderer, which has no public way to say it. 0 before it draws. */
+function cellHeight(term: XTerm): number {
+  type Core = { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } };
+  const core = (term as unknown as { _core?: Core })._core;
+  return core?._renderService?.dimensions?.css?.cell?.height ?? 0;
 }
 
 /** The xterm theme for the theme in front, as your terminal draws it. */
@@ -62,6 +74,7 @@ export function SnoopTerminal({
   fontSize,
   lineHeight,
   themeTerminalColors,
+  onRowHeight,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
@@ -70,6 +83,8 @@ export function SnoopTerminal({
   shownRef.current = shown;
   const tintedRef = useRef(themeTerminalColors);
   tintedRef.current = themeTerminalColors;
+  const calls = useRef({ onRowHeight });
+  calls.current = { onRowHeight };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -99,12 +114,22 @@ export function SnoopTerminal({
 
     const wrapper = new WordWrapper(term.cols);
     const write = (text: string) => term.write(wrapper.process(text) + wrapper.flush());
+    let row = 0;
+    // A tab behind keeps the size of the one in front, unseen, so it
+    // never takes lines at a size it does not show at. xterm resized
+    // while it could not draw leaves its view rows above its newest.
+    // A folded split has no size, and every tab keeps the one it had.
     const fitNow = () => {
-      if (!shownRef.current) return;
+      if (host.clientHeight === 0) return;
       try {
         fit.fit();
       } catch {
         // ignore a fit before layout settles
+      }
+      const height = cellHeight(term);
+      if (height > 0 && height !== row) {
+        row = height;
+        calls.current.onRowHeight?.(height);
       }
     };
     fitRef.current = fitNow;
