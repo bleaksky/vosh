@@ -18,6 +18,7 @@ import CodeMirror, {
   type Transaction,
   type ViewUpdate,
 } from '@uiw/react-codemirror';
+import type { BoxInks } from './boxInks';
 import { codeSlot } from './gameCodes';
 import { flow, leadingCode, marks, pasted, type Folded, type Row } from './text';
 
@@ -69,6 +70,8 @@ export interface WritingBoxProps {
   /** The rows the box shows before it scrolls. */
   rows: number;
   minRows: number;
+  /** The text colors of the marks and the selection (boxInks.ts). */
+  inks: BoxInks;
   onChange: (rows: Row[]) => void;
   onCaret: (row: number) => void;
   onPaste: (note: PasteNote) => void;
@@ -309,6 +312,28 @@ const MARKS = {
   struck: Decoration.mark({ class: 'wr-struck' }),
 };
 const STRUCK = MARKS.struck;
+const SELECTED = Decoration.mark({ class: 'wr-sel' });
+
+/** The selected text as a mark, so it takes the selected text color the
+ *  layer behind it cannot give. */
+function selectedMarks(state: EditorState): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const r of state.selection.ranges) if (!r.empty) builder.add(r.from, r.to, SELECTED);
+  return builder.finish();
+}
+
+const selectedPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(v: EditorView) {
+      this.decorations = selectedMarks(v.state);
+    }
+    update(u: ViewUpdate) {
+      if (u.selectionSet || u.docChanged) this.decorations = selectedMarks(u.state);
+    }
+  },
+  { decorations: (p) => p.decorations },
+);
 
 /** A number in the gutter, or a check for a line the game took, with
  *  the dot of a code at the line's start at the gutter's left. */
@@ -390,6 +415,7 @@ export function WritingBox({
   label,
   rows,
   minRows,
+  inks,
   onChange,
   onCaret,
   onPaste,
@@ -434,6 +460,7 @@ export function WritingBox({
       flowAfter(() => look.current.width, field),
       numbers(() => look.current),
       marksPlugin,
+      selectedPlugin,
       spell.of(contentAttributes(start.spellcheck)),
       editable.of([
         EditorView.editable.of(!start.readOnly),
@@ -532,6 +559,9 @@ export function WritingBox({
   const style = {
     '--wr-rows': rows,
     '--wr-min-rows': minRows,
+    '--wr-ink-warn': inks.warn,
+    '--wr-ink-danger': inks.danger,
+    '--wr-ink-selected': inks.selection,
   } as CSSProperties;
 
   return (

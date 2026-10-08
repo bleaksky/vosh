@@ -421,28 +421,53 @@
   border-left: 2px solid var(--cursor, var(--accent));
 }
 
-.wr-box .cm-selectionBackground,
+/* The selection on the theme's selection fill, focused or not, and the
+   selected text in the theme's selected text color, held to 4.5:1 on
+   that fill (boxInks.ts). The selectors outrank CodeMirror's own
+   lavender for a focused editor. A code's color and a mark's wash give
+   way inside the selection. */
+.wr-box .cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.wr-box .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .wr-box .cm-content ::selection {
   background: var(--selection);
 }
 
+.wr-box .cm-line .wr-sel,
+.wr-box .cm-line .wr-sel * {
+  color: var(--wr-ink-selected, var(--selection-text)) !important;
+}
+
+.wr-box .cm-line .wr-sel {
+  border-radius: 0;
+  background: var(--selection);
+}
+
+.wr-box .cm-line .wr-sel .wr-over,
+.wr-box .cm-line .wr-sel .wr-soft,
+.wr-box .cm-line .wr-sel .wr-warn,
+.wr-box .cm-line .wr-sel .wr-struck {
+  background: transparent;
+}
+
 /* What runs past a width a help sets, in danger text on a danger wash,
-   and past the width only Vosh keeps, in warn. */
+   and past the width only Vosh keeps, in warn. Each text color is the
+   status text held to 4.5:1 on its wash (boxInks.ts, which mirrors the
+   18 percent). */
 .wr-over {
-  color: var(--danger-text);
+  color: var(--wr-ink-danger, var(--danger-text));
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   border-radius: 2px;
 }
 
 .wr-soft,
 .wr-warn {
-  color: var(--warn-text);
+  color: var(--wr-ink-warn, var(--warn-text));
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   border-radius: 2px;
 }
 
 .wr-struck {
-  color: var(--warn-text);
+  color: var(--wr-ink-warn, var(--warn-text));
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   border-radius: 2px;
   text-decoration: line-through;

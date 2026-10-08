@@ -16,6 +16,9 @@ import { useEscape } from '../lib/escapeStack';
 import type { PromptCardHost } from '../prompt/PromptCard';
 import type { CellSize } from '../prompt/pinnedDock';
 import { useBandEnv } from '../prompt/useBandEnv';
+import { useColorVision } from '../theme/fitGameColors';
+import { themeTokens } from '../theme/themes';
+import { useActiveTheme } from '../theme/useActiveTheme';
 import { useCharStatus } from '../stores/gmcp/charStatusStore';
 import { useRoom } from '../stores/gmcp/roomStore';
 import { useSessionConnection } from '../stores/session/connectionStore';
@@ -26,6 +29,7 @@ import { pushToast } from '../stores/toasts';
 import { Button } from '../ui';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { applicationGuide } from './applications';
+import { boxInks } from './boxInks';
 import { stopsAsking, useAskPost } from './askPost';
 import { DontAskAgain } from './DontAskAgain';
 import {
@@ -184,6 +188,13 @@ export function WritingCard({
   const room = useRoom();
   const writing = useWriting();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
+  // The marks and the selection in the box, each readable on its ground.
+  const theme = useActiveTheme();
+  const vision = useColorVision();
+  const inks = useMemo(
+    () => boxInks({ ground: env.bg, ...themeTokens(theme, vision) }),
+    [env.bg, theme, vision],
+  );
 
   // Another character's drafts, opened from Other characters, wait for
   // a session that plays them (Note Editor board 7).
@@ -1082,6 +1093,7 @@ export function WritingCard({
                       label={info.title}
                       rows={boxRows}
                       minRows={boxMinRows}
+                      inks={inks}
                       onChange={onBoxChange}
                       onCaret={setCaretRow}
                       onPaste={(p: PasteNote) =>
