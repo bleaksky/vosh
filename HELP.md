@@ -574,7 +574,7 @@ Alert presets get your attention when the game needs you, while you play another
 
 All five start off. Turn one on with its switch and click `Save`. Each starts with `Banner` pressed in its `Alert` row, and `Sound` and `Bounce` press on and off as they do on a trigger. The rows for the parts you press show under it. `Banner shows` waits for Tells you get and Your name, where `Title and words` adds what was said or the line that named you. `Only while you are not looking at its session` starts on, so a preset rings only while you look at another session or another app. Turn it off and it rings while you watch too. A preset whose `Alert` row you changed wears a pencil in the list, and `Reset to preset` on its card puts the row back as the preset ships.
 
-While Vosh is in front and you look at another session, an alert from a session behind shows a notice at the bottom right, such as `Tell from Maren` with `to Tolliver` beside it. Click `Show` to go to that session.
+While Vosh is in front and you look at another session, an alert from a session behind shows a notice at the bottom right, such as `Tell from Maren` with `to Tolliver` beside it. Click `Show` to go to that session. `Close` puts the notice away and leaves the count on the row of that session in the sidebar until you look there.
 
 The first time you turn on a `Banner`, on a preset or on a trigger, Vosh asks before macOS does. Click `Continue` and macOS asks whether Vosh may post banners. `Not now` keeps `Banner` on and asks no more until you close Settings. If banners from Vosh are off in System Settings, `Banner` wears a warning ring on every `Alert` row, and each alert preset says so at the top of its card. `Sound` and `Bounce` still work. `Open notification settings` takes you to the page where you turn banners back on, and the ring goes once you come back to Settings. On Windows the note names Windows Settings and `Flash`. A dev build you run from the source shows no banners, so it asks nothing and wears no ring.
 
@@ -1079,7 +1079,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
-- `Cmd+Shift+1` opens Settings on Triggers, `Cmd+Shift+2` on Aliases, `Cmd+Shift+3` on Macros and `Cmd+Shift+4` on Timers. They work in Settings too.
+- `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers and `Cmd+Option+4` on Macros. They work in Settings too. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
 
 For your sessions, in the main window.
 

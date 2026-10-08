@@ -181,7 +181,7 @@ export function SettingsWindow() {
     void getCurrentWindow().setFocus();
   });
 
-  // The Settings keys, Cmd and Shift on macOS and Ctrl and Shift
+  // The Settings keys, Cmd and Option on macOS and Ctrl and Shift
   // elsewhere with 1 to 4, open their page here as they do from the
   // main window. No macro runs in this window, so the key always works.
   // Taking the key keeps the macOS menu row from opening the page a
@@ -191,8 +191,11 @@ export function SettingsWindow() {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-      if (!primary || e.altKey) return;
-      const id = settingsShortcutOf({ key: shortcutKey(e), code: e.code, shift: e.shiftKey });
+      if (!primary) return;
+      const id = settingsShortcutOf(
+        { key: shortcutKey(e), code: e.code, shift: e.shiftKey, alt: e.altKey },
+        mac,
+      );
       if (!id) return;
       e.preventDefault();
       if (!e.repeat) go(resolveSettingsTarget(id.slice('settings-'.length)));

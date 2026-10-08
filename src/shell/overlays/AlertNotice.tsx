@@ -1,14 +1,19 @@
 import type { MouseEvent } from 'react';
-import { showAlertNotice, useAlertNotice } from '../../stores/session/alertNoticeStore';
+import {
+  closeAlertNotice,
+  showAlertNotice,
+  useAlertNotice,
+} from '../../stores/session/alertNoticeStore';
 
-// A press on Show leaves the caret on the command line.
+// A press on Close or Show leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
 
 // The notice of an alert from a session you are not looking at, board 5
 // of the Sessions review (Q10). It sits on the update notice recipe with
 // the accent dot, names the alert and the session it rang in, and never
 // shows the words (Alerts Q3). Show selects that session, and the notice
-// goes with it.
+// goes with it. Close puts the notice away and leaves the dot and the
+// count on the session's row, which go once you look at it.
 export function AlertNotice() {
   const notice = useAlertNotice();
   if (!notice) return null;
@@ -18,6 +23,14 @@ export function AlertNotice() {
       <span className="ov-update-msg">{notice.title}</span>
       {notice.label !== null && <span className="ov-update-meta">to {notice.label}</span>}
       <span className="ov-update-actions">
+        <button
+          type="button"
+          className="ov-button"
+          onMouseDown={keepCaret}
+          onClick={closeAlertNotice}
+        >
+          Close
+        </button>
         <button
           type="button"
           className="ov-button"

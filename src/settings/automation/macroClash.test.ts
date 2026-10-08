@@ -27,12 +27,20 @@ describe('macroClashNote', () => {
   });
 
   it('says which Settings page a Settings key opens', () => {
-    expect(macroClashNote('Shift+Meta+1', true)).toBe(
-      '⇧⌘1 also opens Triggers in Settings. In sessions on this profile it runs this macro.',
+    expect(macroClashNote('Alt+Meta+1', true)).toBe(
+      '⌥⌘1 also opens Timers in Settings. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Alt+Meta+£', true)).toBe(
+      '⌥⌘3 also opens Triggers in Settings. In sessions on this profile it runs this macro.',
     );
     expect(macroClashNote('Ctrl+Shift+@', false)).toBe(
       'Ctrl+Shift+2 also opens Aliases in Settings. In sessions on this profile it runs this macro.',
     );
+    expect(macroClashNote('Ctrl+Shift+4', false)).toBe(
+      'Ctrl+Shift+4 also opens Macros in Settings. In sessions on this profile it runs this macro.',
+    );
+    // Cmd Shift with a digit is the screenshot key on macOS, not Vosh's.
+    expect(macroClashNote('Shift+Meta+3', true)).toBeNull();
   });
 
   it('says the sessions toggle key shows or hides your sessions', () => {

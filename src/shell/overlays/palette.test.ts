@@ -486,11 +486,21 @@ describe('settings rows', () => {
       .filter((r) => r.keys)
       .map((r) => [r.id, r.keys]);
     expect(keyed).toEqual([
-      ['settings-triggers', 'Mod+Shift+1'],
-      ['settings-aliases', 'Mod+Shift+2'],
-      ['settings-macros', 'Mod+Shift+3'],
-      ['settings-timers', 'Mod+Shift+4'],
+      ['settings-triggers', appShortcut('settings-triggers')],
+      ['settings-aliases', appShortcut('settings-aliases')],
+      ['settings-macros', appShortcut('settings-macros')],
+      ['settings-timers', appShortcut('settings-timers')],
     ]);
+    // Cmd+Option on macOS, since Cmd Shift 3 and 4 take screenshots
+    // there, and Ctrl+Shift on Windows and Linux.
+    expect(appShortcut('settings-timers', true)).toBe('Mod+Alt+1');
+    expect(appShortcut('settings-aliases', true)).toBe('Mod+Alt+2');
+    expect(appShortcut('settings-triggers', true)).toBe('Mod+Alt+3');
+    expect(appShortcut('settings-macros', true)).toBe('Mod+Alt+4');
+    expect(appShortcut('settings-timers', false)).toBe('Mod+Shift+1');
+    expect(appShortcut('settings-aliases', false)).toBe('Mod+Shift+2');
+    expect(appShortcut('settings-triggers', false)).toBe('Mod+Shift+3');
+    expect(appShortcut('settings-macros', false)).toBe('Mod+Shift+4');
   });
 
   it('opens each row on a place the resolver knows', () => {

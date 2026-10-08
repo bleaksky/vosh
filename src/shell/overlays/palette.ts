@@ -1,6 +1,6 @@
 import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
-import { appShortcut } from '../../lib/appMenu';
+import { appShortcut, type SettingsShortcutId } from '../../lib/appMenu';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
 import type { WritingKind } from '../../ipc/writing';
@@ -194,8 +194,15 @@ const PANE_TITLES: Record<PaneType, string> = {
 // `settings-<id>`, a palette Recent id, so the old tab ids stay. The
 // vitals row is gone because Settings no longer has vitals settings.
 // Its id still resolves, to Layout.
-// The four Automation pages carry the Settings keys (Mod+Shift+1 to 4).
-const SETTINGS_TABS: { id: string; title: string; keywords: string; keys?: string }[] = [
+// The four Automation pages carry the Settings keys, Cmd+Option+1 to 4
+// on macOS and Ctrl+Shift+1 to 4 elsewhere, read for the platform as
+// the palette builds.
+const SETTINGS_TABS: {
+  id: string;
+  title: string;
+  keywords: string;
+  shortcut?: SettingsShortcutId;
+}[] = [
   {
     id: 'themes',
     title: 'Open theme settings',
@@ -223,25 +230,25 @@ const SETTINGS_TABS: { id: string; title: string; keywords: string; keys?: strin
     id: 'triggers',
     title: 'Open trigger settings',
     keywords: 'automation patterns actions',
-    keys: APP_SHORTCUTS['settings-triggers'],
+    shortcut: 'settings-triggers',
   },
   {
     id: 'aliases',
     title: 'Open alias settings',
     keywords: 'automation command shortcuts',
-    keys: APP_SHORTCUTS['settings-aliases'],
+    shortcut: 'settings-aliases',
   },
   {
     id: 'macros',
     title: 'Open macro settings',
     keywords: 'automation key bindings',
-    keys: APP_SHORTCUTS['settings-macros'],
+    shortcut: 'settings-macros',
   },
   {
     id: 'timers',
     title: 'Open timer settings',
     keywords: 'automation recurring commands interval',
-    keys: APP_SHORTCUTS['settings-timers'],
+    shortcut: 'settings-timers',
   },
   {
     id: 'import',
@@ -419,7 +426,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'view',
       title: tab.title,
       keywords: `settings preferences ${tab.keywords}`,
-      ...(tab.keys ? { keys: tab.keys } : {}),
+      ...(tab.shortcut ? { keys: appShortcut(tab.shortcut) } : {}),
       searchOnly: true,
       run: () => deps.openSettingsTab(tab.id),
     });

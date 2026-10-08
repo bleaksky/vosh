@@ -25,10 +25,10 @@ const DOES: Record<MacroKeptShortcutId, string> = {
   'session-next': 'goes to the next session',
   'session-previous': 'goes to the previous session',
   'sessions-sidebar': 'shows or hides your sessions',
-  'settings-triggers': 'opens Triggers in Settings',
-  'settings-aliases': 'opens Aliases in Settings',
-  'settings-macros': 'opens Macros in Settings',
   'settings-timers': 'opens Timers in Settings',
+  'settings-aliases': 'opens Aliases in Settings',
+  'settings-triggers': 'opens Triggers in Settings',
+  'settings-macros': 'opens Macros in Settings',
 };
 
 /** The note for a macro on `canonical`, or null when no session or

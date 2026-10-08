@@ -1,9 +1,9 @@
 {
   "settings": "Mod+,",
-  "settings-triggers": "Mod+Shift+1",
-  "settings-aliases": "Mod+Shift+2",
-  "settings-macros": "Mod+Shift+3",
-  "settings-timers": "Mod+Shift+4",
+  "settings-timers": { "mac": "Mod+Alt+1", "other": "Mod+Shift+1" },
+  "settings-aliases": { "mac": "Mod+Alt+2", "other": "Mod+Shift+2" },
+  "settings-triggers": { "mac": "Mod+Alt+3", "other": "Mod+Shift+3" },
+  "settings-macros": { "mac": "Mod+Alt+4", "other": "Mod+Shift+4" },
   "connect": "Mod+R",
   "session-new": "Mod+T",
   "session-close": "Mod+W",

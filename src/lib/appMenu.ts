@@ -103,14 +103,16 @@ function isSessionShortcut(id: AppShortcutId): id is SessionShortcutId {
   return (SESSION_SHORTCUTS as readonly AppShortcutId[]).includes(id);
 }
 
-// The keys that open a Settings page, Mod and Shift with a digit from 1
-// to 4. Both windows take them, and a macro keeps them in the main
-// window as it keeps a session key.
+// The keys that open a Settings page, a digit from 1 to 4 for Timers,
+// Aliases, Triggers and Macros. macOS keeps Cmd with Shift and 3 or 4
+// for screenshots, so there they take Cmd and Option, and Ctrl and
+// Shift elsewhere. Both windows take them, and a macro keeps them in
+// the main window as it keeps a session key.
 const SETTINGS_SHORTCUTS = [
-  'settings-triggers',
-  'settings-aliases',
-  'settings-macros',
   'settings-timers',
+  'settings-aliases',
+  'settings-triggers',
+  'settings-macros',
 ] as const satisfies readonly AppShortcutId[];
 
 /** A key that opens a Settings page. */
@@ -134,22 +136,38 @@ const SHIFTED_KEYS: Record<string, string> = {
   '4': '$',
 };
 
-/** A spec's key, lowercased, and whether it adds Shift, or Ctrl beside
- *  Mod as macOS specs can. */
-function specKey(spec: string): { key: string; shift: boolean; ctrl: boolean } {
+// What Option makes of each Settings digit on a US Mac layout, so a
+// macro saved from Cmd and Option with one still reads as that key.
+const OPTION_KEYS: Record<string, string> = {
+  '1': '¡',
+  '2': '™',
+  '3': '£',
+  '4': '¢',
+};
+
+/** A spec's key, lowercased, and whether it adds Shift or Alt, or Ctrl
+ *  beside Mod as macOS specs can. */
+function specKey(spec: string): { key: string; shift: boolean; ctrl: boolean; alt: boolean } {
   const parts = spec.split('+').map((p) => p.toLowerCase());
   const key = parts.pop() ?? '';
-  return { key, shift: parts.includes('shift'), ctrl: parts.includes('ctrl') };
+  return {
+    key,
+    shift: parts.includes('shift'),
+    ctrl: parts.includes('ctrl'),
+    alt: parts.includes('alt'),
+  };
 }
 
 /** A primary modifier key press: `key` from shortcutKey (so lowercase),
  *  `code` the physical key. `ctrl` is Control held with Command on
- *  macOS, which only a spec with Ctrl matches. */
+ *  macOS, which only a spec with Ctrl matches. `alt` is Option or Alt,
+ *  which only a Settings key on macOS takes. */
 export interface ShortcutPress {
   key: string;
   code: string;
   shift: boolean;
   ctrl?: boolean;
+  alt?: boolean;
 }
 
 /** What a press does in the main window. */
@@ -165,13 +183,21 @@ export type ShortcutHit =
    *  from the command line, and nothing else takes the key. */
   | { kind: 'macro' };
 
-/** The Settings key a press is, or null. Shift with a digit types !
- *  or another character, which differs by layout, so the digit matches
- *  on the physical key. Settings and the main window both read it. */
-export function settingsShortcutOf(press: ShortcutPress): SettingsShortcutId | null {
-  if (!press.shift) return null;
+/** The Settings key a press is on this platform, or on macOS with
+ *  `mac`, or null. Option or Shift with a digit types ¡ or ! or another
+ *  character, which differs by layout, so the digit matches on the
+ *  physical key. Settings and the main window both read it. */
+export function settingsShortcutOf(
+  press: ShortcutPress,
+  mac: boolean = isMacPlatform(),
+): SettingsShortcutId | null {
+  if (press.ctrl === true) return null;
+  const alt = press.alt === true;
   return (
-    SETTINGS_SHORTCUTS.find((id) => press.code === `Digit${specKey(appShortcut(id)).key}`) ?? null
+    SETTINGS_SHORTCUTS.find((id) => {
+      const spec = specKey(appShortcut(id, mac));
+      return spec.shift === press.shift && spec.alt === alt && press.code === `Digit${spec.key}`;
+    }) ?? null
   );
 }
 
@@ -190,17 +216,19 @@ export function resolveShortcut(
 ): ShortcutHit | null {
   const { key, code, shift } = press;
   const ctrl = press.ctrl === true;
-  if (key === 'r' && shift && !ctrl) return { kind: 'take' };
+  const alt = press.alt === true;
   const digit = /^Digit([1-9])$/.exec(code);
   if (digit && ctrl) return null;
-  if (digit && !shift) {
+  if (digit) {
+    const id = settingsShortcutOf(press, mac);
+    if (id) return macroBound() ? { kind: 'macro' } : { kind: 'run', id };
+    if (shift || alt) return null;
     return macroBound() ? { kind: 'macro' } : { kind: 'goto', place: Number(digit[1]) };
   }
-  if (digit) {
-    const id = settingsShortcutOf(press);
-    if (!id) return null;
-    return macroBound() ? { kind: 'macro' } : { kind: 'run', id };
-  }
+  // Alt is Option on macOS, which only the Settings keys take. On
+  // Windows and Linux Ctrl with Alt is AltGr, which types characters.
+  if (alt) return null;
+  if (key === 'r' && shift && !ctrl) return { kind: 'take' };
   for (const id of WINDOW_SHORTCUTS) {
     const spec = specKey(appShortcut(id, mac));
     const physical = PHYSICAL_KEYS[spec.key];
@@ -217,24 +245,26 @@ export function resolveShortcut(
  *  digit, one of the session keys or one of the Settings keys. Ctrl with
  *  Meta on macOS is the sessions toggle's key there. Settings
  *  names the clash with it. A bracket or a shifted digit matches as
- *  Shift types it on a US layout too. */
+ *  Shift types it on a US layout too, and a Settings digit on macOS as
+ *  Option types it there. */
 export function appKeyOfMacro(
   canonical: string,
   mac: boolean,
 ): { kind: 'run'; id: MacroKeptShortcutId } | { kind: 'goto'; place: number } | null {
   // The canonical order is Ctrl, Alt, Shift, Meta. Off macOS Mod is
   // Ctrl, so a spec's own Ctrl adds nothing there.
-  const named = (key: string, shift: boolean, ctrl = false) =>
-    mac
-      ? `${ctrl ? 'Ctrl+' : ''}${shift ? 'Shift+' : ''}Meta+${key}`
-      : `Ctrl+${shift ? 'Shift+' : ''}${key}`;
+  const named = (key: string, shift: boolean, ctrl = false, alt = false) => {
+    const mods = `${alt ? 'Alt+' : ''}${shift ? 'Shift+' : ''}`;
+    return mac ? `${ctrl ? 'Ctrl+' : ''}${mods}Meta+${key}` : `Ctrl+${mods}${key}`;
+  };
   for (let place = 1; place <= 9; place += 1) {
     if (canonical === named(String(place), false)) return { kind: 'goto', place };
   }
   for (const id of [...SESSION_SHORTCUTS, ...SETTINGS_SHORTCUTS]) {
-    const { key, shift, ctrl } = specKey(appShortcut(id, mac));
-    const keys = [key.toUpperCase(), SHIFTED_KEYS[key]].filter(Boolean);
-    if (keys.some((k) => canonical === named(k, shift, ctrl))) return { kind: 'run', id };
+    const { key, shift, ctrl, alt } = specKey(appShortcut(id, mac));
+    const typed = shift ? SHIFTED_KEYS[key] : alt && mac ? OPTION_KEYS[key] : undefined;
+    const keys = typed ? [key.toUpperCase(), typed] : [key.toUpperCase()];
+    if (keys.some((k) => canonical === named(k, shift, ctrl, alt))) return { kind: 'run', id };
   }
   return null;
 }
