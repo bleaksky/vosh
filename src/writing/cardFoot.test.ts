@@ -19,6 +19,7 @@ const base: FootInput = {
   finding: false,
   matches: false,
   hasGame: true,
+  asksPost: true,
 };
 
 const ids = (f: FootInput) => footFor(f).buttons.map((b) => b.id);
@@ -47,6 +48,12 @@ describe('the footer', () => {
     expect(ids({ ...base, kind: 'beast', matches: true })).toEqual(['send']);
     expect(ids({ ...base, phase: 'sent' })).toEqual(['check', 'done']);
     expect(ids({ ...base, kind: 'beast', phase: 'sent' })).toEqual(['done']);
+  });
+
+  it('reads Post with no ellipsis when it posts without asking', () => {
+    const label = (f: FootInput) => footFor(f).buttons.find((b) => b.id === 'post')?.label;
+    expect(label({ ...base, kind: 'note' })).toBe('Post…');
+    expect(label({ ...base, kind: 'note', asksPost: false })).toBe('Post');
   });
 
   it('posts a note and stops a job until its post goes', () => {

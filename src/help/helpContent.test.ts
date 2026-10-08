@@ -1622,6 +1622,8 @@ describe('the help on the writing card', () => {
   it('teaches the boards, the post and Sent', () => {
     const text = topic('play.write-in-the-game').body;
     expect(text).toContain('`Post…` asks first');
+    expect(text).toContain("`Don't ask again`");
+    expect(text).toContain('`Ask before you post` in Settings, Input');
     expect(text).toContain('Vosh keeps your last 20 for each character');
   });
 });

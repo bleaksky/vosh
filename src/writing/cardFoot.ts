@@ -70,6 +70,8 @@ export interface FootInput {
   matches: boolean;
   /** The card knows the game's copy, which Restore sends back. */
   hasGame: boolean;
+  /** Post asks before it posts, so its label ends in an ellipsis. */
+  asksPost: boolean;
 }
 
 export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] } {
@@ -138,7 +140,7 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
   } else if (info.board) {
     buttons.push({
       id: 'post',
-      label: again ? 'Post again' : 'Post…',
+      label: again ? 'Post again' : f.asksPost ? 'Post…' : 'Post',
       primary: true,
       // The game holds one note, so Post… waits while another board's
       // note is there (Note Editor board 7), and after a drop it waits

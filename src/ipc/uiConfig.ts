@@ -2,7 +2,7 @@
 // field, and the calls that save some of its fields alone.
 
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { normalizePanelFont } from '../panel/panelFont';
 import { normalizePanelSize } from '../panel/panelSize';
 import { toColorVision, type ColorVision } from '../theme/gameFit';
@@ -1095,6 +1095,13 @@ export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Pro
 /** Hear Offer the card when the game's editor opens change. */
 export function subscribeWritingOfferChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>(WRITING_OFFER_CHANGED, (event) => cb(event.payload));
+}
+
+/** Turn Ask before you post off from the writing card, and tell every
+ *  window, since setUiFields tells none. */
+export async function stopAskingToPost(): Promise<void> {
+  await setUiFields({ writing_ask_post: false });
+  await emit(WRITING_ASK_POST_CHANGED, false);
 }
 
 /** Hear Ask before you post change. */

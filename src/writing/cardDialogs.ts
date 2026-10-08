@@ -44,6 +44,16 @@ export function postAsk(
   };
 }
 
+/** Post… asks even with Ask before you post off when a bug or typo
+ *  report would record a room other than the one you began it in. */
+export function postStillAsks(
+  kind: WritingKind,
+  began: string | null,
+  here: string | null,
+): boolean {
+  return Boolean(KINDS[kind].room && here && began && began !== here);
+}
+
 /** Send for approval…'s confirm lists what the note carries, and first
  *  names a count outside ten to thirty or a line past 75. History's is
  *  shorter, and it goes once. */
