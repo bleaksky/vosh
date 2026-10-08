@@ -456,7 +456,7 @@ Turn on `Show the commands your macros send` under Input, then Command line, to 
 
 To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
 
-A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. Turning the preset off removes its six and none of yours.
+A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. In loadout mode a macro of yours in a group your character keeps off leaves the key to the preset, so a character whose `Numpad3` went down still does after another brought its own `Numpad3` to the shared catalog. Turning the preset off removes its six and none of yours.
 
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
