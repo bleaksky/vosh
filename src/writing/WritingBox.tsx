@@ -26,7 +26,9 @@ import { flow, leadingCode, marks, pasted, type Folded, type Row } from './text'
 // the right edge of the width the card keeps, and the marks the card
 // draws on what the game would change. A paragraph flows as you type
 // and a break you make with Return stays (text.ts). While Vosh sends,
-// the gutter checks off each line the game took.
+// the gutter checks off each line the game took. A line longer than the
+// box scrolls the text sideways under a gutter that stays put on the
+// box's ground, so each row in the box stays one line the game gets.
 
 /** What a send looks like in the box: the lines the game took, and the
  *  line on its way. */
@@ -175,8 +177,8 @@ function flowAfter(width: () => number, field: StateField<boolean[]>): Extension
   });
 }
 
-/** The 6 px dot a code at a line's start draws as, at the gutter's
- *  left, in its color, the code itself out of the way. */
+/** A code at a line's start, out of the way. The gutter draws its dot
+ *  (Num), so the dot stays put while the text scrolls sideways. */
 class CodeDot extends WidgetType {
   constructor(
     readonly code: string,
@@ -308,25 +310,41 @@ const MARKS = {
 };
 const STRUCK = MARKS.struck;
 
-/** A number in the gutter, or a check for a line the game took. */
+/** A number in the gutter, or a check for a line the game took, with
+ *  the dot of a code at the line's start at the gutter's left. */
 class Num extends GutterMarker {
   constructor(
     readonly n: number,
     readonly state: '' | 'over' | 'soft' | 'cut' | 'current' | 'sent',
+    readonly code: { code: string; color: string } | null = null,
   ) {
     super();
   }
   override eq(other: Num): boolean {
-    return other.n === this.n && other.state === this.state;
+    return (
+      other.n === this.n &&
+      other.state === this.state &&
+      other.code?.code === this.code?.code &&
+      other.code?.color === this.code?.color
+    );
   }
   override toDOM(): Node {
     const el = document.createElement('span');
     el.className = `wr-num${this.state ? ` is-${this.state}` : ''}`;
+    if (this.code) {
+      const dot = document.createElement('span');
+      dot.className = 'wr-code-dot';
+      dot.title = `\`${this.code.code}`;
+      dot.style.setProperty('--wr-code', this.code.color);
+      el.appendChild(dot);
+    }
     if (this.state === 'sent') {
-      el.innerHTML =
-        '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      );
     } else {
-      el.textContent = String(this.n);
+      el.appendChild(document.createTextNode(String(this.n)));
     }
     return el;
   }
@@ -350,7 +368,9 @@ function numbers(look: () => Look): Extension {
         );
         if (over) state = over.kind === 'over' ? 'over' : 'soft';
       }
-      return new Num(n, state);
+      const code = leadingCode(text);
+      const drawn = code ? { code, color: colorOf(code, l.palette)?.color ?? 'transparent' } : null;
+      return new Num(n, state, drawn);
     },
     lineMarkerChange: (update) =>
       update.docChanged || update.transactions.some((t) => t.effects.some((e) => e.is(setSending))),
