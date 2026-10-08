@@ -626,20 +626,12 @@ impl ProfileSet {
     }
 
     /// Where you are in Get started, or None when it never opened.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the get_started commands of B7 call it")
-    )]
     pub(crate) fn get_started(&self) -> Option<&GetStarted> {
         self.index.get_started.as_ref()
     }
 
     /// Keep where you are in Get started and save the index. An index
     /// that does not save keeps what it held.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the get_started commands of B7 call it")
-    )]
     pub(crate) fn set_get_started(
         &mut self,
         at_launch: bool,

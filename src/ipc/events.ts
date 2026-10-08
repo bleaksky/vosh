@@ -63,6 +63,7 @@ export const TICK_CONFIG_CHANGED = 'vosh://tick-config-changed';
 export const DAYLIGHT_CHANGED = 'vosh://daylight-changed';
 
 export const HELP_OPEN = 'vosh://help-open';
+export const GET_STARTED_OPEN = 'vosh://get-started-open';
 export const FLUSH_PENDING_WRITES = 'vosh://flush-pending-writes';
 export const APP_MENU = 'vosh://app-menu';
 export const SETTINGS_FIND = 'vosh://settings-find';

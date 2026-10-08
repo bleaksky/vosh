@@ -10,6 +10,8 @@ command aliases_import(json, profile?)
 command app_quit()
 command daylight_get(session?)
 command fonts_list()
+command get_started_get()
+command get_started_set(atLaunch, done)
 command groups_list(list, profile?)
 command groups_set_enabled(list, group, enabled, profile?)
 command hidden_get(session?)
@@ -51,6 +53,7 @@ command native_surface_set_prompt_reach(px)
 command native_surface_set_theme(background, foreground, selection, ansi)
 command native_surface_set_tokens(divider?, selection?, selectionText?, findMatch?, currentMatch?, link?, scrollbar?, selrow?, appearance?)
 command native_surface_wheel(deltaY)
+command open_get_started()
 command open_help_window()
 command open_settings_window()
 command pane_layout_get(profile?)
@@ -192,6 +195,7 @@ event vosh://fit-game-colors-changed page heard
 event vosh://flush-pending-writes app heard
 event vosh://font-changed page heard
 event vosh://game-time-changed app page heard
+event vosh://get-started-open app heard
 event vosh://groups-changed app heard
 event vosh://help-find app heard
 event vosh://help-goto page heard

@@ -339,6 +339,9 @@ pub(crate) const TICK_CONFIG_CHANGED: &str = "vosh://tick-config-changed";
 /// Sent to the main window on `#help <words>`. The payload is the
 /// words. `useAppCommands` hears it and opens Help on the best match.
 pub(crate) const HELP_OPEN: &str = "vosh://help-open";
+/// Sent to the main window when Help opens Get started. The payload is
+/// null. `subscribeGetStartedOpen` hears it.
+pub(crate) const GET_STARTED_OPEN: &str = "vosh://get-started-open";
 /// Sent to every window on quit. The payload is the round number, which
 /// each window's answer names. `listenForQuitFlush` hears it.
 pub(crate) const FLUSH_PENDING_WRITES: &str = "vosh://flush-pending-writes";

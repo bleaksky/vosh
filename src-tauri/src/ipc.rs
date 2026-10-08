@@ -5,6 +5,7 @@ pub(crate) mod affects;
 pub(crate) mod alerts;
 pub(crate) mod automation;
 pub(crate) mod characters;
+pub(crate) mod get_started;
 pub(crate) mod loadouts;
 pub(crate) mod logs;
 pub(crate) mod native_surface;
@@ -123,6 +124,9 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         profiles::profile_set_scope,
         windows::open_settings_window,
         windows::open_help_window,
+        get_started::get_started_get,
+        get_started::get_started_set,
+        get_started::open_get_started,
         windows::window_backdrop_set,
         terminal::highlight_ground_set,
         panes::pane_layout_get,
