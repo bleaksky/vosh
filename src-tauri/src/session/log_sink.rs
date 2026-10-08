@@ -92,10 +92,12 @@ impl LogSink {
             }
         }
         if let Some(path) = self.scrollback_path {
-            let bytes = self.scrollback.lock().await.dump();
-            if let Err(e) = std::fs::write(&path, bytes) {
-                warn!(path = %path.display(), error = %e, "scrollback write failed");
-            }
+            let bytes = {
+                let mut ring = self.scrollback.lock().await;
+                let _ = ring.take_changed();
+                ring.dump()
+            };
+            crate::logs::write_scrollback(&path, &bytes);
         }
     }
 }

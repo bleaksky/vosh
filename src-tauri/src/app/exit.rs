@@ -291,6 +291,17 @@ fn flush_profile_on_exit(app_handle: &AppHandle) {
     for session in state.all_sessions() {
         session.affect_full.flush(&state.affect_file);
     }
+    // The open logs and the scrollback, bounded as the profiles are.
+    let quit = tauri::async_runtime::block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            crate::logs::on_quit(&state),
+        )
+        .await
+    });
+    if quit.is_err() {
+        tracing::warn!("exit: the logs and scrollback timed out after 3s");
+    }
     // Honor a #profile reset/load: a profile it left deliberately
     // diverged from disk is not written back.
     let (held, saved): (Vec<_>, Vec<_>) = state

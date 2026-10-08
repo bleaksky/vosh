@@ -200,6 +200,28 @@ impl LogStore {
         Ok(())
     }
 
+    /// End every log still open at `ended_at_ms`, for a quit while
+    /// connected. Returns how many it ended.
+    pub fn end_open_sessions(&mut self, ended_at_ms: i64) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE sessions SET ended_at_ms = ?1 WHERE ended_at_ms IS NULL",
+            params![ended_at_ms],
+        )?)
+    }
+
+    /// End each log a crash left open at the time of its last line, or
+    /// at its start when it has none, so it never reads as running. Call
+    /// before any connection opens a log. Returns how many it ended.
+    pub fn end_crashed_sessions(&mut self) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE sessions SET ended_at_ms = COALESCE(
+                 (SELECT MAX(ts_ms) FROM log_lines WHERE session_id = sessions.id),
+                 started_at_ms)
+             WHERE ended_at_ms IS NULL",
+            [],
+        )?)
+    }
+
     /// Append one line to a session. `raw` may carry ANSI codes; `text`
     /// is the plain-text form. When `raw` is None, the plain text doubles
     /// as the raw payload on export.
@@ -393,6 +415,27 @@ pub(crate) mod tests {
         let hits = s.search("beta", &SearchOptions::default()).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].raw.as_deref(), Some(&b"\x1b[31mbeta"[..]));
+    }
+
+    #[test]
+    fn open_logs_end_at_a_quit_or_after_a_crash() {
+        let mut s = store();
+        let done = s.start_session("h", 1, 0).unwrap();
+        s.end_session(done, 50).unwrap();
+        let crashed = s.start_session("h", 1, 100).unwrap();
+        s.append(crashed, 140, "Tolliver nods.", None).unwrap();
+        s.append(crashed, 170, "Tolliver leaves north.", None)
+            .unwrap();
+        let empty = s.start_session("h", 1, 200).unwrap();
+        assert_eq!(s.end_crashed_sessions().unwrap(), 2);
+        let ended = |s: &LogStore, id| s.get_session(id).unwrap().unwrap().ended_at_ms;
+        assert_eq!(ended(&s, done), Some(50));
+        assert_eq!(ended(&s, crashed), Some(170));
+        assert_eq!(ended(&s, empty), Some(200));
+        let live = s.start_session("h", 1, 300).unwrap();
+        assert_eq!(s.end_open_sessions(400).unwrap(), 1);
+        assert_eq!(ended(&s, live), Some(400));
+        assert_eq!(ended(&s, crashed), Some(170));
     }
 
     #[test]

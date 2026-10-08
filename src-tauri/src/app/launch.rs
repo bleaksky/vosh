@@ -48,7 +48,12 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         // shared catalog and loadouts in loadout mode. See `load`.
         tauri::async_runtime::block_on(load(state, &path));
         match open_log_store(&path) {
-            Ok(store) => {
+            Ok(mut store) => {
+                // A crash left these open. They end at their last line,
+                // before any connection opens a log.
+                if let Err(e) = store.end_crashed_sessions() {
+                    tracing::warn!(error = %e, "could not end the logs a crash left open");
+                }
                 // Searches read through a second connection so
                 // they never wait on, or hold up, the session
                 // loop's appends. Without it they share the
@@ -74,6 +79,8 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
             }
         }
         tauri::async_runtime::block_on(start_selected(app.handle(), state, &path));
+        // The scrollback that changed, every few minutes.
+        crate::logs::start_saving_scrollback(state);
     }
     #[cfg(target_os = "macos")]
     {

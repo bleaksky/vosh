@@ -46,6 +46,8 @@ pub(crate) struct Scrollback {
     /// The run of repeated lines the screen ends on, while Collapse
     /// repeated lines is on.
     run: Option<RingRun>,
+    /// The ring changed since its file was last written.
+    changed: bool,
 }
 
 impl Scrollback {
@@ -54,9 +56,17 @@ impl Scrollback {
     pub(crate) fn clear(&mut self) {
         self.lines.clear();
         self.run = None;
+        self.changed = true;
+    }
+
+    /// The bytes the scrollback file should hold when the ring changed
+    /// since the last call, see [`Scrollback::dump`].
+    pub(crate) fn take_changed(&mut self) -> Option<Vec<u8>> {
+        std::mem::take(&mut self.changed).then(|| self.dump())
     }
 
     pub(crate) fn push(&mut self, raw_line: Vec<u8>) {
+        self.changed = true;
         if self.lines.len() == SCROLLBACK_CAP {
             self.lines.pop_front();
             // The run's line was the oldest, and left with it.
@@ -154,6 +164,8 @@ impl Scrollback {
         out
     }
 
+    /// Read the lines of a scrollback file. The file already holds
+    /// them, so the ring reads as unchanged.
     pub(crate) fn load_from_bytes(&mut self, bytes: &[u8]) {
         self.lines.clear();
         self.run = None;
@@ -174,10 +186,78 @@ impl Scrollback {
             };
             self.push(trimmed.to_vec());
         }
+        self.changed = false;
     }
 }
 
 pub(crate) type SharedScrollback = Arc<Mutex<Scrollback>>;
+
+/// How often a running Vosh writes the scrollback that changed, so a
+/// crash loses at most this much of it.
+const SAVE_EVERY: std::time::Duration = std::time::Duration::from_secs(3 * 60);
+
+/// Write `bytes` to the scrollback file at `path` whole: to a file beside
+/// it first, then over it in one step, so a crash mid write leaves the
+/// last file as it was.
+pub(crate) fn write_scrollback(path: &std::path::Path, bytes: &[u8]) {
+    let mut next = path.as_os_str().to_owned();
+    next.push(".next");
+    let next = std::path::PathBuf::from(next);
+    let written = std::fs::write(&next, bytes).and_then(|()| std::fs::rename(&next, path));
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&next);
+        tracing::warn!(path = %path.display(), error = %e, "scrollback write failed");
+    }
+}
+
+/// Write the scrollback file of each session whose ring changed since its
+/// file was last written. The session loop never waits on it: each ring
+/// is locked only to copy its bytes, and the writes run on the blocking
+/// pool.
+pub(crate) async fn save_changed_scrollback(state: &crate::app::state::SharedState) {
+    let Some(dir) = state.app_data.get().cloned() else {
+        return;
+    };
+    let mut files = Vec::new();
+    for session in state.all_sessions() {
+        if let Some(bytes) = session.scrollback.lock().await.take_changed() {
+            files.push((crate::disk::paths::scrollback_path(&dir, session.id), bytes));
+        }
+    }
+    if files.is_empty() {
+        return;
+    }
+    let _ = tokio::task::spawn_blocking(move || {
+        for (path, bytes) in files {
+            write_scrollback(&path, &bytes);
+        }
+    })
+    .await;
+}
+
+/// On the way out: end each log still open, since a quit while connected
+/// never reaches the end of the session loop, and write the scrollback
+/// that changed, so the next launch shows what you saw last.
+pub(crate) async fn on_quit(state: &crate::app::state::SharedState) {
+    if let Some(store) = state.logs.lock().await.as_mut() {
+        if let Err(e) = store.end_open_sessions(crate::session::now_ms()) {
+            tracing::warn!(error = %e, "could not end the open logs on quit");
+        }
+    }
+    save_changed_scrollback(state).await;
+}
+
+/// Write the scrollback that changed every few minutes, for as long as
+/// Vosh runs, so a crash loses little of it.
+pub(crate) fn start_saving_scrollback(state: &crate::app::state::SharedState) {
+    let state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(SAVE_EVERY).await;
+            save_changed_scrollback(&state).await;
+        }
+    });
+}
 
 #[cfg(test)]
 mod tests {
@@ -195,6 +275,56 @@ mod tests {
             s.lines.back().unwrap(),
             format!("line {}", SCROLLBACK_CAP + 4).as_bytes()
         );
+    }
+
+    #[test]
+    fn the_ring_says_when_its_file_is_behind() {
+        let mut s = Scrollback::default();
+        assert_eq!(s.take_changed(), None);
+        s.load_from_bytes(b"Maren waves.\r\n");
+        assert_eq!(s.take_changed(), None, "the file holds what it read");
+        s.push(b"Orla nods.".to_vec());
+        assert_eq!(
+            s.take_changed().as_deref(),
+            Some(&b"Maren waves.\r\nOrla nods.\r\n"[..])
+        );
+        assert_eq!(s.take_changed(), None);
+        s.clear();
+        assert_eq!(s.take_changed().as_deref(), Some(&b""[..]));
+    }
+
+    #[tokio::test]
+    async fn a_quit_ends_the_open_log_and_writes_the_scrollback() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let state: crate::app::state::SharedState =
+            Arc::new(crate::app::state::AppState::default());
+        let _ = state.app_data.set(dir.path().to_path_buf());
+        let mut store = vosh_log::LogStore::in_memory().unwrap();
+        let open = store.start_session("h", 1, 0).unwrap();
+        *state.logs.lock().await = Some(store);
+        let session = state.selected_session();
+        session
+            .scrollback
+            .lock()
+            .await
+            .push(b"Tolliver leaves north.".to_vec());
+
+        on_quit(&state).await;
+        let path = crate::disk::paths::scrollback_path(dir.path(), session.id);
+        assert_eq!(std::fs::read(path).unwrap(), b"Tolliver leaves north.\r\n");
+        let guard = state.logs.lock().await;
+        let row = guard.as_ref().unwrap().get_session(open).unwrap().unwrap();
+        assert!(row.ended_at_ms.is_some());
+    }
+
+    #[test]
+    fn a_scrollback_file_is_replaced_whole() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let path = dir.path().join("scrollback.txt");
+        std::fs::write(&path, b"old\r\n").unwrap();
+        write_scrollback(&path, b"new\r\n");
+        assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 
     #[test]

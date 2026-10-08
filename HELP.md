@@ -1024,7 +1024,7 @@ Inside that folder.
 - `global.toml` holds cross profile UI preferences.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
-- `scrollback.txt` keeps the last 10,000 terminal lines of the first session you opened across restarts, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.
+- `scrollback.txt` keeps the last 10,000 terminal lines of the first session you opened across restarts, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Vosh writes each one when a connection ends, every few minutes while it runs, and as you quit, so a crash loses at most a few minutes of it. Closing a session deletes its file.
 - `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
 - `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.

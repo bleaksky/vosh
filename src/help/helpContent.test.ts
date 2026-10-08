@@ -1410,7 +1410,7 @@ describe('the help on what each session keeps and what its profile shares', () =
       'Which loadouts are on belongs to the profile.',
     );
     expect(body('fix-it.data-on-disk')).toContain(
-      'each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.',
+      'each later session keeps its own in a file with its number, such as `scrollback-2.txt`.',
     );
     expect(body('characters-and-data.profiles')).toContain(
       "`Default plays in Tolliver's session, Build in Orla's.`",
