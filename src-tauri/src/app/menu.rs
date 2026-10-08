@@ -217,9 +217,12 @@ fn route(id: &str) -> Route {
         "close-window" | "session-close" => Route::CloseFront,
         "copy" => Route::Copy,
         "find" => Route::Find,
-        // A theme repaints every window, so picking one from Settings
-        // leaves Settings in front.
-        _ if id.starts_with("theme-") => Route::Main { raise: false },
+        // A theme repaints every window, and a Settings page opens in
+        // Settings, so picking either from Settings leaves Settings in
+        // front.
+        _ if id.starts_with("theme-") || id.starts_with("settings-") => {
+            Route::Main { raise: false }
+        }
         _ => Route::Main { raise: true },
     }
 }
