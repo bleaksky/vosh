@@ -8,10 +8,10 @@ import type {
   VitalsList as VitalsListType,
 } from './VitalsCustomize';
 
-// Customize vitals under Settings, Layout, as boards 2 to 5 of the
-// Vitals Styles review draw it. The section draws from the config it is
-// handed. The list mounts for real into the stand in for the DOM in
-// src/test/fakeDom.ts, so its grips take the keys a test presses.
+// Customize vitals under Settings, Layout. The section draws from the
+// config it is handed. The list mounts for real into the stand in for
+// the DOM in src/test/fakeDom.ts, so its grips take the keys a test
+// presses.
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve(undefined)) }));
 vi.mock('@tauri-apps/api/event', () => ({

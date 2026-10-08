@@ -5,15 +5,15 @@ import { Button, Field, Section, cx } from '../../ui';
 import { lineTime } from './scriptTimes';
 import { noPluginLines } from './pluginState';
 
-// The Console section of Scripts (boards 2 and 4). Every [lua] line the
-// selected session printed, whoever's Lua it is about, so loose scripts
-// and #lua lines show beside your plugins, each with its local time.
-// The field under them runs Lua there as a #lua line does.
+// The Console section of Scripts. Every [lua] line the selected session
+// printed, whoever's Lua it is about, so loose scripts and #lua lines
+// show beside your plugins, each with its local time. The field under
+// them runs Lua there as a #lua line does.
 //
-// A plugin's page draws the same section as its Output (boards 1 and
-// 3), with only that plugin's lines. Clear there lets go of those
-// alone, and the field runs Lua inside the plugin, where it sees the
-// plugin's globals and its own mud table.
+// A plugin's page draws the same section as its Output, with only that
+// plugin's lines. Clear there lets go of those alone, and the field
+// runs Lua inside the plugin, where it sees the plugin's globals and
+// its own mud table.
 
 /** The well's note before any line. */
 export const NO_LUA_LINES =

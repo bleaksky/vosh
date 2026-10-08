@@ -19,9 +19,10 @@ interface AdvancedAppearanceProps {
 }
 
 /** The quiet Advanced row at the end of Appearance. It holds what the
- *  board leaves out and you still use: custom themes, the base palette,
- *  bold bright text, blinking text, and the font stack. The split
- *  divider color lives on Layout and the sent command color on Input. */
+ *  main rows leave out and you still use: custom themes, the base
+ *  palette, bold bright text, blinking text, and the font stack. The
+ *  split divider color lives on Layout and the sent command color on
+ *  Input. */
 export function AdvancedAppearance({ config, update, open, onToggle }: AdvancedAppearanceProps) {
   const panelId = useId();
   const reduceMotion = useReduceMotion();

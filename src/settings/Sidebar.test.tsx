@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 
-// The nav as the boards draw it. Effects do not run in a markup render,
+// The nav as it draws. Effects do not run in a markup render,
 // so the Find listener never reaches the app.
 
 vi.mock('@tauri-apps/api/event', () => ({

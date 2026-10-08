@@ -5,12 +5,11 @@ import type { TriggerRecord } from '../../ipc/automation';
 import type { PresetEdit, PresetEdits } from '../../ipc/presetEdits';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
-// The trigger card's Pattern row, board 6 of the Scripts review: the
-// mode beside the label, the line under it that says what the mode does,
-// and the field under both. Then its Alert row, board 1 of the Alerts
-// review. This mounts the card on one trigger, or the whole editor over
-// a fake store, and drives it through the handlers React keeps on each
-// element, since this DOM sends no events.
+// The trigger card's Pattern row: the mode beside the label, the line
+// under it that says what the mode does, and the field under both. Then
+// its Alert row. This mounts the card on one trigger, or the whole
+// editor over a fake store, and drives it through the handlers React
+// keeps on each element, since this DOM sends no events.
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -225,7 +224,7 @@ describe('the trigger Pattern row', () => {
   });
 });
 
-/** The visitor of board 1, with no alert yet. */
+/** A trigger on a visitor walking in, with no alert yet. */
 const VISITOR = trigger({
   name: 'visitor',
   patterns: [{ pattern: '^(\\w+) walks in\\.$', enabled: true }],
@@ -437,8 +436,8 @@ describe('the trigger Alert row', () => {
   });
 });
 
-// Presets board 1: the links on a preset's card open Triggers on one of
-// its triggers, or filtered by the preset's name.
+// The links on a preset's card open Triggers on one of its triggers, or
+// filtered by the preset's name.
 describe('a link from a preset card', () => {
   const sanctuary = trigger({
     name: 'buff.sanctuary',
@@ -460,8 +459,8 @@ describe('a link from a preset card', () => {
   });
 });
 
-// Presets board 2: a trigger of yours never takes a preset trigger's
-// name, its preset on or off, wherever you name it.
+// A trigger of yours never takes a preset trigger's name, its preset on
+// or off, wherever you name it.
 describe('the preset name guard', () => {
   const GUARD =
     'Disarms and fading buffs uses the name disarm.secondary. Give your trigger its own name.';
@@ -493,7 +492,7 @@ describe('the preset name guard', () => {
 const DISARMS = presetTriggers(presetById('disarm_buff_fade')!);
 const SANCTUARY = DISARMS.find((t) => t.name === 'buff.sanctuary')!;
 
-// Presets Q9: the text holds your own triggers, and its Save keeps every
+// The JSON text holds your own triggers, and its Save keeps every
 // preset trigger as the store holds it.
 describe('Edit all as JSON', () => {
   it('leaves the preset triggers out and keeps them at Save', async () => {
@@ -522,9 +521,9 @@ describe('Edit all as JSON', () => {
   });
 });
 
-// Presets board 2: Save writes your triggers through the store and the
-// rows you changed in a preset trigger through preset_edits_set, then
-// runs the plan that builds the preset trigger again.
+// Save writes your triggers through the store and the rows you changed
+// in a preset trigger through preset_edits_set, then runs the plan that
+// builds the preset trigger again.
 describe('saving a preset trigger', () => {
   it('keeps its group in the store and in your edits', async () => {
     const editor = await mountEditor([VISITOR, SANCTUARY]);
@@ -545,8 +544,8 @@ describe('saving a preset trigger', () => {
   });
 });
 
-// Presets board 2: every row of a preset trigger edits as yours do, all
-// but its name. A changed row says what the preset has.
+// Every row of a preset trigger edits as yours do, all but its name. A
+// changed row says what the preset has.
 describe('editing a preset trigger', () => {
   const OFF: PresetEdits = {
     disarm_buff_fade: { triggers: { 'buff.sanctuary': { enabled: { value: false, was: true } } } },
@@ -657,9 +656,8 @@ describe('editing a preset trigger', () => {
   });
 });
 
-// Presets board 4: a fix that lands on a row you edited. Your edit stays,
-// the row says what the preset now has, and Take the fix and Keep mine
-// wait for Save.
+// A fix that lands on a row you edited. Your edit stays, the row says
+// what the preset now has, and Take the fix and Keep mine wait for Save.
 describe('a fix to a row you edited', () => {
   const DUAL = 'get 1.;dual 1.';
   const SECONDARY = DISARMS.find((t) => t.name === 'disarm.secondary')!;

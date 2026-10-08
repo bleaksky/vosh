@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { PluginInstallCheck } from '../../ipc/scripts';
 import { InstallDialog } from './InstallDialog';
 
-// Install's one question as markup, worded as board 4 words it.
+// Install's one question as markup.
 
 const none = () => undefined;
 
-// Board 4's weather_pane.
+// A sample plugin with a pane, weather_pane.
 const WEATHER: PluginInstallCheck = {
   name: 'weather_pane',
   version: '0.2.0',

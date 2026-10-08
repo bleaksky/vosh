@@ -5,9 +5,9 @@ import { defaultLayout } from '../../panel/paneLayout';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
 import type { SettingsPageProps } from '../pageTypes';
 
-// Characters with the import of board 5: Import… reads the file you
-// pick, the sheet takes the detail column while no row reads selected,
-// and an import selects the profile the file went to.
+// Characters with the import: Import… reads the file you pick, the
+// sheet takes the detail column while no row reads selected, and an
+// import selects the profile the file went to.
 
 const WORLD = 'play.theforsakenlands.com';
 const NOT_AN_EXPORT =

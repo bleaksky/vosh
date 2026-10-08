@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { alertsAskPermission, alertsPermission, type Permission } from '../../ipc/alerts';
 
 // Whether the system lets Vosh post banners, and the ask Vosh shows
-// before the system's own question (board 3 of the Alerts and Scenes
-// review, Q1).
+// before the system's own question.
 
 /** Not now holds for the life of this Settings window, so a second
  *  Banner press asks no more. */

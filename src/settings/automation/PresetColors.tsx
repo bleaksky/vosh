@@ -7,14 +7,13 @@ import { ColorField, cx, Select } from '../../ui';
 import { FixChoice } from './fields';
 import { SamplePaintContext } from '../../automation/samplePaint';
 
-// The Colors block of a preset's card (Presets board 1, Q3, Q4 and Q8):
-// one swatch for each color the preset paints, on the grid Appearance
-// lays its colors on. A swatch whose color sits in a template takes any
-// color and shows the preset's own while you leave it empty. A swatch
-// whose color sits in a Highlight picks from the theme's sixteen. A
-// changed swatch offers the preset's color back under it. A swatch a fix
-// changed under your color wears the warn ring and offers Take the fix
-// and Keep mine in its place (board 4).
+// The Colors block of a preset's card: one swatch for each color the
+// preset paints, on the grid Appearance lays its colors on. A swatch
+// whose color sits in a template takes any color and shows the preset's
+// own while you leave it empty. A swatch whose color sits in a Highlight
+// picks from the theme's sixteen. A changed swatch offers the preset's
+// color back under it. A swatch a fix changed under your color wears the
+// warn ring and offers Take the fix and Keep mine in its place.
 
 const NAMES = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
 

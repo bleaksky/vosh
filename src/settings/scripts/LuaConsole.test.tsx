@@ -49,7 +49,7 @@ afterAll(() => {
 /** A moment on October 4 in your own time zone. */
 const at = (h: number, m: number, s: number) => new Date(2026, 9, 4, h, m, s).getTime();
 
-// Board 1's Output, one line of each kind.
+// An Output with one line of each kind.
 const LINES: LuaLine[] = [
   {
     ts_ms: at(21, 14, 3),

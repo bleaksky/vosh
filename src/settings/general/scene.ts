@@ -1,9 +1,8 @@
 import type { LogSession, SceneFilter, SceneRange } from '../../ipc/logs';
 import { formatCount, isLocalHost, logTime } from './logView';
 
-// Save a scene (board 5 of the Alerts and Scenes review), the words and
-// numbers its page shows and the range it starts on. The page itself is
-// ScenePage.tsx.
+// Save a scene, the words and numbers its page shows and the range it
+// starts on. The page itself is ScenePage.tsx.
 
 /** The channels a scene can leave out, as Comm.Channel names them. */
 export const SCENE_CHANNELS: readonly string[] = [
@@ -21,7 +20,7 @@ export const SCENE_CHANNELS: readonly string[] = [
 ];
 
 /** What a scene leaves out at first: your prompt and your commands, and
- *  the tells, newbie, prayers and the staff channels (Q10). */
+ *  the tells, newbie, prayers and the staff channels. */
 export const FIRST_FILTER: SceneFilter = {
   prompts: false,
   commands: false,
@@ -124,7 +123,7 @@ export function addable(leftOut: readonly string[]): string[] {
 
 /** True when the selected session's profile logs the world it dials:
  *  your Log sessions choice, or until you choose, every world but this
- *  computer (D34). */
+ *  computer. */
 export function logsWorld(logSessions: boolean | null, host: string): boolean {
   return logSessions ?? !isLocalHost(host);
 }

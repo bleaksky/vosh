@@ -32,7 +32,7 @@ describe('paneSchematic', () => {
   });
 
   it('matches the board when the split sits where the board draws it', () => {
-    // The board draws the line at 43.5, a map share of 43 in 89.
+    // The line sits at 43.5, a map share of 43 in 89.
     const s = paneSchematic(
       tree({ split: 'column', children: [leaf('map', 43), leaf('affects', 46)] }),
       labelFor,

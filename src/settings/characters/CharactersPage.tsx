@@ -43,16 +43,15 @@ import { ProfileList } from './ProfileList';
 import type { ImportFile } from './profileImport';
 import { TrackedAffects } from './TrackedAffects';
 
-// Settings > Characters (SettingsCharacters.dc.html). The profile list
-// on the left, and on the right the selected profile: its login toggle
-// and world, its tracked affects, and its panel layout, then a quiet
-// Advanced row with a label and an order for each tracked affect. The
-// board leaves out the description, host, port, and extra character
-// names, so they stay in the data and off the page. Selecting a
-// profile edits it in place, active or not, and never switches the
-// live session. A deep link names the profile as its section
-// (`characters:Ilsabet#tracked`), and no section means the profile in
-// use.
+// Settings > Characters. The profile list on the left, and on the right
+// the selected profile: its login toggle and world, its tracked
+// affects, and its panel layout, then a quiet Advanced row with a label
+// and an order for each tracked affect. The page leaves out the
+// description, host, port, and extra character names, so they stay in
+// the data and off the page. Selecting a profile edits it in place,
+// active or not, and never switches the live session. A deep link names
+// the profile as its section (`characters:Ilsabet#tracked`), and no
+// section means the profile in use.
 //
 // Every edit goes through the per profile Characters commands, never
 // the whole UI config, so editing an inactive profile cannot reach the

@@ -45,21 +45,20 @@ import { Button, CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../..
 import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
 
-// The log view inside General (the approved SettingsGeneralLogs
-// board), at general:logs. One toolbar over the results: the pattern,
-// a regular expression over MUD text in the terminal font, the Aa
-// match case switch, the count, and the logs to search. A log is one
-// connection, which the store calls a session (Q21). The view reads
-// the world the selected session dials, over the last 7 days until you
-// pick This session, Last 30 days, All time or one log (D35). The
-// results read oldest first like the terminal and sit scrolled to the
-// newest line, under day headings. Each line keeps its own SGR colors
-// with your matches marked the way the find bar marks them, and
+// The log view inside General, at general:logs. One toolbar over the
+// results: the pattern, a regular expression over MUD text in the
+// terminal font, the Aa match case switch, the count, and the logs to
+// search. A log is one connection, which the store calls a session. The
+// view reads the world the selected session dials, over the last 7 days
+// until you pick This session, Last 30 days, All time or one log. The
+// results read oldest first like the terminal and sit scrolled to
+// the newest line, under day headings. Each line keeps its own SGR
+// colors with your matches marked the way the find bar marks them, and
 // earlier matches load as you scroll up. Save as file writes what the
-// view reads to Downloads as plain text or with the game's colors
-// (D29). Copy as text and Save a scene… show once you pick a log, and
-// Save a scene… opens the scene page on it, unless Log sessions is off
-// for the profile, which leaves nothing to save.
+// view reads to Downloads as plain text or with the game's colors. Copy
+// as text and Save a scene… show once you pick a log, and Save a scene…
+// opens the scene page on it, unless Log sessions is off for the
+// profile, which leaves nothing to save.
 
 // A picked log's value in the scope select.
 const LOG_PREFIX = 'log:';
@@ -404,7 +403,7 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
           className="st-logs-scope"
           aria-label="Logs to search"
           // A picked log reads like `September 24, 16:07`, which
-          // needs more than the board's 160.
+          // needs more than the 160 a range takes.
           width={sessionId === null ? 160 : 196}
           value={pick}
           options={scopeOptions}

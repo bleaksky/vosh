@@ -1,7 +1,7 @@
-// What Install hands Rust (Scripts Q6): the bytes of a .zip you picked,
-// or the files of a folder you dropped on the Scripts list, each by its
-// path inside what you dropped. Rust checks all of it again. The page
-// holds the same caps as it reads, so a folder dropped by mistake, like
+// What Install hands Rust: the bytes of a .zip you picked, or the files
+// of a folder you dropped on the Scripts list, each by its path inside
+// what you dropped. Rust checks all of it again. The page holds the
+// same caps as it reads, so a folder dropped by mistake, like
 // your Downloads, is never read whole into the window.
 
 import type { DroppedFile, PluginPackage } from '../../ipc/scripts';

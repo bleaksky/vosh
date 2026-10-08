@@ -40,7 +40,7 @@ const at = (group: SettingsGroup, section?: string, anchor?: string): SettingsTa
 };
 
 export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
-  // General, from the approved board.
+  // General.
   {
     label: 'World',
     keywords: 'connect connection mud server session port build',
@@ -116,7 +116,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     only: 'not-macos',
   },
 
-  // Appearance, from the approved board.
+  // Appearance.
   {
     label: 'Theme',
     keywords: 'colors palette gallery dark light nord ember rubric vellum one everforest',
@@ -248,7 +248,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'advanced', 'font-stack'),
   },
 
-  // Layout, from the approved board.
+  // Layout.
   {
     label: 'Show the panel',
     description: 'When you hide it, your vitals move to the status line.',
@@ -391,7 +391,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'affects', 'affects-almost-gone'),
   },
 
-  // Input, from the approved board.
+  // Input.
   {
     label: 'Caret shape',
     keywords: 'cursor block outline underline pipe command line',
@@ -446,7 +446,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'advanced', 'paste-delay'),
   },
 
-  // Input, Prompt (P12).
+  // Input, Prompt.
   {
     label: "Your game's prompt",
     description: 'Your prompt setting in the game. Vosh reads its codes.',
@@ -466,7 +466,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'prompt', 'prompt-show'),
   },
 
-  // Automation, from the approved board.
+  // Automation.
   {
     label: 'Triggers',
     keywords:
@@ -500,8 +500,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('automation', 'presets'),
   },
   // Each preset of the library, on its own card, which holds its colors,
-  // Your changes and Reset to preset (Presets review). The alert presets
-  // come from Rust, so the Presets row finds them.
+  // Your changes and Reset to preset. The alert presets come from Rust,
+  // so the Presets row finds them.
   ...PRESETS.map(
     (preset): SettingsRowEntry => ({
       label: preset.name,
@@ -534,8 +534,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('automation', undefined, 'json'),
   },
 
-  // Scripts, from the approved boards. A section here names a plugin,
-  // so each row is an anchor on the list page.
+  // Scripts. A section here names a plugin, so each row is an anchor on
+  // the list page.
   {
     label: 'Plugins',
     keywords: 'lua script plugin install new',
@@ -547,8 +547,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('scripts', undefined, 'console'),
   },
 
-  // Characters, from the approved board. No section means the active
-  // profile.
+  // Characters. No section means the active profile.
   {
     label: 'Profiles',
     keywords: 'profile character rename duplicate delete switch',

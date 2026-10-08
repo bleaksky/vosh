@@ -35,14 +35,13 @@ import { ScenePage } from './ScenePage';
 import { SessionLogs } from './SessionLogs';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
-// General (the approved SettingsGeneral board): where Connect dials,
-// updates, the settings every character shares, and the saved session
-// logs. Search logs… opens the log view inside General at
-// general:logs (SessionLogs.tsx), and Save a scene… there opens the
-// scene page at general:scene (ScenePage.tsx) on the log it picked.
-// Windows and Linux add an Advanced
-// disclosure at the end with the GPU rendering switch, which drives
-// the xterm renderer macOS does not show.
+// General: where Connect dials, updates, the settings every character
+// shares, and the saved session logs. Search logs… opens the log view
+// inside General at general:logs (SessionLogs.tsx), and Save a scene…
+// there opens the scene page at general:scene (ScenePage.tsx) on the
+// log it picked. Windows and Linux add an Advanced disclosure at the
+// end with the GPU rendering switch, which drives the xterm renderer
+// macOS does not show.
 
 export function GeneralPage(props: SettingsPageProps) {
   // The log Save a scene… in the log view picked, with the navigation
@@ -130,11 +129,11 @@ function GeneralSections({
 
 /** Where Connect and Cmd+R dial the selected session, the same target
  *  the session popover's Edit connection… edits, which each session
- *  keeps for itself (board 7). The World select picks a known world or
- *  Other…, which clears host and port for you to type. Host and port
- *  save when you leave them or press Enter, and go back to the target
- *  when they do not make one. Reconnect when the link drops belongs to
- *  the profile Settings shows, not the session. */
+ *  keeps for itself. The World select picks a known world or Other…,
+ *  which clears host and port for you to type. Host and port save when
+ *  you leave them or press Enter, and go back to the target when they
+ *  do not make one. Reconnect when the link drops belongs to the
+ *  profile Settings shows, not the session. */
 function ConnectionSection({ onError }: { onError: (message: string | null) => void }) {
   const [target, storeTarget] = useSessionTarget();
   const sessions = useSessions().length;
@@ -425,7 +424,7 @@ function ScopeSection({ onError }: { onError: (message: string | null) => void }
 
 /** Saved logs with the way into the log view, Log sessions for the
  *  profile Settings shows, and Keep logs for, which every profile
- *  shares since they share one log file (D34). Log sessions reads the
+ *  shares since they share one log file. Log sessions reads the
  *  world the selected session dials until you choose, on for a game and
  *  off for this computer. */
 function SessionLogsSection({
@@ -506,7 +505,7 @@ function SessionLogsSection({
 
 /** How many logs and lines Vosh saved, leaving out connections to
  *  this machine the way the log view does. A log is one connection,
- *  which the store calls a session (Q21). */
+ *  which the store calls a session. */
 function SavedLogsCount({ onError }: { onError: (message: string | null) => void }) {
   const [counts, setCounts] = useState<{ logs: number; lines: number } | null>(null);
   useEffect(() => {

@@ -4,9 +4,9 @@ import type { LogSession, ScenePreview, ScenePreviewLine } from '../../ipc/logs'
 import type { SettingsPageProps } from '../pageTypes';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
 
-// Save a scene, board 5 of the Alerts and Scenes review, mounted on a
-// stand in DOM over a fake backend. The lines are Thickening Woods from
-// fixtures/room-colors/looks.json and the say and tell of lines.json.
+// Save a scene, mounted on a stand in DOM over a fake backend. The
+// lines are Thickening Woods from fixtures/room-colors/looks.json and
+// the say and tell of lines.json.
 
 const calls: { cmd: string; args: Record<string, unknown> | undefined }[] = [];
 let failSave = false;

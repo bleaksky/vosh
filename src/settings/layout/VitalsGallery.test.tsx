@@ -7,8 +7,8 @@ import { VitalsTiles } from './VitalsGallery';
 import { arrowPick, galleryCaption, galleryVitals, SAMPLE_VITALS, tileFit } from './vitalsStyles';
 import { vitalsStylePick } from '../../panel/vitalsView';
 
-// The Style gallery under Settings, Layout, Vitals (board 2 and board 5
-// of the Vitals Styles review). The tiles draw from plain values here.
+// The Style gallery under Settings, Layout, Vitals. The tiles draw from
+// plain values here.
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({

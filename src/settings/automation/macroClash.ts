@@ -2,9 +2,9 @@ import { appKeyOfMacro, appShortcut, type MacroKeptShortcutId } from '../../lib/
 import { shortcutLabel } from '../../lib/shortcuts';
 
 // The note over a macro's Key when the key is also one of the session
-// keys (Sessions Q11), the sessions toggle's key or one of the Settings
-// keys. The macro keeps the key in every session on its
-// profile, so the note says what the key does elsewhere.
+// keys, the sessions toggle's key or one of the Settings keys. The
+// macro keeps the key in every session on its profile, so the note says
+// what the key does elsewhere.
 
 const ORDINALS = [
   'first',

@@ -5,10 +5,9 @@ import { listJoin, possessive } from '../../lib/text';
 import { PANE_LABELS } from '../../panel/paneTypes';
 
 // What the import sheet under Characters says about a Vosh profile
-// export (board 5 of the Scripts design, Scripts Q9 and Q10): what the
-// file holds, the note under a character another profile has, and the
-// line under the list once the import is done. Pure, so the sheet stays
-// about layout.
+// export: what the file holds, the note under a character another
+// profile has, and the line under the list once the import is done.
+// Pure, so the sheet stays about layout.
 
 /** A file you picked to import, as Vosh read it. */
 export interface ImportFile {
@@ -58,10 +57,9 @@ function plugins(names: readonly string[]): SummaryPart[] {
   return [...parts, `, off until you turn ${names.length === 1 ? 'it' : 'them'} on`];
 }
 
-/** In this file, in the order board 5 draws it. Runs Lua and Plugins
- *  show only for a file that has some. In loadout mode a file that holds
- *  presets closes with a line that says the catalog keeps its own
- *  (Presets board 5). */
+/** In this file, in the sheet's order. Runs Lua and Plugins show only
+ *  for a file that has some. In loadout mode a file that holds
+ *  presets closes with a line that says the catalog keeps its own. */
 export function importSummary(preview: ImportPreview): SummaryRow[] {
   const count = (label: string, n: number): SummaryRow => ({
     label,
@@ -127,7 +125,7 @@ const CLASH_PLURALS = { trigger: 'triggers', alias: 'aliases', macro: 'macros' }
 const NAMED_CLASHES = 3;
 
 /** The sentence that says the catalog kept your own item wherever the
- *  file had one of the same name, or a macro on the same key (Q26). */
+ *  file had one of the same name, or a macro on the same key. */
 function clashSentence(clashes: ImportResult['clashes']): string {
   const kinds = CLASH_KINDS.map((kind) => ({
     kind,

@@ -7,8 +7,8 @@ import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
 import { ImportSheet } from './ImportSheet';
 import { LUA_WARNING, type ImportFile } from './profileImport';
 
-// The import sheet of board 5, drawn as markup for what it shows and
-// mounted for Add as and Import.
+// The import sheet, drawn as markup for what it shows and mounted for
+// Add as and Import.
 
 const calls = vi.hoisted(() => ({
   invoked: [] as { cmd: string; args: unknown }[],
@@ -53,7 +53,7 @@ const PREVIEW: ImportPreview = {
   presets_stay: false,
 };
 
-// Board 5's list, Default and Healer on The Forsaken Lands.
+// Two profiles, Default and Healer on The Forsaken Lands.
 const PROFILES: ProfileEntry[] = [
   { name: 'default', auto_match: { host: WORLD, port: 1848, characters: [] } },
   { name: 'Healer', auto_match: { host: WORLD, port: 1848, characters: ['Orla'] } },

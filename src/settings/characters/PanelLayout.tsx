@@ -4,7 +4,7 @@ import { paneSchematic } from './paneSchematic';
 import { paneLabel } from '../../panel/paneTypes';
 import { Button, Card, Section } from '../../ui';
 
-// Panel layout on the Characters board: the schematic of the selected
+// Panel layout on the Characters page: the schematic of the selected
 // profile's panel, drawn from its real pane tree, beside a line about
 // what Vosh saves and Reset to default.
 

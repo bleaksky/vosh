@@ -181,9 +181,9 @@ export function CodeRow({
 }
 
 /** A flagged row's line, what the preset now has in the warn tone, and
- *  its two choices on the chip recipe (Presets board 4), for a trigger
- *  row or a swatch. Take the fix sets the row to the preset's value, and
- *  Keep mine keeps yours. Both wait for Save. */
+ *  its two choices on the chip recipe, for a trigger row or a swatch.
+ *  Take the fix sets the row to the preset's value, and Keep mine keeps
+ *  yours. Both wait for Save. */
 export function FixChoice({
   verb,
   children,

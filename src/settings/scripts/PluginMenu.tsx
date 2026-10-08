@@ -7,8 +7,8 @@ import {
 } from '../../ui/MenuSurface';
 import { revealLabel } from '../../lib/revealLabel';
 
-// The more menu of a plugin row (board 4), opened as the profile menu
-// opens in Characters. A press on the row opens the plugin, so the menu
+// The more menu of a plugin row, opened as the profile menu opens in
+// Characters. A press on the row opens the plugin, so the menu
 // has no Open. Remove sits under a separator and asks first.
 
 interface Props {

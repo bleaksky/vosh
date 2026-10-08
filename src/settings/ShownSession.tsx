@@ -5,12 +5,11 @@ import { useSelected, useSessions } from '../stores/session/sessionsStore';
 import { useShown } from './shownProfile';
 
 // The session and the profile Settings edits, at the right of its
-// header in the title button's order, by board 7 of the Sessions
-// review: the dot, the session as its row reads, then the profile in
-// the tertiary tone. While another session plays the same profile it
-// adds Also in with that session, after a hairline, since an edit
-// reaches both (board 9). It shows only while two or more sessions are
-// open, so one session looks as before.
+// header in the title button's order: the dot, the session as its row
+// reads, then the profile in the tertiary tone. While another session
+// plays the same profile it adds Also in with that session, after a
+// hairline, since an edit reaches both. It shows only while two or more
+// sessions are open, so one session looks as before.
 //
 // While a page holds its profile and the selected session plays
 // another, the dot and a note turn to the warn tone, and the note names

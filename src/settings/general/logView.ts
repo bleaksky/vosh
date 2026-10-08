@@ -3,10 +3,10 @@ import { indexedRgb } from '../../theme/color';
 import type { LogScope } from '../../ipc/logs';
 import type { XtermPalette } from '../../theme/themes';
 
-// The Settings log view (the SettingsGeneralLogs board) and the
-// Session logs row on General. The words and numbers they show, the
-// day headings, and each saved line drawn in its own SGR colors with
-// your matches marked, the way the find bar marks them.
+// The Settings log view and the Session logs row on General. The words
+// and numbers they show, the day headings, and each saved line drawn in
+// its own SGR colors with your matches marked, the way the find bar
+// marks them.
 
 /** How many lines one page of the log view loads. */
 export const LOG_PAGE_SIZE = 500;
@@ -29,7 +29,8 @@ const MONTHS = [
 
 /** True when `host` names this computer, ignoring case, spaces and a
  *  trailing dot, as vosh-log's is_local_host reads it. Log sessions
- *  starts off for one (D34). */
+ *  starts off for one, since play on your own machine is usually a
+ *  test. */
 export function isLocalHost(host: string): boolean {
   const clean = host.trim().replace(/\.$/, '').toLowerCase();
   return clean === '127.0.0.1' || clean === 'localhost';
@@ -43,7 +44,7 @@ export const KEEP_LOGS: readonly { value: string; label: string }[] = [
   { value: '30', label: '30 days' },
 ];
 
-/** The choices of Scrollback size, in lines (D40). */
+/** The choices of Scrollback size, in lines. */
 export const SCROLLBACK_SIZES: readonly { value: string; label: string }[] = [
   1_000, 5_000, 10_000, 25_000, 50_000, 100_000,
 ].map((n) => ({ value: String(n), label: `${NUMBER.format(n)} lines` }));
@@ -58,8 +59,8 @@ const plural = (n: number, one: string, many: string) =>
 
 /** The Session logs row on General, like `447 logs and 708,350 lines
  *  on this Mac.` A log is one connection, so a session that connects
- *  three times saves three (Q21). `place` names the computer: Mac,
- *  PC, or computer. */
+ *  three times saves three. `place` names the computer: Mac, PC, or
+ *  computer. */
 export function savedLogsText(logs: number, lines: number, place: string): string {
   if (logs === 0) return `Vosh has not saved a log on this ${place} yet.`;
   return `${plural(logs, 'log', 'logs')} and ${plural(lines, 'line', 'lines')} on this ${place}.`;
@@ -106,7 +107,8 @@ export function logSessionLabel(startedMs: number, now: number = Date.now()): st
 
 // ── What the view reads ────────────────────────────────────────────
 
-/** The spans of time the view reads (D35). Last 7 days opens the view. */
+/** The spans of time the view reads. Last 7 days opens the view, so a
+ *  search stays quick however big the log grows. */
 export type LogRange = 'session' | 'week' | 'month' | 'all';
 
 export const LOG_RANGES: readonly { value: LogRange; label: string }[] = [

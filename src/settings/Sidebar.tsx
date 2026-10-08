@@ -31,11 +31,11 @@ import {
   VisuallyHidden,
 } from '../ui';
 
-// The Settings sidebar (the approved boards): a 32 px drag strip where
-// macOS puts the traffic lights, the search pill at (12, 44), and the
-// seven group nav at (8, 84). While the search holds text its results
-// replace the nav. Each result is a row, not a group. Enter or a click
-// opens it, and the frame scrolls the row into view and flashes it.
+// The Settings sidebar: a 32 px drag strip where macOS puts the traffic
+// lights, the search pill at (12, 44), and the seven group nav at (8,
+// 84). While the search holds text its results replace the nav. Each
+// result is a row, not a group. Enter or a click opens it, and the
+// frame scrolls the row into view and flashes it.
 
 const GROUP_ICONS: Record<SettingsGroup, () => ReactNode> = {
   general: () => <GearIcon />,

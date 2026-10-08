@@ -19,12 +19,11 @@ import {
 } from './types';
 import { useCloseGuard } from '../useCloseGuard';
 
-// Settings, Automation (the approved SettingsAutomation board). One
-// list and detail editor for every kind behind the kind switcher, with
-// Import… at the right of the switcher row. Each kind edits a draft,
-// and the save bar at the bottom writes it through the kind's existing
-// API. Leaving a kind, leaving Automation, or closing the window with
-// unsaved changes asks first.
+// Settings, Automation. One list and detail editor for every kind
+// behind the kind switcher, with Import… at the right of the switcher
+// row. Each kind edits a draft, and the save bar at the bottom writes
+// it through the kind's existing API. Leaving a kind, leaving
+// Automation, or closing the window with unsaved changes asks first.
 //
 // In loadout mode, triggers, aliases, and macros live in the shared
 // catalog, and the same API edits it. So does the list of presets that

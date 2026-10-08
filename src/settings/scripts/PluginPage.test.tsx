@@ -128,7 +128,8 @@ const row = (name: string, patch: Partial<PluginRow> = {}): PluginRow => ({
 
 const STOP = 'Vosh stopped wait_full at main.lua line 5 after 100 ms.';
 
-// The Output ring with board 1's vitals_alert lines and board 3's stop.
+// The Output ring with the lines of vitals_alert and the stop of
+// wait_full.
 const RING: LuaLine[] = [
   {
     ts_ms: at(21, 14, 3),

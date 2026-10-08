@@ -139,9 +139,8 @@ function asYours(t: TriggerRecord): TriggerRecord {
  *  library's trigger with your edits over it (presetCard). Save writes
  *  your triggers through the store, and the rows you changed in a preset
  *  trigger through preset_edits_set, then runs the preset plan for the
- *  profile, which builds and installs them (Presets board 2). Edit all
- *  as JSON lists your triggers only, and keeps every preset trigger as
- *  it is (Q9). */
+ *  profile, which builds and installs them. Edit all as JSON lists your
+ *  triggers only, and keeps every preset trigger as it is. */
 function triggersSpec(): KindSpec<TriggerCard> {
   let loaded: Loaded = { edits: {}, stored: new Map() };
   /** Your edits to the preset trigger `t` as they loaded. */
@@ -252,8 +251,8 @@ export function TriggersEditor({
 }
 
 /** Why a trigger carries the warn ring: it hid your prompt this session
- *  while the profile reads no prompt, so Vosh drew nothing in its place
- *  (section 7 step 13 of the prompt build spec). */
+ *  while the profile reads no prompt, so Vosh drew nothing in its
+ *  place. */
 export const HIDES_PROMPT_NOTE =
   "This trigger hides your prompt, and this profile draws nothing in its place. Turn it off, or tell Vosh your game's prompt in Customize prompt.";
 
@@ -290,7 +289,7 @@ function flagLabels(ship: TriggerRecord, flags: Rows): string[] {
   return [...new Set(Object.keys(flags).map(label))].filter(Boolean);
 }
 
-/** What a fix note says after the preset's name (board 4). */
+/** What a fix note says after the preset's name. */
 const fixTail = (labels: readonly string[]) =>
   `changed ${listJoin(labels)}, ${labels.length === 1 ? 'a row' : 'rows'} you edited.`;
 
@@ -431,7 +430,7 @@ interface FromPreset {
 
 /** The card for the selected trigger. A preset trigger edits as yours
  *  do, all but its name, and each row you changed says what the preset
- *  has (Presets board 2). `swatches` are your colors of its preset. */
+ *  has. `swatches` are your colors of its preset. */
 export function TriggerDetail({
   value: t,
   update,
@@ -729,10 +728,10 @@ function alsoChanges(t: TriggerRecord, ship: TriggerRecord): number {
   return Math.max(added, gone);
 }
 
-/** The Pattern row as board 6 draws it: the label and what the mode
- *  does on the left with the mode beside them, and the main pattern at
- *  full width under both. Built by hand like CodeRow, since a Row keeps
- *  its control on the right of the label. */
+/** The Pattern row: the label and what the mode does on the left with
+ *  the mode beside them, and the main pattern at full width under both.
+ *  Built by hand like CodeRow, since a Row keeps its control on the
+ *  right of the label. */
 function PatternRow({
   t,
   update,

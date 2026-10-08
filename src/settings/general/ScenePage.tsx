@@ -42,15 +42,14 @@ import {
   withTo,
 } from './scene';
 
-// Save a scene (board 5 of the Alerts and Scenes review), a page inside
-// General at general:scene. The toolbar picks the log, a From and a To on
-// the log's own 24 hour clock, and the format. Prompts, Your commands
-// and Channels left out say what the scene leaves out (Q10), and the
-// preview shows every line in the range, what stays out drawn quiet with
-// the reason beside it. A click on a time starts the scene on that line,
-// and a Shift click ends it there. Save scene writes the file to
-// Downloads (Q12), and the main window says so with a button that shows
-// it. Cancel goes back to Session logs.
+// Save a scene, a page inside General at general:scene. The toolbar picks
+// the log, a From and a To on the log's own 24 hour clock, and the
+// format. Prompts, Your commands and Channels left out say what the scene
+// leaves out, and the preview shows every line in the range, what
+// stays out drawn quiet with the reason beside it. A click on a time
+// starts the scene on that line, and a Shift click ends it there. Save
+// scene writes the file to Downloads, and the main window says so
+// with a button that shows it. Cancel goes back to Session logs.
 
 const FORMATS: readonly { value: SceneFormat; label: string }[] = [
   { value: 'text', label: 'Text' },

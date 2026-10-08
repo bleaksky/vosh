@@ -21,7 +21,7 @@ import {
 } from '../../ui';
 import { PromptSection } from './InputPrompt';
 
-// Settings, Input (P12). The Command line card holds the caret shape,
+// Settings, Input. The Command line card holds the caret shape,
 // keep last command, chat spell check, the sent command color, and macro
 // echo. The Prompt section follows with your game's prompt, Draw your own
 // prompt and where it shows, and a preview of your design. Advanced opens

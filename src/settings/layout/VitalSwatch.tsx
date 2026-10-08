@@ -19,11 +19,11 @@ import {
   type ColorMark,
 } from './vitalColorMarks';
 
-// A vital's color under Customize vitals (board 2 of the Vitals Styles
-// review, Q4): a 22 pt swatch of the color you picked, or a dashed ring
-// for Default. A click opens the list Chat uses for a channel, Default
-// and the theme's sixteen, each on its play palette color, with a check
-// on your pick and a mark on a color near the low or warn tone.
+// A vital's color under Customize vitals: a 22 pt swatch of the color
+// you picked, or a dashed ring for Default. A click opens the list Chat
+// uses for a channel, Default and the theme's sixteen, each on its play
+// palette color, with a check on your pick and a mark on a color near
+// the low or warn tone.
 
 /** The list's width, and its gap under the swatch and past its right
  *  edge. */

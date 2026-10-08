@@ -14,11 +14,11 @@ import { useShown } from '../shownProfile';
 // The preview
 // ---------------------------------------------------------------------
 
-/** The text inset of the preview output, as P12 draws it. */
+/** The text inset of the preview output. */
 const OUT_X = 10;
 const OUT_W = 600;
-/** The band reaches 4 px past the text each side and 2 px past each row
- *  (the 2026-09-30 addendum, SPEC 1). */
+/** The band reaches 4 px past the text each side and 2 px past each
+ *  row, so the text never touches its edge. */
 const BAND_X = 4;
 const BAND_Y = 2;
 
@@ -65,8 +65,8 @@ export function PreviewBlock({
     let alive = true;
     const shown = preview === 'now' ? null : preview;
     // A part no value fills draws its label in the ring, as the card
-    // draws it, so you see which part stays blank (P14). Only live
-    // values leave a part blank.
+    // draws it, so you see which part stays blank. Only live values
+    // leave a part blank.
     const ringed = live
       ? promptDescribe(template, shown, null, session)
           .then((d) => warnedPieces(d.pieces, d.tokens, catalog))

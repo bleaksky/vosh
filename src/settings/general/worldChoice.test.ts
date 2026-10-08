@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OTHER, SAVED, worldChoice } from './worldChoice';
 
-// The World select in General › Connection, board 7 of the Sessions
-// review.
+// The World select in General › Connection.
 
 const FORSAKEN = 'world:theforsakenlands.com';
 const labels = (target: Parameters<typeof worldChoice>[0]) =>
