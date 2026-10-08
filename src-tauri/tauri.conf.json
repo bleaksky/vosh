@@ -38,7 +38,17 @@
     "shortDescription": "A desktop MUD client called Vosh.",
     "longDescription": "Vosh is a desktop MUD client for macOS, Windows, and Linux. It speaks telnet and GMCP, draws full ANSI color, and gives you split panes, a map pane, a tick timer, triggers, aliases, and Lua scripting.",
     "resources": {
-      "../public/fonts/OFL.txt": "licenses/JetBrainsMono-OFL.txt"
+      "../public/fonts/OFL.txt": "licenses/JetBrainsMono-OFL.txt",
+      "../public/fonts/nerd-fonts/CREDITS.txt": "licenses/nerd-fonts/CREDITS.txt",
+      "../public/fonts/nerd-fonts/Codicons-LICENSE.txt": "licenses/nerd-fonts/Codicons-LICENSE.txt",
+      "../public/fonts/nerd-fonts/FontAwesome-LICENSE.txt": "licenses/nerd-fonts/FontAwesome-LICENSE.txt",
+      "../public/fonts/nerd-fonts/MaterialDesignIcons-LICENSE.txt": "licenses/nerd-fonts/MaterialDesignIcons-LICENSE.txt",
+      "../public/fonts/nerd-fonts/NerdFonts-LICENSE.txt": "licenses/nerd-fonts/NerdFonts-LICENSE.txt",
+      "../public/fonts/nerd-fonts/Octicons-LICENSE.txt": "licenses/nerd-fonts/Octicons-LICENSE.txt",
+      "../public/fonts/nerd-fonts/Pomicons-LICENSE.txt": "licenses/nerd-fonts/Pomicons-LICENSE.txt",
+      "../public/fonts/nerd-fonts/PowerlineExtraSymbols-LICENSE.txt": "licenses/nerd-fonts/PowerlineExtraSymbols-LICENSE.txt",
+      "../public/fonts/nerd-fonts/PowerlineSymbols-LICENSE.txt": "licenses/nerd-fonts/PowerlineSymbols-LICENSE.txt",
+      "../public/fonts/nerd-fonts/WeatherIcons-OFL.txt": "licenses/nerd-fonts/WeatherIcons-OFL.txt"
     },
     "icon": [
       "icons/32x32.png",
