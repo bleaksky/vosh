@@ -73,6 +73,14 @@ pub(crate) struct UiConfigPayload {
     pub writing_offer: bool,
     pub writing_ask_post: bool,
     pub input_cursor_style: String,
+    pub input_caret_blink: bool,
+    pub input_caret_color: Option<String>,
+    pub input_line_color: Option<String>,
+    /// `theme`, `tint` or `own`.
+    pub input_line_background: String,
+    pub input_line_background_color: Option<String>,
+    /// 0 follows the terminal size.
+    pub input_line_size: u32,
     pub vitals_density: String,
     pub vitals_values: String,
     pub vitals_meter: String,
@@ -172,6 +180,12 @@ impl UiConfigPayload {
             writing_offer: ui.writing_offer,
             writing_ask_post: ui.writing_ask_post,
             input_cursor_style: ui.input_cursor_style.clone(),
+            input_caret_blink: ui.input_caret_blink,
+            input_caret_color: ui.input_caret_color.clone(),
+            input_line_color: ui.input_line_color.clone(),
+            input_line_background: ui.input_line_background.clone(),
+            input_line_background_color: ui.input_line_background_color.clone(),
+            input_line_size: ui.input_line_size,
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
@@ -274,6 +288,12 @@ pub(crate) enum UiField {
     WritingOffer(bool),
     WritingAskPost(bool),
     InputCursorStyle(String),
+    InputCaretBlink(bool),
+    InputCaretColor(Option<String>),
+    InputLineColor(Option<String>),
+    InputLineBackground(String),
+    InputLineBackgroundColor(Option<String>),
+    InputLineSize(u32),
     VitalsDensity(String),
     VitalsValues(String),
     VitalsMeter(String),
@@ -449,6 +469,16 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::InputCursorStyle(v) => {
                 ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
             }
+            UiField::InputCaretBlink(v) => ui.input_caret_blink = v,
+            UiField::InputCaretColor(v) => ui.input_caret_color = cfg::normalize_optional_color(v),
+            UiField::InputLineColor(v) => ui.input_line_color = cfg::normalize_optional_color(v),
+            UiField::InputLineBackground(v) => {
+                ui.input_line_background = cfg::coerce_input_line_background(v);
+            }
+            UiField::InputLineBackgroundColor(v) => {
+                ui.input_line_background_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputLineSize(v) => ui.input_line_size = cfg::coerce_input_line_size(v),
             UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
             UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
             UiField::VitalsMeter(v) => ui.vitals_meter = cfg::coerce_vitals_meter(v),
@@ -1142,6 +1172,35 @@ mod tests {
         }
         ui.panel_font_size = 200;
         assert_eq!(through_payload(&ui).panel_font_size, 64);
+    }
+
+    #[test]
+    fn the_command_line_look_round_trips() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 0);
+        ui.input_caret_blink = false;
+        ui.input_caret_color = Some("#c6a46a".into());
+        ui.input_line_color = Some("#d8dee9".into());
+        ui.input_line_background = "own".into();
+        ui.input_line_background_color = Some("#1d1f21".into());
+        ui.input_line_size = 18;
+        let back = through_payload(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "own");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 18);
+        ui.input_caret_color = Some("  ".into());
+        ui.input_line_background = "glass".into();
+        ui.input_line_size = 3;
+        let back = through_payload(&ui);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_size, 6);
     }
 
     #[test]

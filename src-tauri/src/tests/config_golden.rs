@@ -405,6 +405,12 @@ fn full_ui() -> UiConfig {
         writing_offer: false,
         writing_ask_post: false,
         input_cursor_style: "underline_thick".into(),
+        input_caret_blink: false,
+        input_caret_color: Some("#c6a46a".into()),
+        input_line_color: Some("#d8dee9".into()),
+        input_line_background: "own".into(),
+        input_line_background_color: Some("#1d1f21".into()),
+        input_line_size: 16,
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,
         prompt_template: String::new(),

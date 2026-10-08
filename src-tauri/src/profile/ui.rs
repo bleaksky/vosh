@@ -397,6 +397,36 @@ pub(crate) struct UiConfig {
     /// values coerce back to `block` on save.
     #[serde(default = "default_input_cursor_style")]
     pub input_cursor_style: String,
+    /// The command-line caret blinks. On by default, and Reduce motion
+    /// still holds it steady.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_caret_blink: bool,
+    /// CSS hex color of the caret. None means the theme accent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_caret_color: Option<String>,
+    /// CSS hex color of what you type. None means the theme text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_color: Option<String>,
+    /// The command line's background: `theme` (the default), `tint` for
+    /// a slight tint of the accent, or `own` for
+    /// `input_line_background_color`. Written only once it is not
+    /// `theme`. Unknown values coerce to `theme`.
+    #[serde(
+        default = "default_input_line_background",
+        skip_serializing_if = "is_default_input_line_background"
+    )]
+    pub input_line_background: String,
+    /// Your own background color. It stays while another background is
+    /// picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_line_background_color: Option<String>,
+    /// Size in px of the text you type. 0, the default, follows the
+    /// terminal size. Anything else is held to 6 to 64.
+    #[serde(
+        default = "default_input_line_size",
+        skip_serializing_if = "is_default_input_line_size"
+    )]
+    pub input_line_size: u32,
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
     /// your prompt. A file with no `[prompt]` reads the switch from
@@ -1401,6 +1431,12 @@ impl Default for UiConfig {
             writing_offer: true,
             writing_ask_post: true,
             input_cursor_style: default_input_cursor_style(),
+            input_caret_blink: true,
+            input_caret_color: None,
+            input_line_color: None,
+            input_line_background: default_input_line_background(),
+            input_line_background_color: None,
+            input_line_size: default_input_line_size(),
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
@@ -1928,6 +1964,48 @@ pub(crate) fn coerce_input_cursor_style(value: String) -> String {
     }
 }
 
+/// The backgrounds the command line draws. Anything else saves as the
+/// default, the theme's.
+pub(crate) const INPUT_LINE_BACKGROUNDS: [&str; 3] = ["theme", "tint", "own"];
+
+fn default_input_line_background() -> String {
+    "theme".to_string()
+}
+
+fn is_default_input_line_background(value: &str) -> bool {
+    value == "theme"
+}
+
+/// Keep a known background and turn anything else into `theme`.
+pub(crate) fn coerce_input_line_background(value: String) -> String {
+    if INPUT_LINE_BACKGROUNDS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_line_background()
+    }
+}
+
+/// What the command line Size row saves to follow the terminal size.
+pub(crate) const INPUT_LINE_SIZE_TERMINAL: u32 = 0;
+
+fn default_input_line_size() -> u32 {
+    INPUT_LINE_SIZE_TERMINAL
+}
+
+fn is_default_input_line_size(size: &u32) -> bool {
+    *size == INPUT_LINE_SIZE_TERMINAL
+}
+
+/// Hold a command line size to the terminal size's 6 to 64 pixels,
+/// keeping 0, which follows the terminal size.
+pub(crate) fn coerce_input_line_size(size: u32) -> u32 {
+    if size == INPUT_LINE_SIZE_TERMINAL {
+        size
+    } else {
+        coerce_font_size(size)
+    }
+}
+
 pub(crate) fn default_true() -> bool {
     true
 }
@@ -2151,6 +2229,69 @@ name = "haste"
         assert_eq!(back.input_echo_mark_color.as_deref(), Some("#c6a46a"));
         assert!(back.input_echo_dim);
         assert!(!back.input_line_mark);
+    }
+
+    #[test]
+    fn the_command_line_look_saves_only_once_it_changes() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_caret_blink",
+            "input_caret_color",
+            "input_line_color",
+            "input_line_background",
+            "input_line_background_color",
+            "input_line_size",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(back.input_caret_blink);
+        assert_eq!(back.input_caret_color, None);
+        assert_eq!(back.input_line_color, None);
+        assert_eq!(back.input_line_background, "theme");
+        assert_eq!(back.input_line_background_color, None);
+        assert_eq!(back.input_line_size, 0);
+        let ui = UiConfig {
+            input_caret_blink: false,
+            input_caret_color: Some("#c6a46a".into()),
+            input_line_color: Some("#d8dee9".into()),
+            input_line_background: "tint".into(),
+            input_line_background_color: Some("#1d1f21".into()),
+            input_line_size: 16,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert!(!back.input_caret_blink);
+        assert_eq!(back.input_caret_color.as_deref(), Some("#c6a46a"));
+        assert_eq!(back.input_line_color.as_deref(), Some("#d8dee9"));
+        assert_eq!(back.input_line_background, "tint");
+        assert_eq!(back.input_line_background_color.as_deref(), Some("#1d1f21"));
+        assert_eq!(back.input_line_size, 16);
+        for pick in ["theme", "tint", "own"] {
+            let ui = UiConfig {
+                input_line_background: pick.into(),
+                ..UiConfig::default()
+            };
+            assert_eq!(through_toml(&ui).input_line_background, pick);
+        }
+    }
+
+    #[test]
+    fn an_unknown_command_line_background_reads_as_the_theme() {
+        for value in ["theme", "tint", "own"] {
+            assert_eq!(coerce_input_line_background(value.into()), value);
+        }
+        for value in ["", "Tint", "glass"] {
+            assert_eq!(coerce_input_line_background(value.into()), "theme");
+        }
+    }
+
+    #[test]
+    fn a_command_line_size_holds_to_the_terminal_sizes_and_keeps_same_as_terminal() {
+        assert_eq!(coerce_input_line_size(INPUT_LINE_SIZE_TERMINAL), 0);
+        assert_eq!(coerce_input_line_size(3), 6);
+        assert_eq!(coerce_input_line_size(14), 14);
+        assert_eq!(coerce_input_line_size(90), 64);
     }
 
     /// The profile file a save of `ui` writes.

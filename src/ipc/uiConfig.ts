@@ -89,6 +89,34 @@ export function normalizeInputCursorStyle(value: unknown): InputCursorStyle {
     : 'block';
 }
 
+/** The command line's background: the theme's, a slight tint of the
+ *  accent, or your own color. */
+export const INPUT_LINE_BACKGROUNDS = ['theme', 'tint', 'own'] as const;
+
+export type InputLineBackground = (typeof INPUT_LINE_BACKGROUNDS)[number];
+
+/** Coerce an unknown background back to the theme's. */
+export function normalizeInputLineBackground(value: unknown): InputLineBackground {
+  return INPUT_LINE_BACKGROUNDS.find((pick) => pick === value) ?? 'theme';
+}
+
+/** What the command line Size row saves to follow your terminal size. */
+export const INPUT_LINE_SIZE_TERMINAL = 0;
+
+/** A saved command line size as the page reads it, held to 6 to 64 as
+ *  Rust holds it. Anything but a number follows the terminal size. */
+export function normalizeInputLineSize(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return INPUT_LINE_SIZE_TERMINAL;
+  const size = Math.round(value);
+  if (size === INPUT_LINE_SIZE_TERMINAL) return size;
+  return Math.min(64, Math.max(6, size));
+}
+
+/** A saved color, or null for an empty or missing one. */
+function optionalColor(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 /** Terminal row spacing. Each id maps to the multiple of the glyph
  *  height that xterm takes as `lineHeight`, and the native grid follows
  *  through the cell size xterm reports. */
@@ -587,6 +615,20 @@ export interface UiConfig {
   writing_ask_post: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
+  /** The caret blinks. On by default, and Reduce motion still holds it
+   *  steady. */
+  input_caret_blink: boolean;
+  /** Hex color of the caret. Null means the theme accent. */
+  input_caret_color: string | null;
+  /** Hex color of what you type. Null means the theme text. */
+  input_line_color: string | null;
+  /** The command line's background, one of INPUT_LINE_BACKGROUNDS. */
+  input_line_background: InputLineBackground;
+  /** Your own background color, kept while another background is
+   *  picked. */
+  input_line_background_color: string | null;
+  /** Size in px of what you type. 0 follows your terminal size. */
+  input_line_size: number;
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
@@ -768,6 +810,12 @@ export interface RawUiConfig {
   writing_offer?: boolean;
   writing_ask_post?: boolean;
   input_cursor_style?: string;
+  input_caret_blink?: boolean;
+  input_caret_color?: string | null;
+  input_line_color?: string | null;
+  input_line_background?: string;
+  input_line_background_color?: string | null;
+  input_line_size?: number;
   vitals_density?: string;
   vitals_values?: string;
   vitals_meter?: string;
@@ -915,6 +963,12 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     writing_offer: cfg.writing_offer !== false,
     writing_ask_post: cfg.writing_ask_post !== false,
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
+    input_caret_blink: cfg.input_caret_blink !== false,
+    input_caret_color: optionalColor(cfg.input_caret_color),
+    input_line_color: optionalColor(cfg.input_line_color),
+    input_line_background: normalizeInputLineBackground(cfg.input_line_background),
+    input_line_background_color: optionalColor(cfg.input_line_background_color),
+    input_line_size: normalizeInputLineSize(cfg.input_line_size),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
