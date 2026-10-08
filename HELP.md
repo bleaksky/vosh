@@ -669,6 +669,25 @@ With the xterm renderer, the newest 1000 prompts keep their bands and older ones
 
 The choice saves in the `[prompt]` table of your profile as `show`. An older version of Vosh ignores it and shows your prompt in the text. When that version saves your profile, the choice is gone, so pick it again here.
 
+### 4.8 Watch a player with snoop
+
+When you snoop a player in the game, a split opens at the top of the terminal column with what their screen shows, in the game's colors. Your own terminal stays under it, next to your command line, and your caret stays where it was. Vosh asks the game for snoop on every connection, so there is nothing to turn on, and a character who never snoops sees no change.
+
+- Read one tab for each player you snoop. A green dot marks a snoop that runs and a ring one that ended. A tab behind the one in front brightens and takes a dot when new lines arrive. Point at a tab to see how long that player has been quiet.
+- Click `Stop` to send `snoop stop Tolliver` for the player in front. The tab goes once the game says the snoop ended. `Stop every snoop` in the more menu sends `snoop stop`, which ends them all.
+- When a snoop ends any other way, because you typed the command, Tolliver quit, or your link dropped, the tab stays with the last thing it showed and says when it ended. Click `Close` to drop it. Snoop Tolliver again and the same tab picks up.
+- Each tab keeps 5,000 lines in your terminal's font and size, wrapped at words like your own. `Find` in the more menu, or `Cmd+F` while you're in the snoop, searches the tab in front, and `Cmd+C` copies what you select there.
+- Your triggers, highlights, gags and sounds never act on snoop text, since you wrote them for your own screen. Your Lua still hears `Snoop.Start`, `Snoop.Stop` and `Snoop.Output` like any other GMCP.
+- Drag the line under the split to resize it. It starts at 40 percent of the column, and your profile keeps the size you pick. It keeps four rows and always leaves you six. Drag it to the top, choose `Fold` in the more menu, or double click the line to fold it to its strip, and double click again to open it.
+- Press `Cmd+J` on macOS or `Ctrl+J` elsewhere to move into the snoop, and again to step to the next tab. Press `Escape`, or just start typing, and you're back on the command line, so what you type always goes to your own character.
+- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Close it and the tabs come back to the split.
+
+Each session keeps its own snoops, and its row in the sessions sidebar shows an eye and how many run. A disconnect ends every snoop on that session.
+
+The session log keeps each line of a snoop, starting with the player's name, like `Tolliver|`. Search your logs for `^Tolliver\|` to read it again once the tab is gone.
+
+While a snoop is open, type `snoop` in the palette to reach `Go to snoop`, `Next snoop`, `Stop snooping Tolliver`, `Stop every snoop`, `Open snoop in a window` and `Close ended snoops`. Snoop has no row in Settings.
+
 ## Tick and target
 
 ### 5.1 Configure the tick timer
@@ -854,7 +873,7 @@ Example. The pattern `dragon|wyvern` finds lines containing either word.
 
 With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text. Connections to `127.0.0.1` and `localhost` stay out of the view and the counts. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
 
-The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
+The log keeps what the game sent and each line you sent, marked `> `. Each line of a snoop starts with the name of the player you snooped, like `Tolliver|`, so the pattern `^Tolliver\|` finds what Tolliver's screen showed. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
 
 Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many logs, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file. If you copied or shared one of those logs, change your password in the game.
 
@@ -975,6 +994,7 @@ Anywhere in the main window.
 - `Cmd+/` opens Help.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
+- `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
 
 For your sessions, in the main window.
 
@@ -1000,6 +1020,8 @@ In the command line.
 - `Cmd+C` with nothing selected in the command line copies the terminal selection.
 
 In the find bar. `Enter` finds the next match, `Shift+Enter` the previous, `Escape` closes and clears.
+
+In a snoop. `Cmd+F` opens Find on the tab in front, `Cmd+C` copies what you select, and `Escape` or any key that types puts you back on the command line.
 
 In the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` runs the entry, `ArrowRight` opens a list like Choose theme, `ArrowLeft` or `Backspace` steps back out of it, and `Escape` steps back or closes.
 
