@@ -35,6 +35,7 @@ import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalR
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
+import { WashPainter, washFields, type WashFields } from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
@@ -147,6 +148,13 @@ function themeFor(themeId: string, tinted: boolean, clear: boolean) {
   return theme;
 }
 
+/** The fields xterm paints washed rows in, from the palette and the
+ *  ground the native renderer draws, the ground before it goes clear. */
+function washFieldsFor(themeId: string, tinted: boolean): WashFields {
+  const native = nativeThemeOf(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
+  return washFields(native.ansi, native.background);
+}
+
 export function Terminal({
   session,
   shown = true,
@@ -205,6 +213,9 @@ export function Terminal({
   // time the user toggles the setting.
   const themeTerminalColorsRef = useRef(themeTerminalColors);
   themeTerminalColorsRef.current = themeTerminalColors;
+  // The wash fields of the theme the pane draws, which every write
+  // paints washed rows in.
+  const washRef = useRef<WashFields>(new Map());
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -223,13 +234,20 @@ export function Terminal({
   // xterm's options.
   const appliedLiftRef = useRef(false);
 
+  // Draw with the theme `themeId`, its ground clear while the pane lifts
+  // your prompts, and paint washes in its colors from the next write on.
+  const applyTheme = (term: XTerm, themeId: string = getCurrentThemeId()) => {
+    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    washRef.current = washFieldsFor(themeId, themeTerminalColorsRef.current);
+  };
+
   // Turn the bands on or off, with the clear ground they need.
   const applyLift = (term: XTerm) => {
     const on = liftsHere();
     if (on === appliedLiftRef.current) return;
     appliedLiftRef.current = on;
     term.options.allowTransparency = on;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
+    applyTheme(term);
     // The area is every pane's, so the pane that shows marks it, and a
     // pane that hides leaves the mark to the one that shows next.
     const area = containerRef.current?.closest('.terminal-area');
@@ -265,6 +283,8 @@ export function Terminal({
       scrollSensitivity: 0.75,
       theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
+    washRef.current = washFieldsFor(getCurrentThemeId(), themeTerminalColorsRef.current);
+    const fields = () => washRef.current;
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
@@ -426,9 +446,10 @@ export function Terminal({
       }
     };
 
-    // Decoded across outputs and word wrapped (src/terminal/outputShaper.ts).
-    // A copy that fills anew starts a shaper of its own.
-    let shaper = new OutputShaper(term.cols);
+    // Decoded across outputs, word wrapped and its washes painted
+    // (src/terminal/outputShaper.ts). A copy that fills anew starts a
+    // shaper of its own.
+    let shaper = new OutputShaper(term.cols, fields);
 
     // While the native underlay draws the live terminal, the xterm copy
     // hides and takes no writes (src/terminal/xterm/xtermMirror.ts). It keeps its
@@ -445,7 +466,7 @@ export function Terminal({
         term.reset();
         writer = new RegionWriter(term);
         if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
-        shaper = new OutputShaper(term.cols);
+        shaper = new OutputShaper(term.cols, fields);
         const settle = () => {
           padToBottom();
           keepTail(term);
@@ -454,7 +475,7 @@ export function Terminal({
         loadScrollback(false, session)
           .then(({ bytes }) => {
             if (bytes.length === 0) return settle();
-            writer.local(localDecoder.decode(bytes));
+            writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current));
             writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
             // The pad reads where the cursor sits once xterm parsed it all.
             writer.whenParsed(settle);
@@ -475,7 +496,7 @@ export function Terminal({
         // A copy the native grid hides takes none of it.
         const toXterm = mirror.mirrors();
         if (bytes.length > 0) {
-          if (toXterm) writer.local(localDecoder.decode(bytes));
+          if (toXterm) writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current));
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
@@ -860,8 +881,10 @@ export function Terminal({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColors, liftsHere());
+    applyTheme(term);
     reportTheme(getCurrentThemeId(), themeTerminalColors);
+    // applyTheme reads the refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeTerminalColors, liftsHere]);
 
   // Lift your prompts, or stop, when the choice changes.
@@ -880,11 +903,7 @@ export function Terminal({
     const reapply = () => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = themeFor(
-        getCurrentThemeId(),
-        themeTerminalColorsRef.current,
-        liftsHere(),
-      );
+      applyTheme(term);
       reportTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
     };
     const stopBase = subscribeBaseAnsi(reapply);
@@ -897,6 +916,8 @@ export function Terminal({
       stopVision();
       stopList();
     };
+    // applyTheme reads the refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liftsHere]);
 
   // Live-refresh the xterm palette when the user switches themes from
@@ -904,7 +925,7 @@ export function Terminal({
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    applyTheme(term, themeId);
     reportTheme(themeId, themeTerminalColorsRef.current);
   });
 
