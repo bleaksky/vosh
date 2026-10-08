@@ -1037,6 +1037,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
+- `Cmd+Shift+1` opens Settings on Triggers, `Cmd+Shift+2` on Aliases, `Cmd+Shift+3` on Macros and `Cmd+Shift+4` on Timers. They work in Settings too.
 
 For your sessions, in the main window.
 
@@ -1046,7 +1047,7 @@ For your sessions, in the main window.
 - `Cmd+W` closes the session in front, and asks first while it is connected. With one session it closes the window.
 - `Cmd+Shift+W` closes the window, and asks first while a session is connected.
 
-A macro on one of these keys keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
+A macro on one of these keys, or on one of the four Settings keys, keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
 
 On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh. `Cmd+Q` asks first while two or more sessions are connected.
 
