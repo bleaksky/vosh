@@ -617,10 +617,19 @@ export const PRESETS: Preset[] = [
       'Dims lines where something hits you to grey, with the damage verb in red and ' +
       'misses in pale cyan.',
     // A hit and a miss on you in dam_message in fight.c, from a villager,
-    // mob 5287 in area/fortblac.are, whose attack is a punch.
+    // mob 5287 in area/fortblac.are, whose attack is a punch. Bars stand
+    // for the attacker and the attack.
     sample: [
-      { text: "A villager's punch grazes you.", shows: 'combat.incoming' },
-      { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
+      {
+        text: "A villager's punch decimates you!",
+        shows: 'combat.incoming',
+        bars: ["A villager's", 'punch'],
+      },
+      {
+        text: "A villager's punch misses you.",
+        shows: 'combat.incoming_miss',
+        bars: ["A villager's", 'punch'],
+      },
     ],
     suggest: [FORSAKEN_LANDS],
     colors: {

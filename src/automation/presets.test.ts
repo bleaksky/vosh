@@ -435,8 +435,8 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
   combat_incoming: [
     [
       ["A villager's punch ", '244'],
-      ['grazes', '210'],
-      [' you.', '244'],
+      ['decimates', '210'],
+      [' you!', '244'],
     ],
     [
       ["A villager's punch ", '244'],
@@ -817,7 +817,7 @@ describe('the colors a sample draws in', () => {
     const tell = presetById('sent_tells')!.sample[0].text;
     const at = quotedWords(tell);
     expect(at && tell.slice(...at)).toBe('The day has begun.');
-    expect(quotedWords("A villager's punch grazes you.")).toBeNull();
+    expect(quotedWords("A villager's punch decimates you!")).toBeNull();
   });
 
   it('finds the bars a line names beside the words a tell quotes, in order', () => {
@@ -828,6 +828,9 @@ describe('the colors a sample draws in', () => {
     expect(words(skill.text, skill.bars)).toEqual(['dagger']);
     const [hit] = presetById('combat_outgoing')!.sample;
     expect(words(hit.text, hit.bars)).toEqual(['a villager']);
+    for (const line of presetById('combat_incoming')!.sample) {
+      expect(words(line.text, line.bars)).toEqual(["A villager's", 'punch']);
+    }
     expect(words("You tell Tolliver 'The day has begun.'", ['Tolliver'])).toEqual([
       'Tolliver',
       'The day has begun.',

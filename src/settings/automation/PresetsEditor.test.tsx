@@ -676,6 +676,12 @@ describe('the Presets page of First Run board 4', () => {
     expect(editor.sample()).toEqual(["You tell Tolliver ''|"]);
   });
 
+  it('draws the attacker and the attack that hit you as bars', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Damage to you');
+    expect(editor.sample()).toEqual(['  decimates you!||', '  misses you.||']);
+  });
+
   it('draws the number and the skill a gain names as bars', async () => {
     const editor = await mountEditor(['none'], [], {});
     await editor.pick('Gold, experience, and levels');
