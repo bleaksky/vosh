@@ -34,6 +34,12 @@
 //!   hour and one at 0 wears off. Each sends Char.Affects at once.
 //! - `spam N` sends N lines and a prompt, and `pulses N` sends N pulses
 //!   [`PULSE_MS`] apart, as combat rounds come.
+//! - `bash Tolliver`, `bash Maren` or `bash Orla` slams into them as
+//!   `do_bash` prints it and lags you [`Options::bash_ms`], without the
+//!   fight and the damage a real bash brings. The game holds each line
+//!   you send while you are lagged and runs the first once the lag ends,
+//!   then one each [`GAME_PULSE_MS`], as comm.c reads its buffer. The
+//!   fake hands that back as [`Write::after_ms`].
 //!
 //! Anything else gets `Huh?` and a prompt.
 
@@ -87,6 +93,12 @@ pub const SPLIT_MS: u64 = 400;
 
 /// How far apart `pulses N` sends its pulses, in milliseconds.
 pub const PULSE_MS: u64 = 50;
+
+/// Aabahran's pulse, in milliseconds, `1000 / PULSE_PER_SECOND`.
+pub const GAME_PULSE_MS: u64 = 250;
+
+/// How long a bash that lands lags you, its 24 beats (const.c:1881).
+pub const BASH_MS: u64 = 24 * GAME_PULSE_MS;
 
 /// The longest setting `do_prompt` keeps.
 pub const KEEP: usize = 255;
@@ -156,6 +168,8 @@ pub struct Options {
     pub incog: i64,
     /// The affects on you when you log in, as your pfile holds them.
     pub affects: Vec<Affect>,
+    /// How long `bash` lags you, in milliseconds.
+    pub bash_ms: u64,
 }
 
 /// An affect on you, one Char.Affects row.
@@ -228,6 +242,7 @@ impl Options {
             wizi: 0,
             incog: 0,
             affects: default_affects(),
+            bash_ms: BASH_MS,
         }
     }
 }
@@ -291,6 +306,9 @@ pub struct Mud {
     gmcp: bool,
     logged_in: bool,
     split_next: bool,
+    bash_ms: u64,
+    /// The lag a skill put on you, which holds your next line.
+    wait_ms: Option<u64>,
     /// Client bytes not read yet, and the line they build.
     input: Vec<u8>,
     line: Vec<u8>,
@@ -327,6 +345,8 @@ impl Mud {
             gmcp: false,
             logged_in: false,
             split_next: false,
+            bash_ms: options.bash_ms,
+            wait_ms: None,
             input: Vec::new(),
             line: Vec::new(),
         }
@@ -361,9 +381,12 @@ impl Mud {
 
     /// Read what the client sent. IAC DO GMCP logs you in with GMCP on,
     /// and without GMCP the first line logs you in. After that each line
-    /// is a command. Returns what to write, in order.
+    /// is a command. A line that comes while a skill lags you waits for
+    /// the lag to end, and the lines after it a pulse each. Returns what
+    /// to write, in order.
     pub fn receive(&mut self, bytes: &[u8]) -> Vec<Write> {
         let mut writes = Vec::new();
+        let mut held = false;
         self.input.extend_from_slice(bytes);
         let mut i = 0;
         while i < self.input.len() {
@@ -414,7 +437,19 @@ impl Mud {
                 .to_string();
             self.line.clear();
             if self.logged_in {
-                writes.extend(self.command(&line));
+                let wait = match self.wait_ms.take() {
+                    Some(ms) => {
+                        held = true;
+                        ms
+                    }
+                    None if held => GAME_PULSE_MS,
+                    None => 0,
+                };
+                let mut answer = self.command(&line);
+                if let Some(first) = answer.first_mut() {
+                    first.after_ms += wait;
+                }
+                writes.extend(answer);
             } else {
                 writes.push(Write::now(self.login()));
             }
@@ -474,6 +509,7 @@ impl Mud {
             "cast" => self.cast(rest),
             "tick" => self.tick(),
             "blind" => self.blind(),
+            "bash" => self.bash(rest),
             "afk" => {
                 self.state.afk = !self.state.afk;
                 let reply = if self.state.afk {
@@ -687,6 +723,26 @@ impl Mud {
             max_hit: self.state.max_hit,
         });
         self.pulse(Vec::new(), "A Blackwatch guard attacks you!\n\r", false)
+    }
+
+    /// `do_bash`, skills.c:2090. A bash that lands prints the line
+    /// skills.c:2271 sends you and lags you, so the game holds what you
+    /// send next.
+    fn bash(&mut self, argument: &str) -> Pulse {
+        let target = argument.split_whitespace().next().unwrap_or("");
+        if target.is_empty() {
+            return self.pulse(Vec::new(), "But you aren't fighting anyone!\n\r", false);
+        }
+        let lower = target.to_ascii_lowercase();
+        let Some((name, them)) = BASHED
+            .iter()
+            .find(|(name, _)| name.to_ascii_lowercase().starts_with(&lower))
+        else {
+            return self.pulse(Vec::new(), "They aren't here.\n\r", false);
+        };
+        self.wait_ms = Some(self.bash_ms);
+        let reply = format!("You slam into {name}, and send {them} flying!\n\r");
+        self.pulse(Vec::new(), &reply, false)
     }
 
     /// The fight is over: your health comes back, you stand, and nobody
@@ -1000,6 +1056,9 @@ impl Mud {
 }
 
 /// The room you stand in, as `do_look` prints it.
+/// Who stands in the room for `bash`, and the pronoun `$M` gives them.
+const BASHED: [(&str, &str); 3] = [("Tolliver", "him"), ("Maren", "her"), ("Orla", "her")];
+
 const ROOM_TEXT: &str = "The Bank of Aabahran\n\r  Marble counters line the hall, and a clerk nods at you.\n\r[Exits: south]\n\r";
 
 const BLESS: &str =
