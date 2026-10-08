@@ -491,6 +491,11 @@ export interface UiConfig {
   /** At or under this many hours an affect's hours turn bold red. Whole
    *  hours from 0 to 99, never over affects_running_out_hours. */
   affects_almost_gone_hours: number;
+  /** The share of the terminal column the snoop split takes, from 0.05
+   *  to 0.95. You set it by dragging the line under the split. */
+  snoop_share: number;
+  /** The snoop split folded to its strip. */
+  snoop_folded: boolean;
 }
 
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
@@ -598,6 +603,8 @@ export interface RawUiConfig {
   affects_tint?: boolean;
   affects_running_out_hours?: number;
   affects_almost_gone_hours?: number;
+  snoop_share?: number;
+  snoop_folded?: boolean;
 }
 
 /** A profile's UI config, the selected session's profile's when it
@@ -719,7 +726,21 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     affects_tint: cfg.affects_tint === true,
     affects_running_out_hours: thresholds.running_out,
     affects_almost_gone_hours: thresholds.almost_gone,
+    snoop_share: normalizeSnoopShare(cfg.snoop_share),
+    snoop_folded: cfg.snoop_folded === true,
   };
+}
+
+/** The share of the terminal column a snoop split takes until you drag
+ *  it. */
+export const DEFAULT_SNOOP_SHARE = 0.4;
+
+/** Read a stored snoop share, held to 0.05 to 0.95 as Rust holds it.
+ *  Anything that is not a finite number is the default. */
+export function normalizeSnoopShare(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(0.95, Math.max(0.05, raw))
+    : DEFAULT_SNOOP_SHARE;
 }
 
 /** What FONT_CHANGED carries. */

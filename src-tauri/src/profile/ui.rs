@@ -480,6 +480,21 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "is_default_affects_almost_gone_hours"
     )]
     pub affects_almost_gone_hours: u32,
+    /// The share of the terminal column the snoop split takes, from 0.05
+    /// to 0.95. You set it by dragging the line between the split and the
+    /// terminal, and 0.4, the default, is not written, so a profile that
+    /// never snoops saves the bytes it saved before. A hand edit that is
+    /// not a number reads as the default.
+    #[serde(
+        default = "default_snoop_share",
+        deserialize_with = "deserialize_snoop_share",
+        skip_serializing_if = "is_default_snoop_share"
+    )]
+    pub snoop_share: f64,
+    /// The snoop split folded to its strip. Off by default, and written
+    /// only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub snoop_folded: bool,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -923,6 +938,50 @@ where
     lenient_affects_hours(deser, DEFAULT_AFFECTS_ALMOST_GONE_HOURS)
 }
 
+/// The share of the terminal column a snoop split takes until you
+/// drag it (SN7).
+pub(crate) const DEFAULT_SNOOP_SHARE: f64 = 0.4;
+
+fn default_snoop_share() -> f64 {
+    DEFAULT_SNOOP_SHARE
+}
+
+// The default is a constant, so the exact compare is the one meant.
+#[allow(clippy::float_cmp)]
+fn is_default_snoop_share(share: &f64) -> bool {
+    *share == DEFAULT_SNOOP_SHARE
+}
+
+/// Hold the snoop split's share to 0.05 to 0.95, so neither the split
+/// nor the terminal under it ever closes. Anything that is not a finite
+/// number is the default.
+pub(crate) fn coerce_snoop_share(share: f64) -> f64 {
+    if share.is_finite() {
+        share.clamp(0.05, 0.95)
+    } else {
+        DEFAULT_SNOOP_SHARE
+    }
+}
+
+/// Read the snoop share leniently, so a hand edit never stops a profile
+/// loading. A number holds to 0.05 to 0.95 and anything else reads as
+/// the default.
+pub(crate) fn deserialize_snoop_share<'de, D>(deser: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(f64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_snoop_share(n),
+        Raw::Other(_) => DEFAULT_SNOOP_SHARE,
+    })
+}
+
 fn default_echo_macros() -> bool {
     true
 }
@@ -1041,6 +1100,8 @@ impl Default for UiConfig {
             affects_tint: false,
             affects_running_out_hours: DEFAULT_AFFECTS_RUNNING_OUT_HOURS,
             affects_almost_gone_hours: DEFAULT_AFFECTS_ALMOST_GONE_HOURS,
+            snoop_share: DEFAULT_SNOOP_SHARE,
+            snoop_folded: false,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -2005,6 +2066,46 @@ name = "haste"
         assert!(old.ui.collapse_repeats);
         assert!(old.ui.collapse_fight_lines);
         assert!(!old.ui.collapse_attack_lines);
+    }
+
+    #[test]
+    fn the_snoop_split_is_written_only_off_its_defaults() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("snoop_"), "{first}");
+        config.ui.snoop_share = 0.25;
+        config.ui.snoop_folded = true;
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("snoop_share = 0.25"), "{changed}");
+        assert!(changed.contains("snoop_folded = true"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert!((back.snoop_share - 0.25).abs() < f64::EPSILON);
+        assert!(back.snoop_folded);
+        // A file from before the split reads its defaults.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!((old.ui.snoop_share - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
+        assert!(!old.ui.snoop_folded);
+    }
+
+    #[test]
+    fn a_hand_edited_snoop_share_holds_to_its_range() {
+        let read = |value: &str| {
+            ProfileConfig::from_toml(&format!("[ui]\nsnoop_share = {value}\n"))
+                .unwrap()
+                .ui
+                .snoop_share
+        };
+        for (value, want) in [
+            ("0.6", 0.6),
+            ("2", 0.95),
+            ("0", 0.05),
+            ("-1.5", 0.05),
+            ("\"wide\"", DEFAULT_SNOOP_SHARE),
+            ("nan", DEFAULT_SNOOP_SHARE),
+        ] {
+            assert!((read(value) - want).abs() < f64::EPSILON, "{value}");
+        }
+        assert!((coerce_snoop_share(f64::INFINITY) - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
     }
 
     #[test]
