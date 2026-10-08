@@ -328,6 +328,11 @@ pub(crate) struct UiConfig {
     /// for roleplay-heavy users.
     #[serde(default)]
     pub spellcheck_prompt: bool,
+    /// Offer the writing card in a notice when you open the game's line
+    /// editor yourself on a text Vosh can name, `description edit` or
+    /// `note edit` (Description Editor Q3, Note Editor Q14). Default on.
+    #[serde(default = "default_writing_offer")]
+    pub writing_offer: bool,
     /// Shape of the command-line caret: `block` (default),
     /// `block_outline`, `half_block`, `underline`, `underline_thick`,
     /// `pipe`, or `pipe_thick`. Every shape is painted inside the same
@@ -1017,6 +1022,10 @@ fn default_input_echo_caret() -> bool {
     true
 }
 
+fn default_writing_offer() -> bool {
+    true
+}
+
 fn default_paste_line_delay_ms() -> u32 {
     500
 }
@@ -1104,6 +1113,7 @@ impl Default for UiConfig {
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
+            writing_offer: true,
             input_cursor_style: default_input_cursor_style(),
             prompt_template_enabled: false,
             prompt_template: String::new(),

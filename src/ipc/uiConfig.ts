@@ -39,6 +39,7 @@ import {
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
+  WRITING_OFFER_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_TERMINAL_COLORS_CHANGED,
@@ -491,6 +492,9 @@ export interface UiConfig {
    *  `kill` / `oload` / alias names do not light up red. Default
    *  off; opt-in for roleplayers. */
   spellcheck_prompt: boolean;
+  /** Offer the writing card in a notice when you open the game's line
+   *  editor yourself. Default on. */
+  writing_offer: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
   /** How the vitals under the panel's panes lay out, one of
@@ -644,6 +648,7 @@ export interface RawUiConfig {
   input_echo_caret?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
+  writing_offer?: boolean;
   input_cursor_style?: string;
   vitals_density?: string;
   vitals_values?: string;
@@ -768,6 +773,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
+    writing_offer: cfg.writing_offer !== false,
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
@@ -1078,6 +1084,11 @@ export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promis
 /** Hear Check spelling when you chat change. */
 export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>(SPELLCHECK_PROMPT_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Offer the card when the game's editor opens change. */
+export function subscribeWritingOfferChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(WRITING_OFFER_CHANGED, (event) => cb(event.payload));
 }
 
 /** Hear Caret shape change. */

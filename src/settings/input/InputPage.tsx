@@ -112,6 +112,13 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
           />
         </Row>
         <Row
+          label="Offer the card when the game’s editor opens"
+          description="Type note edit or description edit and Vosh offers to open it in its writing card."
+          anchor="writing-offer"
+        >
+          <Toggle checked={config.writing_offer} onChange={(on) => update({ writing_offer: on })} />
+        </Row>
+        <Row
           label="Mark your commands"
           description="Draws a grey › before each command you send, except after a prompt that already ends in >."
           anchor="mark-commands"

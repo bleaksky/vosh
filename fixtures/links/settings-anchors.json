@@ -59,6 +59,7 @@
     "input:command-line#caret",
     "input:command-line#keep-last",
     "input:command-line#spellcheck",
+    "input:command-line#writing-offer",
     "input:command-line#mark-commands",
     "input:command-line#sent-color",
     "input:command-line#echo-macros",
@@ -277,7 +278,8 @@
       "prompt-preview",
       "prompt-show",
       "sent-color",
-      "spellcheck"
+      "spellcheck",
+      "writing-offer"
     ],
     "automation": [
       "import",
