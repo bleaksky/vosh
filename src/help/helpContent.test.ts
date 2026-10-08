@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
-import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
+import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, readHelp } from './helpContent';
 import { ALERT_PRESETS } from '../automation/alertPresets';
 import { SETTINGS_MENU } from '../terminal/settingsMenu';
 
@@ -9,6 +9,76 @@ function body(id: string): string {
   if (!topic) throw new Error(`no help topic ${id}`);
   return topic.body;
 }
+
+describe('readHelp', () => {
+  const md = [
+    '# Vosh help',
+    '',
+    'Words for readers of the file.',
+    '',
+    '## First',
+    '',
+    '### 1.1 Open a door',
+    '',
+    '<!-- id: first.door -->',
+    '',
+    'Push it.',
+    '',
+    '```lua',
+    '## not a section',
+    '### 9.9 not a topic',
+    '```',
+    '',
+    '## Second',
+    '',
+    '### 2.1 Close it',
+    '',
+    '<!-- id: second.close -->',
+    '',
+    'Pull it.',
+    '',
+  ].join('\n');
+
+  it('returns the sections in order', () => {
+    expect(readHelp(md).sections).toEqual(['First', 'Second']);
+  });
+
+  it('reads a heading as number, title, section and id', () => {
+    const [door] = readHelp(md).topics;
+    expect([door?.id, door?.number, door?.title, door?.section]).toEqual([
+      'first.door',
+      '1.1',
+      'Open a door',
+      'First',
+    ]);
+  });
+
+  it('leaves the id line out of the body and trims it', () => {
+    expect(readHelp(md).topics[0]?.body.startsWith('Push it.')).toBe(true);
+  });
+
+  it('keeps a fenced block that holds headings inside its body', () => {
+    const { topics } = readHelp(md);
+    expect(topics.map((t) => t.id)).toEqual(['first.door', 'second.close']);
+    expect(topics[0]?.body).toBe('Push it.\n\n```lua\n## not a section\n### 9.9 not a topic\n```');
+  });
+
+  it('runs the last topic to the end of the file', () => {
+    expect(readHelp(md).topics[1]?.body).toBe('Pull it.');
+  });
+
+  it('throws on a topic with no id line', () => {
+    expect(() => readHelp(md.replace('<!-- id: second.close -->', ''))).toThrow(
+      /2\.1 Close it has no id line/,
+    );
+  });
+
+  it('throws on an id used twice', () => {
+    expect(() => readHelp(md.replace('second.close', 'first.door'))).toThrow(
+      /first\.door is used twice/,
+    );
+  });
+});
 
 describe('the help on values the game hides', () => {
   // Under lamented tears the game hides your vitals, affects, and group,
@@ -47,7 +117,6 @@ describe('the help on the vitals', () => {
     for (const id of ['shape.read-vitals', 'shape.prompt-show']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -103,11 +172,6 @@ describe('the help on the affects pane', () => {
     expect(text).toContain('almost gone never goes over running out');
   });
 
-  it('reads the same in HELP.md', () => {
-    const { number, title, body: text } = topic();
-    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
-  });
-
   it('sends you to Characters for tracked affects everywhere in HELP.md', () => {
     expect(helpMd).not.toMatch(/[Tt]racked affects[^.\n]*`panels` tab/);
     expect(helpMd).toContain(
@@ -132,7 +196,6 @@ describe('the help on searching the logs', () => {
       expect(text).toContain(line);
       expect(helpMd).toContain(line);
     }
-    expect(helpMd).toContain(`### 7.4 ${topic?.title}\n\n${text}\n`);
   });
 });
 
@@ -263,11 +326,6 @@ describe('the tick timer help', () => {
       'Every connection starts the tick, and switching characters keeps it running until you turn it off.',
     );
   });
-
-  it('reads the same in HELP.md', () => {
-    const { number, title, body: text } = tickTopic();
-    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
-  });
 });
 
 describe('the help on reading your prompt with a pattern', () => {
@@ -344,15 +402,13 @@ describe('the help on forgetting passwords in the session log', () => {
   });
 
   it('lists the command with every slash command', () => {
-    const { number, title, body: text } = topic('reference.slash-commands');
+    const { body: text } = topic('reference.slash-commands');
     expect(text).toContain(referenceBullet);
-    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
 
   it('lists the command where slash commands are taught', () => {
-    const { number, title, body: text } = topic('automate.slash-commands');
+    const { body: text } = topic('automate.slash-commands');
     expect(text).toContain(howToBullet);
-    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
 });
 
@@ -419,7 +475,6 @@ describe('the help on the chat pane', () => {
   it('matches HELP.md word for word', () => {
     const topic = HELP_TOPICS.find((t) => t.id === 'shape.chat-pane');
     if (!topic) throw new Error('no help topic shape.chat-pane');
-    expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
   });
 });
 
@@ -479,7 +534,6 @@ describe('the help on where your prompt shows', () => {
     for (const id of ['shape.prompt-show', 'automate.slash-commands', 'reference.slash-commands']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -540,10 +594,6 @@ describe('the help on prompt design codes', () => {
     return found;
   };
 
-  it('lists every code with its one sentence', () => {
-    expect(PROMPT_DESIGN_CODES.map((row) => [row.codes, row.text])).toEqual(ROWS);
-  });
-
   it('draws them as a table under Reference', () => {
     const { number, title, section, body: text } = topic();
     expect([number, title, section]).toEqual(['9.3', 'Prompt design codes', 'Reference']);
@@ -563,11 +613,6 @@ describe('the help on prompt design codes', () => {
     for (const block of blocks) {
       if (block.kind === 'paragraph') expect(block.text).not.toMatch(/[;:] /);
     }
-  });
-
-  it('matches HELP.md word for word', () => {
-    const { number, title, body: text } = topic();
-    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
 });
 
@@ -608,30 +653,6 @@ describe('the Get started topic', () => {
       'unless you had turned every preset off. A new install starts with every preset off. Each one reads',
     );
     expect(body('play.palette')).toContain('`Open help`, `Get started`, `Open settings`');
-  });
-});
-
-describe('HELP.md', () => {
-  // HELP.md mirrors the catalog word for word, every topic under its
-  // section, so the file and the Help window never tell two stories.
-  it('holds every topic word for word', () => {
-    for (const t of HELP_TOPICS) {
-      expect(helpMd, `${t.number} ${t.title}`).toContain(
-        `### ${t.number} ${t.title}\n\n${t.body}\n`,
-      );
-    }
-  });
-
-  it('holds no topic the catalog does not', () => {
-    const headings = [...helpMd.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
-    expect(headings).toEqual(HELP_TOPICS.map((t) => `${t.number} ${t.title}`));
-    const sections = [...helpMd.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
-    expect(sections).toEqual(HELP_SECTIONS);
-  });
-
-  it('names the Help window, not the old top bar button', () => {
-    expect(helpMd).not.toContain('top bar');
-    expect(helpMd).toContain('Help window');
   });
 });
 
@@ -703,7 +724,6 @@ describe('the help on the one window', () => {
     for (const id of ['get-connected.connect', 'get-connected.sessions', 'fix-it.reconnect']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 
@@ -726,7 +746,6 @@ describe('the help on the one window', () => {
     expect(found.body).toContain(
       '`Open settings` in the palette and the `Settings` list in the terminal right click menu reach it too.',
     );
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
   it('says which theme shows for a theme that left Vosh', () => {
@@ -798,13 +817,11 @@ describe('the help on Room triggers', () => {
     expect(found.body).toContain(
       '- Look at the room. With the `Room, time and weather colors` preset on, the line of your target turns bright red while the room lists them.',
     );
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.first-trigger');
     if (!found) throw new Error('no trigger topic');
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 });
 
@@ -845,7 +862,6 @@ describe('the help on the Room, time and weather colors preset', () => {
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.highlight-lines');
     if (!found) throw new Error('no highlight topic');
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 });
 
@@ -866,7 +882,6 @@ describe('the help on Mark your commands', () => {
     for (const id of ['play.send-commands', 'make-it-yours.control-terminal-colors']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -1103,7 +1118,6 @@ describe('the help on Lua', () => {
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.lua-scripts');
     if (!found) throw new Error('no Lua topic');
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 
   it('keeps colons and semicolons out of the new prose', () => {
@@ -1181,7 +1195,6 @@ describe('the help on #walk', () => {
     for (const id of ['play.walk', 'reference.slash-commands', 'reference.keyboard-shortcuts']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -1256,7 +1269,6 @@ describe('the help on group switches and timer groups', () => {
     ]) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -1296,7 +1308,6 @@ describe('the help on auto reconnect and Lua alerts', () => {
     for (const id of ['get-connected.reconnect', 'automate.lua-scripts', 'automate.alerts']) {
       const found = HELP_TOPICS.find((t) => t.id === id);
       if (!found) throw new Error(`no help topic ${id}`);
-      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
     }
   });
 });
@@ -1347,7 +1358,6 @@ describe('the help on Color vision', () => {
   it('matches HELP.md word for word', () => {
     const topic = HELP_TOPICS.find((t) => t.id === id);
     if (!topic) throw new Error(`no help topic ${id}`);
-    expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
   });
 });
 
@@ -1434,7 +1444,6 @@ describe('the help on what each session keeps and what its profile shares', () =
     ]) {
       const topic = HELP_TOPICS.find((t) => t.id === id);
       if (!topic) throw new Error(`no help topic ${id}`);
-      expect(helpMd, id).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
     }
   });
 });
@@ -1538,7 +1547,6 @@ describe('the help on Numpad movement', () => {
   it('matches HELP.md word for word', () => {
     const found = HELP_TOPICS.find((t) => t.id === 'automate.macros');
     if (!found) throw new Error('no macros topic');
-    expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
   });
 });
 

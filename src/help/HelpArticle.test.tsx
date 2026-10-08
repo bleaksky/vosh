@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
-import { HELP_TOPICS, PROMPT_DESIGN_CODES, type HelpTopic } from './helpContent';
+import { HELP_TOPICS, parseHelpBody, type HelpTopic } from './helpContent';
 import { countMatches, outlineFor } from './helpNav';
 import { HelpArticle } from './HelpArticle';
 import helpCss from '../styles/help.css?raw';
@@ -41,7 +41,10 @@ describe('a help topic', () => {
     expect(html).toContain('<h1 id="hp-title" class="hp-title">Prompt design codes</h1>');
     expect(html).toMatch(/<table class="hp-table"><thead><tr><th scope="col">Code<\/th>/);
     const body = /<tbody>(.*)<\/tbody>/.exec(html)?.[1] ?? '';
-    expect(body.match(/<tr>/g)).toHaveLength(PROMPT_DESIGN_CODES.length);
+    const table = parseHelpBody(topic('reference.prompt-codes').body).find(
+      (b) => b.kind === 'table',
+    );
+    expect(body.match(/<tr>/g)).toHaveLength(table?.kind === 'table' ? table.rows.length : 0);
     expect(body.match(/<tr>/g)).toHaveLength(25);
     // The code column is a row of mono codes, not chips.
     expect(body).toContain(

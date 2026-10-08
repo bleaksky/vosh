@@ -1,14 +1,14 @@
 # Vosh help
 
-This file holds the topics the Help window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, from Settings in the terminal right click menu, or with Open help in the command palette. This file mirrors the same topics for offline reading and copy-out.
-
-The source of truth for both is `src/help/helpContent.ts`.
+This file is the help. The Help window reads it when Vosh is built, so what you read here is what the window shows. Open the Help window with `Cmd+/` on macOS or `Ctrl+/` elsewhere, from Help in the menu bar, from Settings in the terminal right click menu, or with Open help in the command palette.
 
 ---
 
 ## Get connected
 
 ### 1.1 Connect to a world
+
+<!-- id: get-connected.connect -->
 
 You connect from the session button, centered in the title band over the terminal. While you are not connected it reads `Not connected` beside a status dot.
 
@@ -24,6 +24,8 @@ While connected, the button shows your character name and the world. If a saved 
 To disconnect, click the session button and choose `Disconnect`.
 
 ### 1.2 Reconnect
+
+<!-- id: get-connected.reconnect -->
 
 The session button reports the connection through its status dot. The dot turns to its error state when the connection fails, and the reason shows in the terminal in square brackets and when you point at the button. It goes back to idle when the session closes cleanly.
 
@@ -45,6 +47,8 @@ Two things reset between connections. The chat pane empties when you choose `Dis
 
 ### 1.3 Save your profile
 
+<!-- id: get-connected.profile-save -->
+
 `#profile save` writes the current client state to the file of the profile your session plays, and the profile loads again on startup with no extra step. The file is a TOML snapshot under `~/Library/Application Support/com.aabahran.vosh`.
 
 - Set up the client state you want to keep. Aliases, triggers, macros, variables, and tick settings all count.
@@ -58,6 +62,8 @@ Variables set with `#var` live in session scope. They clear when the next connec
 `#profile load` pulls the saved file back into the profile, and `#profile reset` puts the profile back to its defaults. Both reach every session that plays the profile, and each of the others prints a line that names the session you typed it in, such as `Tolliver loaded this profile from its file.` In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.
 
 ### 1.4 Play in more than one session
+
+<!-- id: get-connected.sessions -->
 
 Each session is one connection to a game, with its own terminal, command line and command history. While two or more sessions are open, the sessions sidebar shows on the left of the window, one row for each. With one session it hides by itself.
 
@@ -157,6 +163,8 @@ On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are 
 
 ### 1.5 Get started
 
+<!-- id: get-connected.get-started -->
+
 Get started is a short list of what to turn on in Vosh, with a line on what each thing does. It opens by itself the first time you start Vosh, and you open it again here.
 
 [Open Get started](vosh:get-started)
@@ -178,6 +186,8 @@ On macOS, choose Get started in the Help menu. Anywhere, press `Cmd+K` on macOS 
 
 ### 2.1 Send commands
 
+<!-- id: play.send-commands -->
+
 The command input sends lines to the server. It handles single commands, chained commands, multi line blocks, and pastes.
 
 - Type a command and press `Enter` to send it.
@@ -194,6 +204,8 @@ Each command you send echoes in the text after a grey `›`, so your commands st
 Set the delay in `Wait between pasted lines` under Input, then Advanced, in Settings, anywhere from 0 to 10000 ms.
 
 ### 2.2 Recall command history
+
+<!-- id: play.reuse-history -->
 
 Command history records every line you send during a session and replays it from the command line.
 
@@ -212,6 +224,8 @@ Example. Type `tell` and press `ArrowUp` to cycle through only the lines that st
 
 ### 2.3 Complete names with Tab
 
+<!-- id: play.tab-complete -->
+
 Tab completion finishes a partly typed word in the command line from names Vosh already knows.
 
 - Type the first letters of the word anywhere in the command line.
@@ -228,6 +242,8 @@ Candidates come from three sources, checked in this order.
 Matching is a case insensitive prefix match, duplicates collapse, and Vosh skips a candidate identical to what you already typed. Completion works on the word under the caret, so you can edit the middle of a line without touching the rest.
 
 ### 2.4 Scroll back through history
+
+<!-- id: play.scroll-back -->
 
 Scrollback opens in a split above the live terminal, so old output stays readable while new output keeps flowing underneath.
 
@@ -250,6 +266,8 @@ With the xterm renderer the divider snaps to whole terminal rows. It also answer
 
 ### 2.5 Find text
 
+<!-- id: play.find-text -->
+
 The find bar searches the whole session scrollback. It floats over the top right of the terminal.
 
 - Press `Cmd+F` on macOS or `Ctrl+F` elsewhere. The find bar opens even while you are typing in the command line, and pressing it again puts the caret back in its field.
@@ -265,6 +283,8 @@ The find bar also opens from `Find in scrollback…` in the terminal right click
 
 ### 2.6 Copy terminal text
 
+<!-- id: play.copy-text -->
+
 Terminal text copies to the system clipboard through a drag selection.
 
 - Drag across the output you want. An active text selection stops the usual click from refocusing the command line, so the selection stays put.
@@ -279,6 +299,8 @@ One priority rule. When the command line itself holds a selection, `Cmd+C` copie
 The right click menu also offers `Clear scrollback`, which empties what you can scroll back through, now and at your next launch. Your session log keeps every line.
 
 ### 2.7 Use the command palette
+
+<!-- id: play.palette -->
 
 The command palette runs Vosh commands from the keyboard. It covers the View and Session commands, the Settings pages, your prompt, your aliases, and your sessions.
 
@@ -298,6 +320,8 @@ The palette sorts what it finds into five sections.
 
 ### 2.8 Use the right click menu
 
+<!-- id: play.right-click-menu -->
+
 The terminal right click menu collects the terminal's everyday actions in one place.
 
 - Right click anywhere on the terminal to open it.
@@ -313,6 +337,8 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
 
 ### 2.9 Write your description
+
+<!-- id: play.write-description -->
 
 Vosh's writing card helps you write the description others see when they look at you, and sends it to the game for you.
 
@@ -339,6 +365,8 @@ When you type `description edit` yourself, the game opens its own editor as alwa
 
 ### 2.10 Write in the game
 
+<!-- id: play.write-in-the-game -->
+
 The writing card writes on the game's boards too. Notes, journal entries, applications, ideas, bug and typo reports, and your history, personality and purpose all open in it.
 
 - Right click the terminal and choose `Write`, then the kind you want, or find it in the palette, such as `Write a note…` or `Report a bug…`. The card's title opens your drafts and every other kind.
@@ -359,6 +387,8 @@ You can move the card, resize its box and pin it to the panel for any kind, as W
 Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
 
 ### 2.11 Walk to a place
+
+<!-- id: play.walk -->
 
 `#walk` moves you along a string of directions, one step at a time. Vosh waits for the game to show each new room before it sends the next step, so a move that fails stops the walk where you stand.
 
@@ -381,6 +411,8 @@ Typing `note edit`, `history edit` or another opener yourself brings the same `W
 
 ### 3.1 Create an alias
 
+<!-- id: automate.first-alias -->
+
 Aliases expand a short name into one or more commands. They live in Settings under Automation, then Aliases, and the command line defines them too.
 
 - Open Settings, choose Automation, and pick `Aliases` in the switcher at the top.
@@ -402,6 +434,8 @@ Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk
 The command line defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one. Setting an alias again, with `#alias`, `#endrec`, or `mud.alias` in Lua, keeps it in its group.
 
 ### 3.2 Create a trigger
+
+<!-- id: automate.first-trigger -->
 
 Triggers watch incoming lines and run actions when a pattern matches. They live in Settings under Automation, then Triggers, and a trigger pairs one visual with any number of effects.
 
@@ -426,6 +460,8 @@ A preset adds its triggers under `From presets`, and you edit one as you edit yo
 The command line builds triggers too. `#trigger name {pattern} send command` creates one with a `Regex` pattern at priority 0 on the `line` target, `#triggers` lists everything by priority, and `#untrigger name` removes one. Vosh rejects an invalid regex and names the broken pattern.
 
 ### 3.3 Highlight lines
+
+<!-- id: automate.highlight-lines -->
 
 A highlight trigger restyles every line that matches a pattern. Define one from the command line with `#trigger` or in Settings under Automation, then Triggers.
 
@@ -453,6 +489,8 @@ The `Room, time and weather colors` preset colors a room look, the clock and the
 
 ### 3.4 Route lines to a pane
 
+<!-- id: automate.route-chat -->
+
 A route effect sends matching lines to a named pane. Build one on a trigger in Settings under Automation, then Triggers.
 
 - Open Settings, choose Automation, then Triggers, and click `New trigger`.
@@ -470,6 +508,8 @@ Example. A trigger named `chat-feed` with the patterns `tells you '` and `gossip
 The inline form is `#trigger chat-feed {tells you '} route chat`. It creates a single pattern trigger, so build multi pattern feeds in Settings under Automation.
 
 ### 3.5 Set and use variables
+
+<!-- id: automate.variables -->
 
 Variables store values you reference in commands as `$name`. Set them from the command line with `#var`, and Vosh expands them in the lines you type before they leave.
 
@@ -490,6 +530,8 @@ Trigger send templates use `${name}` for regex capture groups, not this store, a
 Example. `#var potion yellow` followed by `quaff $potion` sends `quaff yellow` to the server. With a target set, `cast dispel $target` aims at your current mark.
 
 ### 3.6 Bind keys to macros
+
+<!-- id: automate.macros -->
 
 Macros bind a key to a command that fires while the command line has focus. They live in Settings under Automation, then Macros.
 
@@ -513,6 +555,8 @@ Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends 
 `#record` builds something different. It captures the commands you type in its session and saves them as an alias you invoke by name, not by key. The alias joins the profile, so every session on the profile has it. Use Automation, then Macros when you want a key, `#record` when you want a word.
 
 ### 3.7 Use slash commands
+
+<!-- id: automate.slash-commands -->
 
 Slash commands drive Vosh from the command line without opening Settings. Vosh handles every line that starts with `#` locally, and it never reaches the MUD.
 
@@ -539,6 +583,8 @@ Slash commands drive Vosh from the command line without opening Settings. Vosh h
 An unknown command echoes a pointer to `#help`, and errors come back wrapped in square brackets.
 
 ### 3.8 Script Vosh with Lua
+
+<!-- id: automate.lua-scripts -->
 
 Lua scripts run inside Vosh and register automation through the global `mud` table. Script files live in the `scripts` folder under the app data directory, `~/Library/Application Support/com.aabahran.vosh/scripts/` on macOS.
 
@@ -574,6 +620,8 @@ Example. `#script load combat` loads `combat.lua` from the scripts folder, and `
 
 ### 3.9 Get alerts
 
+<!-- id: automate.alerts -->
+
 Alert presets get your attention when the game needs you, while you play another session or work in another app. They live in Settings under Automation, then Presets, under `Alerts`.
 
 - `Tells you get` rings when someone sends you a tell, and the banner reads `Tell from` and their name.
@@ -593,6 +641,8 @@ Each preset rings at most once in 10 seconds, so a burst rings once. Tells you g
 To ring on a line of your own choosing, press a part in the `Alert` row of a trigger, as Create a trigger at 3.2 shows.
 
 ### 3.10 Make a pane with Lua
+
+<!-- id: automate.lua-panes -->
 
 A plugin can draw its own pane. You send Vosh rows, gauges and lines, and Vosh draws them in the pane's style. Every value shows as plain text.
 
@@ -629,6 +679,8 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 
 ### 4.1 Arrange the panels
 
+<!-- id: shape.arrange-panels -->
+
 The panel on the right holds your panes, the map over your affects at first, with your vitals pinned at its foot. You arrange it in the window itself, and Vosh keeps the arrangement for each character.
 
 - Show or hide the panel with the panel button at the right end of the title band, with `Cmd+Shift+L` on macOS or `Ctrl+Shift+L` elsewhere, or with `Show panel` in the View menu or the palette. While it is hidden your vitals move to the status line.
@@ -646,6 +698,8 @@ Open Settings with the gear at the right end of the title band, after the panel 
 
 ### 4.2 Use the map
 
+<!-- id: shape.use-the-map -->
+
 The Map pane draws the map the game sends. It sits at the top of the panel at first, and its header names the area you are in.
 
 - Show or hide it with `Show map` in the View menu or the palette, or add it with `Add a pane` in the title band.
@@ -660,6 +714,8 @@ The Map pane draws the map the game sends. It sits at the top of the panel at fi
 Vosh remembers the style, the zoom, the 3D view, and the tileset. Until the game sends `Map.Tiles` the pane says the map appears when your MUD sends it. `Room.Info` names the room, its exits, its terrain, its region, and the area, and `Room.Chars` lists the people.
 
 ### 4.3 Use the chat pane
+
+<!-- id: shape.chat-pane -->
 
 The chat pane collects channel talk in its own buffer, one line per message. Add it with `Add a pane` in the title band, or pick `Show here instead` in any pane's menu.
 
@@ -676,6 +732,8 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 The buffer holds a rolling 500 lines, survives closing and reopening the pane, and empties only when you choose `Disconnect` or connect to another world. Every chat pane reads the same buffer. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
 ### 4.4 Configure the vitals readout
+
+<!-- id: shape.read-vitals -->
 
 The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.
 
@@ -703,6 +761,8 @@ When the game hides your vitals, as it does under lamented tears, every value re
 
 ### 4.5 Watch your group and affects
 
+<!-- id: shape.group-affects -->
+
 The Group pane shows the health of everyone in your group. The Affects pane shows what affects you and the hours each has left. Add either one with `Add a pane` in the title band.
 
 - Read the Group rows. Each member gets a row with the name, a `lead` tag on the leader, a thin health meter, and the percent. The meter and the percent stay quiet at 67% and up, turn yellow down to 34%, and turn red below that. The header counts the members.
@@ -726,6 +786,8 @@ When the game hides your affects or your group, as it does under lamented tears,
 
 ### 4.6 Watch the staff queues
 
+<!-- id: shape.imm-board -->
+
 The Staff queues pane lists the staff queues that need you, worst first. The game sends them to immortals alone.
 
 - Log in on an immortal. The game sends `Imm.Queues` at login, and `Show staff queues` joins the View menu, the palette, and `Add a pane`.
@@ -736,6 +798,8 @@ The Staff queues pane lists the staff queues that need you, worst first. The gam
 The header sums the overdue items, or else the nearing ones. With nothing waiting the pane says no staff queue needs you right now.
 
 ### 4.7 Choose where your prompt shows
+
+<!-- id: shape.prompt-show -->
 
 Once Vosh reads your prompt, you choose where it shows. Open Settings, choose Input, and pick a place under `Where your prompt shows` in the Prompt section.
 
@@ -754,6 +818,8 @@ With the xterm renderer, the newest 1000 prompts keep their bands and older ones
 The choice saves in the `[prompt]` table of your profile as `show`. An older version of Vosh ignores it and shows your prompt in the text. When that version saves your profile, the choice is gone, so pick it again here.
 
 ### 4.8 Watch a player with snoop
+
+<!-- id: shape.snoop -->
 
 When you snoop a player in the game, a split opens at the top of the terminal column with what their screen shows, in the game's colors. Your own terminal stays under it, next to your command line, and your caret stays where it was. Vosh asks the game for snoop on every connection, so there is nothing to turn on, and a character who never snoops sees no change.
 
@@ -776,6 +842,8 @@ While a snoop is open, type `snoop` in the palette to reach `Go to snoop`, `Next
 
 ### 5.1 Configure the tick timer
 
+<!-- id: tick.tick-timer -->
+
 The tick timer shows the game's tick in the status line under the command line, with the game time and the moons beside it. The game's own tick decides when it fires. Vosh knows the game ticked when the game hour moves, which Aabahran advances once a tick, or when a line matches your `Reset on` pattern. When the tick lands, the count restarts, the sound plays, and your `Send each tick` command goes out, once per tick. Configure it in Settings under Automation, then Timers, where `Tick` sits at the top of the list, and click `Save` to apply your changes.
 
 - Turn on `Enabled`. Every connection starts the tick, and switching characters keeps it running until you turn it off. While another session on the profile is connected, a new connection keeps the switch as that session has it. `Play a sound` under `Advanced` plays a sound when the tick lands.
@@ -795,6 +863,8 @@ The game time takes a tint from your theme for the part of the day. Each moon in
 
 ### 5.2 Track a target with quick keys
 
+<!-- id: tick.track-target -->
+
 Set a target with `tar` and Vosh keeps it in the status line. Quick keys pair a short name with a verb, so typing the name acts on your target.
 
 - Type `tar` to list the people in the room, and `tar 2` or `tar drag` to pick one by number or by part of the name. `tarn` and `tarp` step to the next or previous person, and `tarclear` clears the target.
@@ -809,6 +879,8 @@ Setting a target with `tar` also fills `$target`, so `cast dispel $target` aims 
 ## Make it yours
 
 ### 6.1 Switch themes
+
+<!-- id: make-it-yours.switch-themes -->
 
 Themes recolor the whole window, the terminal included. They live in Settings under Appearance, in the Theme section.
 
@@ -829,6 +901,8 @@ A new install starts on Triad, with Rubric as its light theme. The built in them
 
 ### 6.2 Create a custom theme
 
+<!-- id: make-it-yours.build-your-own-theme -->
+
 A custom theme starts as a copy of the theme you see and changes any of its colors. The editor lives in Settings under Appearance, then Advanced.
 
 - Open Settings, choose Appearance, and switch to the theme you want to start from.
@@ -840,6 +914,8 @@ A custom theme starts as a copy of the theme you see and changes any of its colo
 Every change applies at once and saves. Your custom themes join the gallery after the built in ones. To remove one, pick it in `Theme to edit`, click `Delete…`, and confirm.
 
 ### 6.3 Control terminal colors
+
+<!-- id: make-it-yours.control-terminal-colors -->
 
 The colors MUD text draws in live in Settings under Appearance.
 
@@ -860,6 +936,8 @@ Two more colors sit with the rows they belong to. `Sent command color` under Inp
 
 ### 6.4 Set the fonts
 
+<!-- id: make-it-yours.pick-your-fonts -->
+
 The terminal font lives in Settings under Appearance, then Terminal text. The panel font and its size live right after it, under Panel text.
 
 - Open Settings and choose Appearance.
@@ -877,6 +955,8 @@ Each change applies at once and saves. Under General, `Font and size` in Keep th
 ## Characters and data
 
 ### 7.1 Manage profiles
+
+<!-- id: characters-and-data.profiles -->
 
 A profile carries its own aliases, triggers, macros, and variables, its tracked affects, and its panes. Vosh picks the right profile when you connect and again when you log in. Manage profiles in Settings under Characters.
 
@@ -911,6 +991,8 @@ Each profile reads your prompt on its own. Vosh moves the capture trigger that `
 
 ### 7.2 Set up loadouts
 
+<!-- id: characters-and-data.loadouts -->
+
 Loadouts flip whole groups of aliases, triggers, and macros on and off from one shared catalog. Loadout mode starts with a one time migration from per profile files.
 
 - Open Settings, choose Automation, click `Import…`, and find the `Shared catalog` section. Click `Preview…`.
@@ -934,6 +1016,8 @@ After the move, `catalog.toml` holds your aliases, triggers, and macros, with ev
 
 ### 7.3 Import a TinTin++ file
 
+<!-- id: characters-and-data.tintin-import -->
+
 The `#import-tintin` command reads aliases and variables out of a TinTin++ `.tin` file and loads them into the live profile. It runs from the command line.
 
 - Type `#import-tintin <path>` and point it at the `.tin` file. `~` expands in the path.
@@ -948,6 +1032,8 @@ Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder,
 Files from other clients go through Settings instead. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts plus anything rejected, not supported, or unreadable. A trigger that takes the name of a preset trigger stays out, so the preset keeps its own, and the summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
 
 ### 7.4 Search session logs
+
+<!-- id: characters-and-data.search-logs -->
 
 Vosh logs every session automatically and searches the store with regular expressions. A log is the record of one connection, so a session that connects three times saves three. The search lives in Settings under General, then Session logs.
 
@@ -972,6 +1058,8 @@ Type `#logs forget-passwords` to count the lines that hold a password. Vosh says
 
 ### 7.5 Check for updates
 
+<!-- id: characters-and-data.stay-updated -->
+
 Vosh checks for new builds and installs them in place. The controls live in Settings under General, in the Updates section.
 
 - Open Settings. General opens by default. The Updates heading reads `You have Vosh <version>.` beside a `Check now` button.
@@ -986,6 +1074,8 @@ Updates download from the project's GitHub releases, and Vosh checks every build
 ## Fix it
 
 ### 8.1 Switch terminal renderers
+
+<!-- id: fix-it.terminal-renderer -->
 
 Vosh ships two terminal renderers. On macOS the native GPU surface draws the terminal by default, and the `#nativesurface` command switches between it and the xterm renderer from the command line. Windows and Linux always draw with the xterm renderer, whatever the switch says.
 
@@ -1004,6 +1094,8 @@ Under General, `Font and size` in Keep the same for every character decides whet
 
 ### 8.2 Recover a bad connection
 
+<!-- id: fix-it.reconnect -->
+
 The session button in the title band holds the connection controls. Its dot shows idle, connecting, connected, or an error. After a failed connection the button reads `Not connected`, and pointing at it shows why.
 
 - Click the session button and choose `Disconnect`, then wait for the dot to go idle.
@@ -1021,6 +1113,8 @@ The status line shows how long the game takes to answer you, just before the tic
 Type `#lag` to ask whether it was you or the game. It prints the round trip now, how it usually runs over the last 10 minutes, and each stall since you connected, with when it began, its worst reading, and how long it lasted. A stall that waited on a command began when you sent it, so its time and length are the real ones. A stall is any stretch at 300 ms or more, and Vosh keeps the last 20 of each session.
 
 ### 8.3 Find your data on disk
+
+<!-- id: fix-it.data-on-disk -->
 
 Vosh keeps all of its data in one app data folder named `com.aabahran.vosh`.
 
@@ -1049,6 +1143,8 @@ A leftover `profile.toml` at the root is the legacy single profile file. Vosh mi
 ## Reference
 
 ### 9.1 Slash commands
+
+<!-- id: reference.slash-commands -->
 
 This is every slash command Vosh understands today.
 
@@ -1080,6 +1176,8 @@ Targeting also works bare with no `#`. Type `tar` to list, `tar <N>` or `tar <su
 An unknown command points you at `#help`. Errors echo wrapped in square brackets.
 
 ### 9.2 Keyboard shortcuts
+
+<!-- id: reference.keyboard-shortcuts -->
 
 This is every built in key Vosh binds, grouped by where it works. On macOS the window shortcuts use `Cmd`, since `Ctrl` belongs to your macros there. The one exception is `Ctrl+Cmd+S`, the key macOS gives a sidebar. Windows and Linux use `Ctrl`.
 
@@ -1136,6 +1234,8 @@ Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes 
 Bind your own keys as macros in Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`. While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2` and `Numpad4` walk north, east, south and west, and `Numpad9` and `Numpad3` go up and down.
 
 ### 9.3 Prompt design codes
+
+<!-- id: reference.prompt-codes -->
 
 Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose `Edit as text` there to read them or type your own.
 
