@@ -43,7 +43,7 @@ npm run dev
 
 ## Checks
 
-CI runs these in this order. Run them before you push. The Rust steps need the built page, so `npm run build` comes before them. `npm run knip` finds unused files, exports and dependencies, and `npm run css:usage` finds classes in `src/styles` that no file uses.
+CI runs all of these. Run them in this order before you push. The Rust steps need the built page, so `npm run build` comes before them. `npm run knip` finds unused files, exports and dependencies, and `npm run css:usage` finds classes in `src/styles` that no file uses.
 
 ```
 npm run format:check
