@@ -1914,6 +1914,21 @@ fn a_quick_key_echoes_like_a_typed_command() {
 }
 
 #[test]
+fn a_typed_line_fires_a_quick_key_as_the_pipeline_reads_it() {
+    let mut p = Profile::default();
+    let mut c = Connection::default();
+    // A quick key with no verb set fires nothing.
+    assert!(!fires_quick_key(&c, "gg"));
+    let _ = process_on(&mut p, &mut c, "#qkey gg kick");
+    for line in ["gg", "  gg", "gg now"] {
+        assert!(fires_quick_key(&c, line), "{line}");
+    }
+    for line in ["#gg", "ggg", "look", "tar 1", ""] {
+        assert!(!fires_quick_key(&c, line), "{line}");
+    }
+}
+
+#[test]
 fn the_caret_is_the_one_the_command_line_draws() {
     let page = include_str!("../../../src/input/maskedInput.ts");
     assert!(page.contains(r"export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';"));

@@ -18,6 +18,14 @@ describe('OutputShaper', () => {
     expect(new OutputShaper(80).shape(out).output).toEqual({ text: '', pinRow: true });
   });
 
+  it('passes on that a line Vosh prints starts a row of its own', () => {
+    const out = decodeOutputPayload({ b64: btoa('[walk] You are not walking.\r\n'), fresh: true });
+    expect(new OutputShaper(80).shape(out).output).toEqual({
+      text: '[walk] You are not walking.\r\n',
+      fresh: true,
+    });
+  });
+
   it('hands the recent names cache the same text with no wrapping when it writes nothing', () => {
     // A copy the native underlay hides writes nothing, but Tab still
     // completes the names it saw, a character split across reads too.

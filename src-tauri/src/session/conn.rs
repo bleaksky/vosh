@@ -21,7 +21,7 @@ use vosh_protocol::telnet::{option as telnet_option, Negotiator, Parser};
 
 use crate::app::events;
 use crate::input::walk::WalkCommand;
-use crate::output::{echo_lines, emit_output, emit_repaint};
+use crate::output::{echo_command, echo_lines, emit_output, emit_repaint};
 use crate::profile::live::Profile;
 use crate::sessions::Session;
 
@@ -707,7 +707,7 @@ async fn send_typed<R: tauri::Runtime>(
         }
         From::Card(line) => {
             let echo = crate::input::command_echo(line, &conn.session.lock_profile().await.ui);
-            echo_lines(&conn.app, &conn.session, &[echo]);
+            echo_command(&conn.app, &conn.session, &[echo]);
             bytes.to_vec()
         }
     };

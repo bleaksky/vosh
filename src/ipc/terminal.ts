@@ -44,6 +44,10 @@ export interface OutputPayload {
    *  still where the next thing lands after this payload, so the line
    *  end that would end that row writes nothing. */
   pin_row?: boolean;
+  /** The bytes start a row of their own, as a line Vosh prints about
+   *  itself does, so a terminal whose cursor sits past the start of a
+   *  row writes a line end first. Absent when false. */
+  fresh?: boolean;
   /** Which output of the prompt stage this is. Absent on output from
    *  elsewhere, such as a slash command's echo. */
   id?: number;
@@ -66,6 +70,8 @@ export interface SessionOutput {
   pinSpans?: PromptSpan[];
   hold?: Uint8Array;
   pinRow?: boolean;
+  /** The bytes start a row of their own. */
+  fresh?: boolean;
   /** Which output of the prompt stage this is. A terminal keeps the
    *  newest it took, so text it writes itself can tell the session
    *  which output it follows. */
@@ -98,6 +104,7 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   if (Array.isArray(payload.pin_spans)) out.pinSpans = payload.pin_spans;
   if (typeof payload.hold === 'string') out.hold = base64Bytes(payload.hold);
   if (typeof payload.pin_row === 'boolean') out.pinRow = payload.pin_row;
+  if (payload.fresh === true) out.fresh = true;
   if (typeof payload.id === 'number') out.id = payload.id;
   return out;
 }

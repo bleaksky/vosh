@@ -600,7 +600,8 @@ impl Harness {
 
     /// Everything the terminal got, as plain text, each output's region
     /// it replaces first, as the renderers write it, and your typed
-    /// echoes.
+    /// echoes. A line Vosh prints about itself starts a row of its own,
+    /// as each renderer starts it.
     fn text(&self) -> String {
         let shown = self.shown.lock().expect("the outputs").clone();
         let mut bytes = Vec::new();
@@ -613,6 +614,12 @@ impl Harness {
                 }
             };
             let json: Value = serde_json::from_str(&payload).expect("an output payload");
+            if json["fresh"] == true {
+                let plain = vosh_protocol::ansi::plain_text(&bytes);
+                if !plain.is_empty() && !plain.ends_with('\n') {
+                    bytes.extend_from_slice(b"\r\n");
+                }
+            }
             for part in [&json["replace"]["b64"], &json["b64"], &json["hold"]] {
                 if let Some(text) = part.as_str() {
                     bytes.extend(base64_decode(text));
@@ -1021,6 +1028,57 @@ async fn a_command_after_bare_walk_or_walk_stop_goes_out_as_you_typed_it() {
         log.iter().filter(|row| *row == "> look").count(),
         2,
         "{log:#?}"
+    );
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_walk_line_starts_its_own_row_when_a_prompt_lands_after_your_echo() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    // The page echoes `#walk stop` as you press Enter, and before the
+    // session hears the line, the game's answer to an earlier command
+    // lands after the echo and ends on its prompt.
+    let after = {
+        let mut shown = h.shown.lock().expect("the outputs");
+        shown.push(Shown::Echo("#walk stop\r\n".into()));
+        shown
+            .iter()
+            .filter_map(|s| match s {
+                Shown::Output(payload) => {
+                    serde_json::from_str::<Value>(payload).ok()?["id"].as_u64()
+                }
+                Shown::Echo(_) => None,
+            })
+            .max()
+            .unwrap_or(0)
+    };
+    {
+        let session = h.state.selected_session();
+        let slot = session.slot.lock().await;
+        let handle = slot.as_ref().expect("the connection");
+        let _ = handle.local_write(after);
+        assert!(handle.send(b"\r\n".to_vec()));
+    }
+    h.until("the prompt after your echo", |h| h.text().ends_with(PROMPT))
+        .await;
+    crate::ipc::session::session_send_input(
+        h.app.handle().clone(),
+        h.app.state(),
+        "#walk stop".into(),
+        None,
+    )
+    .await
+    .expect("the line goes out");
+    h.until_said(&["[walk] You are not walking."]).await;
+    let text = h.text();
+    let rows: Vec<&str> = text.split("\r\n").collect();
+    assert_eq!(
+        rows[rows.len() - 3..],
+        [PROMPT, "[walk] You are not walking.", ""],
+        "{text}"
     );
     h.finish().await;
 }

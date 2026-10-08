@@ -357,6 +357,49 @@ describe('RegionWriter', () => {
   });
 });
 
+describe('RegionWriter lines Vosh prints about itself', () => {
+  const line = (text: string): RegionOutput => ({ text: `${text}\r\n`, fresh: true });
+
+  it('starts a row of its own after a prompt that came after your echo', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room\r\n' });
+    writer.local('#walk stop\r\n');
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.output(line('[walk] You are not walking.'));
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      'room',
+      '#walk stop',
+      '<1020hp 800m> ',
+      '[walk] You are not walking.',
+    ]);
+  });
+
+  it('adds no blank row at the start of a row or after held line ends', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.local('#walk stop\r\n');
+    writer.output(line('[walk] You are not walking.'));
+    writer.output({ text: 'room', hold: '\r\n' });
+    writer.output(line('[lua] boom'));
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      '<1020hp 800m> #walk stop',
+      '[walk] You are not walking.',
+      'room',
+      '[lua] boom',
+    ]);
+  });
+
+  it('leaves the echo of a command Vosh draws itself after the prompt', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: '<1020hp 800m> ' });
+    writer.output({ text: 'kick goblin\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['<1020hp 800m> kick goblin']);
+  });
+});
+
 describe('RegionWriter held line ends', () => {
   const cursor = (term: Terminal) => [term.buffer.active.cursorY, term.buffer.active.cursorX];
 

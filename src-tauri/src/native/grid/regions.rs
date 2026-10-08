@@ -128,6 +128,10 @@ impl TermGrid {
     /// in their place when it writes them on a new row, or finds the
     /// region open with nothing held, as when the region came from the
     /// scrollback the grid loaded.
+    ///
+    /// Bytes that start a row of their own (`Output::fresh`) get a line
+    /// end first when, the held line ends written, the cursor sits past
+    /// the start of a row.
     pub(crate) fn session_output(&mut self, out: &Output) {
         // A lift's two marks ride in one output.
         self.lift_tracks.clear();
@@ -175,7 +179,13 @@ impl TermGrid {
             self.restore_first();
             self.write_hold();
             self.region = None;
-            let text = self.decode(&out.bytes);
+            let mut text = self.decode(&out.bytes);
+            // A line Vosh prints about itself starts a row of its own.
+            // The row a pinned prompt left drops the line end, as it
+            // drops any.
+            if out.fresh && !self.at_row_start() {
+                text.insert_str(0, "\r\n");
+            }
             let text = self.land(text);
             if !text.is_empty() {
                 let text = self.wrap(&text);

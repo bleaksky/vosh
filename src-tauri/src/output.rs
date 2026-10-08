@@ -54,6 +54,11 @@ pub(crate) struct OutputPayload {
     /// `vosh_prompt::stage::close_pin_row`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pin_row: Option<bool>,
+    /// The bytes start a row of their own, so each renderer writes a line
+    /// end first when its cursor sits past the start of a row. Absent
+    /// when false. See `vosh_prompt::stage::Output::fresh`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fresh: Option<bool>,
     /// Which output of the prompt stage this is (`Output::id`). Each
     /// renderer keeps the newest it took, so text the webview writes
     /// itself can tell the session which output it follows. Absent on
@@ -139,6 +144,7 @@ impl OutputPayload {
             pin_spans: out.pin_spans.clone(),
             hold: (!out.hold.is_empty()).then(|| base64_encode(&out.hold)),
             pin_row: out.pin_row,
+            fresh: out.fresh.then_some(true),
             id: None,
         }
     }
@@ -163,14 +169,40 @@ pub(crate) fn emit_output<R: tauri::Runtime>(
     emit_counted(app, session, &out, true, false, true);
 }
 
-/// Print the lines a typed line echoes, such as a slash command's
-/// reply, one to a row, in the terminal of `session`. They go through
-/// [`emit_output`] like every other terminal write, so the native
-/// renderer shows them too.
+/// Print lines Vosh says about itself, such as a slash command's reply,
+/// a `[walk]` line or a `[lua]` error, one to a row, in the terminal of
+/// `session`. They start a row of their own: a game prompt that landed
+/// after the echo of your line, or that the line came with no echo
+/// after, ends its row first, and a terminal already at the start of a
+/// row gets no blank one. They go through [`emit_output`]'s path like
+/// every other terminal write, so the native renderer shows them too.
 pub(crate) fn echo_lines<R: tauri::Runtime>(
     app: &AppHandle<R>,
     session: &Session,
     lines: &[String],
+) {
+    emit_lines(app, session, lines, true);
+}
+
+/// Print the echo of a command you send that Vosh draws itself, such as
+/// a quick key's, then the lines after it, in the terminal of `session`.
+/// The echo lands at the cursor, after the game's prompt, as the echo
+/// the command line draws does.
+pub(crate) fn echo_command<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    lines: &[String],
+) {
+    emit_lines(app, session, lines, false);
+}
+
+/// Print `lines`, each ended with a line end. `fresh` starts them on a
+/// row of their own.
+fn emit_lines<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    session: &Session,
+    lines: &[String],
+    fresh: bool,
 ) {
     if lines.is_empty() {
         return;
@@ -180,7 +212,10 @@ pub(crate) fn echo_lines<R: tauri::Runtime>(
         buf.extend_from_slice(line.as_bytes());
         buf.extend_from_slice(b"\r\n");
     }
-    emit_output(app, session, buf);
+    let mut out = Output::new(false);
+    out.text(&buf);
+    out.fresh = fresh;
+    emit_counted(app, session, &out, true, false, true);
 }
 
 /// Send a repaint of the open row of `session`. It leaves the output
