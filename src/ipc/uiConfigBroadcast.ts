@@ -23,6 +23,7 @@ import {
   INPUT_CURSOR_STYLE_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_MARK_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -164,6 +165,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     before ? echoMarkOptionsOf(before) : undefined,
     deepEqual,
   );
+  await emitChanged(INPUT_LINE_MARK_CHANGED, config.input_line_mark, before?.input_line_mark);
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,

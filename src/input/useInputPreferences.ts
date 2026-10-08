@@ -14,10 +14,15 @@ import {
   type InputCursorStyle,
 } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { echoMark } from './maskedInput';
-import { getEchoMarkOptions, subscribeEchoMarkOptions } from '../stores/config/echoMarkStore';
+import { echoMark, markText } from './maskedInput';
+import {
+  getEchoMarkOptions,
+  subscribeEchoMarkOptions,
+  useEchoMarkOptions,
+} from '../stores/config/echoMarkStore';
+import { useLineMark } from '../stores/config/lineMarkStore';
 
-/** The command line settings. The two that change what the row draws
+/** The command line settings. The ones that change what the row draws
  *  come back as state, and the rest as refs the handlers read when they
  *  run. */
 export function useInputPreferences() {
@@ -47,6 +52,10 @@ export function useInputPreferences() {
   // keeps current.
   const echoMarkRef = useRef<string>(echoMark(getEchoMarkOptions()));
   const echoDimRef = useRef<boolean>(getEchoMarkOptions().dim);
+  // The mark the row draws before the line you type, while Use the same
+  // mark in the command line is on.
+  const markOptions = useEchoMarkOptions();
+  const lineMarkOn = useLineMark();
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -98,6 +107,7 @@ export function useInputPreferences() {
   return {
     spellcheckPrompt,
     cursorStyle,
+    lineMark: lineMarkOn ? markText(markOptions) : '',
     keepLastRef,
     pasteDelayRef,
     echoColorRef,

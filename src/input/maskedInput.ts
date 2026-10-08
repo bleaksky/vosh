@@ -25,6 +25,12 @@ function styleCommand(line: string, color: string | null, dim: boolean): string 
   return sgr ? `\x1b[${sgr}m${line}\x1b[0m` : line;
 }
 
+/** The text of the mark you picked, `›`, `>` or your own, empty while
+ *  it is off. The echo and the command line both draw it. */
+export function markText({ mark, text }: Pick<EchoMarkOptions, 'mark' | 'text'>): string {
+  return mark === 'off' ? '' : mark === 'gt' ? '>' : mark === 'own' ? text : '\u203a';
+}
+
 /** The mark before each command you send, empty while it is off or your
  *  own text is blank: the Mark color, or the theme's bright black (SGR
  *  90) when none reads, so both renderers draw it in the active theme,
@@ -40,7 +46,7 @@ export function echoMark({
   text,
   color,
 }: Pick<EchoMarkOptions, 'mark' | 'text' | 'color'>): string {
-  const glyph = mark === 'off' ? '' : mark === 'gt' ? '>' : mark === 'own' ? text : '\u203a';
+  const glyph = markText({ mark, text });
   if (glyph.length === 0) return '';
   const rgb = echoRgb(color);
   return `\x1b[${rgb ? `38;2;${rgb}` : '90'}m${glyph} \x1b[0m`;

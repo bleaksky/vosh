@@ -26,3 +26,4 @@ const store = createConfigStore<EchoMarkOptions>({
 export const startEchoMarkStore = store.start;
 export const getEchoMarkOptions = store.get;
 export const subscribeEchoMarkOptions = store.subscribe;
+export const useEchoMarkOptions = store.use;

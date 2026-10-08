@@ -206,7 +206,7 @@
 }
 
 /* Paste-burst indicator. When a multi-line paste is in flight, a thin
-   chip sits between the prompt glyph and the live input showing
+   chip sits between the mark and the live input showing
    progress + the cancel hint. Bracket-delimited to match the rest of
    the chrome ([save], [check now], etc.). Tabular-nums keep the
    counts stable as digits grow so the slash does not shift. */
@@ -267,13 +267,20 @@
   font-size: 0.92em;
 }
 
-/* The prompt glyph sits 16 in, in the tertiary tone, so the text you
-   type starts at 32. */
+/* The mark sits 16 in, in the tertiary tone. One character takes 16 px,
+   so the text you type starts at 32, and a longer mark of up to four
+   keeps a space after it. With the mark off there is no span and the
+   text starts at 16. */
 .input-row .prompt {
   flex: none;
-  width: 16px;
+  min-width: 16px;
+  white-space: pre;
   color: var(--tertiary);
   font-weight: 400;
+}
+
+.input-row .input-mark-wide {
+  margin-right: 1ch;
 }
 
 /* The row sets no gap, so the gutter and the paste chip keep 8 px

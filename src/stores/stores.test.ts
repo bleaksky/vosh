@@ -71,6 +71,7 @@ async function load() {
     tick: await import('./session/tickStore'),
     chipStyle: await import('./config/chipStyleStore'),
     echoMark: await import('./config/echoMarkStore'),
+    lineMark: await import('./config/lineMarkStore'),
     tickCount: await import('./config/tickCountStore'),
     gameTime: await import('./config/gameTimeStore'),
     vitalsOptions: await import('./config/vitalsOptionsStore'),
@@ -633,6 +634,19 @@ describe('stores on the event bus', () => {
     fire('vosh://profile-switched', 'Orla');
     await settle();
     expect(s.echoMark.getEchoMarkOptions().mark).toBe('off');
+  });
+
+  it('follow the line mark switch Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], input_line_mark: false });
+    const s = await load();
+    expect(s.lineMark.getLineMark()).toBe(false);
+    fire('vosh://input-line-mark-changed', true);
+    expect(s.lineMark.getLineMark()).toBe(true);
+    commands.set('ui_get_config', { tracked_affects: [] });
+    fire('vosh://input-line-mark-changed', false);
+    fire('vosh://profile-switched', 'Orla');
+    await settle();
+    expect(s.lineMark.getLineMark()).toBe(true);
   });
 
   it('follow the tick count Settings saves and each profile keeps', async () => {

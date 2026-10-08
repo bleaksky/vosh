@@ -114,6 +114,9 @@ export const ECHO_MACROS_CHANGED = 'vosh://echo-macros-changed';
 /** Carries the mark your echo starts with, its color and Dim sent
  *  commands as one, saved from Settings, to every window. */
 export const INPUT_ECHO_MARK_CHANGED = 'vosh://input-echo-mark-changed';
+/** Carries Use the same mark in the command line, saved from Settings,
+ *  to every window. */
+export const INPUT_LINE_MARK_CHANGED = 'vosh://input-line-mark-changed';
 export const PASTE_LINE_DELAY_CHANGED = 'vosh://paste-line-delay-changed';
 export const SPELLCHECK_PROMPT_CHANGED = 'vosh://spellcheck-prompt-changed';
 export const WRITING_OFFER_CHANGED = 'vosh://writing-offer-changed';

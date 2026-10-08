@@ -35,6 +35,7 @@ import {
   INPUT_CURSOR_STYLE_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_MARK_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -1273,6 +1274,11 @@ export function subscribeInputEchoMarkChanged(
 /** Hear Wait between pasted lines change, in ms. */
 export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
   return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Use the same mark in the command line change. */
+export function subscribeInputLineMarkChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(INPUT_LINE_MARK_CHANGED, (event) => cb(event.payload));
 }
 
 /** Hear Check spelling when you chat change. */

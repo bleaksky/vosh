@@ -239,6 +239,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const {
     spellcheckPrompt,
     cursorStyle,
+    lineMark,
     keepLastRef,
     pasteDelayRef,
     echoColorRef,
@@ -643,9 +644,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   return (
     <div className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}`}>
-      <span className="prompt" aria-hidden="true">
-        &#8250;
-      </span>
+      {lineMark && (
+        <span
+          className={[...lineMark].length > 1 ? 'prompt input-mark-wide' : 'prompt'}
+          aria-hidden="true"
+        >
+          {lineMark}
+        </span>
+      )}
       {lineCount > 1 && (
         <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
           {Array.from({ length: lineCount }, (_, i) => (
