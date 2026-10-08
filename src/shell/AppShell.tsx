@@ -40,6 +40,13 @@ import {
 // panel's clamp counts. With one session the sidebar is gone, the first
 // column takes 0, and the frame is the one it was before sessions.
 //
+// The sessions toggle holds one spot in the frame's top left corner,
+// over the sidebar's top while it shows and at the band's left end while
+// it hides (Sessions toggle T1). The root says which with data-lead, so
+// the band's title keeps clear of it only while it sits over the band.
+// In a window too narrow for the sidebar's column, the sidebar slides
+// over the terminal from the left edge instead (T5), under the toggle.
+//
 // The sidebar's 1 px line is its width handle too, below the sidebar's
 // top 32, the way the panel's edge is the panel's. Each drag writes its
 // columns straight to the root and keeps the width on release.
@@ -69,6 +76,11 @@ interface Props {
   sessionsWidth?: number;
   /** Keep the width a drag or a key gave the sidebar. */
   onSessionsWidth?: (px: number) => void;
+  /** The sessions sidebar over the terminal, in a window too narrow for
+   *  its column, or null. */
+  sessionsOverlay?: ReactNode;
+  /** The sessions toggle, in the top left corner, or null. */
+  sessionsToggle?: ReactNode;
   titleBand: ReactNode;
   /** The snoop split, at the top of the terminal column, or null. It
    *  renders first in the terminal's slot, so the terminal keeps its
@@ -106,6 +118,8 @@ export function AppShell({
   sessions = null,
   sessionsWidth = SESSIONS_WIDTH_STOCK,
   onSessionsWidth,
+  sessionsOverlay = null,
+  sessionsToggle = null,
   titleBand,
   snoop = null,
   terminal,
@@ -215,10 +229,18 @@ export function AppShell({
       ref={rootRef}
       className="shell"
       data-panel={panelOpen ? 'open' : 'hidden'}
+      data-lead={sessionsToggle === null ? undefined : sessions === null ? 'band' : 'sidebar'}
       style={frame}
       onMouseUp={onMouseUp}
     >
+      {/* First, so Tab reaches it before the sidebar's rows. */}
+      {sessionsToggle !== null && <div className="shell-lead">{sessionsToggle}</div>}
       {sessions !== null && <div className="shell-slot-sessions">{sessions}</div>}
+      {sessionsOverlay !== null && (
+        <div className="shell-sessions-overlay" style={{ width: sessionsColumn(sessionsWidth) }}>
+          {sessionsOverlay}
+        </div>
+      )}
       {/* Beside the sidebar, so Tab reaches the line after its rows. */}
       {sessions !== null && (
         <div

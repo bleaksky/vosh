@@ -23,9 +23,9 @@
   -webkit-user-select: none;
 }
 
-/* The top 32 drags the window and holds the lights on macOS. New
-   session and Hide sessions end 16 in from the line, at otty's centers
-   x 162 and 190 on y 16, and stay in view where otty shows them only on
+/* The top 32 drags the window and holds the lights and the sessions
+   toggle on macOS. New session ends 16 in from the line, at otty's
+   center x 190 on y 16, and stays in view where otty shows it only on
    hover, since the plus is how you open a session. */
 .shell-sessions-top {
   position: relative;
@@ -706,4 +706,38 @@
 .shell-title-button .shell-sessions-count {
   flex: none;
   margin-left: 8px;
+}
+
+/* In a window too narrow for the sidebar's column, the sidebar slides
+   in over the terminal from the left edge, full height, its ground
+   running up under the lights and the toggle as in its column (Sessions
+   toggle T5). It floats, so it takes the float shadow on its right.
+   Reduced motion drops the slide. */
+.shell-sessions-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-float);
+  animation: shell-sessions-slide 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes shell-sessions-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-sessions-overlay {
+    animation: none;
+  }
 }
