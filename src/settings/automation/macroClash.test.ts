@@ -26,6 +26,15 @@ describe('macroClashNote', () => {
     );
   });
 
+  it('says which Settings page a Settings key opens', () => {
+    expect(macroClashNote('Shift+Meta+1', true)).toBe(
+      '⇧⌘1 also opens Triggers in Settings. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Ctrl+Shift+@', false)).toBe(
+      'Ctrl+Shift+2 also opens Aliases in Settings. In sessions on this profile it runs this macro.',
+    );
+  });
+
   it('names the keys with Ctrl on Windows and Linux', () => {
     expect(macroClashNote('Ctrl+2', false)).toBe(
       'Ctrl+2 also goes to your second session. In sessions on this profile it runs this macro.',

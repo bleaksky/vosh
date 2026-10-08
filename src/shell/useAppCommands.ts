@@ -144,13 +144,15 @@ export function useAppCommands({
   //   Mod+Shift+W  close the window
   //   Mod+Shift+]  the next session, and Mod+Shift+[ the previous one
   //   Mod+1 to 9   the session at that place in the list
+  //   Mod+Shift+1 to 4  Triggers, Aliases, Macros and Timers in Settings,
+  //                by the physical digit key, since Shift with 1 types !
   // A key this handler takes never reaches the menu bar, and the menu
   // bar sends its commands through runCommand below too, so each press
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
   // layout still reaches them by the physical key. A macro the selected
-  // session's profile binds to one of the session keys keeps the key
-  // (Sessions Q11): nothing here or in the menu bar takes it, and the
-  // command line fires the macro.
+  // session's profile binds to one of the session keys or Settings keys
+  // keeps the key (Sessions Q11): nothing here or in the menu bar takes
+  // it, and the command line fires the macro.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
   useEffect(() => {

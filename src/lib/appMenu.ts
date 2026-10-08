@@ -65,9 +65,10 @@ const WINDOW_SHORTCUTS: readonly AppShortcutId[] = [
 ];
 
 // The keys that act on sessions, otty's keys (Sessions Q11). A macro
-// bound to one of them keeps the key in the sessions on its profile,
-// where every other app key wins over a macro. Mod with a digit from 1
-// to 9 goes to a session by its place in the list, and is one of them.
+// bound to one of them, or to a Settings key below, keeps the key in
+// the sessions on its profile, where every other app key wins over a
+// macro. Mod with a digit from 1 to 9 goes to a session by its place in
+// the list, and is one of them.
 const SESSION_SHORTCUTS = [
   'session-new',
   'session-close',
@@ -83,13 +84,36 @@ function isSessionShortcut(id: AppShortcutId): id is SessionShortcutId {
   return (SESSION_SHORTCUTS as readonly AppShortcutId[]).includes(id);
 }
 
+// The keys that open a Settings page, Mod and Shift with a digit from 1
+// to 4. Both windows take them, and a macro keeps them in the main
+// window as it keeps a session key.
+const SETTINGS_SHORTCUTS = [
+  'settings-triggers',
+  'settings-aliases',
+  'settings-macros',
+  'settings-timers',
+] as const satisfies readonly AppShortcutId[];
+
+/** A key that opens a Settings page. */
+export type SettingsShortcutId = (typeof SETTINGS_SHORTCUTS)[number];
+
+/** An app key a macro can keep: a session key or a Settings key. */
+export type MacroKeptShortcutId = SessionShortcutId | SettingsShortcutId;
+
 // Shift with ] types } on a US layout, and other layouts put the
 // brackets on other keys, so the step keys match the physical keys.
 const PHYSICAL_KEYS: Record<string, string> = { '[': 'BracketLeft', ']': 'BracketRight' };
 
-// What Shift makes of each bracket on a US layout, so a macro saved from
-// Shift with a bracket key still reads as that key.
-const SHIFTED_KEYS: Record<string, string> = { '[': '{', ']': '}' };
+// What Shift makes of each bracket and digit on a US layout, so a macro
+// saved from Shift with one of those keys still reads as that key.
+const SHIFTED_KEYS: Record<string, string> = {
+  '[': '{',
+  ']': '}',
+  '1': '!',
+  '2': '@',
+  '3': '#',
+  '4': '$',
+};
 
 function specKey(spec: string): { key: string; shift: boolean } {
   const parts = spec.split('+');
@@ -114,14 +138,24 @@ export type ShortcutHit =
   /** Take the key and run nothing: Shift+R, which would otherwise
    *  reload the page on Windows. */
   | { kind: 'take' }
-  /** A session key a macro is bound to. The macro runs from the command
-   *  line, and nothing else takes the key. */
+  /** A session or Settings key a macro is bound to. The macro runs
+   *  from the command line, and nothing else takes the key. */
   | { kind: 'macro' };
+
+/** The Settings key a press is, or null. Shift with a digit types !
+ *  or another character, which differs by layout, so the digit matches
+ *  on the physical key. Settings and the main window both read it. */
+export function settingsShortcutOf(press: ShortcutPress): SettingsShortcutId | null {
+  if (!press.shift) return null;
+  return (
+    SETTINGS_SHORTCUTS.find((id) => press.code === `Digit${specKey(APP_SHORTCUTS[id]).key}`) ?? null
+  );
+}
 
 /** What a primary modifier key press means in the main window. Null
  *  leaves the key to the page. `macroBound` says whether the selected
  *  session's profile binds a macro to this press, and is asked only for
- *  a session key. `snooping` says whether the selected session has a
+ *  a session or Settings key. `snooping` says whether the selected session has a
  *  snoop open. Without one the snoop key stays the page's, so a macro
  *  on Ctrl+J on Windows and Linux keeps working. */
 export function resolveShortcut(
@@ -135,6 +169,11 @@ export function resolveShortcut(
   if (digit && !shift) {
     return macroBound() ? { kind: 'macro' } : { kind: 'goto', place: Number(digit[1]) };
   }
+  if (digit) {
+    const id = settingsShortcutOf(press);
+    if (!id) return null;
+    return macroBound() ? { kind: 'macro' } : { kind: 'run', id };
+  }
   for (const id of WINDOW_SHORTCUTS) {
     const spec = specKey(APP_SHORTCUTS[id]);
     const physical = PHYSICAL_KEYS[spec.key];
@@ -145,20 +184,21 @@ export function resolveShortcut(
   return null;
 }
 
-/** The session key a macro's key is too, by the macro's canonical key
+/** The app key a macro's key is too, by the macro's canonical key
  *  (automation/macroKeys.ts): Meta on macOS and Ctrl elsewhere, with a
- *  digit or one of the session keys. Settings names the clash with it.
- *  A bracket matches as Shift types it on a US layout too. */
-export function sessionKeyOfMacro(
+ *  digit, one of the session keys or one of the Settings keys. Settings
+ *  names the clash with it. A bracket or a shifted digit matches as
+ *  Shift types it on a US layout too. */
+export function appKeyOfMacro(
   canonical: string,
   mac: boolean,
-): { kind: 'run'; id: SessionShortcutId } | { kind: 'goto'; place: number } | null {
+): { kind: 'run'; id: MacroKeptShortcutId } | { kind: 'goto'; place: number } | null {
   const named = (key: string, shift: boolean) =>
     mac ? `${shift ? 'Shift+' : ''}Meta+${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`;
   for (let place = 1; place <= 9; place += 1) {
     if (canonical === named(String(place), false)) return { kind: 'goto', place };
   }
-  for (const id of SESSION_SHORTCUTS) {
+  for (const id of [...SESSION_SHORTCUTS, ...SETTINGS_SHORTCUTS]) {
     const { key, shift } = specKey(APP_SHORTCUTS[id]);
     const keys = [key.toUpperCase(), SHIFTED_KEYS[key]].filter(Boolean);
     if (keys.some((k) => canonical === named(k, shift))) return { kind: 'run', id };
