@@ -219,6 +219,8 @@ Tab completion finishes a partly typed word in the command line from names Vosh 
 - Press `Tab` again to cycle through the remaining candidates, or `Shift+Tab` to cycle backward. The list wraps around.
 - Keep typing, or press any other key, and the cycle resets with the current completion left in place.
 
+On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
+
 Candidates come from three sources, checked in this order.
 
 - Words from commands you have typed, most recent first.
@@ -1111,7 +1113,7 @@ On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh
 In the command line.
 
 - `Enter` submits. `Shift+Enter` inserts a newline for multi line compose, and in password mode it submits instead.
-- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names.
+- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names. On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
 - `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.
 - `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.
 - `Escape` cancels an in flight paste burst, stops a walk, closes the scrollback split, and snaps the terminal to its tail.
