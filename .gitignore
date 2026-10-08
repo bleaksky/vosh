@@ -26,8 +26,8 @@ src-tauri/gen/
 src-tauri/WixTools/
 
 # Local profile data and logs (do not commit user data)
-profiles/
-logs/
+/profiles/
+/logs/
 *.sqlite
 *.sqlite-journal
 *.log
