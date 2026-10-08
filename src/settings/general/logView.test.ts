@@ -5,8 +5,12 @@ import {
   logColorCss,
   logCountText,
   logDay,
+  logEmptyText,
   logMatcher,
   logPalette,
+  logPlaceholder,
+  logRangeScope,
+  LOG_RANGES,
   logSpanCss,
   logSessionLabel,
   logTime,
@@ -28,6 +32,37 @@ describe('savedLogsText', () => {
     expect(savedLogsText(1, 1, 'PC')).toBe('1 log and 1 line on this PC.');
     expect(savedLogsText(0, 0, 'Mac')).toBe('Vosh has not saved a log on this Mac yet.');
     expect(savedLogsText(0, 0, 'computer')).toBe('Vosh has not saved a log on this computer yet.');
+  });
+});
+
+describe('the ranges the view reads', () => {
+  const world = { host: 'play.theforsakenlands.com', port: 9009 };
+
+  it('opens on the last 7 days and offers the four ranges in order', () => {
+    expect(LOG_RANGES.map((r) => r.label)).toEqual([
+      'This session',
+      'Last 7 days',
+      'Last 30 days',
+      'All time',
+    ]);
+  });
+
+  it('reads the world the session dials over each range', () => {
+    const day = 86_400_000;
+    expect(logRangeScope('week', world, NOW)).toEqual({ ...world, sinceMs: NOW - 7 * day });
+    expect(logRangeScope('month', world, NOW)).toEqual({ ...world, sinceMs: NOW - 30 * day });
+    expect(logRangeScope('all', world, NOW)).toEqual(world);
+    expect(logRangeScope('session', world, NOW)).toEqual({ ...world, thisSession: true });
+  });
+
+  it('says what it searches and what it found nothing in', () => {
+    expect(logPlaceholder('week')).toBe('Search the last 7 days');
+    expect(logPlaceholder('session')).toBe('Search this session');
+    expect(logPlaceholder('all')).toBe('Search every log');
+    expect(logPlaceholder(null)).toBe('Search this log');
+    expect(logEmptyText('month')).toBe('Nothing saved from this world in the last 30 days.');
+    expect(logEmptyText('session')).toBe('This session has saved nothing since Vosh opened.');
+    expect(logEmptyText(null)).toBe('This log has no saved lines.');
   });
 });
 

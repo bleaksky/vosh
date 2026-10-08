@@ -944,13 +944,13 @@ Vosh logs every session automatically and searches the store with regular expres
 - Open Settings, choose General, and click `Search logs…` in the Session logs section. The row counts your saved logs and lines.
 - Type a pattern in the search field. Patterns are regular expressions, and the view searches as you type.
 - Click `Aa` for case sensitive matching.
-- Pick a log in the menu at the right to search only that one. `All logs` searches everything.
+- Pick what to search in the menu at the right. The view opens on `Last 7 days`. `This session` reads what the selected session saved since Vosh opened, and `Last 30 days` and `All time` reach further back. Each one reads the world the selected session dials. Under `One log`, pick a single connection to search only that one.
 
 The view shows the newest 500 matches under day headings, oldest first, so it reads like the terminal. The count beside the pattern reads like `Newest 500 of 2,423 lines`, and earlier matches load as you scroll up. Each line keeps its original colors, and your matches are marked the way the find bar marks them. With no pattern the view shows the newest lines. Click `General` in the breadcrumb to go back.
 
 Example. The pattern `dragon|wyvern` finds lines containing either word.
 
-With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text. Connections to `127.0.0.1` and `localhost` stay out of the view and the counts. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
+With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text. The count on General leaves out connections to `127.0.0.1` and `localhost`. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
 
 The log keeps what the game sent and each line you sent, marked `> `. Each line of a snoop starts with the name of the player you snooped, like `Tolliver|`, so the pattern `^Tolliver\|` finds what Tolliver's screen showed. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
 

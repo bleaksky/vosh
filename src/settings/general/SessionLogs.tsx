@@ -12,6 +12,7 @@ import {
   exportLogSession,
   listLogSessions,
   searchLogPage,
+  type LogScope,
   type LogSearchHit,
   type LogSession,
 } from '../../ipc/logs';
@@ -19,15 +20,21 @@ import { parseHex, toRgba } from '../../theme/color';
 import {
   groupLogDays,
   LOG_PAGE_SIZE,
+  LOG_RANGES,
   logCountText,
+  logEmptyText,
   logMatcher,
   logPalette,
+  logPlaceholder,
+  logRangeScope,
   logSessionLabel,
+  type LogRange,
   logSpanCss,
   logTime,
   markMatches,
   parseLogLine,
 } from './logView';
+import { useSessionTarget } from '../../stores/session/useConnection';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme, resolveThemeTerminalColors } from '../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
@@ -37,14 +44,17 @@ import { CopyIcon, Field, SearchIcon, Select } from '../../ui';
 // board), at general:logs. One toolbar over the results: the pattern,
 // a regular expression over MUD text in the terminal font, the Aa
 // match case switch, the count, and the logs to search. A log is one
-// connection, which the store calls a session (Q21). The
+// connection, which the store calls a session (Q21). The view reads
+// the world the selected session dials, over the last 7 days until you
+// pick This session, Last 30 days, All time or one log (D35). The
 // results read oldest first like the terminal and sit scrolled to the
 // newest line, under day headings. Each line keeps its own SGR colors
 // with your matches marked the way the find bar marks them, and
-// earlier matches load as you scroll up. Connections to 127.0.0.1 and
-// localhost stay out, and Copy as text shows once you pick a log.
+// earlier matches load as you scroll up. Copy as text shows once you
+// pick a log.
 
-const ALL = 'all';
+// A picked log's value in the scope select.
+const LOG_PREFIX = 'log:';
 // Wait this long after your last keystroke before searching.
 const TYPE_DELAY_MS = 250;
 // Load earlier lines once you scroll this close to the top.
@@ -54,7 +64,12 @@ const COPIED_MS = 2000;
 interface Query {
   pattern: string;
   caseSensitive: boolean;
-  sessionId: number | null;
+  scope: LogScope;
+}
+
+/** The log a scope select value picks, or null for a range. */
+function pickedLog(pick: string): number | null {
+  return pick.startsWith(LOG_PREFIX) ? Number(pick.slice(LOG_PREFIX.length)) : null;
 }
 
 type Status =
@@ -68,7 +83,12 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
   const [sessions, setSessions] = useState<LogSession[]>([]);
   const [pattern, setPattern] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
-  const [sessionId, setSessionId] = useState<number | null>(null);
+  // A range, or a picked log as `log:<id>`.
+  const [pick, setPick] = useState<string>('week');
+  const [target] = useSessionTarget();
+  const { host, port } = target;
+  const sessionId = pickedLog(pick);
+  const range = sessionId === null ? (pick as LogRange) : null;
   const [lines, setLines] = useState<LogSearchHit[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   // The query the shown lines answer, which paging continues.
@@ -84,7 +104,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    listLogSessions(0, { hideLocal: true })
+    listLogSessions(0, { host, port })
       .then((rows) => {
         if (!cancelled) setSessions(rows);
       })
@@ -92,22 +112,24 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [onError]);
+  }, [host, port, onError]);
 
   // Search as you type, and at once when the view opens or the scope
   // or case changes.
   useEffect(() => {
     const mine = ++seq.current;
     setStatus({ kind: 'searching' });
-    const query: Query = { pattern, caseSensitive, sessionId };
     const timer = window.setTimeout(
       () => {
+        const log = pickedLog(pick);
+        const scope: LogScope =
+          log === null ? logRangeScope(pick as LogRange, { host, port }) : { log };
+        const query: Query = { pattern, caseSensitive, scope };
         searchLogPage(pattern, {
           caseSensitive,
           maxResults: LOG_PAGE_SIZE,
-          sessionId,
+          scope,
           beforeLineId: null,
-          hideLocal: true,
           withTotal: true,
         })
           .then((page) => {
@@ -119,8 +141,9 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
             setPinSeq((n) => n + 1);
           })
           .catch((e) => {
-            if (mine !== seq.current) return;
             const message = String(e);
+            // A newer search stopped this one.
+            if (mine !== seq.current || message.startsWith('stopped')) return;
             setLines([]);
             setTotal(0);
             setShown(query);
@@ -135,7 +158,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
       pattern ? TYPE_DELAY_MS : 0,
     );
     return () => window.clearTimeout(timer);
-  }, [pattern, caseSensitive, sessionId, onError]);
+  }, [pattern, caseSensitive, pick, host, port, onError]);
 
   // A new result sits scrolled to its newest line.
   useLayoutEffect(() => {
@@ -160,9 +183,8 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
     searchLogPage(shown.pattern, {
       caseSensitive: shown.caseSensitive,
       maxResults: LOG_PAGE_SIZE,
-      sessionId: shown.sessionId,
+      scope: shown.scope,
       beforeLineId: oldest.line_id,
-      hideLocal: true,
       withTotal: false,
     })
       .then((page) => {
@@ -177,7 +199,8 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         setLines((prev) => [...page.hits, ...prev]);
       })
       .catch((e) => {
-        if (mine === seq.current) onError(String(e));
+        const message = String(e);
+        if (mine === seq.current && !message.startsWith('stopped')) onError(message);
       })
       .finally(() => {
         if (mine === seq.current) setLoadingEarlier(false);
@@ -237,8 +260,12 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
 
   const scopeOptions = useMemo(
     () => [
-      { value: ALL, label: 'All logs' },
-      ...sessions.map((s) => ({ value: String(s.id), label: logSessionLabel(s.started_at_ms) })),
+      ...LOG_RANGES,
+      ...sessions.map((s) => ({
+        value: `${LOG_PREFIX}${s.id}`,
+        label: logSessionLabel(s.started_at_ms),
+        group: 'One log',
+      })),
     ],
     [sessions],
   );
@@ -269,7 +296,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
           autoFocus
           aria-label="Search logs"
           aria-describedby={countId}
-          placeholder={sessionId === null ? 'Search all logs' : 'Search this log'}
+          placeholder={logPlaceholder(range)}
           value={pattern}
           onChange={setPattern}
           onKeyDown={(e) => {
@@ -316,9 +343,9 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
           // A picked log reads like `September 24, 16:07`, which
           // needs more than the board's 160.
           width={sessionId === null ? 160 : 196}
-          value={sessionId === null ? ALL : String(sessionId)}
+          value={pick}
           options={scopeOptions}
-          onChange={(v) => setSessionId(v === ALL ? null : Number(v))}
+          onChange={setPick}
         />
       </div>
       <div
@@ -336,11 +363,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         )}
         {days.length === 0 && status.kind === 'ready' && (
           <p className="st-logs-empty">
-            {shown?.pattern
-              ? 'No saved line matches that pattern.'
-              : sessionId === null
-                ? 'Vosh saves every line as you play. It has none saved yet.'
-                : 'This log has no saved lines.'}
+            {shown?.pattern ? 'No saved line matches that pattern.' : logEmptyText(range)}
           </p>
         )}
         {days.map((group) => (

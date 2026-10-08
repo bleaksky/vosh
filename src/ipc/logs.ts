@@ -21,13 +21,25 @@ export interface LogSearchHit {
   raw: number[] | null;
 }
 
-/** Saved sessions, newest first. A zero limit lists every one.
- *  `hideLocal` leaves out sessions to 127.0.0.1 and localhost. */
-export async function listLogSessions(
-  limit: number,
-  options: { hideLocal?: boolean } = {},
-): Promise<LogSession[]> {
-  return invoke('logs_list_sessions', { limit, hideLocal: options.hideLocal ?? false });
+/** Which logs a list or a search reads. Every part left out reads
+ *  every log. */
+export interface LogScope {
+  /** One log, by its id. */
+  log?: number | null;
+  /** The logs the selected session opened since Vosh started. */
+  thisSession?: boolean;
+  /** Only the logs of connections to this host and port. */
+  host?: string | null;
+  port?: number | null;
+  /** Only the lines at or after this time, in Unix ms. */
+  sinceMs?: number | null;
+  /** Leave out logs of connections to 127.0.0.1 and localhost. */
+  hideLocal?: boolean;
+}
+
+/** Saved logs in `scope`, newest first. A zero limit lists every one. */
+export async function listLogSessions(limit: number, scope: LogScope = {}): Promise<LogSession[]> {
+  return invoke('logs_list_sessions', { limit, scope });
 }
 
 /** One page of a log search, oldest first. */
@@ -37,18 +49,18 @@ export interface LogSearchPage {
   total: number | null;
 }
 
-/** The newest `maxResults` lines older than `beforeLineId` that match
- *  `pattern`, a regular expression. An empty pattern matches every
- *  line. `withTotal` also counts every match in that scope, which
- *  reads the whole log. */
+/** The newest `maxResults` lines in `scope` older than `beforeLineId`
+ *  that match `pattern`, a regular expression. An empty pattern
+ *  matches every line. `withTotal` also counts every match in that
+ *  scope, which reads all of it. Each search stops the one before,
+ *  which then fails with an error that starts `stopped`. */
 export async function searchLogPage(
   pattern: string,
   options: {
     caseSensitive: boolean;
     maxResults: number;
-    sessionId: number | null;
+    scope: LogScope;
     beforeLineId: number | null;
-    hideLocal: boolean;
     withTotal: boolean;
   },
 ): Promise<LogSearchPage> {

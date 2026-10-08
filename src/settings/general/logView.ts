@@ -1,5 +1,6 @@
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../../theme/baseAnsi';
 import { indexedRgb } from '../../theme/color';
+import type { LogScope } from '../../ipc/logs';
 import type { XtermPalette } from '../../theme/themes';
 
 // The Settings log view (the SettingsGeneralLogs board) and the
@@ -80,6 +81,66 @@ export function logDay(ms: number, now: number = Date.now()): string {
  *  or `September 28, 17:28`. */
 export function logSessionLabel(startedMs: number, now: number = Date.now()): string {
   return `${logDay(startedMs, now)}, ${logTime(startedMs)}`;
+}
+
+// ── What the view reads ────────────────────────────────────────────
+
+/** The spans of time the view reads (D35). Last 7 days opens the view. */
+export type LogRange = 'session' | 'week' | 'month' | 'all';
+
+export const LOG_RANGES: readonly { value: LogRange; label: string }[] = [
+  { value: 'session', label: 'This session' },
+  { value: 'week', label: 'Last 7 days' },
+  { value: 'month', label: 'Last 30 days' },
+  { value: 'all', label: 'All time' },
+];
+
+const DAY_MS = 86_400_000;
+
+/** The scope of a range on one world: its host and port, and for the
+ *  last 7 or 30 days the time the span starts. */
+export function logRangeScope(
+  range: LogRange,
+  world: { host: string; port: number },
+  now: number = Date.now(),
+): LogScope {
+  const scope: LogScope = { host: world.host, port: world.port };
+  if (range === 'session') scope.thisSession = true;
+  if (range === 'week') scope.sinceMs = now - 7 * DAY_MS;
+  if (range === 'month') scope.sinceMs = now - 30 * DAY_MS;
+  return scope;
+}
+
+/** The search field's placeholder for what the view reads. */
+export function logPlaceholder(range: LogRange | null): string {
+  switch (range) {
+    case null:
+      return 'Search this log';
+    case 'session':
+      return 'Search this session';
+    case 'week':
+      return 'Search the last 7 days';
+    case 'month':
+      return 'Search the last 30 days';
+    case 'all':
+      return 'Search every log';
+  }
+}
+
+/** What the view says when it reads no line and you typed no pattern. */
+export function logEmptyText(range: LogRange | null): string {
+  switch (range) {
+    case null:
+      return 'This log has no saved lines.';
+    case 'session':
+      return 'This session has saved nothing since Vosh opened.';
+    case 'week':
+      return 'Nothing saved from this world in the last 7 days.';
+    case 'month':
+      return 'Nothing saved from this world in the last 30 days.';
+    case 'all':
+      return 'Vosh saves every line as you play. It has none saved from this world yet.';
+  }
 }
 
 export interface LogDayGroup<T> {

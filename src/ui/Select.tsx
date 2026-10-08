@@ -7,6 +7,9 @@ export interface SelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** The heading this option sits under. Options that share one sit
+   *  together under it, after the options with none. */
+  group?: string;
 }
 
 export interface SelectProps extends Omit<
@@ -52,13 +55,34 @@ export function Select({
         aria-describedby={rest['aria-describedby'] ?? row?.descriptionId}
         onChange={(e) => onChange(e.target.value)}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value} disabled={option.disabled}>
-            {option.label}
-          </option>
+        {options.filter((option) => !option.group).map(renderOption)}
+        {groupsOf(options).map(([group, grouped]) => (
+          <optgroup key={group} label={group}>
+            {grouped.map(renderOption)}
+          </optgroup>
         ))}
       </select>
       <ChevronDownIcon size={12} className="st-select-chevron" />
     </span>
   );
+}
+
+function renderOption(option: SelectOption) {
+  return (
+    <option key={option.value} value={option.value} disabled={option.disabled}>
+      {option.label}
+    </option>
+  );
+}
+
+/** The options under each heading, in the order the headings come. */
+function groupsOf(options: readonly SelectOption[]): [string, SelectOption[]][] {
+  const groups = new Map<string, SelectOption[]>();
+  for (const option of options) {
+    if (!option.group) continue;
+    const list = groups.get(option.group) ?? [];
+    list.push(option);
+    groups.set(option.group, list);
+  }
+  return [...groups];
 }
