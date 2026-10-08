@@ -22,6 +22,11 @@ use tauri::{
 use tracing::warn;
 
 use crate::app::state::SharedState;
+use crate::profile::open::OpenProfile;
+use crate::profile::ui::{
+    coerce_snoop_window_side, coerce_writing_card_edge, UiConfig, SNOOP_WINDOW_MIN_HEIGHT,
+    SNOOP_WINDOW_MIN_WIDTH,
+};
 use crate::sessions::SessionId;
 
 /// What a new window opens on.
@@ -158,8 +163,10 @@ pub(crate) fn set_backdrop(
 /// A window beside the main one that loads the same bundle with its own
 /// `?view=`, like Settings, Help and the snoop window. Each opens hidden
 /// on the theme's ground and shows itself once its page has painted your
-/// theme. The window state plugin keeps its size and place under its
-/// label, as it keeps the main window's.
+/// theme. The window state plugin keeps the size and place of Settings
+/// and Help under their labels, as it keeps the main window's. A snoop
+/// window keeps its own in the profile of its session, and opens at the
+/// `place` read from there.
 pub(crate) struct AuxWindow {
     /// The window label, which the capabilities and the menu name.
     label: Cow<'static, str>,
@@ -170,6 +177,96 @@ pub(crate) struct AuxWindow {
     size: (f64, f64),
     /// The smallest size whose layout still fits.
     min_size: (f64, f64),
+    /// Where it opens, when it keeps its own place. None opens it at
+    /// `size` where the system puts it.
+    place: Option<WindowPlace>,
+}
+
+/// A window's outer left and top edges and its inner width and height,
+/// in logical pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WindowPlace {
+    pub(crate) left: f64,
+    pub(crate) top: f64,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
+}
+
+impl WindowPlace {
+    /// A snoop window place, held to the rules of the profile's `[ui]`
+    /// keys. None when a side is missing, not a number, or under 480 by
+    /// 240.
+    fn snoop(
+        left: Option<f64>,
+        top: Option<f64>,
+        width: Option<f64>,
+        height: Option<f64>,
+    ) -> Option<WindowPlace> {
+        Some(WindowPlace {
+            left: coerce_writing_card_edge(left)?,
+            top: coerce_writing_card_edge(top)?,
+            width: coerce_snoop_window_side(width, SNOOP_WINDOW_MIN_WIDTH)?,
+            height: coerce_snoop_window_side(height, SNOOP_WINDOW_MIN_HEIGHT)?,
+        })
+    }
+
+    /// The snoop window place a profile keeps, or None before the window
+    /// first moved.
+    pub(crate) fn snoop_from(ui: &UiConfig) -> Option<WindowPlace> {
+        Self::snoop(
+            ui.snoop_window_left,
+            ui.snoop_window_top,
+            ui.snoop_window_width,
+            ui.snoop_window_height,
+        )
+    }
+
+    /// Keep this place as the profile's snoop window place.
+    fn snoop_into(self, ui: &mut UiConfig) {
+        ui.snoop_window_left = Some(self.left);
+        ui.snoop_window_top = Some(self.top);
+        ui.snoop_window_width = Some(self.width);
+        ui.snoop_window_height = Some(self.height);
+    }
+}
+
+/// How much of a window's top band, in logical pixels, has to sit on a
+/// monitor for you to reach it and drag it: 100 across and its title bar
+/// of 28 down.
+const REACHABLE_ACROSS: f64 = 100.0;
+const REACHABLE_DOWN: f64 = 28.0;
+
+/// `place` when its top band sits on one of `monitors`, each the logical
+/// left, top, width and height of a screen, or None when you could not
+/// reach it there, as after the screen it was on went away.
+fn place_on_screen(place: WindowPlace, monitors: &[WindowPlace]) -> Option<WindowPlace> {
+    let overlap = |a: f64, a_len: f64, b: f64, b_len: f64| (a + a_len).min(b + b_len) - a.max(b);
+    monitors
+        .iter()
+        .any(|m| {
+            overlap(place.left, place.width, m.left, m.width) >= REACHABLE_ACROSS
+                && overlap(place.top, REACHABLE_DOWN, m.top, m.height) >= REACHABLE_DOWN
+        })
+        .then_some(place)
+}
+
+/// The logical bounds of every monitor on hand.
+fn monitor_bounds<R: Runtime>(app: &AppHandle<R>) -> Vec<WindowPlace> {
+    app.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            let position = monitor.position().to_logical::<f64>(scale);
+            let size = monitor.size().to_logical::<f64>(scale);
+            WindowPlace {
+                left: position.x,
+                top: position.y,
+                width: size.width,
+                height: size.height,
+            }
+        })
+        .collect()
 }
 
 /// Settings, at the 880×600 its layout is drawn for. Under 820×560 its
@@ -180,6 +277,7 @@ pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
     title: Cow::Borrowed("Settings"),
     size: (880.0, 600.0),
     min_size: (820.0, 560.0),
+    place: None,
 };
 
 /// Help, at the 1040×700 its layout is drawn for. Under 860 wide the
@@ -190,6 +288,7 @@ pub(crate) const HELP_WINDOW: AuxWindow = AuxWindow {
     title: Cow::Borrowed("Help"),
     size: (1040.0, 700.0),
     min_size: (860.0, 560.0),
+    place: None,
 };
 
 /// What each snoop window's label starts with, before its session's
@@ -201,8 +300,13 @@ const SNOOP_PREFIX: &str = "snoop-";
 /// is drawn for. Its title reads `Snoop, ` and the
 /// session's label, `label`, so the Window menu and Mission Control can
 /// tell one apart from another. Under 480×240 the band no longer holds
-/// a few tabs and Stop over some rows of text.
-pub(crate) fn snoop_window(session: SessionId, label: Option<&str>) -> AuxWindow {
+/// a few tabs and Stop over some rows of text. It opens at `place`, the
+/// one the session's profile keeps, when that is still on a screen.
+pub(crate) fn snoop_window(
+    session: SessionId,
+    label: Option<&str>,
+    place: Option<WindowPlace>,
+) -> AuxWindow {
     AuxWindow {
         label: Cow::Owned(snoop_label(session)),
         url: Cow::Owned(format!("index.html?view=snoop&session={session}")),
@@ -212,6 +316,7 @@ pub(crate) fn snoop_window(session: SessionId, label: Option<&str>) -> AuxWindow
         }),
         size: (760.0, 480.0),
         min_size: (480.0, 240.0),
+        place,
     }
 }
 
@@ -252,6 +357,74 @@ fn snoop_window_closed<R: Runtime>(app: &AppHandle<R>, state: &SharedState, labe
     if let Ok(session) = state.session(Some(id)) {
         crate::session::snoop::set_windowed(app, &session, false);
     }
+}
+
+/// Whether a moved or resized window's place is worth keeping. A
+/// minimized, maximized or full screen window keeps the place it had
+/// before.
+fn keeps_place(minimized: bool, maximized: bool, fullscreen: bool) -> bool {
+    !(minimized || maximized || fullscreen)
+}
+
+/// Keep `place` as the snoop window place of the profile the session
+/// `id` plays, and return that profile for a save. None when the
+/// session has closed or the place does not hold.
+async fn record_snoop_place(
+    state: &SharedState,
+    id: SessionId,
+    place: WindowPlace,
+) -> Option<std::sync::Arc<OpenProfile>> {
+    let place = WindowPlace::snoop(
+        Some(place.left),
+        Some(place.top),
+        Some(place.width),
+        Some(place.height),
+    )?;
+    let session = state.session(Some(id)).ok()?;
+    let mut profile = session.lock_profile().await;
+    place.snoop_into(&mut profile.ui);
+    Some(profile.open().clone())
+}
+
+/// A snoop window moved or changed size. Keep its place in the profile
+/// of its session, which the debounced save and the save at quit then
+/// write, unless it is minimized, maximized or full screen.
+fn snoop_window_placed(window: &Window, state: &SharedState) {
+    let Some(id) = snoop_session(window.label()) else {
+        return;
+    };
+    if !keeps_place(
+        window.is_minimized().unwrap_or(true),
+        window.is_maximized().unwrap_or(true),
+        window.is_fullscreen().unwrap_or(true),
+    ) {
+        return;
+    }
+    let (Ok(position), Ok(size), Ok(scale)) = (
+        window.outer_position(),
+        window.inner_size(),
+        window.scale_factor(),
+    ) else {
+        return;
+    };
+    let position = position.to_logical::<f64>(scale);
+    let size = size.to_logical::<f64>(scale);
+    let place = WindowPlace {
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+    };
+    let app = window.app_handle().clone();
+    let state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(open) = record_snoop_place(&state, id, place).await {
+            // A move is no consent to save a profile that `#profile
+            // reset` left apart from its file, so this schedules without
+            // clearing that hold, as a pane drag does.
+            crate::disk::save::schedule_profile_persist(&app, &open);
+        }
+    });
 }
 
 /// The logical size a window should take when the window state plugin
@@ -324,9 +497,13 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
         return Ok(());
     }
     let url = WebviewUrl::App(spec.url.as_ref().into());
+    let place = spec
+        .place
+        .and_then(|place| place_on_screen(place, &monitor_bounds(app)));
+    let (width, height) = place.map_or(spec.size, |p| (p.width, p.height));
     let builder = WebviewWindowBuilder::new(app, spec.label.as_ref(), url)
         .title(spec.title.as_ref())
-        .inner_size(spec.size.0, spec.size.1)
+        .inner_size(width, height)
         .min_inner_size(spec.min_size.0, spec.min_size.1)
         .resizable(true)
         .transparent(true)
@@ -338,6 +515,10 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
         // intercepts HTML5 drag-and-drop inside the webview, which
         // can break overlay drag interactions.
         .disable_drag_drop_handler();
+    let builder = match place {
+        Some(place) => builder.position(place.left, place.top),
+        None => builder,
+    };
     // Open on the theme's appearance, which the last theme paint
     // reported, and on macOS on its ground as well, so even a frame the
     // page has not painted yet is in your theme. Windows and Linux keep
@@ -399,6 +580,9 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
                     });
                 }
                 snoop_window_closed(window.app_handle(), state.inner(), window.label());
+            }
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                snoop_window_placed(window, state.inner());
             }
             _ => {}
         }
@@ -504,8 +688,9 @@ pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_dressed, shows_on_reopen, snoop_label, snoop_session, snoop_window, snoop_window_closed,
-        window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
+        is_dressed, keeps_place, place_on_screen, record_snoop_place, shows_on_reopen, snoop_label,
+        snoop_session, snoop_window, snoop_window_closed, window_fit, Backdrop, WindowPlace,
+        HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
     };
     use crate::sessions::SessionId;
     use tauri::{window::Color, Theme};
@@ -681,16 +866,129 @@ mod tests {
     #[test]
     fn a_snoop_window_opens_per_session_at_the_board_size() {
         let id = SessionId::numbered(3);
-        let window = snoop_window(id, Some("Staff"));
+        let window = snoop_window(id, Some("Staff"), None);
         assert_eq!(window.label, "snoop-3");
         assert_eq!(window.url, "index.html?view=snoop&session=3");
         assert_eq!(window.title, "Snoop, Staff");
         assert_eq!(window.size, (760.0, 480.0));
         assert_eq!(window_fit(&window, (760.0, 480.0)), None);
         assert_eq!(window_fit(&window, (300.0, 600.0)), Some((760.0, 600.0)));
+        assert_eq!(window.place, None);
         // A session with nothing to go by yet.
-        assert_eq!(snoop_window(id, None).title, "Snoop");
+        assert_eq!(snoop_window(id, None, None).title, "Snoop");
         assert_eq!(snoop_label(id), "snoop-3");
+    }
+
+    const PLACE: WindowPlace = WindowPlace {
+        left: 200.0,
+        top: 120.0,
+        width: 900.0,
+        height: 520.0,
+    };
+
+    #[test]
+    fn a_snoop_window_carries_the_place_its_profile_keeps() {
+        let window = snoop_window(SessionId::numbered(2), None, Some(PLACE));
+        assert_eq!(window.place, Some(PLACE));
+        // The default size stays for a place that no longer fits a screen.
+        assert_eq!(window.size, (760.0, 480.0));
+        let mut ui = crate::profile::ui::UiConfig::default();
+        assert_eq!(WindowPlace::snoop_from(&ui), None);
+        PLACE.snoop_into(&mut ui);
+        assert_eq!(WindowPlace::snoop_from(&ui), Some(PLACE));
+        // A place with a side missing is no place.
+        ui.snoop_window_top = None;
+        assert_eq!(WindowPlace::snoop_from(&ui), None);
+    }
+
+    #[test]
+    fn a_place_holds_only_on_a_screen_you_can_reach_it_on() {
+        let laptop = WindowPlace {
+            left: 0.0,
+            top: 0.0,
+            width: 1512.0,
+            height: 982.0,
+        };
+        let left_screen = WindowPlace {
+            left: -1920.0,
+            top: -200.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
+        assert_eq!(place_on_screen(PLACE, &[laptop]), Some(PLACE));
+        let there = WindowPlace {
+            left: -1400.0,
+            top: 40.0,
+            ..PLACE
+        };
+        assert_eq!(place_on_screen(there, &[laptop, left_screen]), Some(there));
+        // The screen it was on went away.
+        assert_eq!(place_on_screen(there, &[laptop]), None);
+        assert_eq!(place_on_screen(PLACE, &[]), None);
+        // Only a sliver of the title bar shows, or none of it.
+        let sliver = WindowPlace {
+            left: 1450.0,
+            ..PLACE
+        };
+        assert_eq!(place_on_screen(sliver, &[laptop]), None);
+        let below = WindowPlace {
+            top: 970.0,
+            ..PLACE
+        };
+        assert_eq!(place_on_screen(below, &[laptop]), None);
+    }
+
+    #[test]
+    fn a_minimized_maximized_or_full_screen_window_keeps_its_old_place() {
+        assert!(keeps_place(false, false, false));
+        assert!(!keeps_place(true, false, false));
+        assert!(!keeps_place(false, true, false));
+        assert!(!keeps_place(false, false, true));
+    }
+
+    #[test]
+    fn each_snoop_window_keeps_its_place_in_its_own_profile() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::profile::live::Profile;
+
+        let state: SharedState = Arc::new(AppState::default());
+        let orla = state.add_open_profile("Orla", Profile::default());
+        let maren = state.add_open_profile("Maren", Profile::default());
+        let first = state.open_session(orla.clone());
+        let second = state.open_session(maren.clone());
+        let third = state.open_session(orla.clone());
+        let kept = |open: &Arc<crate::profile::open::OpenProfile>| {
+            let open = open.clone();
+            tauri::async_runtime::block_on(
+                async move { WindowPlace::snoop_from(&open.lock().await.ui) },
+            )
+        };
+        let record =
+            |id, place| tauri::async_runtime::block_on(record_snoop_place(&state, id, place));
+
+        let saved = record(third.id, PLACE).unwrap();
+        assert!(Arc::ptr_eq(&saved, &orla));
+        assert_eq!(kept(&orla), Some(PLACE));
+        assert_eq!(kept(&maren), None);
+
+        let other = WindowPlace {
+            left: 40.0,
+            ..PLACE
+        };
+        assert!(Arc::ptr_eq(&record(second.id, other).unwrap(), &maren));
+        assert_eq!(kept(&maren), Some(other));
+        assert_eq!(kept(&orla), Some(PLACE));
+
+        // A place under the minimum, or of a session gone, is not kept.
+        let small = WindowPlace {
+            width: 300.0,
+            ..PLACE
+        };
+        assert!(record(first.id, small).is_none());
+        assert!(record(SessionId::numbered(99), PLACE).is_none());
+        assert_eq!(kept(&orla), Some(PLACE));
     }
 
     #[test]

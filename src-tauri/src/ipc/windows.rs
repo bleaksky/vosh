@@ -10,7 +10,7 @@ use crate::app::exit::ANSWERS;
 use crate::app::menu::MenuState;
 use crate::app::state::{LaunchNotice, SharedState};
 use crate::app::windows::{
-    open_aux_window, set_backdrop, snoop_window, HELP_WINDOW, SETTINGS_WINDOW,
+    open_aux_window, set_backdrop, snoop_window, WindowPlace, HELP_WINDOW, SETTINGS_WINDOW,
 };
 use crate::sessions::SessionId;
 
@@ -40,7 +40,8 @@ pub(crate) async fn open_help_window(app: AppHandle) -> Result<(), String> {
 /// of `session`, or of the selected session with none, moves into the
 /// session's snoop window, which opens or comes forward, and the split
 /// closes. Closing the window brings the split back with the same tabs
-/// (`on_window_event` in app/windows.rs).
+/// (`on_window_event` in app/windows.rs). The window opens where the
+/// session's profile last kept it.
 #[tauri::command]
 pub(crate) async fn snoop_window_open(
     app: AppHandle,
@@ -49,8 +50,9 @@ pub(crate) async fn snoop_window_open(
 ) -> Result<(), String> {
     let session = state.session(session)?;
     let label = session.label(&state.other_sessions(session.id));
+    let place = WindowPlace::snoop_from(&session.lock_profile().await.ui);
     crate::session::snoop::set_windowed(&app, &session, true);
-    let opened = open_aux_window(&app, &snoop_window(session.id, label.as_deref()));
+    let opened = open_aux_window(&app, &snoop_window(session.id, label.as_deref(), place));
     // A window that never opened leaves the tabs in the split.
     if opened.is_err() {
         crate::session::snoop::set_windowed(&app, &session, false);
