@@ -43,6 +43,11 @@ export function withSwitch(
   return next;
 }
 
+/** What Settings says when the switches do not load. The list still
+ *  shows, with the switches it had. */
+export const groupSwitchesLoadError =
+  "Vosh couldn't load your group switches. Close Settings and open it again.";
+
 /** When the loadouts lay their state over every group again. */
 const UNTIL = 'when you next launch Vosh, switch profiles, or save Loadouts';
 
