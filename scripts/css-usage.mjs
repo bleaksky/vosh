@@ -3,8 +3,13 @@
 //
 // A class counts as used when one of these holds.
 // 1. A word token in src/**/*.{ts,tsx} (tests left out) or index.html spells it.
-// 2. It starts with a prefix the code builds at run time, the text before
-//    `${` in a template literal or a string literal followed by `+`.
+// 2. The code builds it at run time. That means it starts with a prefix the
+//    code builds, the text before `${` in a template literal or a string
+//    literal followed by `+`, and the rest of the name is a string literal in
+//    the source, such as the 'danger' in `is-${tone}`. A prefix alone is not
+//    enough, so `pane-${leaf.pane}` vouches for .pane-map but not .pane-zzz.
+//    Literals given to key, id, htmlFor or an aria attribute build no class
+//    and add no prefix.
 // 3. It starts with a prefix in THIRD_PARTY, for classes a library writes.
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -51,23 +56,43 @@ const sources = [...walk(join(root, 'src')).filter(isSource), join(root, 'index.
 );
 
 const tokens = new Set();
-const prefixes = new Set(THIRD_PARTY);
+const literals = new Set();
+const prefixes = new Set();
+// The text just before a literal that names a key, an id or an aria
+// attribute rather than a class.
+const NOT_A_CLASS = /(?:\bkey|\bid|\bhtmlFor|\baria-[\w-]+)\s*[=:]\s*\{?\s*$/;
+const contextOf = (text, quote) => text.slice(Math.max(0, quote - 40), quote);
 for (const text of sources) {
   for (const [token] of text.matchAll(/[\w-]+/g)) tokens.add(token);
-  const built = [...text.matchAll(/([\w-]*)\$\{/g), ...text.matchAll(/['"`]([\w-]*)['"`]\s*\+/g)];
+  for (const match of text.matchAll(/'([\w-]+)'|"([\w-]+)"|`([\w-]+)`/g)) {
+    const word = match[1] ?? match[2] ?? match[3];
+    literals.add(word).add(word.replace(/_/g, '-'));
+  }
+  const built = [
+    ...[...text.matchAll(/([\w-]*)\$\{/g)].map((m) => [m[1], text.lastIndexOf('`', m.index)]),
+    ...[...text.matchAll(/['"`]([\w-]*)['"`]\s*\+/g)].map((m) => [m[1], m.index]),
+  ];
   // A prefix must start with a letter and end with a dash. That keeps loose
   // fragments such as the lone dash in `--${name}` from passing every class.
-  for (const [, prefix] of built) {
-    if (/^[A-Za-z][\w-]*-$/.test(prefix)) prefixes.add(prefix);
+  for (const [prefix, quote] of built) {
+    if (!/^[A-Za-z][\w-]*-$/.test(prefix)) continue;
+    if (NOT_A_CLASS.test(contextOf(text, quote))) continue;
+    prefixes.add(prefix);
   }
 }
+
+const isBuilt = (name) =>
+  THIRD_PARTY.some((prefix) => name.startsWith(prefix)) ||
+  [...prefixes].some(
+    (prefix) => name.startsWith(prefix) && literals.has(name.slice(prefix.length)),
+  );
 
 const unused = [];
 for (const file of readdirSync(stylesDir)
   .filter((name) => name.endsWith('.css'))
   .sort()) {
   for (const name of classesIn(readFileSync(join(stylesDir, file), 'utf8'))) {
-    const used = tokens.has(name) || [...prefixes].some((prefix) => name.startsWith(prefix));
+    const used = tokens.has(name) || isBuilt(name);
     if (!used) unused.push(`src/styles/${file}  .${name}`);
   }
 }
