@@ -792,16 +792,19 @@ export function WritingCard({
                     onTo={(to) => {
                       setBadField(null);
                       setEnded(null);
+                      setDropped(null);
                       keep({ ...draft, to });
                     }}
                     onSubject={(s) => {
                       setBadField(null);
                       setEnded(null);
+                      setDropped(null);
                       keep({ ...draft, subject: s });
                     }}
                     onLanguage={(language) => {
                       setBadField(null);
                       setEnded(null);
+                      setDropped(null);
                       keep({ ...draft, language });
                     }}
                     onText={() =>
