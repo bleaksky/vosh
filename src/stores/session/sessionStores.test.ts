@@ -294,6 +294,18 @@ describe('the connection store with two sessions', () => {
     fire('vosh://sessions-changed', rows(ORLA, false));
     expect(connection.sessionLive(ORLA)).toBe(false);
   });
+  // A reconnect to a character left link dead brings no Char.Status, and
+  // the app names the character you picked at the account menu as
+  // Char.Name.
+  it('names the character of a reconnect from the Char.Name the app sends', async () => {
+    await load();
+    const connection = await import('./connectionStore');
+    state(TOLLIVER, 'connected');
+    fire('session://gmcp/Char-Vitals', { session: TOLLIVER, data: { hp: 1020 } });
+    expect(connection.getSessionConnection().character).toBeNull();
+    fire('session://gmcp/Char-Name', { session: TOLLIVER, data: { name: 'Maren' } });
+    expect(connection.getSessionConnection().character).toBe('Maren');
+  });
 });
 
 describe('the pinned prompt store with two sessions', () => {

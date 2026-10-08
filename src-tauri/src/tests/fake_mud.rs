@@ -858,6 +858,80 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
     h.finish(grid).await;
 }
 
+/// What the page hears on `session://gmcp/Char-Name`, kept as it comes.
+fn hear_char_name(h: &Harness) -> Arc<StdMutex<Vec<Json>>> {
+    let heard = Arc::new(StdMutex::new(Vec::new()));
+    let keep = heard.clone();
+    h.app.listen_any("session://gmcp/Char-Name", move |e| {
+        let payload: Json = serde_json::from_str(e.payload()).expect("a JSON payload");
+        keep.lock().expect("the names").push(payload);
+    });
+    heard
+}
+
+// A character left link dead takes the new link with no Char.Status
+// (`check_reconnect`, comm.c), so the name you picked at the account menu
+// names the character once the game plays: the session, its row and the
+// page all learn it. The guard keeps other tests off the shared native
+// grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reconnect_names_the_character_you_picked_at_the_account_menu() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        reconnect: true,
+        account: vec!["Tolliver".into(), "Maren".into()],
+        ..Options::new(Build::New)
+    })
+    .await;
+    let names = hear_char_name(&h);
+    h.connect().await;
+    h.until_shown("Your choice>").await;
+    h.type_line("2").await;
+    h.until_shown("Reconnecting.").await;
+    let session = h.state.selected_session();
+    h.until("the character from the pick", |_| {
+        session.character().as_deref() == Some("Maren")
+    })
+    .await;
+    assert_eq!(session.row(true).character.as_deref(), Some("Maren"));
+    h.until("the page hears the name", |_| {
+        !names.lock().expect("the names").is_empty()
+    })
+    .await;
+    let heard = names.lock().expect("the names").clone();
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    assert_eq!(heard[0]["data"], serde_json::json!({ "name": "Maren" }));
+    assert_eq!(heard[0]["session"], serde_json::json!(h.first));
+    h.finish(grid).await;
+}
+
+// A fresh login names the character with Char.Status, so the pick names
+// no one of its own and the page hears no Char.Name.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fresh_login_from_the_account_menu_takes_the_name_from_char_status() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        account: vec!["Orla".into(), "Tester".into()],
+        ..Options::new(Build::New)
+    })
+    .await;
+    let names = hear_char_name(&h);
+    h.connect().await;
+    h.until_shown("Your choice>").await;
+    h.type_line("2").await;
+    h.until_shown("Welcome to the fake Aabahran, Tester.").await;
+    let session = h.state.selected_session();
+    h.until("the character from Char.Status", |_| {
+        session.character().as_deref() == Some("Tester")
+    })
+    .await;
+    h.until_shown("[1020/1020hp").await;
+    assert!(names.lock().expect("the names").is_empty());
+    h.finish(grid).await;
+}
+
 /// The pattern the old capture trigger held, for the PROMPT the fake
 /// game starts with.
 const OLD_PATTERN: &str =

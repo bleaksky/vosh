@@ -106,6 +106,26 @@ pub(crate) struct LinkWatch {
     /// plays takes the mark, and it holds until you step away or log in
     /// again on this link.
     taken: bool,
+    /// The characters the account menu listed last, in its order.
+    menu: Vec<String>,
+    /// The character you picked at the account menu, until the game
+    /// names one or you play.
+    picked: Option<String>,
+}
+
+/// A character's row on the account menu, its number and name.
+/// `acct_menu_row` (comm.c) prints `  %2d. %-15s Lv%-3d %-8s %-12s  %s`:
+/// the number, the name, the level after `Lv`, the race, the class and
+/// the day you last played.
+fn menu_row(line: &str) -> Option<(usize, &str)> {
+    let (number, rest) = line.split_once(". ")?;
+    let number = number.parse::<usize>().ok()?;
+    let mut words = rest.split_whitespace();
+    let name = words.next()?;
+    let level = words.next()?.strip_prefix("Lv")?;
+    let named = name.chars().all(char::is_alphabetic);
+    (named && !level.is_empty() && level.chars().all(|c| c.is_ascii_digit()))
+        .then_some((number, name))
 }
 
 /// Why a drop while you play does not redial.
@@ -129,10 +149,19 @@ impl LinkWatch {
     /// and the vitals only while you play, so either one means you play,
     /// a reconnect to a character left link dead among it, which sends no
     /// Char.Status.
-    pub(crate) fn gmcp(&mut self, package: &str) {
+    ///
+    /// Returns the character you picked at the account menu at the first
+    /// vitals of play that no Char.Status named before, which is how a
+    /// reconnect starts. Char.Status names the character itself, so the
+    /// pick then names no one.
+    pub(crate) fn gmcp(&mut self, package: &str) -> Option<String> {
         if package == "Char.Status" || package == "Char.Vitals" {
             self.playing = true;
+            self.menu.clear();
+            let picked = self.picked.take();
+            return picked.filter(|_| package == "Char.Vitals");
         }
+        None
     }
 
     /// A complete line of the game came.
@@ -148,6 +177,14 @@ impl LinkWatch {
             self.taken = false;
         } else if line.starts_with(ALREADY_PLAYING) {
             self.asked = true;
+        } else if let Some((number, name)) = menu_row(line) {
+            // The menu lists from 1 each time it shows.
+            if number == 1 {
+                self.menu.clear();
+            }
+            if number == self.menu.len() + 1 {
+                self.menu.push(name.to_string());
+            }
         }
     }
 
@@ -168,6 +205,18 @@ impl LinkWatch {
             }
             if self.asked && line.starts_with(['y', 'Y']) {
                 self.took_at = Some(now);
+            }
+            // A number at the account menu picks the character it lists,
+            // as `chargen_acct_menu` (comm.c) reads it.
+            if !self.playing {
+                if let Some(name) = line
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|n| n.checked_sub(1))
+                    .and_then(|i| self.menu.get(i))
+                {
+                    self.picked = Some(name.clone());
+                }
             }
             self.asked = false;
         }
@@ -690,6 +739,53 @@ mod tests {
         assert!(!watch.playing());
         watch.gmcp("Char.Status");
         assert!(watch.playing());
+    }
+
+    /// The account menu as `show_acct_menu` and `acct_menu_row` (comm.c)
+    /// print it, colours taken off, then your pick.
+    fn at_the_menu(watch: &mut LinkWatch, pick: &str) {
+        for line in [
+            " Account: wanderer",
+            "   1. Tolliver        Lv50  Human    Warrior       2026-10-07",
+            "   2. Maren           Lv12  Elf      Cleric        never",
+            " [#] Play   [N]ew character   [L]ink character   [P]assword   [D]isconnect",
+        ] {
+            watch.line(line);
+        }
+        watch.sent(format!("{pick}\r\n").as_bytes(), Instant::now());
+    }
+
+    #[test]
+    fn a_reconnect_names_the_character_picked_at_the_account_menu() {
+        let mut watch = LinkWatch::default();
+        at_the_menu(&mut watch, "2");
+        watch.line("Reconnecting. Type replay to see missed tells.");
+        assert_eq!(watch.gmcp("Room.Info"), None);
+        assert_eq!(watch.gmcp("Char.Vitals").as_deref(), Some("Maren"));
+        assert_eq!(watch.gmcp("Char.Vitals"), None, "the pick names once");
+    }
+
+    #[test]
+    fn char_status_names_a_fresh_login_so_the_pick_names_no_one() {
+        let mut watch = LinkWatch::default();
+        at_the_menu(&mut watch, "1");
+        assert_eq!(watch.gmcp("Char.Status"), None);
+        assert_eq!(watch.gmcp("Char.Vitals"), None);
+    }
+
+    #[test]
+    fn only_a_number_the_menu_lists_picks_and_only_away_from_play() {
+        let mut watch = LinkWatch::default();
+        at_the_menu(&mut watch, "3");
+        watch.line("Invalid selection.");
+        assert_eq!(watch.gmcp("Char.Vitals"), None);
+        // In play a number is a command, and the menu is gone.
+        watch.sent(b"1\r\n", Instant::now());
+        assert_eq!(watch.gmcp("Char.Vitals"), None);
+        // Back at the menu after `quit menu`, a pick names again.
+        watch.line(LEFT_PLAY);
+        at_the_menu(&mut watch, "1");
+        assert_eq!(watch.gmcp("Char.Vitals").as_deref(), Some("Tolliver"));
     }
 
     #[test]
