@@ -32,9 +32,16 @@ jobs:
       - run: npm run css:usage
       - run: npm test
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: page
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
 
   rust:
     name: Rust (${{ matrix.os }})
+    needs: frontend
     strategy:
       fail-fast: false
       matrix:
@@ -66,13 +73,14 @@ jobs:
         with:
           workspaces: '. -> target'
 
-      - name: Build frontend (needed for tauri context)
-        uses: actions/setup-node@v4
+      # tauri generate_context embeds dist at compile time, and nothing else
+      # in the Rust build needs node. The frontend job builds the page once
+      # and every Rust job downloads that same dist.
+      - name: Download the page built by the frontend job
+        uses: actions/download-artifact@v4
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
+          name: page
+          path: dist
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
