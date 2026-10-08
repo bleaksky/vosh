@@ -339,6 +339,10 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
+    // The output is one Tab stop on its slot (Q22), so xterm's hidden
+    // input leaves the Tab order and never eats a Tab.
+    if (term.textarea) term.textarea.tabIndex = -1;
+    term.attachCustomKeyEventHandler((event) => event.key !== 'Tab');
     const blink = new XtermBlink(term);
     blink.setOn(blinkTextRef.current);
     blinkRef.current = blink;

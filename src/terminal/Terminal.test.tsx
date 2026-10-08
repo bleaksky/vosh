@@ -20,6 +20,11 @@ const bus = vi.hoisted(() => ({
   /** How wide each new xterm is. */
   cols: 80,
   held: [] as ((bytes: number[]) => void)[],
+  /** Every stand in xterm, its hidden input and its key handler. */
+  terms: [] as {
+    textarea: { tabIndex: number };
+    keys: ((event: KeyboardEvent) => boolean) | null;
+  }[],
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -53,11 +58,17 @@ vi.mock('@xterm/xterm', () => {
     options: Record<string, unknown>;
     unicode = { activeVersion: '' };
     buffer = { active: { cursorY: 23, baseY: 0, viewportY: 0, type: 'normal' } };
+    textarea = { tabIndex: 0 };
+    keys: ((event: KeyboardEvent) => boolean) | null = null;
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
+      bus.terms.push(this);
     }
     loadAddon() {}
     open() {}
+    attachCustomKeyEventHandler(keys: (event: KeyboardEvent) => boolean) {
+      this.keys = keys;
+    }
     scrollToLine() {}
     resized: ((size: { cols: number; rows: number }) => void)[] = [];
     onResize = (cb: (size: { cols: number; rows: number }) => void) => {
@@ -256,6 +267,36 @@ describe('a terminal for each session', () => {
     const [tolliver, orla] = [...bus.written.values()];
     expect(tolliver).toEqual(['The day has begun.\r\n']);
     expect(orla).toEqual(['[Exits: south]\r\n', '<1020hp 800m 930mv> ']);
+    await act(async () => root.unmount());
+  });
+});
+
+// The output is one Tab stop on its slot (Q22). xterm's hidden input
+// leaves the Tab order and lets every Tab pass.
+describe('the Tab order', () => {
+  it('takes the hidden input out and never eats a Tab', async () => {
+    const { Terminal } = await import('./Terminal');
+    const before = bus.terms.length;
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () =>
+      root.render(
+        createElement(Terminal, {
+          session: 1,
+          shown: true,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          lineHeight: 1.2,
+          themeTerminalColors: false,
+        }),
+      ),
+    );
+    const term = bus.terms[before];
+    expect(term.textarea.tabIndex).toBe(-1);
+    const key = (key: string, shiftKey = false) =>
+      ({ type: 'keydown', key, shiftKey }) as unknown as KeyboardEvent;
+    expect(term.keys?.(key('Tab'))).toBe(false);
+    expect(term.keys?.(key('Tab', true))).toBe(false);
+    expect(term.keys?.(key('a'))).toBe(true);
     await act(async () => root.unmount());
   });
 });
