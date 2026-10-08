@@ -4,8 +4,8 @@
    and the line you drag to resize it. Then the session popover's list
    of sessions, which takes the sidebar's place while it is folded, and
    the total the session button shows then. Loads last, after frame.css.
-   Every rule sits under a shell-sessions- class, or a shell-menu- class
-   only that list uses. */
+   Every rule sits under a shell-sessions- class, a shell-menu- class
+   only that list uses, or the menu.is-listed popover that holds it. */
 
 /* Board 2 of the Sessions review, on otty's measures (otty-measure.md).
    220 of rows on the panel ground, then a 1 px --sep line at x 220,
@@ -589,18 +589,7 @@
 }
 
 /* The session popover's list of sessions while the sidebar is folded
-   (board 8). SESSIONS in the palette's caps style heads it. */
-.shell-menu-head {
-  margin: 0;
-  padding: 7px 12px 3px;
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--tertiary);
-  white-space: nowrap;
-}
-
+   (board 8), under the menu-head SESSIONS (overlays.css). */
 /* Each row takes the sidebar's two lines on the menu's recipe, 44 high
    inside the menu's 6, its mark 10 in and its right column 12 in (S7,
    board 05). The name keeps the text tone and line two the tertiary
@@ -629,7 +618,7 @@
   cursor: default;
 }
 
-.shell-menu-session:focus-visible,
+.shell-menu-session:focus,
 .shell-menu-session-slot:hover .shell-menu-session {
   background: var(--menu-hi);
   outline: none;
@@ -639,19 +628,23 @@
   margin: 0 -4px 0 0;
 }
 
+.shell-menu-session .shell-sessions-end .menu-keys {
+  margin: 0;
+}
+
 /* A list too long for the window scrolls with no bar, as the sidebar's
    does, between SESSIONS and the rows under it, which stay put. It
    keeps two rows in view in the shortest window. */
-.shell-menu.is-listed {
+.menu.is-listed {
   display: flex;
   flex-direction: column;
 }
 
-.shell-menu.is-listed > * {
+.menu.is-listed > * {
   flex: none;
 }
 
-.shell-menu.is-listed > .shell-menu-sessions {
+.menu.is-listed > .shell-menu-sessions {
   flex: 0 1 auto;
   min-height: 60px;
   overflow-y: auto;

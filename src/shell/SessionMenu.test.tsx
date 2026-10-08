@@ -174,7 +174,7 @@ describe('the session popover with the sidebar folded', () => {
     lines.set(1, { who: null, text: 'Thickening Woods', health: 100, low: false });
     lines.set(2, { who: null, text: 'Fighting a Blackwatch guard', health: 18, low: true });
     const { menu, items } = await mount(true);
-    expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
+    expect(findAll(menu, hasClass('menu-head'))[0]?.textContent).toBe('Sessions');
     expect(items.map((el) => el.textContent)).toEqual([
       'TolliverThickening Woods100%',
       'Orla18252Fighting a Blackwatch guard18%',
@@ -188,8 +188,8 @@ describe('the session popover with the sidebar folded', () => {
     // so five rows fit whole at 720 by 450.
     const actions = findAll(
       menu,
-      (el) => hasClass('shell-menu-item')(el) || hasClass('shell-menu-sep')(el),
-    ).map((el) => (hasClass('shell-menu-sep')(el) ? '|' : el.textContent));
+      (el) => hasClass('menu-item')(el) || hasClass('menu-sep')(el),
+    ).map((el) => (hasClass('menu-sep')(el) ? '|' : el.textContent));
     expect(actions).toEqual([
       '|',
       'Edit connection…',
@@ -245,15 +245,17 @@ describe('the session popover with the sidebar folded', () => {
   // stops 8 above the window's foot, so every session stays in reach.
   it('keeps the list inside the window and lets it scroll', async () => {
     const { menu } = await mount(true);
-    expect(menu.style.maxHeight).toBe('calc(100vh - 16px)');
-    expect(menu.getAttribute('class')).toBe('shell-menu is-listed');
+    // With no button to hang from it sits 8 from the top of the 450
+    // high window, and stops 8 above its foot.
+    expect(menu.style.maxHeight).toBe('434px');
+    expect(menu.getAttribute('class')).toBe('menu is-listed');
     const list = findAll(menu, hasClass('shell-menu-sessions'))[0];
     expect(findAll(list, (el) => el.getAttribute('role') === 'menuitem')).toHaveLength(3);
   });
 
   it('lists no session while the sidebar shows', async () => {
     const { menu, items } = await mount(false);
-    expect(findAll(menu, hasClass('shell-menu-head'))).toHaveLength(0);
+    expect(findAll(menu, hasClass('menu-head'))).toHaveLength(0);
     expect(items[0].textContent).toBe('Edit connection…');
   });
 });

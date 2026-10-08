@@ -511,12 +511,13 @@ describe('Add a pane', () => {
     const lines = findAll(
       menu,
       (el) =>
-        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') || el.tagName === 'P',
+        ['menuitem', 'separator'].includes(el.getAttribute('role') ?? '') ||
+        el.getAttribute('class') === 'menu-note',
     ).map((el) => {
       if (el.getAttribute('role') === 'separator') return '---';
-      if (el.tagName === 'P') return el.textContent;
-      const kbd = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-kbd')[0];
-      const name = findAll(el, (k) => k.getAttribute('class') === 'shell-menu-label')[0];
+      if (el.getAttribute('class') === 'menu-note') return el.textContent;
+      const kbd = findAll(el, (k) => k.getAttribute('class') === 'menu-hint')[0];
+      const name = findAll(el, (k) => k.getAttribute('class') === 'menu-label')[0];
       return kbd ? `${name.textContent} | ${kbd.textContent}` : el.textContent;
     });
     const pick = (text: string) =>

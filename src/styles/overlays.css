@@ -411,6 +411,27 @@
   background: var(--sep);
 }
 
+/* A line of text in a menu that is not a row, like Add a pane's
+   Every pane is showing. */
+.menu-note {
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+/* A caps heading over a group of rows, in the palette's caps style,
+   like SESSIONS over the session popover's list. */
+.menu-head {
+  padding: 7px 12px 3px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
 .menu-narrow,
 .menu-sub {
   min-width: 160px;

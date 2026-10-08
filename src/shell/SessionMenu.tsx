@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
@@ -14,7 +14,9 @@ import { openNewSession } from './newSession';
 import { NewSessionForm } from './NewSessionForm';
 import { RenameSessionForm } from './RenameSessionForm';
 import { SessionRowBody, WaitingCount } from './SessionRowBody';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { pointAt, pointerLeft } from '../ui/menuAim';
+import { ShellMenu } from './ShellMenu';
 
 // The session popover under the title button, by board 4 of the
 // Sessions review: Connect to the selected session's world or
@@ -156,8 +158,10 @@ export function SessionMenu({
     >
       {listSessions && (
         <>
-          <p className="shell-menu-head">Sessions</p>
-          <div className="shell-menu-sessions">
+          <li role="none" className="menu-head">
+            Sessions
+          </li>
+          <li role="none" className="shell-menu-sessions">
             {rows.map((row, i) => (
               <SessionItem
                 key={row.id}
@@ -169,37 +173,31 @@ export function SessionMenu({
                 onCloseSession={() => run(() => onCloseSession?.(row.id))}
               />
             ))}
-          </div>
-          <ShellMenuSeparator />
+          </li>
+          <MenuSeparator />
         </>
       )}
       {!live && (
-        <ShellMenuItem
-          shortcut={shortcutLabel(APP_SHORTCUTS.connect)}
-          onSelect={() => run(connection.connect)}
-        >
+        <MenuItem keys={APP_SHORTCUTS.connect} onSelect={() => run(connection.connect)}>
           Connect to {worldName(target.host)}
-        </ShellMenuItem>
+        </MenuItem>
       )}
-      <ShellMenuItem onSelect={() => setMode('edit')}>Edit connection…</ShellMenuItem>
-      <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
+      <MenuItem onSelect={() => setMode('edit')}>Edit connection…</MenuItem>
+      <MenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
-      </ShellMenuItem>
+      </MenuItem>
       {/* Board 05 draws no line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
-      {!listSessions && <ShellMenuSeparator />}
-      <ShellMenuItem
-        shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
-        onSelect={() => run(openNewSession)}
-      >
+      {!listSessions && <MenuSeparator />}
+      <MenuItem keys={APP_SHORTCUTS['session-new']} onSelect={() => run(openNewSession)}>
         New session…
-      </ShellMenuItem>
+      </MenuItem>
       {(live || redialing) && (
         <>
-          <ShellMenuSeparator />
-          <ShellMenuItem danger onSelect={() => run(connection.disconnect)}>
+          <MenuSeparator />
+          <MenuItem danger onSelect={() => run(connection.disconnect)}>
             Disconnect
-          </ShellMenuItem>
+          </MenuItem>
         </>
       )}
     </ShellMenu>
@@ -225,8 +223,16 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
   ) : look.count > 0 ? (
     <WaitingCount count={look.count} />
   ) : (
-    place <= 9 && <kbd className="shell-menu-kbd">{shortcutLabel(`Mod+${place}`)}</kbd>
+    place <= 9 && <kbd className="menu-keys">{shortcutLabel(`Mod+${place}`)}</kbd>
   );
+  // The pointer on the row gives it the focus, so the pointer and the
+  // arrow keys share one highlight.
+  const point = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const el = e.currentTarget;
+    pointAt(el, () => {
+      if (document.activeElement !== el) el.focus();
+    });
+  };
   return (
     <div className="shell-menu-session-slot">
       <button
@@ -234,6 +240,10 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
         role="menuitem"
         className="shell-menu-session"
         aria-current={current ? 'true' : undefined}
+        tabIndex={-1}
+        onPointerEnter={point}
+        onPointerMove={point}
+        onPointerLeave={(e) => pointerLeft(e.currentTarget)}
         onClick={onSelect}
       >
         <SessionRowBody row={row} rows={rows} mark={look.mark} end={end} />

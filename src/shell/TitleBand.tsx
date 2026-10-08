@@ -26,7 +26,8 @@ import {
 } from '../ui/icons';
 import { PanelIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { ShellMenu } from './ShellMenu';
 import { chatRefToAdd } from '../panel/paneActions';
 import { TitleButton } from './TitleButton';
 
@@ -42,8 +43,6 @@ import { TitleButton } from './TitleButton';
 // here, after Settings, and the panel draws at least 248 px wide there
 // to keep all seven over it. They have no menu bar, so there the gear
 // is how you find Settings.
-
-const ADD_MENU_WIDTH = 200;
 
 interface Props {
   connection: Connection;
@@ -238,40 +237,36 @@ function AddPaneMenu({
   // A second Chat pane starts on tell, and the menu says so.
   const chatOnTell = chatRefToAdd(paneTree).props.channel === 'tell';
   return (
-    <ShellMenu
-      anchor={anchor}
-      align="end"
-      width={ADD_MENU_WIDTH}
-      label="Add a pane"
-      onClose={onClose}
-    >
+    <ShellMenu anchor={anchor} align="end" label="Add a pane" onClose={onClose}>
       {builtIns.length === 0 && luaToAdd.length === 0 && (
-        <p className="shell-menu-note">Every pane is showing.</p>
+        <li role="none" className="menu-note">
+          Every pane is showing.
+        </li>
       )}
       {builtIns.map((pane) => (
-        <ShellMenuItem
+        <MenuItem
           key={pane}
           trailing={
             pane === 'chat' && chatOnTell ? (
-              <span className="shell-menu-kbd">starts on Tell</span>
+              <span className="menu-hint">starts on Tell</span>
             ) : undefined
           }
           onSelect={() => onAdd(paneRef(pane))}
         >
           {PANE_LABELS[pane]}
-        </ShellMenuItem>
+        </MenuItem>
       ))}
-      {builtIns.length > 0 && luaToAdd.length > 0 && <ShellMenuSeparator />}
+      {builtIns.length > 0 && luaToAdd.length > 0 && <MenuSeparator />}
       {luaToAdd.map((offer) => {
         const ref = luaPaneRef(offer);
         return (
-          <ShellMenuItem
+          <MenuItem
             key={paneKey(ref)}
-            trailing={<span className="shell-menu-kbd">{offer.plugin}</span>}
+            trailing={<span className="menu-hint">{offer.plugin}</span>}
             onSelect={() => onAdd(ref)}
           >
             {paneLabel(ref)}
-          </ShellMenuItem>
+          </MenuItem>
         );
       })}
     </ShellMenu>

@@ -16,7 +16,8 @@ import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, PlusIcon } from '../ui/icons';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
-import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { ShellMenu } from './ShellMenu';
 import { SessionMark, SessionRowBody, WaitingCount } from './SessionRowBody';
 import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
@@ -98,9 +99,6 @@ export interface SessionSidebarHandle {
    *  field. */
   rename: (session: number) => void;
 }
-
-/** The row menu's width, as board 9 draws it. */
-const ROW_MENU_WIDTH = 212;
 
 /** The rows' pitch, a 44 pill in a 46 slot (S1 of the Sessions Sidebar
  *  review). */
@@ -272,14 +270,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         )}
       </ul>
       {menu && menuRow && (
-        <ShellMenu at={menu} width={ROW_MENU_WIDTH} label="Session options" onClose={closeMenu}>
-          <ShellMenuItem
-            shortcut={menu.keyed ? 'F2' : undefined}
+        <ShellMenu at={menu} label="Session options" onClose={closeMenu}>
+          <MenuItem
+            {...(menu.keyed && { keys: 'F2' })}
             onSelect={() => fromMenu(() => startRename(menuRow.id))}
           >
             Rename session…
-          </ShellMenuItem>
-          <ShellMenuItem
+          </MenuItem>
+          <MenuItem
             onSelect={() =>
               fromMenu(() => {
                 if (menuRow.id !== selected) onSelect(menuRow.id);
@@ -288,16 +286,14 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             }
           >
             Edit connection…
-          </ShellMenuItem>
-          <ShellMenuSeparator />
+          </MenuItem>
+          <MenuSeparator />
           {(menuRow.connected || sessionLive(menuRow.id)) && (
-            <ShellMenuItem onSelect={() => fromMenu(() => onDisconnect(menuRow.id))}>
+            <MenuItem onSelect={() => fromMenu(() => onDisconnect(menuRow.id))}>
               Disconnect
-            </ShellMenuItem>
+            </MenuItem>
           )}
-          <ShellMenuItem onSelect={() => fromMenu(() => onClose(menuRow.id))}>
-            Close session
-          </ShellMenuItem>
+          <MenuItem onSelect={() => fromMenu(() => onClose(menuRow.id))}>Close session</MenuItem>
         </ShellMenu>
       )}
     </aside>
