@@ -79,6 +79,7 @@ describe('InputPage', () => {
       'Text color',
       'Background',
       'Size',
+      'Color commands as you type',
       'Keep last command',
       'Check spelling when you chat',
     ]);
@@ -158,6 +159,37 @@ describe('InputPage', () => {
     expect(yours).toContain('width:110px');
   });
 
+  it('shows the four colors only while coloring is on, each on its theme color', () => {
+    const line = (html: string) =>
+      between(html, 'data-st-anchor="command-line"', 'data-st-anchor="writing"');
+    const off = line(draw());
+    expect(
+      between(off, 'data-st-anchor="type-colors"', 'data-st-anchor="keep-last"'),
+    ).not.toContain('checked=""');
+    expect(off).toContain(
+      'Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red.',
+    );
+    expect(labels(off)).not.toContain('Aliases');
+
+    const on = line(draw({ input_type_colors: true }));
+    const four = between(on, 'data-st-anchor="type-colors"', 'data-st-anchor="keep-last"');
+    expect(four).toContain('checked=""');
+    expect(labels(four)).toEqual([
+      'Color commands as you type',
+      'Aliases',
+      'Vosh commands',
+      'Chat',
+      'A # command Vosh doesn’t know',
+    ]);
+    expect(four).toContain('Commands that start with #, like #walk.');
+    expect(four).toContain('Say, tell, reply and the channels.');
+    const swatches = [...four.matchAll(/st-color-swatch" style="background:([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(swatches).toEqual([EMBER.cyan, EMBER.magenta, EMBER.yellow, 'var(--danger-text)']);
+    expect(four.match(/placeholder="Theme default"/g)).toHaveLength(4);
+  });
+
   it('offers Same as terminal first, then the sizes', () => {
     const size = between(draw(), 'data-st-anchor="line-size"', 'data-st-anchor="keep-last"');
     const options = [...size.matchAll(/<option[^>]*>([^<]*)</g)].map((m) => m[1]);
@@ -227,7 +259,15 @@ describe('InputPage saves', () => {
     );
     unmounts.push(() => root.unmount());
     const inRow = (anchor: string, match: (el: FakeElement) => boolean) => {
-      const row = findAll(container, (el) => el.getAttribute('data-st-anchor') === anchor)[0];
+      // A row with no anchor is found by its label.
+      const row = findAll(
+        container,
+        (el) =>
+          el.getAttribute('data-st-anchor') === anchor ||
+          (el.getAttribute('class') === 'st-row' &&
+            findAll(el, (label) => label.getAttribute('class') === 'st-row-label')[0]
+              ?.textContent === anchor),
+      )[0];
       const el = findAll(row, match)[0];
       const key = Object.keys(el).find((k) => k.startsWith('__reactProps$')) ?? '';
       return (el as unknown as Record<string, Record<string, (e: unknown) => void>>)[key];
@@ -267,6 +307,22 @@ describe('InputPage saves', () => {
       { input_line_background: 'tint' },
       { input_line_background_color: '#0f1a22' },
       { input_line_size: 16 },
+    ]);
+  });
+
+  it('saves coloring and each of its colors to its own field', () => {
+    const page = mount({ input_type_colors: true });
+    page.flip('type-colors', false);
+    page.color('Aliases', '#8abeb7');
+    page.color('Vosh commands', '#b294bb');
+    page.color('Chat', '#f0c674');
+    page.color('A # command Vosh doesn’t know', '#cc6666');
+    expect(saves).toEqual([
+      { input_type_colors: false },
+      { input_type_alias_color: '#8abeb7' },
+      { input_type_hash_color: '#b294bb' },
+      { input_type_chat_color: '#f0c674' },
+      { input_type_unknown_color: '#cc6666' },
     ]);
   });
 });

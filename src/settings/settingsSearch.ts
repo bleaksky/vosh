@@ -400,6 +400,40 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'command-line', 'caret'),
   },
   {
+    label: 'Caret blinks',
+    keywords: 'cursor blink flash steady',
+    target: at('input', 'command-line', 'caret-blink'),
+  },
+  {
+    label: 'Caret color',
+    keywords: 'cursor color accent',
+    target: at('input', 'command-line', 'caret-color'),
+  },
+  {
+    label: 'Text color',
+    keywords: 'command line input typed color foreground',
+    target: at('input', 'command-line', 'line-color'),
+  },
+  {
+    label: 'Background',
+    keywords: 'command line input band tint background',
+    target: at('input', 'command-line', 'line-bg'),
+  },
+  {
+    label: 'Size',
+    keywords: 'command line input font size bigger smaller',
+    target: at('input', 'command-line', 'line-size'),
+  },
+  // The four colors show only while the switch is on, so search names
+  // the switch.
+  {
+    label: 'Color commands as you type',
+    description:
+      'Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red.',
+    keywords: 'syntax highlight fish color alias hash chat unknown',
+    target: at('input', 'command-line', 'type-colors'),
+  },
+  {
     label: 'Keep last command',
     description: 'Your last command stays in the line, selected, so Enter sends it again.',
     keywords: 'history resend repeat',

@@ -32,8 +32,8 @@ import {
 // scrollback: the mark before them, its color, the command color, dim,
 // the mark at the start of the command line, and macro echo. Command
 // line holds how the line looks (the caret, its blink and color, the
-// text color, the background and the size), keep last command and chat
-// spell check.
+// text color, the background and the size), coloring as you type with
+// its four colors, keep last command and chat spell check.
 // Writing card follows with the two rows for the card that opens for
 // note edit and description edit. Advanced opens on paste pacing. The
 // Prompt section has a tab of its own (PromptPage.tsx). Every change
@@ -104,8 +104,16 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
 
   // Sent commands and the line you type draw in the terminal's own text
   // color until you pick one, the mark in the theme's bright black, and
-  // the caret in the accent.
-  const { foreground: terminalText, brightBlack: markGrey } = findTheme(getCurrentThemeId()).xterm;
+  // the caret in the accent. Coloring as you type takes the terminal's
+  // cyan, magenta and yellow, and the danger color for a # command Vosh
+  // doesn't know.
+  const {
+    foreground: terminalText,
+    brightBlack: markGrey,
+    cyan,
+    magenta,
+    yellow,
+  } = findTheme(getCurrentThemeId()).xterm;
 
   return (
     <>
@@ -248,6 +256,60 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             width={180}
           />
         </Row>
+        <Row
+          label="Color commands as you type"
+          description="Aliases, Vosh commands and chat each take a color, and a # command Vosh doesn’t know turns red."
+          anchor="type-colors"
+        >
+          <Toggle
+            checked={config.input_type_colors}
+            onChange={(on) => update({ input_type_colors: on })}
+          />
+        </Row>
+        {config.input_type_colors && (
+          <>
+            <Row label="Aliases">
+              <ColorField
+                value={config.input_type_alias_color ?? ''}
+                onChange={(color) => update({ input_type_alias_color: color || null })}
+                allowEmpty
+                placeholder="Theme default"
+                emptySwatch={cyan}
+                pickerLabel="Choose a color for aliases"
+              />
+            </Row>
+            <Row label="Vosh commands" description="Commands that start with #, like #walk.">
+              <ColorField
+                value={config.input_type_hash_color ?? ''}
+                onChange={(color) => update({ input_type_hash_color: color || null })}
+                allowEmpty
+                placeholder="Theme default"
+                emptySwatch={magenta}
+                pickerLabel="Choose a color for Vosh commands"
+              />
+            </Row>
+            <Row label="Chat" description="Say, tell, reply and the channels.">
+              <ColorField
+                value={config.input_type_chat_color ?? ''}
+                onChange={(color) => update({ input_type_chat_color: color || null })}
+                allowEmpty
+                placeholder="Theme default"
+                emptySwatch={yellow}
+                pickerLabel="Choose a color for chat"
+              />
+            </Row>
+            <Row label="A # command Vosh doesn’t know">
+              <ColorField
+                value={config.input_type_unknown_color ?? ''}
+                onChange={(color) => update({ input_type_unknown_color: color || null })}
+                allowEmpty
+                placeholder="Theme default"
+                emptySwatch="var(--danger-text)"
+                pickerLabel="Choose a color for a # command Vosh doesn’t know"
+              />
+            </Row>
+          </>
+        )}
         <Row
           label="Keep last command"
           description="Your last command stays in the line, selected, so Enter sends it again."

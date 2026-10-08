@@ -57,8 +57,21 @@ describe('searchSettingsRows', () => {
       anchor: 'panel-size',
     });
     expect(labels('ghostty')).toEqual(['Import a theme']);
-    expect(labels('cursor')).toEqual(['Caret shape']);
+    expect(labels('cursor')).toEqual(['Caret shape', 'Caret blinks', 'Caret color']);
     expect(labels('missing')).toContain('Tracked affects');
+  });
+
+  it('finds how the command line looks and colors', () => {
+    expect(labels('caret blink')).toEqual(['Caret blinks']);
+    expect(labels('command line tint')).toEqual(['Background']);
+    expect(labels('command line bigger')).toEqual(['Size']);
+    expect(labels('typed foreground')).toEqual(['Text color']);
+    expect(labels('fish')).toEqual(['Color commands as you type']);
+    expect(searchSettingsRows('syntax highlight', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'command-line',
+      anchor: 'type-colors',
+    });
   });
 
   it('finds where the session in front connects', () => {
