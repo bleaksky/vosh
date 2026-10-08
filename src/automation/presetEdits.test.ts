@@ -228,6 +228,33 @@ describe('Replace with keeps the color keys', () => {
   });
 });
 
+// The descriptions pass renamed the coca label from (endorphins) to
+// (endorphin rush). That is a template change, so a Replace with you
+// edited before it reads as a fix, and the notice names the trigger.
+describe('the coca label fix', () => {
+  const herbs = presetById('herb_labels')!;
+  const COCA = 'herb.coca';
+  const before = 'some purified coca {spell}(endorphins){reset}';
+  const mine = 'some purified coca {spell}(endorphins, sweet){reset}';
+  const edit: PresetEdit = { triggers: { [COCA]: { replace: { value: mine, was: before } } } };
+
+  it('ships the new label', () => {
+    expect(triggerRows(trigger(herbs, COCA)).replace).toBe(
+      'some purified coca {spell}(endorphin rush){reset}',
+    );
+  });
+
+  it('flags a label you edited before it and names the trigger', () => {
+    const build = buildPreset(herbs, edit);
+    const ref = { preset: 'herb_labels', trigger: COCA, row: 'replace' };
+    expect(build.told).toEqual([ref]);
+    expect(fixNotice(build.told, build.removed)).toMatchObject({
+      message: 'A preset fix changed a row you edited',
+      meta: COCA,
+    });
+  });
+});
+
 describe('a trigger the preset no longer builds', () => {
   const gone: PresetEdit = {
     triggers: { 'disarm.tertiary': { enabled: { value: false, was: true } } },

@@ -342,7 +342,8 @@ export const PRESETS: Preset[] = [
     id: 'defensive_combat',
     category: 'defensive',
     name: 'Parries, dodges, and blocks',
-    description: 'Dims routine parries, dodges, and blocks to the dark grey your TinTin++ uses.',
+    description:
+      'Dims routine parries, dodges, and blocks to dark grey, so the blows that land stand out.',
     // check_parry, check_dodge and check_shield_block in fight.c, against
     // a villager, mob 5287 in area/fortblac.are, which fixtures/room-colors
     // names by its short text.
@@ -760,7 +761,7 @@ export const PRESETS: Preset[] = [
     category: 'labels',
     // From highlights.tin lines 192 to 209.
     name: 'Herb labels',
-    description: 'Adds the spell an herb casts after its name.',
+    description: 'Adds the spell an herb casts when you smoke it.',
     // do_smoke in act_obj.c with object 1147 in area/hamlet.are, whose
     // smoke casts protection.
     sample: [{ text: 'You light some rosemary and begin to smoke it.', shows: 'herb.rosemary' }],
@@ -801,7 +802,11 @@ export const PRESETS: Preset[] = [
       replace('herb.greyish', 'some greyish herbs', 'some greyish herbs {spell}(bless){reset}'),
       replace('herb.mugwort', 'some mugwort', 'some mugwort {spell}(slow){reset}'),
       replace('herb.mullein', 'some mullein', 'some mullein {spell}(pass door){reset}'),
-      replace('herb.coca', 'some purified coca', 'some purified coca {spell}(endorphins){reset}'),
+      replace(
+        'herb.coca',
+        'some purified coca',
+        'some purified coca {spell}(endorphin rush){reset}',
+      ),
       replace('herb.rosemary', 'some rosemary', 'some rosemary {spell}(protection){reset}'),
       replace(
         'herb.sand_leaves',

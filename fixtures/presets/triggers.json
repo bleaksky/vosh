@@ -1236,7 +1236,7 @@
         "actions": [
           {
             "kind": "replace",
-            "template": "some purified coca \u001b[38;5;248m(endorphins)\u001b[0m"
+            "template": "some purified coca \u001b[38;5;248m(endorphin rush)\u001b[0m"
           }
         ],
         "preset": "herb_labels"
