@@ -292,6 +292,27 @@ impl AliasStore {
             .kept(|name| self.aliases.get(name) == old.aliases.get(name));
     }
 
+    /// True when the saved alias `alias` expands under `key`: it is on,
+    /// its group is on, and Vosh has not stopped its Lua there.
+    fn fires(&self, alias: &Alias, key: StopKey) -> bool {
+        alias.enabled
+            && self.groups.allows(alias.group.as_deref())
+            && !self.stopped.contains(&alias.name, key)
+    }
+
+    /// The names that expand if you press Enter now in the session
+    /// `key` names, sorted and each once: the saved aliases that fire
+    /// there and every alias in `plugins`. Names match case sensitively,
+    /// as expansion matches them.
+    pub fn live_names(&self, plugins: &PluginAliases, key: StopKey) -> Vec<String> {
+        let saved = self.aliases.values().filter(|a| self.fires(a, key));
+        let made = plugins.list().into_iter().map(|(_, alias)| alias);
+        let mut names: Vec<String> = saved.chain(made).map(|a| a.name.clone()).collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
     pub fn list(&self) -> Vec<&Alias> {
         let mut out: Vec<&Alias> = self.aliases.values().collect();
         out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -359,13 +380,7 @@ impl AliasStore {
         // can flip whole "Combat" / "Crafting" loadouts off without
         // editing each row. An alias a plugin made has none of these and
         // comes first.
-        let saved = || {
-            self.aliases.get(name).filter(|a| {
-                a.enabled
-                    && self.groups.allows(a.group.as_deref())
-                    && !self.stopped.contains(&a.name, key)
-            })
-        };
+        let saved = || self.aliases.get(name).filter(|a| self.fires(a, key));
         let Some(alias) = plugins.get(name).or_else(saved) else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
@@ -856,6 +871,25 @@ mod tests {
             s.expand_line("greet", SESSION).unwrap(),
             vec!["bow".to_string()]
         );
+    }
+
+    #[test]
+    fn live_names_are_the_aliases_that_expand_now() {
+        let mut s = store(&[("kk", "kick"), ("hl", "cast heal"), ("Kk", "kick")]);
+        let mut off = Alias::new("off", "rest");
+        off.enabled = false;
+        s.set(off);
+        s.set(Alias::new("fl", "flee").with_group("combat"));
+        s.set_group_enabled("combat", false);
+        s.stop("hl", SESSION);
+        let mut plugins = PluginAliases::default();
+        plugins.set("mapper", "go", "run %1");
+        plugins.set("other", "kk", "kick hard");
+        // A disabled alias, one in an off group and one stopped here are
+        // left out. A plugin alias is kept, and a name shows once.
+        assert_eq!(s.live_names(&plugins, SESSION), ["Kk", "go", "kk"]);
+        // The stop holds only in the session it went under.
+        assert_eq!(s.live_names(&plugins, OTHER), ["Kk", "go", "hl", "kk"]);
     }
 
     #[test]

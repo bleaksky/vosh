@@ -9,7 +9,7 @@ mod automation;
 pub(crate) mod profile;
 mod prompt;
 mod script;
-mod slash;
+pub(crate) mod slash;
 pub(crate) mod target;
 mod tick;
 mod vars;

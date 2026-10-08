@@ -6,6 +6,7 @@ pub(crate) mod alerts;
 pub(crate) mod automation;
 pub(crate) mod characters;
 pub(crate) mod get_started;
+pub(crate) mod input;
 pub(crate) mod loadouts;
 pub(crate) mod logs;
 pub(crate) mod native_surface;
@@ -88,6 +89,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_reconnect_cancel,
         session::reconnect_get,
         session::reconnect_set,
+        input::input_known_words,
         automation::triggers_list,
         session::target_get,
         automation::triggers_export,
