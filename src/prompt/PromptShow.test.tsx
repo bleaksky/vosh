@@ -35,7 +35,9 @@ describe('the button that says where your prompt shows', () => {
     ] as const) {
       const html = draw(value);
       expect(html, value).toMatch(
-        new RegExp(`<button[^>]*class="btn pc-menu-button"[^>]*><span>${label}</span><svg`),
+        new RegExp(
+          `<button[^>]*class="btn is-small pc-menu-button"[^>]*><span>${label}</span><svg`,
+        ),
       );
       // A screen reader hears what the button picks and the place now.
       expect(html, value).toContain(`aria-label="Where your prompt shows, ${label}"`);

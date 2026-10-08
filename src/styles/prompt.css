@@ -275,14 +275,13 @@
   margin-left: auto;
 }
 
-/* The compact menu buttons at the foot (MenuButton), where your prompt
-   shows and the preview, in the 12/500 face of a segmented control, the
-   chevron in the secondary tone. */
-.pc-menu-button {
+/* The small menu buttons at the foot (MenuButton), where your prompt
+   shows and the preview. The small button sets 24 tall at 12/500. This
+   rule keeps 6 at the right for the chevron, in the secondary tone, and
+   takes two classes so it outranks .btn.is-small. */
+.btn.pc-menu-button {
   gap: 2px;
   padding: 0 6px 0 10px;
-  font-size: 12px;
-  line-height: 16px;
 }
 
 /* Preview: before the preview it reads, in the secondary tone. */

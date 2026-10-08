@@ -67,6 +67,7 @@ export function MenuButton<T extends string>({
   return (
     <>
       <Button
+        small
         className="pc-menu-button"
         aria-label={`${name}, ${label}`}
         aria-haspopup="menu"
