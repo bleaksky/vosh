@@ -165,11 +165,9 @@ describe('the panel faces in the stylesheets', () => {
 
   it('names no other face in any pane or status line rule', () => {
     const named = PANE_RULES.flatMap(({ sheet, selector, body }) =>
-      [
-        ...body.matchAll(
-          /(?:--font-ui|--font-mud(?!-px)|--font-mono|--font-chrome|--app-font-family)\b/g,
-        ),
-      ].map((m) => `${sheet} ${selector}: ${m[0]}`),
+      [...body.matchAll(/(?:--font-ui|--font-mud(?!-px)|--font-mono|--app-font-family)\b/g)].map(
+        (m) => `${sheet} ${selector}: ${m[0]}`,
+      ),
     );
     expect(named).toEqual([]);
   });

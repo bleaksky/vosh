@@ -99,9 +99,9 @@
        60    --z-edge     the window edge and the corner notices
        800   --z-card     the session hover card, the prompt card's marks
                           50 above it and the prompt card 100 above
-       1000  --z-menu     every menu, the palette, the migration wizard
+       1000  --z-menu     every menu and the palette
        1050  --z-coach    the coach ring and its tip
-       1100  --z-dialog   the confirm dialog */
+       1100  --z-dialog   the confirm dialog and the shared catalog preview */
   --z-overlay: 30;
   --z-in-pane: 40;
   --z-edge: 60;
@@ -109,14 +109,6 @@
   --z-menu: 1000;
   --z-coach: 1050;
   --z-dialog: 1100;
-
-  /* Inter and the wizard's shadow. Only html and body in base.css and
-     the migration wizard read them, until D23 retires both. New chrome
-     takes --font-ui, and a new floating surface --shadow-float. */
-  --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --float:
-    0 18px 44px -14px rgba(0, 0, 0, 0.6), 0 6px 18px -10px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.

@@ -1,4 +1,4 @@
-/* The base. The box-sizing reset, html and body in Inter, thin
+/* The base. The box-sizing reset, html and body in the UI face, thin
    scrollbars in the theme's colors on every platform, the window edge
    every window root wears, and the one visually hidden class. */
 
@@ -14,11 +14,10 @@ body,
   height: 100%;
   background: transparent;
   color: var(--text);
-  /* Inter draws only text outside every window root, until D23
-     retires it with the migration wizard. Each window root sets
-     --font-ui, and the terminal and the panes set their own faces. The
-     13 px holds whatever terminal size you pick. */
-  font-family: var(--font-chrome);
+  /* The system UI face draws text outside every window root. Each
+     window root sets --font-ui too, and the terminal and the panes set
+     their own faces. The 13 px holds whatever terminal size you pick. */
+  font-family: var(--font-ui);
   font-size: 13px;
 }
 

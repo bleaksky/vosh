@@ -3,8 +3,7 @@
    dialog, and the scroll depth chip. Every floating surface takes the
    SPEC 3 recipe (--raised ground, radius 16, --shadow-float) and reads
    only the One Window tokens. Class names carry the ov- prefix, and
-   the menu recipe the menu- prefix, so nothing in the interim
-   migration.css reaches them. */
+   the menu recipe the menu- prefix. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40
@@ -811,6 +810,67 @@
 
 .ov-confirm-body + .ov-switch-row {
   margin-top: 12px;
+}
+
+/* The shared catalog preview, a confirm grown to 600 wide. The head
+   takes the confirm's title and body, the kit sections scroll in the
+   middle, and the foot with its hint and buttons stays put under a
+   hairline. A layer 24 in from the window edge holds the card. */
+.ov-confirm-layer.ov-wizard-layer {
+  padding: 24px;
+}
+
+.ov-wizard {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.ov-wizard:focus {
+  outline: none;
+}
+
+.ov-wizard-head {
+  flex: none;
+  padding: 16px 16px 0;
+}
+
+/* Two classes, since settings.css, which sets the frame's st-content
+   padding, loads after this sheet. */
+.st-content.ov-wizard-body {
+  padding: 4px 16px 16px;
+  scroll-padding: 4px 0 16px;
+}
+
+.ov-wizard-body > .st-card + * {
+  margin-top: 16px;
+}
+
+.ov-wizard-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  box-shadow: inset 0 1px 0 var(--sep);
+}
+
+/* The done state has no scroll body, so the foot keeps 16 under the
+   head's copy. */
+.ov-wizard-head + .ov-wizard-foot {
+  margin-top: 16px;
+}
+
+.ov-wizard-foot > .st-row-desc {
+  flex: 1 1 auto;
 }
 
 /* The shell mounts the corner among its floating surfaces, a direct
