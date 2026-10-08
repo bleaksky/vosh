@@ -1,12 +1,21 @@
-active = "default"
+active = "Orla"
 migrations = [
     "prompt-capture-to-profile",
     "preset-sent-tells-on",
     "preset-room-and-time-on",
+    "prompt-line-triggers",
 ]
 
 [[profile]]
 name = "default"
+
+[[profile]]
+name = "Orla"
+
+[profile.auto_match]
+host = "play.theforsakenlands.com"
+port = 1848
+characters = ["Orla"]
 
 [scope]
 theme = "global"
@@ -14,6 +23,3 @@ font = "global"
 dock_layout = "global"
 keep_last_command = "global"
 auto_update = "global"
-
-[get_started]
-at_launch = true

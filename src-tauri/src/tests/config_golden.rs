@@ -45,7 +45,7 @@ use crate::profile::file::{GroupFolders, OnSwitch, PluginsPersist, ProfileConfig
 use crate::profile::live::{Macro, Timer};
 use crate::profile::login_match::AutoMatch;
 use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
-use crate::profile::set::{ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
+use crate::profile::set::{GetStarted, ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
 use crate::profile::tests::claim;
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
@@ -82,7 +82,7 @@ const GOLDENS: [&str; 17] = [
 /// Every old input, by its path under `fixtures/config`, with the FNV-1a
 /// digest of its bytes. An old input never changes, so its digest never
 /// does either.
-const OLD_INPUTS: [(&str, u64); 8] = [
+const OLD_INPUTS: [(&str, u64); 9] = [
     (
         "old/profile-bare-tracked-affects.toml",
         0x69a9_7976_173d_2eb4,
@@ -94,6 +94,7 @@ const OLD_INPUTS: [(&str, u64); 8] = [
     ("old/profile-dock-no-panes.toml", 0xfbb5_fe86_4607_e7bd),
     ("old/catalog-no-presets.toml", 0x14b5_7fe9_05dc_d105),
     ("old/profile-grouped-preset.toml", 0x331a_f4ec_0d11_5763),
+    ("old/profiles-0.8.1.toml", 0x1d95_4204_e236_f3be),
 ];
 
 fn writing() -> bool {
@@ -842,10 +843,15 @@ fn full_index() -> ProfilesIndex {
         notices: vec!["Vosh moved your prompt capture into the Default profile.".into()],
         sessions: Vec::new(),
         selected: None,
+        get_started: Some(GetStarted {
+            at_launch: false,
+            done: vec!["connect".into()],
+        }),
     }
 }
 
-/// [`full_index`] with three sessions open, the second selected (Q16).
+/// [`full_index`] with three sessions open, the second selected (Q16),
+/// and no Get started.
 fn sessions_index() -> ProfilesIndex {
     let world = || Some("play.theforsakenlands.com".to_string());
     ProfilesIndex {
@@ -876,6 +882,7 @@ fn sessions_index() -> ProfilesIndex {
             },
         ],
         selected: Some(SessionId::numbered(3)),
+        get_started: None,
         ..full_index()
     }
 }
@@ -967,7 +974,7 @@ fn profiles_toml_writes_these_bytes() {
 }
 
 /// profiles.toml as 0.8.1 reads and saves it, which knows no session
-/// list.
+/// list and no Get started.
 #[derive(serde::Deserialize, serde::Serialize)]
 struct OldIndex {
     active: String,
@@ -987,7 +994,25 @@ fn an_older_build_reads_the_session_list_and_drops_it_on_its_save() {
     let old: OldIndex = toml::from_str(&sessions).expect("0.8.1 reads it");
     assert_eq!(
         toml::to_string_pretty(&old).unwrap(),
-        toml::to_string_pretty(&full_index()).unwrap()
+        toml::to_string_pretty(&index_without_get_started()).unwrap()
+    );
+}
+
+/// [`full_index`] as 0.8.1 saves it, with no Get started.
+fn index_without_get_started() -> ProfilesIndex {
+    ProfilesIndex {
+        get_started: None,
+        ..full_index()
+    }
+}
+
+#[test]
+fn an_older_build_reads_get_started_and_drops_it_on_its_save() {
+    let full = toml::to_string_pretty(&full_index()).unwrap();
+    let old: OldIndex = toml::from_str(&full).expect("0.8.1 reads it");
+    assert_eq!(
+        toml::to_string_pretty(&old).unwrap(),
+        toml::to_string_pretty(&index_without_get_started()).unwrap()
     );
 }
 
@@ -1115,6 +1140,15 @@ fn bare_tracked_affects_still_load() {
         ]
     );
     assert_eq!(config.ui.theme, "kanso-zen");
+}
+
+#[test]
+fn an_index_from_0_8_1_keeps_get_started_shut() {
+    let (dir, path) = place("old/profiles-0.8.1.toml", "profiles.toml");
+    let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+    assert_eq!(set.get_started(), None);
+    set.save_index().unwrap();
+    assert_eq!(read(&path), old_input("old/profiles-0.8.1.toml"));
 }
 
 #[test]

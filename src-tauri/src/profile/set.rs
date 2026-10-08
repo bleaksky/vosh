@@ -124,6 +124,21 @@ pub(crate) struct ProfilesIndex {
     /// The session that was selected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected: Option<SessionId>,
+    /// Where you are in Get started. Only a new install writes it, so an
+    /// index with none never opens the card at launch. An older build
+    /// drops it on its next save.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub get_started: Option<GetStarted>,
+}
+
+/// Get started as profiles.toml keeps it, once for the whole install.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GetStarted {
+    /// The card opens at launch.
+    pub at_launch: bool,
+    /// The steps you finished, by id.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub done: Vec<String>,
 }
 
 /// A session as profiles.toml keeps it for the next launch: its id, which
@@ -270,6 +285,10 @@ impl ProfileSet {
             notices: Vec::new(),
             sessions: Vec::new(),
             selected: None,
+            get_started: new_install.then_some(GetStarted {
+                at_launch: true,
+                done: Vec::new(),
+            }),
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -606,6 +625,37 @@ impl ProfileSet {
         notices
     }
 
+    /// Where you are in Get started, or None when it never opened.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the get_started commands of B7 call it")
+    )]
+    pub(crate) fn get_started(&self) -> Option<&GetStarted> {
+        self.index.get_started.as_ref()
+    }
+
+    /// Keep where you are in Get started and save the index. An index
+    /// that does not save keeps what it held.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the get_started commands of B7 call it")
+    )]
+    pub(crate) fn set_get_started(
+        &mut self,
+        at_launch: bool,
+        done: Vec<String>,
+    ) -> Result<(), ProfileSetError> {
+        let before = self
+            .index
+            .get_started
+            .replace(GetStarted { at_launch, done });
+        if let Err(e) = self.save_index() {
+            self.index.get_started = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Read the per-category scope map.
     pub(crate) fn scope(&self) -> &ScopeConfig {
         &self.index.scope
@@ -892,10 +942,33 @@ pub(crate) mod tests {
         let path = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
         let config = ProfileConfig::load(&path).unwrap();
         assert_eq!(config.ui.enabled_presets, [PRESETS_OFF]);
+        // Get started opens at launch, and the next launch reads it.
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let open = GetStarted {
+            at_launch: true,
+            done: Vec::new(),
+        };
+        assert_eq!(set.get_started(), Some(&open));
     }
 
     #[test]
-    fn a_folder_with_a_profile_keeps_its_presets() {
+    fn get_started_keeps_the_steps_you_finished() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.set_get_started(false, vec!["connect".into()]).unwrap();
+        let text = std::fs::read_to_string(paths::profiles_index_path(dir.path())).unwrap();
+        assert!(
+            text.ends_with("[get_started]\nat_launch = false\ndone = [\"connect\"]\n"),
+            "{text}"
+        );
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let get_started = set.get_started().unwrap();
+        assert!(!get_started.at_launch);
+        assert_eq!(get_started.done, ["connect"]);
+    }
+
+    #[test]
+    fn a_folder_with_a_profile_keeps_its_presets_and_get_started_shut() {
         // Bug 5 recovery leaves the profile files, and the oldest builds
         // kept one profile.toml at the root, which moves to default.toml.
         for (kept, default_text) in [
@@ -906,10 +979,11 @@ pub(crate) mod tests {
             let path = dir.path().join(kept);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, "marker = 1\n").unwrap();
-            ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+            let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
             let default = paths::profile_path(dir.path(), DEFAULT_PROFILE_NAME);
             let text = std::fs::read_to_string(default).ok();
             assert_eq!(text.as_deref(), default_text, "{kept}");
+            assert_eq!(set.get_started(), None, "{kept}");
         }
     }
 
