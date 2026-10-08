@@ -73,6 +73,17 @@ export function washFields(ansi16: readonly string[], ground: string): WashField
   );
 }
 
+/** Whether a pane fills anew from the scrollback when its wash fields
+ *  go from `before` to `after`. xterm keeps the colors a row was written
+ *  in, so a wash it painted since its last fill shows the old theme until
+ *  it is written again. Nothing washed, or the same fields, keeps it. */
+export function refillsWashes(before: WashFields, after: WashFields, washed: boolean): boolean {
+  if (!washed) return false;
+  if (before.size !== after.size) return true;
+  for (const [tint, field] of before) if (after.get(tint) !== field) return true;
+  return false;
+}
+
 /** The background SGR of a field. */
 function fieldSgr(field: string): string {
   return `48;2;${parseHex(field).join(';')}`;
@@ -201,7 +212,11 @@ export class WashPainter {
   // The fields of the output in hand.
   private map: WashFields = new Map();
 
-  constructor(private readonly fields: () => WashFields) {}
+  /** `onWash` hears each washed row the painter paints. */
+  constructor(
+    private readonly fields: () => WashFields,
+    private readonly onWash: () => void = () => {},
+  ) {}
 
   /** Paint one output, keeping back what the next one completes. */
   paint(text: string): string {
@@ -225,8 +240,8 @@ export class WashPainter {
   }
 
   /** Paint a whole stream, with nothing kept back at its end. */
-  static whole(text: string, fields: WashFields): string {
-    const painter = new WashPainter(() => fields);
+  static whole(text: string, fields: WashFields, onWash?: () => void): string {
+    const painter = new WashPainter(() => fields, onWash);
     let out = painter.paint(text);
     if (painter.pending.length > 0) {
       painter.out = '';
@@ -287,8 +302,9 @@ export class WashPainter {
     return this.forced === true;
   }
 
-  /** The field of the row in hand. */
+  /** The field of the row in hand, which only a washed row asks for. */
   private rowField(): string {
+    this.onWash();
     const tint = this.rowFirst !== null && this.rowFirst !== 'other' ? this.rowFirst : this.signal;
     return fieldSgr(this.map.get(tint ?? '') ?? '#000000');
   }

@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import fixture from '../../../fixtures/wash/fields.json';
 import { OutputShaper } from '../outputShaper';
 import { decodeOutputPayload } from '../../ipc/terminal';
-import { WashPainter, washFields } from './xtermWash';
+import { refillsWashes, WashPainter, washFields } from './xtermWash';
 
 // Washed lines on xterm paint the field the native renderer paints, in
 // the theme's colors (src-tauri/src/native/gpu/frame.rs). The lines are
@@ -146,5 +146,33 @@ describe('WashPainter', () => {
     const term = await screen(out, 40);
     expect(grounds(term, 0)).toEqual(Array(40).fill(YELLOW));
     term.dispose();
+  });
+});
+
+describe('refillsWashes', () => {
+  const other = washFields(fixture.cases[1].palette, fixture.cases[1].ground);
+
+  it('fills anew once a wash painted and the fields changed', () => {
+    expect(refillsWashes(fields, other, true)).toBe(true);
+    expect(refillsWashes(new Map(), fields, true)).toBe(true);
+  });
+
+  it('keeps the screen when nothing washed', () => {
+    expect(refillsWashes(fields, other, false)).toBe(false);
+  });
+
+  it('keeps the screen when the fields are the same', () => {
+    const same = washFields(ember.palette, ember.ground);
+    expect(refillsWashes(fields, same, true)).toBe(false);
+  });
+});
+
+describe('WashPainter hears its washes', () => {
+  it('tells a washed row, and nothing for a plain one', () => {
+    let heard = 0;
+    WashPainter.whole('The day has begun.\r\n', fields, () => (heard += 1));
+    expect(heard).toBe(0);
+    WashPainter.whole(SANCTUARY, fields, () => (heard += 1));
+    expect(heard).toBeGreaterThan(0);
   });
 });

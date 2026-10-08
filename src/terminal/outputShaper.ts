@@ -25,13 +25,15 @@ export class OutputShaper {
   private readonly replaceDecoder = new TextDecoder('utf-8', { fatal: false });
   private readonly painter: WashPainter;
 
-  /** `fields` gives the wash fields of the theme in force. */
+  /** `fields` gives the wash fields of the theme in force, and `onWash`
+   *  hears each washed row painted. */
   constructor(
     cols: number,
     private readonly fields: () => WashFields = () => new Map(),
+    private readonly onWash?: () => void,
   ) {
     this.wrapper = new WordWrapper(cols);
-    this.painter = new WashPainter(fields);
+    this.painter = new WashPainter(fields, onWash);
   }
 
   setCols(cols: number): void {
@@ -45,7 +47,7 @@ export class OutputShaper {
 
   /** Wrap and paint a chunk that stands alone, a region's own text. */
   private wholeChunk(text: string): string {
-    return WashPainter.whole(this.wrapChunk(text), this.fields());
+    return WashPainter.whole(this.wrapChunk(text), this.fields(), this.onWash);
   }
 
   /** Wrap and paint the next part of the stream. */

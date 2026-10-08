@@ -35,7 +35,7 @@ import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalR
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
-import { WashPainter, washFields, type WashFields } from './xterm/xtermWash';
+import { refillsWashes, WashPainter, washFields, type WashFields } from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
@@ -216,6 +216,10 @@ export function Terminal({
   // The wash fields of the theme the pane draws, which every write
   // paints washed rows in.
   const washRef = useRef<WashFields>(new Map());
+  // Whether the pane painted a wash since it last filled, and how it
+  // fills anew in the fields in force, which the setup effect sets.
+  const washedRef = useRef(false);
+  const refillRef = useRef<(() => void) | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -235,10 +239,15 @@ export function Terminal({
   const appliedLiftRef = useRef(false);
 
   // Draw with the theme `themeId`, its ground clear while the pane lifts
-  // your prompts, and paint washes in its colors from the next write on.
+  // your prompts, and paint washes in its colors. xterm keeps the colors
+  // a row was written in, so washes already on screen take the new
+  // fields as the pane fills anew from the scrollback.
   const applyTheme = (term: XTerm, themeId: string = getCurrentThemeId()) => {
     term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
-    washRef.current = washFieldsFor(themeId, themeTerminalColorsRef.current);
+    const fields = washFieldsFor(themeId, themeTerminalColorsRef.current);
+    const refill = refillsWashes(washRef.current, fields, washedRef.current);
+    washRef.current = fields;
+    if (refill) refillRef.current?.();
   };
 
   // Turn the bands on or off, with the clear ground they need.
@@ -285,6 +294,9 @@ export function Terminal({
     });
     washRef.current = washFieldsFor(getCurrentThemeId(), themeTerminalColorsRef.current);
     const fields = () => washRef.current;
+    const washed = () => {
+      washedRef.current = true;
+    };
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
@@ -449,7 +461,39 @@ export function Terminal({
     // Decoded across outputs, word wrapped and its washes painted
     // (src/terminal/outputShaper.ts). A copy that fills anew starts a
     // shaper of its own.
-    let shaper = new OutputShaper(term.cols, fields);
+    let shaper = new OutputShaper(term.cols, fields, washed);
+
+    // Fill the copy anew from the session's scrollback, in the wash fields
+    // in force, and keep the live pane at its tail. The history pane keeps
+    // the row it shows. Only a copy the screen gave back says the
+    // scrollback was restored, since its writes stopped meanwhile.
+    const fill = (banner: boolean, done: () => void) => {
+      const top = term.buffer.active.viewportY;
+      writer.dispose();
+      term.reset();
+      writer = new RegionWriter(term);
+      if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
+      shaper = new OutputShaper(term.cols, fields, washed);
+      washedRef.current = false;
+      const settle = () => {
+        if (quietRef.current) {
+          term.scrollToLine(top);
+        } else {
+          padToBottom();
+          keepTail(term);
+        }
+        done();
+      };
+      loadScrollback(false, session)
+        .then(({ bytes }) => {
+          if (bytes.length === 0) return settle();
+          writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
+          if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
+          // The pad reads where the cursor sits once xterm parsed it all.
+          writer.whenParsed(settle);
+        })
+        .catch(settle);
+    };
 
     // While the native underlay draws the live terminal, the xterm copy
     // hides and takes no writes (src/terminal/xterm/xtermMirror.ts). It keeps its
@@ -461,28 +505,9 @@ export function Terminal({
     const mirror = new XtermMirror({
       owned: () =>
         !quietRef.current && nativeSurfaceEnabled() && underlayShows(document.documentElement),
-      rebuild: (done) => {
-        writer.dispose();
-        term.reset();
-        writer = new RegionWriter(term);
-        if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
-        shaper = new OutputShaper(term.cols, fields);
-        const settle = () => {
-          padToBottom();
-          keepTail(term);
-          done();
-        };
-        loadScrollback(false, session)
-          .then(({ bytes }) => {
-            if (bytes.length === 0) return settle();
-            writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current));
-            writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
-            // The pad reads where the cursor sits once xterm parsed it all.
-            writer.whenParsed(settle);
-          })
-          .catch(settle);
-      },
+      rebuild: (done) => fill(true, done),
     });
+    refillRef.current = () => mirror.refill((done) => fill(false, done));
     const underlayWatch = new MutationObserver(() => mirror.check());
     underlayWatch.observe(document.documentElement, {
       attributes: true,
@@ -496,7 +521,9 @@ export function Terminal({
         // A copy the native grid hides takes none of it.
         const toXterm = mirror.mirrors();
         if (bytes.length > 0) {
-          if (toXterm) writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current));
+          if (toXterm) {
+            writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
+          }
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
@@ -777,6 +804,7 @@ export function Terminal({
       unsubOutput?.();
       unsubGridSize?.();
       underlayWatch.disconnect();
+      refillRef.current = null;
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;
