@@ -143,6 +143,23 @@ export function posted(character: WritingCharacter, draft: Draft): WritingCharac
   };
 }
 
+/** `character` with a check of `kind` waiting in the game, or with it
+ *  gone. The same character when nothing changes. */
+export function withCheckWaiting(
+  character: WritingCharacter,
+  kind: WritingKind,
+  waits: boolean,
+): WritingCharacter {
+  if (checkWaits(character, kind) === waits) return character;
+  const others = (character.checks ?? []).filter((k) => k !== kind);
+  return { ...character, checks: waits ? [...others, kind] : others };
+}
+
+/** Whether the game holds a check of `kind` it has not decided. */
+export function checkWaits(character: WritingCharacter, kind: WritingKind): boolean {
+  return character.checks?.includes(kind) ?? false;
+}
+
 /** The draft of a text the game holds one of, your description, beast,
  *  history, personality or purpose, or a new one. */
 export function onlyDraft(character: WritingCharacter, kind: WritingKind): Draft {

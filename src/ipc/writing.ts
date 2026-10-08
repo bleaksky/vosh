@@ -209,7 +209,7 @@ export interface WritingCharacter {
   drafts: Draft[];
   sent: Draft[];
   /** The kinds whose check the game holds and has not decided. */
-  checks?: ('description' | 'history')[];
+  checks?: WritingKind[];
 }
 
 /** writing.toml, `WritingFile` in writing.rs. */

@@ -34,6 +34,7 @@ import { stopsAsking, useAskPost } from './askPost';
 import { DontAskAgain } from './DontAskAgain';
 import {
   characterOf,
+  checkWaits,
   getWritingFile,
   keepCharacter,
   keepSwitches,
@@ -42,6 +43,7 @@ import {
   onlyDraft,
   posted,
   useWritingFile,
+  withCheckWaiting,
   withDraft,
   withoutDraft,
   type World,
@@ -58,6 +60,7 @@ import { afterDrop, findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
 import {
   changedAsk,
+  checkAnswer,
   checkAsk,
   checkedNote,
   CLEAR_ASK,
@@ -372,9 +375,11 @@ export function WritingCard({
         keep({ ...draft, game: result.lines });
         setConfirm({ ...changedAsk(k), run: () => run({ ...job, base: null }) });
         return;
-      case 'sent':
+      case 'sent': {
         keep({ ...draft, game: result.lines });
         setPhase('sent');
+        const waits =
+          world && name ? checkWaits(characterOf(getWritingFile(), world, name), k) : false;
         setEnded({
           note: sentNote(
             result.lines.length,
@@ -382,15 +387,24 @@ export function WritingCard({
               result.lines,
               lines.map((l) => l.replace(/"/g, "'")),
             ),
+            waits ? k : null,
           ),
           actions: [],
         });
         return;
+      }
       case 'posted':
         markPosted();
         setEnded({ note: postedNote(k, result.forum, result.vote), actions: [] });
         return;
       case 'checked':
+        // A check the game holds waits until the immortals decide. One
+        // that went through or was decided leaves none waiting.
+        if (world && name) {
+          const c = characterOf(getWritingFile(), world, name);
+          const next = withCheckWaiting(c, k, checkAnswer(result.lines) === 'waits');
+          if (next !== c) keepCharacter(next);
+        }
         setPhase('checked');
         setEnded({ note: checkedNote(k, result.lines), actions: [] });
         return;

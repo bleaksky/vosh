@@ -131,15 +131,27 @@ export const CLEAR_ASK: Ask = {
   label: 'Clear',
 };
 
-/** The read back after a send. */
-export function sentNote(held: number, all: boolean): Note {
-  return all
-    ? { lead: '', rest: `The game has all ${held} lines, just as you wrote them`, tone: 'ok' }
-    : {
-        lead: 'The game has something different.',
-        rest: ' Read again to see what it has.',
-        tone: 'warn',
-      };
+/** The read back after a send. A check the game still holds reads the
+ *  text you sent back then, so a good send says so. */
+export function sentNote(held: number, all: boolean, waiting: WritingKind | null): Note {
+  if (!all) {
+    return {
+      lead: 'The game has something different.',
+      rest: ' Read again to see what it has.',
+      tone: 'warn',
+    };
+  }
+  const still =
+    waiting === 'description'
+      ? '. The check that’s waiting still reads the description you sent back then.'
+      : waiting === 'history'
+        ? '. Your history check still reads the history you sent back then.'
+        : '';
+  return {
+    lead: '',
+    rest: `The game has all ${held} lines, just as you wrote them${still}`,
+    tone: 'ok',
+  };
 }
 
 /** A post the game took, a cabal's vote, or a report the forum missed. */
@@ -154,28 +166,43 @@ export function postedNote(kind: WritingKind, forum: boolean, vote: boolean): No
   return { lead: '', rest, tone: 'ok' };
 }
 
+/** How the game answered dcheck or history check. A check it already
+ *  holds waits (recycle.c, act_comm.c), one the immortals took is
+ *  decided, and anything else means this one went through. */
+export function checkAnswer(lines: readonly string[]): 'waits' | 'decided' | 'sent' {
+  const said = lines.join(' ');
+  if (/already submitted|already made your intentions/i.test(said)) return 'waits';
+  if (/already been approved|already recognize/i.test(said)) return 'decided';
+  return 'sent';
+}
+
 /** The game's answer to dcheck or history check, in short. */
 export function checkedNote(kind: WritingKind, lines: readonly string[]): Note {
-  const said = lines.join(' ');
-  if (/already been approved/i.test(said)) {
-    return { lead: '', rest: 'Your description is already approved.', tone: 'ok' };
-  }
-  if (/already submitted|already made your intentions|already recognize/i.test(said)) {
-    return {
-      lead: '',
-      rest:
-        kind === 'description'
+  const description = kind === 'description';
+  switch (checkAnswer(lines)) {
+    case 'waits':
+      return {
+        lead: '',
+        rest: description
           ? 'You already have a check waiting, and it uses the text you sent back then.'
           : 'You’ve already sent your history, and the game only takes it once.',
-      tone: 'warn',
-    };
+        tone: 'warn',
+      };
+    case 'decided':
+      return {
+        lead: '',
+        rest: description
+          ? 'Your description is already approved.'
+          : 'The immortals have already read your history.',
+        tone: 'ok',
+      };
+    case 'sent':
+      return {
+        lead: '',
+        rest: description
+          ? 'Sent for approval. You’ll get a note when the immortals decide.'
+          : 'Sent for review. An immortal will read it.',
+        tone: 'ok',
+      };
   }
-  return {
-    lead: '',
-    rest:
-      kind === 'description'
-        ? 'Sent for approval. You’ll get a note when the immortals decide.'
-        : 'Sent for review. An immortal will read it.',
-    tone: 'ok',
-  };
 }
