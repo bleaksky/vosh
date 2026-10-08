@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use rusqlite::types::ValueRef;
-use rusqlite::{params, Connection, TransactionBehavior};
+use rusqlite::{params, Connection, Row, TransactionBehavior};
 
 use super::replay::PasswordFinder;
 use super::{Forgotten, PasswordLines};
@@ -22,24 +22,13 @@ impl LogStore {
     /// Find the sent lines that still hold a password. Reads only, one
     /// pass over the log in id order.
     pub fn find_password_lines(&self) -> Result<PasswordLines> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, session_id, ts_ms, text, raw IS NULL FROM log_lines ORDER BY id",
-        )?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {FINDER_COLUMNS} FROM log_lines ORDER BY id"
+        ))?;
         let mut rows = stmt.query([])?;
         let mut finder = PasswordFinder::new();
         while let Some(row) = rows.next()? {
-            let id: i64 = row.get(0)?;
-            let session_id: i64 = row.get(1)?;
-            let ts_ms: i64 = row.get(2)?;
-            let no_raw: bool = row.get(4)?;
-            // Read the bytes as they are, so a line that is not valid
-            // UTF-8 never stops the pass.
-            let text = match row.get_ref(3)? {
-                ValueRef::Text(bytes) | ValueRef::Blob(bytes) => String::from_utf8_lossy(bytes),
-                _ => Cow::Borrowed(""),
-            };
-            let sent = no_raw && text.starts_with("> ");
-            finder.row(id, session_id, ts_ms, &text, sent);
+            feed(&mut finder, row)?;
         }
         drop(rows);
         let mut found = finder.finish();
@@ -144,6 +133,27 @@ impl LogStore {
         let found = self.find_password_lines()?;
         self.blank_password_lines(&found)
     }
+}
+
+/// The columns [`feed`] reads, in its order.
+const FINDER_COLUMNS: &str = "id, session_id, ts_ms, text, raw IS NULL";
+
+/// Hand one row, read with [`FINDER_COLUMNS`], to `finder` as a line
+/// you sent or a line of output.
+fn feed(finder: &mut PasswordFinder, row: &Row<'_>) -> rusqlite::Result<()> {
+    let id: i64 = row.get(0)?;
+    let session_id: i64 = row.get(1)?;
+    let ts_ms: i64 = row.get(2)?;
+    let no_raw: bool = row.get(4)?;
+    // Read the bytes as they are, so a line that is not valid UTF-8
+    // never stops the pass.
+    let text = match row.get_ref(3)? {
+        ValueRef::Text(bytes) | ValueRef::Blob(bytes) => String::from_utf8_lossy(bytes),
+        _ => Cow::Borrowed(""),
+    };
+    let sent = no_raw && text.starts_with("> ");
+    finder.row(id, session_id, ts_ms, &text, sent);
+    Ok(())
 }
 
 /// Push every page into the main file and truncate the write ahead log.
