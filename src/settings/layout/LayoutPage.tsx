@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../panel/affects/affectsDisplay';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { PANEL_WIDTH_MAX, panelWidthFloor } from '../../panel/paneLayout';
-import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../lib/shortcuts';
+import { ariaKeyshortcuts, isMacPlatform, shortcutKeys, shortcutLabel } from '../../lib/shortcuts';
 import { profileDisplayName } from '../../lib/characterProfiles';
 import { possessive } from '../../lib/text';
 import {
@@ -106,7 +106,7 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
             <Toggle
               checked={layout?.panel_open ?? true}
               disabled={layout === null}
-              aria-keyshortcuts={mac ? 'Meta+Shift+L' : 'Control+Shift+L'}
+              aria-keyshortcuts={ariaKeyshortcuts(PANEL_KEYS, mac)}
               onChange={setPanelOpen}
             />
           </span>

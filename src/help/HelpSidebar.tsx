@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { HELP_SECTIONS, type HelpTopic } from './helpContent';
 import { helpSearchKey, sectionTopics } from './helpNav';
-import { shortcutKeys } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutKeys } from '../lib/shortcuts';
 import { scrollWithin } from '../lib/scrollWithin';
 import { Keycap, SearchIcon, VisuallyHidden } from '../ui';
 import { sectionIcon } from './sectionIcons';
@@ -109,6 +109,7 @@ export function HelpSidebar({
           aria-expanded={searching}
           aria-controls={listId}
           aria-autocomplete="list"
+          aria-keyshortcuts={ariaKeyshortcuts('Mod+F', mac)}
           aria-activedescendant={searching && results.length > 0 ? optionId(active) : undefined}
           value={query}
           onChange={(e) => onQuery(e.target.value)}
