@@ -82,7 +82,8 @@ import { knownWorld } from '../lib/knownWorlds';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
-import { CardMenu, MenuSeparator } from './CardMenu';
+import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
+import { CardMenu } from './CardMenu';
 import { LineTriggers } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
 import { PromptPicker } from './PromptPicker';
@@ -919,7 +920,6 @@ export function PromptCard({
         <CardMenu
           anchor={moreAt}
           place="below-end"
-          width={forsaken ? 232 : 264}
           label={names.options}
           onClose={() => setMoreAt(null)}
         >
@@ -927,16 +927,13 @@ export function PromptCard({
             item === 'separator' ? (
               <MenuSeparator key={`sep-${i}`} />
             ) : (
-              <li key={item.id} role="none">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`ov-menu-item${item.danger ? ' is-danger' : ''}`}
-                  onClick={() => runMore(item.id)}
-                >
-                  <span className="ov-menu-label">{item.label}</span>
-                </button>
-              </li>
+              <MenuItem
+                key={item.id}
+                danger={item.danger === true}
+                onSelect={() => runMore(item.id)}
+              >
+                {item.label}
+              </MenuItem>
             ),
           )}
         </CardMenu>

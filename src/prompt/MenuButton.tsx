@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import type { MenuPlace } from './cardRules';
 import { Button, CheckIcon, ChevronDownIcon } from '../ui';
+import { MenuItem } from '../ui/MenuSurface';
 import { CardMenu } from './CardMenu';
 
 // A compact button at the foot of Customize prompt that reads the
@@ -13,10 +14,6 @@ import { CardMenu } from './CardMenu';
 // keys move between the choices, and Esc or Tab closes it (CardMenu).
 // A button that is off stays where Tab reaches it, so a screen reader
 // hears why it is off too.
-
-/** The menu's width, the narrow pane menus' width, the same for every
- *  menu button so the menus at the foot line up. */
-export const MENU_BUTTON_MENU_WIDTH = 160;
 
 export interface MenuChoice<T extends string> {
   value: T;
@@ -94,28 +91,19 @@ export function MenuButton<T extends string>({
         </span>
       )}
       {openAt && (
-        <CardMenu
-          anchor={openAt}
-          place={place}
-          width={MENU_BUTTON_MENU_WIDTH}
-          label={name}
-          onClose={() => setMenuAt(null)}
-        >
+        <CardMenu anchor={openAt} place={place} label={name} onClose={() => setMenuAt(null)}>
           {choices.map((choice) => {
             const checked = choice.value === value;
             return (
-              <li key={choice.value} role="none">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={checked}
-                  className="ov-menu-item"
-                  onClick={() => choose(choice.value)}
-                >
-                  <span className="ov-menu-label">{choice.label}</span>
-                  {checked && <CheckIcon className="menu-check" />}
-                </button>
-              </li>
+              <MenuItem
+                key={choice.value}
+                radio
+                checked={checked}
+                trailing={checked && <CheckIcon className="menu-check" />}
+                onSelect={() => choose(choice.value)}
+              >
+                {choice.label}
+              </MenuItem>
             );
           })}
         </CardMenu>

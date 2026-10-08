@@ -40,7 +40,9 @@ import {
   Segmented,
   type SegmentedOption,
 } from '../ui';
-import { CardMenu, MenuSeparator } from './CardMenu';
+import { MenuSeparator } from '../ui/MenuSurface';
+import { focusUnderPointer } from '../ui/menuAim';
+import { CardMenu } from './CardMenu';
 
 // The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line
 // says what it is and what it reads now, with the part's own codes as you
@@ -426,7 +428,6 @@ function MoreStyles({
         <CardMenu
           anchor={anchor}
           place={MORE_STYLES_PLACE}
-          width={184}
           label="More styles"
           onClose={() => setAnchor(null)}
         >
@@ -467,7 +468,8 @@ export function MoreStyleItems({
         type="button"
         role={role}
         aria-checked={checked}
-        className="pc-style-item"
+        className="menu-item pc-style-item"
+        onPointerMove={focusUnderPointer}
         onClick={() => onToggle(style, !checked)}
       >
         {checked && <CheckIcon className="pc-start-check" />}

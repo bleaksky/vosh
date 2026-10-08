@@ -833,73 +833,24 @@
   background: var(--menu-hi);
 }
 
-/* Menus the card opens: More, Presets, From another profile and the name
-   menu, on the ov-menu recipe. */
-.pc-menu {
-  position: fixed;
-  z-index: 1000;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  box-sizing: border-box;
-  outline: none;
-  font-family: var(--font-ui);
-  color: var(--text);
+/* Presets holds the start list with its samples, not rows, so it keeps
+   the list's own width past the one menu's 320. Board 01 does not draw
+   it. */
+.menu.pc-presets-menu {
+  width: 468px;
+  max-width: 468px;
 }
 
-.pc-menu > li {
-  display: block;
-  margin: 0;
-  padding: 0;
-}
-
-.pc-menu > li.pc-menu-sep {
-  height: 1px;
-  margin: 6px 12px;
-  background: var(--sep);
-}
-
-.pc-menu .ov-menu-item:hover,
-.pc-menu .ov-menu-item:focus-visible {
-  background: var(--menu-hi);
-}
-
-.pc-menu .pc-starts {
+.pc-presets-menu .pc-starts {
   margin: 0;
   padding: 0;
 }
 
 /* The name menu: radio rows with the check column, and a GMCP name in
    the terminal's face with its package where a menu puts shortcuts. */
-.pc-name-item {
+.menu-item.pc-name-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-name-item:hover,
-.pc-name-item:focus-visible,
-.pc-name-item[aria-checked='true'] {
-  background: var(--menu-hi);
+  padding-left: 36px;
 }
 
 .pc-name-item .pc-start-check {
@@ -1160,30 +1111,10 @@
 /* Its menu: rows of the name menu with the check column at 12, each
    style drawn as the styles board draws it. A check marks what is on,
    and the highlight follows the pointer and the keys alone. */
-.pc-style-item {
+.menu-item.pc-style-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 30px;
-  margin: 0;
-  padding: 0 12px 0 36px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  font: inherit;
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text);
-  text-align: left;
-  cursor: default;
-}
-
-.pc-style-item:hover,
-.pc-style-item:focus-visible {
-  background: var(--menu-hi);
+  justify-content: flex-start;
+  padding-left: 36px;
 }
 
 .pc-style-item .pc-start-check {

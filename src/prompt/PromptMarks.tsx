@@ -308,7 +308,8 @@ export function PromptMarks({
       // their own presses.
       if (
         target &&
-        (card()?.contains(target) || target.closest('.pc-menu, [role="dialog"], .pc-mark-return'))
+        (card()?.contains(target) ||
+          target.closest('[data-menu-surface], [role="dialog"], .pc-mark-return'))
       ) {
         return;
       }
