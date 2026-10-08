@@ -155,6 +155,8 @@ The review of W2 found four faults, and three commits fix them. Post… stays of
 
 W2 closed with its review fixes in. Every gate passed again on 76f2f9ab, so the item runs 9edb55a1 to c8dcc79b with its two plan records. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 3862 page tests passed and 173 skipped, cargo fmt, clippy on macOS and for Windows, and the workspace tests with 2579 passed and 5 ignored. No gate failed, so the close needed no fix. The departures stay the ones above, the missing passive note when the game's copy changes, the Writing Tools spike that did not run, and the find that can match an older note with the same subject. The architecture page now names `cardDrop.ts`.
 
+On October 8 you moved Send for approval… and Send for review… into the card menu (07409cd8, in `src/writing/cardFoot.ts` and `src/writing/cardMenus.ts`), so the foot no longer shows them beside Done as the W2 record above says. An application's To starts empty with the placeholder `Add who it’s to` (`src/writing/WritingFields.tsx`), since Vosh never sets who a note goes to. The code already did this, because the application kind has `toImmortal` false and nothing fills in `to`, so only this record changes.
+
 The card is only on track-b/writing-card until the main session lands it, so a build from one-window or main has none of it. For your app check, right click the terminal and choose Write, then Note…, Journal entry…, Application…, Idea…, Bug report…, Typo report…, Your description… or Your history…. The palette opens it too, with Write a note… or Report a bug…, and so does the kinds menu on the card's title. Typing `note edit`, `description edit` or `history edit` yourself brings the Edit in Vosh notice, which opens it.
 
 Track S item S1, the Sessions Sidebar redesign, is built. You approved all eight recommendations of the Sessions Sidebar Redesign review on October 6. It is 2775bc8d to 657995db on feat/sessions-sidebar-2 from 54848d7c, about 2,900 changed lines with about 1,350 of them in test files. Each row is two lines 44 high on a 46 pitch (S1). Every row shows one status mark, the dot while you play, the ring while it is not connected, the spinner, the hand and the triangle (S2). Line two reads the room, or Fighting and the target, with your health as a whole percent, or says what happened in plain words, from `src/shell/sessionLine.ts` (S3). `sessionRowStore` keeps what waits for you as a list of sources in place of its alert flag, and the row draws its count in an accent pill up to 9+ (S4). A double click on the name, or Return or F2 on a row that has the keyboard, renames in place, with `Return saves, Esc cancels` on line two and F2 beside Rename session… in the row menu (S5). After 500 ms a card from `SessionCard.tsx` opens beside the row, and the close button takes the count's place under the pointer (S6). The folded popover draws the same rows through `SessionRowBody.tsx`, and the session button totals what waits on the other sessions (S7). SESSIONS gives its count and the rows stay ungrouped (S8). The one new backend field is `since` on SessionRow, the time a session went online, and `session://mark` now names the source of each mark, one for each alert that rings nothing. Help 1.4 and the help content describe all of it word for word.
@@ -436,9 +438,10 @@ Every gate passed on 6cc3e90b on the first run, and again on 9029631b. The build
 
 You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day and D19, which changed on October 2.
 
-- D10. Option B. Vosh no longer ships Berkeley Mono, and the bundled JetBrains Mono is the default font. A saved list that names Berkeley Mono draws with the copy installed on your computer, or with JetBrains Mono where none is installed. 9541225 to 1f99108 made the change before R4, and a fix after R6 makes the xterm renderer measure its cell again once your font loads. On October 8 you went further, since you hold no license to distribute it. Vosh no longer treats Berkeley Mono specially, and a list saved with the retired bundled name or the old default draws in the bundled JetBrains Mono (34a7523d). On the same day you chose to ship the licenses of the icon glyphs the Nerd Fonts patch adds (8fd92e4b).
+- D10. Option B. Vosh no longer ships Berkeley Mono, and the bundled JetBrains Mono is the default font. A saved list that names Berkeley Mono draws with the copy installed on your computer, or with JetBrains Mono where none is installed. 9541225 to 1f99108 made the change before R4, and a fix after R6 makes the xterm renderer measure its cell again once your font loads. On October 8 you went further, since you hold no license to distribute it. Vosh no longer treats Berkeley Mono specially, and a list saved with the retired bundled name or the old default draws in the bundled JetBrains Mono (34a7523d). On the same day you chose to ship the licenses of the icon glyphs the Nerd Fonts patch adds (8fd92e4b). On October 8 you also approved the history rewrite that removes the Berkeley Mono files from git history. The main session does it separately, and this record neither does it nor pushes.
 - D1. Option C. Every phase lands on `one-window` on your machine, and nothing is pushed.
-- D37. Option C. The wire fixtures stay synthetic and no captures land, so R2 item 8 and its R7 fallback drop. The CLAUDE.md quality bar still asks for captured bytes, and that line changes to say so once you approve the new wording.
+- D37. Option C. The wire fixtures stay synthetic and no captures land, so R2 item 8 and its R7 fallback drop. On October 8 you approved the CLAUDE.md wording R23 wrote (f685d833), and its quality bar now says the fixtures are synthetic.
+- D30. A requirements doc and this plan replace the phase model. Your approval of the CLAUDE.md wording R23 wrote (f685d833) on October 8 closes it.
 - D20. Every part takes its recommended answer. The `VOSH_WRITE_PLAYS` exporter left in R6 with the rest of the debug tools.
 - D19. Option A, whether or not R11 lands clean. You want tabs for more than one connection, and R14 gives each connection its own state as their groundwork. So R14 is required, and the Sessions phase R14b follows it.
 - R14 names. On October 4 you chose socket.rs. `session/connection.rs`, which opens the plain or TLS socket and defines `Stream`, becomes `session/socket.rs` as a pure move. The new state one connection shares is `session::Connection` in `session/connection.rs`. `Conn` in conn.rs stays the loop's private part, with the socket, the negotiator, the telnet parser, the line accumulator, the server echo, the perf counters, the settle and the `#walk` walker. Commands and slash commands read `Connection` through its own lock, which they reach through the session's handle, so they never wait on the loop. On the same day you kept `Connection` on `AppState`, where commands reach it under its own lock, until R14b gives each session its own, as After R14 in the R14 section says.
@@ -491,7 +494,7 @@ Answer these in the order the phases need them. Blocks 1.0 marks the eight answe
 | R23          | D11 | One source for help                        | HELP.md is the source                                       |            |
 | R23          | D30 | Project docs                               | A requirements doc replaces the phase model                 |            |
 | R23          | D32 | Dead code guards in CI                     | Add knip and the CSS check                                  |            |
-| R26          | D38 | Windows signing                            | Approve a certificate service                               | Yes        |
+| R26          | D38 | Windows signing                            | Option B, unsigned for now. Answered October 8              | Yes        |
 
 40 decisions in all. The numbers match the first draft. D29 now holds the Phase 10 check's answer, and D34 to D40 are new.
 
@@ -1838,7 +1841,7 @@ R25 is built. The VoiceOver pass over each window and the app check wait for you
 
 Work. macOS signing and notarization, for which the release workflow already passes the secrets. Windows builds ship unsigned for now, as D38 was answered on October 8, and README says so. The dmg, msi, nsis, deb, rpm and AppImage targets are already set. The release workflow builds a draft, and you publish.
 
-Checks. The Phase 11 demo. Each package installs and launches on its platform, Gatekeeper accepts the macOS build, and Windows reports a valid signature.
+Checks. The Phase 11 demo. Each package installs and launches on its platform, Gatekeeper accepts the macOS build, and the unsigned Windows build installs and launches, with the SmartScreen note in README.
 
 Size. Release workflow changes only.
 
@@ -1858,6 +1861,7 @@ D10. Bundled fonts (R0, R13, R24). Blocks 1.0.
 - Answered October 1, 2026. Option B. With Berkeley Mono gone, the renderer bakes the two JetBrains Mono files, about 4.9 MB, and R13 moves them out of the binary.
 - Answered again October 8, 2026. "remove it; berkeley mono is nice, but i dont have the license to distribute it w/ my app." The code stops treating Berkeley Mono specially. The Font select no longer names it, and the font stack rules no longer prefer an installed copy. A list saved with the retired family `BerkeleyMono Bundled` or with the old default list draws in the bundled JetBrains Mono in both renderers, never in an installed Berkeley Mono. A family you typed or picked from your installed fonts is an ordinary installed font (34a7523d).
 - Asked at R24 and answered October 8, 2026. "yes, extra icon glyphs is good." The license texts for the icon glyphs the Nerd Fonts patch adds ship beside the fonts and in every package (8fd92e4b).
+- Approved October 8, 2026. The history rewrite that removes the Berkeley Mono files from git history. The main session does it separately, and this record neither does it nor pushes.
 
 D1. Branch flow for the refactor (R0). Blocks 1.0.
 
@@ -1878,7 +1882,8 @@ D37. Real telnet and ANSI bytes (R2, or R7).
 - B. Build the Aabahran server from its local source and capture a throwaway character on your machine. No player text at all, but the server has to build.
 - C. Keep the synthetic files and change the quality bar to say so.
 - Recommendation. A. It takes a few minutes of your time and gives the parsers the bytes the real server sends.
-- Answered October 1, 2026. Option C. The synthetic fixtures stay. The quality bar line in CLAUDE.md waits for your word on its new wording.
+- Answered October 1, 2026. Option C. The synthetic fixtures stay. The quality bar line in CLAUDE.md needed your word on its new wording.
+- Approved October 8, 2026. You approved the CLAUDE.md wording R23 wrote (f685d833), and its quality bar now says the fixtures are synthetic.
 
 ### Needed at R3
 
@@ -2044,6 +2049,8 @@ D11. One source for help (R23).
 - Recommendation. A. You edit prose in one Markdown file, and about 400 lines of tests that police the copy go away.
 
 D30. Project docs (R23). Replace the phase model in CLAUDE.md and prompt.md with docs/requirements.md plus the milestone plan. Only you approve CLAUDE.md changes. Recommendation. Yes.
+
+- Answered October 8, 2026. You approved the CLAUDE.md wording R23 wrote (f685d833), which closes D30.
 
 D32. Dead code guards in CI (R23). Add knip as a dev dependency and the CSS usage script as an npm script and CI step. Neither sends data anywhere. Recommendation. Yes. Without them dead code piles up again, because the Rust compiler can't see through command registration and the page compiler can't see unreachable files.
 
