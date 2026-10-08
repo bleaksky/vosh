@@ -3,7 +3,9 @@
 //! path, hands the walker your `#walk` lines and gives up on a step that
 //! waited too long, repaints your prompt when a deadline passes, polls
 //! the tick, the Lua timers and the Settings timers, and reads the round
-//! trip to the game every two seconds. When the
+//! trip to the game every two seconds. It sends what the writer asks of
+//! the game's line editor and holds the session's other sends while the
+//! writer works. When the
 //! connection ends, it captures what the game sent last, saves the
 //! scrollback and clears what lasts only as long as the session.
 
@@ -45,6 +47,7 @@ use super::steps::{
     repaint_step, send_step, window_size_step,
 };
 use super::walk::{self, WalkProgress, Walker};
+use super::writer::{Writer, WritingState};
 use super::{emit_input_mode, emit_state, now_ms, OutgoingMsg, StatePayload, TargetPayload};
 
 /// The 250 ms poll that drives the tick, the Lua timers and the Settings
@@ -88,6 +91,15 @@ pub(super) struct Conn<R: tauri::Runtime> {
     /// Where the walk stood when the page last heard, see
     /// [`Conn::tell_walk`].
     pub(super) walk_told: WalkProgress,
+    /// The writer, which drives the game's line editor for the writing
+    /// card.
+    pub(super) writer: Writer,
+    /// The lines the writer asked for during the read under way, which go
+    /// out once the read ends, see [`send_writer`].
+    pub(super) writer_send: Vec<String>,
+    /// Where the writer stood when the page last heard, see
+    /// [`Conn::tell_writing`].
+    pub(super) writing_told: WritingState,
 }
 
 impl<R: tauri::Runtime> Conn<R> {
@@ -105,6 +117,16 @@ impl<R: tauri::Runtime> Conn<R> {
         if progress != self.walk_told {
             self.session.emit(&self.app, events::WALK, &progress);
             self.walk_told = progress;
+        }
+    }
+
+    /// Tell the page where the writer stands when that changed, once at
+    /// the end of each pass as for the walk.
+    fn tell_writing(&mut self) {
+        let state = self.writer.state(self.stream.held_lines());
+        if state != self.writing_told {
+            self.session.emit(&self.app, events::WRITING, &state);
+            self.writing_told = state;
         }
     }
 }
@@ -171,6 +193,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         walker: Walker::default(),
         walk_lines: Vec::new(),
         walk_told: WalkProgress::Idle,
+        writer: Writer::default(),
+        writer_send: Vec::new(),
+        writing_told: WritingState::default(),
     };
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
@@ -199,12 +224,22 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     let disconnect_reason = loop {
         // When the step on its way gives up waiting for its room.
         let walk_until = conn.walker.deadline();
+        // When the writer next looks at the time.
+        let write_until = conn.writer.deadline();
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(OutgoingMsg::Send { bytes, masked }) => {
-                    let sent = send_typed(&mut conn, &mut log_sink, &mut hold_until, &bytes, masked);
+                    let sent = send_typed(&mut conn, &mut log_sink, &mut hold_until, &bytes, masked, From::Typed);
                     if let Err(reason) = sent.await {
+                        break Some(reason);
+                    }
+                }
+                Some(OutgoingMsg::Writer(command)) => {
+                    let out = conn.stream.lines_out();
+                    let send = conn.writer.command(command, out, Instant::now());
+                    conn.writer_send.extend(send);
+                    if let Err(reason) = send_writer(&mut conn, &mut log_sink, &mut hold_until).await {
                         break Some(reason);
                     }
                 }
@@ -317,6 +352,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                     });
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
+                    if let Err(reason) = send_writer(&mut conn, &mut log_sink, &mut hold_until).await {
+                        break Some(reason);
+                    }
                     if gmcp || late_until.is_some() {
                         let c = conn.session.connection.lock();
                         late_until =
@@ -395,6 +433,13 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                 let out = conn.walker.expire(Instant::now());
                 if !out.lines.is_empty() {
                     emit_output(&conn.app, &conn.session, framed_echoes(&out.lines));
+                }
+            }
+            () = sleep_until_hold(write_until), if write_until.is_some() => {
+                let send = conn.writer.poll(Instant::now());
+                conn.writer_send.extend(send);
+                if let Err(reason) = send_writer(&mut conn, &mut log_sink, &mut hold_until).await {
+                    break Some(reason);
                 }
             }
             () = sleep_until_hold(clock_until), if clock_until.is_some() => {
@@ -484,10 +529,14 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             }
         }
         conn.tell_walk();
+        conn.tell_writing();
     };
-    // The walk ends with the connection.
+    // The walk ends with the connection, and so does the writer's job.
     conn.walker = Walker::default();
     conn.tell_walk();
+    conn.writer.dropped();
+    conn.writer.settle();
+    conn.tell_writing();
 
     // A preview the card shows on your prompt goes with the connection,
     // so the live render goes back on the row first.
@@ -590,19 +639,31 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         .await;
 }
 
-/// Send `bytes`, a line you typed with its line ends, to the game. A
-/// partial waiting for the next read paints first, and the lines held
-/// for the rest of a prompt let go. A command stops a walk, the send
-/// records a prompt candidate and closes the open row, the partial goes,
-/// and the line joins the log. `masked` says you typed it into the
-/// masked field. Returns the reason the connection ends when the write
-/// fails.
+/// Who a line comes from.
+enum From<'a> {
+    /// You typed it.
+    Typed,
+    /// The writer sends it, the line without its line end, which echoes
+    /// as a line you type does.
+    Card(&'a str),
+}
+
+/// Send `bytes`, a line you typed with its line ends, or a line of the
+/// writer's, to the game. A partial waiting for the next read paints
+/// first, and the lines held for the rest of a prompt let go. A command
+/// you type stops a walk and goes past the writer's hold, as `./` and
+/// the line while the writer has the game's editor open. The writer's
+/// line echoes. The send records a prompt candidate and closes the open
+/// row, the partial goes, and the line joins the log. `masked` says you
+/// typed it into the masked field. Returns the reason the connection
+/// ends when the write fails.
 async fn send_typed<R: tauri::Runtime>(
     conn: &mut Conn<R>,
     log_sink: &mut LogSink,
     hold_until: &mut Option<Instant>,
     bytes: &[u8],
     masked: bool,
+    from: From<'_>,
 ) -> Result<(), String> {
     // A partial waiting for the next read paints before your line leaves,
     // so it never goes unseen.
@@ -614,10 +675,22 @@ async fn send_typed<R: tauri::Runtime>(
     if let Err(e) = let_go_held_lines(conn, log_sink).await {
         warn!(error = %e, "letting go of held lines failed");
     }
-    // A command you send stops a walk, and the walk says so under the
-    // echo of your line.
-    let stopped = conn.walker.typed(bytes);
-    echo_lines(&conn.app, &conn.session, &stopped.lines);
+    let bytes = match from {
+        From::Typed => {
+            // A command you send stops a walk, and the walk says so under
+            // the echo of your line.
+            let stopped = conn.walker.typed(bytes);
+            echo_lines(&conn.app, &conn.session, &stopped.lines);
+            let out = conn.stream.lines_out() + super::socket::lines_in(bytes);
+            conn.writer.typed(bytes, out)
+        }
+        From::Card(line) => {
+            let echo = crate::input::command_echo(line, &conn.session.lock_profile().await.ui);
+            echo_lines(&conn.app, &conn.session, &[echo]);
+            bytes.to_vec()
+        }
+    };
+    let bytes = bytes.as_slice();
     // The send records a prompt candidate and closes the open row. On a
     // server that sends no Char.Vitals it also starts the next pulse,
     // after which the values the last prompt set go stale.
@@ -648,7 +721,7 @@ async fn send_typed<R: tauri::Runtime>(
         let rows = vosh_log::sent_rows(bytes, conn.server_echo.hides(masked));
         (sid, now_ms(), rows)
     });
-    let wrote = match conn.stream.write_all(bytes).await {
+    let wrote = match conn.stream.write_now(bytes).await {
         Err(e) => Err(("write failed", e)),
         Ok(()) => conn.stream.flush().await.map_err(|e| ("flush failed", e)),
     };
@@ -712,9 +785,43 @@ async fn walk_command<R: tauri::Runtime>(
         } = collect_script_result(&conn.app, &conn.session, apply).await;
         echo_lines(&conn.app, &conn.session, &echoes);
         if !bytes.is_empty() {
-            send_typed(conn, log_sink, hold_until, &bytes, false).await?;
+            send_typed(conn, log_sink, hold_until, &bytes, false, From::Typed).await?;
         }
         next = walk;
+    }
+    Ok(())
+}
+
+/// Send the lines the writer asked for, each as a line you type goes,
+/// and hold the session's other sends while its job runs. Once the job
+/// ends, what the hold kept goes out. Returns the reason the connection
+/// ends when a write fails.
+async fn send_writer<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    log_sink: &mut LogSink,
+    hold_until: &mut Option<Instant>,
+) -> Result<(), String> {
+    if conn.writer.holds() {
+        conn.stream.hold();
+    }
+    for line in std::mem::take(&mut conn.writer_send) {
+        let bytes = format!("{line}\r\n");
+        send_typed(
+            conn,
+            log_sink,
+            hold_until,
+            bytes.as_bytes(),
+            false,
+            From::Card(&line),
+        )
+        .await?;
+    }
+    conn.writer.settle();
+    if !conn.writer.holds() {
+        if let Err(e) = conn.stream.release().await {
+            error!(error = %e, "sending what the writer held failed");
+            return Err(format!("write failed: {e}"));
+        }
     }
     Ok(())
 }

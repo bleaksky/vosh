@@ -14,6 +14,11 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
+/// How many lines `buf` ends.
+pub(crate) fn lines_in(buf: &[u8]) -> u64 {
+    buf.iter().fold(0, |n, b| n + u64::from(*b == b'\n'))
+}
+
 /// Hard cap on a connect attempt. Bad hosts and silent firewalls otherwise
 /// hang the UI for the OS-level timeout (often minutes).
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -42,6 +47,11 @@ pub(crate) struct Stream {
     /// When the oldest line of yours the game has not answered yet left.
     /// Any bytes from the game answer it.
     unanswered: Option<Instant>,
+    /// Lines sent on the stream, every one that left and every one held.
+    lines_out: u64,
+    /// The lines held back while the writing card drives the game's
+    /// editor, see [`Stream::hold`].
+    held: Option<Vec<u8>>,
 }
 
 enum Io {
@@ -55,6 +65,8 @@ impl Stream {
             io,
             last_line: None,
             unanswered: None,
+            lines_out: 0,
+            held: None,
         }
     }
 
@@ -69,7 +81,22 @@ impl Stream {
         read
     }
 
+    /// Write `buf`, or hold it while [`Stream::hold`] holds the lines of
+    /// the session. A telnet answer ends no line, so it never waits.
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        if let Some(held) = &mut self.held {
+            if buf.ends_with(b"\n") {
+                self.lines_out += lines_in(buf);
+                held.extend_from_slice(buf);
+                return Ok(());
+            }
+        }
+        self.write_now(buf).await
+    }
+
+    /// Write `buf` past the hold, as the writing card's own lines and the
+    /// lines you type go.
+    pub(crate) async fn write_now(&mut self, buf: &[u8]) -> std::io::Result<()> {
         match &mut self.io {
             Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
             Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
@@ -78,8 +105,40 @@ impl Stream {
             let now = Instant::now();
             self.last_line = Some(now);
             self.unanswered.get_or_insert(now);
+            self.lines_out += lines_in(buf);
         }
         Ok(())
+    }
+
+    /// The lines sent on the stream so far, held ones included.
+    pub(crate) fn lines_out(&self) -> u64 {
+        self.lines_out
+    }
+
+    /// Hold the lines the session sends from here, the commands triggers,
+    /// timers, the tick, Lua and `#walk` send, until [`Stream::release`].
+    pub(crate) fn hold(&mut self) {
+        self.held.get_or_insert_with(Vec::new);
+    }
+
+    /// How many lines wait in the hold.
+    pub(crate) fn held_lines(&self) -> usize {
+        self.held.as_ref().map_or(0, |held| {
+            usize::try_from(lines_in(held)).unwrap_or(usize::MAX)
+        })
+    }
+
+    /// End the hold and send what it kept, in the order it came.
+    pub(crate) async fn release(&mut self) -> std::io::Result<()> {
+        let Some(held) = self.held.take() else {
+            return Ok(());
+        };
+        if held.is_empty() {
+            return Ok(());
+        }
+        self.lines_out -= lines_in(&held);
+        self.write_now(&held).await?;
+        self.flush().await
     }
 
     /// The round trip to the game at `now`: the kernel's smoothed round

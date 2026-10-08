@@ -165,6 +165,9 @@ command updater_install_and_relaunch()
 command vitals_snapshot_get(session?)
 command vitals_text_watch(session?, cols?)
 command window_backdrop_set(background?, appearance?)
+command writing_start(job, session?)
+command writing_stop(session?)
+command writing_take(id, session?)
 event session://alert app heard
 event session://alerts-ended app unheard
 event session://game-prompt-seen app heard
@@ -189,6 +192,7 @@ event session://target app heard
 event session://tick app heard
 event session://vitals-text app heard
 event session://walk app heard
+event session://writing app heard
 event vosh://affect-full-changed app heard
 event vosh://affects-display-changed app page heard
 event vosh://aliases-changed app heard

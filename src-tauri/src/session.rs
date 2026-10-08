@@ -46,6 +46,8 @@
 //! - `snoop` keeps the players the session snoops, with their text.
 //! - `walk` is the walker, which sends the steps of a `#walk` one at a
 //!   time.
+//! - `writer` follows where the game takes your input and runs what the
+//!   writing card asks of the game's line editor.
 //! - `vitals_text` renders your vitals text for a footer or the status
 //!   line while the page watches it.
 //! - `tests` drives the steps the way the loop does.
@@ -74,6 +76,7 @@ mod socket;
 mod steps;
 pub(crate) mod vitals_text;
 pub(crate) mod walk;
+pub(crate) mod writer;
 
 use std::sync::Arc;
 
@@ -175,6 +178,8 @@ pub(crate) enum OutgoingMsg {
     /// A `#walk` you typed, or Esc, for the walker. It follows the bytes
     /// of its line.
     Walk(WalkCommand),
+    /// What the writing card asks of the game's line editor.
+    Writer(writer::WriterCommand),
 }
 
 pub(crate) struct SessionHandle {
@@ -234,6 +239,12 @@ impl SessionHandle {
     /// the session has already been torn down.
     pub(crate) fn walk(&self, command: WalkCommand) -> bool {
         self.tx_outgoing.send(OutgoingMsg::Walk(command)).is_ok()
+    }
+
+    /// Hand the writer what the writing card asks. Returns false when the
+    /// session has already been torn down.
+    pub(crate) fn writer(&self, command: writer::WriterCommand) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::Writer(command)).is_ok()
     }
 
     /// True once the session loop has ended, so nothing sent reaches the
