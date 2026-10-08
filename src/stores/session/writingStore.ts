@@ -29,3 +29,4 @@ export const getWriting = store.get;
 export const subscribeWriting = store.subscribe;
 export const useWriting = store.use;
 export const writingOf = store.stateOf;
+export const subscribeWritingOf = store.subscribeStates;

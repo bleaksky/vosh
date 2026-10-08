@@ -93,6 +93,8 @@ export const startConnectionStore = store.start;
 export const useSessionConnection = store.use;
 /** The selected session's connection, as the title band reads it. */
 export const getSessionConnection = store.get;
+/** One session's connection, whatever is selected. */
+export const connectionOf = store.stateOf;
 
 /** Whether `session` dials or plays, as this window last heard. */
 export function sessionLive(session: number): boolean {
