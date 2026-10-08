@@ -98,6 +98,43 @@ describe('broadcastUiConfigChanges font event', () => {
   });
 });
 
+describe('broadcastUiConfigChanges screen reader event', () => {
+  const READER = 'vosh://screen-reader-changed';
+  const readerSends = () => vi.mocked(emit).mock.calls.filter(([event]) => event === READER);
+
+  it('sends the four choices as one event when any of them moves', async () => {
+    const base = normalizeUiConfig(raw());
+    for (const moved of [
+      { screen_reader: true },
+      { screen_reader_background: true },
+      { screen_reader_prompt: true },
+      { screen_reader_burst: 16 as const },
+    ]) {
+      vi.mocked(emit).mockClear();
+      await broadcastUiConfigChanges({ ...base, ...moved }, base);
+      expect(readerSends()).toEqual([
+        [
+          READER,
+          {
+            screen_reader: false,
+            screen_reader_background: false,
+            screen_reader_prompt: false,
+            screen_reader_burst: 8,
+            ...moved,
+          },
+        ],
+      ]);
+    }
+  });
+
+  it('stays quiet when no reader choice moved', async () => {
+    const base = normalizeUiConfig(raw({ screen_reader: true }));
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, font_size: 16 }, base);
+    expect(readerSends()).toEqual([]);
+  });
+});
+
 describe('a replaced UI config', () => {
   const REPLACED = 'vosh://ui-config-replaced';
 

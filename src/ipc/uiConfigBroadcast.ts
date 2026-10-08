@@ -11,6 +11,7 @@ import {
   BASE_ANSI_CHANGED,
   BLINK_TEXT_CHANGED,
   SCROLLBACK_LINES_CHANGED,
+  SCREEN_READER_CHANGED,
   BRIGHT_BOLD_CHANGED,
   CHIP_STYLE_CHANGED,
   COLOR_VISION_CHANGED,
@@ -38,6 +39,7 @@ import {
   VITALS_OPTIONS_CHANGED,
   VITALS_TEXT_CHANGED,
 } from './events';
+import { screenReaderOf } from './screenReader';
 import {
   fetchUiConfig,
   subscribeUiConfigReplaced,
@@ -135,6 +137,14 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     READABLE_HIGHLIGHTS_CHANGED,
     config.readable_highlights,
     before?.readable_highlights,
+  );
+  // The four reader choices go out as one, so the page reads lines,
+  // the prompt and the burst by the same choices.
+  await emitChanged(
+    SCREEN_READER_CHANGED,
+    screenReaderOf(config),
+    before ? screenReaderOf(before) : undefined,
+    deepEqual,
   );
   await emitChanged(
     BASE_ANSI_CHANGED,

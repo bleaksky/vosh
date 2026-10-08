@@ -10,7 +10,6 @@ import {
   INPUT_MODE,
   RECONNECT,
   ROUTED,
-  SCREEN_READER,
   SESSION_SELECTED,
   SESSIONS_CHANGED,
   STATE,
@@ -299,28 +298,6 @@ export async function onWalk(
     // The session rides beside the progress, so the callback gets them apart.
     const { session: _session, ...progress } = event.payload;
     cb(progress as WalkProgress, sessionOf(event.payload));
-  });
-}
-
-/** What a screen reader reads of one read while Read new game lines is
- *  on: the plain text of each line that shows, the last 500 at most, how
- *  many showed, your prompt's text when the read brought one, and
- *  whether Vosh is in the background. */
-export interface ScreenReaderFeed {
-  lines: string[];
-  count: number;
-  prompt: string | null;
-  away: boolean;
-}
-
-/** Hear what a screen reader reads of each read of a session, with that
- *  session. */
-export async function onScreenReader(
-  cb: (feed: ScreenReaderFeed, session: number) => void,
-): Promise<UnlistenFn> {
-  return listen<ScreenReaderFeed & { session?: number }>(SCREEN_READER, (event) => {
-    const { lines, count, prompt, away } = event.payload;
-    cb({ lines, count, prompt, away }, sessionOf(event.payload));
   });
 }
 
