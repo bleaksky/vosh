@@ -1,6 +1,6 @@
 //! Streaming telnet parser. Feed bytes, get events.
 
-use crate::telnet::codes::{DO, DONT, IAC, SB, SE, WILL, WONT};
+use crate::telnet::codes::{DO, DONT, EOR, IAC, SB, SE, WILL, WONT};
 
 /// Events emitted by the parser as bytes flow through.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +146,13 @@ impl Parser {
                         });
                         self.state = State::Stream;
                     }
+                    // A command other than SE inside a subnegotiation.
+                    // Aabahran copies a snooped player's screen into
+                    // Snoop.Output as it stands, and with telnet GA on
+                    // that screen holds an unescaped IAC GA. Drop the two
+                    // bytes and keep the packet, so its JSON never spills
+                    // into the terminal.
+                    EOR..=DONT => self.state = State::SbData,
                     _ => {
                         // Malformed SB. Drop the subnegotiation and resync.
                         self.sb_buffer.clear();
@@ -310,6 +317,53 @@ mod tests {
         let events = p.feed(&bytes);
         // SB was abandoned. The trailing 'y' is normal data.
         assert_eq!(events, vec![Event::Data(b"y".to_vec())]);
+    }
+
+    /// A Snoop.Output for Maren whose text is `body`, the way
+    /// `gmcp_send_snoop` frames it.
+    fn snoop_output(body: &[u8]) -> Vec<u8> {
+        let mut bytes = vec![IAC, SB, option::GMCP];
+        bytes.extend_from_slice(b"Snoop.Output {\"name\":\"Maren\",\"text\":\"");
+        bytes.extend_from_slice(body);
+        bytes.extend_from_slice(b"\"}");
+        bytes.extend_from_slice(&[IAC, SE]);
+        bytes
+    }
+
+    #[test]
+    fn a_go_ahead_inside_a_subnegotiation_keeps_the_packet() {
+        use crate::telnet::codes::GA;
+        // A prompt and go_ahead_str (comm.c, IAC GA) at the end of the
+        // snooped screen, then the next line.
+        let mut p = Parser::new();
+        let mut bytes = snoop_output(&[b'<', b'5', b'h', b'p', b'>', b' ', IAC, GA]);
+        bytes.extend_from_slice(b"Orla says hi.");
+        let events = p.feed(&bytes);
+        let mut payload = b"Snoop.Output {\"name\":\"Maren\",\"text\":\"<5hp> \"}".to_vec();
+        assert_eq!(
+            events,
+            vec![
+                Event::Subnegotiation {
+                    option: option::GMCP,
+                    payload: payload.clone(),
+                },
+                Event::Data(b"Orla says hi.".to_vec()),
+            ]
+        );
+
+        // The same with the GA alone in the middle, split across reads.
+        let bytes = snoop_output(&[b'a', IAC, GA, b'b']);
+        let (head, tail) = bytes.split_at(bytes.len() - 6);
+        let mut events = p.feed(head);
+        events.extend(p.feed(tail));
+        payload = b"Snoop.Output {\"name\":\"Maren\",\"text\":\"ab\"}".to_vec();
+        assert_eq!(
+            events,
+            vec![Event::Subnegotiation {
+                option: option::GMCP,
+                payload,
+            }]
+        );
     }
 
     #[test]

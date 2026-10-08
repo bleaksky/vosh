@@ -8,7 +8,7 @@
 use serde_json::{json, Value as Json};
 use tauri::Manager;
 use vosh_automation::trigger::{HighlightStyle, Trigger, TriggerAction};
-use vosh_prompt::testkit::mud::telnet::{GMCP, IAC, SB};
+use vosh_prompt::testkit::mud::telnet::{GA, GMCP, IAC, SB, SE};
 use vosh_prompt::testkit::{gmcp, Build, Options};
 
 use super::fake_mud::harness::Harness;
@@ -335,5 +335,31 @@ async fn each_snoop_line_goes_in_the_log_marked_with_the_name() {
         .await;
     let rows = until_logged(&h, marked, 12).await;
     assert_eq!(rows[11].0, "Tolliver| <612hp 480m 702mv> ");
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_go_ahead_in_the_snooped_screen_stays_in_the_snoop() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = snooping().await;
+    // Tolliver plays with telnet GA on, so the game copies his prompt
+    // and go_ahead_str (comm.c) into Snoop.Output as they stand.
+    let mut bytes = vec![IAC, SB, GMCP];
+    bytes.extend_from_slice(b"Snoop.Output {\"name\":\"Tolliver\",\"text\":\"<612hp 480m 702mv> ");
+    bytes.extend_from_slice(&[IAC, GA]);
+    bytes.extend_from_slice(b"\"}");
+    bytes.extend_from_slice(&[IAC, SE]);
+    h.servers[0].push(&bytes);
+    read_on(&h, "Maren walks in.").await;
+    assert_eq!(
+        h.events_of(h.first, SNOOP_OUTPUT),
+        [json!({"name": "Tolliver", "text": "<612hp 480m 702mv> "})]
+    );
+    let outputs = h.events_of(h.first, "session://output");
+    let shown = serde_json::to_string(&outputs).expect("json");
+    assert!(!shown.contains("612hp"), "{shown}");
+    assert!(!shown.contains("Tolliver"), "{shown}");
     h.finish(grid).await;
 }
