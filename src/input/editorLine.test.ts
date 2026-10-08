@@ -23,6 +23,8 @@ describe('the command line in the game’s editor', () => {
       const open = { ...WRITING_IDLE, game: 'editor' as const, editor: kind };
       expect(editorLineOf(open)).toEqual({ kind, width: 75, helpWidth: false });
     }
+    const vote = editorLineOf({ ...WRITING_IDLE, game: 'editor', editor: 'vote' });
+    expect(vote && editorCount('x'.repeat(80), vote)).toEqual({ text: '80 / 75', tone: 'warn' });
   });
 
   it('counts the line in danger past a width a help sets, and in warn otherwise', () => {
