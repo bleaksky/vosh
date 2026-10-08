@@ -35,7 +35,13 @@ import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalR
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
-import { refillsWashes, WashPainter, washFields, type WashFields } from './xterm/xtermWash';
+import {
+  refillsWashes,
+  WashPainter,
+  washFields,
+  WashWidth,
+  type WashFields,
+} from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
@@ -216,9 +222,10 @@ export function Terminal({
   // The wash fields of the theme the pane draws, which every write
   // paints washed rows in.
   const washRef = useRef<WashFields>(new Map());
-  // Whether the pane painted a wash since it last filled, and how it
-  // fills anew in the fields in force, which the setup effect sets.
-  const washedRef = useRef(false);
+  // How narrow the pane was for the washes it painted since it last
+  // filled, and how it fills anew in the fields in force, which the
+  // setup effect sets.
+  const washWidthRef = useRef(new WashWidth());
   const refillRef = useRef<(() => void) | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
@@ -245,7 +252,7 @@ export function Terminal({
   const applyTheme = (term: XTerm, themeId: string = getCurrentThemeId()) => {
     term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
     const fields = washFieldsFor(themeId, themeTerminalColorsRef.current);
-    const refill = refillsWashes(washRef.current, fields, washedRef.current);
+    const refill = refillsWashes(washRef.current, fields, washWidthRef.current.washed());
     washRef.current = fields;
     if (refill) refillRef.current?.();
   };
@@ -294,9 +301,7 @@ export function Terminal({
     });
     washRef.current = washFieldsFor(getCurrentThemeId(), themeTerminalColorsRef.current);
     const fields = () => washRef.current;
-    const washed = () => {
-      washedRef.current = true;
-    };
+    const washed = () => washWidthRef.current.painted(term.cols);
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
@@ -482,7 +487,7 @@ export function Terminal({
       if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
       writer.local('\x1bc');
       shaper = new OutputShaper(term.cols, fields, washed);
-      washedRef.current = false;
+      washWidthRef.current.filled();
       const settle = () => {
         if (gen !== fills) return;
         if (quietRef.current) {
@@ -575,6 +580,18 @@ export function Terminal({
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
+    // A washed row keeps the width it was written at, so a pane that grows
+    // past it fills anew once the size settles, and the field reaches the
+    // new edge as it does natively.
+    let widthRefill: ReturnType<typeof setTimeout> | null = null;
+    const refillWhenSettled = () => {
+      if (widthRefill) clearTimeout(widthRefill);
+      widthRefill = setTimeout(() => {
+        widthRefill = null;
+        if (washWidthRef.current.outgrown(term.cols)) refillRef.current?.();
+      }, 150);
+    };
+
     // Client-side word wrap. NAWS handles most lines server-side, but
     // some content paths (tells, comm channels) ignore it on certain
     // ROM derivatives. We line-buffer here so a complete line word-
@@ -590,6 +607,7 @@ export function Terminal({
     // the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
+      if (washWidthRef.current.outgrown(cols)) refillWhenSettled();
       paneSizer.reportCellSize();
       paneSizer.placeGrid();
       // Same tail-anchor rationale as in onOutput below: a resize
@@ -812,6 +830,7 @@ export function Terminal({
       window.removeEventListener('keydown', onCopyKey, true);
       detachUnderlayInput?.();
       if (naws_timer) clearTimeout(naws_timer);
+      if (widthRefill) clearTimeout(widthRefill);
       unsubOutput?.();
       unsubGridSize?.();
       underlayWatch.disconnect();

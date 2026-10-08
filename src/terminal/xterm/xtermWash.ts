@@ -84,6 +84,34 @@ export function refillsWashes(before: WashFields, after: WashFields, washed: boo
   return false;
 }
 
+/** The narrowest width a pane painted a washed row at since it last
+ *  filled. xterm keeps a washed row's field in the cells the row had
+ *  then, and a pane that widens gives the row the plain ground past
+ *  them, where the native renderer paints the field to the edge. */
+export class WashWidth {
+  private narrowest = Infinity;
+
+  /** A washed row painted while the pane was `cols` wide. */
+  painted(cols: number): void {
+    this.narrowest = Math.min(this.narrowest, cols);
+  }
+
+  /** The pane began filling anew. */
+  filled(): void {
+    this.narrowest = Infinity;
+  }
+
+  /** Whether a wash painted since the pane last filled. */
+  washed(): boolean {
+    return this.narrowest !== Infinity;
+  }
+
+  /** Whether a pane `cols` wide leaves a washed row short of its edge. */
+  outgrown(cols: number): boolean {
+    return cols > this.narrowest;
+  }
+}
+
 /** The background SGR of a field. */
 function fieldSgr(field: string): string {
   return `48;2;${parseHex(field).join(';')}`;

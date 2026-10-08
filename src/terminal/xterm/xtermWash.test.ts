@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import fixture from '../../../fixtures/wash/fields.json';
 import { OutputShaper } from '../outputShaper';
 import { decodeOutputPayload } from '../../ipc/terminal';
-import { refillsWashes, WashPainter, washFields } from './xtermWash';
+import { refillsWashes, WashPainter, washFields, WashWidth } from './xtermWash';
 
 // Washed lines on xterm paint the field the native renderer paints, in
 // the theme's colors (src-tauri/src/native/gpu/frame.rs). The lines are
@@ -164,6 +164,44 @@ describe('refillsWashes', () => {
   it('keeps the screen when the fields are the same', () => {
     const same = washFields(ember.palette, ember.ground);
     expect(refillsWashes(fields, same, true)).toBe(false);
+  });
+});
+
+describe('WashWidth', () => {
+  it('tells when a pane grows past the narrowest width a wash painted at', () => {
+    const width = new WashWidth();
+    expect(width.washed()).toBe(false);
+    expect(width.outgrown(200)).toBe(false);
+    width.painted(80);
+    width.painted(60);
+    expect(width.washed()).toBe(true);
+    expect(width.outgrown(60)).toBe(false);
+    expect(width.outgrown(70)).toBe(true);
+    width.filled();
+    expect(width.washed()).toBe(false);
+    expect(width.outgrown(70)).toBe(false);
+  });
+
+  it('fills a widened washed row to the new edge once the pane fills anew', async () => {
+    const width = new WashWidth();
+    const term = await screen(
+      WashPainter.whole(SANCTUARY, fields, () => width.painted(40)),
+      40,
+    );
+    term.resize(60, 6);
+    // xterm gives the cells a row gains the plain ground.
+    expect(grounds(term, 0)).toEqual([...Array(40).fill(YELLOW), ...Array(20).fill(null)]);
+    expect(width.outgrown(term.cols)).toBe(true);
+    width.filled();
+    const shaper = new OutputShaper(
+      term.cols,
+      () => fields,
+      () => width.painted(term.cols),
+    );
+    await new Promise<void>((done) => term.write('\x1bc' + shaper.whole(SANCTUARY), done));
+    expect(grounds(term, 0)).toEqual(Array(60).fill(YELLOW));
+    expect(width.outgrown(term.cols)).toBe(false);
+    term.dispose();
   });
 });
 

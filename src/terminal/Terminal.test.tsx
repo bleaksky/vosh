@@ -59,7 +59,17 @@ vi.mock('@xterm/xterm', () => {
     loadAddon() {}
     open() {}
     scrollToLine() {}
-    onResize = none;
+    resized: ((size: { cols: number; rows: number }) => void)[] = [];
+    onResize = (cb: (size: { cols: number; rows: number }) => void) => {
+      this.resized.push(cb);
+      return { dispose() {} };
+    };
+    /** Take a new size, as a fit does. */
+    resize(cols: number, rows: number) {
+      this.cols = cols;
+      this.rows = rows;
+      for (const cb of this.resized) cb({ cols, rows });
+    }
     onScroll = none;
     onSelectionChange = none;
     getSelectionPosition() {
@@ -259,6 +269,14 @@ function themeChanged(id: string): void {
 const SANCTUARY =
   '\x1b[33;48;2;51;51;0mYour \x1b[33msanctuary\x1b[0m\x1b[33;48;2;51;51;0m flickers and fades.\x1b[0m\r\n';
 
+/** The stand in xterm, which takes a new size as a fit gives it. */
+interface Resizable {
+  resize(cols: number, rows: number): void;
+}
+
+/** Wait past the pause a pane takes for its size to settle. */
+const settled = () => new Promise((done) => setTimeout(done, 200));
+
 /** How many times a pane loaded the scrollback. */
 const loads = () => bus.invoked.filter(([cmd]) => cmd === 'scrollback_load').length;
 
@@ -336,6 +354,32 @@ describe('a theme change on a pane xterm draws', () => {
     const plain = (text: string) => text.replace(/\x1b\[[0-9;:]*[A-Za-z]/g, '');
     expect(plain(live.join(''))).toBe('Your sanctuary\r\nflickers and\r\nfades.\r\n');
     expect(plain(local[1])).toBe(plain(live.join('')));
+    await act(async () => root.unmount());
+  });
+
+  it('fills anew once it settles wider than a wash it painted', async () => {
+    const root = await mount();
+    output(1, SANCTUARY);
+    const [term] = [...bus.local.keys()] as Resizable[];
+    const before = loads();
+    term.resize(70, 24);
+    await settled();
+    expect(loads()).toBe(before);
+    term.resize(90, 24);
+    term.resize(100, 24);
+    await settled();
+    expect(loads()).toBe(before + 1);
+    await act(async () => root.unmount());
+  });
+
+  it('keeps the screen as it widens when no wash painted', async () => {
+    const root = await mount();
+    output(1, 'The day has begun.\r\n');
+    const [term] = [...bus.local.keys()] as Resizable[];
+    const before = loads();
+    term.resize(100, 24);
+    await settled();
+    expect(loads()).toBe(before);
     await act(async () => root.unmount());
   });
 
