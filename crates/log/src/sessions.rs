@@ -2,6 +2,8 @@
 //! It also owns the `> ` rows that record what you sent and the rows
 //! of the players you snoop.
 
+use std::collections::HashSet;
+
 use rusqlite::params;
 #[cfg(any(test, feature = "testkit"))]
 use rusqlite::OptionalExtension;
@@ -296,22 +298,30 @@ impl LogStore {
     /// [`Self::export_scope`].
     pub fn export_session(&self, session_id: i64, with_ansi: bool) -> Result<String> {
         let mut out = Vec::new();
-        self.export_scope(&Scope::log(session_id), with_ansi, &mut out)?;
+        self.export_scope(&Scope::log(session_id), with_ansi, false, &mut out)?;
         Ok(String::from_utf8_lossy(&out).into_owned())
     }
 
     /// Write every line in `scope` to `out`, oldest first, each ended by
     /// `\n`. With `with_ansi` a line goes out as the bytes the game sent,
     /// colors included, or as its plain text when it kept none, such as a
-    /// line you sent. Without it every line is its plain text. Returns
-    /// how many lines it wrote.
+    /// line you sent. Without it every line is its plain text. With
+    /// `hide_passwords` a line forget passwords would blank goes out as
+    /// [`HIDDEN_SENT_TEXT`], as it reads once blanked. Returns how many
+    /// lines it wrote.
     pub fn export_scope(
         &self,
         scope: &Scope,
         with_ansi: bool,
+        hide_passwords: bool,
         out: &mut dyn std::io::Write,
     ) -> Result<u64> {
         let logs = self.scoped_logs(scope)?;
+        let hidden = if hide_passwords {
+            self.password_lines_in(&logs)?
+        } else {
+            HashSet::new()
+        };
         let (Some(low), Some(high)) = (
             logs.values().map(|l| l.first).min(),
             logs.values().map(|l| l.last).max(),
@@ -320,7 +330,7 @@ impl LogStore {
         };
         let since = scope.since_ms.unwrap_or(i64::MIN);
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, ts_ms, text, raw FROM log_lines
+            "SELECT session_id, ts_ms, text, raw, id FROM log_lines
              WHERE id >= ?1 AND id <= ?2 ORDER BY id",
         )?;
         let mut rows = stmt.query(params![low, high])?;
@@ -336,9 +346,14 @@ impl LogStore {
             } else {
                 None
             };
-            match raw {
-                Some(bytes) => out.write_all(&bytes)?,
-                None => out.write_all(row.get_ref(2)?.as_bytes().unwrap_or_default())?,
+            // A sent line keeps no raw bytes, so a hidden one reads the
+            // same with colors or without.
+            if hidden.contains(&row.get(4)?) {
+                out.write_all(HIDDEN_SENT_TEXT.as_bytes())?;
+            } else if let Some(bytes) = raw {
+                out.write_all(&bytes)?;
+            } else {
+                out.write_all(row.get_ref(2)?.as_bytes().unwrap_or_default())?;
             }
             out.write_all(b"\n")?;
             written += 1;
@@ -496,14 +511,15 @@ pub(crate) mod tests {
             ..Scope::default()
         };
         let mut plain = Vec::new();
-        assert_eq!(s.export_scope(&scope, false, &mut plain).unwrap(), 2);
+        assert_eq!(s.export_scope(&scope, false, false, &mut plain).unwrap(), 2);
         assert_eq!(plain, b"Orla waves.\n> wave\n");
         let mut ansi = Vec::new();
-        s.export_scope(&scope, true, &mut ansi).unwrap();
+        s.export_scope(&scope, true, false, &mut ansi).unwrap();
         assert_eq!(ansi, b"\x1b[33mOrla waves.\x1b[0m\n> wave\n");
         let mut none = Vec::new();
         assert_eq!(
-            s.export_scope(&Scope::log(99), false, &mut none).unwrap(),
+            s.export_scope(&Scope::log(99), false, false, &mut none)
+                .unwrap(),
             0
         );
         assert_eq!(none, Vec::<u8>::new());

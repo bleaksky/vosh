@@ -155,7 +155,8 @@ pub(crate) async fn search_page(
 
 /// Save the lines in `scope` to your Downloads folder as `<name>.txt`,
 /// or with `with_ansi` as `<name>.log` with the game's colors, adding
-/// ` (2)` and on when that file is there. Returns the file's name.
+/// ` (2)` and on when that file is there. A line forget passwords would
+/// blank is saved blanked. Returns the file's name.
 #[tauri::command]
 pub(crate) async fn logs_save<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -192,7 +193,7 @@ fn save(
     let file = std::fs::File::create_new(&path).map_err(|e| could_not(&e))?;
     let mut out = std::io::BufWriter::new(file);
     let written = store
-        .export_scope(scope, with_ansi, &mut out)
+        .export_scope(scope, with_ansi, true, &mut out)
         .and_then(|_| std::io::Write::flush(&mut out).map_err(Into::into));
     if let Err(e) = written {
         drop(out);

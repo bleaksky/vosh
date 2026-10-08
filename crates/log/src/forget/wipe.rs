@@ -2,13 +2,14 @@
 //! file so no old copy is left.
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::types::ValueRef;
 use rusqlite::{params, Connection, Row, TransactionBehavior};
 
 use super::replay::PasswordFinder;
 use super::{Forgotten, PasswordLines};
+use crate::search::ScopedLog;
 use crate::{LogStore, Result, HIDDEN_SENT_TEXT};
 
 /// A table that says an earlier run blanked lines and has not yet cleared
@@ -34,6 +35,42 @@ impl LogStore {
         let mut found = finder.finish();
         found.wipe_pending = self.wipe_pending()?;
         Ok(found)
+    }
+
+    /// The sent lines of `logs` that still hold a password, by id, as
+    /// [`Self::find_password_lines`] finds them. Each log replays from
+    /// its own first line, not from the start of the scope, since the
+    /// prompt that asks for a password can come before the scope does.
+    /// The replay stops at the last line `logs` holds, so a pick with no
+    /// reply yet counts, as it does in a log that ended there.
+    pub(crate) fn password_lines_in(&self, logs: &HashMap<i64, ScopedLog>) -> Result<HashSet<i64>> {
+        let mut start = self.conn.prepare_cached(
+            "SELECT id FROM log_lines WHERE session_id = ?1 ORDER BY ts_ms, id LIMIT 1",
+        )?;
+        let mut low: Option<i64> = None;
+        for session_id in logs.keys() {
+            let first: i64 = start.query_row([session_id], |r| r.get(0))?;
+            low = Some(low.map_or(first, |low| low.min(first)));
+        }
+        let (Some(low), Some(high)) = (low, logs.values().map(|l| l.last).max()) else {
+            return Ok(HashSet::new());
+        };
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {FINDER_COLUMNS} FROM log_lines WHERE id >= ?1 AND id <= ?2 ORDER BY id"
+        ))?;
+        let mut rows = stmt.query(params![low, high])?;
+        let mut finder = PasswordFinder::new();
+        while let Some(row) = rows.next()? {
+            if logs.contains_key(&row.get(1)?) {
+                feed(&mut finder, row)?;
+            }
+        }
+        Ok(finder
+            .finish()
+            .lines
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect())
     }
 
     /// Replace the text of each line in `found` with [`HIDDEN_SENT_TEXT`]
