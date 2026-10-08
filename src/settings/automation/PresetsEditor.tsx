@@ -391,7 +391,7 @@ export function AlertPresetDetail({
           <Toggle checked={t.enabled} onChange={turn} />
         </Row>
         <Row label="Listens to">
-          <span className="st-auto-value">{preset.listensTo}</span>
+          <span className="st-auto-value st-auto-mono">{preset.listensTo}</span>
         </Row>
         <AlertRow
           alert={alert}
