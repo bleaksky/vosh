@@ -116,7 +116,7 @@ pub(crate) const AT_A_GLANCE: &str = concat!(
     " ",
 );
 
-/// At a glance as it first shipped, before the review guarded each vital.
+/// At a glance as it first shipped, before each vital had its guard.
 const AT_A_GLANCE_FIRST: &str = concat!(
     "%{if:fight}",
     "%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% ",

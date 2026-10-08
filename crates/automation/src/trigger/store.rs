@@ -795,8 +795,7 @@ mod tests {
 
     #[test]
     fn each_mode_compiles_to_its_regex() {
-        // The preset line cure.feel_better, as the board shows each mode
-        // holding it.
+        // The preset line cure.feel_better, held in each mode.
         let row = |pattern: &str, mode| TriggerPattern {
             mode,
             ..TriggerPattern::regex(pattern)

@@ -673,7 +673,7 @@ mod tests {
         let fit = |size| window_fit(&HELP_WINDOW, size);
         assert_eq!(fit((1040.0, 700.0)), None);
         assert_eq!(fit((860.0, 560.0)), None);
-        // A side under the minimum goes back to the board size.
+        // A side under the minimum goes back to the default size.
         assert_eq!(fit((700.0, 800.0)), Some((1040.0, 800.0)));
         assert_eq!(fit((900.0, 400.0)), Some((900.0, 700.0)));
     }

@@ -625,7 +625,7 @@ pub(crate) mod tests {
         assert_eq!(layout.panel_width, None);
         assert_eq!(layout.root.split.as_deref(), Some("column"));
         assert_eq!(leaf_panes(&layout.root), ["map", "affects"]);
-        // The boards' split, 348 px over 315 px of the 663 px the two
+        // The stock split, 348 px over 315 px of the 663 px the two
         // panes share at 1280 by 800.
         assert!(close(layout.root.children[0].weight, 0.525));
         assert!(close(layout.root.children[1].weight, 0.475));

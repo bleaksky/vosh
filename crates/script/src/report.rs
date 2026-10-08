@@ -99,7 +99,7 @@ fn first_frame(traceback: &str) -> Option<String> {
 
 /// The lines for a stop of `owner`, who ran `site` when Vosh stopped it:
 /// the stop as an error, and for a plugin a note on how long it stays
-/// off, which the board draws plain.
+/// off, which shows plain.
 pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<Action> {
     let subject = subject(owner, site);
     // Only the stop of a plugin names the file and line, the way the
@@ -287,8 +287,8 @@ mod tests {
     fn a_plugin_stop_reads_as_the_board_writes_it() {
         let owner = Owner::Plugin("wait_full".into());
         let at = Some(("@wait_full/main.lua", 5));
-        // The stop is an error at its place, and the second line a note
-        // the board draws plain.
+        // The stop is an error at its place, and the second line a plain
+        // note.
         assert_eq!(
             stop_lines(&owner, &Site::Entry, &stop(StopReason::Time, at)),
             [
