@@ -233,15 +233,19 @@ export function AppShell({
       style={frame}
       onMouseUp={onMouseUp}
     >
-      {/* First, so Tab reaches it before the sidebar's rows. */}
+      {/* Tab follows the eye (Q22). The toggle in the corner comes
+          first, then the band, the sidebar's rows, the terminal, the
+          command line and the panel. frame.css places every slot by
+          row and column, so this order moves nothing on screen. */}
       {sessionsToggle !== null && <div className="shell-lead">{sessionsToggle}</div>}
+      <div className="shell-slot-band">{titleBand}</div>
       {sessions !== null && <div className="shell-slot-sessions">{sessions}</div>}
       {sessionsOverlay !== null && (
         <div className="shell-sessions-overlay" style={{ width: sessionsColumn(sessionsWidth) }}>
           {sessionsOverlay}
         </div>
       )}
-      {/* Beside the sidebar, so Tab reaches the line after its rows. */}
+      {/* After the sidebar, so Tab reaches the line after its rows. */}
       {sessions !== null && (
         <div
           role="separator"
@@ -264,12 +268,16 @@ export function AppShell({
           onKeyDown={onKeyDown('sessions')}
         />
       )}
-      <div className="shell-slot-band">{titleBand}</div>
-      <div className="shell-slot-term">
+      {/* The output is one stop you can read. The stop sits on the slot
+          and not the log, because under the macOS underlay the terminal
+          host is hidden and could not hold the focus. */}
+      <section className="shell-slot-term" aria-label="Terminal" tabIndex={0}>
         {snoop}
         {terminal}
-      </div>
-      <div className="shell-slot-input">{input}</div>
+      </section>
+      <section className="shell-slot-input" aria-label="Command line">
+        {input}
+      </section>
       <div className="shell-slot-status">{statusLine}</div>
       <aside ref={panelRef} className="shell-slot-panel" aria-label="Panel">
         {panel}
