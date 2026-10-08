@@ -174,6 +174,17 @@ pub(crate) const LUA_OUTPUT: &str = "session://lua-output";
 /// carries its `kind`, `row`, `gauge`, `line` or `rule`. `onLuaPanes`
 /// hears it, and the Lua panes of the main window show it.
 pub(crate) const LUA_PANES: &str = "session://lua-panes";
+/// The players the session snoops, once per read that changed them and
+/// as you stop or close one: every tab in the order they started, with
+/// whether it is live, when it ended and when its player's screen last
+/// got text. The payload is a [`crate::session::snoop::SnoopPayload`].
+/// `onSnoop` hears it, and the snoop store keeps the tabs of each session.
+pub(crate) const SNOOP: &str = "session://snoop";
+/// What one snooped player's screen got in one read, raw with its ANSI.
+/// The payload is a [`crate::session::snoop::SnoopOutputPayload`].
+/// `onSnoopOutput` hears it, and the snoop store hands the text to the
+/// terminal of that player's tab.
+pub(crate) const SNOOP_OUTPUT: &str = "session://snoop-output";
 /// Your vitals text, drawn for the footer or the status line that
 /// watches it through `vitals_text_watch`. The payload is a
 /// [`vosh_prompt::vitals::VitalsText`], the rows at the live values and
@@ -358,6 +369,11 @@ pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
 /// payload is null. `HelpWindow` hears it.
 #[cfg(target_os = "macos")]
 pub(crate) const HELP_FIND: &str = "vosh://help-find";
+/// Find, chosen while a snoop window is in front, opens Find on the tab
+/// in front there. The payload is the window's session. `SnoopWindow`
+/// hears it.
+#[cfg(target_os = "macos")]
+pub(crate) const SNOOP_FIND: &str = "vosh://snoop-find";
 
 // The native renderer.
 

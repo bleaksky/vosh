@@ -236,16 +236,33 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The right column of line one, which holds the count, or the key
-   while you hold ⌘. */
+/* The right column of line one, which holds the eye of the session's
+   snoops, then the count, or the key while you hold ⌘. */
 .shell-sessions-end {
   grid-row: 1;
   grid-column: 3;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px;
   min-width: 16px;
   height: 16px;
+}
+
+/* A session's snoops: the eye and the count, in line one's right column
+   (Snoop board 05). */
+.shell-sessions-snoops {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-sessions-row[aria-current='true'] .shell-sessions-snoops {
+  color: var(--secondary);
 }
 
 /* What waits for you, white on the accent in a pill 16 high (S4). */

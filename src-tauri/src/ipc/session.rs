@@ -7,7 +7,7 @@
 //! names none. Every window hears the rows again after a step that
 //! changes what one shows, see [`crate::sessions::broadcast_sessions`].
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
@@ -64,9 +64,10 @@ pub(crate) async fn session_select<R: tauri::Runtime>(
 /// Close the session `session` names. Its connection ends as on
 /// Disconnect, and its grid, its scrollback file and the Lua stops it
 /// made go. With it go its
-/// connection's state, its Lua engine with the aliases its plugins made
-/// and its recording. Its profile saves, unless `#profile reset` or
-/// `#profile load` holds it, and closes when no other session plays it.
+/// connection's state, its Lua engine with the aliases its plugins made,
+/// its recording and its snoop window. Its profile saves, unless
+/// `#profile reset` or `#profile load` holds it, and closes when no other
+/// session plays it.
 /// A session that was selected hands the selection on, see
 /// [`crate::sessions::Sessions::close`], and every window hears what the
 /// next one brings to the front, see
@@ -89,6 +90,9 @@ pub(crate) async fn session_close<R: tauri::Runtime>(
         (closed, (selected.id == session).then(|| selected.profile()))
     };
     crate::session::disconnect(&app, state.inner(), &closed).await;
+    if let Some(window) = app.get_webview_window(&crate::app::windows::snoop_label(closed.id)) {
+        let _ = window.close();
+    }
     if let Some(app_data) = state.app_data.get() {
         let _ = std::fs::remove_file(crate::disk::paths::scrollback_path(app_data, closed.id));
     }

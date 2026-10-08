@@ -19,6 +19,7 @@ import type { MacroKeys } from '../input/useMacroKeys';
 import { helpNoMatchNotice, helpOpensOn, openHelpTopic } from '../lib/helpLink';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { getImmState, subscribeImmState } from '../stores/gmcp/immStore';
+import { getSnoops, useSnoops } from '../stores/session/snoopStore';
 import { goTo, sessionAt, sessionStep } from '../stores/session/sessionsStore';
 import type { Connection } from '../stores/session/useConnection';
 import {
@@ -36,6 +37,7 @@ import {
   type PaletteDeps,
 } from './overlays/palette';
 import { openNewSession } from './newSession';
+import { goToSnoop, requestSnoop, snoopHasCaret } from './snoopKeys';
 import type { ScrollbackFind } from './useFind';
 import type { ScrollbackSplit } from './useScrollbackSplit';
 
@@ -114,10 +116,13 @@ export function useAppCommands({
 }: CommandInputs): AppCommands {
   // What the macOS menu bar mirrors beyond the panel and the session: a
   // tick for every theme apply or custom theme change, whether the MUD
-  // offers staff queues, and whether the native grid is scrolled back.
+  // offers staff queues, whether the native grid is scrolled back, and
+  // how many snoop tabs the session has.
   const [themeTick, setThemeTick] = useState(0);
   const [staffOffered, setStaffOffered] = useState(false);
   const [nativeScrolled, setNativeScrolled] = useState(false);
+  // The selected session's snoop tabs, for Go to snoop in View.
+  const snoops = useSnoops().tabs.length;
 
   // Window shortcuts, in the capture phase so they fire before xterm's
   // own keybindings, the webview's find and reload, and the command
@@ -132,6 +137,8 @@ export function useAppCommands({
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
   //   Mod+\        open or close the scrollback split
+  //   Mod+J        into the snoop, and in a snoop to the next tab. With
+  //                no snoop open the key stays the page's.
   //   Mod+T        new session
   //   Mod+W        close the session, or the window with one session
   //   Mod+Shift+W  close the window
@@ -152,7 +159,11 @@ export function useAppCommands({
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
       const press = { key: shortcutKey(e), code: e.code, shift: e.shiftKey };
-      const hit = resolveShortcut(press, () => macroKeys.bound(canonicalKeyFromEvent(e)));
+      const hit = resolveShortcut(
+        press,
+        () => macroKeys.bound(canonicalKeyFromEvent(e)),
+        () => getSnoops().tabs.length > 0,
+      );
       if (!hit) return;
       e.preventDefault();
       if (hit.kind === 'macro') return;
@@ -189,6 +200,10 @@ export function useAppCommands({
   // line and Copy in the terminal menu. Otherwise the system copies the
   // field or page selection.
   const copyFromMenu = () => {
+    if (snoopHasCaret()) {
+      requestSnoop('copy');
+      return;
+    }
     const own = pageHasSelection();
     if (!own && !nativeSurfaceEnabled()) {
       const text = termRef.current?.getSelection() || historyTermRef.current?.getSelection() || '';
@@ -219,6 +234,11 @@ export function useAppCommands({
         if (inPalette) focusInput();
         return;
       case 'find':
+        // Cmd F in a snoop finds in that snoop.
+        if (snoopHasCaret()) {
+          requestSnoop('find');
+          return;
+        }
         // Open just the toolbar. Whether to open the split is decided
         // per search: only when a match would scroll the live pane up
         // off its tail (see submitFind in useFind.ts).
@@ -233,6 +253,9 @@ export function useAppCommands({
         return;
       case 'split':
         toggleSplit();
+        return;
+      case 'snoop':
+        goToSnoop();
         return;
       case 'session-edit':
         requestSessionMenu({ mode: 'edit' });
@@ -315,6 +338,7 @@ export function useAppCommands({
         theme: getCurrentThemeId(),
         sessions: sessionCount,
         sessionsShown,
+        snoops,
       }),
     );
   }, [
@@ -329,6 +353,7 @@ export function useAppCommands({
     themeTick,
     sessionCount,
     sessionsShown,
+    snoops,
   ]);
 
   return {

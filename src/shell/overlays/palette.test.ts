@@ -343,6 +343,83 @@ describe('paletteSections', () => {
   });
 });
 
+describe('snoop rows (SN8)', () => {
+  const tab = (name: string, live: boolean) => ({
+    name,
+    live,
+    ended_at: live ? null : 1_800_000_000_000,
+    last_output_at: null,
+  });
+  const snoops = (tabs: ReturnType<typeof tab>[]) => ({
+    tabs,
+    goTo: vi.fn(),
+    next: vi.fn(),
+    stop: vi.fn(),
+    openWindow: vi.fn(),
+    closeEnded: vi.fn(),
+  });
+  const titles = (over: Partial<PaletteDeps>) =>
+    flat(paletteSections(buildPaletteEntries(deps(over)), 'snoop', [])).map((r) => r.title);
+
+  it('lists the SN8 rows, word for word, while a snoop is open', () => {
+    const all = snoops([tab('Tolliver', true), tab('Maren', true), tab('Orla', false)]);
+    expect(titles({ snoops: all })).toEqual([
+      'Go to snoop',
+      'Next snoop',
+      'Stop snooping Tolliver',
+      'Stop snooping Maren',
+      'Stop every snoop',
+      'Open snoop in a window',
+      'Close ended snoops',
+    ]);
+  });
+
+  it('offers none with no snoop open, the way staff queues waits', () => {
+    expect(titles({})).toEqual([]);
+    expect(titles({ snoops: snoops([]) })).toEqual([]);
+  });
+
+  it('offers each row only where it acts', () => {
+    expect(titles({ snoops: snoops([tab('Tolliver', true)]) })).toEqual([
+      'Go to snoop',
+      'Stop snooping Tolliver',
+      'Stop every snoop',
+      'Open snoop in a window',
+    ]);
+    expect(titles({ snoops: snoops([tab('Orla', false)]) })).toEqual([
+      'Go to snoop',
+      'Open snoop in a window',
+      'Close ended snoops',
+    ]);
+  });
+
+  it('keeps them out of the palette until you type, with the key on Go to snoop', () => {
+    const one = snoops([tab('Tolliver', true)]);
+    const home = flat(paletteSections(buildPaletteEntries(deps({ snoops: one })), '', []));
+    expect(home.some((r) => r.id.startsWith('snoop'))).toBe(false);
+    const go = buildPaletteEntries(deps({ snoops: one })).find((r) => r.id === 'snoop');
+    expect(go?.keys).toBe('Mod+J');
+    expect(go?.section).toBe('session');
+  });
+
+  it('runs each row on its own call', async () => {
+    const all = snoops([tab('Tolliver', true), tab('Maren', true), tab('Orla', false)]);
+    const rows = buildPaletteEntries(deps({ snoops: all }));
+    const run = (id: string) => rows.find((r) => r.id === id)?.run();
+    await run('snoop');
+    await run('snoop-next');
+    await run('snoop-stop-Maren');
+    await run('snoop-stop-all');
+    await run('snoop-window');
+    await run('snoop-close-ended');
+    expect(all.goTo).toHaveBeenCalledTimes(1);
+    expect(all.next).toHaveBeenCalledTimes(1);
+    expect(all.stop.mock.calls).toEqual([['Maren'], []]);
+    expect(all.openWindow).toHaveBeenCalledTimes(1);
+    expect(all.closeEnded).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('settings rows', () => {
   const settingsRows = (over: Partial<PaletteDeps> = {}) =>
     buildPaletteEntries(deps(over)).filter((r) => r.id.startsWith('settings-'));

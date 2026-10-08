@@ -415,6 +415,11 @@ fn full_ui() -> UiConfig {
         affects_tint: true,
         affects_running_out_hours: 5,
         affects_almost_gone_hours: 2,
+        // Written only off their defaults, so the defaults keep the
+        // golden's bytes. The snoop split tests in profile/ui.rs cover
+        // the others.
+        snoop_share: 0.4,
+        snoop_folded: false,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),
             ("tell".into(), "magenta".into()),

@@ -45,6 +45,7 @@ fn the_board_shortcuts_are_all_there() {
         ("palette", "Cmd+K"),
         ("panel", "Cmd+Shift+L"),
         ("split", "Cmd+\\"),
+        ("snoop", "Cmd+J"),
         ("help", "Cmd+/"),
     ];
     for (id, accel) in expect {
@@ -160,6 +161,9 @@ fn routes_follow_the_board() {
     assert_eq!(route("session-next"), Route::Main { raise: true });
     assert_eq!(route("session-previous"), Route::Main { raise: true });
     assert_eq!(route("sessions-sidebar"), Route::Main { raise: true });
+    // Go to snoop runs in the main window as Split terminal does, which
+    // brings the snoop window forward when the snoops sit there.
+    assert_eq!(route("snoop"), route("split"));
 }
 
 #[test]
@@ -182,6 +186,7 @@ fn check_rows_are_the_toggles_and_themes() {
         "theme",
         "session-next",
         "session-previous",
+        "snoop",
     ] {
         assert!(!is_check_id(id), "{id}");
     }
@@ -238,6 +243,7 @@ fn menu_state() -> MenuState {
         theme: "nord".to_string(),
         sessions: 1,
         sessions_shown: false,
+        snoops: 0,
     }
 }
 
@@ -247,6 +253,32 @@ fn staff_queues_waits_for_the_offer() {
     assert!(!staff_listed(&state));
     state.panes[0].offered = true;
     assert!(staff_listed(&state));
+}
+
+#[test]
+fn go_to_snoop_shows_while_a_snoop_is_open() {
+    let mut state = menu_state();
+    assert!(!snoop_listed(&state));
+    state.snoops = 1;
+    assert!(snoop_listed(&state));
+}
+
+#[test]
+fn a_page_without_snoops_reads_none() {
+    // A snapshot from a page before snoops still reads, with no snoop.
+    let json = r#"{
+        "connected": false,
+        "worldName": null,
+        "panelOpen": true,
+        "splitOpen": false,
+        "panes": [],
+        "themes": [],
+        "theme": "nord",
+        "sessions": 1,
+        "sessionsShown": false
+    }"#;
+    let state: MenuState = serde_json::from_str(json).unwrap();
+    assert_eq!(state.snoops, 0);
 }
 
 #[test]
@@ -272,7 +304,8 @@ fn state_reads_camel_case() {
         "themes": [{ "id": "nord", "label": "Nord", "custom": false }],
         "theme": "nord",
         "sessions": 2,
-        "sessionsShown": true
+        "sessionsShown": true,
+        "snoops": 3
     }"#;
     let state: MenuState = serde_json::from_str(json).unwrap();
     assert!(state.connected);
@@ -283,4 +316,5 @@ fn state_reads_camel_case() {
     assert_eq!(state.themes[0].label, "Nord");
     assert_eq!(state.sessions, 2);
     assert!(state.sessions_shown);
+    assert_eq!(state.snoops, 3);
 }

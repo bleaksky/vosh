@@ -24,7 +24,7 @@ mod sqlite;
 pub use forget::{Forgotten, PasswordLines};
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
 pub use search::{SearchHit, SearchOptions, SearchPage};
-pub use sessions::{sent_entries, sent_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT};
+pub use sessions::{sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT};
 
 #[derive(Debug, Error)]
 pub enum LogError {

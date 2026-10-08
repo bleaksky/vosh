@@ -41,6 +41,10 @@ pub(crate) struct MenuState {
     pub(crate) sessions: usize,
     /// The sessions sidebar shows in the main window.
     pub(crate) sessions_shown: bool,
+    /// How many snoop tabs the selected session has, live or ended. View
+    /// lists Go to snoop while there is one (Snoop SN7).
+    #[serde(default)]
+    pub(crate) snoops: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -181,7 +185,8 @@ enum Route {
     /// Copy in the window in front.
     Copy,
     /// Find in the window in front: settings search in Settings, help
-    /// search in Help, the find bar in the main window.
+    /// search in Help, the tab in front in a snoop window, the find bar
+    /// in the main window.
     Find,
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },
@@ -242,6 +247,12 @@ fn connect_label(world: Option<&str>) -> String {
 #[cfg(target_os = "macos")]
 fn staff_listed(state: &MenuState) -> bool {
     state.panes.iter().any(|p| p.pane == "imm" && p.offered)
+}
+
+/// Whether View lists Go to snoop, after Split terminal.
+#[cfg(target_os = "macos")]
+fn snoop_listed(state: &MenuState) -> bool {
+    state.snoops > 0
 }
 
 /// A row in Choose theme.

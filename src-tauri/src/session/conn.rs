@@ -491,6 +491,15 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     if hold_until.is_some() {
         flush_hold(&mut conn).await;
     }
+    // Every snoop ends with the link, and each tab stays as ended. The
+    // partial each one ended on joins the burst's rows.
+    let snoop_rows = {
+        let mut c = conn.session.connection.lock();
+        let at = now_ms();
+        c.snoops.link_ended(at);
+        c.snoops.take_log(log_sink.id(), at)
+    };
+    conn.settle.queue_rows(snoop_rows);
     // The last burst still owes its frame and its rows, which go in the
     // log before the lines the session captures as it ends.
     conn.settle.frame_now(&conn.app, &conn.session);
@@ -510,7 +519,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // tail end with the connection, and so does this session's variable
     // that mirrors the target. Your quick keys outlive it, though not a
     // restart.
-    let target_after = {
+    let (target_after, snoops) = {
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
@@ -521,8 +530,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         // A new GMCP handler gets the last packet of its package, and
         // the packets of this connection end with it.
         c.script.forget_gmcp_packets();
-        had.then(|| TargetPayload::of(&c))
+        (had.then(|| TargetPayload::of(&c)), c.snoops.take_changes())
     };
+    super::snoop::emit(&conn.app, &conn.session, snoops);
     // Line triggers no longer see a prompt the profile reads, so the first
     // session that read yours names the ones that matched it, once, at the
     // next launch.

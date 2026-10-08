@@ -1,8 +1,8 @@
 //! The Aabahran packets in `fixtures/gmcp/aabahran` parse into the
 //! package and the fields the server documents. That covers the
 //! lamented tears `hidden` flag, the Char.Combat `tank` field, the
-//! Char.Prompt, Char.State and Room.Weather packages, Room.Info, and the
-//! packets two older server builds send under lamented tears.
+//! Char.Prompt, Char.State and Room.Weather packages, Room.Info, the
+//! packets two older server builds send under lamented tears, and Snoop.
 
 use serde_json::{json, Value};
 use vosh_protocol::gmcp::{parse, Message};
@@ -46,6 +46,9 @@ const FIXTURES: &[(&str, &str, &str)] = &[
     fixture!("char-combat-lament-older.gmcp", "Char.Combat"),
     fixture!("room-info.gmcp", "Room.Info"),
     fixture!("room-info-rhapsody.gmcp", "Room.Info"),
+    fixture!("snoop-start.gmcp", "Snoop.Start"),
+    fixture!("snoop-output.gmcp", "Snoop.Output"),
+    fixture!("snoop-stop.gmcp", "Snoop.Stop"),
 ];
 
 fn packet(file: &str) -> Message {

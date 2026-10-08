@@ -128,6 +128,10 @@ command session_set_address(session, host, port, tls)
 command session_set_window_size(cols, rows, session?)
 command session_walk_stop(session?)
 command sessions_list()
+command snoop_close(session?, name?)
+command snoop_get(session?)
+command snoop_stop(session?, name?)
+command snoop_window_open(session?)
 command target_get(session?)
 command terminal_cursor(session?)
 command terminal_local_write(text, after?, session?)
@@ -171,6 +175,8 @@ event session://prompt-vars app heard
 event session://reconnect app heard
 event session://round-trip app heard
 event session://routed app heard
+event session://snoop app heard
+event session://snoop-output app heard
 event session://state app heard
 event session://target app heard
 event session://tick app heard
@@ -222,6 +228,7 @@ event vosh://session-selected app heard
 event vosh://sessions-changed app heard
 event vosh://settings-find app heard
 event vosh://settings-goto-tab page heard
+event vosh://snoop-find app heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
 event vosh://terminal-clicked app heard

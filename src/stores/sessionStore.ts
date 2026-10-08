@@ -35,7 +35,9 @@ import {
 // connect met marks the session it was for.
 //
 // A store with a snapshot asks the backend for the last value it kept
-// for a session the first time that session is selected, once every
+// for a session the first time that session is selected, or the first
+// time ask names it, for a window that shows one session whatever is
+// selected, as the snoop window does. It asks once every
 // listener is in, so a value that lands meanwhile is either in the
 // answer or newer than it. Each session's generation counts each packet
 // and event the store hears for it and each of its disconnects, even
@@ -141,10 +143,9 @@ export function createSessionStore<S, V = S>({
     apply(session, change);
   }
 
-  /** Ask for the selected session's snapshot, the first time only. */
-  function askOnce(): void {
+  /** Ask for a session's snapshot, the first time only. */
+  function askOnce(session: number = getSelected()): void {
     if (!snapshot) return;
-    const session = getSelected();
     const held = slot(session);
     if (held.asked) return;
     held.asked = true;
@@ -201,6 +202,14 @@ export function createSessionStore<S, V = S>({
     askOnce();
   }
 
+  /** Start the store and ask for the snapshot of `session`, the first
+   *  time only, for a window that shows a session other than the one
+   *  selected. */
+  function ask(session: number): void {
+    start();
+    askOnce(session);
+  }
+
   function subscribe(cb: () => void): () => void {
     start();
     return store.subscribe(cb);
@@ -225,5 +234,5 @@ export function createSessionStore<S, V = S>({
     };
   }
 
-  return { start, get: store.get, subscribe, use, apply, stateOf, subscribeStates };
+  return { start, get: store.get, subscribe, use, apply, stateOf, subscribeStates, ask };
 }

@@ -101,6 +101,10 @@ const record = views as Record<string, unknown>;
  *  brings its store back and moves the package into view(). */
 const ENGINE_ONLY = new Set(['Char.State', 'Room.Weather']);
 
+/** Packages neither the engine nor a GMCP store reads, so they keep no
+ *  record. The snoop store takes Snoop through its own events. */
+const NO_VIEW = new Set(['Snoop.Start', 'Snoop.Output', 'Snoop.Stop']);
+
 /** The record's view as the stores read it, with the Map pane's own
  *  readings laid over the engine's. */
 function storeView(name: string): unknown {
@@ -114,6 +118,7 @@ describe('the Aabahran packets', () => {
   it('read in the stores as the record says, the same as in the prompt engine', () => {
     const names = aabahranFixtureNames();
     for (const name of names) {
+      if (NO_VIEW.has(aabahranPacket(name).package)) continue;
       expect(record, `views.json has no view of ${name}`).toHaveProperty([name]);
       if (ENGINE_ONLY.has(aabahranPacket(name).package)) continue;
       expect(view(name), name).toEqual(storeView(name));

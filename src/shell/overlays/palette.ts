@@ -3,6 +3,7 @@ import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
 import { sendInput, type SessionRow } from '../../ipc/session';
+import type { SnoopTab } from '../../ipc/snoop';
 import { sessionLabel } from '../../lib/sessionLabel';
 import { setUiTheme } from '../../ipc/uiConfig';
 import type { PaneType } from '../../panel/paneLayout';
@@ -89,6 +90,23 @@ export interface PaletteSessions {
   toggleShown: () => void;
 }
 
+/** The selected session's snoops, for the rows that reach them (Snoop
+ *  SN8). */
+export interface PaletteSnoops {
+  /** Every tab, live or ended, in the order they started. */
+  tabs: readonly SnoopTab[];
+  /** Put the caret in the tab in front, as Cmd J does. */
+  goTo: () => void;
+  /** Step to the next tab and put the caret there. */
+  next: () => void;
+  /** Send `snoop stop` with `name`, or alone to stop every snoop. */
+  stop: (name?: string) => void;
+  /** Move the tabs into a window of their own, or bring it forward. */
+  openWindow: () => void;
+  /** Close every ended tab. */
+  closeEnded: () => void;
+}
+
 export interface PaletteDeps {
   connected: boolean;
   /** A redial waits or dials after a drop, so Disconnect follows the
@@ -128,6 +146,9 @@ export interface PaletteDeps {
   /** The open sessions. With two or more, Next session, Previous session,
    *  Hide sessions and a Go to row for each appear. */
   sessions?: PaletteSessions;
+  /** The selected session's snoops. The snoop rows appear while it has
+   *  one, the way Show staff queues waits for Imm.Queues. */
+  snoops?: PaletteSnoops;
   disconnect: () => void;
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
@@ -430,6 +451,70 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
         run: () => sessions.goTo(row.id),
       });
     });
+  }
+  // The snoop rows, while the session has a snoop open (SN8). Next
+  // snoop waits for a second tab, Stop for a live one and Close ended
+  // snoops for an ended one.
+  const snoops = deps.snoops && deps.snoops.tabs.length > 0 ? deps.snoops : null;
+  if (snoops) {
+    const live = snoops.tabs.filter((tab) => tab.live);
+    entries.push({
+      id: 'snoop',
+      section: 'session',
+      title: 'Go to snoop',
+      keywords: 'watch player split tab',
+      keys: APP_SHORTCUTS.snoop,
+      searchOnly: true,
+      run: snoops.goTo,
+    });
+    if (snoops.tabs.length >= 2) {
+      entries.push({
+        id: 'snoop-next',
+        section: 'session',
+        title: 'Next snoop',
+        keywords: 'watch player step tab',
+        searchOnly: true,
+        run: snoops.next,
+      });
+    }
+    for (const tab of live) {
+      entries.push({
+        id: `snoop-stop-${tab.name}`,
+        section: 'session',
+        title: `Stop snooping ${tab.name}`,
+        keywords: 'snoop stop end watch player',
+        searchOnly: true,
+        run: () => snoops.stop(tab.name),
+      });
+    }
+    if (live.length > 0) {
+      entries.push({
+        id: 'snoop-stop-all',
+        section: 'session',
+        title: 'Stop every snoop',
+        keywords: 'snoop stop end all watch',
+        searchOnly: true,
+        run: () => snoops.stop(),
+      });
+    }
+    entries.push({
+      id: 'snoop-window',
+      section: 'session',
+      title: 'Open snoop in a window',
+      keywords: 'watch player separate pop out',
+      searchOnly: true,
+      run: snoops.openWindow,
+    });
+    if (live.length < snoops.tabs.length) {
+      entries.push({
+        id: 'snoop-close-ended',
+        section: 'session',
+        title: 'Close ended snoops',
+        keywords: 'snoop close ended tabs',
+        searchOnly: true,
+        run: snoops.closeEnded,
+      });
+    }
   }
   entries.push({
     id: 'profile-save',

@@ -124,6 +124,10 @@ pub(crate) struct Connection {
     /// which the loop records every two seconds and `#lag` prints. See
     /// [`crate::session::round_trip`].
     pub(crate) round_trip: super::round_trip::RoundTrip,
+    /// The players the session snoops, one tab each with its text. A
+    /// link that ends marks them ended and keeps them, so only the
+    /// session that closes drops them.
+    pub(crate) snoops: super::snoop::Snoops,
 }
 
 impl Connection {

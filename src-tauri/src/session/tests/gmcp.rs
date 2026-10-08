@@ -30,6 +30,7 @@ fn core_supports_set_names_every_package_vosh_reads() {
         "Map.Tiles",
         "Imm.Queues",
         "Group.Info",
+        "Snoop.Output",
     ] {
         assert!(
             modules

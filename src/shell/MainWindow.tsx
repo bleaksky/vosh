@@ -15,6 +15,8 @@ import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
+import { SnoopSplit } from './SnoopSplit';
+import { requestSnoop } from './snoopKeys';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
@@ -33,6 +35,7 @@ import {
 } from '../ipc/prompt';
 import { promptPreviewSet } from '../ipc/promptDesign';
 import { disconnectSession } from '../ipc/session';
+import { snoopClose, snoopStop, snoopWindowOpen } from '../ipc/snoop';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
@@ -61,6 +64,7 @@ import {
   useSelected,
   useSessions,
 } from '../stores/session/sessionsStore';
+import { getSnoops } from '../stores/session/snoopStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useEscape } from '../lib/escapeStack';
@@ -409,6 +413,10 @@ function MainWindow() {
   // asks while sessions are connected.
   const closing = useClosing();
 
+  // A snoop row's call to the game, which says in a toast when it fails.
+  const snoopCall = (call: Promise<void>) =>
+    void call.catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
+
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
   const paletteDeps = (): PaletteDeps => ({
@@ -440,6 +448,14 @@ function MainWindow() {
       goTo,
       step: (step) => goTo(sessionStep(step)),
       toggleShown: sessionsSidebar.toggle,
+    },
+    snoops: {
+      tabs: getSnoops().tabs,
+      goTo: () => requestSnoop('enter'),
+      next: () => requestSnoop('next'),
+      stop: (name) => snoopCall(snoopStop(getSelected(), name)),
+      openWindow: () => snoopCall(snoopWindowOpen(getSelected())),
+      closeEnded: () => snoopCall(snoopClose(getSelected())),
     },
     disconnect: () => void disconnectSession(getSelected()),
     insertInput: (text) => inputRef.current?.insert(text),
@@ -724,6 +740,16 @@ function MainWindow() {
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
+        />
+      }
+      snoop={
+        <SnoopSplit
+          session={selected}
+          fontFamily={renderFamily}
+          fontSize={fontSize}
+          lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
+          themeTerminalColors={themeTerminalColors}
+          onCaret={focusInput}
         />
       }
       terminal={terminalAreaElement}

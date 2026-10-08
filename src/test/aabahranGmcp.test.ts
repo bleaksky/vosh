@@ -11,6 +11,9 @@ const PACKAGES: Record<string, string> = {
   'room-weather': 'Room.Weather',
   'room-info': 'Room.Info',
   'group-info': 'Group.Info',
+  'snoop-start': 'Snoop.Start',
+  'snoop-output': 'Snoop.Output',
+  'snoop-stop': 'Snoop.Stop',
 };
 
 describe('the Aabahran GMCP fixtures', () => {

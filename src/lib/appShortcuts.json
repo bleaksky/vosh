@@ -11,5 +11,6 @@
   "palette": "Mod+K",
   "panel": "Mod+Shift+L",
   "split": "Mod+\\",
+  "snoop": "Mod+J",
   "help": "Mod+/"
 }

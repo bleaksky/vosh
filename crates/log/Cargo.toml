@@ -9,8 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
-# Only append_raw strips a line, and only tests call it.
-vosh-protocol = { path = "../protocol", optional = true }
+# Strips the ANSI from a snoop row, and from a line append_raw writes.
+vosh-protocol = { path = "../protocol" }
 regex = "1"
 serde = { workspace = true }
 thiserror = { workspace = true }
@@ -18,11 +18,10 @@ thiserror = { workspace = true }
 [features]
 # The test kit: the in-memory store and the readers and writers the app's
 # tests use.
-testkit = ["dep:vosh-protocol"]
+testkit = []
 
 [dev-dependencies]
-# The unit tests here call append_raw, so they turn the test kit on, and
-# with it vosh-protocol.
+# The unit tests here call append_raw, so they turn the test kit on.
 vosh-log = { path = ".", features = ["testkit"] }
 
 [lints]

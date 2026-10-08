@@ -1,0 +1,315 @@
+/* The snoop split at the top of the terminal column (Snoop SN1, SN2, SN3
+   and SN7, boards 01 to 04). A 32 strip with the eye, a tab for each
+   snooped player, Stop or Close and the more button, then the snoop's
+   own terminal in the well's insets, closed by the pane handle's 1 px
+   line. It paints the terminal's ground, so it stays opaque while the
+   native surface draws your terminal under the page. It sits over the
+   terminal area, so the line's grab area reaches past its edge. */
+
+.snoop {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--sep);
+  background: var(--xterm-bg);
+  z-index: 3;
+}
+
+/* Folded to the strip and its line. */
+.snoop.is-folded .snoop-body {
+  display: none;
+}
+
+/* The line drags like the scrollback split's: a grab area 3 px past
+   each side of it and the accent tick on hover, longer while you drag
+   (terminal.css .resizable-handle). */
+.snoop > .snoop-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 7px;
+  cursor: row-resize;
+}
+
+.snoop > .snoop-handle::after {
+  width: 24px;
+  height: 2px;
+}
+
+.snoop > .snoop-handle.is-dragging::after {
+  width: 56px;
+}
+
+/* Find floats under the strip, as yours floats under the band. */
+.snoop > .ov-find {
+  top: calc(var(--band) + 8px);
+}
+
+.snoop-menu {
+  width: 232px;
+}
+
+.snoop-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--band);
+  padding: 0 10px 0 12px;
+  font-family: var(--font-ui);
+}
+
+.snoop-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  color: var(--tertiary);
+}
+
+.snoop-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.snoop-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  /* A narrow strip ends each name in an ellipsis and keeps the mark. */
+  min-width: 48px;
+  height: 24px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* The name in front ends in an ellipsis last, once the others are as
+   narrow as they go. */
+.snoop-tab[aria-selected='true'] {
+  flex-shrink: 0;
+  background: var(--selrow);
+  box-shadow: var(--st-selrow-ring);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The sessions sidebar's mark: a dot while the snoop runs, a ring once
+   it ended. */
+.snoop-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.snoop-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--success);
+}
+
+.snoop-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A tab behind with lines you have not read. */
+.snoop-tab.is-unread {
+  min-width: 60px;
+  color: var(--text);
+}
+
+.snoop-tabs.is-tight .snoop-tab[aria-selected='true'] {
+  flex-shrink: 1;
+}
+
+.snoop-tab.is-unread::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.snoop-tab.is-ended {
+  color: var(--tertiary);
+}
+
+.snoop-tab.is-ended[aria-selected='true'] {
+  color: var(--secondary);
+}
+
+.snoop-tab.is-ended .snoop-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.25px var(--tertiary);
+}
+
+.snoop-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.snoop-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snoop-end .snoop-more {
+  margin-left: -4px;
+}
+
+.snoop-end .snoop-more.is-open {
+  box-shadow: var(--st-selrow-ring);
+}
+
+.snoop-meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.snoop-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The well: your terminal's 16 side insets and 6 at the foot. Whole rows
+   only, as xterm draws them, kept to the bottom like your terminal's. */
+.snoop-body {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+@supports (overflow: clip) {
+  .snoop-body {
+    overflow: clip;
+    overflow-clip-margin: content-box;
+  }
+}
+
+.snoop-term {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* A tab behind keeps the size of the one in front, unseen. */
+.snoop-term[hidden] {
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  visibility: hidden;
+}
+
+/* The snoop window, board 06 (SN1). The strip sits in the 32 band beside
+   the traffic lights, as the Settings header sits there, and the band
+   drags the window. The tabs' terminals start 17 under it. On Windows
+   and Linux the frameless window draws its own edge and its controls at
+   the right of the band, as Settings does. */
+.snoop-window {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--r-float);
+  background: var(--xterm-bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.snoop-window::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--edge);
+  pointer-events: none;
+}
+
+[data-platform='macos'] .snoop-window,
+[data-platform='windows'] .snoop-window {
+  border-radius: 0;
+}
+
+[data-platform='macos'] .snoop-window::after {
+  display: none;
+}
+
+.snoop-window-band {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--band);
+  padding-right: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-platform='macos'] .snoop-window-band {
+  padding: 0 0 0 66px;
+}
+
+.snoop-window-band > .snoop-strip {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.snoop-window > .snoop-body {
+  padding-top: 17px;
+}
+
+.snoop-window > .ov-find {
+  top: calc(var(--band) + 8px);
+}

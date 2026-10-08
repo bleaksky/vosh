@@ -1,11 +1,11 @@
 //! Starts, ends and lists sessions, writes their lines, and exports one.
-//! It also owns the `> ` rows that record what you sent.
+//! It also owns the `> ` rows that record what you sent and the rows
+//! of the players you snoop.
 
 use rusqlite::params;
 #[cfg(any(test, feature = "testkit"))]
 use rusqlite::OptionalExtension;
 use serde::Serialize;
-#[cfg(any(test, feature = "testkit"))]
 use vosh_protocol::ansi::plain_text;
 
 use crate::{LogStore, Result};
@@ -120,6 +120,35 @@ pub fn sent_entries(
         text,
         raw: None,
     })
+}
+
+/// The session log rows for whole lines of a snooped player's screen,
+/// as the game sent them, each as its plain text and its raw bytes. A
+/// row starts with the player's name and a bar, `Tolliver| `, the mark
+/// the game puts on each snooped line for a client that has no snoop
+/// pane (`snoop_relay` in comm.c). The search reads a regex, so
+/// `^Tolliver\|` finds that player's text, and a search anchored on a
+/// line's start never takes it for the snooper's own. The
+/// raw bytes carry the mark too, so the export with color names the
+/// player as well.
+///
+/// The game ends a line with `\n\r`, so a `\r` on either end of a line
+/// goes, as it does for your own lines. Each line that ends in `\n` is a
+/// row, a blank one too. Text after the last `\n` is the partial a snoop
+/// ended on, and it is a row when anything but `\r` is left of it.
+pub fn snoop_rows(name: &str, text: &str) -> Vec<(String, Vec<u8>)> {
+    let mut rows = Vec::new();
+    let mut pieces = text.split('\n').peekable();
+    while let Some(piece) = pieces.next() {
+        let line = piece.strip_prefix('\r').unwrap_or(piece);
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if pieces.peek().is_none() && line.is_empty() {
+            break;
+        }
+        let raw = format!("{name}| {line}").into_bytes();
+        rows.push((plain_text(&raw), raw));
+    }
+    rows
 }
 
 /// The statement that writes one log line, shared by
@@ -391,6 +420,59 @@ pub(crate) mod tests {
         let rows = sent_rows(format!("{SECRET}\r\n\r\n{SECRET}\r\n").as_bytes(), true);
         assert_eq!(rows, vec!["> (hidden)", "> (hidden)"]);
         assert_eq!(sent_rows(b"\r\n", true), Vec::<String>::new());
+    }
+
+    #[test]
+    fn snoop_rows_mark_each_line_with_the_name_and_keep_its_color() {
+        let rows = snoop_rows(
+            "Tolliver",
+            "\x1b[0;33mA Ramshackle Tent City\x1b[0;0m\n\r\n\r[Exits: east west]\n",
+        );
+        let text: Vec<&str> = rows.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(
+            text,
+            [
+                "Tolliver| A Ramshackle Tent City",
+                "Tolliver| ",
+                "Tolliver| [Exits: east west]"
+            ]
+        );
+        assert_eq!(
+            rows[0].1,
+            b"Tolliver| \x1b[0;33mA Ramshackle Tent City\x1b[0;0m".to_vec()
+        );
+    }
+
+    #[test]
+    fn snoop_rows_keep_a_partial_and_drop_the_line_end_debris() {
+        let rows = snoop_rows("Maren", "\r<612hp 480m 702mv> ");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "Maren| <612hp 480m 702mv> ");
+        assert_eq!(snoop_rows("Maren", "\r"), Vec::new());
+        assert_eq!(snoop_rows("Maren", ""), Vec::new());
+    }
+
+    #[test]
+    fn snoop_rows_find_by_the_mark_and_stay_out_of_other_searches() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        s.append(id, 1, "Orla says, 'East.'", None).unwrap();
+        let rows: Vec<LogEntry> = snoop_rows("Tolliver", "You go east.\n\r")
+            .into_iter()
+            .map(|(text, raw)| LogEntry {
+                session_id: id,
+                ts_ms: 2,
+                text,
+                raw: Some(raw),
+            })
+            .collect();
+        s.append_batch(&rows).unwrap();
+        // The search reads a regex, so the bar takes a backslash.
+        let marked = s.search(r"^Tolliver\|", &SearchOptions::default()).unwrap();
+        assert_eq!(marked.len(), 1);
+        assert_eq!(marked[0].text, "Tolliver| You go east.");
+        let others = s.search("^Orla", &SearchOptions::default()).unwrap();
+        assert_eq!(others.len(), 1);
     }
 
     /// Five sessions: two to a MUD, one each to 127.0.0.1, localhost,

@@ -152,7 +152,7 @@ async fn handle_event<R: tauri::Runtime>(
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             conn.perf.gmcp_packets += 1;
             batch.gmcp = true;
-            handle_gmcp(conn, &payload, batch).await?;
+            handle_gmcp(conn, log_sink.id(), &payload, batch).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -351,7 +351,7 @@ async fn end_read<R: tauri::Runtime>(
 /// Send what one socket read gathered: its output, the triggers that hid
 /// a prompt with nothing to draw in its place, then the prompt vars when
 /// a prompt was read or they changed, what the plugins changed in their
-/// panes, and the hidden state when it changed. Once per read, so the
+/// panes, the snoops, and the hidden state when it changed. Once per read, so the
 /// packets of one pulse never show the panes a state between them. Its frame and its log rows wait in
 /// `settle` for the end of the burst of reads. `seen_output` becomes the
 /// output count after this read's output. Returns when a clock piece in
@@ -367,6 +367,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         log,
         prompt_vars,
         lua_panes,
+        snoop,
         prompt,
         gag_without_reader,
         character,
@@ -375,13 +376,14 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
-    let (open, vars, panes, hidden, prompt_seen, status, prompt_state, clock, rings) = {
+    let (open, vars, panes, snoops, hidden, prompt_seen, status, prompt_state, clock, rings) = {
         let p = conn.session.lock_profile().await;
         let mut c = session.connection.lock();
         // Echoes the end of the read wrote close the open row.
         c.prompt.stage.finish(&mut out);
         let vars = c.prompt.take_prompt_vars(prompt_vars);
         let panes = lua_panes.then(|| c.lua_panes.take_changes()).flatten();
+        let snoops = snoop.then(|| c.snoops.take_changes());
         let hidden = c.prompt.vars.take_hidden_change();
         // Low health follows what the vitals panes read once the read's
         // packets and prompt values landed, whether its alert is on or
@@ -402,6 +404,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
             p.open().clone(),
             vars,
             panes,
+            snoops,
             hidden,
             c.prompt.take_seen(),
             c.prompt.take_status_change(),
@@ -433,6 +436,9 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
     }
     if let Some(panes) = panes {
         session.emit(app, events::LUA_PANES, &panes);
+    }
+    if let Some(snoops) = snoops {
+        super::snoop::emit(app, session, snoops);
     }
     if let Some(hidden) = hidden {
         session.emit(app, events::HIDDEN, &hidden);

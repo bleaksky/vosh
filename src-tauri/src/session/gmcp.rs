@@ -27,6 +27,7 @@ use super::conn::Conn;
 use super::connection::Connection;
 use super::effects::{apply_script_result, deliver_tick_step, OutputSink, ScriptIo};
 use super::gmcp_vars;
+use super::now_ms;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
 use super::vitals_text;
@@ -40,6 +41,12 @@ use super::vitals_text;
 /// mortals nothing). Group carries the roster the Group pane shows.
 /// Aabahran sends every package without this list, so it names them
 /// for servers that honor it.
+///
+/// Snoop is the one Aabahran waits for. A Core.Supports body that holds
+/// `"Snoop ` turns on Snoop.Start, Snoop.Stop and Snoop.Output for the
+/// players you snoop (gmcp.c). The game sends them only to someone who
+/// snoops, so a mortal sees no change. serde writes the list with no
+/// spaces, so the one entry is enough.
 pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Char 1",
     "Room 1",
@@ -48,10 +55,14 @@ pub(super) const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Map 1",
     "Imm.Queues 1",
     "Group 1",
+    "Snoop 1",
 ];
 
+/// Take one GMCP packet. `log_id` is the session log's row, which the
+/// rows of a snooped player's lines attach to.
 pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     conn: &mut Conn<R>,
+    log_id: Option<i64>,
     payload: &[u8],
     batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
@@ -71,7 +82,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight, vitals_text) = {
+    let (tick_step, script_apply, daylight, vitals_text, snooped) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -79,6 +90,14 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
         c.link.gmcp(&msg.package);
+        // A snoop's text goes to its tab and never to the line pipeline.
+        // Lua still hears the packet below. Its whole lines go in the log
+        // with this read's rows.
+        let at = now_ms();
+        let snooped = c.snoops.gmcp(&msg.package, &msg.data, at);
+        if snooped {
+            batch.log.extend(c.snoops.take_log(log_id, at));
+        }
         let (tick_step, mut apply) = gmcp_step(&mut p, &mut c, &msg, now);
         // A tell you got or a fight that starts on you rings its preset.
         apply
@@ -90,8 +109,15 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             .flatten();
         // Your vitals or the fight moved, so a vitals text draws again.
         let vitals_text = vitals_text::after_package(&conn.session, &p, &c, &msg.package, now);
-        (tick_step, apply.ran_under(p.open()), daylight, vitals_text)
+        (
+            tick_step,
+            apply.ran_under(p.open()),
+            daylight,
+            vitals_text,
+            snooped,
+        )
     };
+    batch.snoop |= snooped;
     vitals_text::emit(&conn.app, &conn.session, vitals_text);
     if let Some(phase) = daylight {
         conn.session.emit(

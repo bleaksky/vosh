@@ -11,6 +11,7 @@ import {
   getUiConfig,
   normalizeChipStyle,
   normalizeGameTime,
+  normalizeSnoopShare,
   normalizeTerminalLineHeight,
   normalizeTickCount,
   normalizeUiConfig,
@@ -885,5 +886,16 @@ describe('setUiFields', () => {
       ],
       profile: 'Orla',
     });
+  });
+});
+
+describe('normalizeSnoopShare', () => {
+  it('holds the snoop split share to 0.05 to 0.95 as Rust does', () => {
+    expect(normalizeSnoopShare(0.6)).toBe(0.6);
+    expect(normalizeSnoopShare(2)).toBe(0.95);
+    expect(normalizeSnoopShare(-1)).toBe(0.05);
+    expect(normalizeSnoopShare(Number.NaN)).toBe(0.4);
+    expect(normalizeSnoopShare('wide')).toBe(0.4);
+    expect(normalizeSnoopShare(undefined)).toBe(0.4);
   });
 });
