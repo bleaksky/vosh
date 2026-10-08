@@ -15,6 +15,7 @@ import {
   PANEL_FONT_TERMINAL,
 } from '../panel/panelFont';
 import { normalizePanelSize, PANEL_SIZE_TERMINAL } from '../panel/panelSize';
+import { renderFontStack } from '../lib/fontLoader';
 import type { CustomTheme } from '../ipc/theme';
 import type { SystemFontEntry } from '../ipc/uiConfig';
 import type { ThemePrefs } from './theme';
@@ -43,12 +44,6 @@ export const BUNDLED_FONTS: readonly Choice[] = [
   { label: 'JetBrains Mono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
 ];
 
-/** Fonts Vosh once shipped, which saved font lists still name. The
- *  Font select names them but no longer offers them. */
-const RETIRED_FONTS: readonly Choice[] = [
-  { label: 'Berkeley Mono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
-];
-
 /** The first family in a CSS font list, without its quotes. */
 export function primaryFontFamily(stack: string): string {
   const first = stack.split(',')[0] ?? '';
@@ -72,10 +67,16 @@ export function systemFontStack(family: string): string {
   return `"${family}", Menlo, monospace`;
 }
 
+// The first family of a font list as the page draws it, so a list saved
+// with a retired name reads as the font it draws in.
+function drawnFamily(stack: string): string {
+  return primaryFontFamily(renderFontStack(stack));
+}
+
 /** The name the Font select shows for a font list. */
 export function fontLabel(stack: string): string {
-  const family = primaryFontFamily(stack).replace(/\s+Bundled$/i, '');
-  const bundled = [...BUNDLED_FONTS, ...RETIRED_FONTS].find(
+  const family = drawnFamily(stack).replace(/\s+Bundled$/i, '');
+  const bundled = BUNDLED_FONTS.find(
     (f) => fontKey(primaryFontFamily(f.value)) === fontKey(family),
   );
   if (bundled) return bundled.label;
@@ -101,7 +102,7 @@ export function fontChoices(current: string, installed: readonly SystemFontEntry
     choices.push({ label: family, value: systemFontStack(family) });
   }
   if (current.trim() === '') return choices;
-  const key = fontKey(primaryFontFamily(current));
+  const key = fontKey(drawnFamily(current));
   const index = choices.findIndex((c) => fontKey(primaryFontFamily(c.value)) === key);
   if (index >= 0) {
     choices[index] = { ...choices[index], value: current };

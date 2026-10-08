@@ -56,10 +56,10 @@ describe('the face a window writes', () => {
     const iosevka = '"Iosevka", Menlo, monospace';
     expect(panelFontFamily(iosevka)).toBe(iosevka);
     expect(panelFontList(iosevka)).toBe(iosevka);
-    // A Berkeley Mono list falls back to the bundled face, as the
+    // A retired bundled name draws in the bundled face, as the
     // terminal does.
-    expect(panelFontFamily('"Berkeley Mono", monospace')).toBe(
-      '"Berkeley Mono", "JetBrainsMono Bundled", monospace',
+    expect(panelFontFamily('"BerkeleyMono Bundled", monospace')).toBe(
+      '"JetBrainsMono Bundled", monospace',
     );
   });
 });

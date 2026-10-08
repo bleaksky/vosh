@@ -39,8 +39,8 @@ const installed = [
 
 describe('primaryFontFamily', () => {
   it('reads the first family without quotes', () => {
-    expect(primaryFontFamily('"BerkeleyMono Bundled", Menlo, monospace')).toBe(
-      'BerkeleyMono Bundled',
+    expect(primaryFontFamily('"JetBrainsMono Bundled", Menlo, monospace')).toBe(
+      'JetBrainsMono Bundled',
     );
     expect(primaryFontFamily("  'SF Mono' , monospace")).toBe('SF Mono');
     expect(primaryFontFamily('Menlo')).toBe('Menlo');
@@ -51,8 +51,9 @@ describe('primaryFontFamily', () => {
 describe('fontLabel', () => {
   it('names the bundled fonts the way the board does', () => {
     expect(fontLabel('"JetBrainsMono Bundled", Menlo, monospace')).toBe('JetBrains Mono');
+    // A list saved with the retired bundled name draws in JetBrains Mono.
     expect(fontLabel('"BerkeleyMono Bundled", "JetBrainsMono Bundled", monospace')).toBe(
-      'Berkeley Mono',
+      'JetBrains Mono',
     );
   });
 
@@ -143,15 +144,15 @@ describe('fontChoices', () => {
     expect(choices).toHaveLength(5);
   });
 
-  it('keeps a Berkeley Mono list saved while Vosh bundled it, by name', () => {
-    const saved = '"BerkeleyMono Bundled", Menlo, monospace';
-    expect(fontChoices(saved, installed)[0]).toEqual({ label: 'Berkeley Mono', value: saved });
-    // Where you have it installed, its entry carries your list.
-    const withBerkeley = [...installed, { family: 'Berkeley Mono', monospace: true }];
-    const choices = fontChoices(saved, withBerkeley);
-    expect(choices.filter((c) => c.label === 'Berkeley Mono')).toEqual([
-      { label: 'Berkeley Mono', value: saved },
-    ]);
+  it('shows a list saved with a retired default as JetBrains Mono, unchanged', () => {
+    for (const saved of [
+      '"BerkeleyMono Bundled", Menlo, monospace',
+      'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace',
+    ]) {
+      const choices = fontChoices(saved, installed);
+      expect(choices[0]).toEqual({ label: 'JetBrains Mono', value: saved });
+      expect(choices.filter((c) => c.label === 'JetBrains Mono')).toHaveLength(1);
+    }
   });
 
   it('works before the installed list loads', () => {

@@ -941,7 +941,7 @@ Two more colors sit with the rows they belong to. `Sent command color` under Inp
 The terminal font lives in Settings under Appearance, then Terminal text. The panel font and its size live right after it, under Panel text.
 
 - Open Settings and choose Appearance.
-- Under Terminal text, pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer. If you own Berkeley Mono, install it and pick it there.
+- Under Terminal text, pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer.
 - Pick a size in `Size`, from 11 to 18 pt. The default is 14.
 - Pick `Compact`, `Default`, or `Loose` in `Line height`.
 - Under Panel text, pick a font in `Font` for every pane in the panel and the status line under the terminal. `As designed`, the default, keeps the fonts the panes were drawn in. The headers, labels, counts, and rows use the font of the menus and Settings, and the game text in your affects, the chips, and chat uses your terminal font. `Same as terminal` draws all of it in your terminal font. `System font` draws all of it in the font of the menus and Settings. The rest of the list holds the fonts the terminal `Font` offers.
@@ -1088,7 +1088,7 @@ The command runs entirely in the frontend and stores your choice locally under t
 
 On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`, which draws the xterm renderer with your graphics card. Turn it off when the terminal draws wrong, then restart Vosh.
 
-If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface or size, check `Font` and `Size` under Panel text, right after Terminal text.
+If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. A font list saved by an older Vosh that names a font Vosh no longer ships draws in JetBrains Mono. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface or size, check `Font` and `Size` under Panel text, right after Terminal text.
 
 Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size. Turn it off to let each character keep its own.
 
