@@ -331,7 +331,9 @@ describe('a walk on the map', () => {
   async function map() {
     const { MapView } = await import('./MapView');
     const { startRoomStore } = await import('../../stores/gmcp/roomStore');
+    const { startWalkStore } = await import('../../stores/session/walkStore');
     startRoomStore();
+    startWalkStore();
     const container = doc.createElement('div');
     const root = createRoot(container as unknown as HTMLElement);
     await act(async () => {
@@ -360,6 +362,23 @@ describe('a walk on the map', () => {
       click: async (row: number, col: number) => {
         await fire('pointerdown', ...at(row, col));
         await fire('pointerup', ...at(row, col));
+      },
+      /** The words in the chip at the bottom of the map, or null with
+       *  none. */
+      chip: () => {
+        const [chip] = findAll(container, (el) => classOf(el).startsWith('walk-chip'));
+        if (!chip) return null;
+        return findAll(chip, (el) => /^ov-(update|toast)-(msg|meta)/.test(classOf(el))).map(
+          (el) => el.textContent,
+        );
+      },
+      /** Press the chip's Stop. */
+      stop: async () => {
+        const [chip] = findAll(container, (el) => classOf(el).startsWith('walk-chip'));
+        const [button] = findAll(chip, (el) => el.tagName === 'BUTTON');
+        const key = Object.keys(button).find((k) => k.startsWith('__reactProps$')) ?? '';
+        const props = (button as unknown as Record<string, { onClick(): void }>)[key];
+        await act(async () => props.onClick());
       },
       /** The tip's words and its meta, or null with no tip. */
       tip: () => {
@@ -450,5 +469,54 @@ describe('a walk on the map', () => {
     expect(view.tip()).toBeNull();
     await view.hover(...otherFloor());
     expect(view.tip()).toBeNull();
+  });
+
+  /** Tell the page where the first session's walk stands, as the
+   *  walker does. */
+  async function progress(payload: object) {
+    await act(async () => {
+      for (const cb of bus.get('session://walk') ?? []) cb({ payload: { session: 1, ...payload } });
+    });
+  }
+
+  it('shows the steps left and Stop while you walk, and clears on arrival', async () => {
+    const view = await map();
+    await view.click(6, 12);
+    expect(view.chip()).toBeNull();
+    await progress({ kind: 'walking', done: 2, total: 6, left: '2n2e', route: true });
+    expect(view.chip()).toEqual(['4 steps left', '2n2e']);
+    await progress({ kind: 'walking', done: 5, total: 6, left: 'e', route: true });
+    expect(view.chip()).toEqual(['1 step left', 'e']);
+    await progress({ kind: 'idle' });
+    expect(view.chip()).toBeNull();
+    const { getWalk } = await import('../../stores/session/walkStore');
+    expect(getWalk().route).toBeNull();
+  });
+
+  it('stops the walk with Stop', async () => {
+    const view = await map();
+    await view.click(6, 12);
+    await progress({ kind: 'walking', done: 2, total: 6, left: '2n2e', route: true });
+    const { invoke } = await import('@tauri-apps/api/core');
+    vi.mocked(invoke).mockClear();
+    await view.stop();
+    expect(vi.mocked(invoke).mock.calls).toEqual([['session_walk_stop', { session: 1 }]]);
+  });
+
+  it('says how far a stopped walk got while you stand on its route', async () => {
+    const view = await map();
+    await view.click(6, 12);
+    await progress({ kind: 'stopped', done: 4, total: 6, why: 'lost_sight' });
+    expect(view.chip()).toEqual(['Stopped after 4 of 6 steps']);
+    await progress({ kind: 'stopped', done: 0, total: 6, why: 'lost_track' });
+    expect(view.chip()).toEqual(['Stopped']);
+  });
+
+  it('says nothing of a stopped walk you typed', async () => {
+    const view = await map();
+    await progress({ kind: 'walking', done: 1, total: 3, left: '2w', route: false });
+    expect(view.chip()).toEqual(['2 steps left', '2w']);
+    await progress({ kind: 'stopped', done: 1, total: 3, why: 'plain' });
+    expect(view.chip()).toBeNull();
   });
 });

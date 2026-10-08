@@ -61,10 +61,12 @@ const walking = (done: number, left: string, route = true) => ({
   route,
 });
 
-/** Ten steps north from the fountain, as planWalk lays them out. */
+/** Ten steps north from the fountain, your room first. */
 const ROUTE: WalkRoute = {
-  cells: Array.from({ length: 10 }, (_, i) => ({ row: 9 - i, col: 10 })),
+  cells: Array.from({ length: 11 }, (_, i) => ({ row: 10 - i, col: 10 })),
+  rooms: Array.from({ length: 11 }, (_, i) => 3001 + i),
   target: { row: 0, col: 10 },
+  kind: 'open',
 };
 
 async function load() {

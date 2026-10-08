@@ -19,7 +19,7 @@ import {
   type OffFloorEntry,
 } from './mapTiles';
 import type { MapStyle } from './mapStyle';
-import type { GridSpot, WalkPlan } from './mapWalk';
+import type { GridSpot, WalkMark } from './mapWalk';
 
 // Default sector code order in a horizontal sprite strip. A tileset PNG
 // supplied by the user is assumed to lay tiles out left-to-right in this
@@ -117,54 +117,64 @@ export function roomAt(place: GridPlace, x: number, y: number): GridSpot {
   };
 }
 
-/** A walk the map shows, to the room at `target`, under the pointer or
- *  clicked. */
-export interface WalkMark {
-  plan: WalkPlan;
-  target: GridSpot;
-}
-
 const spotKey = (spot: GridSpot) => `${spot.row},${spot.col}`;
 
-/** The rooms a walk passes through, as spotKey gives them. */
+/** The rooms a walk lights, as spotKey gives them. A stopped walk
+ *  lights none, so its rooms fall back to their depth fade. */
 function walkRooms(walk: WalkMark | null): Set<string> {
-  return new Set(walk ? walk.plan.cells.map(spotKey) : []);
+  return new Set(walk && walk.solid === undefined ? walk.cells.map(spotKey) : []);
 }
 
 /** The path of a walk from your room at `from`, through the corridor
- *  of each step, in the path color at 2 px. It draws under the rooms,
- *  so the route reads between them. */
+ *  of each step, at 2 px under the rooms, so the route reads between
+ *  them. It draws in the path color, and the steps left of a stopped
+ *  walk dash 3 on 3 in the secondary ink after the legs Vosh sent. */
 export function drawWalkPath(
   ctx: CanvasRenderingContext2D,
-  plan: WalkPlan,
+  walk: WalkMark,
   from: GridSpot,
   place: GridPlace,
 ) {
-  if (plan.cells.length === 0) return;
   const { ox, oy, pitch } = place;
+  const points = [from, ...walk.cells];
+  const solid = walk.solid ?? walk.cells.length;
+  const leg = (start: number, end: number, color: string, dash: number[]) => {
+    if (end <= start) return;
+    ctx.strokeStyle = color;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    points.slice(start, end + 1).forEach(({ row, col }, i) => {
+      if (i === 0) ctx.moveTo(ox + col * pitch, oy + row * pitch);
+      else ctx.lineTo(ox + col * pitch, oy + row * pitch);
+    });
+    ctx.stroke();
+  };
   ctx.save();
-  ctx.strokeStyle = MAP_COLORS.pathLine;
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(ox + from.col * pitch, oy + from.row * pitch);
-  for (const { row, col } of plan.cells) ctx.lineTo(ox + col * pitch, oy + row * pitch);
-  ctx.stroke();
+  leg(0, solid, MAP_COLORS.pathLine, []);
+  leg(solid, walk.cells.length, MAP_COLORS.secondary, [3, 3]);
   ctx.restore();
 }
 
 /** The ring around the room a walk goes to, 1.5 px and 3.5 px outside
- *  its square. The accent marks a room the walk reaches, and a dashed
- *  danger ring one past a door or a shore. */
+ *  its square. The accent marks a room the walk reaches and a dashed
+ *  danger ring one past a door or a shore. A stopped walk dashes it in
+ *  the tertiary ink. */
 export function drawWalkTarget(ctx: CanvasRenderingContext2D, walk: WalkMark, place: GridPlace) {
   const { ox, oy, pitch, size } = place;
-  const open = walk.plan.kind === 'open';
   const half = size / 2 + 3.5;
   ctx.save();
-  ctx.strokeStyle = open ? MAP_COLORS.origin : MAP_COLORS.danger;
+  if (walk.solid !== undefined) {
+    ctx.strokeStyle = MAP_COLORS.text;
+    ctx.setLineDash([3, 2]);
+  } else {
+    const open = walk.kind === 'open';
+    ctx.strokeStyle = open ? MAP_COLORS.origin : MAP_COLORS.danger;
+    ctx.setLineDash(open ? [] : [3, 2]);
+  }
   ctx.lineWidth = 1.5;
-  ctx.setLineDash(open ? [] : [3, 2]);
   ctx.beginPath();
   ctx.roundRect(
     ox + walk.target.col * pitch - half,
@@ -260,7 +270,7 @@ export function drawSquares(
   for (const layer of layers) drawOffFloorOverlay(ctx, layer, ox, oy, pitch);
 
   const place = { ox, oy, pitch, size };
-  if (walk) drawWalkPath(ctx, walk.plan, { row: centerR, col: centerC }, place);
+  if (walk) drawWalkPath(ctx, walk, { row: centerR, col: centerC }, place);
   const onPath = walkRooms(walk);
 
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
@@ -505,7 +515,7 @@ export function drawTileset(
   }
 
   const place = { ox, oy, pitch, size: pitch };
-  if (walk) drawWalkPath(ctx, walk.plan, { row: centerR, col: centerC }, place);
+  if (walk) drawWalkPath(ctx, walk, { row: centerR, col: centerC }, place);
   const onPath = walkRooms(walk);
 
   for (const { row: r, col: c, cell } of gridRooms(payload, rows, cols)) {

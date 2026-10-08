@@ -142,6 +142,17 @@
   pointer-events: none;
 }
 
+/* Where a walk stands, centered 8 px up from the bottom of the map: the
+   Walking chip with Stop, or the toast a stopped walk leaves. */
+.map-canvas-host .walk-chip {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {

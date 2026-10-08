@@ -16,16 +16,24 @@ import {
   gridPlace,
   roomAt,
   type GridPlace,
-  type WalkMark,
 } from './mapPaint';
-import { planWalk, speedwalk, type GridSpot } from './mapWalk';
+import {
+  offerOf,
+  planWalk,
+  speedwalk,
+  walkAhead,
+  type GridSpot,
+  type WalkMark,
+  type WalkPlan,
+} from './mapWalk';
+import { WalkStatus } from './WalkStatus';
 import { GlyphsOverlay } from './GlyphsOverlay';
 import { subscribeThemeChanges } from '../../theme/theme';
 import { pushToast } from '../../stores/toasts';
 import { walkRoute } from '../../ipc/session';
 import { getRoomOf } from '../../stores/gmcp/roomStore';
 import { getSelected } from '../../stores/session/sessionsStore';
-import { noteWalkRoute } from '../../stores/session/walkStore';
+import { noteWalkRoute, useWalk } from '../../stores/session/walkStore';
 import {
   getMapTiles,
   startMapTiles,
@@ -168,11 +176,25 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   const spot = spotAt(pointer);
   const hoverRow = spot?.row ?? null;
   const hoverCol = spot?.col ?? null;
-  const hover = useMemo((): WalkMark | null => {
+  const hover = useMemo((): WalkOffer | null => {
     if (!tiles || hoverRow === null || hoverCol === null) return null;
     const plan = planWalk(tiles, hoverRow, hoverCol);
     return plan && { plan, target: { row: hoverRow, col: hoverCol } };
   }, [tiles, hoverRow, hoverCol]);
+  // The walk a click sent, from where you stand to the room clicked.
+  // The map shows it while you walk and after it stops, until you
+  // arrive or stand off its route. The walk on offer under the pointer
+  // shows over it.
+  const walk = useWalk();
+  const ahead = useMemo(
+    () => (tiles && walk.route ? walkAhead(tiles, walk.route, walk.progress) : null),
+    [tiles, walk],
+  );
+  const mark = useMemo(
+    (): WalkMark | null => (hover ? offerOf(hover.plan, hover.target) : ahead),
+    [hover, ahead],
+  );
+  const status = walk.progress.kind === 'stopped' && !ahead ? null : walk.progress;
 
   useMapGestures(containerRef, {
     zoom,
@@ -190,8 +212,14 @@ export function MapView({ emptyText }: MapViewProps = {}) {
       const plan = tiles && target && planWalk(tiles, target.row, target.col);
       const session = getSelected();
       const start = getRoomOf(session)?.vnum;
-      if (!target || !plan || plan.steps.length === 0 || start == null) return;
-      noteWalkRoute(session, { cells: plan.cells, target });
+      if (!tiles || !target || !plan || plan.steps.length === 0 || start == null) return;
+      const { rows, cols } = gridDims(tiles);
+      noteWalkRoute(session, {
+        cells: [playerCellOf(tiles, rows, cols), ...plan.cells],
+        rooms: [start, ...plan.rooms],
+        target,
+        kind: plan.kind,
+      });
       void walkRoute(speedwalk(plan.steps), start, plan.rooms, session).catch(() => {});
     },
   });
@@ -280,7 +308,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     const anchor = computeAnchor(cssWidth, cssHeight, zoom);
 
     if (style === 'tileset') {
-      drawTileset(ctx, tiles, rows, cols, centerR, centerC, tilesetImage, anchor, ground, hover);
+      drawTileset(ctx, tiles, rows, cols, centerR, centerC, tilesetImage, anchor, ground, mark);
     } else if (style === 'squares') {
       drawSquares(
         ctx,
@@ -292,17 +320,17 @@ export function MapView({ emptyText }: MapViewProps = {}) {
         anchor,
         ground,
         readPanelMarkFace(),
-        hover,
+        mark,
       );
     } else {
       // Glyph mode: canvas paints just the background and the walk
-      // under the pointer. The actual character grid is rendered via
+      // it shows. The actual character grid is rendered via
       // <GlyphsOverlay /> in the JSX below so it tiles in em cells
       // using the glyph face, matching tintin's character-grid map.
       const place = placeIn(cssWidth, cssHeight);
-      if (hover && place) {
-        drawWalkPath(ctx, hover.plan, { row: centerR, col: centerC }, place);
-        drawWalkTarget(ctx, hover, place);
+      if (mark && place) {
+        drawWalkPath(ctx, mark, { row: centerR, col: centerC }, place);
+        drawWalkTarget(ctx, mark, place);
       }
     }
   };
@@ -317,7 +345,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // A change to the 3D view repaints the same way, once per drag step.
   useLayoutEffect(() => {
     drawRef.current();
-  }, [tiles, view3d, hover]);
+  }, [tiles, view3d, mark]);
 
   // The tip sits 16 px right of the room under the pointer and 50 px
   // above it, or under it for a walk that stops at a door or a shore.
@@ -464,6 +492,7 @@ export function MapView({ emptyText }: MapViewProps = {}) {
             <span className="ov-toast-meta is-mono">{speedwalk(hover.plan.steps)}</span>
           </div>
         )}
+        {status && <WalkStatus progress={status} />}
         {!tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
         <MapPaneControls
           style={style}
@@ -485,8 +514,14 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   );
 }
 
+/** The walk on offer to the room under the pointer. */
+interface WalkOffer {
+  plan: WalkPlan;
+  target: GridSpot;
+}
+
 /** What the tip over a room says. */
-function walkTipText({ plan }: WalkMark): string {
+function walkTipText({ plan }: WalkOffer): string {
   if (plan.kind === 'door') return 'Walk to the door';
   if (plan.kind === 'shore') return 'Walk to the edge';
   return plan.steps.length === 1 ? 'Walk 1 step' : `Walk ${plan.steps.length} steps`;

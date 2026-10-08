@@ -88,15 +88,15 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       pinchFrom = null;
     };
 
-    // A press on the map's own button is the button's.
-    const onButton = (e: Event) =>
-      e.target instanceof Element && e.target.closest('button') !== null;
+    // A press on the map's own button or on the walk chip is theirs.
+    const onControl = (e: Event) =>
+      e.target instanceof Element && e.target.closest('button, .walk-chip') !== null;
     // The command line keeps the caret while you drag the map.
     const onMouseDown = (e: MouseEvent) => {
-      if (latest.current.view && !onButton(e)) e.preventDefault();
+      if (latest.current.view && !onControl(e)) e.preventDefault();
     };
     const onPointerDown = (e: PointerEvent) => {
-      if (e.button !== 0 || onButton(e)) return;
+      if (e.button !== 0 || onControl(e)) return;
       if (!latest.current.view) {
         press = e.pointerId;
         return;
@@ -106,7 +106,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     };
     const onPointerMove = (e: PointerEvent) => {
       if (!latest.current.view) {
-        latest.current.onPoint(onButton(e) ? null : pointAt(e));
+        latest.current.onPoint(onControl(e) ? null : pointAt(e));
         return;
       }
       if (!drag || e.pointerId !== drag.id || !latest.current.view) return;
@@ -118,7 +118,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     const onPointerUp = (e: PointerEvent) => {
       if (press !== null && e.pointerId === press && e.type === 'pointerup') {
         press = null;
-        if (!latest.current.view && !onButton(e)) latest.current.onPick(pointAt(e));
+        if (!latest.current.view && !onControl(e)) latest.current.onPick(pointAt(e));
         return;
       }
       press = null;
@@ -128,7 +128,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     };
     const onPointerLeave = () => latest.current.onPoint(null);
     const onDoubleClick = (e: MouseEvent) => {
-      if (latest.current.view && !onButton(e)) latest.current.setView(resetView);
+      if (latest.current.view && !onControl(e)) latest.current.setView(resetView);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const v = latest.current.view;

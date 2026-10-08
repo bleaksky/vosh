@@ -9,6 +9,8 @@ import {
   type Dir,
   type MapTilesPayload,
 } from './mapTiles';
+import type { WalkProgress } from '../../ipc/session';
+import type { WalkRoute } from '../../stores/session/walkStore';
 
 // Click to walk on the tiles the game sends (Scripts and Panels review,
 // board 9, Q14 and Q15). A path runs over the lowercase n, e, s
@@ -168,4 +170,63 @@ export function speedwalk(steps: Dir[]): string {
     i = j;
   }
   return out;
+}
+
+/** A walk the map draws, to the room at `target`, under the pointer or
+ *  under way. `cells` are the rooms the path passes after yours, in
+ *  order, and `kind` says how it ends. A stopped walk holds `solid`, the
+ *  legs from your room Vosh sent but never saw land, and the steps after
+ *  them dash. */
+export interface WalkMark {
+  cells: GridSpot[];
+  target: GridSpot;
+  kind: WalkKind;
+  solid?: number;
+}
+
+/** The walk the map offers for `plan`, to the room at `target`. */
+export function offerOf(plan: WalkPlan, target: GridSpot): WalkMark {
+  return { cells: plan.cells, target, kind: plan.kind };
+}
+
+/** The room num of the cell at `spot`, from the `ex` of a room beside
+ *  it whose lowercase exit lands on it. Null when no room beside it
+ *  says. */
+export function roomNumAt(payload: MapTilesPayload, spot: GridSpot): number | null {
+  for (const [, back, dr, dc] of MOVES) {
+    const next = getCell(payload, spot.row + dr, spot.col + dc);
+    if (!next || !hasExit(next, back)) continue;
+    const room = Number(next.ex?.[back]);
+    if (Number.isInteger(room) && room > 0) return room;
+  }
+  return null;
+}
+
+/** What is left of a walk a click sent, on the tiles the game sent
+ *  last. The tiles center on the room you stand in, which the route
+ *  finds by its num, so the route moves with you and holds still while
+ *  a step goes unseen. Null with no walk, or once you stand off the
+ *  route. */
+export function walkAhead(
+  payload: MapTilesPayload,
+  route: WalkRoute,
+  progress: WalkProgress,
+): WalkMark | null {
+  if (progress.kind === 'idle') return null;
+  const { rows, cols } = gridDims(payload);
+  const you = playerCellOf(payload, rows, cols);
+  const room = roomNumAt(payload, you);
+  const at = room === null ? -1 : route.rooms.indexOf(room);
+  if (at < 0) return null;
+  const was = route.cells[at];
+  const move = ({ row, col }: GridSpot) => ({
+    row: row + you.row - was.row,
+    col: col + you.col - was.col,
+  });
+  const mark = {
+    cells: route.cells.slice(at + 1).map(move),
+    target: move(route.target),
+    kind: route.kind,
+  };
+  return progress.kind === 'stopped' ? { ...mark, solid: Math.max(0, progress.done - at) } : mark;
 }
