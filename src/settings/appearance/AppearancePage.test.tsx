@@ -72,6 +72,9 @@ let createRoot: typeof import('react-dom/client').createRoot;
 let normalizeUiConfig: typeof import('../../ipc/uiConfig').normalizeUiConfig;
 let BUILTIN_THEMES: typeof import('../../theme/themes').BUILTIN_THEMES;
 
+// A dark OS, with Increase contrast only where a test turns it on.
+let moreContrast = false;
+
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('document', doc);
@@ -81,9 +84,8 @@ beforeAll(async () => {
     HTMLIFrameElement: class {},
     addEventListener() {},
     removeEventListener() {},
-    // A dark OS without Increase contrast.
     matchMedia: (query: string) => ({
-      matches: !query.includes('contrast'),
+      matches: query.includes('contrast') ? moreContrast : true,
       addEventListener() {},
       removeEventListener() {},
     }),
@@ -908,6 +910,21 @@ describe('AppearancePage', () => {
     expect(system.text).toContain(
       'Vosh switches between your light and dark theme when your system does.',
     );
+
+    // While Increase contrast shows High Contrast, the line says why a
+    // pick does not show yet.
+    moreContrast = true;
+    try {
+      const more = await themeCard({ ...config(), follow_system_appearance: true });
+      expect(more.text).toContain(
+        "Your system is set to increase contrast, so High Contrast shows. Your pick shows once that's off.",
+      );
+      expect(more.text).not.toContain('Vosh switches between');
+      const offMore = await themeCard(config());
+      expect(offMore.text).not.toContain('increase contrast');
+    } finally {
+      moreContrast = false;
+    }
 
     const game = await themeCard(gameConfig());
     expect(game.pressed).toEqual(['With the game']);
