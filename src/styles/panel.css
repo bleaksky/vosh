@@ -1566,6 +1566,126 @@
   transition: stroke-dasharray 400ms linear;
 }
 
+/* The glass of Vials and Orbs: a 1 px rim at 55 percent of the
+   vital's tone over a 6 percent wash, the liquid in the tone with a
+   1 px surface line a step toward the text color. The liquid eases to
+   its level in 160 ms, and the part a hit took drains down into it. */
+.vitals-glass-rim {
+  fill: none;
+  stroke: var(--vital-rim);
+  stroke-width: 1;
+}
+
+.vitals-glass-wash {
+  fill: color-mix(in oklab, var(--vital-mark) 6%, transparent);
+}
+
+.vitals-glass-liquid {
+  fill: color-mix(in oklab, var(--vital-mark) 82%, transparent);
+}
+
+.vitals-glass-surface {
+  stroke: color-mix(in oklab, var(--vital-mark) 55%, var(--text));
+  stroke-width: 1;
+}
+
+.vitals-glass-level {
+  transition: transform 160ms ease-out;
+}
+
+.vitals-glass-gone {
+  fill: var(--vital-ghost);
+  transform-box: fill-box;
+  transform-origin: bottom;
+}
+
+.vitals-glass-gone.is-draining {
+  transform: scaleY(0);
+  transition: transform 400ms linear;
+}
+
+/* Vials. Each vial 18 by 44 with its caps, figure and max beside it,
+   9 apart, or on a narrow panel the caps over the vial and the figure
+   under it. Your opponent's tube runs the footer, 8 tall. */
+.vitals-vial {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+
+.vitals-vial.is-narrow {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.vitals-vial-glass {
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+.vitals-vial.is-narrow .vitals-vial-glass {
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-vial-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vitals-vial.is-narrow .vitals-vial-text {
+  align-items: center;
+  margin-top: round(5px * var(--mud-scale), 1px);
+}
+
+.vitals-vial-figure {
+  height: round(20px * var(--mud-scale), 1px);
+  font-size: round(16px * var(--mud-scale), 1px);
+  line-height: round(20px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-vial-max {
+  font-size: round(10px * var(--mud-scale), 1px);
+  line-height: round(12px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.vitals-tube {
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--vital-mark) 6%, transparent);
+  box-shadow: inset 0 0 0 1px var(--vital-rim);
+}
+
+.vitals-tube-liquid,
+.vitals-tube-gone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.vitals-tube-liquid {
+  left: 0;
+  border-right: 1px solid color-mix(in oklab, var(--vital-mark) 55%, var(--text));
+  background: color-mix(in oklab, var(--vital-mark) 82%, transparent);
+  transition: width 160ms ease-out;
+}
+
+.vitals-tube-gone {
+  background: var(--vital-ghost);
+}
+
 /* Show each hit. The part a hit took holds pale beside the fill, then
    drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
    every fill jumps and the pale part just goes. */

@@ -79,6 +79,8 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   traces: 'Traces. Each vital shows its last minute as a line, filled to where it stands now.',
   dials: 'Dials. Each vital fills an open dial with its figure in the middle.',
   rings: 'Rings. Your vitals fill rings nested in one glyph, with the figures beside it.',
+  vials:
+    "Vials. Each vital fills a small vial beside its figure, the way a flask shows what's left.",
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 

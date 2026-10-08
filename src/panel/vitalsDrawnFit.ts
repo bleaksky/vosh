@@ -2,7 +2,7 @@ import type { Vital } from '../ipc/uiConfig';
 import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { textPx } from './paneTextSize';
 import { maxOf } from './vitalsView';
-import { FOOTER_INSETS, LEDGER_GAP, type MeasureText } from './vitalsLedgerFit';
+import { FOOTER_INSETS, LEDGER_GAP, type LedgerFigure, type MeasureText } from './vitalsLedgerFit';
 import { markRoom } from './vitalsMarksFit';
 
 // How the styles of the More Vitals Styles review fit the panel and
@@ -108,6 +108,42 @@ export function dialsFit(width: number, count: number): ColumnFit {
 export function dialsHeight(size: number, fit: ColumnFit): number {
   const dial = fit === 'narrow' ? DIAL_NARROW : DIAL;
   return 1 + textPx(10, size) + textPx(12, size) + textPx(5, size) + dial + textPx(12, size);
+}
+
+/** A vial's size, and the space between it and its figure. */
+export const VIAL_WIDTH = 18;
+export const VIAL_HEIGHT = 44;
+const VIAL_GAP = 9;
+
+/** Vials sets the pane label caps, the figure and the max beside each
+ *  vial while the widest of each fits its column, else moves the
+ *  figure under the vial and drops the max. */
+export function vialsFit(
+  width: number,
+  size: number,
+  widest: readonly { label: string; figure: LedgerFigure }[],
+  measure: MeasureText,
+): ColumnFit {
+  if (widest.length === 0) return 'full';
+  const column = columnWidth(width, widest.length) - VIAL_WIDTH - VIAL_GAP;
+  const fits = widest.every(
+    ({ label, figure }) =>
+      measure(label.toUpperCase(), textPx(10, size), 600) <= column &&
+      measure(figure.current, textPx(16, size), 500) <= column &&
+      (figure.max === null || measure(figure.max, textPx(10, size), 500) <= column),
+  );
+  return fits ? 'full' : 'narrow';
+}
+
+/** The footer's height for Vials, the 1 px line on top included: the
+ *  vial beside its text, or the caps, the vial and the figure under it,
+ *  between the column pads. */
+export function vialsHeight(size: number, fit: ColumnFit): number {
+  const cell =
+    fit === 'narrow'
+      ? textPx(12, size) + textPx(5, size) + VIAL_HEIGHT + textPx(5, size) + textPx(20, size)
+      : Math.max(VIAL_HEIGHT, textPx(12, size) + textPx(20, size) + textPx(12, size));
+  return 1 + textPx(10, size) + cell + textPx(12, size);
 }
 
 /** The Rings glyph's size, and the radius of each ring, outer to inner

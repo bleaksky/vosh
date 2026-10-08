@@ -359,6 +359,7 @@ describe('vitals style', () => {
       'traces',
       'dials',
       'rings',
+      'vials',
       'text',
     ]);
   });

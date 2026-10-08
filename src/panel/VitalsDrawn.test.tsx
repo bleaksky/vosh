@@ -252,6 +252,32 @@ describe('Rings', () => {
   });
 });
 
+describe('Vials', () => {
+  /** The y each vial's liquid stands at. */
+  const levels = (html: string) =>
+    all(html, /vitals-glass-level" style="transform:translateY\(([\d.]+)px\)/g).map(Number);
+
+  it('fills each vial to its share, with the caps, figure and max beside it', () => {
+    const html = draw({ style: 'vials', fit: 'full' });
+    expect(levels(html)).toEqual([18.77, 20.1, 16.88]);
+    expect(all(html, /vitals-vial-figure">([^<]+)/g)).toEqual(['744', '590', '402']);
+    expect(all(html, /vitals-vial-max">([^<]+)/g)).toEqual(['/ 1038', '/ 870', '/ 521']);
+    expect(html).toContain('vitals-tube-liquid" style="width:54%"');
+  });
+
+  it('moves the figure under the vial on a narrow panel and drops the max', () => {
+    const html = draw({ style: 'vials', fit: 'narrow' });
+    expect(html).toContain('vitals-vial is-narrow');
+    expect(html).not.toContain('vitals-vial-max');
+  });
+
+  it('leaves the vial empty for a value the game hides', () => {
+    const html = draw({ style: 'vials', fit: 'full' }, {}, { vitals: { ...HIT, hidden: true } });
+    expect(levels(html)).toEqual([]);
+    expect(all(html, /vitals-vial-figure">([^<]+)/g)).toEqual(['?', '?', '?']);
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

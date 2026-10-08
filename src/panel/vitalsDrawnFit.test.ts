@@ -5,6 +5,7 @@ import {
   columnWidth,
   dialsFit,
   ringsFit,
+  vialsFit,
   FOE_LADDER,
   LADDER,
   litSegments,
@@ -79,6 +80,15 @@ describe('the column styles', () => {
   it('keep the Rings labels while each fits whole beside its value', () => {
     expect(ringsFit(300, 12, LABELS, VALUES, MEASURE)).toBe('labels');
     expect(ringsFit(200, 12, LABELS, VALUES, MEASURE)).toBe('keys');
+  });
+
+  it('set the Vials text beside each vial while it fits its column', () => {
+    const widest = LABELS.map((label, i) => ({
+      label,
+      figure: { current: ['1038', '870', '521'][i] ?? '', max: '/ 1038' },
+    }));
+    expect(vialsFit(300, 12, widest, MEASURE)).toBe('full');
+    expect(vialsFit(200, 12, widest, MEASURE)).toBe('narrow');
   });
 
   it('draw Dials at 60 while a column holds one, else at 44', () => {

@@ -149,6 +149,7 @@ export const VITALS_STYLES = [
   'traces',
   'dials',
   'rings',
+  'vials',
   'text',
 ] as const;
 
@@ -169,6 +170,7 @@ const SAVED_VITALS_STYLES = [
   'traces',
   'dials',
   'rings',
+  'vials',
   'text',
 ] as const;
 

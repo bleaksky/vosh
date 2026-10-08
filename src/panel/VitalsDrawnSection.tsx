@@ -3,7 +3,8 @@ import type { Fight } from '../stores/gmcp/combatStore';
 import { VitalsBands } from './VitalsBands';
 import { VitalsBlocks } from './VitalsBlocks';
 import type { DrawnVitalsProps } from './VitalsDrawn';
-import { bandsHeight, dialsHeight, ringsHeight, tracesHeight } from './vitalsDrawnFit';
+import { bandsHeight, dialsHeight, ringsHeight, tracesHeight, vialsHeight } from './vitalsDrawnFit';
+import { VitalsVials } from './VitalsVials';
 import { VitalsRings } from './VitalsRings';
 import { VitalsDials } from './VitalsDials';
 import type { VitalsValues } from '../ipc/uiConfig';
@@ -68,6 +69,11 @@ export function DrawnSection({
     case 'dials':
       body = <VitalsDials {...props} values={values} fit={fit.fit} />;
       height = dialsHeight(size, fit.fit);
+      cols = true;
+      break;
+    case 'vials':
+      body = <VitalsVials {...props} values={values} fit={fit.fit} />;
+      height = vialsHeight(size, fit.fit);
       cols = true;
       break;
     case 'rings':

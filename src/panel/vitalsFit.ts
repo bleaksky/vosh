@@ -6,6 +6,7 @@ import { gaugesFit, pipsFit, type GaugesFit, type PipsFit } from './vitalsMarksF
 import {
   dialsFit,
   ringsFit,
+  vialsFit,
   rowMarkFit,
   type ColumnFit,
   type RingsFit,
@@ -25,7 +26,7 @@ export type VitalsFit =
   | { style: 'pips'; fit: PipsFit }
   | { style: 'bands' }
   | { style: RowStyle; fit: RowMarkFit }
-  | { style: 'dials'; fit: ColumnFit }
+  | { style: 'dials' | 'vials'; fit: ColumnFit }
   | { style: 'rings'; fit: RingsFit };
 
 /** The row styles of the More Vitals Styles review, each vital's mark
@@ -35,7 +36,7 @@ type RowStyle = (typeof ROW_STYLES)[number];
 
 /** The styles of the More Vitals Styles review, which DrawnSection
  *  draws. */
-const DRAWN = ['bands', ...ROW_STYLES, 'dials', 'rings'] as const;
+const DRAWN = ['bands', ...ROW_STYLES, 'dials', 'rings', 'vials'] as const;
 
 export type DrawnFit = Extract<VitalsFit, { style: (typeof DRAWN)[number] }>;
 
@@ -94,6 +95,13 @@ export function vitalsFitOf(
     };
   }
   if (style === 'dials') return { style, fit: dialsFit(width, rows.length) };
+  if (style === 'vials') {
+    const widest = rows.map((row) => ({
+      label: VITAL_LABELS[row.key],
+      figure: ledgerFigure(values, row.max, row.max, row.tone === 'hidden'),
+    }));
+    return { style, fit: vialsFit(width, size, widest, measure) };
+  }
   if (style === 'rings') {
     const labels = rows.map((row) => VITAL_LABELS[row.key]);
     const widest = rows.map((row) => row.widest);

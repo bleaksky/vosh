@@ -237,6 +237,13 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-dial-max', 'font-size', '10px', '13px'],
   ['.vitals-dial-max', 'line-height', '12px', '16px'],
   ['.vitals-ring-row', 'height', '19px', '25px'],
+  ['.vitals-vial.is-narrow .vitals-vial-glass', 'margin-top', '5px', '7px'],
+  ['.vitals-vial.is-narrow .vitals-vial-text', 'margin-top', '5px', '7px'],
+  ['.vitals-vial-figure', 'height', '20px', '27px'],
+  ['.vitals-vial-figure', 'font-size', '16px', '21px'],
+  ['.vitals-vial-figure', 'line-height', '20px', '27px'],
+  ['.vitals-vial-max', 'font-size', '10px', '13px'],
+  ['.vitals-vial-max', 'line-height', '12px', '16px'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
