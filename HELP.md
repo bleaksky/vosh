@@ -328,7 +328,8 @@ Vosh's writing card helps you write the description others see when they look at
 - A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
 - Drag the card by its header to put it anywhere in the window. Double click the header, or pick `Put the card back` in the `⋯` menu, and it goes back over the terminal.
 - Drag the grip on the card's edge to make the box taller or shorter. It runs along the top while the card sits over the terminal and along the bottom once you've moved it. Double click it and the box grows with your text again.
-- The pin beside `Close` moves the card into a Writing pane in the panel, so the whole terminal stays in view. Press it again to float the card over the terminal. Vosh remembers where you put the card, how tall you made the box and whether you pinned it.
+- Drag the grip in the box's bottom right corner to make the box taller or wider, as you would any text area. It never gets narrower than 75 columns, and whatever runs past 75 still shows however wide you make it. Double click it and the box goes back to 80 columns and grows with your text.
+- The pin beside `Close` moves the card into a Writing pane in the panel, so the whole terminal stays in view. Press it again to float the card over the terminal. Vosh remembers where you put the card, how big you made the box and whether you pinned it.
 
 Vosh never writes, rewrites or suggests a word. The red underlines come from your system's own spell check, and `Check spelling` in the card's `⋯` menu turns them off.
 

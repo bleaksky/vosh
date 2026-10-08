@@ -573,6 +573,15 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "Option::is_none"
     )]
     pub writing_card_rows: Option<u32>,
+    /// The columns of text the writing card's box shows, from dragging the
+    /// grip at its corner. None until you drag it, which keeps 80. From 75
+    /// to 500, and anything else in a hand edit reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_cols",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_cols: Option<u32>,
     /// The writing card opens in its pane in the panel. Off by default,
     /// and written only while on.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1113,6 +1122,10 @@ where
 pub(crate) const WRITING_CARD_ROWS_MIN: u32 = 6;
 pub(crate) const WRITING_CARD_ROWS_MAX: u32 = 500;
 
+/// The fewest and most columns of text the writing card's box keeps.
+pub(crate) const WRITING_CARD_COLS_MIN: u32 = 75;
+pub(crate) const WRITING_CARD_COLS_MAX: u32 = 500;
+
 /// Hold a writing card edge to a finite number of pixels, or None.
 pub(crate) fn coerce_writing_card_edge(edge: Option<f64>) -> Option<f64> {
     edge.filter(|e| e.is_finite())
@@ -1122,6 +1135,11 @@ pub(crate) fn coerce_writing_card_edge(edge: Option<f64>) -> Option<f64> {
 /// Hold the writing card's rows to 6 to 500.
 pub(crate) fn coerce_writing_card_rows(rows: Option<u32>) -> Option<u32> {
     rows.map(|r| r.clamp(WRITING_CARD_ROWS_MIN, WRITING_CARD_ROWS_MAX))
+}
+
+/// Hold the writing card's columns to 75 to 500.
+pub(crate) fn coerce_writing_card_cols(cols: Option<u32>) -> Option<u32> {
+    cols.map(|c| c.clamp(WRITING_CARD_COLS_MIN, WRITING_CARD_COLS_MAX))
 }
 
 /// Read a writing card edge leniently, so a hand edit never stops a
@@ -1156,6 +1174,24 @@ where
     }
     Ok(match Raw::deserialize(deser)? {
         Raw::Number(n) => coerce_writing_card_rows(Some(u32::try_from(n).unwrap_or(u32::MAX))),
+        Raw::Other(_) => None,
+    })
+}
+
+/// Read the writing card's columns leniently. A whole number holds to 75
+/// to 500, and anything else reads as None.
+pub(crate) fn deserialize_writing_card_cols<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(u64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_cols(Some(u32::try_from(n).unwrap_or(u32::MAX))),
         Raw::Other(_) => None,
     })
 }
@@ -1299,6 +1335,7 @@ impl Default for UiConfig {
             writing_card_left: None,
             writing_card_top: None,
             writing_card_rows: None,
+            writing_card_cols: None,
             writing_card_pinned: false,
             chat_colors: BTreeMap::new(),
         }
@@ -2447,20 +2484,24 @@ name = "haste"
         config.ui.writing_card_left = Some(140.0);
         config.ui.writing_card_top = Some(96.0);
         config.ui.writing_card_rows = Some(14);
+        config.ui.writing_card_cols = Some(96);
         config.ui.writing_card_pinned = true;
         let changed = config.to_toml().unwrap();
         assert!(changed.contains("writing_card_left = 140.0"), "{changed}");
         assert!(changed.contains("writing_card_rows = 14"), "{changed}");
+        assert!(changed.contains("writing_card_cols = 96"), "{changed}");
         assert!(changed.contains("writing_card_pinned = true"), "{changed}");
         let back = through_toml(&config.ui);
         assert_eq!(back.writing_card_left, Some(140.0));
         assert_eq!(back.writing_card_top, Some(96.0));
         assert_eq!(back.writing_card_rows, Some(14));
+        assert_eq!(back.writing_card_cols, Some(96));
         assert!(back.writing_card_pinned);
         // A file from before the card moved reads its defaults.
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert_eq!(old.ui.writing_card_left, None);
         assert_eq!(old.ui.writing_card_rows, None);
+        assert_eq!(old.ui.writing_card_cols, None);
         assert!(!old.ui.writing_card_pinned);
     }
 
@@ -2474,6 +2515,14 @@ name = "haste"
         assert_eq!(big.writing_card_top, Some(12.6));
         assert_eq!(big.writing_card_rows, Some(WRITING_CARD_ROWS_MAX));
         assert_eq!(ui("[ui]\nwriting_card_rows = -3\n").writing_card_rows, None);
+        let narrow = ui("[ui]\nwriting_card_cols = 40\n").writing_card_cols;
+        assert_eq!(narrow, Some(WRITING_CARD_COLS_MIN));
+        let wide = ui("[ui]\nwriting_card_cols = 9000\n").writing_card_cols;
+        assert_eq!(wide, Some(WRITING_CARD_COLS_MAX));
+        assert_eq!(
+            ui("[ui]\nwriting_card_cols = \"wide\"\n").writing_card_cols,
+            None
+        );
         assert_eq!(coerce_writing_card_edge(Some(f64::NAN)), None);
     }
 

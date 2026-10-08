@@ -581,6 +581,9 @@ export interface UiConfig {
   /** The rows the writing card's text box shows, 6 to 500. Null until
    *  you drag its foot, which lets the box grow with the text. */
   writing_card_rows: number | null;
+  /** The columns of text the writing card's box shows, 75 to 500. Null
+   *  until you drag its corner, which keeps 80. */
+  writing_card_cols: number | null;
   /** The writing card opens in its pane in the panel. */
   writing_card_pinned: boolean;
 }
@@ -703,6 +706,7 @@ export interface RawUiConfig {
   writing_card_left?: number | null;
   writing_card_top?: number | null;
   writing_card_rows?: number | null;
+  writing_card_cols?: number | null;
   writing_card_pinned?: boolean;
 }
 
@@ -838,6 +842,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     writing_card_left: normalizeWritingCardEdge(cfg.writing_card_left),
     writing_card_top: normalizeWritingCardEdge(cfg.writing_card_top),
     writing_card_rows: normalizeWritingCardRows(cfg.writing_card_rows),
+    writing_card_cols: normalizeWritingCardCols(cfg.writing_card_cols),
     writing_card_pinned: cfg.writing_card_pinned === true,
   };
 }
@@ -855,6 +860,14 @@ export function normalizeWritingCardEdge(raw: unknown): number | null {
 export function normalizeWritingCardRows(raw: unknown): number | null {
   return typeof raw === 'number' && Number.isFinite(raw)
     ? Math.min(500, Math.max(6, Math.round(raw)))
+    : null;
+}
+
+/** Read the writing card's stored columns, a whole number from 75 to
+ *  500, or null for the box's own 80. */
+export function normalizeWritingCardCols(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(500, Math.max(75, Math.round(raw)))
     : null;
 }
 

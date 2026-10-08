@@ -64,6 +64,7 @@
     "writing_card_left": null,
     "writing_card_top": null,
     "writing_card_rows": null,
+    "writing_card_cols": null,
     "writing_card_pinned": false
   }
 }

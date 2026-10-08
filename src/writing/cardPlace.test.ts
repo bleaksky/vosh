@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOX_COLS,
+  BOX_COLS_MAX,
+  BOX_COLS_MIN,
   BOX_ROWS_MAX,
   BOX_ROWS_MIN,
   CARD_MARGIN,
   KEEPS_ITS_PRESS,
+  boxColsFor,
   boxRowsFor,
+  boxWidthFor,
+  dragCols,
   clampPlace,
   dragRows,
+  fitCols,
   fitRows,
   fitsMoved,
   movedFit,
@@ -117,5 +124,30 @@ describe('startsMove', () => {
     expect(startsMove(at('[role="radiogroup"]'))).toBe(false);
     expect(startsMove(at('[role="menu"]'))).toBe(false);
     expect(startsMove(null)).toBe(false);
+  });
+});
+
+describe('the box columns', () => {
+  it('measures a box as its columns, its two gutter digits and 32 px', () => {
+    expect(boxWidthFor(80, 8)).toBe(32 + 82 * 8);
+    expect(fitCols(boxWidthFor(96, 8), 8)).toBe(96);
+    expect(fitCols(boxWidthFor(96, 8) - 1, 8)).toBe(95);
+  });
+
+  it('keeps 80 until you set columns, and holds what you set to 75 and the fit', () => {
+    expect(boxColsFor(null, 60)).toBe(BOX_COLS);
+    expect(boxColsFor(96, 200)).toBe(96);
+    expect(boxColsFor(96, 90)).toBe(90);
+    expect(boxColsFor(96, 40)).toBe(BOX_COLS_MIN);
+    expect(boxColsFor(70, 200)).toBe(BOX_COLS_MIN);
+  });
+
+  it('adds a column for each column of travel to the right', () => {
+    expect(dragCols(80, 8 * 12, 8, 200)).toBe(92);
+    expect(dragCols(80, 3, 8, 200)).toBe(80);
+    expect(dragCols(80, -8 * 40, 8, 200)).toBe(BOX_COLS_MIN);
+    expect(dragCols(80, 8 * 400, 8, 120)).toBe(120);
+    expect(dragCols(80, 8 * 900, 8, 9000)).toBe(BOX_COLS_MAX);
+    expect(dragCols(80, 8 * 10, 8, 20)).toBe(BOX_COLS_MIN);
   });
 });

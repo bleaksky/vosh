@@ -214,7 +214,7 @@
    the box's hairline ring. Each row is 28 px with a hairline between,
    and 11 px under the block, so the fields add four rows of 17. */
 .wr-fields {
-  width: calc(32px + 82ch);
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
   margin: 0 0 11px;
   border-radius: var(--r-row);
   background: var(--wr-ground, var(--bg));
@@ -285,19 +285,51 @@
   white-space: nowrap;
 }
 
-/* The text box. The gutter is two columns of numbers and 12 px, and the
-   guide a 1 px hairline at the right edge of the width the card keeps,
-   drawn on the box's ground under the text. */
+/* The text box, 80 columns until you size it by its corner. The gutter
+   is two columns of numbers and 12 px, and the guide a 1 px hairline at
+   the right edge of the width the card keeps, drawn on the box's ground
+   under the text. A line longer than the box scrolls the text sideways
+   and the gutter stays put on the box's ground over it, so no text ever
+   shows under a number. The ring draws over both. */
 .wr-box {
   --wr-guide-at: calc(22px + 2ch + var(--wr-width, 75) * 1ch);
   position: relative;
-  width: calc(32px + 82ch);
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
   border-radius: var(--r-row);
   background: var(--wr-ground, var(--bg));
-  box-shadow: inset 0 0 0 1px var(--sep);
   font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
   color: var(--wr-fg, var(--text));
   overflow: hidden;
+}
+
+.wr-box::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 201;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  pointer-events: none;
+}
+
+/* The grip in the box's corner: two short diagonals, as a text area
+   draws them, in a 14 px square with the resize cursor. */
+.wr-box-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 202;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  color: var(--tertiary);
+}
+
+.wr-box-grip:hover,
+.wr-box-grip:active {
+  color: var(--secondary);
 }
 
 .wr-box[data-width='70'] {
@@ -332,7 +364,7 @@
 
 .wr-box .cm-gutters {
   border: 0;
-  background: transparent;
+  background: var(--wr-ground, var(--bg));
   color: var(--tertiary);
 }
 
@@ -341,6 +373,7 @@
 }
 
 .wr-box .cm-gutterElement {
+  position: relative;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -368,6 +401,18 @@
   color: var(--accent);
 }
 
+/* The line on its way: a 2 px bar at the gutter's left. */
+.wr-num.is-current::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
 .wr-num.is-sent {
   display: flex;
   color: var(--success);
@@ -384,17 +429,6 @@
   padding: 0;
 }
 
-.wr-box .cm-line.is-current::before {
-  content: '';
-  position: absolute;
-  left: calc(-12px - 2ch - 10px);
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-}
-
 .wr-box .cm-line.is-waiting {
   color: var(--secondary);
 }
@@ -407,28 +441,53 @@
   border-left: 2px solid var(--cursor, var(--accent));
 }
 
-.wr-box .cm-selectionBackground,
+/* The selection on the theme's selection fill, focused or not, and the
+   selected text in the theme's selected text color, held to 4.5:1 on
+   that fill (boxInks.ts). The selectors outrank CodeMirror's own
+   lavender for a focused editor. A code's color and a mark's wash give
+   way inside the selection. */
+.wr-box .cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.wr-box .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .wr-box .cm-content ::selection {
   background: var(--selection);
 }
 
+.wr-box .cm-line .wr-sel,
+.wr-box .cm-line .wr-sel * {
+  color: var(--wr-ink-selected, var(--selection-text)) !important;
+}
+
+.wr-box .cm-line .wr-sel {
+  border-radius: 0;
+  background: var(--selection);
+}
+
+.wr-box .cm-line .wr-sel .wr-over,
+.wr-box .cm-line .wr-sel .wr-soft,
+.wr-box .cm-line .wr-sel .wr-warn,
+.wr-box .cm-line .wr-sel .wr-struck {
+  background: transparent;
+}
+
 /* What runs past a width a help sets, in danger text on a danger wash,
-   and past the width only Vosh keeps, in warn. */
+   and past the width only Vosh keeps, in warn. Each text color is the
+   status text held to 4.5:1 on its wash (boxInks.ts, which mirrors the
+   18 percent). */
 .wr-over {
-  color: var(--danger-text);
+  color: var(--wr-ink-danger, var(--danger-text));
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   border-radius: 2px;
 }
 
 .wr-soft,
 .wr-warn {
-  color: var(--warn-text);
+  color: var(--wr-ink-warn, var(--warn-text));
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   border-radius: 2px;
 }
 
 .wr-struck {
-  color: var(--warn-text);
+  color: var(--wr-ink-warn, var(--warn-text));
   background: color-mix(in srgb, var(--warn) 18%, transparent);
   border-radius: 2px;
   text-decoration: line-through;
@@ -436,19 +495,17 @@
 }
 
 /* A code at a line's start: a 6 px dot in its color at the gutter's
-   left, so the text keeps its columns. A code inside a line an immortal
-   keeps: a dot of no width under the gap where it sits. The start dot
-   places itself in its line, not on the text's baseline, so it sits
-   level with the line it colors. */
+   left, so the text keeps its columns, drawn by the gutter so it stays
+   put while the text scrolls. A code inside a line an immortal keeps: a
+   dot of no width under the gap where it sits. */
 .wr-code {
   display: inline-block;
   width: 0;
 }
 
-.wr-code::before {
-  content: '';
+.wr-code-dot {
   position: absolute;
-  left: calc(-12px - 2ch - 10px + 3px);
+  left: 3px;
   top: calc(var(--wr-lh, 17px) / 2 - 3px);
   width: 6px;
   height: 6px;
