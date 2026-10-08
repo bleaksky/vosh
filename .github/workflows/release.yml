@@ -6,10 +6,11 @@ name: release
 # its artifacts to a draft GitHub release, which you publish by hand.
 #
 # Signing. tauri-action signs and notarizes the macOS builds when the
-# six Apple secrets are set. Windows builds ship unsigned for now, as
-# D38 was answered on October 8, and a certificate can join the env
-# block below later. The minisign keys sign the updater bundles when
-# they are present and are skipped when absent.
+# six Apple secrets are set, and the repository sets all six, so the
+# release notes say so plainly. Windows builds ship unsigned for now.
+# A code signing certificate can join the env block below later. The
+# minisign keys sign the updater bundles when they are present and are
+# skipped when absent.
 
 on:
   push:
