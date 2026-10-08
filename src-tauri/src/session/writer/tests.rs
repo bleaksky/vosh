@@ -42,6 +42,9 @@ struct Table {
     /// Lines the session sent.
     out: u64,
     sent: Vec<String>,
+    /// The lines your prompt prints above its last, as `%c` makes them
+    /// (`comm.c:1930`).
+    above: Vec<&'static str>,
 }
 
 const LISTED: [&str; 2] = [
@@ -57,6 +60,7 @@ impl Table {
             now: Instant::now(),
             out: 0,
             sent: Vec::new(),
+            above: Vec::new(),
         };
         table.tick();
         table
@@ -106,19 +110,22 @@ impl Table {
     /// One pulse at the game's prompt: `lines`, the prompt and its tick in
     /// the table's order, then the quiet after it.
     fn pulse(&mut self, lines: &[&str]) -> Vec<String> {
+        let above = self.above.clone();
+        let mut all: Vec<&str> = lines.to_vec();
+        all.extend(above.iter().copied());
         let early = match self.order {
             Order::First => {
                 self.vitals();
-                self.game(lines, PROMPT)
+                self.game(&all, PROMPT)
             }
             Order::Middle => {
                 let mut early = self.game(lines, "");
                 self.vitals();
-                early.extend(self.game(&[], PROMPT));
+                early.extend(self.game(&above, PROMPT));
                 early
             }
             Order::Last => {
-                let early = self.game(lines, PROMPT);
+                let early = self.game(&all, PROMPT);
                 self.vitals();
                 early
             }

@@ -86,6 +86,12 @@ struct World {
     welcome_after: Duration,
     links: usize,
     heard: Vec<String>,
+    /// What `show` puts before the sender, such as an immortal's rank
+    /// (`recycle.c:4535`).
+    rank: &'static str,
+    /// The line your prompt prints above its last, which a `%c` in it
+    /// makes (`comm.c:1930`).
+    above: Option<&'static str>,
 }
 
 /// What the game writes for one line it read.
@@ -143,20 +149,24 @@ impl World {
     fn prompt(&self, wrote: &str) -> Answer {
         let reply = format!("{wrote}\n\r");
         let tick = prompt_tick();
+        let prompt = match self.above {
+            Some(above) => format!("{above}\n\r{PROMPT}"),
+            None => PROMPT.to_string(),
+        };
         Answer::Writes(match self.order {
             Order::First => {
                 let mut writes = tick;
-                writes.push(format!("{reply}{PROMPT}").into_bytes());
+                writes.push(format!("{reply}{prompt}").into_bytes());
                 writes
             }
             Order::Middle => {
                 let mut out = reply.into_bytes();
                 out.extend(tick.concat());
-                out.extend_from_slice(PROMPT.as_bytes());
+                out.extend_from_slice(prompt.as_bytes());
                 vec![out]
             }
             Order::Last => {
-                let mut out = format!("{reply}{PROMPT}").into_bytes();
+                let mut out = format!("{reply}{prompt}").into_bytes();
                 out.extend(tick.concat());
                 vec![out]
             }
@@ -215,7 +225,8 @@ impl World {
                 None => self.prompt("You have no note in progress."),
                 Some(note) => {
                     let shown = format!(
-                        "Orla: {}\n\rTo: {}\n\r{}",
+                        "{}Orla: {}\n\rTo: {}\n\r{}",
+                        self.rank,
                         note.subject,
                         note.to,
                         kept(&note.text)
