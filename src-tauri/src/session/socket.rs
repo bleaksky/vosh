@@ -42,7 +42,8 @@ pub(crate) struct Stream {
     /// ends no line, so it never counts.
     last_line: Option<Instant>,
     /// How long the oldest line of yours the game has not answered has
-    /// waited, see [`Waits`].
+    /// waited. Any bytes the game sends answer it, GMCP alone too. See
+    /// [`Waits`].
     waits: Waits,
 }
 
@@ -88,10 +89,11 @@ impl Stream {
 
     /// The round trip to the game at `now`: the kernel's smoothed round
     /// trip time for the socket, or how long the oldest line the game has
-    /// not answered has waited when that is longer and the network still
-    /// carries it. A line the game's machine acknowledged reached the
-    /// game, so its wait stops counting. None where the system does not
-    /// say. See [`super::round_trip`].
+    /// not answered has waited when that is longer and the link or the
+    /// game is not answering. The network still carrying the line is the
+    /// link not answering. The game sending nothing at all past the
+    /// longest lag it puts on you is the game not answering. None where
+    /// the system does not say. See [`super::round_trip`].
     pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Duration> {
         let kernel = self.kernel()?;
         Some(self.waits.reading(kernel, now))
@@ -190,7 +192,7 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::time::Instant;
 
-    use super::super::round_trip::SLOW;
+    use super::super::round_trip::{HELD_AT_MOST, SLOW};
     use super::connect;
 
     /// The kernel reads the round trip on the systems Vosh ships for. A
@@ -228,6 +230,38 @@ mod tests {
         let mut buf = [0u8; 64];
         assert!(stream.read(&mut buf).await.expect("the answer") > 0);
         let answered = stream.round_trip(Instant::now()).expect("a reading");
+        assert!(answered < SLOW, "{answered:?}");
+    }
+
+    /// A game that reads your line and sends nothing back for longer
+    /// than any lag it puts on you is not answering, so the wait counts
+    /// even though its machine acknowledged the line. Anything it sends
+    /// ends the wait, a GMCP packet alone too.
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[tokio::test]
+    async fn a_game_that_says_nothing_past_the_longest_lag_is_a_stall() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a port");
+        let port = listener.local_addr().expect("an address").port();
+        let game = tokio::spawn(async move { listener.accept().await.expect("a client").0 });
+        let mut stream = connect("127.0.0.1", port, false).await.expect("the game");
+        let mut game = game.await.expect("the game task");
+
+        stream.write_all(b"look\r\n").await.expect("the line");
+        let mut line = [0u8; 6];
+        game.read_exact(&mut line).await.expect("the game hears it");
+        let silent = Instant::now() + HELD_AT_MOST + Duration::from_secs(1);
+        let stalled = stream.round_trip(silent).expect("a reading");
+        assert!(stalled >= HELD_AT_MOST, "{stalled:?}");
+
+        let mut gmcp = vec![255, 250, 201];
+        gmcp.extend_from_slice(
+            br#"Room.Weather {"sky":"rainy","temp":60,"unit":"F","region":"Coastal North"}"#,
+        );
+        gmcp.extend_from_slice(&[255, 240]);
+        game.write_all(&gmcp).await.expect("the packet");
+        let mut buf = [0u8; 128];
+        assert!(stream.read(&mut buf).await.expect("the packet") > 0);
+        let answered = stream.round_trip(silent).expect("a reading");
         assert!(answered < SLOW, "{answered:?}");
     }
 }

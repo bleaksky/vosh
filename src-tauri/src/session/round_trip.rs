@@ -1,16 +1,25 @@
 //! The round trip to the game (Round Trip Readout, approved October 7).
 //! Every [`READ_EVERY`] the session loop reads the kernel's smoothed
 //! round trip time for the game socket, see [`kernel`]. The kernel only
-//! updates it as the game acknowledges your bytes, so in a hard stall it
-//! stays low. The loop also times your oldest send the game has not
-//! answered yet and takes that wait when it is longer, so a stall counts
-//! up live. That wait counts only while the kernel still holds bytes the
-//! game's machine has not acknowledged. Once it has them the game has
-//! your line, and The Forsaken Lands holds a line it read while a skill
-//! lags you (`ch->wait` in comm.c) and answers none until the lag ends,
-//! so typing ahead during a bash is no stall, see [`Waits`]. Each reading goes to the status line on
-//! `session://round-trip` and into the [`RoundTrip`] the connection
-//! keeps, which `#lag` reads.
+//! updates it as the game's machine acknowledges your bytes, so in a
+//! hard stall it stays low. The loop also times your oldest line the
+//! game has not answered yet, see [`Waits`], and takes that wait when it
+//! is longer, so a stall counts up live.
+//!
+//! A wait counts when the link or the game is not answering, never
+//! because the game holds your commands while a skill lags you. The
+//! Forsaken Lands reads your bytes every pulse even while `ch->wait`
+//! runs (comm.c), so its machine acknowledges them at once, keeps the
+//! lines in its buffer and answers each when the lag ends. So the wait
+//! counts in two halves. The link half counts while the kernel still
+//! holds bytes the game's machine has not acknowledged. The game half
+//! counts once the game has sent nothing at all since your line for
+//! longer than [`HELD_AT_MOST`], the longest lag it puts on you. Any
+//! bytes from the game, text or GMCP alone, end both. A line you type
+//! while an earlier one waits starts no wait of its own, so typing
+//! ahead during a bash never counts. Each reading goes to the status
+//! line on `session://round-trip` and into the [`RoundTrip`] the
+//! connection keeps, which `#lag` reads.
 //!
 //! A stall is any stretch of readings at [`SLOW`] or more. The session
 //! keeps the last [`KEPT_STALLS`] of the connection, and the readings
@@ -38,14 +47,25 @@ const USUAL_OVER: Duration = Duration::from_secs(600);
 /// The stalls of a connection `#lag` lists, the newest.
 const KEPT_STALLS: usize = 20;
 
+/// The longest the game holds a line of yours with nothing sent back.
+/// The longest lag The Forsaken Lands puts on you is `PULSE_TICK`, 30
+/// seconds, when a psalm drags you off bloody (magic.c:6713,
+/// `WAIT_STATE(victim, PULSE_TICK)`). Skills reach 24 seconds at most
+/// (handler.c:5173, `WAIT_STATE(ch,96)`), and `WAIT_STATE` takes the
+/// longer lag, so lags never stack. The game answers the held line in
+/// the pulse the lag ends, so add one 250 ms pulse.
+pub(crate) const HELD_AT_MOST: Duration = Duration::from_millis(30_250);
+
 /// How long the oldest line of yours the game has not answered has
-/// waited. [`super::socket::Stream`] tells it each line you send and
+/// waited, in two halves, see the module doc. [`super::socket::Stream`] tells it each line you send and
 /// each read from the game, and asks it for the reading.
 #[derive(Debug, Default)]
 pub(crate) struct Waits {
     /// When the oldest line left that the network may still carry, the
     /// oldest since the kernel last showed nothing in flight.
     link: Option<Instant>,
+    /// When the oldest line left since the game last sent anything.
+    game: Option<Instant>,
 }
 
 impl Waits {
@@ -59,26 +79,31 @@ impl Waits {
             self.link = None;
         }
         self.link.get_or_insert(now);
+        self.game.get_or_insert(now);
     }
 
-    /// The game sent something, so it answered every line before.
+    /// The game sent something, so the link and the game both answer.
     pub(crate) fn heard(&mut self) {
         self.link = None;
+        self.game = None;
     }
 
-    /// The reading at `now` from what the kernel says of the socket.
-    /// Nothing in flight means the game's machine has every line, so
-    /// the wait for its answer is the game's and starts over with your
-    /// next line. Otherwise the wait counts when it is longer than the
-    /// round trip.
+    /// The reading at `now` from what the kernel says of the socket,
+    /// the longest of the round trip, the link half and the game half.
+    /// Nothing in flight means the game's machine has every line, so the
+    /// link half starts over with your next line. The game half counts
+    /// only past [`HELD_AT_MOST`], since a shorter silence may be a lag
+    /// the game holds your line for.
     pub(crate) fn reading(&mut self, kernel: kernel::Reading, now: Instant) -> Duration {
         if !kernel.in_flight {
             self.link = None;
         }
-        let waited = self
-            .link
-            .map_or(Duration::ZERO, |sent| now.duration_since(sent));
-        kernel.round_trip.max(waited)
+        let since = |sent: Option<Instant>| sent.map_or(Duration::ZERO, |s| now.duration_since(s));
+        let link = since(self.link);
+        let game = Some(since(self.game))
+            .filter(|w| *w > HELD_AT_MOST)
+            .unwrap_or_default();
+        kernel.round_trip.max(link).max(game)
     }
 }
 
@@ -256,10 +281,6 @@ mod tests {
     fn a_wait_counts_only_while_the_link_still_carries_your_line() {
         let sent = Instant::now();
         let now = sent + ms(1500);
-        let link = |in_flight| kernel::Reading {
-            round_trip: ms(38),
-            in_flight,
-        };
 
         // The game's machine has not acknowledged the line, so the
         // network holds it and the wait is a stall.
@@ -276,6 +297,129 @@ mod tests {
         // A wait shorter than the round trip reads the round trip.
         waits.sent(now - ms(10), true);
         assert_eq!(waits.reading(link(true), now), ms(38));
+    }
+
+    /// The kernel reading 38 ms, with bytes in flight or none.
+    fn link(in_flight: bool) -> kernel::Reading {
+        kernel::Reading {
+            round_trip: ms(38),
+            in_flight,
+        }
+    }
+
+    #[test]
+    fn a_bash_with_lines_typed_ahead_reads_the_round_trip() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        // The game answers the bash at once and lags you six seconds.
+        waits.sent(start, true);
+        waits.heard();
+        // You type kick and look, and the game's machine takes each.
+        waits.sent(start + ms(400), true);
+        waits.sent(start + ms(900), true);
+        for i in 1..=3 {
+            let reading = waits.reading(link(false), start + READ_EVERY * i);
+            assert_eq!(reading, ms(38));
+            assert!(reading < SLOW);
+        }
+        // The lag ends and the game answers kick.
+        waits.heard();
+        assert_eq!(waits.reading(link(false), start + ms(6500)), ms(38));
+    }
+
+    #[test]
+    fn a_line_typed_while_one_waits_starts_no_wait_of_its_own() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        waits.sent(start, true);
+        waits.sent(start + ms(800), false);
+        assert_eq!(waits.reading(link(true), start + ms(1500)), ms(1500));
+
+        // The game's machine took the first, so the link half starts
+        // over with the second. The game half keeps the first.
+        let mut waits = Waits::default();
+        waits.sent(start, true);
+        waits.sent(start + ms(5000), true);
+        let later = start + HELD_AT_MOST + ms(1000);
+        assert_eq!(waits.reading(link(false), later), HELD_AT_MOST + ms(1000));
+    }
+
+    #[test]
+    fn a_link_that_holds_your_line_is_a_stall() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        waits.sent(start, true);
+        let reading = waits.reading(link(true), start + ms(1500));
+        assert_eq!(reading, ms(1500));
+
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        trip.record(reading, start + ms(1500), clock(21, 14, 1));
+        assert_eq!(
+            trip.report(start + ms(1500))[1],
+            "1 stall since you connected at 19:42"
+        );
+    }
+
+    #[test]
+    fn a_game_that_says_nothing_past_the_longest_lag_is_a_stall() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        waits.sent(start, true);
+        let mut now = start;
+        for i in 1..=17 {
+            now = start + READ_EVERY * i;
+            let reading = waits.reading(link(false), now);
+            if now.duration_since(start) > HELD_AT_MOST {
+                assert_eq!(reading, now.duration_since(start));
+            } else {
+                assert_eq!(reading, ms(38));
+            }
+            trip.record(reading, now, clock(21, 14, 2 * i));
+        }
+        assert_eq!(
+            trip.report(now),
+            [
+                "round trip to the game 34.0s, usually 38ms over the last 10 minutes",
+                "1 stall since you connected at 19:42",
+                "  21:14:32  34.0s now, 2s so far",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_line_the_game_answers_in_a_pulse_or_after_a_lag_is_no_stall() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        // A trigger sends a line, and the game answers in the pulse.
+        waits.sent(start, true);
+        waits.heard();
+        assert_eq!(waits.reading(link(false), start + READ_EVERY), ms(38));
+
+        // A timer sends a line while a skill lags you 24 seconds, the
+        // longest skill lag (handler.c), and the game says nothing until
+        // it ends.
+        let sent = start + ms(3000);
+        waits.sent(sent, true);
+        for i in 1..=12 {
+            assert_eq!(waits.reading(link(false), sent + READ_EVERY * i), ms(38));
+        }
+        waits.heard();
+        assert_eq!(waits.reading(link(false), sent + ms(25_000)), ms(38));
+    }
+
+    #[test]
+    fn anything_from_the_game_ends_the_wait() {
+        let start = Instant::now();
+        let mut waits = Waits::default();
+        waits.sent(start, true);
+        let later = start + HELD_AT_MOST + ms(4000);
+        assert_eq!(waits.reading(link(true), later), HELD_AT_MOST + ms(4000));
+        // A GMCP packet alone, with no text, is the game answering.
+        waits.heard();
+        assert_eq!(waits.reading(link(true), later), ms(38));
     }
 
     /// A connection at 19:42 that took `readings`, one every two seconds
