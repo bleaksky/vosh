@@ -113,8 +113,8 @@ describe('the reconnect notice', () => {
     expect(notice.text('ov-update-msg')).toBe('Reconnecting in 3s');
     expect(notice.text('ov-update-meta')).toBe('Try 1 of 8');
     expect(notice.buttons()).toEqual([
-      ['Cancel', 'ov-button'],
-      ['Reconnect now', 'ov-button is-primary'],
+      ['Cancel', 'btn'],
+      ['Reconnect now', 'btn is-primary'],
     ]);
     await notice.tick(1000);
     expect(notice.text('ov-update-msg')).toBe('Reconnecting in 2s');
@@ -133,7 +133,7 @@ describe('the reconnect notice', () => {
     expect(notice.card().getAttribute('class')).toBe('ov-update is-wait');
     expect(notice.text('ov-update-msg')).toBe('Connecting');
     expect(notice.text('ov-update-meta')).toBe('Try 2 of 8');
-    expect(notice.buttons()).toEqual([['Cancel', 'ov-button']]);
+    expect(notice.buttons()).toEqual([['Cancel', 'btn']]);
   });
 
   it('says it stopped once the tries run out, and Try again dials', async () => {
@@ -141,7 +141,7 @@ describe('the reconnect notice', () => {
     expect(notice.card().getAttribute('class')).toBe('ov-update is-error');
     expect(notice.text('ov-update-msg')).toBe('Vosh stopped after 8 tries');
     expect(notice.text('ov-update-meta')).toBeUndefined();
-    expect(notice.buttons()).toEqual([['Try again', 'ov-button is-primary']]);
+    expect(notice.buttons()).toEqual([['Try again', 'btn is-primary']]);
     await notice.press('Try again');
     expect(onTryAgain).toHaveBeenCalledOnce();
     expect(calls).toEqual([]);

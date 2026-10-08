@@ -1,6 +1,7 @@
 import { useSyncExternalStore, type MouseEvent } from 'react';
 import { openSettingsTab } from '../../lib/settingsLink';
 import { closePresetFix, presetFixStore } from '../../stores/presetFixStore';
+import { Button } from '../../ui';
 
 // A press on the notice's buttons leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
@@ -24,22 +25,16 @@ export function PresetFixNotice() {
       <span className="ov-update-msg">{notice.message}</span>
       <span className={`ov-update-meta${notice.mono ? ' is-mono' : ''}`}>{notice.meta}</span>
       <span className="ov-update-actions">
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={closePresetFix}
-        >
+        <Button onMouseDown={keepCaret} onClick={closePresetFix}>
           Close
-        </button>
-        <button
-          type="button"
-          className="ov-button is-primary"
+        </Button>
+        <Button
+          variant="primary"
           onMouseDown={keepCaret}
           onClick={() => openSettingsTab(notice.link)}
         >
           Show
-        </button>
+        </Button>
       </span>
     </div>
   );

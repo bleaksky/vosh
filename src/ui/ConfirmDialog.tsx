@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { trapDialogFocus } from './dialogFocus';
 import { cx } from './cx';
 import { useEscape } from '../lib/escapeStack';
+import { Button } from './Button';
 
 interface Props {
   title: string;
@@ -109,17 +110,12 @@ export function ConfirmDialog({
         </p>
         {children}
         <div className="ov-confirm-actions">
-          <button ref={cancelRef} type="button" className="ov-button" onClick={onCancel}>
+          <Button ref={cancelRef} onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={cx('ov-button', tone === 'primary' ? 'is-primary' : 'is-danger')}
-            disabled={confirmDisabled}
-            onClick={onConfirm}
-          >
+          </Button>
+          <Button variant={tone} disabled={confirmDisabled} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

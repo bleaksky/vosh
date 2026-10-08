@@ -40,7 +40,7 @@ describe('the Get started notice', () => {
     const html = renderToStaticMarkup(<CornerNotices />);
     expect(html).toContain('<span class="ov-update-msg">Get started</span>');
     expect(html).toContain('<span class="ov-update-meta">1 of 5 done</span>');
-    expect(html).toMatch(/>Close<\/button><button[^>]*class="ov-button is-primary"[^>]*>Open</);
+    expect(html).toMatch(/>Close<\/button><button[^>]*class="btn is-primary"[^>]*>Open</);
   });
 
   it('shows nothing while the card is open or shut', () => {

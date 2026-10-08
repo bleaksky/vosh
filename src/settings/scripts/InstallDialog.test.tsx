@@ -25,9 +25,7 @@ function draw(check: PluginInstallCheck, busy = false) {
   return {
     title: /class="ov-confirm-title">([^<]*)</.exec(html)?.[1],
     body: /class="ov-confirm-body">([^<]*)</.exec(html)?.[1],
-    install: /<button type="button" class="ov-button is-primary"( disabled="")?>Install</.exec(
-      html,
-    ),
+    install: /<button type="button"( disabled="")? class="btn is-primary">Install</.exec(html),
   };
 }
 

@@ -680,7 +680,7 @@
   flex: 0 1 auto;
 }
 
-.ov-toast.has-action > .ov-button {
+.ov-toast.has-action > .btn {
   flex: none;
   margin-left: 8px;
 }
@@ -820,64 +820,6 @@
 
 .ov-confirm-body + .ov-switch-row {
   margin-top: 12px;
-}
-
-/* Buttons (SPEC 4): 28 tall, radius 8, 13 medium. The default is the
-   secondary look, a ring and no fill. Danger keeps the ring and takes
-   the danger text. */
-.ov-button {
-  height: 28px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-row);
-  outline: none;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--sep);
-  box-sizing: border-box;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
-  color: var(--text);
-  cursor: default;
-}
-
-.ov-button:hover {
-  background: var(--menu-hi);
-}
-
-.ov-button:focus-visible {
-  box-shadow:
-    inset 0 0 0 1px var(--sep),
-    0 0 0 2px var(--accent);
-}
-
-.ov-button.is-danger {
-  color: var(--danger-text);
-}
-
-/* Primary fills with the accent, for the one thing a card asks you to
-   do, like Install and restart on the update notice or Create in New
-   plugin. A button that waits on the card, like Create while the name
-   breaks its rule, sits at 45 percent. */
-.ov-update .ov-button.is-primary,
-.ov-confirm .ov-button.is-primary {
-  background: var(--accent);
-  box-shadow: none;
-  color: var(--on-accent);
-}
-
-.ov-update .ov-button.is-primary:focus-visible,
-.ov-confirm .ov-button.is-primary:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--raised),
-    0 0 0 4px var(--accent);
-}
-
-.ov-update .ov-button:disabled,
-.ov-confirm .ov-button:disabled {
-  opacity: 0.45;
 }
 
 /* The shell mounts the corner among its floating surfaces, a direct

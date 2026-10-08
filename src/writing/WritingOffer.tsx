@@ -3,6 +3,7 @@ import { getUiConfig, subscribeWritingOfferChanged } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import type { WritingKind } from '../ipc/writing';
 import { useWriting } from '../stores/session/writingStore';
+import { Button } from '../ui';
 
 // The card's offer when you open the game's editor yourself on a text
 // Vosh can name (Description Editor Q3, Note Editor Q3, board 3). It is
@@ -37,22 +38,16 @@ export function WritingOffer({ onOpen }: { onOpen: (kind: WritingKind, offer: nu
       <span className="ov-update-dot" aria-hidden="true" />
       <span className="ov-update-msg">Write this in Vosh?</span>
       <span className="ov-update-actions">
-        <button
-          type="button"
-          className="ov-button"
-          onMouseDown={keepCaret}
-          onClick={() => setKept(offer.id)}
-        >
+        <Button onMouseDown={keepCaret} onClick={() => setKept(offer.id)}>
           Keep typing
-        </button>
-        <button
-          type="button"
-          className="ov-button is-primary"
+        </Button>
+        <Button
+          variant="primary"
           onMouseDown={keepCaret}
           onClick={() => onOpen(offer.kind, offer.id)}
         >
           Open in Vosh
-        </button>
+        </Button>
       </span>
     </div>
   );

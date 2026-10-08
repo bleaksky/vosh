@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react';
 import { end, unfold, useGetStarted } from '../getStarted/getStartedStore';
 import { progress, stepsFor } from '../getStarted/steps';
+import { Button } from '../../ui';
 
 // A press on the notice's buttons leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
@@ -21,17 +22,12 @@ export function GetStartedNotice() {
         {progress(stepsFor(view.target), view.saved?.done ?? [])}
       </span>
       <span className="ov-update-actions">
-        <button type="button" className="ov-button" onMouseDown={keepCaret} onClick={end}>
+        <Button onMouseDown={keepCaret} onClick={end}>
           Close
-        </button>
-        <button
-          type="button"
-          className="ov-button is-primary"
-          onMouseDown={keepCaret}
-          onClick={unfold}
-        >
+        </Button>
+        <Button variant="primary" onMouseDown={keepCaret} onClick={unfold}>
           Open
-        </button>
+        </Button>
       </span>
     </div>
   );

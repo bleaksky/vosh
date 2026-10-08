@@ -7,6 +7,7 @@ import {
   subscribeToasts,
   type Toast,
 } from '../../stores/toasts';
+import { Button } from '../../ui';
 
 /** How long the copy confirmation stays up. Matches the native toast
  *  it replaces. */
@@ -65,9 +66,7 @@ export function Toasts() {
         t.action ? (
           <div key={t.id} className={`ov-toast has-action is-${t.kind}`}>
             <ToastBody toast={t} />
-            <button
-              type="button"
-              className="ov-button"
+            <Button
               onMouseDown={keepCaret}
               onClick={() => {
                 dismissToast(t.id);
@@ -75,7 +74,7 @@ export function Toasts() {
               }}
             >
               {t.action.label}
-            </button>
+            </Button>
           </div>
         ) : (
           <button

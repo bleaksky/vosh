@@ -1,6 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { reconnectCancel, reconnectNow } from '../../ipc/session';
 import { useReconnect } from '../../stores/session/reconnectStore';
+import { Button } from '../../ui';
 
 // A press on the notice's buttons leaves the caret on the command line,
 // as on the update notice.
@@ -66,33 +67,18 @@ export function ReconnectNotice({ session, onTryAgain, onError }: Props) {
       {meta && <span className="ov-update-meta">{meta}</span>}
       <span className="ov-update-actions">
         {redial.kind === 'stopped' ? (
-          <button
-            type="button"
-            className="ov-button is-primary"
-            onMouseDown={keepCaret}
-            onClick={onTryAgain}
-          >
+          <Button variant="primary" onMouseDown={keepCaret} onClick={onTryAgain}>
             Try again
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="ov-button"
-            onMouseDown={keepCaret}
-            onClick={act(reconnectCancel)}
-          >
+          <Button onMouseDown={keepCaret} onClick={act(reconnectCancel)}>
             Cancel
-          </button>
+          </Button>
         )}
         {redial.kind === 'waiting' && (
-          <button
-            type="button"
-            className="ov-button is-primary"
-            onMouseDown={keepCaret}
-            onClick={act(reconnectNow)}
-          >
+          <Button variant="primary" onMouseDown={keepCaret} onClick={act(reconnectNow)}>
             Reconnect now
-          </button>
+          </Button>
         )}
       </span>
     </div>
