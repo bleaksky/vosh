@@ -185,9 +185,11 @@ export function SettingsWindow() {
   // elsewhere with 1 to 4, open their page here as they do from the
   // main window. No macro runs in this window, so the key always works.
   // Taking the key keeps the macOS menu row from opening the page a
-  // second time. Each id is the palette's `settings-<tab id>`.
+  // second time. Each id is the palette's `settings-<tab id>`. A key a
+  // field already took, like a macro key being recorded, stays there.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
       const id = settingsShortcutOf({ key: shortcutKey(e), code: e.code, shift: e.shiftKey });

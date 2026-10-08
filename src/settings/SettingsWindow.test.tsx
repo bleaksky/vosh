@@ -147,4 +147,17 @@ describe('the Settings keys', () => {
     expect(shown()).toBe('automation:timers');
     act(() => root.unmount());
   });
+
+  it('leaves a key that a field already took, like a macro being recorded', async () => {
+    const { root, shown, press } = await mount({ userAgent: 'Windows NT', platform: 'Win32' });
+    await press({
+      key: '@',
+      code: 'Digit2',
+      ctrlKey: true,
+      shiftKey: true,
+      defaultPrevented: true,
+    });
+    expect(shown()).toBe('general:');
+    act(() => root.unmount());
+  });
 });
