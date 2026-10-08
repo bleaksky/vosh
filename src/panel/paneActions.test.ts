@@ -10,6 +10,7 @@ import {
   splitHere,
   togglePane,
 } from './paneActions';
+import { paneTypesToAdd, panesToShowInstead } from './paneTypes';
 
 // The layout a split reads, whether the plugin that draws the
 // Weather pane runs, and the toasts the actions raise.
@@ -62,6 +63,17 @@ function lay(...panes: PaneType[]): void {
     },
   };
 }
+
+describe('the Writing pane', () => {
+  it('is never offered, since only the card pins it', () => {
+    lay('map', 'affects', 'group', 'chat');
+    expect(paneTypesToAdd(state.layout?.root ?? null)).not.toContain('writing');
+    expect(paneTypesToAdd(null)).toEqual(['map', 'affects', 'group', 'chat']);
+    const map = state.layout?.root.children[0];
+    if (!map || !isLeaf(map)) throw new Error('no map');
+    expect(panesToShowInstead(map, state.layout?.root ?? null).builtIns).not.toContain('writing');
+  });
+});
 
 describe('paneToSplitIn', () => {
   it('splits in the first built-in pane the panel does not show', () => {

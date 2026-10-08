@@ -24,8 +24,10 @@ pub(crate) struct DockEntryPersist {
 /// The built-in content types a pane can show. The panel holds up to
 /// [`CHAT_PANES_MAX`] Chat panes and one of each other type, and a
 /// type doubles as its first leaf's default id. Mirrored by
-/// `PANE_TYPES` in src/panel/paneLayout.ts.
-pub(crate) const PANE_TYPES: [&str; 5] = ["map", "affects", "group", "chat", "imm"];
+/// `PANE_TYPES` in src/panel/paneLayout.ts. `writing` is the writing
+/// card pinned to the panel, which only the card's pin adds. A build
+/// from before it drops the leaf as an unknown type and loads the rest.
+pub(crate) const PANE_TYPES: [&str; 6] = ["map", "affects", "group", "chat", "imm", "writing"];
 
 /// How many Chat panes the panel holds. Mirrored by `CHAT_PANES_MAX`
 /// in src/panel/paneLayout.ts.
@@ -784,6 +786,28 @@ pub(crate) mod tests {
         assert!(text.contains("[ui.panes]"), "{text}");
         let parsed = ProfileConfig::from_toml(&text).unwrap();
         assert_eq!(parsed.ui.panes, Some(custom_layout()));
+    }
+
+    #[test]
+    fn the_writing_pane_round_trips_and_an_unknown_type_leaves_the_rest() {
+        let mut config = ProfileConfig::default();
+        let mut layout = PaneLayoutPersist::default_layout();
+        layout.root.children.push(PaneNode::leaf("writing", 0.5));
+        layout.sanitize();
+        config.ui.panes = Some(layout.clone());
+        let text = config.to_toml().unwrap();
+        let parsed = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(parsed.ui.pane_layout(), layout);
+        assert_eq!(
+            leaf_panes(&parsed.ui.pane_layout().root),
+            ["map", "affects", "writing"]
+        );
+        // A build that does not know a pane type drops its leaf and keeps
+        // the others, the way a build from before the writing pane reads
+        // a profile with one.
+        let later = text.replace("\"writing\"", "\"someday\"");
+        let older = ProfileConfig::from_toml(&later).unwrap();
+        assert_eq!(leaf_panes(&older.ui.pane_layout().root), ["map", "affects"]);
     }
 
     #[test]

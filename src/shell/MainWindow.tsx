@@ -57,7 +57,7 @@ import { CoachRing } from '../ui/CoachRing';
 import { openSettingsTab } from '../lib/settingsLink';
 import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
-import { allPanes, PANE_TYPES } from '../panel/paneLayout';
+import { allPanes, isOfferedPaneType, PANE_TYPES } from '../panel/paneLayout';
 import { offeredPaneTypes } from '../panel/paneTypes';
 import {
   getSelected,
@@ -467,7 +467,9 @@ function MainWindow() {
     toggleSplit,
     // The staff queues row waits for Imm.Queues, like Add a pane, but a
     // pane the tree already shows stays listed so you can hide it.
-    paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
+    paneTypes: PANE_TYPES.filter(isOfferedPaneType).filter(
+      (t) => offeredPaneTypes().includes(t) || shownPanes.includes(t),
+    ),
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: openHelpWindow,

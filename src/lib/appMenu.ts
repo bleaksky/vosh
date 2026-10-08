@@ -2,7 +2,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { menuSetState, subscribeAppMenu } from '../ipc/windows';
 import SHORTCUTS from './appShortcuts.json';
 import { isMacPlatform } from './shortcuts';
-import { PANE_TYPES, type PaneType } from '../panel/paneLayout';
+import { isOfferedPaneType, PANE_TYPES, type OfferedPaneType } from '../panel/paneLayout';
 
 // The page side of the macOS menu bar (src-tauri/src/app/menu.rs). A
 // menu command reaches the main window as `vosh://app-menu` with the
@@ -277,7 +277,7 @@ export function commandRepeats(id: string): boolean {
 // ── Menu state ───────────────────────────────────────────────────────
 
 export interface MenuPaneState {
-  pane: PaneType;
+  pane: OfferedPaneType;
   /** Checked. The pane shows in the open panel. */
   visible: boolean;
   /** Listed. Staff queues waits for the MUD to offer it. */
@@ -345,7 +345,7 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     worldName: world.length > 0 ? world : null,
     panelOpen: input.panelOpen,
     splitOpen: input.splitOpen,
-    panes: PANE_TYPES.map((pane) => {
+    panes: PANE_TYPES.filter(isOfferedPaneType).map((pane) => {
       const shown = input.shownPanes.includes(pane);
       return {
         pane,

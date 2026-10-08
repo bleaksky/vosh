@@ -438,6 +438,24 @@ describe('Chat panes', () => {
   });
 });
 
+describe('the Writing pane', () => {
+  const writing = paneRef('writing');
+
+  it('holds once, and a second pin moves it rather than adding one', () => {
+    const one = deepFreeze(addPane(root(), writing));
+    expect(allPanes(one)).toEqual(['map', 'affects', 'writing']);
+    expect(addPane(one, writing)).toBe(one);
+    expect(leafKey(findNode(one, 'writing') as PaneLeaf)).toBe('writing');
+    const moved = splitPane(one, 'map', 'row', writing);
+    expect(countPanes(moved, writing)).toBe(1);
+  });
+
+  it('closes like any pane and leaves the others their space', () => {
+    const one = deepFreeze(addPane(root(), writing));
+    expect(allPanes(closePane(one, 'writing'))).toEqual(['map', 'affects']);
+  });
+});
+
 describe('persistence', () => {
   const layoutWith = (...panes: string[]): PaneLayout =>
     sanitizeLayout({
