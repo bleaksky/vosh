@@ -139,19 +139,19 @@ describe('the Settings button in the title band', () => {
     // The session button comes first, centered over the terminal.
     expect(labels(draw('macos', true)).slice(1)).toEqual([
       'Add a pane',
-      'Search commands (⌘K)',
+      'Search commands',
       'Hide panel',
       'Settings',
     ]);
     expect(labels(draw('macos', false)).slice(1)).toEqual([
-      'Search commands (⌘K)',
+      'Search commands',
       'Show panel',
       'Settings',
     ]);
     for (const platform of ['windows', 'linux'] as const) {
       expect(labels(draw(platform, true)).slice(1), platform).toEqual([
         'Add a pane',
-        'Search commands (Ctrl+K)',
+        'Search commands',
         'Hide panel',
         'Settings',
         'Minimize',
@@ -159,7 +159,7 @@ describe('the Settings button in the title band', () => {
         'Close',
       ]);
       expect(labels(draw(platform, false)).slice(1), platform).toEqual([
-        'Search commands (Ctrl+K)',
+        'Search commands',
         'Show panel',
         'Settings',
         'Minimize',
@@ -167,6 +167,17 @@ describe('the Settings button in the title band', () => {
         'Close',
       ]);
     }
+  });
+
+  it('names each shortcut in aria-keyshortcuts, apart from the name', () => {
+    const keys = (platform: 'macos' | 'windows', label: string) =>
+      attr(button(draw(platform, true), label).tag, 'aria-keyshortcuts');
+    expect(keys('macos', 'Search commands')).toBe('Meta+K');
+    expect(keys('windows', 'Search commands')).toBe('Control+K');
+    expect(keys('macos', 'Hide panel')).toBe('Meta+Shift+L');
+    expect(keys('windows', 'Hide panel')).toBe('Control+Shift+L');
+    expect(keys('macos', 'Settings')).toBe('Meta+,');
+    expect(keys('windows', 'Settings')).toBe('Control+,');
   });
 
   it('keeps the tab order the order you see', () => {

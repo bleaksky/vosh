@@ -912,7 +912,7 @@ export function PromptCard({
         {body}
         {/* The part you pick on your prompt, for a reader, since the marks
             on the terminal are pictures. */}
-        <p className="st-visually-hidden" aria-live="polite">
+        <p className="visually-hidden" aria-live="polite">
           {pickAnnouncement(pickedPiece)}
         </p>
       </div>

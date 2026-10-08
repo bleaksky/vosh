@@ -17,5 +17,6 @@
   "sessions-sidebar": { "mac": "Ctrl+Mod+S", "other": "Mod+Shift+S" },
   "split": "Mod+\\",
   "snoop": "Mod+J",
+  "read-prompt": "Mod+Shift+P",
   "help": "Mod+/"
 }

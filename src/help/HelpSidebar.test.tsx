@@ -40,6 +40,9 @@ describe('the help sidebar', () => {
     expect(html.match(/class="st-nav-item hp-topic"/g)).toHaveLength(3);
     // The Cmd+F keycaps sit in the empty search.
     expect(html).toContain('<kbd class="st-keycap st-keycap-glyph">⌘</kbd>');
+    // The search names its keys apart, and the caps stay out of its name.
+    expect(html).toMatch(/role="combobox"[^>]*aria-keyshortcuts="Meta\+F"/);
+    expect(html).toContain('<span class="st-search-keys" aria-hidden="true">');
   });
 
   it('swaps the nav for the results while the search holds words', () => {
@@ -56,6 +59,10 @@ describe('the help sidebar', () => {
 
   it('says so when nothing matches', () => {
     expect(draw('zzyzx')).toContain('No help matches.');
+  });
+
+  it('is a landmark named Sidebar', () => {
+    expect(draw('')).toMatch(/^<aside class="st-sidebar" aria-label="Sidebar">/);
   });
 
   it('gives every section an icon', () => {

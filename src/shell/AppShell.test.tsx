@@ -189,6 +189,57 @@ describe('the sessions column', () => {
   });
 });
 
+// Tab follows the eye (Q22): the band, the sessions, the terminal as
+// one stop, the command line, then the panel.
+describe('the Tab order', () => {
+  it('runs band, sessions, Terminal, Command line, then the panel', () => {
+    vi.stubGlobal('document', { documentElement: { dataset: { platform: 'macos' } } });
+    let html = '';
+    try {
+      html = renderToStaticMarkup(
+        <AppShell
+          panelOpen
+          panelWidth={300}
+          onPanelWidth={() => undefined}
+          sessions={<button>Tolliver</button>}
+          sessionsWidth={220}
+          onSessionsWidth={() => undefined}
+          sessionsToggle={<button>Sessions</button>}
+          titleBand={<button>Session</button>}
+          terminal={<div className="terminal-area" />}
+          reader={<ol role="log" aria-label="Game lines" />}
+          input={<textarea aria-label="Command line" />}
+          statusLine={null}
+          panel={<button>Pane</button>}
+        />,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const stops = [...html.matchAll(/<(button|textarea|section|div)\b([^>]*)>([^<]*)/g)]
+      .filter(([, tag, attrs]) =>
+        tag === 'button' || tag === 'textarea' ? true : / tabindex="0"/.test(attrs),
+      )
+      .map(([, tag, attrs, text]) => attrs.match(/aria-label="([^"]*)"/)?.[1] ?? text ?? tag);
+    expect(stops).toEqual([
+      'Sessions',
+      'Session',
+      'Tolliver',
+      'Sessions width',
+      'Terminal',
+      'Command line',
+      'Pane',
+      'Panel width',
+    ]);
+    // The game lines a screen reader reads follow the terminal in its
+    // slot, so the one stop holds them under the underlay and xterm.
+    expect(html).toContain(
+      '<section class="shell-slot-term" aria-label="Terminal" tabindex="0"><div class="terminal-area"></div><ol role="log" aria-label="Game lines"></ol></section>',
+    );
+    expect(html).toContain('<section class="shell-slot-input" aria-label="Command line">');
+  });
+});
+
 // A snoop that opens takes the top of the terminal column.
 // The split renders first in the terminal's slot, so the live terminal
 // keeps its parent and never remounts, which would reload its scrollback.

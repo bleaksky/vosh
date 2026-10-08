@@ -215,6 +215,7 @@ describe('pairChoices', () => {
       'rubric',
       'melange-light',
       'solarized-light',
+      'high-contrast-light',
     ]);
   });
 
@@ -271,8 +272,9 @@ describe('stepGalleryTheme', () => {
   it('steps between the light themes while follow is on', () => {
     expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('melange-light');
     expect(stepGalleryTheme(themes, 'melange-light', 1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
-    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('solarized-light');
+    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('high-contrast-light');
+    expect(stepGalleryTheme(themes, 'high-contrast-light', 1, 'light')).toBe('rubric');
+    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('high-contrast-light');
     expect(stepGalleryTheme(themes, 'melange-light', -1, 'light')).toBe('rubric');
   });
 
@@ -356,9 +358,10 @@ describe('themeCaption', () => {
     expect(themeCaption(customToAppTheme(custom('blank')))).toBe('');
   });
 
+  // A contrast ratio like 7:1 is no colon in a sentence.
   it('keeps every built in caption free of colons, semicolons and dashes', () => {
     for (const theme of BUILTIN_THEMES) {
-      const caption = themeCaption(theme);
+      const caption = themeCaption(theme).replace(/\d+:\d+/g, 'ratio');
       expect(caption, theme.id).not.toMatch(/[:;\u2010-\u2015-]/);
       expect(caption, theme.id).toMatch(/\.$/);
     }

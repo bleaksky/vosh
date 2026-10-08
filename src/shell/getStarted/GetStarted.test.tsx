@@ -225,6 +225,11 @@ describe('Get started', () => {
     expect(text).toContain('After you log in');
     expect(text).toContain('New session…Connect');
     expect(text).toContain('Find it again with Get started in the palette.');
+    // Connect names its key apart, and its keycaps stay out of the name.
+    const connect = view.button('Connect to');
+    expect(connect.getAttribute('aria-keyshortcuts')).toMatch(/^(Meta|Control)\+R$/);
+    const keys = findAll(connect, (el) => el.getAttribute('class') === 'gs-keys')[0];
+    expect(keys?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('counts what you finished', async () => {

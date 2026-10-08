@@ -91,6 +91,45 @@ export function shortcutLabel(spec: string, mac: boolean = isMacPlatform()): str
   return shortcutKeys(spec, mac).join(mac ? '' : '+');
 }
 
+// The KeyboardEvent.key names aria-keyshortcuts expects for the named
+// keys. Any other key longer than one letter, like F2, is already one.
+const ARIA_KEYS: Record<string, string> = {
+  enter: 'Enter',
+  return: 'Enter',
+  escape: 'Escape',
+  esc: 'Escape',
+  tab: 'Tab',
+  backspace: 'Backspace',
+  delete: 'Delete',
+  space: 'Space',
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+  pageup: 'PageUp',
+  pagedown: 'PageDown',
+  home: 'Home',
+  end: 'End',
+};
+
+/** A shortcut spec as aria-keyshortcuts reads it, so a screen reader
+ *  names the keys apart from the control: `ariaKeyshortcuts('Mod+K')`
+ *  is Meta+K on macOS and Control+K elsewhere. Modifiers come in the
+ *  order Control, Meta, Alt, Shift. */
+export function ariaKeyshortcuts(spec: string, mac: boolean = isMacPlatform()): string {
+  const { mods, key } = parseSpec(spec);
+  const out: string[] = [];
+  if (mods.has('ctrl') || (!mac && mods.has('mod'))) out.push('Control');
+  if (mac && mods.has('mod')) out.push('Meta');
+  if (mods.has('alt')) out.push('Alt');
+  if (mods.has('shift')) out.push('Shift');
+  const named = ARIA_KEYS[key.toLowerCase()];
+  if (named) out.push(named);
+  else if (key.length === 1) out.push(key.toUpperCase());
+  else if (key.length > 1) out.push(key[0].toUpperCase() + key.slice(1));
+  return out.join('+');
+}
+
 // Physical keys the window shortcuts use, for layouts whose keys type
 // something else.
 const CODE_KEYS: Record<string, string> = {

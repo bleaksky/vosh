@@ -17,6 +17,7 @@ const fake = vi.hoisted(() => ({
     disposed: boolean;
     focused: boolean;
     keys: ((event: KeyboardEvent) => boolean) | null;
+    textarea: { tabIndex: number };
     selected: string;
   }[],
   sent: [] as string[],
@@ -43,6 +44,7 @@ vi.mock('@xterm/xterm', () => {
     disposed = false;
     focused = false;
     keys: ((event: KeyboardEvent) => boolean) | null = null;
+    textarea = { tabIndex: 0 };
     selected = '';
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
@@ -241,7 +243,7 @@ describe('a snoop terminal', () => {
     );
   });
 
-  it('hands Esc and a key that types back to the command line (SN7)', async () => {
+  it('hands Esc and a key that types back to the command line and lets Tab pass (SN7)', async () => {
     const { term, unmount } = await mount('Tolliver');
     let prevented = 0;
     const key = (key: string, over: Partial<KeyboardEvent> = {}) =>
@@ -269,6 +271,13 @@ describe('a snoop terminal', () => {
     expect(keys(key('ArrowUp'))).toBe(true);
     expect(keys(key('l', { type: 'keyup' }))).toBe(true);
     expect(fake.sent).toHaveLength(2);
+    // Tab moves the focus on, so xterm leaves it alone and it hands
+    // nothing back (Q22).
+    expect(keys(key('Tab'))).toBe(false);
+    expect(keys(key('Tab', { shiftKey: true }))).toBe(false);
+    expect(prevented).toBe(1);
+    expect(fake.sent).toHaveLength(2);
+    expect(term.textarea.tabIndex).toBe(-1);
     unmount();
   });
 

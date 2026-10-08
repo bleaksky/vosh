@@ -61,7 +61,7 @@ describe('the button that says where your prompt shows', () => {
       expect(html).toContain(`title="${why}"`);
       const id = /aria-describedby="([^"]+)"/.exec(html)?.[1];
       expect(id).toBeTruthy();
-      expect(html).toContain(`<span id="${id}" class="st-visually-hidden">${why}</span>`);
+      expect(html).toContain(`<span id="${id}" class="visually-hidden">${why}</span>`);
       // Off, not gone, so Tab still reaches it and a reader hears why.
       expect(html).not.toMatch(/<button[^>]*disabled=""/);
     }

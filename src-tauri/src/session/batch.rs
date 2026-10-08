@@ -12,6 +12,7 @@ use crate::sessions::Session;
 
 use super::log_sink::LogSink;
 use super::perf::PerfCounters;
+use super::reader::ReaderFeed;
 
 /// Everything one socket read writes to the terminal and reports, kept
 /// in stream order and sent once at the end of the read, so a prompt
@@ -46,10 +47,17 @@ pub(super) struct ReadBatch {
     /// The read ended on a partial that can still become your prompt, so
     /// it waits a moment for the next read instead of painting raw.
     pub(super) hold: bool,
+    /// The read painted a partial raw while Read new game lines is on, so
+    /// a screen reader reads it if it is still there
+    /// [`super::reader::PARTIAL_WAIT`] later.
+    pub(super) reader_wait: bool,
     /// The read brought GMCP packets after the last prompt Vosh read in
     /// it, which can change what that prompt shows. Packets before a
     /// prompt in the same read draw with it.
     pub(super) gmcp: bool,
+    /// What a screen reader reads of the read, filled only while Read new
+    /// game lines is on.
+    pub(super) reader: ReaderFeed,
 }
 
 impl ReadBatch {
@@ -67,7 +75,9 @@ impl ReadBatch {
             gag_without_reader: Vec::new(),
             character: None,
             hold: false,
+            reader_wait: false,
             gmcp: false,
+            reader: ReaderFeed::default(),
         }
     }
 }

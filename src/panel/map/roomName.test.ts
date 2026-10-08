@@ -253,7 +253,13 @@ describe('roomNameColor', () => {
         const name = contrast(hex(roomNameColor(sector, theme.xterm, tokens)!), panel);
         // The one ground rule holds the quiet tier at 3.1:1 on menus too,
         // a step over the panel, so on the panel it reads up to 4.1:1 and
-        // a name at 4.5:1 stands less than 1 above it.
+        // a name at 4.5:1 stands less than 1 above it. The High Contrast
+        // pair pins every tier at 7:1 or better, and the name reads as
+        // strong as its tier.
+        if (quiet >= 7) {
+          expect(name, `${theme.id} ${sector}`).toBeGreaterThanOrEqual(7);
+          continue;
+        }
         expect(name, `${theme.id} ${sector}`).toBeGreaterThan(quiet + 0.4);
       }
     }

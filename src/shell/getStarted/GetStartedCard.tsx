@@ -4,7 +4,7 @@ import { PRESETS, type Preset } from '../../automation/presets';
 import type { PromptShowState } from '../../ipc/prompt';
 import { useEscape } from '../../lib/escapeStack';
 import { APP_SHORTCUTS } from '../../lib/appMenu';
-import { shortcutKeys } from '../../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutKeys } from '../../lib/shortcuts';
 import type { PromptCardHost } from '../../prompt/PromptCard';
 import type { CellSize } from '../../prompt/pinnedDock';
 import { useCardPlace } from '../../prompt/useCardPlace';
@@ -198,7 +198,7 @@ export function GetStartedCard({
           onClose={close}
         />
       )}
-      <p className="st-visually-hidden" aria-live="polite">
+      <p className="visually-hidden" aria-live="polite">
         {said}
       </p>
     </section>
@@ -289,6 +289,7 @@ function StepList({
             else rows.current.delete(s.id);
           }}
           className={cx('gs-step', isDone && 'is-done', !all && s.id === current && 'is-current')}
+          aria-keyshortcuts={dials ? ariaKeyshortcuts(APP_SHORTCUTS.connect) : undefined}
           onFocus={() => setCurrent(s.id)}
           onClick={() => (dials ? play.connect() : showPage(s.id))}
         >
@@ -296,7 +297,7 @@ function StepList({
           <span className="gs-name">{s.title}</span>
           {meta && <span className="gs-meta">{meta}</span>}
           {dials ? (
-            <span className="gs-keys">
+            <span className="gs-keys" aria-hidden="true">
               {shortcutKeys(APP_SHORTCUTS.connect).map((key) => (
                 <Keycap key={key}>{key}</Keycap>
               ))}

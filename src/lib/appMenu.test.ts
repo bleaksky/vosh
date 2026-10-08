@@ -224,6 +224,33 @@ describe('resolveShortcut', () => {
   });
 });
 
+describe('the prompt key', () => {
+  const reading = (id: string) => id === 'read-prompt';
+
+  it('reads your prompt while the screen reader is on', () => {
+    expect(resolveShortcut(letter('p', true), undefined, reading)).toEqual({
+      kind: 'run',
+      id: 'read-prompt',
+    });
+    expect(resolveShortcut(letter('p', true), undefined, reading, false)).toEqual({
+      kind: 'run',
+      id: 'read-prompt',
+    });
+  });
+
+  it('stays the page key with the reader off, so a macro on it still fires', () => {
+    expect(resolveShortcut(letter('p', true))).toBeNull();
+    expect(resolveShortcut(letter('p', true), () => true)).toBeNull();
+  });
+
+  it('is Mod+Shift+P, a window key that runs once per press, apart from the snoop', () => {
+    expect(APP_SHORTCUTS['read-prompt']).toBe('Mod+Shift+P');
+    expect(commandRepeats('read-prompt')).toBe(false);
+    expect(resolveShortcut(letter('p'), undefined, reading)).toBeNull();
+    expect(resolveShortcut(letter('j'), undefined, reading)).toBeNull();
+  });
+});
+
 describe('the snoop key', () => {
   it('goes to the snoop while the session has one open', () => {
     expect(resolveShortcut(letter('j'), undefined, () => true)).toEqual({

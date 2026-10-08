@@ -233,6 +233,8 @@ Tab completion finishes a partly typed word in the command line from names Vosh 
 - Press `Tab` again to cycle through the remaining candidates, or `Shift+Tab` to cycle backward. The list wraps around.
 - Keep typing, or press any other key, and the cycle resets with the current completion left in place.
 
+On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
+
 Candidates come from three sources, checked in this order.
 
 - Words from commands you have typed, most recent first.
@@ -889,6 +891,7 @@ Themes recolor the whole window, the terminal included. They live in Settings un
 - Read the line under the gallery. It describes the theme on screen and, for a built in theme, names where its colors come from, who made them, and the license they carry.
 - Use the `Vision` switch above the gallery to see every theme as a player with deuteranopia, protanopia or tritanopia sees it. It starts on your `Color vision` from Accessibility and only previews, so it changes no theme.
 - Pick how the window changes theme in `Switch themes`. `Off` keeps the theme you click. `With the system` switches between the `Light theme` and the `Dark theme` you pick under it whenever your system does. `With the game` shows your `Day theme` from the game's dawn and your `Night theme` from its dusk, so the window turns about every 6 minutes.
+- High Contrast and High Contrast Light keep every text color at 7:1 or better. With `Switch themes` on `With the system`, turning on Increase contrast in macOS settings shows them, the light one while your system is light and the dark one while it is dark. While Increase contrast is on, a theme you click waits in its slot and shows once you turn it off.
 - Pick the `Day theme` and the `Night theme` from any theme, light or dark. Both start on the theme showing, so nothing changes until you pick. A click in the gallery fills whichever one is showing now.
 - Choose a pair close in tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes read as evening coming on, where a dark and a light one flash at every turn.
 - Go offline and the window keeps the theme it showed last, through a relaunch too, until the game names the time again.
@@ -951,6 +954,27 @@ The terminal font lives in Settings under Appearance, then Terminal text. The pa
 - Turn off `Blinking text` under Accessibility, then Motion, to keep text that your MUD or your prompt sets to blink still. It starts off when your system reduces motion.
 
 Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size.
+
+### 6.5 Hear the game with a screen reader
+
+<!-- id: make-it-yours.screen-reader -->
+
+Vosh can hand the game to your screen reader, such as VoiceOver on macOS or NVDA on Windows. The switches live in Settings under Accessibility, in the Screen reader section, and each one is off until you turn it on.
+
+- Open Settings and choose Accessibility.
+- Under Screen reader, turn on `Read new game lines`. Your screen reader then reads each line the game shows, after your gags and routes, so a line your gags hide or your routes take out of the terminal stays quiet.
+- The lines that land within one pulse of the game join one announcement, so a room look reads as one piece.
+- Pick a number in `Long bursts`, 4, 8, 16 or 32. When more lines than that land at once, you hear how many came and then the last one, such as `12 lines.` and the line. It starts at 8.
+- Turn on `Read your prompt` to hear your prompt after the lines of each pulse. Your prompt comes every pulse, so it starts off. With it off, press `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows and Linux to hear your latest prompt when you want it. `Read your prompt` in the command palette does the same.
+- Turn on `Read in the background` to keep hearing the game while you work in another app. With it off, Vosh stays quiet while another app is in front.
+
+Vosh also keeps the last 500 lines of the session in front in a list named Game lines, right after the terminal. Step through it with your screen reader to read back what you missed, line by line. The list reads nothing aloud by itself. A session behind keeps its lines quietly, and its list shows them when you bring it to the front. It all works with either terminal renderer.
+
+The prompt key works only while `Read new game lines` is on. With it off, a macro you bound to `Ctrl+Shift+P` keeps working.
+
+Each change applies at once and saves with your profile.
+
+When a screen reader runs as Vosh starts and `Read new game lines` is off, the terminal says once where to find it. On macOS Vosh asks whether VoiceOver is on. On Windows it asks for the sign Narrator, NVDA, JAWS and other screen readers give the system. Linux gets no line, since no sign of a running screen reader holds across its desktops.
 
 ## Characters and data
 
@@ -1191,6 +1215,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
+- `Cmd+Shift+P` reads your latest prompt aloud while `Read new game lines` is on under Accessibility.
 - `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers and `Cmd+Option+4` on Macros. They work in Settings too. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
 
 For your sessions, in the main window.
@@ -1209,7 +1234,7 @@ On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh
 In the command line.
 
 - `Enter` submits. `Shift+Enter` inserts a newline for multi line compose, and in password mode it submits instead.
-- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names.
+- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names. On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
 - `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.
 - `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.
 - `Escape` cancels an in flight paste burst, stops a walk, closes the scrollback split, and snaps the terminal to its tail.

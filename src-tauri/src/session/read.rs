@@ -27,10 +27,12 @@ use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, Outp
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
+use super::reader::ReaderFeed;
 use super::round_trip::ends_on_prompt;
 use super::socket::Stream;
 use super::steps::{
-    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
+    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, reader_wait_step,
+    LineStep,
 };
 use super::walk::{self, WalkOut};
 use super::writer::game_text::GameLine;
@@ -265,6 +267,26 @@ pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
     }
 }
 
+/// Send what a screen reader reads of a partial that waited
+/// [`super::reader::PARTIAL_WAIT`].
+pub(super) async fn flush_reader_wait<R: tauri::Runtime>(conn: &mut Conn<R>) {
+    let mut reader = ReaderFeed::default();
+    hear_reader_wait(conn, &mut reader).await;
+    super::reader::emit(&conn.app, &conn.session, reader);
+}
+
+/// Read a partial that waited into `reader`, through
+/// [`reader_wait_step`], under the profile lock, which says whether a
+/// screen reader reads it.
+pub(super) async fn hear_reader_wait<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    reader: &mut ReaderFeed,
+) {
+    let p = conn.session.lock_profile().await;
+    let mut c = conn.session.connection.lock();
+    reader_wait_step(&p, &mut c, &conn.accumulator, reader);
+}
+
 /// Let go of the lines the stage holds for the rest of a prompt, through
 /// [`let_go_held`], and send what their Line pass left: the routes, the
 /// scrollback, what their triggers send, and the log rows. `seen_output`
@@ -393,7 +415,8 @@ async fn end_read<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Send what one socket read gathered: its output, the triggers that hid
+/// Send what one socket read gathered: its output, what a screen reader
+/// reads of it, the triggers that hid
 /// a prompt with nothing to draw in its place, then the prompt vars when
 /// a prompt was read or they changed, what the plugins changed in their
 /// panes, the snoops, and the hidden state when it changed. Once per read, so the
@@ -417,8 +440,10 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         gag_without_reader,
         character,
         hold: _,
+        reader_wait: _,
         gmcp,
         since_prompt: _,
+        reader,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
@@ -466,6 +491,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
                 as u64;
         conn.seen_output = emit_session_output(app, session, &out, &mut conn.settle);
     }
+    super::reader::emit(app, session, reader);
     conn.settle.queue_rows(log);
     if let Some(named) = character.and_then(|character| log_sink.name(&character)) {
         conn.settle.queue_name(named);

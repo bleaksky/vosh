@@ -8,12 +8,14 @@ import {
   type PointerEvent,
 } from 'react';
 import type { SessionRow } from '../ipc/session';
+import { APP_SHORTCUTS } from '../lib/appMenu';
 import { useEscape } from '../lib/escapeStack';
 import { sessionLabel, typedName } from '../lib/sessionLabel';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, PlusIcon } from '../ui/icons';
+import { VisuallyHidden } from '../ui/VisuallyHidden';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
@@ -206,6 +208,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             type="button"
             className="shell-icon-button"
             aria-label="New session"
+            aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS['session-new'])}
             onClick={onNewSession}
           >
             <PlusIcon />
@@ -213,7 +216,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         </div>
       </div>
       <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
-        Sessions<span className="shell-sessions-total">{rows.length}</span>
+        Sessions<VisuallyHidden>, </VisuallyHidden>
+        <span className="shell-sessions-total">{rows.length}</span>
       </h2>
       <ul
         ref={list}
@@ -230,7 +234,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             row={row}
             rows={rows}
             current={row.id === selected}
-            keys={numbered && i < 9 ? shortcutLabel(`Mod+${i + 1}`) : null}
+            keys={i < 9 ? `Mod+${i + 1}` : null}
+            numbered={numbered}
             renaming={row.id === renaming}
             lifted={drag?.id === row.id}
             offset={
@@ -303,9 +308,11 @@ interface SlotProps {
   row: SessionRow;
   rows: SessionRow[];
   current: boolean;
-  /** The key that brings this row to the front, shown while you hold
-   *  Mod, or null. */
+  /** The shortcut spec that brings this row to the front, like Mod+1,
+   *  or null past the ninth row. */
   keys: string | null;
+  /** Mod is held, so the row draws its keys. */
+  numbered: boolean;
   /** Its name is a field while you rename it. */
   renaming: boolean;
   /** It is the row in the air. */
@@ -343,6 +350,7 @@ function SessionSlot({
   rows,
   current,
   keys,
+  numbered,
   renaming,
   lifted,
   offset,
@@ -396,6 +404,7 @@ function SessionSlot({
         className={rowClass}
         aria-current={current ? 'true' : undefined}
         aria-describedby={described}
+        aria-keyshortcuts={keys ? ariaKeyshortcuts(keys) : undefined}
         onPointerDown={onPress}
         onClick={() => {
           if (dropped()) return;
@@ -425,8 +434,12 @@ function SessionSlot({
           rows={rows}
           mark={look.mark}
           end={
-            keys ? (
-              <span className="shell-sessions-key">{keys}</span>
+            numbered && keys ? (
+              // The row names its keys in aria-keyshortcuts, so the glyphs
+              // stay out of its name.
+              <span className="shell-sessions-key" aria-hidden="true">
+                {shortcutLabel(keys)}
+              </span>
             ) : (
               look.count > 0 && !current && <WaitingCount count={look.count} />
             )

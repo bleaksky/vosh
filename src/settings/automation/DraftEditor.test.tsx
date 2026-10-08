@@ -178,7 +178,7 @@ async function mount(spec: KindSpec<Thing> = SPEC) {
     /** The names of the rows that show. */
     rows: () =>
       findAll(container, (el) => el.hasAttribute('data-uid')).map((el) =>
-        el.textContent.replace(/(On|Off)$/, ''),
+        el.textContent.replace(/(Enabled|Off)$/, ''),
       ),
     selected: () =>
       findAll(container, (el) => el.getAttribute('aria-current') === 'true')[0]?.textContent ?? '',

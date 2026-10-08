@@ -18,6 +18,9 @@ const { launchNoticeLine, MIGRATION_APPLIED_NOTICE, showLaunchNotices, showMigra
 const HEALER =
   'Vosh could not read the Healer profile file, so it will not save over it. Fix the file or switch to another profile.';
 
+const VOICEOVER =
+  'VoiceOver is on. To hear the game, turn on Read new game lines in Settings under Accessibility.';
+
 describe('launch notices', () => {
   beforeEach(() => {
     fakes.invoke.mockReset();
@@ -29,12 +32,21 @@ describe('launch notices', () => {
   });
 
   it('shows each notice in the terminal and as a toast', async () => {
-    fakes.invoke.mockResolvedValueOnce([HEALER]);
+    fakes.invoke.mockResolvedValueOnce([{ kind: 'error', message: HEALER }]);
     const written: string[] = [];
     await showLaunchNotices((text) => written.push(text));
     expect(fakes.invoke).toHaveBeenCalledWith('launch_notices_take');
     expect(written).toEqual([launchNoticeLine(HEALER)]);
     expect(fakes.pushToast).toHaveBeenCalledWith({ kind: 'error', message: HEALER });
+  });
+
+  it('shows the screen reader pointer as info, not as an error', async () => {
+    fakes.invoke.mockResolvedValueOnce([{ kind: 'info', message: VOICEOVER }]);
+    const written: string[] = [];
+    await showLaunchNotices((text) => written.push(text));
+    expect(written).toEqual([launchNoticeLine(VOICEOVER)]);
+    expect(fakes.pushToast).toHaveBeenCalledWith({ kind: 'info', message: VOICEOVER });
+    expect(fakes.pushToast).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'error' }));
   });
 
   it('shows nothing when launch kept nothing or the backend is away', async () => {

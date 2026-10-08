@@ -43,6 +43,7 @@ mod log_sink;
 mod pointer;
 mod preview;
 mod prompt_table;
+mod reader;
 mod repaint;
 mod right;
 mod room;
@@ -186,6 +187,8 @@ struct Read {
     sends: Vec<String>,
     gmcp: bool,
     prompt: bool,
+    /// What a screen reader reads of the read.
+    reader: crate::session::reader::ReaderFeed,
 }
 
 /// The session's state for one connection, fed through its own steps.
@@ -306,7 +309,16 @@ impl Session {
             sends,
             gmcp: batch.gmcp,
             prompt: batch.prompt,
+            reader: batch.reader,
         }
+    }
+
+    /// The screen reader's wait runs out after a read that painted a
+    /// partial raw, and this is what it reads.
+    fn reader_wait(&mut self) -> crate::session::reader::ReaderFeed {
+        let mut reader = crate::session::reader::ReaderFeed::default();
+        reader_wait_step(&self.p, &mut self.c, &self.acc, &mut reader);
+        reader
     }
 
     /// You send `line`: held lines let go first, then the send step.

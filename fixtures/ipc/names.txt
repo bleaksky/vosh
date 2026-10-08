@@ -196,6 +196,7 @@ event session://prompt-vars app heard
 event session://reconnect app heard
 event session://round-trip app heard
 event session://routed app heard
+event session://screen-reader app heard
 event session://snoop app heard
 event session://snoop-output app heard
 event session://state app heard
@@ -250,6 +251,7 @@ event vosh://prompt-card-open page heard
 event vosh://prompt-config-changed app heard
 event vosh://readable-highlights-changed page heard
 event vosh://scene-saved app heard
+event vosh://screen-reader-changed page heard
 event vosh://scrollback-lines-changed page heard
 event vosh://session-identity-changed app heard
 event vosh://session-selected app heard

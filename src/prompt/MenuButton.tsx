@@ -89,7 +89,7 @@ export function MenuButton<T extends string>({
         <ChevronDownIcon />
       </Button>
       {why !== null && (
-        <span id={whyId} className="st-visually-hidden">
+        <span id={whyId} className="visually-hidden">
           {why}
         </span>
       )}

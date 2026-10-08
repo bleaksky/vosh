@@ -25,6 +25,7 @@ use super::batch::ReadBatch;
 use super::connection::Connection;
 use super::lines::{Line, LineAccumulator, Partial};
 use super::prompt_view::prompt_view;
+use super::reader::{self, ReaderFeed};
 use super::{highlight_ground, now_ms, room_block};
 
 /// What the Line pass decided for one line that is not your prompt.
@@ -147,6 +148,9 @@ pub(super) fn line_step(
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
     c.prompt.note_text();
+    // A line that completes a partial the reader read as it painted reads
+    // only the rest.
+    batch.reader.heard = c.reader_heard.take();
     // Whether a drop redials reads every line since the last prompt.
     c.link.line(&plain);
     // Without Char.Prompt this session, the game's reply to your own
@@ -162,6 +166,9 @@ pub(super) fn line_step(
         .stage
         .offer(&line.bytes, &plain, line.painted, End::Line);
     let mut steps = released_steps(p, c, batch, offered.released, now, log_session_id);
+    // A line the stage holds reads once it lets go, so what the reader
+    // heard of it waits with it.
+    let held = matches!(offered.offer, Offer::Held);
     match offered.offer {
         Offer::Prompt(block, painted) => {
             steps.push(prompt_block(
@@ -185,6 +192,10 @@ pub(super) fn line_step(
             now,
             log_session_id,
         )),
+    }
+    let heard = batch.reader.heard.take();
+    if held {
+        c.reader_heard = heard;
     }
     steps
 }
@@ -227,7 +238,9 @@ pub(super) fn let_go_held(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
-    c.prompt
+    batch.reader.heard = c.reader_heard.take();
+    let steps = c
+        .prompt
         .stage
         .release()
         .into_iter()
@@ -243,7 +256,9 @@ pub(super) fn let_go_held(
                 log_session_id,
             )
         })
-        .collect()
+        .collect();
+    batch.reader.heard = None;
+    steps
 }
 
 /// The lines the stage still holds as the session ends. The end of their
@@ -361,6 +376,25 @@ fn text_line_step(
         c.fight_head = true;
     }
     let fighting = in_combat || c.fight_tail || c.fight_head;
+    // A screen reader reads what shows: the echoes in place of a hidden
+    // line, and the line as its triggers left it, or as the game sent it
+    // when an earlier read painted it. A collapsed run reads the line
+    // without its count.
+    if p.ui.screen_reader {
+        let feed = &mut batch.reader;
+        match shows {
+            Shows::Now(_) => {
+                feed.lines_of(&shown);
+                if let Some(text) = &result.display {
+                    feed.lines_of(text.as_bytes());
+                }
+            }
+            Shows::Painted => {
+                feed.line(&plain);
+                feed.lines_of(&shown);
+            }
+        }
+    }
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -469,6 +503,13 @@ fn prompt_block(
     c.link.prompt();
     c.fight_tail = false;
     c.fight_head = false;
+    // A screen reader reads your prompt only when you ask, so it never
+    // joins the lines.
+    if p.ui.screen_reader {
+        batch
+            .reader
+            .prompt(block.lines.iter().map(|line| line.plain.as_str()));
+    }
     let disagree = c.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -665,6 +706,13 @@ fn unread_partial(
             before.extend_from_slice(b"\r\n");
         }
     }
+    // A screen reader reads it as a line, or the echoes in its place.
+    if p.ui.screen_reader {
+        match &result.display {
+            Some(text) => batch.reader.lines_of(text.as_bytes()),
+            None => batch.reader.lines_of(&before),
+        }
+    }
     c.prompt.stage.end_partial(
         &mut batch.out,
         &partial.bytes,
@@ -686,6 +734,22 @@ fn unread_partial(
 /// through [`unread_partial`]. Held lines it does not finish run the Line
 /// pass first. The candidates ring records one entry either way.
 pub(super) fn marker_step(
+    p: &mut Profile,
+    c: &mut Connection,
+    accumulator: &mut LineAccumulator,
+    batch: &mut ReadBatch,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Vec<LineStep> {
+    batch.reader.heard = c.reader_heard.take();
+    let steps = marker_steps(p, c, accumulator, batch, now, log_session_id);
+    batch.reader.heard = None;
+    steps
+}
+
+/// [`marker_step`], with the start of a partial the reader read already
+/// noted on the read's feed.
+fn marker_steps(
     p: &mut Profile,
     c: &mut Connection,
     accumulator: &mut LineAccumulator,
@@ -760,9 +824,10 @@ fn end_pulse(c: &mut Connection, batch: &mut ReadBatch) {
 /// The end of a read. A partial the capture settles on, alone or after
 /// held lines, is your prompt now, so it draws in this read and never
 /// flashes. Any other partial paints as a region a later read replaces,
-/// with the held lines before it. Held lines with no partial after them
-/// paint the same way. Then the stage catches up with everything the read
-/// wrote.
+/// with the held lines before it. A screen reader reads either only once
+/// it waits, see [`reader_wait_step`]. Held lines with no partial after
+/// them paint the same way. Then the stage catches up with everything the
+/// read wrote.
 pub(super) fn partial_step(
     p: &mut Profile,
     c: &mut Connection,
@@ -777,6 +842,7 @@ pub(super) fn partial_step(
         let plain = vosh_protocol::ansi::plain_text(&bytes);
         match c.prompt.stage.settle(&bytes, &plain) {
             Some((block, region)) => {
+                c.reader_heard = None;
                 let painted = accumulator
                     .take_partial()
                     .and_then(|t| t.painted)
@@ -795,6 +861,7 @@ pub(super) fn partial_step(
             // yet, so it waits a moment for the next read.
             None if accumulator.painted().is_none() && c.prompt.stage.live(&plain) => {
                 batch.hold = true;
+                batch.reader_wait = p.ui.screen_reader;
             }
             None => {
                 let painted =
@@ -802,6 +869,7 @@ pub(super) fn partial_step(
                         .stage
                         .paint_partial(&mut batch.out, &bytes, accumulator.painted());
                 accumulator.set_painted(painted);
+                batch.reader_wait = p.ui.screen_reader;
             }
         }
     } else {
@@ -823,6 +891,27 @@ pub(super) fn hold_step(c: &mut Connection, accumulator: &mut LineAccumulator, o
         accumulator.set_painted(painted);
     }
     c.prompt.stage.finish(out);
+}
+
+/// A partial the end of a read left, painted raw or held, is still there
+/// [`reader::PARTIAL_WAIT`] later and painted by then, so it waits for
+/// you, such as a login question the game sends with no GA. A screen
+/// reader reads it then, into `reader`, and the line that completes it
+/// reads only the rest. A line the reads split ends before that and
+/// reads whole.
+pub(super) fn reader_wait_step(
+    p: &Profile,
+    c: &mut Connection,
+    accumulator: &LineAccumulator,
+    reader: &mut ReaderFeed,
+) {
+    if !p.ui.screen_reader || accumulator.painted().is_none() {
+        return;
+    }
+    if let Some(bytes) = accumulator.partial() {
+        let plain = vosh_protocol::ansi::plain_text(bytes);
+        reader::painted_partial(reader, &mut c.reader_heard, plain);
+    }
 }
 
 /// How long a GMCP packet that changes your prompt waits for text before
@@ -961,6 +1050,9 @@ pub(super) fn send_step(
         at_ms,
     );
     c.prompt.stage.close();
+    // The partial goes with the send, and so does what the reader read of
+    // it.
+    c.reader_heard = None;
     // A quit of yours, or a Y that takes a character, says how the link
     // may end.
     c.link.sent(sent, Instant::now());

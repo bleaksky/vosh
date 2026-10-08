@@ -6,7 +6,7 @@
 
 @import '@fontsource-variable/inter'; /* Inter, for html and body and the migration wizard until it goes, bundled so the app never fetches a font */
 @import './fonts.css'; /* the bundled mono faces, no classes */
-@import './base.css'; /* the reset, html and body, and the scrollbars, no classes */
+@import './base.css'; /* the reset, html and body, the scrollbars, and visually-hidden */
 @import './tokens.css'; /* the shared tokens, no classes */
 @import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */

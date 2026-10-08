@@ -165,6 +165,9 @@ export interface PaletteDeps {
   /** Open the prompt card, or Edit as text with `text`. The Input rows
    *  appear when the shell passes it. */
   openPromptCard?: (view?: 'text') => void;
+  /** Read your prompt aloud, as the prompt key does. The row appears
+   *  while the screen reader is on, so the shell passes it then. */
+  readPrompt?: (() => void) | undefined;
   /** Whether the profile draws its prompt, or null while it reads none,
    *  which leaves Draw your prompt out. */
   promptDraw?: boolean | null;
@@ -394,6 +397,17 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
         run: () => void sendInput(`#prompt show ${row.show}`),
       });
     }
+  }
+  if (deps.readPrompt) {
+    entries.push({
+      id: 'read-prompt',
+      section: 'view',
+      title: 'Read your prompt',
+      keywords: 'screen reader voiceover narrator speak aloud prompt',
+      keys: APP_SHORTCUTS['read-prompt'],
+      searchOnly: true,
+      run: deps.readPrompt,
+    });
   }
   entries.push({
     id: 'panel-reset',

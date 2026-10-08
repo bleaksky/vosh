@@ -42,6 +42,7 @@
 //!   connection, and the lines the session captures as it ends.
 //!   `log_kinds` says what each row it logs is, for Save a scene.
 //! - `perf` counts the work on the hot path.
+//! - `reader` holds what one read hands a screen reader.
 //! - `reconnect` decides whether a drop dials again, and runs the series
 //!   of redials.
 //! - `snoop` keeps the players the session snoops, with their text.
@@ -70,6 +71,7 @@ mod lua_timers;
 mod perf;
 pub(crate) mod prompt_view;
 mod read;
+mod reader;
 pub(crate) mod reconnect;
 pub(crate) mod room_block;
 pub(crate) mod round_trip;

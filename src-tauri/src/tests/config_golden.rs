@@ -369,6 +369,10 @@ fn full_ui() -> UiConfig {
         // Written only while off, so on keeps the golden's bytes. The
         // readable_highlights tests in ipc/ui_config.rs cover off.
         readable_highlights: true,
+        screen_reader: true,
+        screen_reader_background: true,
+        screen_reader_prompt: true,
+        screen_reader_burst: 16,
         // Written only while on, so off keeps the golden's bytes. The
         // collapse_repeats tests in ipc/ui_config.rs cover on.
         collapse_repeats: false,

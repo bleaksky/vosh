@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../lib/escapeStack';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { pointAt, pointerLeft, trackMenuPointer } from './menuAim';
 import { placeMenu, type MenuPlacement } from './menuPlacement';
 
@@ -178,8 +179,11 @@ interface ItemProps {
   disabled?: boolean;
   /** A row that toggles, read out as checked or not. */
   checked?: boolean;
-  /** Right aligned: a check, a chevron, a shortcut. */
+  /** Right aligned: a check or a chevron. */
   trailing?: ReactNode;
+  /** Shortcut spec, like Mod+F. The row draws it at the right as ⌘F
+   *  and names it in aria-keyshortcuts, apart from the row's name. */
+  keys?: string | undefined;
   /** Menu attributes for a row that opens a submenu. */
   submenu?: { open: boolean; controls: string; onOpen: (focusFirst: boolean) => void };
   /** Pointer entered the row. Rows without a submenu use it to close
@@ -201,6 +205,7 @@ export function MenuItem({
   disabled,
   checked,
   trailing,
+  keys,
   submenu,
   onHover,
   onFocus,
@@ -230,6 +235,7 @@ export function MenuItem({
         aria-haspopup={submenu ? 'menu' : undefined}
         aria-expanded={submenu ? submenu.open : undefined}
         aria-controls={submenu?.open ? submenu.controls : undefined}
+        aria-keyshortcuts={keys && ariaKeyshortcuts(keys)}
         tabIndex={-1}
         onFocus={onFocus}
         onPointerEnter={point}
@@ -253,6 +259,11 @@ export function MenuItem({
       >
         <span className="pane-menu-text">{children}</span>
         {trailing}
+        {keys && (
+          <kbd className="ov-menu-keys" aria-hidden="true">
+            {shortcutLabel(keys)}
+          </kbd>
+        )}
       </button>
     </li>
   );

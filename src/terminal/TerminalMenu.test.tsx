@@ -85,6 +85,14 @@ describe('the terminal menu', () => {
     expect(settings).toContain('pane-menu-chevron');
     expect(settings).not.toContain('ov-menu-keys');
   });
+
+  it('names each shortcut in aria-keyshortcuts and keeps its glyphs out of the name', () => {
+    const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
+    const keyed = [...html.matchAll(/aria-keyshortcuts="([^"]*)"/g)].map((m) => m[1]);
+    expect(keyed).toEqual(['Control+C', 'Control+V', 'Control+A', 'Control+F']);
+    expect(html).toContain('<kbd class="ov-menu-keys" aria-hidden="true">');
+    expect(html).not.toContain('<kbd class="ov-menu-keys">');
+  });
 });
 
 // ── The Settings list, mounted ──────────────────────────────────────

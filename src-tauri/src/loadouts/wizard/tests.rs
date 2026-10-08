@@ -1971,7 +1971,7 @@ async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
         // group names, and every character got every item.
         for (n, name) in names.iter().enumerate() {
             let state = relaunch_as(dir.path(), name).await;
-            let notices = state.take_launch_notices();
+            let notices = state.take_launch_messages();
             let finished = [crate::loadouts::wizard::journal::WIZARD_FINISHED_NOTICE.to_string()];
             if n == 0 {
                 assert_eq!(notices, finished, "stop {stop}");
@@ -2035,7 +2035,7 @@ async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
     let state = relaunch_as(dir.path(), "Healer").await;
     assert!(state.relaunch_pending.load(Ordering::Acquire));
     assert!(!state.loadout_mode.load(Ordering::Acquire));
-    assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
+    assert_eq!(state.take_launch_messages(), [WIZARD_UNFINISHED_NOTICE]);
     // Loadout mode used to start over the Healer file, which still
     // holds its items under their old groups, so the Healer got
     // every other character's items too. The session runs on the

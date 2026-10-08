@@ -13,6 +13,23 @@ use crate::profile::live::Profile;
 use crate::profile::open::{OpenProfile, ProfileGuard};
 use crate::sessions::{Session, SessionId, SessionRow, Sessions, NO_SUCH_SESSION};
 
+/// One thing launch has to tell you, as the main window shows it in the
+/// terminal and as a toast of its kind.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct LaunchNotice {
+    pub(crate) kind: NoticeKind,
+    pub(crate) message: String,
+}
+
+/// Whether a launch notice says something went wrong, such as a profile
+/// file Vosh could not read, or only points you somewhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum NoticeKind {
+    Error,
+    Info,
+}
+
 /// What every command, window and session shares. The sessions with the
 /// profiles they play, the profile set, the log store, the plugins, the
 /// catalog and loadouts of loadout mode, the file of the affect fulls and
@@ -50,11 +67,11 @@ pub(crate) struct AppState {
     /// `global_catalog`. The active subset drives which catalog groups
     /// the runtime gates on (see [`crate::loadouts::gating::apply_loadout_state`]).
     pub(crate) loadout_set: Arc<Mutex<Option<crate::loadouts::set::LoadoutSet>>>,
-    /// Sentences launch has to tell you, such as a profile file Vosh
-    /// could not read and will not save over. Kept until the main window
-    /// takes them through `launch_notices_take`, since launch runs before
-    /// any window listens.
-    pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
+    /// What launch has to tell you, such as a profile file Vosh could not
+    /// read and will not save over. Kept until the main window takes them
+    /// through `launch_notices_take`, since launch runs before any window
+    /// listens.
+    pub(crate) launch_notices: std::sync::Mutex<Vec<LaunchNotice>>,
     /// Counts the times the panes in front have been replaced: a
     /// wholesale replace of the UI config, a pane reset, or a selection
     /// that brought another profile to the front. It moves in the same
@@ -329,11 +346,25 @@ impl AppState {
         }
     }
 
-    /// Keep `notices` for the main window to show.
+    /// Keep `notices`, each something that went wrong, for the main
+    /// window to show.
     pub(crate) fn add_launch_notices(&self, notices: Vec<String>) {
-        if notices.is_empty() {
-            return;
-        }
+        self.keep_launch_notices(notices.into_iter().map(|message| LaunchNotice {
+            kind: NoticeKind::Error,
+            message,
+        }));
+    }
+
+    /// Keep `message`, a pointer that nothing went wrong to, for the main
+    /// window to show.
+    pub(crate) fn add_launch_info(&self, message: String) {
+        self.keep_launch_notices([LaunchNotice {
+            kind: NoticeKind::Info,
+            message,
+        }]);
+    }
+
+    fn keep_launch_notices(&self, notices: impl IntoIterator<Item = LaunchNotice>) {
         self.launch_notices
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -369,13 +400,22 @@ impl AppState {
     }
 
     /// Hand over the notices kept so far, once. A second call gets none.
-    pub(crate) fn take_launch_notices(&self) -> Vec<String> {
+    pub(crate) fn take_launch_notices(&self) -> Vec<LaunchNotice> {
         std::mem::take(
             &mut *self
                 .launch_notices
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
+    }
+
+    /// The sentences of the notices kept so far, taken, for a test.
+    #[cfg(test)]
+    pub(crate) fn take_launch_messages(&self) -> Vec<String> {
+        self.take_launch_notices()
+            .into_iter()
+            .map(|notice| notice.message)
+            .collect()
     }
 
     /// Advance the panes generation. Call it in the step that replaces

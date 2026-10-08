@@ -107,6 +107,10 @@ function draw(rows: SessionRow[], selected: number): string {
 const buttons = (html: string) =>
   html.match(/<button[^>]*class="shell-sessions-row[^"]*"[^]*?<\/button>/g) ?? [];
 
+/** The words in a piece of markup, hidden ones too, as a screen reader
+ *  gathers them. */
+const words = (html: string) => html.replace(/<[^>]*>/g, '');
+
 afterEach(() => {
   states.clear();
   lines.clear();
@@ -126,16 +130,21 @@ describe('the sessions sidebar', () => {
     const html = draw(rows, 1);
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
-    expect(html).toContain('aria-label="New session"');
+    expect(html).toMatch(/aria-label="New session" aria-keyshortcuts="(Meta|Control)\+T"/);
     expect(html).not.toContain('Hide sessions');
     expect(html).toContain(
-      '<h2 class="shell-sessions-head">Sessions<span class="shell-sessions-total">3</span></h2>',
+      '<h2 class="shell-sessions-head">Sessions<span class="visually-hidden">, </span><span class="shell-sessions-total">3</span></h2>',
     );
   });
 
   it('reads Sessions 5 with five open, as board 01 draws it', () => {
     const five = [...rows, row(4, { name: 'Errands' }), row(5, { port: 1825, connected: false })];
-    expect(draw(five, 1)).toContain('Sessions<span class="shell-sessions-total">5</span></h2>');
+    expect(draw(five, 1)).toContain('<span class="shell-sessions-total">5</span></h2>');
+  });
+
+  it('reads the heading as Sessions, 3, the comma hidden so it draws as before', () => {
+    const head = draw(rows, 1).match(/<h2[^>]*>(.*?)<\/h2>/)?.[1] ?? '';
+    expect(words(head)).toBe('Sessions, 3');
   });
 
   it('lists every session in order, the selected one current', () => {
@@ -194,16 +203,22 @@ describe('the sessions sidebar', () => {
     lines.set(3, { who: 'Orla', text: 'The Bank of Aabahran', health: null, low: false });
     const [tolliver, orla, build] = buttons(draw(rows, 1));
     expect(tolliver).toMatch(
-      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health">100%<\/span><\/button>$/,
+      /<span class="shell-sessions-line">Thickening Woods<\/span><span class="shell-sessions-health"><span class="visually-hidden">Health <\/span>100%<\/span><\/button>$/,
     );
     expect(orla).toContain(
-      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low">18%</span>',
+      '<span class="shell-sessions-line">Fighting a Blackwatch guard</span><span class="shell-sessions-health is-low"><span class="visually-hidden">Health </span>18%</span>',
     );
     // With no health the line takes the right column too, and a session
     // you named starts it with its character.
     expect(build).toMatch(
       /<span class="shell-sessions-line is-wide"><span class="shell-sessions-who">Orla<\/span> · The Bank of Aabahran<\/span><\/button>$/,
     );
+  });
+
+  it('says Health before the figure, so a row never reads a bare percent', () => {
+    lines.set(1, { who: null, text: 'Thickening Woods', health: 94, low: false });
+    const tolliver = buttons(draw(rows, 1))[0] ?? '';
+    expect(words(tolliver)).toContain('Thickening WoodsHealth 94%');
   });
 
   it('counts what waits on a row behind in the pill, and brightens it for new lines', () => {
@@ -285,7 +300,7 @@ describe('the sessions sidebar', () => {
     const numbered = buttons(draw(many, 1));
     numbered.slice(0, 9).forEach((button, i) => {
       expect(button).toContain(
-        `<span class="shell-sessions-end"><span class="shell-sessions-key">⌘${i + 1}</span></span>`,
+        `<span class="shell-sessions-end"><span class="shell-sessions-key" aria-hidden="true">⌘${i + 1}</span></span>`,
       );
     });
     // Orla's count gives way to her key, and her port stays.
@@ -293,13 +308,22 @@ describe('the sessions sidebar', () => {
     expect(numbered[1]).toContain('<span class="shell-sessions-port">1825</span>');
     // The tenth row has no key.
     expect(numbered[9]).toContain('<span class="shell-sessions-end"></span>');
+    // Held or not, the first nine rows name their keys for a screen
+    // reader, and the tenth names none.
+    for (const drawn of [quiet, numbered]) {
+      drawn.slice(0, 9).forEach((button, i) => {
+        expect(button).toContain(`aria-keyshortcuts="Meta+${i + 1}"`);
+      });
+      expect(drawn[9]).not.toContain('aria-keyshortcuts');
+    }
   });
 
   it('names the key with Ctrl on Windows and Linux', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' });
     mod.held = true;
     const [tolliver] = buttons(draw(rows, 1));
-    expect(tolliver).toContain('<span class="shell-sessions-key">Ctrl+1</span>');
+    expect(tolliver).toContain('<span class="shell-sessions-key" aria-hidden="true">Ctrl+1</span>');
+    expect(tolliver).toContain('aria-keyshortcuts="Control+1"');
   });
 });
 

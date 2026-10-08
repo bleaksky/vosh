@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shortcutKey, shortcutKeys, shortcutLabel } from './shortcuts';
+import { ariaKeyshortcuts, shortcutKey, shortcutKeys, shortcutLabel } from './shortcuts';
 
 describe('shortcutKeys', () => {
   it('uses the Apple glyphs and modifier order on macOS', () => {
@@ -30,6 +30,29 @@ describe('shortcutLabel', () => {
     expect(shortcutLabel('Mod+Shift+L', true)).toBe('⇧⌘L');
     expect(shortcutLabel('Mod+C', false)).toBe('Ctrl+C');
     expect(shortcutLabel('Mod+Shift+L', false)).toBe('Ctrl+Shift+L');
+  });
+});
+
+describe('ariaKeyshortcuts', () => {
+  it('names Mod as Meta on macOS', () => {
+    expect(ariaKeyshortcuts('Mod+K', true)).toBe('Meta+K');
+    expect(ariaKeyshortcuts('Ctrl+Mod+S', true)).toBe('Control+Meta+S');
+    expect(ariaKeyshortcuts('Shift+Enter', true)).toBe('Shift+Enter');
+    expect(ariaKeyshortcuts('Mod+,', true)).toBe('Meta+,');
+    expect(ariaKeyshortcuts('F2', true)).toBe('F2');
+  });
+
+  it('names Mod as Control on Windows and Linux', () => {
+    expect(ariaKeyshortcuts('Mod+K', false)).toBe('Control+K');
+    expect(ariaKeyshortcuts('Ctrl+Mod+S', false)).toBe('Control+S');
+    expect(ariaKeyshortcuts('Shift+Enter', false)).toBe('Shift+Enter');
+    expect(ariaKeyshortcuts('Mod+,', false)).toBe('Control+,');
+    expect(ariaKeyshortcuts('F2', false)).toBe('F2');
+  });
+
+  it('uses the key names a keyboard event gives', () => {
+    expect(ariaKeyshortcuts('Mod+Alt+Shift+up', true)).toBe('Meta+Alt+Shift+ArrowUp');
+    expect(ariaKeyshortcuts('Esc', false)).toBe('Escape');
   });
 });
 

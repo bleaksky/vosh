@@ -410,10 +410,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // Tab completion. Pressing Tab once builds a candidate list from
     // history words and room characters that prefix-match the word
     // being typed. Pressing Tab again cycles through the matches.
-    // Any other key resets the cycle.
+    // Any other key resets the cycle. With no word before the caret
+    // Tab moves the focus on, to the panel or back to the terminal.
     if (event.key === 'Tab') {
-      event.preventDefault();
-      complete(event.shiftKey ? -1 : 1);
+      if (complete(event.shiftKey ? -1 : 1)) event.preventDefault();
       return;
     }
     resetCycle();
@@ -702,7 +702,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
-          aria-label="command input"
+          aria-label="Command line"
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}

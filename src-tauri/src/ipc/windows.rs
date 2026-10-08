@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 
 use crate::app::exit::ANSWERS;
 use crate::app::menu::MenuState;
-use crate::app::state::SharedState;
+use crate::app::state::{LaunchNotice, SharedState};
 use crate::app::windows::{
     open_aux_window, set_backdrop, snoop_window, HELP_WINDOW, SETTINGS_WINDOW,
 };
@@ -17,7 +17,7 @@ use crate::sessions::SessionId;
 /// What launch has to tell you, for the main window to show once in the
 /// terminal and as a toast.
 #[tauri::command]
-pub(crate) fn launch_notices_take(state: State<'_, SharedState>) -> Vec<String> {
+pub(crate) fn launch_notices_take(state: State<'_, SharedState>) -> Vec<LaunchNotice> {
     state.take_launch_notices()
 }
 

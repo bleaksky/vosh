@@ -108,7 +108,7 @@ export function CellLine({
       className={['pc-cells', className].filter(Boolean).join(' ')}
       style={{ width: cut ? cut.width : shown * cellW, ...style }}
     >
-      <span className="st-visually-hidden">{text}</span>
+      <span className="visually-hidden">{text}</span>
       {marks.map((mark) => (
         <span
           key={`${mark.from}-${mark.to}`}

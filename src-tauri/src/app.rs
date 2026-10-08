@@ -6,6 +6,7 @@ pub(crate) mod exit;
 pub(crate) mod launch;
 pub(crate) mod menu;
 pub(crate) mod plugins;
+pub(crate) mod screen_reader;
 pub(crate) mod state;
 pub(crate) mod system_fonts;
 pub(crate) mod windows;

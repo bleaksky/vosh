@@ -202,6 +202,12 @@ pub(crate) const WALK: &str = "session://walk";
 /// and the writing card, the offer notice and the command line follow
 /// it.
 pub(crate) const WRITING: &str = "session://writing";
+/// What a screen reader reads of one read while Read new game lines is
+/// on: the plain text of each line that shows, up to 500, how many showed,
+/// your prompt's text when the read brought one, and whether Vosh is in
+/// the background. Sent once per read that holds a line or a prompt.
+/// `onScreenReader` hears it.
+pub(crate) const SCREEN_READER: &str = "session://screen-reader";
 
 // The lists.
 

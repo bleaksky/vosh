@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../lib/escapeStack';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { placeMenu } from '../ui/menuPlacement';
 
 // The floating menu the title band opens: the session menu and Add a
@@ -194,7 +195,8 @@ export function ShellMenu({
 
 interface ItemProps {
   children: ReactNode;
-  /** Shortcut label drawn at the right, like ⌘R. */
+  /** Shortcut spec, like Mod+R. The row draws it at the right as ⌘R
+   *  and names it in aria-keyshortcuts, apart from the row's name. */
   shortcut?: string | undefined;
   /** Drawn at the right before the shortcut, like the plugin a Lua
    *  pane in Add a pane comes from. */
@@ -212,12 +214,17 @@ export function ShellMenuItem({
   disabled,
   onSelect,
 }: ItemProps) {
-  const kbd = shortcut && <kbd className="shell-menu-kbd">{shortcut}</kbd>;
+  const kbd = shortcut && (
+    <kbd className="shell-menu-kbd" aria-hidden="true">
+      {shortcutLabel(shortcut)}
+    </kbd>
+  );
   return (
     <button
       type="button"
       role="menuitem"
       className={`shell-menu-item${danger ? ' is-danger' : ''}`}
+      aria-keyshortcuts={shortcut && ariaKeyshortcuts(shortcut)}
       disabled={disabled}
       onClick={onSelect}
     >

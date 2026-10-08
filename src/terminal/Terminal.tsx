@@ -339,6 +339,10 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
+    // The output is one Tab stop on its slot (Q22), so xterm's hidden
+    // input leaves the Tab order and never eats a Tab.
+    if (term.textarea) term.textarea.tabIndex = -1;
+    term.attachCustomKeyEventHandler((event) => event.key !== 'Tab');
     const blink = new XtermBlink(term);
     blink.setOn(blinkTextRef.current);
     blinkRef.current = blink;
@@ -999,13 +1003,9 @@ export function Terminal({
 
   return (
     <div ref={sizingRef} className="terminal-sizer" hidden={!shown}>
-      <div
-        ref={containerRef}
-        className="terminal-host"
-        role="log"
-        aria-live="polite"
-        aria-label="MUD output"
-      />
+      {/* The host holds xterm's canvas and no text to read. The game
+          reaches a screen reader through ScreenReaderFeed beside it. */}
+      <div ref={containerRef} className="terminal-host" />
     </div>
   );
 }

@@ -821,6 +821,24 @@ describe('chip style', () => {
   });
 });
 
+describe('The screen reader', () => {
+  it('reads off and a burst of 8 for a config saved before it existed', () => {
+    const cfg = normalizeUiConfig(raw());
+    expect(cfg.screen_reader).toBe(false);
+    expect(cfg.screen_reader_background).toBe(false);
+    expect(cfg.screen_reader_prompt).toBe(false);
+    expect(cfg.screen_reader_burst).toBe(8);
+  });
+
+  it('holds the burst to 4, 8, 16 or 32 and reads anything else as 8', () => {
+    const read = (burst: unknown) =>
+      normalizeUiConfig(raw({ screen_reader_burst: burst } as Partial<RawUiConfig>))
+        .screen_reader_burst;
+    for (const burst of [4, 8, 16, 32]) expect(read(burst)).toBe(burst);
+    for (const burst of [7, 0, -4, 16.5, 'x', null]) expect(read(burst)).toBe(8);
+  });
+});
+
 // What Rust sends for a profile that sets nothing under [ui]
 // (UiConfigPayload in src-tauri/src/ipc/ui_config.rs, whose test reads
 // the same file).

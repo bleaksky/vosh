@@ -1,4 +1,4 @@
-import { launchNoticesTake } from '../ipc/windows';
+import { launchNoticesTake, type LaunchNotice } from '../ipc/windows';
 import { pushToast } from '../stores/toasts';
 
 // What launch has to tell you, such as a profile file Vosh could not
@@ -13,19 +13,19 @@ export function launchNoticeLine(sentence: string): string {
 }
 
 /** Take the launch notices and show each one in the terminal through
- *  `write` and as a toast. The backend hands them over once, so a
- *  second call shows nothing. */
+ *  `write` and as a toast of its kind. The backend hands them over once,
+ *  so a second call shows nothing. */
 export async function showLaunchNotices(write: (text: string) => void): Promise<void> {
-  let notices: string[];
+  let notices: LaunchNotice[];
   try {
     notices = await launchNoticesTake();
   } catch (e) {
     console.warn('[launch] notices unavailable', e);
     return;
   }
-  for (const sentence of notices) {
-    write(launchNoticeLine(sentence));
-    pushToast({ kind: 'error', message: sentence });
+  for (const { kind, message } of notices) {
+    write(launchNoticeLine(message));
+    pushToast({ kind, message });
   }
 }
 

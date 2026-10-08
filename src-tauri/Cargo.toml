@@ -68,8 +68,10 @@ tauri-plugin-single-instance = "2"
 windows = { version = "0.62", features = ["UI_Notifications"] }
 # The round trip to the game reads the kernel's TCP numbers through
 # SIO_TCP_INFO (Round Trip Readout P3). mio brings this version with
-# these features already, so it adds no new crate.
-windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock", "Win32_System_IO"] }
+# these features already, so it adds no new crate. Launch also asks
+# SystemParametersInfoW whether a screen reader runs, through the
+# WindowsAndMessaging feature of the same crate (app/screen_reader.rs).
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock", "Win32_System_IO", "Win32_UI_WindowsAndMessaging"] }
 
 # The round trip to the game reads the kernel's TCP numbers through
 # getsockopt on macOS and Linux (Round Trip Readout P3). tokio brings

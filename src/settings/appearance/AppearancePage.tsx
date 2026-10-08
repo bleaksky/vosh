@@ -32,6 +32,7 @@ import {
   daylightShown,
   pickTheme,
   systemPrefersDark,
+  systemPrefersMoreContrast,
   themeFollowOf,
   themePrefsOf,
 } from '../../theme/theme';
@@ -135,8 +136,16 @@ function systemName(): string {
   return 'your system';
 }
 
-/** What Switch themes says under its label in each mode. */
-function switchThemesLine(mode: ThemeFollow): string | undefined {
+/** What Switch themes says under its label in each mode. While it
+ *  follows the system and the system asks for more contrast, it names
+ *  the high contrast theme showing (`contrastTheme`), since a pick only
+ *  fills its slot. */
+function switchThemesLine(mode: ThemeFollow, contrastTheme?: string): string | undefined {
+  if (mode === 'system' && contrastTheme !== undefined) {
+    const system = systemName();
+    const named = system === 'your system' ? 'Your system' : system;
+    return `${named} is set to increase contrast, so ${contrastTheme} shows. Your pick shows once that's off.`;
+  }
   if (mode === 'system') {
     return `Vosh switches between your light and dark theme when ${systemName()} does.`;
   }
@@ -220,6 +229,8 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   // An id no theme has draws the fallback theme, so the caption names it.
   const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
   const caption = themeCaption(shownTheme);
+  const contrastTheme =
+    follow === 'system' && systemPrefersMoreContrast() ? shownTheme.label : undefined;
   // With the system the arrow keys stay among the themes the OS shows
   // now, so stepping through the gallery never fills the other slot and
   // each step lands on the radio it checks. With the game a pick fills
@@ -325,7 +336,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
               ref={fileRef}
               type="file"
               accept={THEME_FILE_TYPES}
-              className="st-visually-hidden"
+              className="visually-hidden"
               tabIndex={-1}
               aria-hidden="true"
               onChange={(e) => {
@@ -353,7 +364,11 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
             onVision={setPreview}
           />
           {caption !== '' && <p className="st-meta st-theme-caption">{caption}</p>}
-          <Row anchor="switch-themes" label="Switch themes" description={switchThemesLine(follow)}>
+          <Row
+            anchor="switch-themes"
+            label="Switch themes"
+            description={switchThemesLine(follow, contrastTheme)}
+          >
             <Segmented<ThemeFollow>
               options={THEME_FOLLOW_CHOICES}
               value={follow}

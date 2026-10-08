@@ -49,6 +49,11 @@ pub(crate) struct UiConfigPayload {
     /// `typical`, `deuteranopia`, `protanopia` or `tritanopia`.
     pub color_vision: String,
     pub readable_highlights: bool,
+    pub screen_reader: bool,
+    pub screen_reader_background: bool,
+    pub screen_reader_prompt: bool,
+    /// 4, 8, 16 or 32.
+    pub screen_reader_burst: u32,
     pub collapse_repeats: bool,
     pub collapse_fight_lines: bool,
     pub collapse_attack_lines: bool,
@@ -140,6 +145,10 @@ impl UiConfigPayload {
             fit_game_colors: ui.fit_game_colors,
             color_vision: ui.color_vision.clone(),
             readable_highlights: ui.readable_highlights,
+            screen_reader: ui.screen_reader,
+            screen_reader_background: ui.screen_reader_background,
+            screen_reader_prompt: ui.screen_reader_prompt,
+            screen_reader_burst: ui.screen_reader_burst,
             collapse_repeats: ui.collapse_repeats,
             collapse_fight_lines: ui.collapse_fight_lines,
             collapse_attack_lines: ui.collapse_attack_lines,
@@ -232,6 +241,10 @@ pub(crate) enum UiField {
     FitGameColors(bool),
     ColorVision(String),
     ReadableHighlights(bool),
+    ScreenReader(bool),
+    ScreenReaderBackground(bool),
+    ScreenReaderPrompt(bool),
+    ScreenReaderBurst(u32),
     CollapseRepeats(bool),
     CollapseFightLines(bool),
     CollapseAttackLines(bool),
@@ -372,6 +385,12 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::FitGameColors(v) => ui.fit_game_colors = v,
             UiField::ColorVision(v) => ui.color_vision = cfg::coerce_color_vision(v),
             UiField::ReadableHighlights(v) => ui.readable_highlights = v,
+            UiField::ScreenReader(v) => ui.screen_reader = v,
+            UiField::ScreenReaderBackground(v) => ui.screen_reader_background = v,
+            UiField::ScreenReaderPrompt(v) => ui.screen_reader_prompt = v,
+            UiField::ScreenReaderBurst(v) => {
+                ui.screen_reader_burst = cfg::coerce_screen_reader_burst(v);
+            }
             UiField::CollapseRepeats(v) => ui.collapse_repeats = v,
             UiField::CollapseFightLines(v) => ui.collapse_fight_lines = v,
             UiField::CollapseAttackLines(v) => ui.collapse_attack_lines = v,
@@ -1247,6 +1266,25 @@ mod tests {
         assert!(through_payload(&ui).readable_highlights);
         ui.readable_highlights = false;
         assert!(!through_payload(&ui).readable_highlights);
+    }
+
+    #[test]
+    fn the_screen_reader_fields_round_trip_and_the_burst_holds_to_its_four() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(
+            !back.screen_reader && !back.screen_reader_background && !back.screen_reader_prompt
+        );
+        assert_eq!(back.screen_reader_burst, 8);
+        ui.screen_reader = true;
+        ui.screen_reader_background = true;
+        ui.screen_reader_prompt = true;
+        ui.screen_reader_burst = 32;
+        let back = through_payload(&ui);
+        assert!(back.screen_reader && back.screen_reader_background && back.screen_reader_prompt);
+        assert_eq!(back.screen_reader_burst, 32);
+        ui.screen_reader_burst = 7;
+        assert_eq!(through_payload(&ui).screen_reader_burst, 8);
     }
 
     #[test]

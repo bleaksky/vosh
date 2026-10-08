@@ -61,6 +61,14 @@ export function toRgba(c: Rgb, alpha: number): string {
   return `rgba(${channel(c.r)}, ${channel(c.g)}, ${channel(c.b)}, ${a})`;
 }
 
+/** A hex or `rgba(r, g, b, a)` color as it paints over an opaque
+ *  `ground`, or null for any other text. */
+export function paintOver(css: string, ground: Rgb): Rgb | null {
+  const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(css);
+  if (m) return composite({ r: +m[1], g: +m[2], b: +m[3] }, ground, +m[4]);
+  return parseHex(css);
+}
+
 /** A 3 or 6 digit hex color as `rgba(r, g, b, a)`. Any other text comes
  *  back unchanged. */
 export function hexToRgba(hex: string, alpha: number): string {

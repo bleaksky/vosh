@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsFind } from '../ipc/windows';
-import { shortcutKey, shortcutKeys } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutKey, shortcutKeys } from '../lib/shortcuts';
 import { scrollWithin } from '../lib/scrollWithin';
 import {
   SETTINGS_GROUPS,
@@ -131,13 +131,13 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
   };
 
   return (
-    <aside className="st-sidebar">
+    <aside className="st-sidebar" aria-label="Sidebar">
       <div className="st-drag" data-tauri-drag-region="" />
       <div className="st-search">
         <span className="st-search-icon" aria-hidden="true">
           <SearchIcon />
         </span>
-        <label htmlFor={inputId} className="st-visually-hidden">
+        <label htmlFor={inputId} className="visually-hidden">
           Search settings
         </label>
         <input
@@ -152,6 +152,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
           aria-expanded={searching}
           aria-controls={listId}
           aria-autocomplete="list"
+          aria-keyshortcuts={ariaKeyshortcuts('Mod+F', mac)}
           aria-activedescendant={searching && results.length > 0 ? optionId(active) : undefined}
           value={query}
           onChange={(e) => setQuery(e.target.value)}

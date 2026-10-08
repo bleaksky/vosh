@@ -101,7 +101,11 @@
     "characters#login",
     "characters#world",
     "characters#tracked",
-    "characters#layout"
+    "characters#layout",
+    "accessibility:screen-reader#read-game-lines",
+    "accessibility:screen-reader#read-in-background",
+    "accessibility:screen-reader#read-your-prompt",
+    "accessibility:screen-reader#long-bursts"
   ],
   "palette": {
     "settings-themes": "themes",
@@ -288,8 +292,13 @@
       "color",
       "color-vision",
       "fit-game-colors",
+      "long-bursts",
       "motion",
-      "readable-highlights"
+      "read-game-lines",
+      "read-in-background",
+      "read-your-prompt",
+      "readable-highlights",
+      "screen-reader"
     ],
     "layout": [
       "affects",

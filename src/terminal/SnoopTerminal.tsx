@@ -145,6 +145,8 @@ export function SnoopTerminal({
       calls.current.onFindResults?.({ index: resultIndex, count: resultCount }),
     );
     term.open(host);
+    // xterm's hidden input leaves the Tab order (Q22).
+    if (term.textarea) term.textarea.tabIndex = -1;
     // Hide the cursor, since you never type here.
     term.write('\x1b[?25l');
     termRef.current = term;
@@ -152,8 +154,9 @@ export function SnoopTerminal({
     const wrapper = new WordWrapper(term.cols);
     // Esc or a key that types goes back to the command line. xterm does
     // nothing with a key this answers false for, so a key that types is
-    // left to type where the caret went.
+    // left to type where the caret went, and Tab moves the focus on.
     term.attachCustomKeyEventHandler((event) => {
+      if (event.key === 'Tab') return false;
       if (event.type !== 'keydown') return true;
       const handoff = snoopHandoff(event);
       if (handoff === 'stay') return true;

@@ -463,10 +463,16 @@
 }
 
 /* A row of keycaps 4 apart, and a shortcut set 12 before its toggle
-   (Show the panel on Layout). */
+   (Show the panel on Layout). Inline, they end a row's line (Read your
+   prompt on Accessibility). */
 .st-keys {
   display: flex;
   gap: 4px;
+}
+
+.st-keys-inline {
+  display: inline-flex;
+  vertical-align: middle;
 }
 
 .st-control-group {
@@ -548,6 +554,12 @@
   color: var(--text);
   font: inherit;
   text-align: left;
+}
+
+/* Holds the note only so the button can point its description at it.
+ * It draws no box, so an empty note adds no gap. */
+.st-disclosure-note {
+  display: contents;
 }
 
 .st-disclosure-chevron {
