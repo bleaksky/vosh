@@ -70,3 +70,11 @@ export async function searchLogPage(
 export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }
+
+/** Save the lines in `scope` to the Downloads folder as `<name>.txt`,
+ *  or with `withAnsi` as `<name>.log` with the game's colors. Resolves
+ *  to the name of the file it wrote, which gains ` (2)` and on when the
+ *  name is taken. */
+export async function saveLog(scope: LogScope, withAnsi: boolean, name: string): Promise<string> {
+  return invoke('logs_save', { scope, withAnsi, name });
+}

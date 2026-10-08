@@ -100,6 +100,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         logs::logs_list_sessions,
         logs::logs_search_page,
         logs::logs_export,
+        logs::logs_save,
         terminal::scrollback_load,
         terminal::scrollback_clear,
         ui_config::ui_get_config,

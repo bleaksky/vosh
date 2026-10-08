@@ -6,6 +6,7 @@ import {
   logCountText,
   logDay,
   logEmptyText,
+  logFileName,
   logMatcher,
   logPalette,
   logPlaceholder,
@@ -53,6 +54,13 @@ describe('the ranges the view reads', () => {
     expect(logRangeScope('month', world, NOW)).toEqual({ ...world, sinceMs: NOW - 30 * day });
     expect(logRangeScope('all', world, NOW)).toEqual(world);
     expect(logRangeScope('session', world, NOW)).toEqual({ ...world, thisSession: true });
+  });
+
+  it('names the file Save as file writes', () => {
+    expect(logFileName('week', null)).toBe('Vosh log, last 7 days');
+    expect(logFileName('session', null)).toBe('Vosh log, this session');
+    expect(logFileName('all', null)).toBe('Vosh log, all time');
+    expect(logFileName(null, at(10, 8, 7, 5))).toBe('Vosh log, 2026-10-08 07.05');
   });
 
   it('says what it searches and what it found nothing in', () => {

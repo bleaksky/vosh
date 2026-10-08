@@ -5,8 +5,8 @@
 //!
 //! `sqlite` opens the file in WAL mode and creates or upgrades the tables.
 //! `sessions` starts, ends and lists sessions, writes each game line with
-//! its plain text and its raw bytes, and exports a session. It also owns
-//! the `> ` rows that record what you sent.
+//! its plain text and its raw bytes, and exports the lines of a scope.
+//! It also owns the `> ` rows that record what you sent.
 //! `search` runs the regex search the log view pages through, over the
 //! logs a `Scope` names.
 //! `lookup` reads the sessions that belong to a profile's characters.
@@ -31,6 +31,8 @@ pub use sessions::{sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HI
 pub enum LogError {
     #[error("sqlite: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("write: {0}")]
+    Write(#[from] std::io::Error),
     #[error("regex: {0}")]
     Regex(#[from] regex::Error),
     /// A search stopped because a newer one replaced it.

@@ -271,30 +271,58 @@ impl LogStore {
         Ok(rows)
     }
 
-    /// Export a session's log as a single string. With `with_ansi=true`
-    /// the original raw bytes are concatenated (best-effort UTF-8); with
-    /// `with_ansi=false` only the plain-text column is used.
+    /// Export a session's log as a single string, see
+    /// [`Self::export_scope`].
     pub fn export_session(&self, session_id: i64, with_ansi: bool) -> Result<String> {
+        let mut out = Vec::new();
+        self.export_scope(&Scope::log(session_id), with_ansi, &mut out)?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    /// Write every line in `scope` to `out`, oldest first, each ended by
+    /// `\n`. With `with_ansi` a line goes out as the bytes the game sent,
+    /// colors included, or as its plain text when it kept none, such as a
+    /// line you sent. Without it every line is its plain text. Returns
+    /// how many lines it wrote.
+    pub fn export_scope(
+        &self,
+        scope: &Scope,
+        with_ansi: bool,
+        out: &mut dyn std::io::Write,
+    ) -> Result<u64> {
+        let logs = self.scoped_logs(scope)?;
+        let (Some(low), Some(high)) = (
+            logs.values().map(|l| l.first).min(),
+            logs.values().map(|l| l.last).max(),
+        ) else {
+            return Ok(0);
+        };
+        let since = scope.since_ms.unwrap_or(i64::MIN);
         let mut stmt = self.conn.prepare(
-            "SELECT ts_ms, text, raw FROM log_lines
-             WHERE session_id = ?1 ORDER BY id ASC",
+            "SELECT session_id, ts_ms, text, raw FROM log_lines
+             WHERE id >= ?1 AND id <= ?2 ORDER BY id",
         )?;
-        let mut rows = stmt.query(params![session_id])?;
-        let mut out = String::new();
+        let mut rows = stmt.query(params![low, high])?;
+        let mut written = 0u64;
         while let Some(row) = rows.next()? {
-            let text: String = row.get(1)?;
-            if with_ansi {
-                let raw: Option<Vec<u8>> = row.get(2)?;
-                match raw {
-                    Some(bytes) => out.push_str(&String::from_utf8_lossy(&bytes)),
-                    None => out.push_str(&text),
-                }
-            } else {
-                out.push_str(&text);
+            let session_id: i64 = row.get(0)?;
+            let ts_ms: i64 = row.get(1)?;
+            if !logs.contains_key(&session_id) || ts_ms < since {
+                continue;
             }
-            out.push('\n');
+            let raw = if with_ansi {
+                row.get::<_, Option<Vec<u8>>>(3)?
+            } else {
+                None
+            };
+            match raw {
+                Some(bytes) => out.write_all(&bytes)?,
+                None => out.write_all(row.get_ref(2)?.as_bytes().unwrap_or_default())?,
+            }
+            out.write_all(b"\n")?;
+            written += 1;
         }
-        Ok(out)
+        Ok(written)
     }
 
     /// Look up a single session row. Test only. The app's tests read it
@@ -406,6 +434,37 @@ pub(crate) mod tests {
         assert_eq!(plain, "red\nplain\n");
         let ansi = s.export_session(id, true).unwrap();
         assert_eq!(ansi, "\x1b[31mred\x1b[0m\nplain\n");
+    }
+
+    #[test]
+    fn export_a_span_of_time_across_logs() {
+        let mut s = store();
+        let a = s.start_session("h", 1, 0).unwrap();
+        s.append(a, 100, "old", None).unwrap();
+        s.end_session(a, 150).unwrap();
+        let b = s.start_session("h", 1, 900).unwrap();
+        let c = s.start_session("other", 1, 900).unwrap();
+        s.append_raw(b, 1_000, b"\x1b[33mOrla waves.\x1b[0m")
+            .unwrap();
+        s.append(c, 1_001, "elsewhere", None).unwrap();
+        s.append(b, 1_002, "> wave", None).unwrap();
+        let scope = Scope {
+            world: Some(("h".into(), 1)),
+            since_ms: Some(500),
+            ..Scope::default()
+        };
+        let mut plain = Vec::new();
+        assert_eq!(s.export_scope(&scope, false, &mut plain).unwrap(), 2);
+        assert_eq!(plain, b"Orla waves.\n> wave\n");
+        let mut ansi = Vec::new();
+        s.export_scope(&scope, true, &mut ansi).unwrap();
+        assert_eq!(ansi, b"\x1b[33mOrla waves.\x1b[0m\n> wave\n");
+        let mut none = Vec::new();
+        assert_eq!(
+            s.export_scope(&Scope::log(99), false, &mut none).unwrap(),
+            0
+        );
+        assert_eq!(none, Vec::<u8>::new());
     }
 
     #[test]

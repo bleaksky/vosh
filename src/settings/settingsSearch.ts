@@ -86,7 +86,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Search logs',
-    keywords: 'log history find copy text',
+    keywords: 'log history find copy text save file export download txt colors',
     target: at('general', 'logs'),
   },
   {

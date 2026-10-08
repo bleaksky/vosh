@@ -127,6 +127,20 @@ export function logPlaceholder(range: LogRange | null): string {
   }
 }
 
+/** The name Save as file gives what the view reads, before its
+ *  extension: `Vosh log, last 7 days`, or for one log the day and time
+ *  it started, `Vosh log, 2026-10-08 17.28`. */
+export function logFileName(range: LogRange | null, startedMs: number | null): string {
+  if (range === null) {
+    const at = startedMs ?? 0;
+    const d = new Date(at);
+    const time = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
+    return `Vosh log, ${logDayKey(at)} ${time}`;
+  }
+  const label = LOG_RANGES.find((r) => r.value === range)?.label ?? '';
+  return `Vosh log, ${label.toLowerCase()}`;
+}
+
 /** What the view says when it reads no line and you typed no pattern. */
 export function logEmptyText(range: LogRange | null): string {
   switch (range) {

@@ -710,14 +710,19 @@
   color: var(--danger-text);
 }
 
-.st-logs-copy {
+.st-logs-save {
   margin-left: 12px;
+}
+
+.st-logs-copy {
+  margin-left: 8px;
 }
 
 .st-logs-scope {
   margin-left: 12px;
 }
 
+.st-logs-save + .st-logs-scope,
 .st-logs-copy + .st-logs-scope {
   margin-left: 8px;
 }

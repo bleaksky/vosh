@@ -11,6 +11,7 @@ import {
 import {
   exportLogSession,
   listLogSessions,
+  saveLog,
   searchLogPage,
   type LogScope,
   type LogSearchHit,
@@ -23,6 +24,7 @@ import {
   LOG_RANGES,
   logCountText,
   logEmptyText,
+  logFileName,
   logMatcher,
   logPalette,
   logPlaceholder,
@@ -38,7 +40,9 @@ import { useSessionTarget } from '../../stores/session/useConnection';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme, resolveThemeTerminalColors } from '../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
-import { CopyIcon, Field, SearchIcon, Select } from '../../ui';
+import { CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../../ui';
+import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
+import { menuBelow } from '../../ui/menuPlacement';
 
 // The log view inside General (the approved SettingsGeneralLogs
 // board), at general:logs. One toolbar over the results: the pattern,
@@ -50,8 +54,9 @@ import { CopyIcon, Field, SearchIcon, Select } from '../../ui';
 // results read oldest first like the terminal and sit scrolled to the
 // newest line, under day headings. Each line keeps its own SGR colors
 // with your matches marked the way the find bar marks them, and
-// earlier matches load as you scroll up. Copy as text shows once you
-// pick a log.
+// earlier matches load as you scroll up. Save as file writes what the
+// view reads to Downloads as plain text or with the game's colors
+// (D29), and Copy as text shows once you pick a log.
 
 // A picked log's value in the scope select.
 const LOG_PREFIX = 'log:';
@@ -77,6 +82,7 @@ type Status =
   | { kind: 'ready' }
   | { kind: 'bad-pattern' }
   | { kind: 'copied' }
+  | { kind: 'saved'; name: string }
   | { kind: 'failed' };
 
 export function SessionLogs({ config, onError }: SettingsPageProps) {
@@ -96,6 +102,7 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
   const [status, setStatus] = useState<Status>({ kind: 'searching' });
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [pinSeq, setPinSeq] = useState(0);
+  const [saveMenu, setSaveMenu] = useState<{ at: MenuPlacement; anchor: HTMLElement } | null>(null);
   const seq = useRef(0);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   // Where the view sat before earlier lines went in above it.
@@ -222,8 +229,24 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
     }
   };
 
+  // Save what the view reads now: its scope as the last search took it,
+  // so the file holds the lines you see and the ones above them.
+  const saveFile = async (withAnsi: boolean) => {
+    setSaveMenu(null);
+    const log = pickedLog(pick);
+    const started = sessions.find((s) => s.id === log)?.started_at_ms ?? null;
+    const scope: LogScope =
+      shown?.scope ?? (log === null ? logRangeScope(pick as LogRange, { host, port }) : { log });
+    try {
+      const name = await saveLog(scope, withAnsi, logFileName(range, started));
+      setStatus({ kind: 'saved', name });
+    } catch (e) {
+      onError(String(e));
+    }
+  };
+
   useEffect(() => {
-    if (status.kind !== 'copied') return;
+    if (status.kind !== 'copied' && status.kind !== 'saved') return;
     const timer = window.setTimeout(() => setStatus({ kind: 'ready' }), COPIED_MS);
     return () => window.clearTimeout(timer);
   }, [status]);
@@ -280,6 +303,8 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         return 'Search failed';
       case 'copied':
         return 'Copied as text';
+      case 'saved':
+        return `Saved ${status.name} in Downloads`;
       case 'ready':
         return logCountText(lines.length, total, shown?.pattern ?? '');
     }
@@ -326,6 +351,24 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
         >
           {count}
         </span>
+        <button
+          type="button"
+          className="st-icon-button st-logs-save"
+          aria-label="Save as file"
+          title="Save as file"
+          aria-haspopup="menu"
+          aria-expanded={saveMenu !== null}
+          onClick={(e) => {
+            if (saveMenu) setSaveMenu(null);
+            else
+              setSaveMenu({
+                at: menuBelow(e.currentTarget.getBoundingClientRect()),
+                anchor: e.currentTarget,
+              });
+          }}
+        >
+          <SaveFileIcon />
+        </button>
         {sessionId !== null && (
           <button
             type="button"
@@ -348,6 +391,17 @@ export function SessionLogs({ config, onError }: SettingsPageProps) {
           onChange={setPick}
         />
       </div>
+      {saveMenu && (
+        <MenuSurface
+          label="Save as file"
+          at={saveMenu.at}
+          anchor={saveMenu.anchor}
+          onClose={() => setSaveMenu(null)}
+        >
+          <MenuItem onSelect={() => void saveFile(false)}>Plain text (.txt)</MenuItem>
+          <MenuItem onSelect={() => void saveFile(true)}>With colors (.log)</MenuItem>
+        </MenuSurface>
+      )}
       <div
         ref={resultsRef}
         className="st-logs-results"
