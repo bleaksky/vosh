@@ -36,6 +36,7 @@ import { FootCount, FootNote, WritingFoot } from './WritingFoot';
 import { WritingGuide } from './WritingGuide';
 import { WritingPreview } from './WritingPreview';
 import { WritingHead, type KindsMenu, type MoreItem } from './WritingHead';
+import { afterDrop, findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
 import {
   changedAsk,
@@ -98,12 +99,6 @@ interface Props {
 
 interface Confirm extends Ask {
   run: () => void;
-}
-
-/** How far a send got before the link dropped. */
-interface Drop {
-  sent: number;
-  total: number;
 }
 
 const rowsOf = (text: readonly string[]): Row[] =>
@@ -195,7 +190,7 @@ export function WritingCard({
   const [dropped, setDropped] = useState<Drop | null>(null);
   // A drop after the post went out, which a look at the board's list
   // settles once the session plays again (Note Editor board 8).
-  const [find, setFind] = useState<{ drop: Drop; started: boolean } | null>(null);
+  const [find, setFind] = useState<Find | null>(null);
 
   /** The draft of `k` to open on: the newest of a board's, or the one a
    *  text about you keeps. */
@@ -285,6 +280,14 @@ export function WritingCard({
     setBadField(null);
     setDropped(null);
     const k = job.kind;
+    const drop = afterDrop(find, result, job, k, lines.length);
+    if (drop) {
+      setDropped(drop.dropped);
+      setFind(drop.find);
+      setEnded(drop.ended);
+      if (drop.posted) markPosted();
+      return;
+    }
     switch (result.kind) {
       case 'read': {
         const note = result.note;
@@ -363,49 +366,7 @@ export function WritingCard({
           actions: result.field === 'post' ? ['done'] : [],
         });
         return;
-      case 'dropped': {
-        const drop = find?.drop ?? { sent: result.sent, total: lines.length };
-        setDropped(drop);
-        // Whether it posted waits for the board's list, so Post again
-        // shows once the list says.
-        if (result.posted || job.action === 'find') {
-          setFind({ drop, started: false });
-          setEnded({ note: resultNote({ ...result, posted: true }, k)!, actions: [] });
-          return;
-        }
-        setEnded({
-          note: resultNote(result, k)!,
-          actions: KINDS[k].board ? ['again'] : ['restore', 'again'],
-        });
-        return;
-      }
-      case 'found':
-        setFind(null);
-        markPosted();
-        setEnded({ note: resultNote(result, k)!, actions: [] });
-        return;
-      case 'not_found':
-      case 'cant_tell': {
-        const drop = find?.drop ?? { sent: lines.length, total: lines.length };
-        setFind(null);
-        setDropped(drop);
-        const said =
-          result.kind === 'cant_tell'
-            ? resultNote(result, k)!
-            : resultNote({ kind: 'dropped', sent: drop.sent, posted: false }, k)!;
-        setEnded({ note: said, actions: ['again'] });
-        return;
-      }
       case 'stopped':
-        if (job.action === 'find') {
-          setFind(null);
-          setDropped(find?.drop ?? null);
-          setEnded({
-            note: resultNote({ kind: 'dropped', sent: 0, posted: true }, k)!,
-            actions: ['again'],
-          });
-          return;
-        }
         setEnded({
           note: resultNote(result, k)!,
           actions: KINDS[k].board ? [] : ['restore', 'again'],
@@ -427,9 +388,10 @@ export function WritingCard({
   // Look for the note once the session plays again. Vosh never sends it
   // again on its own.
   useEffect(() => {
-    if (!find || find.started || !live || writing.job) return;
-    setFind({ ...find, started: true });
-    run({ kind, action: 'find', name, subject: draft.subject ?? '', immortal });
+    const now = findToStart(find, live, writing.job !== null);
+    if (!now) return;
+    setFind({ ...now, started: true });
+    run({ kind, action: 'find', name, subject: now.subject, immortal });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [find, live, writing.job]);
 
