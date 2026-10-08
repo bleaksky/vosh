@@ -505,12 +505,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             }
             _ = round_trip_interval.tick() => {
                 let now = Instant::now();
-                let reading = conn.stream.round_trip(now);
-                if let Some(reading) = reading {
+                let sample = conn.stream.round_trip(now);
+                if let Some(sample) = sample {
                     let at = chrono::Local::now().time();
-                    conn.session.connection.lock().round_trip.record(reading, now, at);
+                    conn.session.connection.lock().round_trip.record(sample, now, at);
                 }
-                let payload = RoundTripPayload::of(reading);
+                let payload = RoundTripPayload::of(sample.map(|s| s.reading));
                 if payload != round_trip_sent {
                     round_trip_sent = payload;
                     conn.session.emit(&conn.app, events::ROUND_TRIP, &payload);

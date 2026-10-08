@@ -1600,7 +1600,10 @@ async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
         config.ui.enabled_presets = vec!["numpad_movement".into()];
         config.macros.extend(yours);
         config.macros.extend(numpad_movement());
-        crate::loadouts::presets::hold_taken_keys(&mut config.macros);
+        crate::loadouts::presets::hold_taken_keys(
+            &mut config.macros,
+            &std::collections::BTreeSet::new(),
+        );
         config.save(&set.profile_path(name)).unwrap();
     }
     let state = launch_state(dir.path()).await;
@@ -1635,6 +1638,65 @@ async fn a_preset_macro_folds_into_one_beside_your_macro_on_its_key() {
     let presets = catalog.macros.iter().filter(|m| m.preset.is_some());
     assert!(presets.clone().all(|m| m.group.is_none()));
     assert_eq!(presets.count(), 6);
+}
+
+/// What Numpad3 sends for the character a launch plays: each macro on it
+/// that is on, in a group that is on.
+async fn numpad3_sends(state: &SharedState) -> Vec<String> {
+    let p = state.selected_profile().await;
+    p.macros
+        .iter()
+        .filter(|m| m.key == "Numpad3" && m.enabled)
+        .filter(|m| {
+            m.group
+                .as_ref()
+                .is_none_or(|g| !p.disabled_macro_groups.contains(g))
+        })
+        .map(|m| m.command.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn each_character_keeps_the_preset_key_it_had_after_the_wizard() {
+    use crate::profile::set::DEFAULT_PROFILE_NAME;
+    let dir = tempfile::tempdir().unwrap();
+    let set = james_like_set(dir.path());
+    // Both characters have Numpad movement on. Default's only Numpad3 is
+    // the preset's d, and Healer binds its own rec there, which holds d
+    // off in its file.
+    for (name, yours) in [
+        (DEFAULT_PROFILE_NAME, None),
+        ("Healer", Some(macro_on("Numpad3", "rec"))),
+    ] {
+        let mut config = ProfileConfig::default();
+        config.ui.enabled_presets = vec!["numpad_movement".into()];
+        config.macros.extend(yours);
+        config.macros.extend(numpad_movement());
+        crate::loadouts::presets::hold_taken_keys(
+            &mut config.macros,
+            &std::collections::BTreeSet::new(),
+        );
+        config.save(&set.profile_path(name)).unwrap();
+    }
+    let state = launch_state(dir.path()).await;
+    apply_migration(&state, &[], LIBRARY).await.unwrap();
+
+    // Healer's rec lands in a group Default keeps off, so Default keeps
+    // going down with Numpad3 and Healer keeps its rec. Default used to
+    // lose d to the rec it never had on.
+    let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+    assert_eq!(numpad3_sends(&state).await, ["d"]);
+    let state = relaunch_as(dir.path(), "Healer").await;
+    assert_eq!(numpad3_sends(&state).await, ["rec"]);
+
+    // catalog.toml holds d off as rec holds it for every character, so
+    // the file says the same whoever saved it last.
+    let (catalog, _) = load_at_launch(dir.path()).unwrap();
+    let d = catalog
+        .macros
+        .iter()
+        .find(|m| m.preset.is_some() && m.key == "Numpad3");
+    assert_eq!(d.map(|m| m.enabled), Some(false));
 }
 
 /// Default with the alias kk, a target, and a 300 pixel panel.

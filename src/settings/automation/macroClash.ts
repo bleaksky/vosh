@@ -1,8 +1,8 @@
-import { APP_SHORTCUTS, sessionKeyOfMacro, type SessionShortcutId } from '../../lib/appMenu';
+import { APP_SHORTCUTS, appKeyOfMacro, type MacroKeptShortcutId } from '../../lib/appMenu';
 import { shortcutLabel } from '../../lib/shortcuts';
 
 // The note over a macro's Key when the key is also one of the session
-// keys (Sessions Q11). The macro keeps the key in every session on its
+// keys (Sessions Q11) or one of the Settings keys. The macro keeps the key in every session on its
 // profile, so the note says what the key does elsewhere.
 
 const ORDINALS = [
@@ -17,18 +17,22 @@ const ORDINALS = [
   'ninth',
 ];
 
-const DOES: Record<SessionShortcutId, string> = {
+const DOES: Record<MacroKeptShortcutId, string> = {
   'session-new': 'opens a new session',
   'session-close': 'closes the session in front',
   'close-window': 'closes the window',
   'session-next': 'goes to the next session',
   'session-previous': 'goes to the previous session',
+  'settings-triggers': 'opens Triggers in Settings',
+  'settings-aliases': 'opens Aliases in Settings',
+  'settings-macros': 'opens Macros in Settings',
+  'settings-timers': 'opens Timers in Settings',
 };
 
-/** The note for a macro on `canonical`, or null when no session key
- *  shares it. */
+/** The note for a macro on `canonical`, or null when no session or
+ *  Settings key shares it. */
 export function macroClashNote(canonical: string, mac: boolean): string | null {
-  const hit = sessionKeyOfMacro(canonical, mac);
+  const hit = appKeyOfMacro(canonical, mac);
   if (!hit) return null;
   const does =
     hit.kind === 'goto'

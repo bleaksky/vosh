@@ -16,7 +16,7 @@ import { labelForKey } from '../../automation/macroKeys';
 import { presetById } from '../../automation/presets';
 import { listMacros, subscribeMacrosChanged, type Macro } from '../../ipc/automation';
 import { isMacPlatform } from '../../lib/shortcuts';
-import { useMacroList } from '../../stores/config/macroListStore';
+import { useMacroList } from './macroListStore';
 import { Card, CardNote, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';

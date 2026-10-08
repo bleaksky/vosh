@@ -1522,6 +1522,10 @@ describe('the help on Numpad movement', () => {
       "A key one of your macros uses stays yours, and the preset's macro on it waits.",
     );
     expect(text).toContain('The direction takes the key once you move or delete your macro.');
+    // A group a character keeps off gives the key back (hold_profile_keys).
+    expect(text).toContain(
+      'In loadout mode a macro of yours in a group your character keeps off leaves the key to the preset,',
+    );
     expect(text).toContain('Turning the preset off removes its six and none of yours.');
   });
 

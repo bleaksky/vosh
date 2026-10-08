@@ -477,6 +477,18 @@ describe('settings rows', () => {
     expect(title('import')).toBe('Import from another client…');
   });
 
+  it('shows the Settings keys on the four Automation rows only', () => {
+    const keyed = settingsRows()
+      .filter((r) => r.keys)
+      .map((r) => [r.id, r.keys]);
+    expect(keyed).toEqual([
+      ['settings-triggers', 'Mod+Shift+1'],
+      ['settings-aliases', 'Mod+Shift+2'],
+      ['settings-macros', 'Mod+Shift+3'],
+      ['settings-timers', 'Mod+Shift+4'],
+    ]);
+  });
+
   it('opens each row on a place the resolver knows', () => {
     const opened: string[] = [];
     for (const row of settingsRows({ openSettingsTab: (tab) => opened.push(tab) })) row.run();

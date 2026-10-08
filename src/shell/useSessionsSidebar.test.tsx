@@ -108,6 +108,43 @@ describe('the sessions sidebar in the main window', () => {
     expect(m.get()).toMatchObject({ shown: true, wanted: true, folded: false });
   });
 
+  it('stays hidden as a session opens, and says so while two or more are open', async () => {
+    const { useSessionsSidebar } = await import('./useSessionsSidebar');
+    let count = 2;
+    const seen: { now: SessionsSidebar | null } = { now: null };
+    function Probe() {
+      seen.now = useSessionsSidebar(count, true);
+      return null;
+    }
+    const container = doc.createElement('div');
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => root.render(createElement(Probe)));
+    cleanups.push(async () => act(async () => root.unmount()));
+    expect(seen.now?.hidden).toBe(false);
+    await act(async () => seen.now!.hide());
+    expect(seen.now).toMatchObject({ shown: false, hidden: true });
+    count = 3;
+    await act(async () => root.render(createElement(Probe)));
+    expect(seen.now).toMatchObject({ shown: false, wanted: false, folded: true, hidden: true });
+    // With one session there is no sidebar to show, so nothing offers it.
+    count = 1;
+    await act(async () => root.render(createElement(Probe)));
+    expect(seen.now?.hidden).toBe(false);
+    count = 2;
+    await act(async () => root.render(createElement(Probe)));
+    expect(seen.now?.hidden).toBe(true);
+  });
+
+  it('offers Show sessions only while the window has room for the sidebar', async () => {
+    const m = await mount(1280);
+    await m.run(() => m.get().hide());
+    expect(m.get()).toMatchObject({ hidden: true, folded: true });
+    await m.resizeTo(720);
+    expect(m.get()).toMatchObject({ hidden: false, folded: true });
+    await m.resizeTo(1280);
+    expect(m.get()).toMatchObject({ hidden: true, folded: true });
+  });
+
   it('shows nothing and lists nothing with one session', async () => {
     const m = await mount(1280, 1);
     expect(m.get()).toMatchObject({ shown: false, wanted: false, folded: false });

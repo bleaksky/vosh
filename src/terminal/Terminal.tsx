@@ -35,6 +35,13 @@ import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalR
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
+import {
+  refillsWashes,
+  WashPainter,
+  washFields,
+  WashWidth,
+  type WashFields,
+} from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
@@ -147,6 +154,13 @@ function themeFor(themeId: string, tinted: boolean, clear: boolean) {
   return theme;
 }
 
+/** The fields xterm paints washed rows in, from the palette and the
+ *  ground the native renderer draws, the ground before it goes clear. */
+function washFieldsFor(themeId: string, tinted: boolean): WashFields {
+  const native = nativeThemeOf(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
+  return washFields(native.ansi, native.background);
+}
+
 export function Terminal({
   session,
   shown = true,
@@ -205,6 +219,14 @@ export function Terminal({
   // time the user toggles the setting.
   const themeTerminalColorsRef = useRef(themeTerminalColors);
   themeTerminalColorsRef.current = themeTerminalColors;
+  // The wash fields of the theme the pane draws, which every write
+  // paints washed rows in.
+  const washRef = useRef<WashFields>(new Map());
+  // How narrow the pane was for the washes it painted since it last
+  // filled, and how it fills anew in the fields in force, which the
+  // setup effect sets.
+  const washWidthRef = useRef(new WashWidth());
+  const refillRef = useRef<(() => void) | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -223,13 +245,25 @@ export function Terminal({
   // xterm's options.
   const appliedLiftRef = useRef(false);
 
+  // Draw with the theme `themeId`, its ground clear while the pane lifts
+  // your prompts, and paint washes in its colors. xterm keeps the colors
+  // a row was written in, so washes already on screen take the new
+  // fields as the pane fills anew from the scrollback.
+  const applyTheme = (term: XTerm, themeId: string = getCurrentThemeId()) => {
+    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    const fields = washFieldsFor(themeId, themeTerminalColorsRef.current);
+    const refill = refillsWashes(washRef.current, fields, washWidthRef.current.washed());
+    washRef.current = fields;
+    if (refill) refillRef.current?.();
+  };
+
   // Turn the bands on or off, with the clear ground they need.
   const applyLift = (term: XTerm) => {
     const on = liftsHere();
     if (on === appliedLiftRef.current) return;
     appliedLiftRef.current = on;
     term.options.allowTransparency = on;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
+    applyTheme(term);
     // The area is every pane's, so the pane that shows marks it, and a
     // pane that hides leaves the mark to the one that shows next.
     const area = containerRef.current?.closest('.terminal-area');
@@ -265,6 +299,9 @@ export function Terminal({
       scrollSensitivity: 0.75,
       theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
+    washRef.current = washFieldsFor(getCurrentThemeId(), themeTerminalColorsRef.current);
+    const fields = () => washRef.current;
+    const washed = () => washWidthRef.current.painted(term.cols);
 
     // Every write to this xterm goes through one ordered writer, which
     // finds the regions the session marks and replaces them only while
@@ -426,9 +463,52 @@ export function Terminal({
       }
     };
 
-    // Decoded across outputs and word wrapped (src/terminal/outputShaper.ts).
-    // A copy that fills anew starts a shaper of its own.
-    let shaper = new OutputShaper(term.cols);
+    // Decoded across outputs, word wrapped and its washes painted
+    // (src/terminal/outputShaper.ts). A copy that fills anew starts a
+    // shaper of its own.
+    let shaper = new OutputShaper(term.cols, fields, washed);
+
+    // Fill the copy anew from the session's scrollback, word wrapped as
+    // live output is and in the wash fields in force, and keep the live
+    // pane at its tail. The history pane keeps
+    // the row it shows. Only a copy the screen gave back says the
+    // scrollback was restored, since its writes stopped meanwhile. A fill
+    // that a newer one overtook writes nothing and settles nothing, since
+    // the writer and the screen are the newer fill's. The reset goes in
+    // the stream (RIS), since xterm still parses what an earlier writer
+    // handed it after a reset called from here, and the history would
+    // show twice.
+    let fills = 0;
+    const fill = (banner: boolean, done: () => void) => {
+      const gen = ++fills;
+      const top = term.buffer.active.viewportY;
+      writer.dispose();
+      writer = new RegionWriter(term);
+      if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
+      writer.local('\x1bc');
+      shaper = new OutputShaper(term.cols, fields, washed);
+      washWidthRef.current.filled();
+      const settle = () => {
+        if (gen !== fills) return;
+        if (quietRef.current) {
+          term.scrollToLine(top);
+        } else {
+          padToBottom();
+          keepTail(term);
+        }
+        done();
+      };
+      loadScrollback(false, session)
+        .then(({ bytes }) => {
+          if (gen !== fills) return;
+          if (bytes.length === 0) return settle();
+          writer.local(shaper.whole(localDecoder.decode(bytes)));
+          if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
+          // The pad reads where the cursor sits once xterm parsed it all.
+          writer.whenParsed(settle);
+        })
+        .catch(settle);
+    };
 
     // While the native underlay draws the live terminal, the xterm copy
     // hides and takes no writes (src/terminal/xterm/xtermMirror.ts). It keeps its
@@ -440,28 +520,9 @@ export function Terminal({
     const mirror = new XtermMirror({
       owned: () =>
         !quietRef.current && nativeSurfaceEnabled() && underlayShows(document.documentElement),
-      rebuild: (done) => {
-        writer.dispose();
-        term.reset();
-        writer = new RegionWriter(term);
-        if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
-        shaper = new OutputShaper(term.cols);
-        const settle = () => {
-          padToBottom();
-          keepTail(term);
-          done();
-        };
-        loadScrollback(false, session)
-          .then(({ bytes }) => {
-            if (bytes.length === 0) return settle();
-            writer.local(localDecoder.decode(bytes));
-            writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
-            // The pad reads where the cursor sits once xterm parsed it all.
-            writer.whenParsed(settle);
-          })
-          .catch(settle);
-      },
+      rebuild: (done) => fill(true, done),
     });
+    refillRef.current = () => mirror.refill((done) => fill(false, done));
     const underlayWatch = new MutationObserver(() => mirror.check());
     underlayWatch.observe(document.documentElement, {
       attributes: true,
@@ -472,10 +533,13 @@ export function Terminal({
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled(), session)
       .then(({ bytes, seededNative }) => {
-        // A copy the native grid hides takes none of it.
-        const toXterm = mirror.mirrors();
+        // A copy the native grid hides takes none of it, and neither does
+        // a copy that began filling anew, since the fill writes it all.
+        const toXterm = mirror.mirrors() && fills === 0;
         if (bytes.length > 0) {
-          if (toXterm) writer.local(localDecoder.decode(bytes));
+          if (toXterm) {
+            writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
+          }
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
@@ -516,6 +580,18 @@ export function Terminal({
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
+    // A washed row keeps the width it was written at, so a pane that grows
+    // past it fills anew once the size settles, and the field reaches the
+    // new edge as it does natively.
+    let widthRefill: ReturnType<typeof setTimeout> | null = null;
+    const refillWhenSettled = () => {
+      if (widthRefill) clearTimeout(widthRefill);
+      widthRefill = setTimeout(() => {
+        widthRefill = null;
+        if (washWidthRef.current.outgrown(term.cols)) refillRef.current?.();
+      }, 150);
+    };
+
     // Client-side word wrap. NAWS handles most lines server-side, but
     // some content paths (tells, comm channels) ignore it on certain
     // ROM derivatives. We line-buffer here so a complete line word-
@@ -531,6 +607,7 @@ export function Terminal({
     // the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
+      if (washWidthRef.current.outgrown(cols)) refillWhenSettled();
       paneSizer.reportCellSize();
       paneSizer.placeGrid();
       // Same tail-anchor rationale as in onOutput below: a resize
@@ -753,9 +830,11 @@ export function Terminal({
       window.removeEventListener('keydown', onCopyKey, true);
       detachUnderlayInput?.();
       if (naws_timer) clearTimeout(naws_timer);
+      if (widthRefill) clearTimeout(widthRefill);
       unsubOutput?.();
       unsubGridSize?.();
       underlayWatch.disconnect();
+      refillRef.current = null;
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;
@@ -860,8 +939,10 @@ export function Terminal({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColors, liftsHere());
+    applyTheme(term);
     reportTheme(getCurrentThemeId(), themeTerminalColors);
+    // applyTheme reads the refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeTerminalColors, liftsHere]);
 
   // Lift your prompts, or stop, when the choice changes.
@@ -880,11 +961,7 @@ export function Terminal({
     const reapply = () => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = themeFor(
-        getCurrentThemeId(),
-        themeTerminalColorsRef.current,
-        liftsHere(),
-      );
+      applyTheme(term);
       reportTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
     };
     const stopBase = subscribeBaseAnsi(reapply);
@@ -897,6 +974,8 @@ export function Terminal({
       stopVision();
       stopList();
     };
+    // applyTheme reads the refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liftsHere]);
 
   // Live-refresh the xterm palette when the user switches themes from
@@ -904,7 +983,7 @@ export function Terminal({
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
+    applyTheme(term, themeId);
     reportTheme(themeId, themeTerminalColorsRef.current);
   });
 

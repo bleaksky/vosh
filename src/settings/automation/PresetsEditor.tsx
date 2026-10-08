@@ -37,7 +37,7 @@ import {
 import { getUiConfig, type UiConfig } from '../../ipc/uiConfig';
 import { knownWorld } from '../../lib/knownWorlds';
 import { listJoin } from '../../lib/text';
-import { useMacroList } from '../../stores/config/macroListStore';
+import { useMacroList } from './macroListStore';
 import { loadTarget } from '../../stores/session/useConnection';
 import type { SetUiConfig } from '../pageTypes';
 import { getShownProfile } from '../shownProfile';
@@ -391,7 +391,7 @@ export function AlertPresetDetail({
           <Toggle checked={t.enabled} onChange={turn} />
         </Row>
         <Row label="Listens to">
-          <span className="st-auto-value">{preset.listensTo}</span>
+          <span className="st-auto-value st-auto-mono">{preset.listensTo}</span>
         </Row>
         <AlertRow
           alert={alert}

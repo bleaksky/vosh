@@ -9,7 +9,10 @@ import { createStore } from '../store';
 // when nothing was heard after it began, so a slow read for the old
 // profile cannot undo a pick made since. subscribe starts the store
 // too, so a window that never ran startStores still fills it. set takes
-// a value the window saved itself, the same way.
+// a value the window saved itself, the same way. A store whose read
+// can go stale another way, as when it names a profile of its own and
+// that profile moves, hears it through `reread`, and reads again then
+// too.
 
 interface ConfigStoreOptions<T> {
   /** The value until the first read lands. */
@@ -22,9 +25,18 @@ interface ConfigStoreOptions<T> {
    *  snapshot it has and nothing renders again. Without it a new
    *  object always replaces the snapshot. */
   same?: (a: T, b: T) => boolean;
+  /** Hear when `read` should run again beside a switch, as when the
+   *  profile it names moves. */
+  reread?: (cb: () => void) => unknown;
 }
 
-export function createConfigStore<T>({ initial, read, follow, same }: ConfigStoreOptions<T>) {
+export function createConfigStore<T>({
+  initial,
+  read,
+  follow,
+  same,
+  reread: staleOn,
+}: ConfigStoreOptions<T>) {
   const store = createStore<T>(initial);
   let started = false;
   let generation = 0;
@@ -52,6 +64,7 @@ export function createConfigStore<T>({ initial, read, follow, same }: ConfigStor
       put(value);
     });
     void subscribeProfileSwitched(() => reread());
+    staleOn?.(() => reread());
   }
 
   function subscribe(cb: () => void): () => void {

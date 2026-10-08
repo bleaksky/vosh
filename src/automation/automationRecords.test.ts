@@ -692,7 +692,8 @@ describe('presets', () => {
     if (!numpad) throw new Error('no numpad_movement preset');
     const theirs = { key: 'Numpad8', command: 'n', preset: 'numpad_movement' };
     expect(keysYourMacrosKeep(numpad, [theirs, { key: 'F1', command: 'score' }])).toEqual([]);
-    // Yours keeps a key while it is on, off or in a group.
+    // Where the store holds no macro of the preset, yours keeps a key while
+    // it is on, off or in a group.
     expect(
       keysYourMacrosKeep(numpad, [
         { key: 'Numpad3', command: 'rec', enabled: false },
@@ -700,6 +701,15 @@ describe('presets', () => {
         theirs,
       ]),
     ).toEqual(['Numpad9', 'Numpad3']);
+    // With the preset on, its macro on the key tells, so one Rust left on
+    // beside yours, as loadout mode does for a group you keep off, keeps
+    // its key.
+    expect(
+      keysYourMacrosKeep(numpad, [
+        { key: 'Numpad3', command: 'rec', group: '(Healer)' },
+        { key: 'Numpad3', command: 'd', preset: 'numpad_movement' },
+      ]),
+    ).toEqual([]);
     // A preset with no macros wants no key.
     const heals = presetById('healing_basics');
     if (!heals) throw new Error('no healing_basics preset');

@@ -2506,3 +2506,92 @@ async fn the_round_trip_reads_while_you_play_and_lag_lists_it() {
         .await;
     h.finish(grid).await;
 }
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_bash_with_lines_typed_ahead_and_a_trigger_line_is_no_stall() {
+    use crate::app::events::ROUND_TRIP;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        bash_ms: 3_000,
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.connect().await;
+    h.until_shown("[Exits: south]").await;
+    h.until("the first reading", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .iter()
+            .any(|p| p["ms"].is_u64())
+    })
+    .await;
+
+    // The bash lags you three seconds. A trigger on its line sends afk
+    // while you are lagged, and you type kick and look at once. The
+    // game holds all three and answers them once the lag ends.
+    h.type_line("#trigger slam {^You slam into Tolliver} send afk")
+        .await;
+    let bashed = tokio::time::Instant::now();
+    h.type_line("bash Tolliver").await;
+    h.type_line("kick").await;
+    h.type_line("look").await;
+    h.until_shown("You slam into Tolliver, and send him flying!")
+        .await;
+    h.until_shown("You are now in AFK mode.").await;
+    h.until_shown("Huh?").await;
+    h.until("the held look", |h| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("The Bank of Aabahran"))
+            .count()
+            == 2
+    })
+    .await;
+    // The lag ran longer than the reading interval, so at least one
+    // reading fell inside it.
+    assert!(bashed.elapsed() > crate::session::round_trip::READ_EVERY);
+
+    // The held lines came back in the order the game read them.
+    let received =
+        String::from_utf8_lossy(&h.servers[0].received.lock().expect("the bytes")).into_owned();
+    let after_bash = &received[received.find("bash Tolliver").expect("the bash")..];
+    let mut read: Vec<(usize, &str)> = [
+        ("kick\r\n", "Huh?"),
+        ("look\r\n", "The Bank of Aabahran"),
+        ("afk\r\n", "You are now in AFK mode."),
+    ]
+    .into_iter()
+    .map(|(line, answer)| (after_bash.find(line).expect("the held line"), answer))
+    .collect();
+    read.sort_unstable();
+    let screen = h.screen();
+    let slam = screen
+        .iter()
+        .position(|r| r.contains("You slam into Tolliver"))
+        .expect("the bash");
+    let shown: Vec<usize> = read
+        .iter()
+        .map(|(_, answer)| {
+            slam + screen[slam..]
+                .iter()
+                .position(|r| r.contains(answer))
+                .expect("the answer")
+        })
+        .collect();
+    assert!(shown.is_sorted(), "{read:?} at {shown:?} in {screen:#?}");
+
+    // No reading counted the lag, and #lag lists no stall.
+    let payloads = h.events_of(h.first, ROUND_TRIP);
+    assert!(
+        payloads
+            .iter()
+            .all(|p| p["ms"].as_u64().is_some_and(|ms| ms < 300)),
+        "{payloads:?}"
+    );
+    h.type_line("#lag").await;
+    h.until_shown("no stalls since you connected at ").await;
+    h.finish(grid).await;
+}

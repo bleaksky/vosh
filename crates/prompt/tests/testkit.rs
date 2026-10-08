@@ -567,6 +567,37 @@ fn pulses_come_apart_and_start_on_a_new_line() {
 }
 
 #[test]
+fn a_bash_lags_you_and_the_game_holds_what_you_type_ahead() {
+    let mut mud = playing(Build::New);
+    let writes = mud.receive(b"bash tolliver\r\nkick\r\nlook\r\n");
+    assert_eq!(writes.len(), 3);
+    assert_eq!(writes[0].after_ms, 0);
+    assert!(shown(&writes[0].bytes).starts_with("You slam into Tolliver, and send him flying!\n\r"));
+    // kick waits out the lag, and look comes a pulse after it.
+    assert_eq!(writes[1].after_ms, mud::BASH_MS);
+    assert!(shown(&writes[1].bytes).starts_with("Huh?\n\r"));
+    assert_eq!(writes[2].after_ms, mud::GAME_PULSE_MS);
+    assert!(shown(&writes[2].bytes).starts_with("The Bank of Aabahran"));
+
+    // A line typed once the game answered the held ones comes at once.
+    assert_eq!(mud.receive(b"look\r\n")[0].after_ms, 0);
+
+    // A line that comes later still waits out the lag.
+    mud.receive(b"bash maren\r\n");
+    let writes = mud.receive(b"look\r\n");
+    assert_eq!(writes[0].after_ms, mud::BASH_MS);
+}
+
+#[test]
+fn a_bash_that_finds_nobody_puts_no_lag_on_you() {
+    let mut mud = playing(Build::New);
+    let writes = mud.receive(b"bash\r\nbash Vex\r\nlook\r\n");
+    assert!(shown(&writes[0].bytes).starts_with("But you aren't fighting anyone!\n\r"));
+    assert!(shown(&writes[1].bytes).starts_with("They aren't here.\n\r"));
+    assert!(writes.iter().all(|w| w.after_ms == 0));
+}
+
+#[test]
 fn compact_and_telnetga_change_how_a_prompt_ends() {
     let mut mud = playing(Build::New);
     let raw = run(&mut mud, "");

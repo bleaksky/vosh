@@ -1,0 +1,32 @@
+aliases = []
+triggers = []
+
+[[macros]]
+key = "Numpad3"
+command = "rec"
+
+[[macros]]
+key = "Numpad8"
+command = "n"
+group = "travel"
+
+[[macros]]
+key = "Numpad6"
+command = "e"
+
+[[macros]]
+key = "Numpad2"
+command = "s"
+
+[[macros]]
+key = "Numpad4"
+command = "w"
+
+[[macros]]
+key = "Numpad9"
+command = "u"
+
+[[macros]]
+key = "Numpad3"
+command = "d"
+enabled = false

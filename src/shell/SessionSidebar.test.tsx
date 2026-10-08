@@ -129,7 +129,7 @@ describe('the sessions sidebar', () => {
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
     expect(html).toContain('aria-label="New session"');
-    expect(html).toContain('aria-label="Hide sessions"');
+    expect(html).toContain('aria-label="Hide sessions" title="Hide sessions"');
     expect(html).toContain(
       '<h2 class="shell-sessions-head">Sessions<span class="shell-sessions-total">3</span></h2>',
     );
@@ -396,6 +396,7 @@ describe('renaming and moving a session in its row', () => {
       onEditConnection: vi.fn(),
       onDisconnect: vi.fn(),
       onMove: vi.fn(),
+      onHide: vi.fn(),
     };
     await act(async () => {
       root.render(
@@ -404,7 +405,6 @@ describe('renaming and moving a session in its row', () => {
           rows: shown,
           selected,
           onNewSession: () => undefined,
-          onHide: () => undefined,
           ...calls,
         }),
       );
@@ -792,6 +792,25 @@ describe('renaming and moving a session in its row', () => {
     expect(m.calls.onSelect).not.toHaveBeenCalled();
     expect(findAll(m.container, hasClass('shell-sessions-drop'))).toHaveLength(0);
     expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
+  });
+
+  it('hides the sidebar and hands the caret back only when the keyboard pressed Hide sessions', async () => {
+    const m = await mount();
+    const hide = only(
+      m.container,
+      'Hide sessions',
+      (el) => el.getAttribute('aria-label') === 'Hide sessions',
+    );
+    expect(hide.getAttribute('title')).toBe('Hide sessions');
+    // A click leaves the caret where it was, as the panel toggle does.
+    await m.run(() => on(hide).onClick({ currentTarget: hide }));
+    expect(m.calls.onHide).toHaveBeenCalledTimes(1);
+    expect(m.calls.onCaret).not.toHaveBeenCalled();
+    // A press from the keyboard, with the button focused, hands it back.
+    hide.focus();
+    await m.run(() => on(hide).onClick({ currentTarget: hide }));
+    expect(m.calls.onHide).toHaveBeenCalledTimes(2);
+    expect(m.calls.onCaret).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a press that never moves a click, and a row let go in its place where it was', async () => {

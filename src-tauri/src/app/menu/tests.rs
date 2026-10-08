@@ -34,6 +34,10 @@ fn every_accelerator_parses() {
 fn the_board_shortcuts_are_all_there() {
     let expect = [
         ("settings", "Cmd+,"),
+        ("settings-triggers", "Cmd+Shift+1"),
+        ("settings-aliases", "Cmd+Shift+2"),
+        ("settings-macros", "Cmd+Shift+3"),
+        ("settings-timers", "Cmd+Shift+4"),
         ("connect", "Cmd+R"),
         ("session-new", "Cmd+T"),
         ("session-close", "Cmd+W"),
@@ -159,6 +163,16 @@ fn routes_follow_the_board() {
     assert_eq!(route("connect"), Route::Main { raise: true });
     assert_eq!(route("panel"), Route::Main { raise: true });
     assert_eq!(route("theme-nord"), Route::Main { raise: false });
+    // A Settings page opens in Settings, so a press from Settings or
+    // Help leaves Settings in front.
+    for id in [
+        "settings-triggers",
+        "settings-aliases",
+        "settings-macros",
+        "settings-timers",
+    ] {
+        assert_eq!(route(id), Route::Main { raise: false }, "{id}");
+    }
     // A step or the sidebar from Settings brings the main window up.
     assert_eq!(route("session-next"), Route::Main { raise: true });
     assert_eq!(route("session-previous"), Route::Main { raise: true });

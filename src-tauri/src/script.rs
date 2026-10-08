@@ -510,7 +510,9 @@ pub(crate) fn list_groups(profile: &Profile, list: GroupList) -> Vec<(String, bo
 /// switch on its heading in Settings does. Returns whether it turned. A
 /// group that turned moves [`Profile::group_toggles`], and a macro group
 /// [`Profile::macro_group_toggles`] as well, so the windows hear it
-/// through [`crate::app::events::ListChanges`].
+/// through [`crate::app::events::ListChanges`]. A macro group also lays
+/// the hold of the preset macros again, see
+/// [`crate::loadouts::presets::hold_profile_keys`].
 pub(crate) fn set_list_group(
     profile: &mut Profile,
     list: GroupList,
@@ -537,6 +539,7 @@ pub(crate) fn set_list_group(
         profile.group_toggles = profile.group_toggles.wrapping_add(1);
         if list == GroupList::Macros {
             profile.macro_group_toggles = profile.macro_group_toggles.wrapping_add(1);
+            crate::loadouts::presets::hold_profile_keys(profile);
         }
     }
     turned

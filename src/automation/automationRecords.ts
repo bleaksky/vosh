@@ -506,14 +506,22 @@ export function presetLaunchPlan(
   return { install, remove: [...remove].sort() };
 }
 
-/** The keys of `preset` that one of your macros uses, in the preset's
- *  order. Yours keeps such a key, and Rust holds the preset's macro on it
- *  off (hold_taken_keys in src-tauri/src/loadouts/presets.rs). `macros` is
- *  every macro the store holds, and a macro a preset added keeps no
- *  key. */
+/** The keys of `preset` one of your macros keeps, in the preset's order.
+ *  `macros` is every macro the store holds. Rust holds the preset's macro
+ *  off on a key yours keeps (hold_taken_keys in
+ *  src-tauri/src/loadouts/presets.rs), so while the store holds it, it
+ *  tells. In loadout mode a macro of yours in a group the character keeps
+ *  off keeps no key there. With the preset off, a key one of your macros
+ *  uses is the one it would keep. */
 export function keysYourMacrosKeep(preset: Preset, macros: readonly Macro[]): string[] {
   const yours = new Set(macros.filter((m) => !m.preset).map((m) => m.key));
-  return (preset.macros ?? []).map((m) => m.key).filter((key) => yours.has(key));
+  const theirs = new Map(macros.filter((m) => m.preset === preset.id).map((m) => [m.key, m]));
+  return (preset.macros ?? [])
+    .map((m) => m.key)
+    .filter((key) => {
+      const held = theirs.get(key);
+      return held ? held.enabled === false : yours.has(key);
+    });
 }
 
 /** What a preset's card says when your macros keep keys the preset

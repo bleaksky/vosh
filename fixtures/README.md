@@ -144,6 +144,13 @@ fixtures/
              no vitals_text draws, held to DEFAULT_VITALS_TEXT in
              crates/prompt and to the copy the Settings gallery draws by
              their tests. Hand written.
+  wash/      fields.json, the field a renderer paints behind a washed line,
+             for each named color on two grounds. One is the obsidian-ember
+             play palette with Fit game colors on, the other the canonical
+             16 colors on black. Each entry holds the wash tint the trigger
+             engine bakes into the line and the field it stands for. The
+             test in crates/automation/src/trigger/color.rs checks both
+             against the code. Written from the sources.
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
              TypeScript WordWrapper, so both renderers break lines alike.
 ```

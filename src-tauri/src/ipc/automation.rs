@@ -23,7 +23,7 @@ use crate::import::{merge_triggers, ImportFormat};
 use crate::loadouts::gating::{loadout_hold, LoadoutHold};
 use crate::loadouts::presets::{
     delete_macro, import_macros, install_preset_macros, install_preset_triggers,
-    remove_preset_macros, set_macro, switch_presets, PresetSwitch,
+    remove_preset_macros, retag_returned_macros, set_macro, switch_presets, PresetSwitch,
 };
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::live::{Macro, Profile, Timer};
@@ -456,8 +456,8 @@ pub(crate) struct PresetsInstalled {
 /// comes out. This command validates and inserts them so the engine
 /// starts matching and the keys start sending at once.
 #[tauri::command]
-pub(crate) async fn presets_install(
-    app: AppHandle,
+pub(crate) async fn presets_install<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
     macros: Vec<Macro>,
@@ -468,7 +468,13 @@ pub(crate) async fn presets_install(
         let mut p = state.lock_named(profile).await?;
         let installed = triggers.len() + macros.len();
         // The macros go first, since they refuse before they change
-        // anything.
+        // anything. Macros that came back through 0.8.1 take their
+        // preset back first, so copies of them hold none off, and only
+        // when the install takes every macro, so a refusal changes
+        // nothing.
+        if macros.iter().all(|m| m.preset.is_some()) {
+            retag_returned_macros(&mut p, &macros);
+        }
         install_preset_macros(&mut p, macros)?;
         let removed = install_preset_triggers(&mut p, triggers)?;
         let macros = macros_came.then(|| p.macros.clone());

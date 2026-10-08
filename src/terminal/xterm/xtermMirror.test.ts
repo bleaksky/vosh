@@ -82,6 +82,25 @@ describe('the xterm copy under the native underlay', () => {
     expect(written).toEqual(['fill', 'fill', 'b']);
   });
 
+  it('fills anew for a refill while xterm draws, then takes the writes that waited', () => {
+    const { written, mirror, write } = pane(false);
+    let finish = () => {};
+    mirror.refill((done) => {
+      written.push('refill');
+      finish = done;
+    });
+    write('a');
+    expect(written).toEqual(['refill']);
+    finish();
+    expect(written).toEqual(['refill', 'a']);
+  });
+
+  it('leaves a refill to the fill the screen coming back makes', () => {
+    const { written, mirror } = pane(true);
+    mirror.refill(() => written.push('refill'));
+    expect(written).toEqual([]);
+  });
+
   it('reads the underlay from the mark the root carries once the surface is up', () => {
     expect(underlayShows({ dataset: { underlay: '1' } })).toBe(true);
     expect(underlayShows({ dataset: {} })).toBe(false);

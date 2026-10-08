@@ -24,7 +24,7 @@ import {
   SearchIcon,
   ToothedGearIcon,
 } from '../ui/icons';
-import { PanelIcon } from './icons';
+import { PanelIcon, SidebarIcon } from './icons';
 import { SessionMenu } from './SessionMenu';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import { chatRefToAdd } from '../panel/paneActions';
@@ -34,6 +34,8 @@ import { TitleButton } from './TitleButton';
 // fill and no line of its own: the terminal ground runs up under it and
 // the panel ground runs up on the right. Its empty areas drag the
 // window. The session button sits centered over the terminal column.
+// While you hide the sessions sidebar with two or more sessions open,
+// Show sessions sits at the left, after the traffic lights on macOS.
 // Add a pane, Search commands, the panel toggle, and Settings sit at
 // the right, over the panel. On macOS the native traffic lights own the
 // left corner. Windows and Linux draw minimize, maximize, and close
@@ -67,6 +69,9 @@ interface Props {
   /** Close a session from that list, asking first while it is
    *  connected. */
   onCloseSession?: (session: number) => void;
+  /** Show the sessions sidebar again, set while you hid it with two or
+   *  more sessions open. */
+  onShowSessions?: (() => void) | undefined;
 }
 
 export function TitleBand({
@@ -81,6 +86,7 @@ export function TitleBand({
   renameInRow,
   listSessions = false,
   onCloseSession,
+  onShowSessions,
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
@@ -125,7 +131,26 @@ export function TitleBand({
   const panelLabel = panelOpen ? 'Hide panel' : 'Show panel';
 
   return (
-    <div className="shell-band" data-tauri-drag-region>
+    <div className={onShowSessions ? 'shell-band has-lead' : 'shell-band'} data-tauri-drag-region>
+      {onShowSessions && (
+        <div className="shell-band-lead">
+          <button
+            type="button"
+            className="shell-icon-button is-quiet"
+            aria-label="Show sessions"
+            title="Show sessions"
+            onClick={(e) => {
+              // The button goes once the sidebar shows, so a caret it
+              // held goes back to the command line.
+              const caret = document.activeElement === e.currentTarget;
+              onShowSessions();
+              if (caret) onMenuClosed();
+            }}
+          >
+            <SidebarIcon />
+          </button>
+        </div>
+      )}
       <div className="shell-band-title" data-tauri-drag-region>
         <TitleButton
           ref={sessionRef}

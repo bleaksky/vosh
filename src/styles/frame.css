@@ -193,6 +193,28 @@
   padding: 0 216px;
 }
 
+/* Show sessions sits at the band's left while you hide the sessions
+   sidebar, 10 in as the right buttons sit, and on macOS 8 past the 66
+   the traffic lights take, as the snoop window's eye clears them.
+   There the title's insets grow to clear it, as they do for the right
+   buttons with the panel hidden. */
+.shell-band-lead {
+  position: absolute;
+  top: 4.5px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+[data-platform='macos'] .shell-band-lead {
+  left: 74px;
+}
+
+[data-platform='macos'] .shell-band.has-lead .shell-band-title {
+  padding: 0 112px;
+}
+
 .shell-band-actions {
   position: absolute;
   top: 4.5px;

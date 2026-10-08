@@ -46,16 +46,31 @@ export class XtermMirror {
     const on = !this.host.owned();
     if (on === this.on) return;
     this.on = on;
-    this.fills += 1;
-    this.waiting.length = 0;
-    if (!on) {
-      this.rebuilding = false;
+    if (on) {
+      this.start((done) => this.host.rebuild(done));
       return;
     }
-    const fill = this.fills;
+    this.fills += 1;
+    this.waiting.length = 0;
+    this.rebuilding = false;
+  }
+
+  /** Fill the copy anew with `fill` while it shows, the way it fills when
+   *  the screen comes back. Nothing while the native grid owns it, since
+   *  the copy fills anew when the screen comes back anyway. */
+  refill(fill: (done: () => void) => void): void {
+    this.check();
+    if (this.on) this.start(fill);
+  }
+
+  /** Run a fill, holding the writes that arrive meanwhile until it ends. */
+  private start(fill: (done: () => void) => void): void {
+    this.fills += 1;
+    this.waiting.length = 0;
+    const current = this.fills;
     this.rebuilding = true;
-    this.host.rebuild(() => {
-      if (fill !== this.fills) return;
+    fill(() => {
+      if (current !== this.fills) return;
       this.rebuilding = false;
       for (const write of this.waiting.splice(0)) write();
     });

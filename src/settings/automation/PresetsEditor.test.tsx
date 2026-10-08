@@ -558,7 +558,7 @@ describe('the Alerts category', () => {
       'Only while you are not looking at its session',
       'Adds',
     ]);
-    expect(editor.value('Listens to')).toBe("The game's word that a tell reached you");
+    expect(editor.value('Listens to')).toBe('Comm.Channel, tell, received');
     expect(editor.value('Adds')).toBe('1 alert');
 
     // A preset the [alerts] table leaves out posts a banner alone.

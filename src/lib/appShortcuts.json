@@ -1,5 +1,9 @@
 {
   "settings": "Mod+,",
+  "settings-triggers": "Mod+Shift+1",
+  "settings-aliases": "Mod+Shift+2",
+  "settings-macros": "Mod+Shift+3",
+  "settings-timers": "Mod+Shift+4",
   "connect": "Mod+R",
   "session-new": "Mod+T",
   "session-close": "Mod+W",

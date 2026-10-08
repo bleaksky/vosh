@@ -66,7 +66,7 @@ Each row reads on two lines. The first starts with a mark that says where the se
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key. On macOS the Session menu steps too, with `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
-- Click `Hide sessions` at the top right of the sidebar to fold it away in this window. `Show sessions` in the `Cmd+K` palette brings it back, and on macOS so does `Show sessions` in the View menu.
+- Click `Hide sessions` at the top right of the sidebar to fold it away in this window. It stays folded when you open another session. Click `Show sessions` at the left of the title band to bring it back, just after the window buttons on macOS. The button shows only while the window has room for the sidebar. `Show sessions` in the `Cmd+K` palette does the same, and on macOS so does `Show sessions` in the View menu.
 - Right click a row for its menu, with `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each acts on that row's session. `Rename session…` and `Edit connection…` bring it to the front first.
 
 `Sessions` heads the list with how many are open, such as `Sessions 3`. More rows than fit scroll under it, and it draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
@@ -423,7 +423,7 @@ A highlight trigger restyles every line that matches a pattern. Define one from 
 - Add `wash` to the style list to tint the whole line instead of restyling the text alone.
 - Type `#triggers` to confirm the pattern and action. Defining a trigger under an existing name replaces it.
 
-A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, a dim field in that color fills the row edge to edge, and an accent bar marks the left edge. The field and the bar follow your theme palette, so a washed line sits with the colors around it instead of fighting them.
+A plain highlight restyles the matched words, and the rest of the line keeps the colors the game sent. A wash marks the whole line. The line text takes the highlight color, and a dim field in that color fills the row edge to edge. The field follows your theme palette, so a washed line sits with the colors around it instead of fighting them.
 
 Colors take the sixteen ANSI names. `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` maps to magenta and `gray` to `bright_black`. Stack `bold`, `underline`, and `inverse` freely, and add `bg:<color>` for a background.
 
@@ -496,7 +496,7 @@ Turn on `Show the commands your macros send` under Input, then Command line, to 
 
 To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
 
-A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. Turning the preset off removes its six and none of yours.
+A key one of your macros uses stays yours, and the preset's macro on it waits. Both macros say so in Macros, where a ring marks yours, and the preset's card marks the key. The direction takes the key once you move or delete your macro. In loadout mode a macro of yours in a group your character keeps off leaves the key to the preset, so a character whose `Numpad3` went down still does after another brought its own `Numpad3` to the shared catalog. Turning the preset off removes its six and none of yours.
 
 Example. Bind `F1` to `stand; flee` and pressing `F1` in the command line sends both commands.
 
@@ -1002,9 +1002,9 @@ Disconnecting has side effects. Session scoped variables clear when the next con
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
-The status line shows how long the game takes to answer you, just before the tick, like `38ms`. Your computer measures it on the connection, so nothing extra goes to the game. It stays dim while you can't feel it, turns the warn color from 300 ms, when your commands start to land a pulse late, and reads in seconds in red from a second, like `1.4s`. When the game stops answering, it counts up from the command you sent, so you see a stall as it happens. It shows the session in front, comes with the game's first answer, and leaves with the connection. Hover it to read `Round trip to the game`. In a narrow window a reading under 300 ms gives way before the game time, and a slower one always stays.
+The status line shows how long the game takes to answer you, just before the tick, like `38ms`. Your computer measures it on the connection, so nothing extra goes to the game. It stays dim while you can't feel it, turns the warn color from 300 ms, when your commands start to land a pulse late, and reads in seconds in red from a second, like `1.4s`. When a command you sent is stuck on its way to the game, it counts up from the moment you sent it, so you see a stall as it happens. Anything the game sends ends the wait, a line or a GMCP packet alike. What you type ahead while a skill lags you never counts, since the game holds it until the lag ends. If the game sends you nothing at all for more than half a minute after a command, that counts as a stall too. The lines you write into a note never count, since the game doesn't answer them. It shows the session in front, comes with the game's first answer, and leaves with the connection. Hover it to read `Round trip to the game`. In a narrow window a reading under 300 ms gives way before the game time, and a slower one always stays.
 
-Type `#lag` to ask whether it was you or the game. It prints the round trip now, how it usually runs over the last 10 minutes, and each stall since you connected, with when it began, its worst reading, and how long it lasted. A stall is any stretch at 300 ms or more, and Vosh keeps the last 20 of each session.
+Type `#lag` to ask whether it was you or the game. It prints the round trip now, how it usually runs over the last 10 minutes, and each stall since you connected, with when it began, its worst reading, and how long it lasted. A stall that waited on a command began when you sent it, so its time and length are the real ones. A stall is any stretch at 300 ms or more, and Vosh keeps the last 20 of each session.
 
 ### 8.3 Find your data on disk
 
@@ -1079,6 +1079,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
+- `Cmd+Shift+1` opens Settings on Triggers, `Cmd+Shift+2` on Aliases, `Cmd+Shift+3` on Macros and `Cmd+Shift+4` on Timers. They work in Settings too.
 
 For your sessions, in the main window.
 
@@ -1088,7 +1089,7 @@ For your sessions, in the main window.
 - `Cmd+W` closes the session in front, and asks first while it is connected. With one session it closes the window.
 - `Cmd+Shift+W` closes the window, and asks first while a session is connected.
 
-A macro on one of these keys keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
+A macro on one of these keys, or on one of the four Settings keys, keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
 
 On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh. `Cmd+Q` asks first while two or more sessions are connected.
 

@@ -1,0 +1,61 @@
+{
+  "notes": "Written from the sources. Each case holds a terminal ground and the 16 colors a renderer paints washes in, in ANSI order. obsidian-ember is the play palette of that built in theme from src/theme/themes.ts, with Fit game colors on and Typical color vision, and its terminal background. canonical is ANSI_16 from src-tauri/src/native/gpu/style.rs on black, what the native frame tests draw with. washes holds, for each NamedColor in ALL order, the wash tint the trigger engine bakes into a washed line and the field a renderer paints behind it, the palette color for that mark mixed into the ground with WASH_FIELD_MIX. The tests in crates/automation/src/trigger/color.rs check wash_tint and wash_field against every entry.",
+  "cases": [
+    {
+      "name": "obsidian-ember",
+      "ground": "#050403",
+      "palette": [
+        "#4a4642", "#d07166", "#95e4b0", "#d2af64",
+        "#799ed6", "#b08ac5", "#79c3cf", "#b8b2ac",
+        "#99948f", "#f59989", "#c7ffd8", "#f2cf8a",
+        "#9bbef1", "#d0aae2", "#9de3ee", "#ece7e1"
+      ],
+      "washes": [
+        { "color": "black", "tint": "#000000", "field": "#11100e" },
+        { "color": "red", "tint": "#330000", "field": "#2a1815" },
+        { "color": "green", "tint": "#003300", "field": "#1f2c22" },
+        { "color": "yellow", "tint": "#333300", "field": "#2a2314" },
+        { "color": "blue", "tint": "#00003b", "field": "#1a2029" },
+        { "color": "magenta", "tint": "#330033", "field": "#241c26" },
+        { "color": "cyan", "tint": "#003333", "field": "#1a2628" },
+        { "color": "white", "tint": "#393939", "field": "#252321" },
+        { "color": "bright_black", "tint": "#1f1f1f", "field": "#201e1c" },
+        { "color": "bright_red", "tint": "#3f0000", "field": "#301f1b" },
+        { "color": "bright_green", "tint": "#003f00", "field": "#283129" },
+        { "color": "bright_yellow", "tint": "#3f3f00", "field": "#30291b" },
+        { "color": "bright_blue", "tint": "#17173f", "field": "#20252e" },
+        { "color": "bright_magenta", "tint": "#3f003f", "field": "#2a222b" },
+        { "color": "bright_cyan", "tint": "#003f3f", "field": "#202c2d" },
+        { "color": "bright_white", "tint": "#3f3f3f", "field": "#2f2d2b" }
+      ]
+    },
+    {
+      "name": "canonical",
+      "ground": "#000000",
+      "palette": [
+        "#000000", "#cd0000", "#00cd00", "#cdcd00",
+        "#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5",
+        "#7f7f7f", "#ff0000", "#00ff00", "#ffff00",
+        "#5c5cff", "#ff00ff", "#00ffff", "#ffffff"
+      ],
+      "washes": [
+        { "color": "black", "tint": "#000000", "field": "#000000" },
+        { "color": "red", "tint": "#330000", "field": "#250000" },
+        { "color": "green", "tint": "#003300", "field": "#002500" },
+        { "color": "yellow", "tint": "#333300", "field": "#252500" },
+        { "color": "blue", "tint": "#00003b", "field": "#00002b" },
+        { "color": "magenta", "tint": "#330033", "field": "#250025" },
+        { "color": "cyan", "tint": "#003333", "field": "#002525" },
+        { "color": "white", "tint": "#393939", "field": "#292929" },
+        { "color": "bright_black", "tint": "#1f1f1f", "field": "#171717" },
+        { "color": "bright_red", "tint": "#3f0000", "field": "#2e0000" },
+        { "color": "bright_green", "tint": "#003f00", "field": "#002e00" },
+        { "color": "bright_yellow", "tint": "#3f3f00", "field": "#2e2e00" },
+        { "color": "bright_blue", "tint": "#17173f", "field": "#11112e" },
+        { "color": "bright_magenta", "tint": "#3f003f", "field": "#2e002e" },
+        { "color": "bright_cyan", "tint": "#003f3f", "field": "#002e2e" },
+        { "color": "bright_white", "tint": "#3f3f3f", "field": "#2e2e2e" }
+      ]
+    }
+  ]
+}

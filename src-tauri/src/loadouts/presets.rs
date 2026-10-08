@@ -190,18 +190,38 @@ pub(crate) fn adopt_catalog_presets(
 /// Hold off each preset macro on a key one of your macros uses, and turn
 /// every other preset macro on, so a key you already use stays yours
 /// (Scripts Q13). Yours keeps the key while it is on, off or in a group
-/// that is off. A held macro saves with `enabled` false, so the command
-/// line and 0.8.1 both pass it over. Every step that changes the macros
-/// runs this before it saves.
-pub(crate) fn hold_taken_keys(macros: &mut [Macro]) {
+/// that is off, except a group in `off`, which [`hold_profile_keys`]
+/// fills in loadout mode. A held macro saves with `enabled` false, so
+/// the command line and 0.8.1 both pass it over. Every step that changes
+/// the macros runs this before it saves.
+pub(crate) fn hold_taken_keys(macros: &mut [Macro], off: &BTreeSet<String>) {
     let yours: BTreeSet<String> = macros
         .iter()
         .filter(|m| m.preset.is_none())
+        .filter(|m| !m.group.as_ref().is_some_and(|g| off.contains(g)))
         .map(|m| m.key.clone())
         .collect();
     for m in macros.iter_mut().filter(|m| m.preset.is_some()) {
         m.enabled = !yours.contains(&m.key);
     }
+}
+
+/// [`hold_taken_keys`] over the live profile `p`. In loadout mode every
+/// character shares the catalog, and the groups each one keeps off are
+/// what sets them apart, so a macro of yours in a group `p` keeps off
+/// keeps no key there. Otherwise a character whose only Numpad3 was the
+/// preset's d would lose d to a macro another character brought to the
+/// catalog. catalog.toml stores the hold with no group left out, see
+/// [`GlobalCatalog::from_profile`]. Each step that changes the macros or
+/// turns a macro group on or off runs this.
+pub(crate) fn hold_profile_keys(p: &mut Profile) {
+    let none = BTreeSet::new();
+    let off = if p.on_catalog {
+        &p.disabled_macro_groups
+    } else {
+        &none
+    };
+    hold_taken_keys(&mut p.macros, off);
 }
 
 /// The triggers half of [`presets_install`] over the live profile `p`,
@@ -323,8 +343,57 @@ pub(crate) fn install_preset_macros(p: &mut Profile, macros: Vec<Macro>) -> Resu
         }
         p.macros.push(m);
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     Ok(installed)
+}
+
+/// Give the preset tag back to the macros of a preset that came back
+/// through a build that drops it. 0.8.1 has no `preset` field, so a save
+/// there writes each preset macro as one of yours, the held ones still
+/// off. A preset of `macros` is taken as come back when `p` holds no
+/// macro tagged with it and holds, for each of its macros, one of yours
+/// on the same key with the same command. Each such copy takes the tag,
+/// so [`install_preset_macros`] replaces it, with its group kept, and
+/// your own macro on the key keeps it. The install appends the preset's
+/// macros after yours and holds one off while yours keeps its key, so of
+/// two copies on one key the one off, else the later one, is taken as
+/// the preset's. Every install of the presets already on runs this, and
+/// turning a preset on does not, since that install tags its macros
+/// itself, so a preset you turn on never takes a macro of yours that
+/// happens to match. Returns the number tagged.
+pub(crate) fn retag_returned_macros(p: &mut Profile, macros: &[Macro]) -> usize {
+    let presets: BTreeSet<&str> = macros.iter().filter_map(|m| m.preset.as_deref()).collect();
+    let mut tagged = 0;
+    for id in presets {
+        if p.macros.iter().any(|m| m.preset.as_deref() == Some(id)) {
+            continue;
+        }
+        let mut copies: Vec<usize> = Vec::new();
+        for want in macros.iter().filter(|m| m.preset.as_deref() == Some(id)) {
+            let fits: Vec<usize> = (0..p.macros.len())
+                .filter(|i| {
+                    let m = &p.macros[*i];
+                    m.preset.is_none()
+                        && m.key == want.key
+                        && m.command == want.command
+                        && !copies.contains(i)
+                })
+                .collect();
+            let held = fits.iter().rev().find(|i| !p.macros[**i].enabled);
+            match held.or(fits.last()) {
+                Some(i) => copies.push(*i),
+                None => {
+                    copies.clear();
+                    break;
+                }
+            }
+        }
+        for i in &copies {
+            p.macros[*i].preset = Some(id.to_string());
+        }
+        tagged += copies.len();
+    }
+    tagged
 }
 
 /// Take out every macro the preset `preset` added. Your macros stay as
@@ -388,7 +457,7 @@ pub(crate) fn set_macro(
             preset: None,
         });
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     Ok(())
 }
 
@@ -398,7 +467,7 @@ pub(crate) fn set_macro(
 /// [`macros_delete`]: crate::ipc::automation::macros_delete
 pub(crate) fn delete_macro(p: &mut Profile, key: &str) {
     p.macros.retain(|m| m.preset.is_some() || m.key != key);
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
 }
 
 /// The macros half of [`import_apply`] over the live profile `p`. Each
@@ -419,7 +488,7 @@ pub(crate) fn import_macros(p: &mut Profile, imported: &[Macro]) {
             p.macros.push(m.clone());
         }
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
 }
 
 #[cfg(test)]
@@ -800,6 +869,131 @@ mod tests {
     }
 
     #[test]
+    fn preset_macros_back_from_0_8_1_take_their_preset_back() {
+        // Your rec on Numpad3 holds the preset d off, and you put n in a
+        // group.
+        let mut p = Profile::default();
+        p.macros.push(yours("Numpad3", "rec"));
+        install_preset_macros(&mut p, numpad()).unwrap();
+        let travel = Some("travel".to_string());
+        set_macro(
+            &mut p,
+            "Numpad8",
+            "n",
+            travel,
+            None,
+            Some("numpad_movement"),
+        )
+        .unwrap();
+        let before = p.macros.clone();
+
+        // 0.8.1 drops the tag as it reads the file and saves the six as
+        // macros of yours, d still off.
+        for m in &mut p.macros {
+            m.preset = None;
+        }
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 6);
+        install_preset_macros(&mut p, numpad()).unwrap();
+        assert_eq!(p.macros, before);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+
+        // Turning the preset off leaves your rec alone.
+        remove_preset_macros(&mut p, "numpad_movement");
+        assert_eq!(p.macros, [yours("Numpad3", "rec")]);
+    }
+
+    #[test]
+    fn the_preset_copies_take_the_tag_where_yours_match_them_too() {
+        // Your own six on the numpad, then Numpad movement turned on,
+        // which holds its six off. Then you bind the six again after it.
+        for yours_first in [true, false] {
+            let mut p = Profile::default();
+            let mine = || NUMPAD.iter().map(|(k, c)| yours(k, c));
+            if yours_first {
+                p.macros.extend(mine());
+            }
+            install_preset_macros(&mut p, numpad()).unwrap();
+            if !yours_first {
+                p.macros.extend(mine());
+                hold_profile_keys(&mut p);
+            }
+            let before = p.macros.clone();
+
+            // 0.8.1 leaves twelve untagged macros, the held six off.
+            for m in &mut p.macros {
+                m.preset = None;
+            }
+            assert_eq!(retag_returned_macros(&mut p, &numpad()), 6);
+            install_preset_macros(&mut p, numpad()).unwrap();
+            let [on, off] = on_and_off(&p);
+            assert_eq!(on, NUMPAD, "each key still sends your macro");
+            assert_eq!(off, NUMPAD);
+            let mut after = p.macros.clone();
+            let mut before = before;
+            after.sort_by(|a, b| (&a.key, &a.preset).cmp(&(&b.key, &b.preset)));
+            before.sort_by(|a, b| (&a.key, &a.preset).cmp(&(&b.key, &b.preset)));
+            assert_eq!(after, before);
+        }
+    }
+
+    #[test]
+    fn in_loadout_mode_a_macro_in_a_group_you_keep_off_keeps_no_key() {
+        // Another character's rec sits on Numpad3 in a group this one
+        // keeps off, so d sends here.
+        let mut p = Profile {
+            on_catalog: true,
+            ..Profile::default()
+        };
+        p.macros.push(Macro {
+            group: Some("(Healer)".into()),
+            ..yours("Numpad3", "rec")
+        });
+        p.disabled_macro_groups.insert("(Healer)".into());
+        install_preset_macros(&mut p, numpad()).unwrap();
+        let [_, off] = on_and_off(&p);
+        assert!(off.is_empty(), "{off:?}");
+
+        // Turning the group on gives the key back to rec, and off again
+        // to d.
+        crate::script::set_list_group(&mut p, crate::script::GroupList::Macros, "(Healer)", true);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+        crate::script::set_list_group(&mut p, crate::script::GroupList::Macros, "(Healer)", false);
+        let [_, off] = on_and_off(&p);
+        assert!(off.is_empty(), "{off:?}");
+
+        // Per profile mode keeps Q13, and rec keeps the key in a group
+        // that is off.
+        p.on_catalog = false;
+        hold_profile_keys(&mut p);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+    }
+
+    #[test]
+    fn your_own_macros_never_join_a_preset() {
+        // The preset still holds its macros, so your copies stay yours.
+        let mut p = Profile::default();
+        p.macros.push(yours("Numpad8", "n"));
+        install_preset_macros(&mut p, numpad()).unwrap();
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
+
+        // Five of the six keys are not the whole preset.
+        let mut p = Profile::default();
+        p.macros
+            .extend(NUMPAD[..5].iter().map(|(k, c)| yours(k, c)));
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
+        assert!(p.macros.iter().all(|m| m.preset.is_none()));
+
+        // A command you changed is yours too.
+        let mut p = Profile::default();
+        p.macros.extend(NUMPAD.iter().map(|(k, c)| yours(k, c)));
+        p.macros[0].command = "north".into();
+        assert_eq!(retag_returned_macros(&mut p, &numpad()), 0);
+    }
+
+    #[test]
     fn a_preset_macro_on_your_key_is_held_until_your_macro_moves_or_goes() {
         let mut p = Profile::default();
         p.macros.push(yours("Numpad3", "rec"));
@@ -856,6 +1050,9 @@ mod tests {
     #[derive(serde::Deserialize)]
     struct KeptCase {
         about: String,
+        /// The macro groups the hold leaves out, as in loadout mode.
+        #[serde(default)]
+        off: BTreeSet<String>,
         macros: Vec<Macro>,
         kept: Vec<String>,
     }
@@ -869,7 +1066,7 @@ mod tests {
             serde_json::from_str(include_str!("../../../fixtures/macros/kept-keys.json")).unwrap();
         for case in file.cases {
             let mut held = case.macros.clone();
-            hold_taken_keys(&mut held);
+            hold_taken_keys(&mut held, &case.off);
             assert_eq!(held, case.macros, "{}", case.about);
             let off: Vec<&str> = held
                 .iter()

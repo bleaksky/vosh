@@ -13,6 +13,13 @@ const bus = vi.hoisted(() => ({
   invoked: [] as [string, unknown][],
   /** What each terminal's region writer took, by the xterm it writes. */
   written: new Map<object, string[]>(),
+  /** What each region writer wrote of the pane's own, by the xterm. */
+  local: new Map<object, string[]>(),
+  /** Scrollback loads held until a test answers them, while it holds. */
+  hold: false,
+  /** How wide each new xterm is. */
+  cols: 80,
+  held: [] as ((bytes: number[]) => void)[],
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -28,6 +35,11 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: async (cmd: string, args?: unknown) => {
     bus.invoked.push([cmd, args]);
+    if (cmd === 'scrollback_load' && bus.hold) {
+      return new Promise((answer) =>
+        bus.held.push((bytes) => answer({ bytes, seeded_native: false })),
+      );
+    }
     if (cmd === 'scrollback_load') return { bytes: [], seeded_native: false };
     return null;
   },
@@ -36,7 +48,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@xterm/xterm', () => {
   const none = () => ({ dispose() {} });
   class Terminal {
-    cols = 80;
+    cols = bus.cols;
     rows = 24;
     options: Record<string, unknown>;
     unicode = { activeVersion: '' };
@@ -46,7 +58,18 @@ vi.mock('@xterm/xterm', () => {
     }
     loadAddon() {}
     open() {}
-    onResize = none;
+    scrollToLine() {}
+    resized: ((size: { cols: number; rows: number }) => void)[] = [];
+    onResize = (cb: (size: { cols: number; rows: number }) => void) => {
+      this.resized.push(cb);
+      return { dispose() {} };
+    };
+    /** Take a new size, as a fit does. */
+    resize(cols: number, rows: number) {
+      this.cols = cols;
+      this.rows = rows;
+      for (const cb of this.resized) cb({ cols, rows });
+    }
     onScroll = none;
     onSelectionChange = none;
     getSelectionPosition() {
@@ -79,13 +102,17 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 vi.mock('./terminalRegion', () => ({
   RegionWriter: class {
     private readonly took: string[] = [];
+    private readonly own: string[] = [];
     constructor(term: object) {
       bus.written.set(term, this.took);
+      bus.local.set(term, this.own);
     }
     output(out: { text: string }) {
       this.took.push(out.text);
     }
-    local() {}
+    local(text: string) {
+      this.own.push(text);
+    }
     pad() {}
     onErase() {}
     pendingRows() {
@@ -137,6 +164,9 @@ vi.mock('./xterm/xtermMirror', () => ({
     }
     write(step: () => void) {
       step();
+    }
+    refill(fill: (done: () => void) => void) {
+      fill(() => {});
     }
     check() {}
   },
@@ -226,6 +256,140 @@ describe('a terminal for each session', () => {
     const [tolliver, orla] = [...bus.written.values()];
     expect(tolliver).toEqual(['The day has begun.\r\n']);
     expect(orla).toEqual(['[Exits: south]\r\n', '<1020hp 800m 930mv> ']);
+    await act(async () => root.unmount());
+  });
+});
+
+/** Tell every window the theme is now `id`. */
+function themeChanged(id: string): void {
+  for (const cb of bus.handlers.get('vosh://theme-changed') ?? []) cb({ payload: id });
+}
+
+/** The yellow wash of wash_wraps_whole_line in the trigger engine. */
+const SANCTUARY =
+  '\x1b[33;48;2;51;51;0mYour \x1b[33msanctuary\x1b[0m\x1b[33;48;2;51;51;0m flickers and fades.\x1b[0m\r\n';
+
+/** The stand in xterm, which takes a new size as a fit gives it. */
+interface Resizable {
+  resize(cols: number, rows: number): void;
+}
+
+/** Wait past the pause a pane takes for its size to settle. */
+const settled = () => new Promise((done) => setTimeout(done, 200));
+
+/** How many times a pane loaded the scrollback. */
+const loads = () => bus.invoked.filter(([cmd]) => cmd === 'scrollback_load').length;
+
+describe('a theme change on a pane xterm draws', () => {
+  async function mount() {
+    const { Terminal } = await import('./Terminal');
+    bus.written.clear();
+    bus.local.clear();
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () =>
+      root.render(
+        createElement(Terminal, {
+          session: 1,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          lineHeight: 1.2,
+          themeTerminalColors: true,
+        }),
+      ),
+    );
+    return root;
+  }
+
+  it('fills anew from the scrollback, with no banner, once a wash painted', async () => {
+    const root = await mount();
+    themeChanged('obsidian-ember');
+    output(1, SANCTUARY);
+    const before = loads();
+    await act(async () => themeChanged('vellum'));
+    expect(loads()).toBe(before + 1);
+    const local = [...bus.local.values()].flat();
+    expect(local.some((text) => text.includes('[scrollback restored]'))).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+  it('writes the history once when a second change overtakes a fill', async () => {
+    const root = await mount();
+    themeChanged('obsidian-ember');
+    const history = 'The day has begun.\r\n';
+    output(1, SANCTUARY);
+    bus.hold = true;
+    await act(async () => themeChanged('vellum'));
+    // The stand in mirror writes at once where the real one waits for
+    // the fill, so the pane paints a wash again and the next change
+    // fills anew while the first fill still loads.
+    output(1, SANCTUARY);
+    await act(async () => themeChanged('obsidian-ember'));
+    const [first, second] = bus.held.splice(0);
+    expect(second).toBeDefined();
+    const bytes = [...new TextEncoder().encode(history)];
+    await act(async () => second(bytes));
+    await act(async () => first(bytes));
+    bus.hold = false;
+    const [local] = [...bus.local.values()];
+    // The fill resets in the stream, then writes the history once.
+    expect(local[0]).toBe('\x1bc');
+    expect(local.join('').split('The day has begun.').length - 1).toBe(1);
+    await act(async () => root.unmount());
+  });
+
+  it('word wraps the history it fills anew as live output wraps', async () => {
+    bus.cols = 16;
+    const root = await mount();
+    bus.cols = 80;
+    themeChanged('obsidian-ember');
+    output(1, SANCTUARY);
+    const [live] = [...bus.written.values()];
+    bus.hold = true;
+    await act(async () => themeChanged('vellum'));
+    const [load] = bus.held.splice(0);
+    await act(async () => load([...new TextEncoder().encode(SANCTUARY)]));
+    bus.hold = false;
+    const [local] = [...bus.local.values()];
+    // eslint-disable-next-line no-control-regex
+    const plain = (text: string) => text.replace(/\x1b\[[0-9;:]*[A-Za-z]/g, '');
+    expect(plain(live.join(''))).toBe('Your sanctuary\r\nflickers and\r\nfades.\r\n');
+    expect(plain(local[1])).toBe(plain(live.join('')));
+    await act(async () => root.unmount());
+  });
+
+  it('fills anew once it settles wider than a wash it painted', async () => {
+    const root = await mount();
+    output(1, SANCTUARY);
+    const [term] = [...bus.local.keys()] as Resizable[];
+    const before = loads();
+    term.resize(70, 24);
+    await settled();
+    expect(loads()).toBe(before);
+    term.resize(90, 24);
+    term.resize(100, 24);
+    await settled();
+    expect(loads()).toBe(before + 1);
+    await act(async () => root.unmount());
+  });
+
+  it('keeps the screen as it widens when no wash painted', async () => {
+    const root = await mount();
+    output(1, 'The day has begun.\r\n');
+    const [term] = [...bus.local.keys()] as Resizable[];
+    const before = loads();
+    term.resize(100, 24);
+    await settled();
+    expect(loads()).toBe(before);
+    await act(async () => root.unmount());
+  });
+
+  it('writes nothing again when no wash painted', async () => {
+    const root = await mount();
+    themeChanged('obsidian-ember');
+    output(1, 'The day has begun.\r\n');
+    const before = loads();
+    await act(async () => themeChanged('vellum'));
+    expect(loads()).toBe(before);
     await act(async () => root.unmount());
   });
 });

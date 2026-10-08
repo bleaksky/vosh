@@ -31,7 +31,8 @@ import {
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
-import { isMacPlatform } from '../lib/shortcuts';
+import { settingsShortcutOf } from '../lib/appMenu';
+import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import {
   leavesSettingsPage,
   resolveSettingsTarget,
@@ -179,6 +180,26 @@ export function SettingsWindow() {
     go(resolveSettingsTarget(target));
     void getCurrentWindow().setFocus();
   });
+
+  // The Settings keys, Cmd and Shift on macOS and Ctrl and Shift
+  // elsewhere with 1 to 4, open their page here as they do from the
+  // main window. No macro runs in this window, so the key always works.
+  // Taking the key keeps the macOS menu row from opening the page a
+  // second time. Each id is the palette's `settings-<tab id>`. A key a
+  // field already took, like a macro key being recorded, stays there.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!primary || e.altKey) return;
+      const id = settingsShortcutOf({ key: shortcutKey(e), code: e.code, shift: e.shiftKey });
+      if (!id) return;
+      e.preventDefault();
+      if (!e.repeat) go(resolveSettingsTarget(id.slice('settings-'.length)));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mac, go]);
 
   // Scroll to the anchor the target names once the page draws it, or
   // to the top for a bare group.
