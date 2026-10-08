@@ -446,6 +446,7 @@ Slash commands drive Vosh from the command line without opening Settings. Vosh h
 - Use Vosh's default prompt design with `#prompt default`. It takes the place of the design in this profile, and Vosh keeps yours as an earlier design.
 - Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
 - Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the rest listed under `#help`.
+- Check how long the game takes to answer with `#lag`, which also lists each stall since you connected.
 - Record a command sequence with `#record <name>`, finish with `#endrec`, abort with `#record cancel`.
 - Configure quick keys with `#qkey <name> <verb>` and list them with `#qkeys`.
 - Drive Lua with `#script load <name>`, `#script reload`, `#scripts`, and `#lua <code>`.
@@ -614,7 +615,7 @@ Right click your vitals, at the foot of the panel or on the status line, to chan
 
 Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 
-Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. In a fight your opponent follows them with its health in yellow. When the target you set is the mob you fight, the two share one item, and a target on another mob keeps its own after it. When the line runs short, your opponent's name gives way first, then the labels, then each value falls back to the current number, then the moons and the game time. The tick always stays.
+Turn off `Show the panel` under Layout and your vitals move to the status line. There they follow `Values` and `Warn before you run low` but never draw a meter. In a fight your opponent follows them with its health in yellow. When the target you set is the mob you fight, the two share one item, and a target on another mob keeps its own after it. When the line runs short, your opponent's name gives way first, then the labels, then each value falls back to the current number, then the moons, a round trip under 300 ms, and the game time. The tick always stays, and so does a slower round trip.
 
 When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health or sends none, and so does its health on the status line.
 
@@ -905,6 +906,10 @@ Disconnecting has side effects. Session scoped variables clear when the next con
 
 Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
 
+The status line shows how long the game takes to answer you, just before the tick, like `38ms`. Your computer measures it on the connection, so nothing extra goes to the game. It stays dim while you can't feel it, turns the warn color from 300 ms, when your commands start to land a pulse late, and reads in seconds in red from a second, like `1.4s`. When the game stops answering, it counts up from the command you sent, so you see a stall as it happens. It shows the session in front, comes with the game's first answer, and leaves with the connection. Hover it to read `Round trip to the game`. In a narrow window a reading under 300 ms gives way before the game time, and a slower one always stays.
+
+Type `#lag` to ask whether it was you or the game. It prints the round trip now, how it usually runs over the last 10 minutes, and each stall since you connected, with when it began, its worst reading, and how long it lasted. A stall is any stretch at 300 ms or more, and Vosh keeps the last 20 of each session.
+
 ### 8.3 Find your data on disk
 
 Vosh keeps all of its data in one app data folder named `com.aabahran.vosh`.
@@ -948,6 +953,7 @@ This is every slash command Vosh understands today.
 - `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off for every session on the profile, `#group <name>` shows state, `#groups` lists.
 - `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer. `#tick reset` restarts the count of this session, and each command that changes a setting changes it for every session on the profile.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
+- `#lag` prints the round trip to the game now and as it usually runs over the last 10 minutes, then each stall since you connected with its time, its worst, and how long it lasted.
 - `#script load <name>` loads a Lua file, `#script reload` reads every loaded script again and runs it, `#scripts` lists them.
 - `#lua <code>` evaluates Lua inline.
 - `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot, and a load or a reset reaches every session on the profile. In loadout mode all three become notices.

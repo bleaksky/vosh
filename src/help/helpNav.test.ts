@@ -84,6 +84,7 @@ describe('the outline of a topic', () => {
       '#group',
       '#tick',
       '#tick warn',
+      '#lag',
       '#script',
       '#lua',
       '#profile',
