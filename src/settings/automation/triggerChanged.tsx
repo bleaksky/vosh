@@ -1,8 +1,9 @@
 import { createContext, Fragment, type ReactNode } from 'react';
+import { alertOrNone } from '../../automation/alertParts';
 import { extraEffects, mainPattern, patternSource } from '../../automation/automationTriggers';
-import type { Rows } from '../../automation/presetEdits';
+import { patternKey, type Rows } from '../../automation/presetEdits';
 import type { Preset } from '../../automation/presets';
-import type { TriggerRecord } from '../../ipc/automation';
+import type { AlertParts, TriggerRecord } from '../../ipc/automation';
 import type { EditValue } from '../../ipc/presetEdits';
 
 /** Opens a preset's card in Presets, by id, from the note at the head
@@ -103,4 +104,21 @@ export function alsoChanges(t: TriggerRecord, ship: TriggerRecord): number {
   const added = mine.filter((c) => !theirs.includes(c)).length;
   const gone = theirs.filter((c) => !mine.includes(c)).length;
   return Math.max(added, gone);
+}
+
+/** The key of the main pattern of `ship`, the trigger as its preset
+ *  ships it. */
+export const mainKeyOf = (ship: TriggerRecord) => patternKey(patternSource(mainPattern(ship)));
+
+/** `v` with its alert table set by `fn`, or with none while the table
+ *  is the default, so a trigger that rings nothing saves no alert. */
+export function withAlert(
+  v: TriggerRecord,
+  fn: (alert: AlertParts | undefined) => AlertParts,
+): TriggerRecord {
+  const next = { ...v };
+  const alert = alertOrNone(fn(v.alert));
+  if (alert) next.alert = alert;
+  else delete next.alert;
+  return next;
 }
