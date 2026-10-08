@@ -75,12 +75,17 @@ import { draftRows, moreRows, otherRows, sentRows, type MoreAction } from './car
 import { useWritingJob, type JobSpec } from './useWritingJob';
 import { useBoxSize, useWritingPlace } from './useWritingPlace';
 import {
+  BOX_COLS,
   BOX_ROWS_MIN,
   CARD_MARGIN,
   DRAG_SLOP,
+  boxColsFor,
   boxRowsFor,
+  boxWidthFor,
   clampPlace,
+  dragCols,
   dragRows,
+  fitCols,
   fitRows,
   fitsMoved,
   movedFit,
@@ -574,6 +579,7 @@ export function WritingCard({
   const awaitingPane = prefs.pinned && slot === null && (panel === null || panel.panel_open);
   const [moving, setMoving] = useState<Point | null>(null);
   const [sizing, setSizing] = useState<number | null>(null);
+  const [sizingCols, setSizingCols] = useState<number | null>(null);
   const viewW = place?.viewW ?? window.innerWidth;
   const viewH = place?.viewH ?? window.innerHeight;
   const view = { w: viewW, h: viewH };
@@ -583,7 +589,7 @@ export function WritingCard({
   const narrow = !docked && !moved && place !== null && place.right !== null;
   const px = narrow ? 11 : fontSize;
   const lineH = Math.round(px * 1.3);
-  const boxWidth = 32 + 82 * useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
+  const colW = useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
   // The fields over the text: To and Subject, and a third row for the
   // language or the room when the card shows one. The rows count only
   // the fields the card draws, so a note with no language keeps the two
@@ -605,6 +611,18 @@ export function WritingCard({
     docked ? (cardEl?.querySelector<HTMLElement>('.pc-head') ?? null) : null,
   );
   const headGrew = Math.max(0, (headSize?.h ?? 46) - 46);
+  // The columns the box may take: what the window or the pane leaves
+  // beside the card's own 16 px each side and the guide. A narrow window
+  // keeps 80 in a smaller face.
+  const besideBox = 32 + (guideOn ? 248 : 0);
+  const colsRoom = docked
+    ? (slotSize?.w ?? 0)
+    : moved
+      ? viewW - 2 * CARD_MARGIN
+      : viewW - (place?.left ?? 12) - 12;
+  const colsFit = fitCols(colsRoom - besideBox, colW);
+  const boxCols = narrow ? BOX_COLS : boxColsFor(sizingCols ?? prefs.cols, colsFit);
+  const boxWidth = boxWidthFor(boxCols, colW);
   const fit = docked
     ? fitRows((slotSize?.h ?? 0) - headGrew, chrome, lineH)
     : moved
@@ -891,6 +909,79 @@ export function WritingCard({
     />
   );
 
+  // The grip in the text box's corner sizes the box both ways, as a text
+  // area's does: down for more rows and right for more columns, from 6
+  // rows and 75 columns up to what the window allows, and the card grows
+  // with it. A narrow window keeps 80 columns in a smaller face, so there
+  // the grip sizes the rows alone. A double click lets the box grow with
+  // the text again at 80 columns.
+  const boxSizeRef = useRef<{
+    x: number;
+    y: number;
+    rows: number;
+    cols: number;
+    toRows: number;
+    toCols: number;
+  } | null>(null);
+  const endBoxSize = () => {
+    const d = boxSizeRef.current;
+    boxSizeRef.current = null;
+    document.body.style.cursor = '';
+    if (d) {
+      const patch = {
+        ...(d.toRows !== d.rows ? { rows: d.toRows } : {}),
+        ...(d.toCols !== d.cols ? { cols: d.toCols } : {}),
+      };
+      if (Object.keys(patch).length > 0) void saveWritingCardPrefs(patch).catch(() => {});
+    }
+    setSizing(null);
+    setSizingCols(null);
+  };
+  const boxGrip = gripEdge && (
+    <div
+      className="wr-box-grip"
+      role="button"
+      aria-label="Resize the text box"
+      title="Drag to resize the text box. Double click to reset it."
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        boxSizeRef.current = {
+          x: e.clientX,
+          y: e.clientY,
+          rows: boxRows,
+          cols: boxCols,
+          toRows: boxRows,
+          toCols: boxCols,
+        };
+        document.body.style.cursor = narrow ? 'ns-resize' : 'nwse-resize';
+      }}
+      onPointerMove={(e) => {
+        const d = boxSizeRef.current;
+        if (!d) return;
+        d.toRows = dragRows(d.rows, e.clientY - d.y, lineH, fit, 1);
+        d.toCols = narrow ? d.cols : dragCols(d.cols, e.clientX - d.x, colW, colsFit);
+        setSizing(d.toRows);
+        setSizingCols(d.toCols);
+      }}
+      onPointerUp={endBoxSize}
+      onPointerCancel={endBoxSize}
+      onDoubleClick={() => void saveWritingCardPrefs({ rows: null, cols: null }).catch(() => {})}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+        <path
+          d="M11.5 4.5l-7 7M11.5 8.5l-3 3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+
   // The card's own box, which moves between the window and the pane.
   // Focus inside it stays where it was across the move.
   const [hostEl] = useState(() => {
@@ -963,6 +1054,7 @@ export function WritingCard({
     visibility: (place || docked) && ready && prefs.loaded && !awaitingPane ? 'visible' : 'hidden',
     ['--wr-px' as string]: `${px}px`,
     ['--wr-lh' as string]: `${lineH}px`,
+    ['--wr-cols' as string]: boxCols,
     ['--wr-family' as string]: fontFamily,
     ['--wr-fg' as string]: env.fg,
     ['--wr-ground' as string]: env.bg,
@@ -1097,7 +1189,9 @@ export function WritingCard({
                       label={info.title}
                       rows={boxRows}
                       minRows={boxMinRows}
+                      cols={boxCols}
                       inks={inks}
+                      corner={boxGrip}
                       onChange={onBoxChange}
                       onCaret={setCaretRow}
                       onPaste={(p: PasteNote) =>

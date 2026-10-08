@@ -214,7 +214,7 @@
    the box's hairline ring. Each row is 28 px with a hairline between,
    and 11 px under the block, so the fields add four rows of 17. */
 .wr-fields {
-  width: calc(32px + 82ch);
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
   margin: 0 0 11px;
   border-radius: var(--r-row);
   background: var(--wr-ground, var(--bg));
@@ -285,16 +285,16 @@
   white-space: nowrap;
 }
 
-/* The text box. The gutter is two columns of numbers and 12 px, and the
-   guide a 1 px hairline at the right edge of the width the card keeps,
-   drawn on the box's ground under the text. A line longer than the box
-   scrolls the text sideways and the gutter stays put on the box's ground
-   over it, so no text ever shows under a number. The ring draws over
-   both. */
+/* The text box, 80 columns until you size it by its corner. The gutter
+   is two columns of numbers and 12 px, and the guide a 1 px hairline at
+   the right edge of the width the card keeps, drawn on the box's ground
+   under the text. A line longer than the box scrolls the text sideways
+   and the gutter stays put on the box's ground over it, so no text ever
+   shows under a number. The ring draws over both. */
 .wr-box {
   --wr-guide-at: calc(22px + 2ch + var(--wr-width, 75) * 1ch);
   position: relative;
-  width: calc(32px + 82ch);
+  width: calc(32px + (var(--wr-cols, 80) + 2) * 1ch);
   border-radius: var(--r-row);
   background: var(--wr-ground, var(--bg));
   font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
@@ -310,6 +310,26 @@
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px var(--sep);
   pointer-events: none;
+}
+
+/* The grip in the box's corner: two short diagonals, as a text area
+   draws them, in a 14 px square with the resize cursor. */
+.wr-box-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 202;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  color: var(--tertiary);
+}
+
+.wr-box-grip:hover,
+.wr-box-grip:active {
+  color: var(--secondary);
 }
 
 .wr-box[data-width='70'] {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import CodeMirror, {
   Annotation,
   Compartment,
@@ -70,8 +70,12 @@ export interface WritingBoxProps {
   /** The rows the box shows before it scrolls. */
   rows: number;
   minRows: number;
+  /** The columns of text the box shows before it scrolls sideways. */
+  cols: number;
   /** The text colors of the marks and the selection (boxInks.ts). */
   inks: BoxInks;
+  /** What sits in the box's corner, the grip that sizes it. */
+  corner?: ReactNode;
   onChange: (rows: Row[]) => void;
   onCaret: (row: number) => void;
   onPaste: (note: PasteNote) => void;
@@ -415,7 +419,9 @@ export function WritingBox({
   label,
   rows,
   minRows,
+  cols,
   inks,
+  corner = null,
   onChange,
   onCaret,
   onPaste,
@@ -559,6 +565,7 @@ export function WritingBox({
   const style = {
     '--wr-rows': rows,
     '--wr-min-rows': minRows,
+    '--wr-cols': cols,
     '--wr-ink-warn': inks.warn,
     '--wr-ink-danger': inks.danger,
     '--wr-ink-selected': inks.selection,
@@ -596,6 +603,7 @@ export function WritingBox({
         }}
         aria-label={label}
       />
+      {corner}
     </div>
   );
 }
