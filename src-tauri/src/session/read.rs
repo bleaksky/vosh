@@ -146,6 +146,7 @@ async fn handle_event<R: tauri::Runtime>(
                     .walker
                     .watching()
                     .then(|| walk::answer(&plain, ended.as_deref()).to_string());
+                conn.writer.heard(&plain);
                 if conn.writer.watching() {
                     let out = conn.stream.lines_out();
                     conn.writer.line(&GameLine::new(&plain, &line.bytes), out);

@@ -25,6 +25,10 @@
 //! text before or after it fires after [`SILENT`]. A job the tick finds
 //! still waiting for its answer keeps a tick armed for the next text.
 //!
+//! It hears every line the game sends, watching or not, for the game
+//! deciding a check of your description or history, which can come long
+//! after the check went out.
+//!
 //! The writer only decides. Each event hands back the lines to send and
 //! the session does the IO, as the walker does.
 //!
@@ -48,7 +52,9 @@ use std::time::Duration;
 use serde::Serialize;
 use tokio::time::Instant;
 
-use game_text::{editor_waits, lone_prompts, opened_listing, pager_waits, GameLine, BANNER};
+use game_text::{
+    decided, editor_waits, lone_prompts, opened_listing, pager_waits, GameLine, BANNER,
+};
 use job::Job;
 use kinds::Kind;
 use payloads::{JobProgress, JobResult, WriteJob};
@@ -107,6 +113,13 @@ pub(crate) struct Done {
     pub(crate) result: JobResult,
 }
 
+/// The game decided a check of a text, with the writer's number for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Decided {
+    pub(crate) id: u64,
+    pub(crate) kind: Kind,
+}
+
 /// What the page hears on [`crate::app::events::WRITING`].
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub(crate) struct WritingState {
@@ -118,6 +131,8 @@ pub(crate) struct WritingState {
     /// How many lines of the session's other sends wait for the job.
     pub(crate) held: usize,
     pub(crate) done: Option<Done>,
+    /// The last check the game decided.
+    pub(crate) decided: Option<Decided>,
 }
 
 /// What the page asks the writer.
@@ -167,6 +182,8 @@ pub(crate) struct Writer {
     waiting: Option<WriteJob>,
     done: Option<Done>,
     next_offer: u64,
+    decided: Option<Decided>,
+    next_decided: u64,
     /// The game's prompt tick, until the text of its pulse is in.
     armed: Option<Armed>,
     /// Text came since the writer last sent.
@@ -206,6 +223,7 @@ impl Writer {
             job: self.job.as_ref().map(Job::progress),
             held,
             done: self.done.clone(),
+            decided: self.decided.clone(),
         }
     }
 
@@ -241,6 +259,18 @@ impl Writer {
             wired.extend_from_slice(b"\r\n");
         }
         wired
+    }
+
+    /// Any line the game sent, watched or not, for the game deciding a
+    /// check.
+    pub(crate) fn heard(&mut self, plain: &str) {
+        if let Some(kind) = decided(plain) {
+            self.next_decided += 1;
+            self.decided = Some(Decided {
+                id: self.next_decided,
+                kind,
+            });
+        }
     }
 
     /// A line the game sent. `out` is the count of lines the session has

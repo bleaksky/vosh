@@ -81,6 +81,7 @@ impl Table {
     /// The game prints `lines` and ends the read on `partial`.
     fn game(&mut self, lines: &[&str], partial: &str) -> Vec<String> {
         for line in lines {
+            self.writer.heard(line);
             self.writer
                 .line(&GameLine::new(line, line.as_bytes()), self.out);
         }
@@ -1021,6 +1022,20 @@ fn post_then_drop(t: &mut Table) {
     );
 }
 
+fn hears_the_game_decide_a_check_while_nothing_runs() {
+    let mut t = Table::new();
+    assert!(!t.writer.watching());
+    t.pulse(&["Orla has judged your look worthy."]);
+    let decided = t.writer.state(0).decided.expect("a decision");
+    assert_eq!(decided.kind, Kind::Description);
+    t.pulse(&["As the gods view your past, they grant you a small blessing."]);
+    let next = t.writer.state(0).decided.expect("a decision");
+    assert_eq!(next.kind, Kind::History);
+    assert!(next.id > decided.id);
+    assert_eq!(t.writer.state(0).editor, None);
+    assert_eq!(t.done(), None);
+}
+
 /// Each test once in each [`Order`].
 macro_rules! in_every_order {
     ($($name:ident),* $(,)?) => {
@@ -1080,4 +1095,5 @@ in_every_order!(
     turns_the_pager_for_a_long_list,
     says_when_the_list_holds_no_such_note,
     cannot_tell_on_a_board_only_immortals_read,
+    hears_the_game_decide_a_check_while_nothing_runs,
 );

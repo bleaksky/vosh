@@ -16,6 +16,7 @@ export const WRITING_IDLE: WritingState = {
   job: null,
   held: 0,
   done: null,
+  decided: null,
 };
 
 const store = createSessionStore<WritingState>({

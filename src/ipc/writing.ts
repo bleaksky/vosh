@@ -142,6 +142,8 @@ export interface WritingState {
   held: number;
   /** How the last job ended. */
   done: { id: number; result: JobResult } | null;
+  /** The last check the game decided, heard whether or not a job ran. */
+  decided: { id: number; kind: WritingKind } | null;
 }
 
 /** Start a job in a session's writer. It starts at the game's prompt. */
