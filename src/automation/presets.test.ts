@@ -478,8 +478,10 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
   sent_tells: [[["You tell Tolliver 'The day has begun.'", null]]],
   room_and_time: [
     [['[Exits: south]', 'green']],
-    [['A Blackwatch villager scurries about, taking care of business.', 'yellow']],
+    [['A villager is here, fighting Maren.', 'bright_red']],
+    [['Maren is here, fighting a villager.', 'yellow']],
     [['The day has begun.', 'blue']],
+    [['It starts to rain.', '#8fa7d9']],
   ],
 };
 
@@ -491,10 +493,10 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
 const TRIGGER_PRESETS = PRESETS.filter((p) => p.triggers.length > 0);
 
 describe('the sample of every preset', () => {
-  it('holds one to three lines as the game prints them, each naming a trigger of its preset', () => {
+  it('holds one to five lines as the game prints them, each naming a trigger of its preset', () => {
     for (const preset of TRIGGER_PRESETS) {
       expect(preset.sample.length, preset.id).toBeGreaterThanOrEqual(1);
-      expect(preset.sample.length, preset.id).toBeLessThanOrEqual(3);
+      expect(preset.sample.length, preset.id).toBeLessThanOrEqual(5);
       const names = preset.triggers.map((t) => t.name);
       for (const line of preset.sample) {
         expect(line.text.trim(), preset.id).toBe(line.text);

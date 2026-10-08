@@ -52,7 +52,7 @@ export interface Preset {
    *  The presets step lists the suggestions outside Chat, and the Chat
    *  step lists the ones in it. */
   suggest: readonly string[];
-  /** One to three lines the game prints that show what the preset does,
+  /** One to five lines the game prints that show what the preset does,
    *  each in the game's own words, with the place in the game's source it
    *  comes from beside it. A character or a number the game fills in comes
    *  from the repo fixtures. presets.test.ts runs each line through the
@@ -878,17 +878,25 @@ export const PRESETS: Preset[] = [
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
       'magenta.',
-    // The first look in fixtures/room-colors/looks.json, the Bank of
-    // Aabahran. Its exits line, the villager it lists after them, and the
-    // time of day message that follows the look in the same pulse.
+    // The look in fixtures/room-colors/looks.json where your target, a
+    // villager, fights a player who names it in their own line. Its exits
+    // line, the villager and Maren as char_to_char in act_info.c prints
+    // them, the time of day message, and a change in the weather from
+    // sky_event_text in update.c.
     sample: [
       { text: '[Exits: south]', shows: 'room.exits' },
       {
-        text: 'A Blackwatch villager scurries about, taking care of business.',
+        text: 'A villager is here, fighting Maren.',
+        shows: 'room.target',
+        target: 'room_target',
+      },
+      {
+        text: 'Maren is here, fighting a villager.',
         shows: 'room.contents',
         target: 'room',
       },
       { text: 'The day has begun.', shows: 'time.of_day' },
+      { text: 'It starts to rain.', shows: 'weather.change' },
     ],
     suggest: [FORSAKEN_LANDS],
     colors: {
