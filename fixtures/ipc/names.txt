@@ -196,6 +196,7 @@ event session://prompt-vars app heard
 event session://reconnect app heard
 event session://round-trip app heard
 event session://routed app heard
+event session://screen-reader app heard
 event session://snoop app heard
 event session://snoop-output app heard
 event session://state app heard

@@ -295,7 +295,13 @@ impl Session {
             take(step, &mut kept, &mut repeats);
         }
         if batch.hold {
-            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
+            hold_step(
+                &self.p,
+                &mut self.c,
+                &mut self.acc,
+                &mut batch.out,
+                &mut batch.reader,
+            );
         }
         self.c.prompt.stage.finish(&mut batch.out);
         Read {
@@ -406,7 +412,13 @@ impl Wire {
         );
         // The hold's deadline passes before the next read.
         if batch.hold {
-            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
+            hold_step(
+                &self.p,
+                &mut self.c,
+                &mut self.acc,
+                &mut batch.out,
+                &mut batch.reader,
+            );
         }
         batch
     }
@@ -511,7 +523,13 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
+            hold_step(
+                &self.p,
+                &mut self.c,
+                &mut self.acc,
+                &mut batch.out,
+                &mut batch.reader,
+            );
         }
         batch.out
     }
@@ -551,7 +569,13 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
+            hold_step(
+                &self.p,
+                &mut self.c,
+                &mut self.acc,
+                &mut batch.out,
+                &mut batch.reader,
+            );
         }
         batch.out
     }

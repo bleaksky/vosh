@@ -34,6 +34,7 @@ export const SNOOP_OUTPUT = 'session://snoop-output';
 export const VITALS_TEXT = 'session://vitals-text';
 export const WALK = 'session://walk';
 export const WRITING = 'session://writing';
+export const SCREEN_READER = 'session://screen-reader';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';
 export const ALIASES_CHANGED = 'vosh://aliases-changed';

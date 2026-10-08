@@ -12,6 +12,7 @@ use crate::sessions::Session;
 
 use super::log_sink::LogSink;
 use super::perf::PerfCounters;
+use super::reader::ReaderFeed;
 
 /// Everything one socket read writes to the terminal and reports, kept
 /// in stream order and sent once at the end of the read, so a prompt
@@ -50,6 +51,9 @@ pub(super) struct ReadBatch {
     /// it, which can change what that prompt shows. Packets before a
     /// prompt in the same read draw with it.
     pub(super) gmcp: bool,
+    /// What a screen reader reads of the read, filled only while Read new
+    /// game lines is on.
+    pub(super) reader: ReaderFeed,
 }
 
 impl ReadBatch {
@@ -68,6 +72,7 @@ impl ReadBatch {
             character: None,
             hold: false,
             gmcp: false,
+            reader: ReaderFeed::default(),
         }
     }
 }

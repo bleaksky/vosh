@@ -140,6 +140,11 @@ pub(crate) struct Connection {
     /// link that ends marks them ended and keeps them, so only the
     /// session that closes drops them.
     pub(crate) snoops: super::snoop::Snoops,
+    /// The plain text of the partial the end of a read painted raw while
+    /// a screen reader reads the session, which the reader already read,
+    /// so the line that completes it reads only the rest. The only thing
+    /// the reader keeps between reads. A send or a disconnect drops it.
+    pub(crate) reader_heard: Option<String>,
 }
 
 impl Connection {
@@ -156,6 +161,7 @@ impl Connection {
         self.fight_tail = false;
         self.fight_head = false;
         self.preset_watch.reset();
+        self.reader_heard = None;
         had
     }
 

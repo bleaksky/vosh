@@ -39,12 +39,12 @@ use super::prompt_view::{
     emit_hidden_change, emit_prompt_state, emit_prompt_vars, end_prompt, start_prompt,
     watched_state, watching_prompt,
 };
-use super::read::{finish_read, flush_hold, let_go_held_lines, READ_BUFFER_BYTES};
+use super::read::{finish_read, flush_hold, let_go_held_lines, paint_hold, READ_BUFFER_BYTES};
 use super::round_trip::{RoundTripPayload, READ_EVERY};
 use super::socket::Stream;
 use super::steps::{
-    clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
-    repaint_step, send_step, window_size_step,
+    clock_after, clock_step, end_preview_step, late_repaint_after, late_repaint_step, repaint_step,
+    send_step, window_size_step,
 };
 use super::walk::{self, WalkProgress, Walker};
 use super::writer::{Writer, WritingState};
@@ -386,8 +386,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
-                                    let mut c = conn.session.connection.lock();
-                                    hold_step(&mut c, &mut conn.accumulator, &mut batch.out);
+                                    paint_hold(&mut conn, &mut batch.out, &mut batch.reader).await;
                                 }
                                 hold_until = None;
                                 // The connection is going, so no clock

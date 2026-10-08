@@ -27,6 +27,7 @@ use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, Outp
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
+use super::reader::ReaderFeed;
 use super::round_trip::ends_on_prompt;
 use super::socket::Stream;
 use super::steps::{
@@ -251,18 +252,28 @@ async fn handle_event<R: tauri::Runtime>(
     }
 }
 
-/// Paint a partial that waited and send it out. `seen_output` becomes
-/// the output count after it.
+/// Paint a partial that waited and send it out, with what a screen
+/// reader reads of it. `seen_output` becomes the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
-    let out = {
-        let mut c = conn.session.connection.lock();
-        let mut out = Output::new(conn.others_wrote());
-        hold_step(&mut c, &mut conn.accumulator, &mut out);
-        out
-    };
+    let mut out = Output::new(conn.others_wrote());
+    let mut reader = ReaderFeed::default();
+    paint_hold(conn, &mut out, &mut reader).await;
     if !out.is_empty() {
         conn.seen_output = emit_session_output(&conn.app, &conn.session, &out, &mut conn.settle);
     }
+    super::reader::emit(&conn.app, &conn.session, reader);
+}
+
+/// Paint a partial that waited into `out`, through [`hold_step`], under
+/// the profile lock, which says whether a screen reader reads it.
+pub(super) async fn paint_hold<R: tauri::Runtime>(
+    conn: &mut Conn<R>,
+    out: &mut Output,
+    reader: &mut ReaderFeed,
+) {
+    let p = conn.session.lock_profile().await;
+    let mut c = conn.session.connection.lock();
+    hold_step(&p, &mut c, &mut conn.accumulator, out, reader);
 }
 
 /// Let go of the lines the stage holds for the rest of a prompt, through
@@ -393,7 +404,8 @@ async fn end_read<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Send what one socket read gathered: its output, the triggers that hid
+/// Send what one socket read gathered: its output, what a screen reader
+/// reads of it, the triggers that hid
 /// a prompt with nothing to draw in its place, then the prompt vars when
 /// a prompt was read or they changed, what the plugins changed in their
 /// panes, the snoops, and the hidden state when it changed. Once per read, so the
@@ -419,6 +431,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         hold: _,
         gmcp,
         since_prompt: _,
+        reader,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);
@@ -466,6 +479,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
                 as u64;
         conn.seen_output = emit_session_output(app, session, &out, &mut conn.settle);
     }
+    super::reader::emit(app, session, reader);
     conn.settle.queue_rows(log);
     if let Some(named) = character.and_then(|character| log_sink.name(&character)) {
         conn.settle.queue_name(named);
