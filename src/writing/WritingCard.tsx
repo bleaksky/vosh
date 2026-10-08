@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import type { Draft, JobResult, WriteJob, WritingKind } from '../ipc/writing';
 import { sendInput } from '../ipc/session';
-import { stopAskingToPost } from '../ipc/uiConfig';
 import { useEscape } from '../lib/escapeStack';
 import type { PromptCardHost } from '../prompt/PromptCard';
 import type { CellSize } from '../prompt/pinnedDock';
@@ -16,12 +15,9 @@ import { useSessionConnection } from '../stores/session/connectionStore';
 import { useSelectedRow } from '../stores/session/sessionsStore';
 import { useWriting } from '../stores/session/writingStore';
 import { pushToast } from '../stores/toasts';
-import { Button } from '../ui';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { applicationGuide } from './applications';
 import { boxInks } from './boxInks';
-import { stopsAsking, useAskPost } from './askPost';
-import { DontAskAgain } from './DontAskAgain';
+import { useAskPost } from './askPost';
 import {
   characterOf,
   getWritingFile,
@@ -50,20 +46,15 @@ import { endJob } from './writingJobEnd';
 import { kindsMenuFor, moreItemsFor, type MenuCard } from './writingMenus';
 import { WritingBox, type BoxText, type PasteNote } from './WritingBox';
 import { WritingFields, type FieldName } from './WritingFields';
-import { FootCount, FootNote, WritingFoot } from './WritingFoot';
+import { FootButtons, FootLeftSide, WritingFoot } from './WritingFoot';
 import { WritingGuide } from './WritingGuide';
 import { WritingPreview } from './WritingPreview';
+import { WritingConfirm, type Confirm } from './WritingConfirm';
+import { WritingNoCharacter } from './WritingNoCharacter';
 import { WritingHead, type MoreItem } from './WritingHead';
 import { findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
-import {
-  checkAsk,
-  clearOtherAsk,
-  postAsk,
-  postStillAsks,
-  readAgainAsk,
-  type Ask,
-} from './cardDialogs';
+import { checkAsk, clearOtherAsk, postAsk, postStillAsks, readAgainAsk } from './cardDialogs';
 import { checkable } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
 import { useWritingFrame } from './useWritingFrame';
@@ -104,13 +95,6 @@ interface Props {
   brightBold: boolean;
   renderer: 'xterm' | 'native';
   onClose: () => void;
-}
-
-interface Confirm extends Ask {
-  run: () => void;
-  /** The confirm offers Don't ask again, which turns Ask before you
-   *  post off. */
-  skip?: boolean;
 }
 
 const rowsOf = (text: readonly string[]): Row[] =>
@@ -529,24 +513,8 @@ export function WritingCard({
     post,
     send: () => sendToGame(),
   };
-  const left =
-    'progress' in foot.left ? (
-      <span className="pc-foot-note">{foot.left.progress}</span>
-    ) : 'note' in foot.left ? (
-      <FootNote note={foot.left.note} />
-    ) : (
-      <FootCount {...foot.left.count} />
-    );
-  const buttons = foot.buttons.map((b) => (
-    <Button
-      key={b.id}
-      variant={b.primary ? 'primary' : 'secondary'}
-      disabled={b.disabled === true}
-      onClick={footActions[b.id]}
-    >
-      {b.label}
-    </Button>
-  ));
+  const left = <FootLeftSide left={foot.left} />;
+  const buttons = <FootButtons buttons={foot.buttons} actions={footActions} />;
 
   // ── Header ────────────────────────────────────────────────────────
   // Description and Beast for a werebeast past level 15, and History,
@@ -631,28 +599,7 @@ export function WritingCard({
     setFolded(true);
   };
 
-  if (!world || !name) {
-    return (
-      <div
-        className="pc-card st-controls wr-card"
-        role="dialog"
-        aria-label="Write"
-        style={{ left: 12, bottom: 120 }}
-      >
-        <div className="pc-head">
-          <h2 className="pc-title">Write</h2>
-          <span className="pc-spacer" />
-          <Button onClick={onClose}>Close</Button>
-        </div>
-        <div className="pc-rule" />
-        <div className="pc-body">
-          <p className="pc-copy">
-            Log in with a character first. Vosh keeps your writing separate for each one.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!world || !name) return <WritingNoCharacter onClose={onClose} />;
 
   const placed: CSSProperties = docked
     ? {}
@@ -676,15 +623,6 @@ export function WritingCard({
     ['--wr-fg' as string]: env.fg,
     ['--wr-ground' as string]: env.bg,
   };
-
-  // A confirm sits over the card's foot, 12 in from its right.
-  const cardBox = confirm ? cardRef.current?.getBoundingClientRect() : null;
-  const confirmAt = cardBox
-    ? {
-        right: window.innerWidth - cardBox.right + 12,
-        bottom: window.innerHeight - cardBox.bottom + 60,
-      }
-    : null;
 
   const sending =
     running && running.stage === 'sending'
@@ -841,23 +779,13 @@ export function WritingCard({
         hostEl,
       )}
       {confirm && (
-        <ConfirmDialog
-          title={confirm.title}
-          body={confirm.body}
-          confirmLabel={confirm.label}
-          {...(confirm.cancel ? { cancelLabel: confirm.cancel } : {})}
-          tone={confirm.tone ?? 'danger'}
-          onConfirm={() => {
-            const go = confirm.run;
-            if (stopsAsking(confirm.skip, skipAsk)) void stopAskingToPost().catch(() => {});
-            setConfirm(null);
-            go();
-          }}
-          onCancel={() => setConfirm(null)}
-          {...(confirmAt ? { at: confirmAt } : {})}
-        >
-          {confirm.skip && <DontAskAgain checked={skipAsk} onChange={setSkipAsk} />}
-        </ConfirmDialog>
+        <WritingConfirm
+          confirm={confirm}
+          skipAsk={skipAsk}
+          setSkipAsk={setSkipAsk}
+          setConfirm={setConfirm}
+          cardRef={cardRef}
+        />
       )}
     </>
   );
