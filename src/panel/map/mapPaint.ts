@@ -18,6 +18,8 @@ import {
   type MapTilesPayload,
   type OffFloorEntry,
 } from './mapTiles';
+import type { MapStyle } from './mapStyle';
+import type { GridSpot, WalkPlan } from './mapWalk';
 
 // Default sector code order in a horizontal sprite strip. A tileset PNG
 // supplied by the user is assumed to lay tiles out left-to-right in this
@@ -48,6 +50,133 @@ export function computeAnchor(cssWidth: number, cssHeight: number, zoom: number 
   };
 }
 
+/** Where a flat style puts the grid on the canvas. The room at
+ *  [row][col] centers on (ox + col * pitch, oy + row * pitch), and its
+ *  square has side `size`. */
+export interface GridPlace {
+  ox: number;
+  oy: number;
+  pitch: number;
+  size: number;
+}
+
+/** The side of a room's square in Squares at a pitch. */
+export function squareSide(pitch: number): number {
+  return Math.max(8, Math.floor(pitch * 0.55));
+}
+
+/** The Glyphs style's room box and the bridge between two rooms, in
+ *  em of its font. */
+export const GLYPH_ROOM_EM = 1;
+export const GLYPH_BRIDGE_EM = 0.35;
+
+/** The Glyphs style's font size at a zoom, 14 px at 1. */
+export function glyphFontPx(zoom: number): number {
+  return Math.round(14 * zoom);
+}
+
+/** Where a flat style puts the grid on a canvas of width by height,
+ *  with your room at [centerR][centerC]. Squares and Tileset place it
+ *  as drawSquares does, and a loaded tileset fills each pitch. Glyphs
+ *  places it as GlyphsOverlay does, your room's box centered on the
+ *  middle of the drawing and each room 1 em plus a bridge from the
+ *  next. */
+export function gridPlace(
+  style: Exclude<MapStyle, '3d'>,
+  width: number,
+  height: number,
+  zoom: number,
+  centerR: number,
+  centerC: number,
+  tileset: boolean,
+): GridPlace {
+  if (style === 'glyphs') {
+    const font = glyphFontPx(zoom);
+    const pitch = font * (GLYPH_ROOM_EM + GLYPH_BRIDGE_EM);
+    return {
+      ox: width / 2 - centerC * pitch,
+      oy: height / 2 - centerR * pitch,
+      pitch,
+      size: font * GLYPH_ROOM_EM,
+    };
+  }
+  const { pitch, playerX, playerY } = computeAnchor(width, height, zoom);
+  return {
+    ox: Math.floor(playerX - centerC * pitch),
+    oy: Math.floor(playerY - centerR * pitch),
+    pitch,
+    size: style === 'tileset' && tileset ? pitch : squareSide(pitch),
+  };
+}
+
+/** The grid cell nearest a point on the canvas. */
+export function roomAt(place: GridPlace, x: number, y: number): GridSpot {
+  return {
+    row: Math.round((y - place.oy) / place.pitch),
+    col: Math.round((x - place.ox) / place.pitch),
+  };
+}
+
+/** A walk the map shows, to the room at `target`, under the pointer or
+ *  clicked. */
+export interface WalkMark {
+  plan: WalkPlan;
+  target: GridSpot;
+}
+
+const spotKey = (spot: GridSpot) => `${spot.row},${spot.col}`;
+
+/** The rooms a walk passes through, as spotKey gives them. */
+function walkRooms(walk: WalkMark | null): Set<string> {
+  return new Set(walk ? walk.plan.cells.map(spotKey) : []);
+}
+
+/** The path of a walk from your room at `from`, through the corridor
+ *  of each step, in the path color at 2 px. It draws under the rooms,
+ *  so the route reads between them. */
+export function drawWalkPath(
+  ctx: CanvasRenderingContext2D,
+  plan: WalkPlan,
+  from: GridSpot,
+  place: GridPlace,
+) {
+  if (plan.cells.length === 0) return;
+  const { ox, oy, pitch } = place;
+  ctx.save();
+  ctx.strokeStyle = MAP_COLORS.pathLine;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(ox + from.col * pitch, oy + from.row * pitch);
+  for (const { row, col } of plan.cells) ctx.lineTo(ox + col * pitch, oy + row * pitch);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The ring around the room a walk goes to, 1.5 px and 3.5 px outside
+ *  its square. The accent marks a room the walk reaches, and a dashed
+ *  danger ring one past a door or a shore. */
+export function drawWalkTarget(ctx: CanvasRenderingContext2D, walk: WalkMark, place: GridPlace) {
+  const { ox, oy, pitch, size } = place;
+  const open = walk.plan.kind === 'open';
+  const half = size / 2 + 3.5;
+  ctx.save();
+  ctx.strokeStyle = open ? MAP_COLORS.origin : MAP_COLORS.danger;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash(open ? [] : [3, 2]);
+  ctx.beginPath();
+  ctx.roundRect(
+    ox + walk.target.col * pitch - half,
+    oy + walk.target.row * pitch - half,
+    half * 2,
+    half * 2,
+    3,
+  );
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawSquares(
   ctx: CanvasRenderingContext2D,
   payload: MapTilesPayload,
@@ -59,9 +188,11 @@ export function drawSquares(
   ground: string,
   /** The mark face, which the up and down marks draw in. */
   face: string,
+  /** The walk the map shows, if any. */
+  walk: WalkMark | null = null,
 ) {
   const { pitch, playerX, playerY } = anchor;
-  const size = Math.max(8, Math.floor(pitch * 0.55));
+  const size = squareSide(pitch);
   // Place each grid cell relative to the player's canvas position so the
   // ROOM at world coord (x, y) keeps its on-screen position across pushes.
   const ox = Math.floor(playerX - centerC * pitch);
@@ -128,12 +259,17 @@ export function drawSquares(
   for (const layer of layers) drawOffFloorCells(ctx, layer, ox, oy, pitch, size);
   for (const layer of layers) drawOffFloorOverlay(ctx, layer, ox, oy, pitch);
 
+  const place = { ox, oy, pitch, size };
+  if (walk) drawWalkPath(ctx, walk.plan, { row: centerR, col: centerC }, place);
+  const onPath = walkRooms(walk);
+
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
   // and your room in the accent over its soft fill. A light theme fills
   // each room from its sector over the paper (roomFill), so your room
   // stays the only accent square. Each cell's alpha tracks Manhattan
   // distance from the player so the player sits in a bright pool that
-  // fades outward.
+  // fades outward. A room on the walk shown takes the path color at
+  // full alpha.
   const light = lightAppearance();
   for (const { row: r, col: c, cell } of gridRooms(payload, rows, cols)) {
     const cx = ox + c * pitch;
@@ -162,10 +298,11 @@ export function drawSquares(
       ctx.lineWidth = 1;
       ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
     } else {
-      ctx.globalAlpha = depth;
+      const lit = onPath.has(spotKey({ row: r, col: c }));
+      ctx.globalAlpha = lit ? 1 : depth;
       ctx.fillStyle = roomFill(sector, ground, light);
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
-      ctx.strokeStyle = hexToRgba(sector.border, 0.8);
+      ctx.strokeStyle = lit ? MAP_COLORS.pathLine : hexToRgba(sector.border, 0.8);
       ctx.lineWidth = 1;
       ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
     }
@@ -187,6 +324,8 @@ export function drawSquares(
       }
     }
   }
+
+  if (walk) drawWalkTarget(ctx, walk, place);
 }
 
 // Pass A: only the dim cell fills. Drawn under everything;
@@ -305,11 +444,24 @@ export function drawTileset(
   image: HTMLImageElement | null,
   anchor: Anchor,
   ground: string,
+  /** The walk the map shows, if any. */
+  walk: WalkMark | null = null,
 ) {
   if (!image) {
     // Fallback when no tileset is loaded — render with the standard
     // squares style and the line-based off-floor glyphs.
-    drawSquares(ctx, payload, rows, cols, centerR, centerC, anchor, ground, readPanelMarkFace());
+    drawSquares(
+      ctx,
+      payload,
+      rows,
+      cols,
+      centerR,
+      centerC,
+      anchor,
+      ground,
+      readPanelMarkFace(),
+      walk,
+    );
     return;
   }
   const tileSize = image.naturalHeight;
@@ -352,6 +504,10 @@ export function drawTileset(
     ctx.restore();
   }
 
+  const place = { ox, oy, pitch, size: pitch };
+  if (walk) drawWalkPath(ctx, walk.plan, { row: centerR, col: centerC }, place);
+  const onPath = walkRooms(walk);
+
   for (const { row: r, col: c, cell } of gridRooms(payload, rows, cols)) {
     const cx = ox + c * pitch;
     const cy = oy + r * pitch;
@@ -377,8 +533,14 @@ export function drawTileset(
       ctx.strokeStyle = MAP_COLORS.origin;
       ctx.lineWidth = 1;
       ctx.strokeRect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
+    } else if (onPath.has(spotKey({ row: r, col: c }))) {
+      ctx.strokeStyle = MAP_COLORS.pathLine;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
     }
   }
+
+  if (walk) drawWalkTarget(ctx, walk, place);
 }
 
 function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {

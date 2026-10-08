@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import { drawMap3D } from './map3dDraw';
 import { DEFAULT_MAP_3D_VIEW, MAP_3D_VIEW_KEY, loadMap3dView, type Map3dView } from './map3dView';
@@ -7,7 +7,18 @@ import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from './mapStyle';
 import { readPanelMarkFace, readPanelTextPx, subscribePanelFace } from '../panelFace';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from './mapZoom';
 import { gridDims, playerCellOf } from './mapTiles';
-import { computeAnchor, drawSquares, drawTileset } from './mapPaint';
+import {
+  computeAnchor,
+  drawSquares,
+  drawTileset,
+  drawWalkPath,
+  drawWalkTarget,
+  gridPlace,
+  roomAt,
+  type GridPlace,
+  type WalkMark,
+} from './mapPaint';
+import { planWalk, speedwalk, type GridSpot } from './mapWalk';
 import { GlyphsOverlay } from './GlyphsOverlay';
 import { subscribeThemeChanges } from '../../theme/theme';
 import { pushToast } from '../../stores/toasts';
@@ -19,7 +30,7 @@ import {
 } from '../../stores/gmcp/mapTilesStore';
 import { MapPaneControls } from './MapPaneControls';
 import { textPx } from '../paneTextSize';
-import { useMapGestures } from './useMapGestures';
+import { useMapGestures, type MapPoint } from './useMapGestures';
 
 type Style = MapStyle;
 
@@ -96,6 +107,10 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // canvas picks up the new --panel / --accent CSS vars that
   // MAP_COLORS reads through its getters.
   const [themeVersion, setThemeVersion] = useState(0);
+  // Where the pointer rests over a flat style, which shows the walk to
+  // the room under it.
+  const [pointer, setPointer] = useState<MapPoint | null>(null);
+  const tipRef = useRef<HTMLDivElement | null>(null);
 
   useTauriEvent(subscribeThemeChanges, () => {
     setThemeVersion((v) => v + 1);
@@ -128,11 +143,39 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // Plain scroll and a pinch zoom the map in every style. In 3D a drag,
   // a double click and the arrow keys turn and tilt it.
   const is3d = style === '3d';
+
+  /** Where a flat style puts the grid in a drawing of width by height. */
+  const placeIn = (width: number, height: number): GridPlace | null => {
+    if (!tiles || style === '3d') return null;
+    const { rows, cols } = gridDims(tiles);
+    if (rows === 0 || cols === 0) return null;
+    const { row, col } = playerCellOf(tiles, rows, cols);
+    return gridPlace(style, width, height, zoom, row, col, tilesetImage !== null);
+  };
+  /** The grid cell at a point in a flat style. */
+  const spotAt = (at: MapPoint | null): GridSpot | null => {
+    const place = at && placeIn(at.width, at.height);
+    return at && place ? roomAt(place, at.x, at.y) : null;
+  };
+  // The walk to the room under the pointer, if one is on offer. Your
+  // room, empty ground and rooms on other floors offer none. It plans
+  // again only for a new room or packet, so a move inside one room
+  // repaints nothing.
+  const spot = spotAt(pointer);
+  const hoverRow = spot?.row ?? null;
+  const hoverCol = spot?.col ?? null;
+  const hover = useMemo((): WalkMark | null => {
+    if (!tiles || hoverRow === null || hoverCol === null) return null;
+    const plan = planWalk(tiles, hoverRow, hoverCol);
+    return plan && { plan, target: { row: hoverRow, col: hoverCol } };
+  }, [tiles, hoverRow, hoverCol]);
+
   useMapGestures(containerRef, {
     zoom,
     setZoom,
     view: is3d ? view3d : null,
     setView: setView3d,
+    onPoint: setPointer,
   });
 
   useEffect(() => {
@@ -219,14 +262,31 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     const anchor = computeAnchor(cssWidth, cssHeight, zoom);
 
     if (style === 'tileset') {
-      drawTileset(ctx, tiles, rows, cols, centerR, centerC, tilesetImage, anchor, ground);
+      drawTileset(ctx, tiles, rows, cols, centerR, centerC, tilesetImage, anchor, ground, hover);
     } else if (style === 'squares') {
-      drawSquares(ctx, tiles, rows, cols, centerR, centerC, anchor, ground, readPanelMarkFace());
+      drawSquares(
+        ctx,
+        tiles,
+        rows,
+        cols,
+        centerR,
+        centerC,
+        anchor,
+        ground,
+        readPanelMarkFace(),
+        hover,
+      );
+    } else {
+      // Glyph mode: canvas paints just the background and the walk
+      // under the pointer. The actual character grid is rendered via
+      // <GlyphsOverlay /> in the JSX below so it tiles in em cells
+      // using the glyph face, matching tintin's character-grid map.
+      const place = placeIn(cssWidth, cssHeight);
+      if (hover && place) {
+        drawWalkPath(ctx, hover.plan, { row: centerR, col: centerC }, place);
+        drawWalkTarget(ctx, hover, place);
+      }
     }
-    // Glyph mode: canvas paints just the background + terrain halo.
-    // The actual character grid is rendered via <GlyphsOverlay /> in
-    // the JSX below so it tiles in real terminal-cell pitch (1ch ×
-    // 1em) using the app font, matching tintin's character-grid map.
   };
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -239,7 +299,26 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // A change to the 3D view repaints the same way, once per drag step.
   useLayoutEffect(() => {
     drawRef.current();
-  }, [tiles, view3d]);
+  }, [tiles, view3d, hover]);
+
+  // The tip sits 16 px right of the room under the pointer and 50 px
+  // above it, or under it for a walk that stops at a door or a shore.
+  // Near the drawing's right edge it starts 200 px in from that edge,
+  // and one that still runs past it flips to the left of the room.
+  useLayoutEffect(() => {
+    const tip = tipRef.current;
+    const container = containerRef.current;
+    if (!tip || !container || !hover) return;
+    const width = container.clientWidth;
+    const place = placeIn(width, container.clientHeight);
+    if (!place) return;
+    const x = place.ox + hover.target.col * place.pitch;
+    const y = place.oy + hover.target.row * place.pitch;
+    let left = Math.min(Math.max(x + 16, 8), width - 200);
+    if (left + tip.offsetWidth > width - 8) left = Math.max(8, x - 16 - tip.offsetWidth);
+    tip.style.left = `${left}px`;
+    tip.style.top = `${hover.plan.kind === 'open' ? Math.max(y - 50, 8) : y + 18}px`;
+  });
 
   // Style/layout-driven redraw keeps the settle sequence. Layout after
   // a mode toggle can take a frame or two to settle. Schedule a couple
@@ -361,6 +440,12 @@ export function MapView({ emptyText }: MapViewProps = {}) {
         {style === 'glyphs' && tilesSnap && (
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
         )}
+        {hover && hover.plan.steps.length > 0 && (
+          <div ref={tipRef} className="walk-tip ov-toast" role="tooltip">
+            <span className="ov-toast-msg">{walkTipText(hover)}</span>
+            <span className="ov-toast-meta is-mono">{speedwalk(hover.plan.steps)}</span>
+          </div>
+        )}
         {!tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
         <MapPaneControls
           style={style}
@@ -380,4 +465,11 @@ export function MapView({ emptyText }: MapViewProps = {}) {
       </div>
     </div>
   );
+}
+
+/** What the tip over a room says. */
+function walkTipText({ plan }: WalkMark): string {
+  if (plan.kind === 'door') return 'Walk to the door';
+  if (plan.kind === 'shore') return 'Walk to the edge';
+  return plan.steps.length === 1 ? 'Walk 1 step' : `Walk ${plan.steps.length} steps`;
 }

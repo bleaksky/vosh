@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { glyphGrid, type MapTilesPayload } from './mapTiles';
-import { cellClass } from './mapPaint';
+import { GLYPH_BRIDGE_EM, GLYPH_ROOM_EM, cellClass, glyphFontPx } from './mapPaint';
 
 // HTML glyph overlay.
 //
@@ -38,21 +38,19 @@ export const GlyphsOverlay = memo(
 
     // Font size scales with zoom; base 14 keeps glyph cells legible at
     // 1.0× and matches the terminal's default size.
-    const fontSize = Math.round(14 * zoom);
+    const fontSize = glyphFontPx(zoom);
 
     // Asymmetric cell sizing crunches the map toward squares-mode
     // density while keeping connection chars visible. Room cells stay
-    // 1em × 1em so each sector glyph still has a clean box. Bridge
-    // cells (the in-between row/column the doubled grid creates for
-    // ─ │ connectors) shrink to BRIDGE_EM, so room-to-room pitch is
-    // 1 + BRIDGE_EM em instead of 2em. CSS reads this constant via
-    // a --vosh-glyph-bridge custom property so the same value drives
-    // both cell widths and the player-center translate.
-    const BRIDGE_EM = 0.35;
-    const ROOM_EM = 1.0;
-    const stepEm = ROOM_EM + BRIDGE_EM;
-    const playerColOffset = centerC * stepEm + ROOM_EM / 2;
-    const playerRowOffset = centerR * stepEm + ROOM_EM / 2;
+    // GLYPH_ROOM_EM square so each sector glyph still has a clean box.
+    // Bridge cells (the in-between row/column the doubled grid creates
+    // for ─ │ connectors) shrink to GLYPH_BRIDGE_EM, so room-to-room
+    // pitch is their sum instead of 2em. map.css sets the same sizes,
+    // and gridPlace in mapPaint reads these constants to find the room
+    // under the pointer.
+    const stepEm = GLYPH_ROOM_EM + GLYPH_BRIDGE_EM;
+    const playerColOffset = centerC * stepEm + GLYPH_ROOM_EM / 2;
+    const playerRowOffset = centerR * stepEm + GLYPH_ROOM_EM / 2;
 
     return (
       <div

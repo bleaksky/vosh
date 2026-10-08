@@ -84,6 +84,10 @@ export const MAP_COLORS = {
   get text(): string {
     return readCssVar('--tertiary', '#6e7681');
   },
+  /// The ring around a room a walk cannot reach, past a door.
+  get danger(): string {
+    return readCssVar('--danger', '#ea8f80');
+  },
   dest: '#c83030',
   destGlow: 'rgba(200,48,48,0.15)',
   corridor: 'rgba(140,145,160,0.45)',

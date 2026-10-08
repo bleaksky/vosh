@@ -8,11 +8,20 @@ import { NO_WHEEL_RUN, ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '.
 // with a scale, so both are read and the webview on each platform zooms
 // the same. In 3D a drag turns and tilts the map, a double click puts
 // north back at the top, and the arrow keys turn and tilt it while the
-// drawing has focus.
+// drawing has focus. In the flat styles the map hears where the pointer
+// is.
 
 /** WebKit's gesture event, which the DOM types leave out. */
 interface GestureLike extends Event {
   scale: number;
+}
+
+/** A point in the drawing, from its top left, with the drawing's size. */
+export interface MapPoint {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface Options {
@@ -22,6 +31,9 @@ interface Options {
   /** The 3D view while the map draws in 3D, else null. */
   view: Map3dView | null;
   setView: Dispatch<SetStateAction<Map3dView>>;
+  /** Where the pointer is over a flat style, or null once it leaves the
+   *  drawing or rests on the map's button. */
+  onPoint: (at: MapPoint | null) => void;
 }
 
 export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Options): void {
@@ -38,6 +50,15 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     let wheel = NO_WHEEL_RUN;
     let pinchFrom: number | null = null;
     let drag: { id: number; x: number; y: number } | null = null;
+    const pointAt = (e: PointerEvent): MapPoint => {
+      const box = el.getBoundingClientRect();
+      return {
+        x: e.clientX - box.left,
+        y: e.clientY - box.top,
+        width: el.clientWidth,
+        height: el.clientHeight,
+      };
+    };
 
     // Attached by hand, not passive, so the drawing can keep the wheel
     // from scrolling the panel and a pinch from zooming the page.
@@ -76,6 +97,10 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       el.setPointerCapture?.(e.pointerId);
     };
     const onPointerMove = (e: PointerEvent) => {
+      if (!latest.current.view) {
+        latest.current.onPoint(onButton(e) ? null : pointAt(e));
+        return;
+      }
       if (!drag || e.pointerId !== drag.id || !latest.current.view) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
@@ -87,6 +112,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       drag = null;
       if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
+    const onPointerLeave = () => latest.current.onPoint(null);
     const onDoubleClick = (e: MouseEvent) => {
       if (latest.current.view && !onButton(e)) latest.current.setView(resetView);
     };
@@ -117,6 +143,7 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       on('pointermove', onPointerMove),
       on('pointerup', onPointerUp),
       on('pointercancel', onPointerUp),
+      on('pointerleave', onPointerLeave),
       on('dblclick', onDoubleClick),
       on('keydown', onKeyDown),
     ];

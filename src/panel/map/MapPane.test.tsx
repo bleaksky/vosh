@@ -1,5 +1,6 @@
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { roomNameColor } from './roomName';
 import {
   parseRoomInfo,
@@ -10,16 +11,25 @@ import {
 import { findTheme, themeTokens } from '../../theme/themes';
 import mapCss from '../../styles/map.css?raw';
 import panelCss from '../../styles/panel.css?raw';
-import { aabahranPacket } from '../../test/aabahranGmcp';
+import { aabahranMapPacket, aabahranPacket } from '../../test/aabahranGmcp';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
 import { MapBandRows } from './MapPane';
+import { getCell, offFloorLayers, type MapTilesPayload } from './mapTiles';
 
 // The room store and the map view reach the Tauri bridge when they
-// start. MapBandRows, under test, draws from plain room data and never
-// calls it.
+// start. MapBandRows draws from plain room data and never calls it. The
+// map view hears its packets through the fake event bus here.
+type Handler = (event: { payload: unknown }) => void;
+const bus = vi.hoisted(() => new Map<string, Set<(event: { payload: unknown }) => void>>());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
-  listen: vi.fn(() => Promise.resolve(() => undefined)),
+  listen: vi.fn((event: string, cb: Handler) => {
+    let set = bus.get(event);
+    if (!set) bus.set(event, (set = new Set()));
+    set.add(cb);
+    return Promise.resolve(() => set.delete(cb));
+  }),
 }));
 
 const kansoTheme = findTheme('kanso-zen');
@@ -222,5 +232,181 @@ describe('the band under the map', () => {
     const fade =
       'linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);';
     expect(rule('.pane-map-box')).toContain(`mask-image: ${fade}`);
+  });
+});
+
+// Click to walk, board 9 of the Scripts and Panels review. The map view
+// draws in a fake DOM with no canvas, 404 by 300, so Squares at zoom 1
+// puts the room at [row][col] of the Val Miran packet at (2 + 20 col,
+// -50 + 20 row), and you stand in The Central Square at [10][10].
+describe('a walk on the map', () => {
+  const doc = new FakeDocument();
+  const WIDTH = 404;
+  const HEIGHT = 300;
+  const VAL_MIRAN = aabahranMapPacket('val-miran-central-square.gmcp').data as MapTilesPayload;
+  /** The listeners each element of the drawing added. */
+  const heard = new WeakMap<object, Map<string, Set<(e: unknown) => void>>>();
+  const patched: [string, PropertyDescriptor | undefined][] = [];
+
+  function patch(name: string, value: PropertyDescriptor) {
+    patched.push([name, Object.getOwnPropertyDescriptor(FakeElement.prototype, name)]);
+    Object.defineProperty(FakeElement.prototype, name, { configurable: true, ...value });
+  }
+
+  beforeAll(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('window', {
+      document: doc,
+      devicePixelRatio: 1,
+      location: { protocol: 'about:' },
+      HTMLIFrameElement: class {},
+      addEventListener() {},
+      removeEventListener() {},
+      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    });
+    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+    vi.stubGlobal('Node', FakeNode);
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '', minHeight: '' }));
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem() {}, removeItem() {} });
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    patch('getContext', { value: () => null });
+    patch('clientWidth', { get: () => WIDTH });
+    patch('clientHeight', { get: () => HEIGHT });
+    patch('getBoundingClientRect', { value: () => ({ left: 0, top: 0 }) });
+    patch('addEventListener', {
+      value(this: object, type: string, fn: (e: unknown) => void) {
+        const byType = heard.get(this) ?? new Map<string, Set<(e: unknown) => void>>();
+        heard.set(this, byType);
+        const set = byType.get(type) ?? new Set();
+        byType.set(type, set.add(fn));
+      },
+    });
+    patch('removeEventListener', {
+      value(this: object, type: string, fn: (e: unknown) => void) {
+        heard.get(this)?.get(type)?.delete(fn);
+      },
+    });
+  });
+
+  afterAll(() => {
+    for (const [name, was] of patched.reverse()) {
+      if (was) Object.defineProperty(FakeElement.prototype, name, was);
+      else delete (FakeElement.prototype as unknown as Record<string, unknown>)[name];
+    }
+    vi.unstubAllGlobals();
+  });
+
+  const cleanups: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const clean of cleanups.splice(0)) await clean();
+  });
+
+  /** Send a GMCP package to the first session, as the backend does. */
+  function gmcp(name: string, data: unknown) {
+    for (const cb of bus.get(`session://gmcp/${name.replace(/\./g, '-')}`) ?? []) {
+      cb({ payload: { session: 1, data } });
+    }
+  }
+
+  /** Draw the map over the Val Miran packet, standing in room 20605. */
+  async function map() {
+    const { MapView } = await import('./MapView');
+    const { startRoomStore } = await import('../../stores/gmcp/roomStore');
+    startRoomStore();
+    const container = doc.createElement('div');
+    const root = createRoot(container as unknown as HTMLElement);
+    await act(async () => {
+      root.render(createElement(MapView));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      gmcp('Map.Tiles', VAL_MIRAN);
+      gmcp('Room.Info', { num: 20605, name: 'The Central Square of Val Miran', exits: {} });
+    });
+    cleanups.push(async () => {
+      await act(async () => root.unmount());
+    });
+    const classOf = (el: FakeElement) => el.getAttribute('class') ?? '';
+    const [host] = findAll(container, (el) => classOf(el).startsWith('map-canvas-host'));
+    const fire = async (type: string, x: number, y: number) =>
+      act(async () => {
+        const event = { type, button: 0, pointerId: 1, clientX: x, clientY: y, target: null };
+        for (const fn of heard.get(host)?.get(type) ?? []) fn(event);
+      });
+    /** The room at [row][col] on the canvas. */
+    const at = (row: number, col: number): [number, number] => [2 + 20 * col, -50 + 20 * row];
+    return {
+      hover: (row: number, col: number) => fire('pointermove', ...at(row, col)),
+      leave: () => fire('pointerleave', 0, 0),
+      click: async (row: number, col: number) => {
+        await fire('pointerdown', ...at(row, col));
+        await fire('pointerup', ...at(row, col));
+      },
+      /** The tip's words and its meta, or null with no tip. */
+      tip: () => {
+        const [tip] = findAll(container, (el) => classOf(el).startsWith('walk-tip'));
+        if (!tip) return null;
+        const part = (name: string) =>
+          findAll(tip, (el) => classOf(el).startsWith(name))[0]?.textContent;
+        return { msg: part('ov-toast-msg'), meta: part('ov-toast-meta') };
+      },
+    };
+  }
+
+  let createRoot: typeof import('react-dom/client').createRoot;
+  beforeAll(async () => {
+    ({ createRoot } = await import('react-dom/client'));
+  });
+
+  /** A room on another floor whose cell on yours is empty. */
+  function otherFloor(): [number, number] {
+    for (const entry of offFloorLayers(VAL_MIRAN).flat()) {
+      if (!getCell(VAL_MIRAN, entry.y, entry.x)) return [entry.y, entry.x];
+    }
+    throw new Error('no room on another floor');
+  }
+
+  it('offers the walk to a room you can reach as a tip with its steps', async () => {
+    const view = await map();
+    expect(view.tip()).toBeNull();
+    await view.hover(6, 12);
+    expect(view.tip()).toEqual({ msg: 'Walk 6 steps', meta: '4n2e' });
+    await view.hover(10, 11);
+    expect(view.tip()).toEqual({ msg: 'Walk 1 step', meta: 'e' });
+    await view.leave();
+    expect(view.tip()).toBeNull();
+  });
+
+  it('says Walk to the door for a room behind a locked door', async () => {
+    const view = await map();
+    await view.hover(7, 15);
+    expect(view.tip()).toEqual({ msg: 'Walk to the door', meta: '4n5e' });
+  });
+
+  it('offers nothing over your own room or a room on another floor', async () => {
+    const view = await map();
+    await view.hover(10, 10);
+    expect(view.tip()).toBeNull();
+    await view.hover(...otherFloor());
+    expect(view.tip()).toBeNull();
   });
 });
