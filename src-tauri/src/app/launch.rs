@@ -16,6 +16,7 @@ use tracing::{error, info};
 use vosh_log::LogStore;
 
 use crate::app::events::{broadcast, broadcast_profile_ui, PROFILE_SWITCHED};
+use crate::app::screen_reader;
 use crate::app::state::SharedState;
 use crate::disk::paths;
 use crate::disk::save::PERSIST_LOCK;
@@ -47,6 +48,12 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         // The profile set and the active profile, then the
         // shared catalog and loadouts in loadout mode. See `load`.
         tauri::async_runtime::block_on(load(state, &path));
+        // A screen reader runs and the profile in front has Read new
+        // game lines off, so say once where the setting lives.
+        tauri::async_runtime::block_on(screen_reader::add_launch_notice(
+            state,
+            screen_reader::running,
+        ));
         match open_log_store(&path) {
             Ok(mut store) => {
                 // A crash left these open. They end at their last line,
