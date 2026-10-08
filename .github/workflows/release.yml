@@ -1,11 +1,15 @@
 name: release
 
-# Tag a release like v0.0.2 to fire this workflow. Each platform builds
-# the Tauri bundle and uploads its artifacts to a draft GitHub release.
-# Code signing for macOS and Windows is intentionally deferred; the
-# artifacts are unsigned at this stage. The minisign keys for the
-# updater plugin are read from secrets when present and skipped when
-# absent so the workflow stays usable until you generate them.
+# Tag a release like v0.0.2 to fire this workflow. The gates job runs
+# ci.yml first, so a tag passes the same checks as a push before any
+# bundle builds. Each platform then builds the Tauri bundle and uploads
+# its artifacts to a draft GitHub release, which you publish by hand.
+#
+# Signing. tauri-action signs and notarizes the macOS builds when the
+# six Apple secrets are set. Windows builds ship unsigned for now, as
+# D38 was answered on October 8, and a certificate can join the env
+# block below later. The minisign keys sign the updater bundles when
+# they are present and are skipped when absent.
 
 on:
   push:
@@ -17,7 +21,11 @@ permissions:
   contents: write
 
 jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: gates
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +72,7 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
+            libssl-dev \
             patchelf
 
       - name: Install Node
@@ -118,9 +127,10 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'vosh ${{ github.ref_name }}'
           releaseBody: |
-            Cross platform builds. Artifacts are not yet code signed.
-            macOS users may need to right-click and choose Open the first time.
-            Windows users will see a SmartScreen warning until signing lands.
+            Builds for macOS, Windows and Linux.
+            The Mac builds are signed and notarized by Apple.
+            Windows may show a SmartScreen warning the first time you run Vosh, because the Windows builds are not signed yet.
+            Choose More info and then Run anyway to start it.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
