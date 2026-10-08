@@ -176,6 +176,7 @@ event session://alert app heard
 event session://alerts-ended app heard
 event session://game-prompt-seen app heard
 event session://gmcp/* app heard
+event session://gmcp/Char-Name app heard
 event session://hidden app heard
 event session://input-mode app heard
 event session://lua-output app heard

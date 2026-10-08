@@ -152,6 +152,11 @@ pub struct Options {
     /// The connection takes over a link dead character, so the game
     /// sends no Char.Status and no Char.Prompt.
     pub reconnect: bool,
+    /// The characters your account lists. With any, the game shows the
+    /// account menu first and you pick one by its number, as
+    /// `chargen_acct_menu` (comm.c) reads it, and you play the one you
+    /// picked.
+    pub account: Vec<String>,
     /// `telnetga` is on, so each prompt ends in IAC GA.
     pub ga: bool,
     /// The game plays server proposal S3 with no state kept: it answers
@@ -236,6 +241,7 @@ impl Options {
             prompt: PROMPT.into(),
             fprompt: String::new(),
             reconnect: false,
+            account: Vec::new(),
             ga: true,
             eor: false,
             compact: false,
@@ -285,6 +291,10 @@ pub struct Mud {
     build: Build,
     name: String,
     reconnect: bool,
+    /// The characters the account menu lists, see [`Options::account`].
+    account: Vec<String>,
+    /// You picked a character at the account menu.
+    picked: bool,
     /// What the game holds for you when it prints the prompt.
     pub state: State,
     /// Your PROMPT and fight prompt as the game stores them.
@@ -332,6 +342,8 @@ impl Mud {
             build: options.build,
             name: options.name,
             reconnect: options.reconnect,
+            account: options.account,
+            picked: false,
             state,
             prompt: options.prompt,
             fprompt: options.fprompt,
@@ -450,6 +462,8 @@ impl Mud {
                     first.after_ms += wait;
                 }
                 writes.extend(answer);
+            } else if self.at_menu() {
+                writes.push(Write::now(self.choose(&line)));
             } else {
                 writes.push(Write::now(self.login()));
             }
@@ -463,6 +477,9 @@ impl Mud {
     /// `do_look` sends Room.Info, and the first pulse follows. A reconnect
     /// sends none of those packets.
     pub fn login(&mut self) -> Vec<u8> {
+        if self.at_menu() {
+            return self.account_menu();
+        }
         self.logged_in = true;
         if self.reconnect {
             return self
@@ -490,6 +507,57 @@ impl Mud {
             self.name, ROOM_TEXT
         );
         self.pulse(early, &welcome, false).bytes
+    }
+
+    /// The game waits for your pick at the account menu.
+    fn at_menu(&self) -> bool {
+        !self.account.is_empty() && !self.picked
+    }
+
+    /// The account menu as `show_acct_menu` and `acct_menu_row` (comm.c)
+    /// print it with 256 colours off, then the prompt of `acct-menu`
+    /// (tables.c).
+    fn account_menu(&self) -> Vec<u8> {
+        use std::fmt::Write as _;
+        const RST: &str = "\x1B[0m";
+        let mut out = format!(
+            "\n\r \x1B[37mAccount:{RST} \x1B[1;37mwanderer{RST}\n\r \x1B[1;30m{}{RST}\n\r",
+            "\u{2500}".repeat(50)
+        );
+        let (race, class, seen) = ("Human", "Warrior", "2026-10-07");
+        for (i, name) in self.account.iter().enumerate() {
+            let number = i + 1;
+            let _ = write!(
+                out,
+                "  \x1B[1;37m{number:2}{RST}. \x1B[37m{name:<15}{RST} \x1B[36mLv{MORTAL_LEVEL:<3}{RST} \x1B[1;30m{race:<8} {class:<12}{RST}  \x1B[1;30m{seen}{RST}\n\r",
+            );
+        }
+        out.push_str(
+            "\n\r [#] Play   [N]ew character   [L]ink character   [P]assword   [D]isconnect\n\r",
+        );
+        out.push_str("\n\rYour choice> ");
+        out.into_bytes()
+    }
+
+    /// Your answer at the account menu: a number in the list logs you in
+    /// as that character, and anything else shows the menu again.
+    fn choose(&mut self, line: &str) -> Vec<u8> {
+        let pick = line.trim().parse::<usize>().ok();
+        match pick
+            .and_then(|n| n.checked_sub(1))
+            .and_then(|i| self.account.get(i))
+        {
+            Some(name) => {
+                self.name = name.clone();
+                self.picked = true;
+                self.login()
+            }
+            None => {
+                let mut out = b"Invalid selection.\n\r".to_vec();
+                out.extend(self.account_menu());
+                out
+            }
+        }
     }
 
     /// Run one line you typed. Returns what to write, in order.

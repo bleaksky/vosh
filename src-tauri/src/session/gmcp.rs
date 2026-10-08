@@ -82,14 +82,14 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Take the tick step for a World.Time hour change under these locks,
     // as the line path does, so the tick needs no lock of its own after.
-    let (tick_step, script_apply, daylight, vitals_text, snooped) = {
+    let (tick_step, script_apply, daylight, vitals_text, snooped, picked) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = conn.session.lock_profile().await;
         conn.perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         conn.perf.mutex_acquires += 1;
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
-        c.link.gmcp(&msg.package);
+        let picked = c.link.gmcp(&msg.package);
         // A snoop's text goes to its tab and never to the line pipeline.
         // Lua still hears the packet below. Its whole lines go in the log
         // with this read's rows.
@@ -115,6 +115,7 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
             daylight,
             vitals_text,
             snooped,
+            picked,
         )
     };
     batch.snoop |= snooped;
@@ -142,6 +143,20 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
                 character_named(&conn.app, state.inner(), &conn.session, &owned).await;
             }
         }
+    }
+    // A reconnect to a character left link dead sends no Char.Status
+    // (`check_reconnect`, comm.c), so the character you picked at the
+    // account menu names it at the first vitals of play. The page hears
+    // it as Char.Name, the package that names the character alone.
+    if let Some(name) = picked {
+        batch.character = Some(name.clone());
+        let state = conn.app.state::<SharedState>();
+        character_named(&conn.app, state.inner(), &conn.session, &name).await;
+        conn.session.emit_data(
+            &conn.app,
+            "session://gmcp/Char-Name",
+            &serde_json::json!({ "name": name }),
+        );
     }
     let mut sink = OutputSink::Batch(batch);
     let mut io = ScriptIo::Session(&mut conn.stream, &mut sink, &mut conn.walker);
