@@ -10,8 +10,11 @@
 //! fight, a blank line unless you play compact, the prompt that
 //! [`game::prompt`] prints for your PROMPT, and IAC GA, or IAC EOR once
 //! the client asked for it from a game that plays [`Options::eor`].
-//! [`Options::order`] moves the packets after the reply and before the
-//! prompt, as a game that writes GMCP into its output buffer sends them.
+//! [`Options::order`] moves the packets into the text, as a game that
+//! writes GMCP into its output buffer sends them, since d50e4a24: the
+//! packets a command wrote where it wrote them, such as the room packets
+//! right after the people of a look, and the prompt time packages after
+//! the reply and before the prompt.
 //!
 //! Three server builds are played, as [`Build`] names them. Output that
 //! comes without a command, such as someone arriving, starts on a new line
@@ -35,6 +38,11 @@
 //!   hour and one at 0 wears off. Each sends Char.Affects at once.
 //! - `spam N` sends N lines and a prompt, and `pulses N` sends N pulses
 //!   [`PULSE_MS`] apart, as combat rounds come.
+//! - `goto 6909` or `goto 6910` takes an immortal to The Crossroads or to
+//!   Nearing the Crossroads on The Eastern Road, and `east` and `west`
+//!   walk between them. `look` there shows that room. Each look ends with
+//!   the room's Room.Info, Room.Chars and Room.Items, and a walk or a goto
+//!   prints what the room shows you as you come in after them.
 //! - `bash Tolliver`, `bash Maren` or `bash Orla` slams into them as
 //!   `do_bash` prints it and lags you [`Options::bash_ms`], without the
 //!   fight and the damage a real bash brings. The game holds each line
@@ -48,6 +56,7 @@ use std::fmt::Write as _;
 
 use super::game::{self, State, Tank};
 use super::gmcp;
+use super::rooms;
 
 /// The telnet bytes the fake reads and writes.
 pub mod telnet {
@@ -151,7 +160,8 @@ pub enum TickOrder {
     First,
     /// After the reply and before the prompt, as a game that writes GMCP
     /// into its output buffer as it prints the prompt sends them. The
-    /// packets a command wrote come with them.
+    /// packets a command wrote come where it wrote them, after the reply
+    /// or, as `do_look` sends the room packets, inside it.
     Middle,
 }
 
@@ -342,6 +352,9 @@ pub struct Mud {
     /// Client bytes not read yet, and the line they build.
     input: Vec<u8>,
     line: Vec<u8>,
+    /// The room of The Eastern Road you stand in, or None in the bank
+    /// where you log in.
+    room: Option<u32>,
 }
 
 impl Mud {
@@ -382,6 +395,7 @@ impl Mud {
             wait_ms: None,
             input: Vec::new(),
             line: Vec::new(),
+            room: None,
         }
     }
 
@@ -593,6 +607,9 @@ impl Mud {
             w if w.len() >= 3 && "prompt".starts_with(w) => self.do_prompt(rest),
             w if w.len() >= 2 && "fprompt".starts_with(w) => self.do_fprompt(rest),
             "l" | "lo" | "loo" | "look" => self.look(),
+            "e" | "ea" | "eas" | "east" => self.walk(|room| room.east),
+            "w" | "we" | "wes" | "west" => self.walk(|room| room.west),
+            "goto" => self.goto(rest),
             "fight" | "kill" => self.fight(),
             "lament" => self.lament(),
             "cast" => self.cast(rest),
@@ -713,7 +730,16 @@ impl Mud {
     /// packages, then the text. `later` starts the text on a new line, as
     /// output that no command asked for does.
     fn pulse(&mut self, early: Vec<u8>, reply: &str, later: bool) -> Pulse {
-        let mut packets = early;
+        self.pulse_split(early, reply, "", later)
+    }
+
+    /// One pulse whose command wrote its packets (`early`) between the
+    /// text `head` and the text `tail`, as `do_look` writes the room
+    /// packets after the people and before what follows the look. Where
+    /// the game writes packets straight to the socket they come first all
+    /// the same.
+    fn pulse_split(&mut self, early: Vec<u8>, head: &str, tail: &str, later: bool) -> Pulse {
+        let mut packets = Vec::new();
         let ticks = self.build == Build::New || (self.prompt_on && !self.state.afk);
         if self.gmcp && ticks {
             packets.extend(self.vitals());
@@ -726,14 +752,20 @@ impl Mud {
             }
         }
         let mut out = Vec::new();
-        if self.order == TickOrder::First {
-            out.append(&mut packets);
-        }
         let mut text = String::new();
         if later {
             text.push_str("\n\r");
         }
-        text.push_str(reply);
+        text.push_str(head);
+        if self.order == TickOrder::First {
+            out.extend(early);
+            out.append(&mut packets);
+        } else {
+            game::send_to_char(&mut out, &text, &self.state);
+            out.extend(early);
+            text.clear();
+        }
+        text.push_str(tail);
         if let Some(line) = self.battle_line() {
             text.push_str(&line);
         }
@@ -814,8 +846,50 @@ impl Mud {
         if self.blind {
             return self.pulse(Vec::new(), "You can't see a thing!\n\r", false);
         }
+        if let Some(room) = self.room.and_then(rooms::find) {
+            return self.show(room, "");
+        }
         let early = if self.gmcp { room_info() } else { Vec::new() };
         self.pulse(early, ROOM_TEXT, false)
+    }
+
+    /// `do_look` in `room`, then `after` in the same pulse.
+    fn show(&mut self, room: &rooms::Room, after: &str) -> Pulse {
+        let early = if self.gmcp {
+            room.packets()
+        } else {
+            Vec::new()
+        };
+        let head = room.look(self.state.immortal);
+        self.pulse_split(early, &head, after, false)
+    }
+
+    /// `move_char` (`act_move.c`) through the exit `exit` gives, then what
+    /// the room shows you as you come in.
+    fn walk(&mut self, exit: fn(&rooms::Room) -> Option<u32>) -> Pulse {
+        let to = self
+            .room
+            .and_then(rooms::find)
+            .and_then(exit)
+            .and_then(rooms::find);
+        let Some(room) = to else {
+            return self.pulse(Vec::new(), "Alas, you cannot go that way.\n\r", false);
+        };
+        self.room = Some(room.vnum);
+        self.show(room, room.greet)
+    }
+
+    /// `do_goto` (`act_wiz.c`), for an immortal.
+    fn goto(&mut self, argument: &str) -> Pulse {
+        if !self.state.immortal {
+            return self.pulse(Vec::new(), "Huh?\n\r", false);
+        }
+        let to = argument.trim().parse().ok().and_then(rooms::find);
+        let Some(room) = to else {
+            return self.pulse(Vec::new(), "No such location.\n\r", false);
+        };
+        self.room = Some(room.vnum);
+        self.show(room, "")
     }
 
     fn fight(&mut self) -> Pulse {
