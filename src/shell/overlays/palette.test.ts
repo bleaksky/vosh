@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import aliasesExport from '../../../fixtures/ipc/aliases_export.json?raw';
@@ -11,6 +13,7 @@ import {
   themesInGalleryOrder,
   type PaletteDeps,
 } from './palette';
+import { CommandPalette } from './CommandPalette';
 import { appShortcut } from '../../lib/appMenu';
 import { resolveSettingsTarget } from '../../lib/settingsNav';
 import type { SessionRow } from '../../ipc/session';
@@ -815,5 +818,19 @@ describe('the writing card’s rows', () => {
       deps({ writing: { kinds: ['note'], beast: true, open: () => {} } }),
     );
     expect(rows.some((row) => row.title === 'Edit your beast description…')).toBe(true);
+  });
+});
+
+describe('the palette keys', () => {
+  it('draws each shortcut through Keycap, a glyph in its square', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: 'MacIntel' });
+    try {
+      const html = renderToStaticMarkup(
+        createElement(CommandPalette, { deps: deps(), onClose: () => {} }),
+      );
+      expect(html).toContain('<kbd class="keys"><kbd class="keycap is-glyph">');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
