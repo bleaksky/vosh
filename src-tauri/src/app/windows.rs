@@ -230,6 +230,18 @@ fn snoop_session(label: &str) -> Option<SessionId> {
     number.parse().ok().map(SessionId::from_number)
 }
 
+/// The snoop window that is the key window, by its label, with its
+/// session.
+#[cfg(target_os = "macos")]
+pub(crate) fn snoop_in_front<R: Runtime>(app: &AppHandle<R>) -> Option<(String, SessionId)> {
+    app.webview_windows()
+        .into_iter()
+        .find_map(|(label, window)| {
+            let session = snoop_session(&label)?;
+            window.is_focused().ok()?.then_some((label, session))
+        })
+}
+
 /// The snoop window `label` closed. The tabs of its session go back to
 /// the split, which comes back with them. A session that closed first
 /// has nothing to take them.

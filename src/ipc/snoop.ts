@@ -9,7 +9,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { SNOOP, SNOOP_OUTPUT } from './events';
+import { SNOOP, SNOOP_FIND, SNOOP_OUTPUT } from './events';
 import { sessionOf } from './session';
 
 /** One snooped player, `SnoopTab` in src-tauri/src/session/snoop.rs. A
@@ -80,4 +80,10 @@ export function onSnoopOutput(
     const { name, text } = event.payload;
     cb({ name, text }, sessionOf(event.payload));
   });
+}
+
+/** Hear Find in the menu bar, chosen while a snoop window is in front,
+ *  with the session of that window. */
+export function onSnoopFind(cb: (session: number) => void): Promise<UnlistenFn> {
+  return listen<number>(SNOOP_FIND, (event) => cb(event.payload));
 }

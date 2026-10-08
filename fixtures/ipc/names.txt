@@ -227,6 +227,7 @@ event vosh://session-selected app heard
 event vosh://sessions-changed app heard
 event vosh://settings-find app heard
 event vosh://settings-goto-tab page heard
+event vosh://snoop-find app heard
 event vosh://spellcheck-prompt-changed page heard
 event vosh://split-divider-changed page heard
 event vosh://terminal-clicked app heard

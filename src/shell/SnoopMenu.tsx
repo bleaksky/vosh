@@ -7,7 +7,8 @@ import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../u
 // right edge on the button's. Stop snooping the player in front, or
 // Close an ended tab, then Stop every snoop, which sends `snoop stop`
 // for the game to read as stop all. After a rule, Find in the tab in
-// front, Open in a window and Fold, or Unfold while folded.
+// front, Open in a window and Fold, or Unfold while folded. The snoop
+// window's menu stops at Find (board 06).
 
 /** What a row of the menu does. */
 export type SnoopPick = 'stop' | 'stop-all' | 'find' | 'window' | 'fold';
@@ -17,7 +18,9 @@ interface Props {
   anchor: HTMLElement;
   /** The tab in front. */
   front: SnoopTab | null;
-  folded: boolean;
+  /** The split's fold, which brings Open in a window and Fold. The
+   *  snoop window leaves it out. */
+  folded?: boolean | undefined;
   onPick: (pick: SnoopPick) => void;
   onClose: (reason: MenuCloseReason) => void;
 }
@@ -62,8 +65,12 @@ export function SnoopMenu({ anchor, front, folded, onPick, onClose }: Props) {
       >
         Find
       </MenuItem>
-      <MenuItem onSelect={pick('window')}>Open in a window</MenuItem>
-      <MenuItem onSelect={pick('fold')}>{folded ? 'Unfold' : 'Fold'}</MenuItem>
+      {folded !== undefined && (
+        <>
+          <MenuItem onSelect={pick('window')}>Open in a window</MenuItem>
+          <MenuItem onSelect={pick('fold')}>{folded ? 'Unfold' : 'Fold'}</MenuItem>
+        </>
+      )}
     </MenuSurface>
   );
 }

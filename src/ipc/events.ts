@@ -67,6 +67,7 @@ export const FLUSH_PENDING_WRITES = 'vosh://flush-pending-writes';
 export const APP_MENU = 'vosh://app-menu';
 export const SETTINGS_FIND = 'vosh://settings-find';
 export const HELP_FIND = 'vosh://help-find';
+export const SNOOP_FIND = 'vosh://snoop-find';
 
 export const NATIVE_GRID_SIZE = 'vosh://native-grid-size';
 export const NATIVE_SCROLL = 'vosh://native-scroll';

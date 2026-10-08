@@ -12,9 +12,9 @@ use super::{
     snoop_listed, staff_listed, theme_rows, MenuState, MenuTheme, Route, SessionRow, ThemeRow,
     PANE_ROWS, QUIT_ACCELERATOR, SESSION_ROWS,
 };
-use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND};
+use crate::app::events::{APP_MENU, HELP_FIND, SETTINGS_FIND, SNOOP_FIND};
 use crate::app::state::SharedState;
-use crate::app::windows::{open_aux_window, HELP_WINDOW, SETTINGS_WINDOW};
+use crate::app::windows::{open_aux_window, snoop_in_front, HELP_WINDOW, SETTINGS_WINDOW};
 
 const COPYRIGHT: &str = "Copyright © 2026 James Wright";
 
@@ -297,6 +297,8 @@ pub(crate) fn on_event(app: &AppHandle, event: MenuEvent) {
                 let _ = app.emit_to("settings", SETTINGS_FIND, ());
             } else if is_front(app, "help") {
                 let _ = app.emit_to("help", HELP_FIND, ());
+            } else if let Some((label, session)) = snoop_in_front(app) {
+                let _ = app.emit_to(label.as_str(), SNOOP_FIND, session);
             } else {
                 raise_main(app);
                 emit_main(app, id);

@@ -69,7 +69,9 @@ function sendBrightBold(on: boolean): void {
   }
 }
 
-const DEFAULT_FONT_FAMILY = '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
+/** The terminal face before the config says otherwise. */
+export const DEFAULT_FONT_FAMILY =
+  '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
 interface UiConfigFollow {
   /** The terminal font as saved. */

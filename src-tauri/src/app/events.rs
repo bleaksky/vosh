@@ -364,6 +364,11 @@ pub(crate) const SETTINGS_FIND: &str = "vosh://settings-find";
 /// payload is null. `HelpWindow` hears it.
 #[cfg(target_os = "macos")]
 pub(crate) const HELP_FIND: &str = "vosh://help-find";
+/// Find, chosen while a snoop window is in front, opens Find on the tab
+/// in front there. The payload is the window's session. `SnoopWindow`
+/// hears it.
+#[cfg(target_os = "macos")]
+pub(crate) const SNOOP_FIND: &str = "vosh://snoop-find";
 
 // The native renderer.
 

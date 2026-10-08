@@ -185,7 +185,8 @@ enum Route {
     /// Copy in the window in front.
     Copy,
     /// Find in the window in front: settings search in Settings, help
-    /// search in Help, the find bar in the main window.
+    /// search in Help, the tab in front in a snoop window, the find bar
+    /// in the main window.
     Find,
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },

@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import MainWindow from './shell/MainWindow';
 import { SettingsWindow } from './settings/SettingsWindow';
 import { HelpWindow } from './help/HelpWindow';
+import { SnoopWindow } from './shell/SnoopWindow';
 import './styles/index.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
@@ -58,14 +59,23 @@ window.addEventListener('unhandledrejection', (e) =>
 
 // One frontend bundle, multiple windows: the main window loads MainWindow;
 // auxiliary Tauri windows pass a `?view=...` query so this entry
-// renders the right component for each. StrictMode is off because
+// renders the right component for each. A snoop window names its
+// session too, `?view=snoop&session=N`. StrictMode is off because
 // xterm.js does not survive the double-mount dance.
 const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 try {
   root.render(
-    view === 'settings' ? <SettingsWindow /> : view === 'help' ? <HelpWindow /> : <MainWindow />,
+    view === 'settings' ? (
+      <SettingsWindow />
+    ) : view === 'help' ? (
+      <HelpWindow />
+    ) : view === 'snoop' ? (
+      <SnoopWindow session={Number(params.get('session'))} />
+    ) : (
+      <MainWindow />
+    ),
   );
 } catch (e) {
   showBootError('render failed', e);

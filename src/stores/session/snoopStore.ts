@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   onSnoop,
   onSnoopOutput,
@@ -201,22 +201,35 @@ export function liveSnoops(session: number): number {
   return store.stateOf(session).tabs.filter((tab) => tab.live).length;
 }
 
-/** How many snoops run in `session`, kept current, for its row. */
-export function useLiveSnoops(session: number): number {
-  const subscribe = useCallback(
+/** Hear each change to the snoops of `session`. */
+function useMoves(session: number): (cb: () => void) => () => void {
+  return useCallback(
     (cb: () => void) =>
       store.subscribeStates((moved) => {
         if (moved === session) cb();
       }),
     [session],
   );
-  const count = () => liveSnoops(session);
-  return useSyncExternalStore(subscribe, count, count);
 }
 
-/** Put the tab of `name` in front in the session in front. */
-export function selectSnoop(name: string): void {
-  store.apply(getSelected(), (now) => select(now, name));
+/** How many snoops run in `session`, kept current, for its row. */
+export function useLiveSnoops(session: number): number {
+  const count = () => liveSnoops(session);
+  return useSyncExternalStore(useMoves(session), count, count);
+}
+
+/** The snoops of `session` whatever is selected, for its snoop window,
+ *  which reads every tab with its text the first time it shows them. */
+export function useSnoopsOf(session: number): Snoops {
+  useEffect(() => store.ask(session), [session]);
+  const now = () => store.stateOf(session);
+  return useSyncExternalStore(useMoves(session), now, now);
+}
+
+/** Put the tab of `name` in front in `session`, the session in front
+ *  unless it names another. */
+export function selectSnoop(name: string, session: number = getSelected()): void {
+  store.apply(session, (now) => select(now, name));
 }
 
 /** The split folded to its strip, or opened again, which shows the tab
