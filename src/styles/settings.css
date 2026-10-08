@@ -183,6 +183,12 @@
   cursor: default;
 }
 
+/* The first group of a cluster. The gap replaces the 1 px margin, so
+   eleven rows and three gaps end at 538 px, inside the 600 px window. */
+.st-nav-item[data-cluster] {
+  margin-top: 13px;
+}
+
 .st-nav-item svg {
   display: block;
   flex: none;

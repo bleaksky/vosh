@@ -1,10 +1,9 @@
 import { useEffect, useId, useState } from 'react';
 import { setBaseAnsi } from '../../theme/baseAnsi';
-import { renderFontStack } from '../../lib/fontLoader';
 import { INPUT_CURSOR_STYLES, type InputCursorStyle } from '../../ipc/uiConfig';
 import type { SettingsTarget } from '../../lib/settingsNav';
 import { getCurrentThemeId } from '../../theme/theme';
-import { findTheme, resolveThemeTerminalColors } from '../../theme/themes';
+import { findTheme } from '../../theme/themes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import {
@@ -19,13 +18,13 @@ import {
   Toggle,
   type SegmentedOption,
 } from '../../ui';
-import { PromptSection } from './InputPrompt';
 
 // Settings, Input. The Command line card holds the caret shape,
 // keep last command, chat spell check, the sent command color, and macro
-// echo. The Prompt section follows with your game's prompt, Draw your own
-// prompt and where it shows, and a preview of your design. Advanced opens
-// on paste pacing. Every change saves on its own.
+// echo. Writing card follows with the two rows for the card that opens
+// for note edit and description edit (Settings layout Q10). Advanced
+// opens on paste pacing. The Prompt section left for a tab of its own
+// (Q3, PromptPage.tsx). Every change saves on its own.
 
 const CARET_NAMES: Record<InputCursorStyle, string> = {
   block: 'Block',
@@ -112,23 +111,6 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
           />
         </Row>
         <Row
-          label="Offer the card when the game’s editor opens"
-          description="Type note edit or description edit and Vosh offers to open it in its writing card."
-          anchor="writing-offer"
-        >
-          <Toggle checked={config.writing_offer} onChange={(on) => update({ writing_offer: on })} />
-        </Row>
-        <Row
-          label="Ask before you post"
-          description="Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in."
-          anchor="writing-ask-post"
-        >
-          <Toggle
-            checked={config.writing_ask_post}
-            onChange={(on) => update({ writing_ask_post: on })}
-          />
-        </Row>
-        <Row
           label="Mark your commands"
           description="Draws a grey › before each command you send, except after a prompt that already ends in >."
           anchor="mark-commands"
@@ -155,12 +137,25 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
         </Row>
       </Section>
 
-      <PromptSection
-        fontFamily={renderFontStack(config.font_family)}
-        themeTerminalColors={resolveThemeTerminalColors(config.theme_terminal_colors)}
-        brightBold={config.bright_bold}
-        onError={onError}
-      />
+      <Section id="writing" title="Writing card">
+        <Row
+          label="Offer the card when the game’s editor opens"
+          description="Type note edit or description edit and Vosh offers to open it in its writing card."
+          anchor="writing-offer"
+        >
+          <Toggle checked={config.writing_offer} onChange={(on) => update({ writing_offer: on })} />
+        </Row>
+        <Row
+          label="Ask before you post"
+          description="Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in."
+          anchor="writing-ask-post"
+        >
+          <Toggle
+            checked={config.writing_ask_post}
+            onChange={(on) => update({ writing_ask_post: on })}
+          />
+        </Row>
+      </Section>
 
       <section className="st-section" aria-label="Advanced" data-st-anchor="advanced">
         <Card>

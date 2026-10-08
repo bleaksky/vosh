@@ -1,7 +1,8 @@
 //! Your logs. This module keeps the session log and the scrollback ring,
 //! [`forget_passwords`] blanks the lines in that log where you sent a
-//! password, [`retention`] deletes the logs past Keep logs for, and
-//! [`scene`] saves a stretch of one log as a scene to share.
+//! password, [`retention`] deletes the logs past Keep logs for,
+//! [`scene`] saves a stretch of one log as a scene to share, and [`file`]
+//! saves what the log view reads as a file.
 //!
 //! The shared log store wraps `vosh_log::LogStore` in an async mutex so
 //! the session `io_loop`, the search commands, and the scrollback flush
@@ -10,6 +11,7 @@
 //! The ring buffer holds the most recent terminal lines and survives
 //! across runs as a plain text scrollback file.
 
+pub(crate) mod file;
 pub(crate) mod forget_passwords;
 pub(crate) mod retention;
 pub(crate) mod scene;

@@ -6,7 +6,6 @@ import {
   type LogSession,
   type SceneFilter,
   type SceneFormat,
-  type ScenePalette,
   type ScenePreview,
   type SceneRange,
 } from '../../ipc/logs';
@@ -28,7 +27,14 @@ import {
 } from '../../ui';
 import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
-import { logPalette, logSessionLabel, logSpanCss, logTime, parseLogLine } from './logView';
+import {
+  logPalette,
+  logSessionLabel,
+  logSpanCss,
+  logTime,
+  parseLogLine,
+  savedPalette,
+} from './logView';
 import {
   addable,
   clockText,
@@ -42,14 +48,15 @@ import {
   withTo,
 } from './scene';
 
-// Save a scene, a page inside General at general:scene. The toolbar picks
-// the log, a From and a To on the log's own 24 hour clock, and the
-// format. Prompts, Your commands and Channels left out say what the scene
-// leaves out, and the preview shows every line in the range, what
-// stays out drawn quiet with the reason beside it. A click on a time
-// starts the scene on that line, and a Shift click ends it there. Save
-// scene writes the file to Downloads, and the main window says so
-// with a button that shows it. Cancel goes back to Session logs.
+// Save a scene, a page inside Logs at logs:scene. The toolbar picks the
+// log, a From and a To on the log's own 24 hour clock, and the format.
+// Prompts, Your commands and Channels left out say what the scene leaves
+// out, and the preview shows every line in the range, what stays out
+// drawn quiet with the reason beside it. A click on a time starts the
+// scene on that line, and a Shift click ends it there. Save scene writes
+// the file to Downloads, and the main window says so with a button that
+// shows it. Cancel goes back to the log view when the scene came from
+// it, and to the Logs tab otherwise.
 
 const FORMATS: readonly { value: SceneFormat; label: string }[] = [
   { value: 'text', label: 'Text' },
@@ -61,25 +68,12 @@ const FORMATS: readonly { value: SceneFormat; label: string }[] = [
 const PREVIEW_DELAY_MS = 120;
 
 interface Props extends SettingsPageProps {
-  /** The log Save a scene… in Session logs picked, or null to open on
+  /** The log Save a scene… in the log view picked, or null to open on
    *  the newest log of the selected session. */
   log: number | null;
 }
 
 type Status = { kind: 'ready' } | { kind: 'saving' } | { kind: 'saved'; name: string };
-
-/** The theme in front, for the HTML file: the terminal's ground and text,
- *  Settings' quiet text and the 16 colors the log view reads with. */
-function palette(sixteen: string[], themeId: string, root: HTMLElement | null): ScenePalette {
-  const xterm = findTheme(themeId).xterm;
-  const muted = root ? getComputedStyle(root).getPropertyValue('--tertiary').trim() : '';
-  return {
-    background: xterm.background,
-    foreground: xterm.foreground,
-    muted,
-    ansi: sixteen,
-  };
-}
 
 export function ScenePage({ config, onError, navigate, log: picked }: Props) {
   const [target] = useSessionTarget();
@@ -186,7 +180,7 @@ export function ScenePage({ config, onError, navigate, log: picked }: Props) {
         range,
         filter,
         format,
-        format === 'html' ? palette(sixteen, themeId, pageRef.current) : null,
+        format === 'html' ? savedPalette(sixteen, findTheme(themeId).xterm, pageRef.current) : null,
       );
       setStatus({ kind: 'saved', name });
     } catch (e) {
@@ -377,7 +371,13 @@ export function ScenePage({ config, onError, navigate, log: picked }: Props) {
           </span>
         </div>
         <div className="st-savebar-actions">
-          <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>Cancel</Button>
+          <Button
+            onClick={() =>
+              navigate(picked === null ? { group: 'logs' } : { group: 'logs', section: 'search' })
+            }
+          >
+            Cancel
+          </Button>
           <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
             Save scene
           </Button>

@@ -226,7 +226,7 @@ export function TerminalMenu({
         id: 'scene',
         label: 'Save a scene…',
         disabled: !logged,
-        run: () => openSettingsTab('general:scene'),
+        run: () => openSettingsTab('logs:scene'),
       },
     ],
     [

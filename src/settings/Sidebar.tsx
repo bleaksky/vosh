@@ -19,6 +19,7 @@ import {
 } from '../lib/settingsNav';
 import { searchSettingsRows, settingsRowKey, type SettingsRowEntry } from './settingsSearch';
 import {
+  AccessibilityIcon,
   AppearanceIcon,
   BoltIcon,
   CodeIcon,
@@ -26,24 +27,33 @@ import {
   Keycap,
   KeyboardIcon,
   LayoutIcon,
+  LogsIcon,
   SearchIcon,
+  TerminalIcon,
   UserIcon,
   VisuallyHidden,
+  VitalsIcon,
 } from '../ui';
 
 // The Settings sidebar: a 32 px drag strip where macOS puts the traffic
-// lights, the search pill at (12, 44), and the seven group nav at (8,
-// 84). While the search holds text its results replace the nav. Each
-// result is a row, not a group. Enter or a click opens it, and the
-// frame scrolls the row into view and flashes it.
+// lights, the search pill at (12, 44), and the nav of eleven groups at
+// (8, 84), in four clusters set off by 13 px gaps with no headings, so
+// the list stays short enough to scan. Prompt wears the terminal glyph
+// Help draws for Play. While the search holds text its results replace
+// the nav. Each result is a row, not a group. Enter or a click opens it,
+// and the frame scrolls the row into view and flashes it.
 
 const GROUP_ICONS: Record<SettingsGroup, () => ReactNode> = {
   general: () => <GearIcon />,
   appearance: () => <AppearanceIcon />,
+  accessibility: () => <AccessibilityIcon />,
   layout: () => <LayoutIcon />,
+  vitals: () => <VitalsIcon />,
+  prompt: () => <TerminalIcon />,
   input: () => <KeyboardIcon />,
   automation: () => <BoltIcon />,
   scripts: () => <CodeIcon />,
+  logs: () => <LogsIcon />,
   characters: () => <UserIcon />,
 };
 
@@ -190,6 +200,7 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
               key={g.id}
               href={`#${g.id}`}
               className="st-nav-item"
+              data-cluster={g.gap ? '' : undefined}
               aria-current={g.id === group ? 'page' : undefined}
               onClick={(e) => {
                 e.preventDefault();

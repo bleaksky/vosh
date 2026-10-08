@@ -324,6 +324,22 @@ impl LogStore {
         hide_passwords: bool,
         out: &mut dyn std::io::Write,
     ) -> Result<u64> {
+        self.export_lines(scope, with_ansi, hide_passwords, &mut |_, line| {
+            out.write_all(line)?;
+            out.write_all(b"\n")
+        })
+    }
+
+    /// Hand every line in `scope` to `each`, oldest first, with the time
+    /// it came in Unix ms, as [`Self::export_scope`] writes it but with no
+    /// line end. Returns how many lines it handed over.
+    pub fn export_lines(
+        &self,
+        scope: &Scope,
+        with_ansi: bool,
+        hide_passwords: bool,
+        each: &mut dyn FnMut(i64, &[u8]) -> std::io::Result<()>,
+    ) -> Result<u64> {
         let logs = self.scoped_logs(scope)?;
         let hidden = if hide_passwords {
             self.password_lines_in(&logs)?
@@ -357,13 +373,12 @@ impl LogStore {
             // A sent line keeps no raw bytes, so a hidden one reads the
             // same with colors or without.
             if hidden.contains(&row.get(4)?) {
-                out.write_all(HIDDEN_SENT_TEXT.as_bytes())?;
+                each(ts_ms, HIDDEN_SENT_TEXT.as_bytes())?;
             } else if let Some(bytes) = raw {
-                out.write_all(&bytes)?;
+                each(ts_ms, &bytes)?;
             } else {
-                out.write_all(row.get_ref(2)?.as_bytes().unwrap_or_default())?;
+                each(ts_ms, row.get_ref(2)?.as_bytes().unwrap_or_default())?;
             }
-            out.write_all(b"\n")?;
             written += 1;
         }
         Ok(written)

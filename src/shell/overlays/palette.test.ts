@@ -443,7 +443,7 @@ describe('settings rows', () => {
   const settingsRows = (over: Partial<PaletteDeps> = {}) =>
     buildPaletteEntries(deps(over)).filter((r) => r.id.startsWith('settings-'));
 
-  it('keeps the old ids so Recent rows survive, except vitals', () => {
+  it('keeps the old ids so Recent rows survive', () => {
     const ids = settingsRows().map((r) => r.id);
     for (const id of [
       'themes',
@@ -458,13 +458,14 @@ describe('settings rows', () => {
       'timers',
       'import',
       'logs',
+      'vitals',
     ]) {
       expect(ids).toContain(`settings-${id}`);
     }
-    expect(ids).not.toContain('settings-vitals');
-    // A Recent row for the removed vitals entry drops out quietly.
+    // A Recent row for an entry the palette no longer has drops out
+    // quietly.
     const recent = paletteSections(buildPaletteEntries(deps()), '', [
-      'settings-vitals',
+      'settings-gone',
       'settings-themes',
     ]);
     expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-themes']);
@@ -478,6 +479,11 @@ describe('settings rows', () => {
     expect(title('profiles')).toBe('Open character settings');
     expect(title('input')).toBe('Open input settings');
     expect(title('import')).toBe('Import from another client…');
+    expect(title('accessibility')).toBe('Open accessibility settings');
+    expect(title('vitals')).toBe('Open vitals settings');
+    expect(title('prompt')).toBe('Open prompt settings');
+    expect(title('logs')).toBe('Search logs');
+    expect(title('logs:session-logs')).toBe('Open log settings');
   });
 
   it('shows the Settings keys on the four Automation rows only', () => {
@@ -512,6 +518,9 @@ describe('settings rows', () => {
       'automation',
       'characters',
       'general',
+      'accessibility',
+      'vitals',
+      'prompt',
       'input',
       'characters',
       'automation',
@@ -519,13 +528,15 @@ describe('settings rows', () => {
       'automation',
       'automation',
       'automation',
-      'general',
+      'logs',
+      'logs',
     ]);
     expect(resolveSettingsTarget(opened[0])).toEqual({ group: 'appearance', section: 'theme' });
-    expect(resolveSettingsTarget(opened[opened.length - 1])).toEqual({
-      group: 'general',
-      section: 'logs',
-    });
+    // Search logs opens the search, and Open log settings the tab.
+    expect(opened.slice(-2).map(resolveSettingsTarget)).toEqual([
+      { group: 'logs', section: 'search' },
+      { group: 'logs', section: 'session-logs' },
+    ]);
   });
 });
 

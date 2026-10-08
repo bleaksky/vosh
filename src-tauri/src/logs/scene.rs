@@ -10,7 +10,7 @@
 //! the first room in the range and the day, and it goes to Downloads, as
 //! every file Vosh writes for you does.
 
-mod html;
+pub(crate) mod html;
 mod older;
 
 use std::path::Path;
@@ -61,7 +61,7 @@ pub(crate) enum SceneFormat {
 }
 
 impl SceneFormat {
-    fn extension(self) -> &'static str {
+    pub(crate) fn extension(self) -> &'static str {
         match self {
             Self::Text => "txt",
             Self::Ansi => "log",
@@ -207,7 +207,7 @@ fn title(lines: &[SceneLine]) -> String {
 }
 
 /// A time on the local clock.
-fn local(ms: i64) -> chrono::DateTime<Local> {
+pub(crate) fn local(ms: i64) -> chrono::DateTime<Local> {
     Local
         .timestamp_millis_opt(ms)
         .single()
@@ -264,19 +264,21 @@ fn meta(log: &SceneLog, lines: &[SceneLine]) -> String {
     let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
         return place;
     };
-    let (from, to) = (local(first.ts_ms), local(last.ts_ms));
+    format!("{place}, {}", when(first.ts_ms, last.ts_ms))
+}
+
+/// When a stretch of play ran on the local 24 hour clock, like `October
+/// 3, 2026, from 21:14 to 21:15`, or `from October 3, 2026, 21:14 to
+/// October 4, 2026, 0:10` when it ran past midnight.
+pub(crate) fn when(first_ms: i64, last_ms: i64) -> String {
+    let (from, to) = (local(first_ms), local(last_ms));
     let date = |at: &chrono::DateTime<Local>| at.format("%B %-d, %Y").to_string();
     let time = |at: &chrono::DateTime<Local>| at.format("%-H:%M").to_string();
     if from.date_naive() == to.date_naive() {
-        format!(
-            "{place}, {}, from {} to {}",
-            date(&from),
-            time(&from),
-            time(&to)
-        )
+        format!("{}, from {} to {}", date(&from), time(&from), time(&to))
     } else {
         format!(
-            "{place}, from {}, {} to {}, {}",
+            "from {}, {} to {}, {}",
             date(&from),
             time(&from),
             date(&to),

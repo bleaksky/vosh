@@ -42,3 +42,5 @@
 # Wire fixtures hold raw telnet bytes with \n\r line ends that a checkout
 # must never touch.
 *.bin binary
+# The saved log goldens hold a file byte for byte, escape codes and all.
+fixtures/saved-logs/** -text

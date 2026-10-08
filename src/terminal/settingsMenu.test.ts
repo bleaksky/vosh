@@ -29,17 +29,35 @@ const PINNED = new Set<string>([
 ]);
 
 describe('the Settings list in the terminal menu', () => {
-  it('lists the four Automation lists, the seven pages, then Help', () => {
+  it('lists the four Automation lists, the eleven pages, then Help', () => {
     expect(SETTINGS_MENU.map((group) => group.map((row) => row.label))).toEqual([
       ['Triggers', 'Aliases', 'Macros', 'Timers'],
-      ['General', 'Appearance', 'Layout', 'Input', 'Automation', 'Scripts', 'Characters'],
+      [
+        'General',
+        'Appearance',
+        'Accessibility',
+        'Layout',
+        'Vitals',
+        'Prompt',
+        'Input',
+        'Automation',
+        'Scripts',
+        'Logs',
+        'Characters',
+      ],
       ['Help'],
     ]);
   });
 
   it('names each page as the Settings sidebar does, in its order', () => {
     expect(pages.map((row) => row.label)).toEqual(SETTINGS_GROUPS.map((g) => g.label));
-    expect(pages.map((row) => at(row.link))).toEqual(SETTINGS_GROUPS.map((g) => ({ group: g.id })));
+    // The bare link logs opens the search, so the Logs row opens the
+    // tab on its first section.
+    expect(pages.map((row) => at(row.link))).toEqual(
+      SETTINGS_GROUPS.map((g) =>
+        g.id === 'logs' ? { group: g.id, section: 'session-logs' } : { group: g.id },
+      ),
+    );
   });
 
   it('names each list as Settings does, and opens Automation on it', () => {

@@ -9,20 +9,30 @@
 export type SettingsGroup =
   | 'general'
   | 'appearance'
+  | 'accessibility'
   | 'layout'
+  | 'vitals'
+  | 'prompt'
   | 'input'
   | 'automation'
   | 'scripts'
+  | 'logs'
   | 'characters';
 
-/** The seven groups in nav order, with their visible names. */
-export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string }[] = [
+/** The eleven groups in nav order, with their visible names. `gap`
+ *  starts a cluster, which the sidebar sets off with a 13 px gap and no
+ *  heading (Settings layout Q9). */
+export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string; gap?: boolean }[] = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
-  { id: 'layout', label: 'Layout' },
+  { id: 'accessibility', label: 'Accessibility' },
+  { id: 'layout', label: 'Layout', gap: true },
+  { id: 'vitals', label: 'Vitals' },
+  { id: 'prompt', label: 'Prompt' },
   { id: 'input', label: 'Input' },
-  { id: 'automation', label: 'Automation' },
+  { id: 'automation', label: 'Automation', gap: true },
   { id: 'scripts', label: 'Scripts' },
+  { id: 'logs', label: 'Logs', gap: true },
   { id: 'characters', label: 'Characters' },
 ];
 
@@ -63,11 +73,11 @@ const SECTION_KEEPS_CASE: ReadonlySet<SettingsGroup> = new Set(['scripts', 'char
 const SETTINGS_SUBPAGES: Readonly<
   Partial<Record<SettingsGroup, Readonly<Record<string, string>>>>
 > = {
-  general: { logs: 'Session logs', scene: 'Save a scene' },
+  logs: { search: 'Search logs', scene: 'Save a scene' },
 };
 
 /** The title of the page inside a group that `target` opens, like
- *  `Session logs` for `general:logs`, or null for the group's own
+ *  `Search logs` for `logs:search`, or null for the group's own
  *  page. A plugin opens its own page under Scripts, titled by its name,
  *  like `vitals_alert` for `scripts:vitals_alert`. */
 export function settingsSubpage(target: SettingsTarget): string | null {
@@ -90,7 +100,7 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
   general: { group: 'general' },
   themes: { group: 'appearance', section: 'theme' },
   typography: { group: 'appearance', section: 'text' },
-  vitals: { group: 'layout', section: 'vitals' },
+  vitals: { group: 'vitals' },
   tick: { group: 'automation', section: 'timers', anchor: 'tick' },
   panels: { group: 'characters', anchor: 'layout' },
   profiles: { group: 'characters' },
@@ -100,7 +110,8 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
   macros: { group: 'automation', section: 'macros' },
   timers: { group: 'automation', section: 'timers' },
   import: { group: 'automation', anchor: 'import' },
-  logs: { group: 'general', section: 'logs' },
+  // The bare link opens the search, as it did in General (Q2).
+  logs: { group: 'logs', section: 'search' },
 };
 
 // Rows that moved out of a section, by the anchor they had there, with
@@ -121,12 +132,72 @@ const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
   },
 };
 
+// Sections and rows that left their group in the Settings layout move
+// (answered October 8), keyed by the old link without its anchor, or
+// with it for a single row. The anchor rides along unless the key names
+// one. Applied after MOVED_ANCHORS, so a link that moved twice lands
+// too, like input:advanced#prompt on the Prompt tab. Links live where
+// Vosh cannot rewrite them, palette Recent, a pending tab from an older
+// build and plugin code, so this table stays for good (Q11).
+const GROUP_MOVES: Readonly<Record<string, SettingsTarget>> = {
+  'general:session-logs': { group: 'logs', section: 'session-logs' },
+  'general:scrollback': { group: 'logs', section: 'scrollback' },
+  'general:logs': { group: 'logs', section: 'search' },
+  'general:scene': { group: 'logs', section: 'scene' },
+  'appearance:text#color-vision': {
+    group: 'accessibility',
+    section: 'color',
+    anchor: 'color-vision',
+  },
+  'appearance:text#fit-game-colors': {
+    group: 'accessibility',
+    section: 'color',
+    anchor: 'fit-game-colors',
+  },
+  'appearance:text#readable-highlights': {
+    group: 'accessibility',
+    section: 'color',
+    anchor: 'readable-highlights',
+  },
+  'appearance:advanced#blink-text': {
+    group: 'accessibility',
+    section: 'motion',
+    anchor: 'blink-text',
+  },
+  'layout:vitals': { group: 'vitals' },
+  'layout:customize-vitals': { group: 'vitals', section: 'customize-vitals' },
+  'input:prompt': { group: 'prompt' },
+  'input:command-line#writing-offer': {
+    group: 'input',
+    section: 'writing',
+    anchor: 'writing-offer',
+  },
+  'input:command-line#writing-ask-post': {
+    group: 'input',
+    section: 'writing',
+    anchor: 'writing-ask-post',
+  },
+};
+
+/** Where a target from before the Settings layout move lands now. */
+function movedSettingsTarget(target: SettingsTarget): SettingsTarget {
+  const whole = GROUP_MOVES[formatSettingsTarget(target)];
+  if (whole) return { ...whole };
+  const bare: SettingsTarget = { group: target.group };
+  if (target.section) bare.section = target.section;
+  const head = GROUP_MOVES[formatSettingsTarget(bare)];
+  if (!head) return target;
+  const next: SettingsTarget = { ...head };
+  if (target.anchor) next.anchor = target.anchor;
+  return next;
+}
+
 /** Resolve a deep link string. Legacy tab ids and rows that moved map to
  *  their new place. Anything this cannot read opens General. */
 export function resolveSettingsTarget(raw: string): SettingsTarget {
   const text = raw.trim();
   const legacy = LEGACY_TARGETS[text.toLowerCase()];
-  if (legacy) return { ...legacy };
+  if (legacy) return movedSettingsTarget({ ...legacy });
 
   const hash = text.indexOf('#');
   const head = hash === -1 ? text : text.slice(0, hash);
@@ -141,7 +212,7 @@ export function resolveSettingsTarget(raw: string): SettingsTarget {
   if (section) target.section = section;
   if (anchor) target.anchor = anchor.toLowerCase();
   const moved = MOVED_ANCHORS[formatSettingsTarget(target)];
-  return moved ? { ...moved } : target;
+  return movedSettingsTarget(moved ? { ...moved } : target);
 }
 
 /** The string form of a target, the inverse of resolveSettingsTarget. */

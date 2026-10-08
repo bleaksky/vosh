@@ -14,13 +14,19 @@ describe('SETTINGS_ROWS', () => {
     }
   });
 
-  it('covers all seven groups', () => {
+  it('covers all eleven groups', () => {
     const groups = new Set(SETTINGS_ROWS.map((r) => r.target.group));
+    // In the order search lists their first rows. Rows that moved keep
+    // their place in the list, since search breaks a tie by it.
     expect([...groups]).toEqual([
       'general',
+      'logs',
       'appearance',
+      'accessibility',
       'layout',
+      'vitals',
       'input',
+      'prompt',
       'automation',
       'scripts',
       'characters',
@@ -214,19 +220,11 @@ describe('searchSettingsRows', () => {
     expect(paste.target).toEqual({ group: 'input', section: 'advanced', anchor: 'paste-delay' });
   });
 
-  it('finds the Prompt section rows (P12)', () => {
+  it('finds the Prompt section rows (P12) on the Prompt tab', () => {
     const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target ?? null;
-    expect(target("Your game's prompt")).toEqual({
-      group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-game',
-    });
-    expect(target('Draw your own prompt')).toEqual({ group: 'input', section: 'prompt' });
-    expect(target('Where your prompt shows')).toEqual({
-      group: 'input',
-      section: 'prompt',
-      anchor: 'prompt-show',
-    });
+    expect(target("Your game's prompt")).toEqual({ group: 'prompt', anchor: 'prompt-game' });
+    expect(target('Draw your own prompt')).toEqual({ group: 'prompt' });
+    expect(target('Where your prompt shows')).toEqual({ group: 'prompt', anchor: 'prompt-show' });
     expect(labels('prompt template')).toEqual(['Draw your own prompt']);
     expect(labels('customize')).toContain('Draw your own prompt');
     // The fight prompt reads in the same block.
@@ -241,13 +239,13 @@ describe('searchSettingsRows', () => {
     ).toEqual(['Wait between pasted lines']);
   });
 
-  it('finds the Layout rows', () => {
+  it('finds the Layout and Vitals rows', () => {
     expect(labels('vitals')).toContain('Style');
     expect(labels('one line')).toEqual(['Style']);
     expect(labels('gauges')).toEqual(['Style']);
     expect(labels('status line')).toContain('Show your vitals in');
     const style = searchSettingsRows('pips', mac)[0];
-    expect(style.target).toEqual({ group: 'layout', section: 'vitals', anchor: 'style' });
+    expect(style.target).toEqual({ group: 'vitals', anchor: 'style' });
     expect(labels('panel width')[0]).toBe('Width');
     expect(labels('divider')).toEqual(['Divider color']);
     const divider = searchSettingsRows('divider', mac)[0];
@@ -268,9 +266,9 @@ describe('searchSettingsRows', () => {
       (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
     );
     expect(targets).toEqual([
-      { group: 'layout', section: 'customize-vitals', anchor: 'values' },
-      { group: 'layout', section: 'customize-vitals', anchor: 'meter' },
-      { group: 'layout', section: 'customize-vitals', anchor: 'warn-low' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'values' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'meter' },
+      { group: 'vitals', section: 'customize-vitals', anchor: 'warn-low' },
     ]);
   });
 
@@ -283,7 +281,7 @@ describe('searchSettingsRows', () => {
     expect(labels('vitals text')).toContain('Style');
     const order = SETTINGS_ROWS.find((r) => r.label === 'Vitals and their order');
     expect(order?.target).toEqual({
-      group: 'layout',
+      group: 'vitals',
       section: 'customize-vitals',
       anchor: 'vitals-order',
     });
@@ -353,5 +351,28 @@ describe('searchSettingsRows', () => {
     expect(row.target).toEqual(resolveSettingsTarget('logs'));
     expect(labels('saved logs')[0]).toBe('Session logs');
     expect(labels('saved sessions')[0]).toBe('Session logs');
+  });
+
+  it('finds the rows that moved to Accessibility, by the tab name too', () => {
+    expect(labels('accessibility')).toEqual(
+      expect.arrayContaining([
+        'Color vision',
+        'Fit game colors',
+        'Keep highlight colors readable',
+        'Blinking text',
+      ]),
+    );
+    expect(labels('color vision')[0]).toBe('Color vision');
+    expect(SETTINGS_ROWS.find((r) => r.label === 'Blinking text')?.target).toEqual({
+      group: 'accessibility',
+      section: 'motion',
+      anchor: 'blink-text',
+    });
+  });
+
+  it('finds the writing card rows in their own Input section', () => {
+    expect(
+      SETTINGS_ROWS.filter((r) => r.target.section === 'writing').map((r) => r.target.anchor),
+    ).toEqual(['writing-offer', 'writing-ask-post']);
   });
 });
