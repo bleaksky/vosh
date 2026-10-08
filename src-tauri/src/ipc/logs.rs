@@ -312,6 +312,37 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn a_saved_file_never_holds_a_password() {
+        // A made up secret. It is nobody's password.
+        const SECRET: &str = "Zq7vellumSparrow";
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = LogStore::in_memory().unwrap();
+        let id = store
+            .start_session("play.theforsakenlands.com", 1848, 0)
+            .unwrap();
+        // The main menu, then enter, an account name and its password.
+        store
+            .append_raw(id, 0, b"\x1b[0mAbandon hope, all ye who enter here...")
+            .unwrap();
+        store.append(id, 1, "> e", None).unwrap();
+        store.append_raw(id, 2, b"\x1b[0m").unwrap();
+        store.append(id, 3, "> tester", None).unwrap();
+        store.append_raw(id, 4, b"\x1b[0m").unwrap();
+        store.append(id, 5, &format!("> {SECRET}"), None).unwrap();
+        let scope = Scope::log(id);
+        for with_ansi in [false, true] {
+            let name = save(&store, &scope, with_ansi, "Vosh log", dir.path()).unwrap();
+            let saved = std::fs::read_to_string(dir.path().join(&name)).unwrap();
+            assert!(saved.contains("> tester\n"), "{name} lost the login");
+            assert!(
+                saved.ends_with(&format!("{}\n", vosh_log::HIDDEN_SENT_TEXT)),
+                "{name} does not hide the password line"
+            );
+            assert!(!saved.contains(SECRET), "{name} holds the password");
+        }
+    }
+
     #[tokio::test]
     async fn a_new_search_stops_the_one_before() {
         let dir = tempfile::tempdir().unwrap();
