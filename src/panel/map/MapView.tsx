@@ -232,10 +232,13 @@ export function MapView({ emptyText }: MapViewProps = {}) {
       // the game last said you stand in, and the map keeps the route to
       // light it as the walk goes on. While you walk it plans from the
       // room the step on its way lands in, since Rust lets the click
-      // take over only there. The game has the final word on every
-      // step.
+      // take over only there. A click on the room a click walk under
+      // way heads for changes nothing. The game has the final word on
+      // every step.
       const target = spotAt(at);
       if (!tiles || !target || here === null) return;
+      const walking = walk.progress.kind === 'walking';
+      if (walking && ahead?.target.row === target.row && ahead.target.col === target.col) return;
       const { rows, cols } = gridDims(tiles);
       const from = stepOnItsWay(tiles, walk.route, walk.progress, here) ?? {
         cell: playerCellOf(tiles, rows, cols),

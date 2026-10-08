@@ -361,9 +361,18 @@ describe('a walk on the map', () => {
     });
     const classOf = (el: FakeElement) => el.getAttribute('class') ?? '';
     const [host] = findAll(container, (el) => classOf(el).startsWith('map-canvas-host'));
-    const fire = async (type: string, x: number, y: number) =>
+    const fire = async (type: string, x: number, y: number, detail = 1) =>
       act(async () => {
-        const event = { type, button: 0, pointerId: 1, clientX: x, clientY: y, target: null };
+        const event = {
+          type,
+          button: 0,
+          pointerId: 1,
+          clientX: x,
+          clientY: y,
+          detail,
+          target: null,
+          preventDefault: () => {},
+        };
         for (const fn of heard.get(host)?.get(type) ?? []) fn(event);
       });
     /** The room at [row][col] on the canvas, the middle of its roof in
@@ -552,6 +561,22 @@ describe('a walk on the map', () => {
     ]);
   });
 
+  it('walks once for a double click, and not again on the room the walk heads for', async () => {
+    const view = await map();
+    const before = (await routes()).length;
+    // A double click presses twice, and the second mousedown counts 2.
+    for (const detail of [1, 2]) {
+      await view.fire('pointerdown', ...view.at(6, 12));
+      await view.fire('mousedown', ...view.at(6, 12), detail);
+      await view.fire('pointerup', ...view.at(6, 12));
+    }
+    await view.fire('dblclick', ...view.at(6, 12));
+    expect((await routes()).length).toBe(before + 1);
+    await progress({ kind: 'walking', done: 0, total: 6, left: '4n2e', route: true });
+    await view.click(6, 12);
+    expect((await routes()).length).toBe(before + 1);
+  });
+
   it('says nothing of a stopped walk you typed', async () => {
     const view = await map();
     await progress({ kind: 'walking', done: 1, total: 3, left: '2w', route: false });
@@ -584,6 +609,21 @@ describe('a walk on the map', () => {
         '4n2e',
       ]);
       expect(turn()).toBe(0);
+    });
+
+    it('walks once for a double click on a roof', async () => {
+      stored.set(MAP_STYLE_KEY, '3d');
+      const view = await map();
+      const before = (await routes()).length;
+      for (const detail of [1, 2]) {
+        await view.fire('pointerdown', ...view.at(6, 12));
+        await view.fire('mousedown', ...view.at(6, 12), detail);
+        await view.fire('pointerup', ...view.at(6, 12));
+      }
+      await view.fire('dblclick', ...view.at(6, 12));
+      expect((await routes()).slice(before).map((r) => (r as { steps: string }).steps)).toEqual([
+        '4n2e',
+      ]);
     });
 
     it('turns the map for a drag of 10 px and walks nowhere', async () => {
