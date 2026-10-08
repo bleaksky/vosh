@@ -1,9 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { describe, expect, it, vi } from 'vitest';
 import { HELP_TOPICS, PROMPT_DESIGN_CODES, type HelpTopic } from './helpContent';
 import { countMatches, outlineFor } from './helpNav';
 import { HelpArticle } from './HelpArticle';
 import helpCss from '../styles/help.css?raw';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 function topic(id: string): HelpTopic {
   const found = HELP_TOPICS.find((t) => t.id === id);
@@ -84,5 +88,43 @@ describe('the help article stylesheet', () => {
 
   it('draws list bullets in the tertiary tone, as the boards do', () => {
     expect(rule('.hp-article li::marker')).toMatch(/color:\s*var\(--tertiary\)/);
+  });
+});
+
+describe('the Get started topic', () => {
+  it('draws Open Get started as a primary button between its paragraphs', () => {
+    const html = draw(topic('get-connected.get-started'));
+    expect(html).toContain(
+      'again here.</p><div class="hp-actions"><button type="button" class="st-button st-button-primary">Open Get started</button></div><p>A new install',
+    );
+    expect(html).toContain('<th scope="col">Where it lives</th>');
+    expect(helpCss).toMatch(/\.hp-actions \{[^}]*margin: 16px 0 0;/);
+  });
+
+  it('marks the button when you search for its words', () => {
+    const shown = topic('get-connected.get-started');
+    expect(draw(shown, 'open get')).toContain(
+      '<button type="button" class="st-button st-button-primary"><mark class="hp-mark" data-match="0" data-current="">Open Get</mark> started</button>',
+    );
+    expect(countMatches(shown, 'open get')).toBe(1);
+  });
+
+  it('raises the main window and opens the card from the button', () => {
+    const shown = topic('get-connected.get-started');
+    const tree = (
+      HelpArticle as unknown as { render: (p: unknown, r: null) => ReactElement }
+    ).render({ topic: shown, query: '', current: 0, outline: null, markColors: null }, null);
+    const clicks: (() => void)[] = [];
+    const walk = (node: ReactNode) => {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (isValidElement<{ children?: ReactNode; onClick?: () => void }>(node)) {
+        if (node.props.onClick) clicks.push(node.props.onClick);
+        walk(node.props.children);
+      }
+    };
+    walk(tree);
+    expect(clicks).toHaveLength(1);
+    clicks[0]();
+    expect(invoke).toHaveBeenCalledWith('open_get_started');
   });
 });

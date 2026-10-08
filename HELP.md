@@ -149,6 +149,25 @@ Closing the window ends every session and quits Vosh. While a session is connect
 
 On macOS, `Quit Vosh` and `Cmd+Q` ask first only while two or more sessions are connected, and with one Vosh quits at once. A quit from the Dock or as you log out cannot ask.
 
+### 1.5 Get started
+
+Get started is a short list of what to turn on in Vosh, with a line on what each thing does. It opens by itself the first time you start Vosh, and you open it again here.
+
+[Open Get started](vosh:get-started)
+
+A new install starts with every preset off. The list suggests the presets that suit the world you connect to, each with a sample, and a switch turns one on at once.
+
+| What                          | Where it lives                              |
+| ----------------------------- | ------------------------------------------- |
+| Connect to The Forsaken Lands | The session button, or `Cmd+R`              |
+| Color what the game prints    | Settings, Automation, Presets               |
+| Add Chat and Group            | Add a pane, the plus in the title band      |
+| Track the affects you keep up | Settings, Characters, Tracked affects       |
+| Customize your prompt         | The first row when you right click the text |
+| Read back while you play      | Scroll up, `Cmd+\` or a middle click        |
+
+On macOS, choose Get started in the Help menu. Anywhere, press `Cmd+K` on macOS or `Ctrl+K` elsewhere and type get started.
+
 ## Play
 
 ### 2.1 Send commands
@@ -264,7 +283,7 @@ The command palette runs Vosh commands from the keyboard. It covers the View and
 The palette sorts what it finds into five sections.
 
 - Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`.
-- View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
+- View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
 - Aliases. Every alias that is on. One that takes no arguments runs the moment you pick it. One that takes arguments puts its name in the command line instead, so you finish the line and press `Enter`.
 - Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open, `Close session`, `Hide sessions` or `Show sessions` with two or more, `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
 - Go to. Every open session by the name its row shows, with the world beside a character, while two or more are open. The one in front has a check, and the first nine show their keys, `Cmd+1` to `Cmd+9`. Pick one to bring it to the front, or type a name or a port to find it.
@@ -373,7 +392,7 @@ A preset you changed wears a pencil beside its dot in the list. Its card closes 
 
 Vosh keeps only what you change and lays it over the preset each time a profile opens, so a fix Vosh ships later still reaches the parts you left alone. When a fix lands on a row you changed, your change stays. The trigger card says a fix changed a row you edited, the row shows what the preset now has, and `Take the fix` and `Keep mine` sit under it. A swatch whose color a fix changed wears a warning ring with the same two choices. Your pick waits for `Save`. A change the fix now matches drops away on its own. At the launch that finds a fix, a notice in the corner says `A preset fix changed a row you edited` and names the trigger. `Show` opens it in Settings, and `Close` hides the notice and keeps the marks. When a fix takes away a trigger you changed, the notice says `A preset fix removed a trigger you edited`. Vosh tells you about each fix once.
 
-The `Room, time and weather colors` preset colors a room look, the clock and the weather. The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset. Each one is a terminal color from your theme, so a theme switch carries them along. A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue. That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads. The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. Turn it off in Settings under Automation, then Presets.
+The `Room, time and weather colors` preset colors a room look, the clock and the weather. The exits line turns green, the armies, things and people the room lists turn yellow, the day and night messages turn blue, and the WiZNET tag turns bold magenta. The one you target with `tar` turns bright red when the room lists them, so your target stands out from the rest of the room. That red is the `room.target` trigger, so turn off its `Enabled` in Triggers to keep your target yellow, or pick another color for `Your target` on the card of the preset. Each one is a terminal color from your theme, so a theme switch carries them along. A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue. That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads. The exits, room and target colors fill only the text the game left uncolored, so an aura, a red `[AFK]` and the red `+` of a trap you see keep their own colors. The magenta covers the WiZNET tag alone, so the message after it keeps its colors too. A say or a tell that quotes the same words stays as it was. Vosh turns the preset on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.
 
 ### 3.4 Route lines to a pane
 
@@ -558,7 +577,7 @@ The chat pane collects channel talk in its own buffer, one line per message. Add
 - Point at a message to see when it arrived.
 - Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.
 - Route trigger output in. On a trigger under Automation, then Triggers, put a name in `Send to pane` under `Advanced`. Those lines land in the chat pane under that name, in their own words.
-- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
+- See the tells you send. The game sends no GMCP for them, so the `Tells you send` preset routes the line the game prints for each one. Vosh turns it on for every profile, once, unless you had turned every preset off. A new install starts with every preset off. Each one reads `[tell] to Tolliver: text`, the tells a telepath projects too. The pane skips the `You tell your group` line, because your gtell already arrives over GMCP. Turn the preset off in Settings under Automation, then Presets.
 
 The buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 

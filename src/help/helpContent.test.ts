@@ -571,6 +571,46 @@ describe('the help on prompt design codes', () => {
   });
 });
 
+describe('the Get started topic', () => {
+  // First Run board 5: topic 1.5 at the end of Get connected, its button,
+  // and the table of where each step lives.
+  it('closes Get connected with a button and the table board 5 draws', () => {
+    const topic = HELP_TOPICS.find((t) => t.id === 'get-connected.get-started');
+    expect(topic).toMatchObject({ number: '1.5', title: 'Get started', section: 'Get connected' });
+    const connected = HELP_TOPICS.filter((t) => t.section === 'Get connected');
+    expect(connected[connected.length - 1]).toBe(topic);
+    const blocks = parseHelpBody(topic?.body ?? '');
+    expect(blocks.map((b) => b.kind)).toEqual([
+      'paragraph',
+      'action',
+      'paragraph',
+      'table',
+      'paragraph',
+    ]);
+    expect(blocks[1]).toEqual({ kind: 'action', label: 'Open Get started', action: 'get-started' });
+    const table = blocks[3];
+    expect(table.kind === 'table' && table.head).toEqual(['What', 'Where it lives']);
+    expect(table.kind === 'table' && table.rows.map((r) => r[0])).toEqual([
+      'Connect to The Forsaken Lands',
+      'Color what the game prints',
+      'Add Chat and Group',
+      'Track the affects you keep up',
+      'Customize your prompt',
+      'Read back while you play',
+    ]);
+  });
+
+  it('says a new install starts with every preset off and lists the palette row', () => {
+    expect(body('automate.highlight-lines')).toContain(
+      'unless you had turned every preset off. A new install starts with every preset off. Turn it on or off in Settings under Automation, then Presets.',
+    );
+    expect(body('shape.chat-pane')).toContain(
+      'unless you had turned every preset off. A new install starts with every preset off. Each one reads',
+    );
+    expect(body('play.palette')).toContain('`Open help`, `Get started`, `Open settings`');
+  });
+});
+
 describe('HELP.md', () => {
   // HELP.md mirrors the catalog word for word, every topic under its
   // section, so the file and the Help window never tell two stories.
@@ -832,6 +872,15 @@ describe('the help on Mark your commands', () => {
 });
 
 describe('the help body format', () => {
+  it('reads a lone Vosh link as a button and any other link as text', () => {
+    expect(parseHelpBody('[Open Get started](vosh:get-started)')).toEqual([
+      { kind: 'action', label: 'Open Get started', action: 'get-started' },
+    ]);
+    for (const text of ['[Open it](vosh:nowhere)', 'See [Open it](vosh:get-started) here.']) {
+      expect(parseHelpBody(text)).toEqual([{ kind: 'paragraph', text }]);
+    }
+  });
+
   it('reads paragraphs, lists and tables', () => {
     expect(
       parseHelpBody('One line.\n\n- a\n- b\n\n| A | B |\n|---|---|\n| `x` | y. |\n| z | w |'),

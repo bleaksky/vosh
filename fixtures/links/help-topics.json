@@ -5,6 +5,7 @@
     "get-connected.reconnect": "1.2",
     "get-connected.profile-save": "1.3",
     "get-connected.sessions": "1.4",
+    "get-connected.get-started": "1.5",
     "play.send-commands": "2.1",
     "play.reuse-history": "2.2",
     "play.tab-complete": "2.3",

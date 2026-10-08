@@ -17,6 +17,10 @@ export function sectionTopics(section: string, topics: HelpTopic[] = HELP_TOPICS
 export function topicPieces(topic: HelpTopic): string[] {
   const pieces = [topic.title];
   for (const block of parseHelpBody(topic.body)) {
+    if (block.kind === 'action') {
+      pieces.push(block.label);
+      continue;
+    }
     const lines =
       block.kind === 'paragraph'
         ? [block.text]
