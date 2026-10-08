@@ -1,7 +1,8 @@
 //! The commands for your sessions and their connections to the game.
 //! The page lists, opens, selects, renames, moves and closes sessions,
 //! keeps where each one dials, connects and disconnects through them,
-//! sends the lines you type, plain or masked, walks the path you click on
+//! sends the lines you type, plain, masked or raw into the game's editor,
+//! walks the path you click on
 //! the map, stops a walk on Esc, tells
 //! the game the size of the terminal, and reads the target you track.
 //! Each acts on the session it names, or on the selected session when it
@@ -248,6 +249,30 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
         return Ok(());
     };
     if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {
+        return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+/// Send a line you type into the game's line editor while it holds a
+/// text Vosh can name, exactly as typed (Description Editor Q3). No
+/// alias, variable, `#` command or semicolon split sees it, and its
+/// leading spaces stay, since every line there is part of your text. It
+/// goes to the log as typed.
+#[tauri::command]
+pub(crate) async fn session_send_raw<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    line: String,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    let session = state.session(session)?;
+    let current = session.slot.lock().await;
+    let Some(handle) = current.as_ref() else {
+        output::emit_output(&app, &session, input::NOT_CONNECTED.to_vec());
+        return Ok(());
+    };
+    if !handle.send(format!("{line}\r\n").into_bytes()) {
         return Err("session task gone".to_string());
     }
     Ok(())

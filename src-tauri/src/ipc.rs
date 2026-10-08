@@ -73,6 +73,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         session::session_connect,
         session::session_send_input,
         session::session_send_masked,
+        session::session_send_raw,
         session::session_walk_route,
         session::session_walk_stop,
         writing::writing_start,

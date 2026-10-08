@@ -248,6 +248,14 @@ export async function sendMaskedInput(line: string, session?: number): Promise<v
   await invoke('session_send_masked', { line, session });
 }
 
+/// Send a line you type into the game's line editor to a session, the
+/// selected one when it names none, while the editor holds a text Vosh
+/// names. It goes exactly as typed, past aliases, variables, slash
+/// commands and the semicolon split, and logs as typed.
+export async function sendRawInput(line: string, session?: number): Promise<void> {
+  await invoke('session_send_raw', { line, session });
+}
+
 /// Stop the walk under way in a session, the selected one when it names
 /// none, as Esc in the command line does. The session says nothing when
 /// you are not walking.
