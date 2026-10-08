@@ -187,7 +187,10 @@ pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         HELP_SUBMENU_ID,
         "Help",
         true,
-        &[&item("help", "Vosh help")?],
+        &[
+            &item("help", "Vosh help")?,
+            &item("get-started", "Get started")?,
+        ],
     )?;
 
     let menu = Menu::with_items(app, &[&vosh, &session, &edit, &view, &window, &help])?;

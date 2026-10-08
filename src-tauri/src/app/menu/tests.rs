@@ -146,6 +146,8 @@ fn routes_follow_the_board() {
     // Help opens its own window from wherever you are, so the main
     // window never has to be in front for it.
     assert_eq!(route("help"), Route::OpenHelp);
+    // Get started opens in the main window, so it comes forward first.
+    assert_eq!(route("get-started"), Route::Main { raise: true });
     assert_eq!(route("close-window"), Route::CloseFront);
     // Close session closes Settings or Help in front, as Close window
     // does, and never a game behind them.
