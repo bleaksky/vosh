@@ -311,3 +311,20 @@ fn a_range_with_no_room_takes_a_plain_title() {
     ));
     assert!(!is_room_name(b"\x1b[0;32m[Exits: east west]"));
 }
+
+#[test]
+fn a_room_name_saves_as_a_name_every_system_holds() {
+    // Room names from the game's own areas.
+    assert_eq!(
+        file_safe("What Does RP-Enforced Mean?"),
+        "What Does RP-Enforced Mean"
+    );
+    assert_eq!(file_safe("Room \"01\""), "Room '01'");
+    assert_eq!(file_safe("Thickening Woods"), "Thickening Woods");
+    assert_eq!(file_safe("a/b: c|d*"), "a-b- cd");
+    assert_eq!(
+        file_safe("Why is it getting so dark... ?"),
+        "Why is it getting so dark"
+    );
+    assert_eq!(file_safe("??"), "Vosh scene");
+}

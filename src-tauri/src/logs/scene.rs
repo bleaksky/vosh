@@ -220,23 +220,37 @@ fn day(ms: i64) -> String {
 }
 
 /// The file's name before its extension, the title and the day, like
-/// `Thickening Woods, October 3`. A slash or a colon in a room name, which
-/// a file name cannot hold, reads as a dash.
+/// `Thickening Woods, October 3`.
 fn file_stem(lines: &[SceneLine]) -> String {
     let at = lines
         .first()
         .map_or_else(|| Local::now().timestamp_millis(), |l| l.ts_ms);
-    let name: String = title(lines)
+    format!("{}, {}", file_safe(&title(lines)), day(at))
+}
+
+/// A room name as a file name every system can hold. A slash or a colon
+/// reads as a dash and a double quote as a single one. A question mark,
+/// an asterisk, an angle bracket, a bar and a control character, which
+/// Windows refuses, go, as do the dots and spaces it drops from the end,
+/// so `What Does RP-Enforced Mean?` saves as `What Does RP-Enforced
+/// Mean`.
+fn file_safe(name: &str) -> String {
+    let safe: String = name
         .chars()
-        .map(|c| {
-            if matches!(c, '/' | '\\' | ':') {
-                '-'
-            } else {
-                c
-            }
+        .filter_map(|c| match c {
+            '/' | '\\' | ':' => Some('-'),
+            '"' => Some('\''),
+            '?' | '*' | '<' | '>' | '|' => None,
+            c if c.is_control() => None,
+            c => Some(c),
         })
         .collect();
-    format!("{name}, {}", day(at))
+    let safe = safe.trim().trim_end_matches(['.', ' ']);
+    if safe.is_empty() {
+        "Vosh scene".to_string()
+    } else {
+        safe.to_string()
+    }
 }
 
 /// The line under the title: who, where and when, like `Orla in The
