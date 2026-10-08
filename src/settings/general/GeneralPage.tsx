@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { listLogSessions, logsKeepGet, logsKeepSet } from '../../ipc/logs';
 import {
   profileGetScope,
   profileSetScope,
@@ -11,9 +10,6 @@ import { checkForUpdate, installUpdateAndRelaunch } from '../../ipc/updater';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
-import { isLocalHost, KEEP_LOGS, SCROLLBACK_SIZES, savedLogsText } from './logView';
-import { DEFAULT_SCROLLBACK_LINES } from '../../ipc/uiConfig';
-import { settingsSubpage } from '../../lib/settingsNav';
 import { KNOWN_WORLDS } from '../../lib/knownWorlds';
 import { useSessions } from '../../stores/session/sessionsStore';
 import { parseTarget, useSessionTarget } from '../../stores/session/useConnection';
@@ -31,60 +27,16 @@ import {
   Toggle,
 } from '../../ui';
 import { ReconnectRow } from './ReconnectRow';
-import { ScenePage } from './ScenePage';
-import { SessionLogs } from './SessionLogs';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
 // General (the approved SettingsGeneral board): where Connect dials,
-// updates, the settings every character shares, and the saved session
-// logs. Search logs… opens the log view inside General at
-// general:logs (SessionLogs.tsx), and Save a scene… there opens the
-// scene page at general:scene (ScenePage.tsx) on the log it picked.
-// Windows and Linux add an Advanced
-// disclosure at the end with the GPU rendering switch, which drives
-// the xterm renderer macOS does not show.
+// updates and the settings every character shares. Session logs and
+// Scrollback left for the Logs tab (Settings layout Q1, LogsPage.tsx).
+// Windows and Linux add an Advanced disclosure at the end with the GPU
+// rendering switch, which drives the xterm renderer macOS does not
+// show.
 
-export function GeneralPage(props: SettingsPageProps) {
-  // The log Save a scene… in the log view picked, with the navigation
-  // that opens the scene page on it. A scene opened any other way, from
-  // the terminal's menu or search, opens on the selected session's
-  // newest log. Each navigation opens the page afresh.
-  const [sceneFrom, setSceneFrom] = useState<{ log: number; seq: number } | null>(null);
-  if (props.target.section === 'scene') {
-    const log = sceneFrom?.seq === props.navSeq ? sceneFrom.log : null;
-    return <ScenePage key={props.navSeq} {...props} log={log} />;
-  }
-  if (settingsSubpage(props.target) !== null) {
-    return (
-      <SessionLogs
-        {...props}
-        onSaveScene={(log) => {
-          setSceneFrom({ log, seq: props.navSeq + 1 });
-          props.navigate({ group: 'general', section: 'scene' });
-        }}
-      />
-    );
-  }
-  return <GeneralSections {...props} />;
-}
-
-/** What to call this computer in a sentence: Mac, PC, or computer. */
-function computerName(): string {
-  const platform =
-    typeof document !== 'undefined' ? document.documentElement.dataset.platform : undefined;
-  if (platform === 'macos' || (!platform && isMacPlatform())) return 'Mac';
-  if (platform === 'windows') return 'PC';
-  return 'computer';
-}
-
-function GeneralSections({
-  target,
-  navSeq,
-  config,
-  setConfig,
-  onError,
-  navigate,
-}: SettingsPageProps) {
+export function GeneralPage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
   const mac = isMacPlatform();
   return (
@@ -96,31 +48,6 @@ function GeneralSections({
         disabled={config === null}
       />
       <ScopeSection onError={onError} />
-      <SessionLogsSection
-        logSessions={config?.log_sessions ?? null}
-        onLogSessions={(on) => update({ log_sessions: on })}
-        disabled={config === null}
-        onError={onError}
-        onSearch={() => navigate({ group: 'general', section: 'logs' })}
-      />
-      <Section
-        id="scrollback"
-        title="Scrollback"
-        help={{ topic: 'play.scroll-back', subject: 'scrollback' }}
-      >
-        <Row
-          label="Scrollback size"
-          description="How many lines you can scroll back through in the terminal. Vosh keeps them for your next launch too."
-          anchor="scrollback-size"
-        >
-          <Select
-            value={String(config?.scrollback_lines ?? DEFAULT_SCROLLBACK_LINES)}
-            disabled={config === null}
-            options={SCROLLBACK_SIZES}
-            onChange={(v) => update({ scrollback_lines: Number(v) })}
-          />
-        </Row>
-      </Section>
       {!mac && <AdvancedSection target={target} navSeq={navSeq} />}
     </>
   );
@@ -419,113 +346,6 @@ function ScopeSection({ onError }: { onError: (message: string | null) => void }
       </Card>
     </Section>
   );
-}
-
-// ── Session logs ───────────────────────────────────────────────────
-
-/** Saved logs with the way into the log view, Log sessions for the
- *  profile Settings shows, and Keep logs for, which every profile
- *  shares since they share one log file (D34). Log sessions reads the
- *  world the selected session dials until you choose, on for a game and
- *  off for this computer. */
-function SessionLogsSection({
-  logSessions,
-  onLogSessions,
-  disabled,
-  onError,
-  onSearch,
-}: {
-  logSessions: boolean | null;
-  onLogSessions: (on: boolean) => void;
-  disabled: boolean;
-  onError: (message: string | null) => void;
-  onSearch: () => void;
-}) {
-  const [target] = useSessionTarget();
-  const [keep, setKeep] = useState<number | null | undefined>(undefined);
-  useEffect(() => {
-    let cancelled = false;
-    logsKeepGet()
-      .then((days) => {
-        if (!cancelled) setKeep(days);
-      })
-      .catch((e) => onError(String(e)));
-    return () => {
-      cancelled = true;
-    };
-  }, [onError]);
-
-  const pickKeep = async (value: string) => {
-    const days = value === 'forever' ? null : Number(value);
-    const before = keep;
-    setKeep(days);
-    try {
-      await logsKeepSet(days);
-      onError(null);
-    } catch (e) {
-      setKeep(before);
-      onError(String(e));
-    }
-  };
-
-  return (
-    <Section
-      id="session-logs"
-      title="Session logs"
-      help={{ topic: 'characters-and-data.search-logs', subject: 'session logs' }}
-    >
-      <Row label="Saved logs" description={<SavedLogsCount onError={onError} />}>
-        <Button onClick={onSearch}>Search logs…</Button>
-      </Row>
-      <Row
-        label="Log sessions"
-        description="Saves every line this character's sessions show, so you can search them later. Connections to this computer stay out until you turn it on."
-        anchor="log-sessions"
-      >
-        <Toggle
-          checked={logSessions ?? !isLocalHost(target.host)}
-          disabled={disabled}
-          onChange={onLogSessions}
-        />
-      </Row>
-      <Row
-        label="Keep logs for"
-        description="Vosh deletes logs older than this once a day. The first time one goes, it rebuilds the log file, which takes a few seconds on a big one. Your game keeps going and the log catches up after. A connect or reconnect waits for it."
-        anchor="keep-logs"
-      >
-        <Select
-          value={keep ? String(keep) : 'forever'}
-          disabled={keep === undefined}
-          options={KEEP_LOGS}
-          onChange={(v) => void pickKeep(v)}
-        />
-      </Row>
-    </Section>
-  );
-}
-
-/** How many logs and lines Vosh saved, leaving out connections to
- *  this machine the way the log view does. A log is one connection,
- *  which the store calls a session (Q21). */
-function SavedLogsCount({ onError }: { onError: (message: string | null) => void }) {
-  const [counts, setCounts] = useState<{ logs: number; lines: number } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    listLogSessions(0, { hideLocal: true })
-      .then((rows) => {
-        if (cancelled) return;
-        setCounts({
-          logs: rows.length,
-          lines: rows.reduce((sum, row) => sum + row.line_count, 0),
-        });
-      })
-      .catch((e) => onError(String(e)));
-    return () => {
-      cancelled = true;
-    };
-  }, [onError]);
-  if (!counts) return 'Counting your saved logs…';
-  return savedLogsText(counts.logs, counts.lines, computerName());
 }
 
 // ── Advanced (Windows and Linux) ───────────────────────────────────

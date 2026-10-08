@@ -16,7 +16,7 @@ describe('resolveSettingsTarget', () => {
       ['general', { group: 'general' }],
       ['themes', { group: 'appearance', section: 'theme' }],
       ['typography', { group: 'appearance', section: 'text' }],
-      ['vitals', { group: 'layout', section: 'vitals' }],
+      ['vitals', { group: 'vitals' }],
       ['tick', { group: 'automation', section: 'timers', anchor: 'tick' }],
       ['panels', { group: 'characters', anchor: 'layout' }],
       ['profiles', { group: 'characters' }],
@@ -26,13 +26,18 @@ describe('resolveSettingsTarget', () => {
       ['macros', { group: 'automation', section: 'macros' }],
       ['timers', { group: 'automation', section: 'timers' }],
       ['import', { group: 'automation', anchor: 'import' }],
-      ['logs', { group: 'general', section: 'logs' }],
+      ['logs', { group: 'logs', section: 'search' }],
     ];
     for (const [raw, target] of cases) expect(resolveSettingsTarget(raw)).toEqual(target);
   });
 
-  it('reads a bare group in every one of the seven', () => {
-    for (const { id } of SETTINGS_GROUPS) expect(resolveSettingsTarget(id)).toEqual({ group: id });
+  it('reads a bare group in every one of the eleven, but logs', () => {
+    expect(SETTINGS_GROUPS).toHaveLength(11);
+    for (const { id } of SETTINGS_GROUPS) {
+      // The bare link logs opens the search, as it did in General.
+      if (id === 'logs') continue;
+      expect(resolveSettingsTarget(id)).toEqual({ group: id });
+    }
   });
 
   it('reads a group with a section and an anchor', () => {
@@ -69,14 +74,10 @@ describe('resolveSettingsTarget', () => {
     expect(resolveSettingsTarget('  THEMES ')).toEqual({ group: 'appearance', section: 'theme' });
   });
 
-  it('sends the prompt rows that left Input Advanced to the Prompt section', () => {
-    expect(resolveSettingsTarget('input:advanced#prompt')).toEqual({
-      group: 'input',
-      section: 'prompt',
-    });
+  it('sends the prompt rows that left Input Advanced to the Prompt tab, through two moves', () => {
+    expect(resolveSettingsTarget('input:advanced#prompt')).toEqual({ group: 'prompt' });
     expect(resolveSettingsTarget('Input:Advanced#Prompt-Show')).toEqual({
-      group: 'input',
-      section: 'prompt',
+      group: 'prompt',
       anchor: 'prompt-show',
     });
     // Paste pacing stays under Advanced.
@@ -86,9 +87,47 @@ describe('resolveSettingsTarget', () => {
       anchor: 'paste-delay',
     });
     expect(resolveSettingsTarget('input:prompt#prompt-game')).toEqual({
-      group: 'input',
-      section: 'prompt',
+      group: 'prompt',
       anchor: 'prompt-game',
+    });
+  });
+
+  it('sends the sections and rows that left their tab to the new tabs', () => {
+    const cases: [string, SettingsTarget][] = [
+      [
+        'general:session-logs#keep-logs',
+        { group: 'logs', section: 'session-logs', anchor: 'keep-logs' },
+      ],
+      ['general:scrollback', { group: 'logs', section: 'scrollback' }],
+      ['general:logs', { group: 'logs', section: 'search' }],
+      ['general:scene', { group: 'logs', section: 'scene' }],
+      [
+        'appearance:text#color-vision',
+        { group: 'accessibility', section: 'color', anchor: 'color-vision' },
+      ],
+      [
+        'appearance:advanced#blink-text',
+        { group: 'accessibility', section: 'motion', anchor: 'blink-text' },
+      ],
+      ['layout:vitals#style', { group: 'vitals', anchor: 'style' }],
+      ['layout:vitals#values', { group: 'vitals', section: 'customize-vitals', anchor: 'values' }],
+      ['layout:customize-vitals', { group: 'vitals', section: 'customize-vitals' }],
+      [
+        'input:command-line#writing-offer',
+        { group: 'input', section: 'writing', anchor: 'writing-offer' },
+      ],
+    ];
+    for (const [raw, target] of cases) expect(resolveSettingsTarget(raw), raw).toEqual(target);
+    // Rows that stayed keep their links.
+    expect(resolveSettingsTarget('appearance:text#size')).toEqual({
+      group: 'appearance',
+      section: 'text',
+      anchor: 'size',
+    });
+    expect(resolveSettingsTarget('input:command-line#caret')).toEqual({
+      group: 'input',
+      section: 'command-line',
+      anchor: 'caret',
     });
   });
 
@@ -109,9 +148,11 @@ describe('resolveSettingsTarget', () => {
 });
 
 describe('settingsSubpage', () => {
-  it('names the session logs page inside General', () => {
-    expect(settingsSubpage(resolveSettingsTarget('general:logs'))).toBe('Session logs');
-    expect(settingsSubpage(resolveSettingsTarget('logs'))).toBe('Session logs');
+  it('names the pages inside Logs', () => {
+    expect(settingsSubpage(resolveSettingsTarget('general:logs'))).toBe('Search logs');
+    expect(settingsSubpage(resolveSettingsTarget('logs'))).toBe('Search logs');
+    expect(settingsSubpage(resolveSettingsTarget('logs:scene'))).toBe('Save a scene');
+    expect(settingsSubpage({ group: 'logs' })).toBeNull();
   });
 
   it('is null for a group page and its sections', () => {
@@ -193,7 +234,7 @@ describe('settingsScrollIds', () => {
   });
 
   it('never scrolls to a page inside a group', () => {
-    expect(settingsScrollIds({ group: 'general', section: 'logs' })).toEqual([]);
+    expect(settingsScrollIds({ group: 'logs', section: 'search' })).toEqual([]);
   });
 
   it('never scrolls to an Automation kind or a Characters profile', () => {

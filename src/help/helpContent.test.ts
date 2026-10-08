@@ -39,7 +39,7 @@ describe('the help on the vitals', () => {
       '- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. In a fight your opponent keeps its row at the foot of the panel. Turn it off to keep them, or pick another place for your prompt, and they come back at once.',
     );
     expect(body('shape.prompt-show')).toContain(
-      "While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.",
+      "While your prompt is pinned, the panel hides its vitals and gives their room to the panes, all but your opponent's row in a fight. Turn off `Hide vitals while your prompt is pinned` under Vitals, then Style, to keep them.",
     );
   });
 
@@ -434,7 +434,7 @@ describe('the help on where your prompt shows', () => {
     const text = topic().body;
     expect(topic().section).toBe('Shape the window');
     expect(text).toContain(
-      'Open Settings, choose Input, and pick a place under `Where your prompt shows` in the Prompt section.',
+      'Open Settings, choose Prompt, and pick a place under `Where your prompt shows`.',
     );
     expect(text).not.toContain('`Advanced`');
     expect(text).toContain('- `In the text` shows each prompt where the game sends it.');
@@ -838,7 +838,7 @@ describe('the help on the Room, time and weather colors preset', () => {
       'A change in the weather, such as `It starts to rain.` or `A thick fog rolls in, shrouding the area.`, turns pale blue.',
     );
     expect(text).toContain(
-      'That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` darkens it on a light theme until it reads.',
+      'That blue is `#8fa7d9`, a color of its own that stays apart from the blue and cyan of your theme. It holds on every built in dark theme, and `Keep highlight colors readable` under Accessibility darkens it on a light theme until it reads.',
     );
   });
 

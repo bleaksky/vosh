@@ -42,7 +42,7 @@ import type { SettingsPageProps } from './pageTypes';
 // window that already shows the group follows the link, since the frame
 // keeps the page and hands it the new target. The Prompt section draws
 // your game's prompt one of four ways, and a search hit on it lands in
-// each, so the Input page mounts on that link in all four.
+// each, so the Prompt page mounts on that link in all four.
 
 // What the pages read when they mount. Two profiles, so a link that
 // names one is told apart from the profile in use, and a tick, so the
@@ -103,7 +103,7 @@ function forsakenState(newBuild: boolean): PromptState {
 }
 
 /** The link a search hit on Your game's prompt sends. */
-const PROMPT_LINK = 'input:prompt#prompt-game';
+const PROMPT_LINK = 'prompt#prompt-game';
 
 const NO_PROMPT: PromptScene = { block: 'point' };
 
@@ -290,24 +290,44 @@ beforeAll(async () => {
   // React DOM checks for a DOM once, when it loads, so it and the pages
   // load now.
   ({ createRoot } = await import('react-dom/client'));
-  const [general, appearance, layout, input, automation, scripts, characters, paneMenu] =
-    await Promise.all([
-      import('./general/GeneralPage'),
-      import('./appearance/AppearancePage'),
-      import('./layout/LayoutPage'),
-      import('./input/InputPage'),
-      import('./automation/AutomationPage'),
-      import('./scripts/ScriptsPage'),
-      import('./characters/CharactersPage'),
-      import('../panel/PaneMenu'),
-    ]);
+  const [
+    general,
+    appearance,
+    accessibility,
+    layout,
+    vitals,
+    prompt,
+    input,
+    automation,
+    scripts,
+    logs,
+    characters,
+    paneMenu,
+  ] = await Promise.all([
+    import('./general/GeneralPage'),
+    import('./appearance/AppearancePage'),
+    import('./accessibility/AccessibilityPage'),
+    import('./layout/LayoutPage'),
+    import('./vitals/VitalsPage'),
+    import('./prompt/PromptPage'),
+    import('./input/InputPage'),
+    import('./automation/AutomationPage'),
+    import('./scripts/ScriptsPage'),
+    import('./logs/LogsPage'),
+    import('./characters/CharactersPage'),
+    import('../panel/PaneMenu'),
+  ]);
   PAGES = {
     general: general.GeneralPage,
     appearance: appearance.AppearancePage,
+    accessibility: accessibility.AccessibilityPage,
     layout: layout.LayoutPage,
+    vitals: vitals.VitalsPage,
+    prompt: prompt.PromptPage,
     input: input.InputPage,
     automation: automation.AutomationPage,
     scripts: scripts.ScriptsPage,
+    logs: logs.LogsPage,
     characters: characters.CharactersPage,
   };
   PaneMenu = paneMenu.PaneMenu;
@@ -574,7 +594,8 @@ async function senderLinks(): Promise<Record<string, string[]>> {
     'pane menu, Edit tracked affects': [],
     'pane menu, Change when affects warn': [],
     'Layout, Panes and tracked affects': [],
-    'General, Search logs': [],
+    'Logs, Save a scene': [],
+    'Logs, Search logs': [],
   };
   for (const active of ['Ilsabet', null]) {
     scene.active = active;
@@ -589,17 +610,13 @@ async function senderLinks(): Promise<Record<string, string[]>> {
     out['Layout, Panes and tracked affects'].push(...layout.sent);
   }
   scene.active = PROFILES.active;
-  const general = await land({ group: 'general' }, MAC, {
-    after: (c) =>
-      press(
-        only(
-          c,
-          'Search logs',
-          (el) => el.nodeName === 'BUTTON' && el.textContent === 'Search logs…',
-        ),
-      ),
-  });
-  out['General, Search logs'].push(...general.sent);
+  for (const label of ['Save a scene', 'Search logs']) {
+    const logs = await land({ group: 'logs' }, MAC, {
+      after: (c) =>
+        press(only(c, label, (el) => el.nodeName === 'BUTTON' && el.textContent === `${label}…`)),
+    });
+    out[`Logs, ${label}`].push(...logs.sent);
+  }
   return out;
 }
 
@@ -617,7 +634,7 @@ function gameBlockDrawn(root: FakeElement): GameBlock | null {
   return null;
 }
 
-/** Open the Input page on the search hit for Your game's prompt in each
+/** Open the Prompt page on the search hit for Your game's prompt in each
  *  scene. */
 async function promptLinks() {
   const target = resolveSettingsTarget(PROMPT_LINK);
@@ -697,7 +714,10 @@ describe('Settings links', () => {
       }
       if (settingsSubpage(target) !== null) {
         // The page inside the group takes the place of the group page.
-        const own = cold.get(target.group)?.anchors ?? [];
+        // The bare link logs opens the search, so the Logs page is
+        // the one its first section opens (Settings layout Q2).
+        const page = target.group === 'logs' ? 'logs:session-logs' : target.group;
+        const own = cold.get(page)?.anchors ?? [];
         expect(own.length, at).toBeGreaterThan(0);
         for (const anchor of own) expect(landing.anchors, at).not.toContain(anchor);
       }

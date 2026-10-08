@@ -431,3 +431,36 @@ export function TriangleIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+// The Settings group icons the Settings layout review added (October
+// 8). Prompt reuses TerminalIcon.
+
+/** A figure in a ring: Accessibility. */
+export function AccessibilityIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <circle cx="8" cy="4.85" r="0.9" fill="currentColor" stroke="none" />
+      <path d="M4.9 6.6L8 7.15l3.1-.55M8 7.15v2.6M8 9.75l-1.6 2.6M8 9.75l1.6 2.6" />
+    </Glyph>
+  );
+}
+
+/** A pulse line: Vitals. */
+export function VitalsIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M1.75 8.5h2.75l1.5-3.75 2.5 7 1.75-3.25h4" />
+    </Glyph>
+  );
+}
+
+/** A page of lines: Logs. */
+export function LogsIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="2.75" y="1.75" width="10.5" height="12.5" rx="2" />
+      <path d="M5.5 5.25h5M5.5 8h5M5.5 10.75h3" />
+    </Glyph>
+  );
+}

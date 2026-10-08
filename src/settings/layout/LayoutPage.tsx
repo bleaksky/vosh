@@ -31,7 +31,6 @@ import type { SettingsPageProps } from '../pageTypes';
 import { GameTimeRow } from './GameTimeRow';
 import { TickCountRow } from './TickCountRow';
 import { TickTimeStyleRow } from './TickTimeStyleRow';
-import { CustomizeVitalsSection } from './VitalsCustomize';
 import { VitalsGallery } from './VitalsGallery';
 import {
   ColorField,
@@ -53,11 +52,12 @@ import {
 // Show the panel and Width write that profile's pane layout through
 // the panel layout store, so the main window follows at once. What
 // each character keeps, its panes and tracked affects, stays in
-// Characters, which the last Panel row opens. Affects, Vitals, Split
-// terminal, and Status line save with the rest of the config. Each
-// profile keeps its own, but they say how a pane draws, not what a
-// character tracks, so they sit here beside the Vitals and Tick counts
-// rows that work the same way.
+// Characters, which the last Panel row opens. Affects, Split terminal,
+// and Status line save with the rest of the config. Each profile keeps
+// its own, but they say how a pane draws, not what a character tracks,
+// so they sit here beside the Tick counts rows that work the same way.
+// Vitals left for a tab of its own (Settings layout Q4), which draws
+// VitalsSection below and Customize vitals.
 
 // The keycaps read the shortcut table the menu bar and the palette
 // read, so every place shows the same keys.
@@ -142,10 +142,6 @@ export function LayoutPage({ config, setConfig, onError, navigate }: SettingsPag
       </Section>
 
       {config && <AffectsSection config={config} update={update} />}
-
-      {config && <VitalsSection config={config} update={update} />}
-
-      {config && <CustomizeVitalsSection config={config} update={update} />}
 
       {config && (
         <Section id="split" title="Split terminal">
@@ -343,8 +339,8 @@ const PLACES: readonly SegmentedOption<VitalsPlace>[] = [
  *  changes until you pick something, except the pinned switch. It starts
  *  on and drops the vitals while your prompt is pinned above the command
  *  line, which usually shows them, and you can turn it off. What every
- *  style shares sits under Customize vitals below. Exported for its
- *  test. */
+ *  style shares sits under Customize vitals below it. The Vitals tab
+ *  draws it (VitalsPage.tsx), and it stays here beside its test. */
 export function VitalsSection({
   config,
   update,
@@ -354,7 +350,7 @@ export function VitalsSection({
 }) {
   const text = shownStyle(config) === 'text';
   return (
-    <Section id="vitals" title="Vitals">
+    <Section id="vitals" title="Style">
       <VitalsGallery config={config} onPick={update} />
       <Row
         label="Show your vitals in"

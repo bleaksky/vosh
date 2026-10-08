@@ -275,7 +275,7 @@ describe('Save a scene', () => {
     expect(page.status()).toBe('Saved Thickening Woods, October 3.html in Downloads');
   });
 
-  it('says why a save failed and goes back to Session logs on Cancel', async () => {
+  it('says why a save failed and goes back to the log view on Cancel', async () => {
     const page = await draw(7);
     failSave = true;
     await page.act(
@@ -286,6 +286,12 @@ describe('Save a scene', () => {
       'Error: Vosh could not save the scene in your Downloads folder.',
     );
     await page.act(() => props<{ onClick: () => void }>(page.button('Cancel')).onClick(), false);
-    expect(page.moves).toEqual([{ group: 'general', section: 'logs' }]);
+    expect(page.moves).toEqual([{ group: 'logs', section: 'search' }]);
+  });
+
+  it('goes back to the Logs tab on Cancel when no log was picked', async () => {
+    const page = await draw(null);
+    await page.act(() => props<{ onClick: () => void }>(page.button('Cancel')).onClick(), false);
+    expect(page.moves).toEqual([{ group: 'logs' }]);
   });
 });

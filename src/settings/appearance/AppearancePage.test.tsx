@@ -5,6 +5,7 @@ import type { SystemFontEntry, UiConfig } from '../../ipc/uiConfig';
 import type { XtermPalette } from '../../theme/themes';
 import { FakeDocument, findAll, type FakeElement, type FakeNode } from '../../test/fakeDom';
 import type { AppearancePage as AppearancePageType } from './AppearancePage';
+import type { AccessibilityPage as AccessibilityPageType } from '../accessibility/AccessibilityPage';
 
 // The Font select waits on fonts_list, the one slow read on this page.
 // The first read of a launch takes a moment, so the page must draw the
@@ -66,6 +67,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const doc = new FakeDocument();
 let AppearancePage: typeof AppearancePageType;
+let AccessibilityPage: typeof AccessibilityPageType;
 let createRoot: typeof import('react-dom/client').createRoot;
 let normalizeUiConfig: typeof import('../../ipc/uiConfig').normalizeUiConfig;
 let BUILTIN_THEMES: typeof import('../../theme/themes').BUILTIN_THEMES;
@@ -89,6 +91,7 @@ beforeAll(async () => {
   // React DOM checks for a DOM once, when it loads, so it loads now.
   ({ createRoot } = await import('react-dom/client'));
   ({ AppearancePage } = await import('./AppearancePage'));
+  ({ AccessibilityPage } = await import('../accessibility/AccessibilityPage'));
   ({ normalizeUiConfig } = await import('../../ipc/uiConfig'));
   ({ BUILTIN_THEMES } = await import('../../theme/themes'));
 });
@@ -279,219 +282,7 @@ describe('AppearancePage', () => {
     });
   });
 
-  it('starts Blinking text off while your system reduces motion and keeps your choice', async () => {
-    // The window above answers every media query, reduce motion among
-    // them, as a match.
-    const container = doc.createElement('div');
-    doc.body.appendChild(container);
-    const root = createRoot(container as unknown as HTMLElement);
-    const blinking = async (ui: UiConfig): Promise<boolean> => {
-      await act(async () => {
-        root.render(
-          createElement(AppearancePage, {
-            target: { group: 'appearance', anchor: 'blink-text' },
-            navSeq: 0,
-            config: ui,
-            setConfig: () => undefined,
-            onError: () => undefined,
-            pathB: false,
-            navigate: () => undefined,
-            setLeaveGuard: () => undefined,
-          }),
-        );
-      });
-      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'blink-text');
-      const [toggle] = findAll(row, (el) => el.getAttribute('role') === 'switch');
-      return (toggle as unknown as { checked: boolean }).checked;
-    };
-    expect(await blinking(config())).toBe(false);
-    expect(await blinking({ ...config(), blink_text: true })).toBe(true);
-    expect(await blinking({ ...config(), blink_text: false })).toBe(false);
-    await act(async () => {
-      root.unmount();
-    });
-  });
-
-  it('draws Fit game colors after the theme colors switch, on unless you turn it off', async () => {
-    const fitSwitch = async (cfg: UiConfig) => {
-      const container = doc.createElement('div');
-      doc.body.appendChild(container);
-      const root = createRoot(container as unknown as HTMLElement);
-      await act(async () => {
-        root.render(
-          createElement(AppearancePage, {
-            target: { group: 'appearance' },
-            navSeq: 0,
-            config: cfg,
-            setConfig: () => undefined,
-            onError: () => undefined,
-            pathB: false,
-            navigate: () => undefined,
-            setLeaveGuard: () => undefined,
-          }),
-        );
-      });
-      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
-        (el) => el.getAttribute('data-st-anchor'),
-      );
-      const [row] = findAll(
-        container,
-        (el) => el.getAttribute('data-st-anchor') === 'fit-game-colors',
-      );
-      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
-      const checked = (input as unknown as { checked: boolean }).checked;
-      await act(async () => {
-        root.unmount();
-      });
-      return { label: row.textContent, checked, anchors };
-    };
-
-    const on = await fitSwitch(config());
-    expect(on.label).toContain('Fit game colors');
-    expect(on.label).toContain('Settings keeps the theme as published');
-    expect(on.checked).toBe(true);
-    const at = on.anchors.indexOf('fit-game-colors');
-    expect(on.anchors.slice(at - 1, at + 2)).toEqual([
-      'theme-colors',
-      'fit-game-colors',
-      'color-vision',
-    ]);
-    const off = await fitSwitch({ ...config(), fit_game_colors: false });
-    expect(off.checked).toBe(false);
-  });
-
-  it('draws Color vision beside Fit game colors, Typical until you pick another', async () => {
-    const visionRow = async (cfg: UiConfig, pick?: string) => {
-      const container = doc.createElement('div');
-      doc.body.appendChild(container);
-      const root = createRoot(container as unknown as HTMLElement);
-      let saved: UiConfig | null = null;
-      await act(async () => {
-        root.render(
-          createElement(AppearancePage, {
-            target: { group: 'appearance' },
-            navSeq: 0,
-            config: cfg,
-            setConfig: (next) => {
-              saved = next(cfg);
-            },
-            onError: () => undefined,
-            pathB: false,
-            navigate: () => undefined,
-            setLeaveGuard: () => undefined,
-          }),
-        );
-      });
-      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
-        (el) => el.getAttribute('data-st-anchor'),
-      );
-      const [row] = findAll(
-        container,
-        (el) => el.getAttribute('data-st-anchor') === 'color-vision',
-      );
-      const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
-      const options = select.options.map((o) => ({ label: o.textContent, value: o.value }));
-      const value = select.options.find(
-        (o) => (o as unknown as { selected?: boolean }).selected,
-      )?.value;
-      if (pick !== undefined) {
-        // The fake DOM sends no events, so call the handler React keeps.
-        const key = Object.keys(select).find((k) => k.startsWith('__reactProps$'));
-        const props = key
-          ? (select as unknown as Record<string, { onChange?: (e: unknown) => void }>)[key]
-          : undefined;
-        await act(async () => {
-          props?.onChange?.({ target: { value: pick } });
-        });
-      }
-      await act(async () => {
-        root.unmount();
-      });
-      return { anchors, label: row.textContent, options, value, saved: saved as UiConfig | null };
-    };
-
-    const typical = await visionRow(config(), 'deuteranopia');
-    const at = typical.anchors.indexOf('color-vision');
-    expect(typical.anchors.slice(at - 1, at + 2)).toEqual([
-      'fit-game-colors',
-      'color-vision',
-      'readable-highlights',
-    ]);
-    expect(typical.label).toContain('Color vision');
-    expect(typical.label).toContain(
-      'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
-    );
-    // Typical changes nothing, so the row says nothing more.
-    expect(typical.label).not.toContain('turn');
-    expect(typical.options).toEqual([
-      { label: 'Typical', value: 'typical' },
-      { label: 'Deuteranopia', value: 'deuteranopia' },
-      { label: 'Protanopia', value: 'protanopia' },
-      { label: 'Tritanopia', value: 'tritanopia' },
-    ]);
-    expect(typical.value).toBe('typical');
-    // A pick saves with the rest of the config.
-    expect(typical.saved?.color_vision).toBe('deuteranopia');
-    // The row says what the vision swaps, the same on every theme.
-    const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
-    expect(picked.value).toBe('tritanopia');
-    expect(picked.label).toContain(
-      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
-    );
-    const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
-    const swapped =
-      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
-    expect((await visionRow(kanso)).label).toContain(swapped);
-    // Fit game colors off swaps the published colors, so the row says
-    // the same.
-    expect((await visionRow({ ...kanso, fit_game_colors: false })).label).toContain(swapped);
-    // While the theme's colors are off for MUD text, the game text keeps
-    // your base palette.
-    const base = await visionRow({ ...kanso, theme_terminal_colors: false });
-    expect(base.label).toContain(
-      "Game text keeps your base palette while the theme's colors are off for MUD text. In the window success turns blue and danger leans toward orange.",
-    );
-  });
-
-  it('draws Keep highlight colors readable under Terminal text, on unless you turn it off', async () => {
-    const readableSwitch = async (cfg: UiConfig) => {
-      const container = doc.createElement('div');
-      doc.body.appendChild(container);
-      const root = createRoot(container as unknown as HTMLElement);
-      await act(async () => {
-        root.render(
-          createElement(AppearancePage, {
-            target: { group: 'appearance' },
-            navSeq: 0,
-            config: cfg,
-            setConfig: () => undefined,
-            onError: () => undefined,
-            pathB: false,
-            navigate: () => undefined,
-            setLeaveGuard: () => undefined,
-          }),
-        );
-      });
-      const [row] = findAll(
-        container,
-        (el) => el.getAttribute('data-st-anchor') === 'readable-highlights',
-      );
-      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
-      const checked = (input as unknown as { checked: boolean }).checked;
-      await act(async () => {
-        root.unmount();
-      });
-      return { label: row.textContent, checked };
-    };
-
-    const on = await readableSwitch(config());
-    expect(on.label).toContain('Keep highlight colors readable');
-    expect(on.checked).toBe(true);
-    const off = await readableSwitch({ ...config(), readable_highlights: false });
-    expect(off.checked).toBe(false);
-  });
-
-  it('draws Collapse repeated lines after Keep highlight colors readable, off until you turn it on', async () => {
+  it('draws Collapse repeated lines after the theme colors switch, off until you turn it on', async () => {
     const collapseSwitch = async (cfg: UiConfig) => {
       const container = doc.createElement('div');
       doc.body.appendChild(container);
@@ -528,9 +319,13 @@ describe('AppearancePage', () => {
     const off = await collapseSwitch(config());
     expect(off.label).toContain('Collapse repeated lines');
     expect(off.checked).toBe(false);
-    // It follows Keep highlight colors readable.
+    // It follows the theme colors switch, since the rows that make the
+    // game easier to see left for Accessibility.
     const at = off.anchors.indexOf('collapse-repeats');
-    expect(off.anchors[at - 1]).toBe('readable-highlights');
+    expect(off.anchors[at - 1]).toBe('theme-colors');
+    for (const gone of ['fit-game-colors', 'color-vision', 'readable-highlights', 'blink-text']) {
+      expect(off.anchors).not.toContain(gone);
+    }
     const on = await collapseSwitch({ ...config(), collapse_repeats: true });
     expect(on.checked).toBe(true);
   });
@@ -1209,5 +1004,214 @@ describe('AppearancePage', () => {
     });
     expect(picked.saved).toMatchObject({ day_theme: 'gruvbox', night_theme: 'tokyo-night' });
     daylight.now = null;
+  });
+});
+
+describe('AccessibilityPage', () => {
+  it('starts Blinking text off on Accessibility while your system reduces motion and keeps your choice', async () => {
+    // The window above answers every media query, reduce motion among
+    // them, as a match.
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const root = createRoot(container as unknown as HTMLElement);
+    const blinking = async (ui: UiConfig): Promise<boolean> => {
+      await act(async () => {
+        root.render(
+          createElement(AccessibilityPage, {
+            target: { group: 'accessibility', section: 'motion', anchor: 'blink-text' },
+            navSeq: 0,
+            config: ui,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const [row] = findAll(container, (el) => el.getAttribute('data-st-anchor') === 'blink-text');
+      const [toggle] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      return (toggle as unknown as { checked: boolean }).checked;
+    };
+    expect(await blinking(config())).toBe(false);
+    expect(await blinking({ ...config(), blink_text: true })).toBe(true);
+    expect(await blinking({ ...config(), blink_text: false })).toBe(false);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('draws Fit game colors after Color vision on Accessibility, on unless you turn it off', async () => {
+    const fitSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AccessibilityPage, {
+            target: { group: 'accessibility' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'fit-game-colors',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked, anchors };
+    };
+
+    const on = await fitSwitch(config());
+    expect(on.label).toContain('Fit game colors');
+    expect(on.label).toContain('Settings keeps the theme as published');
+    expect(on.checked).toBe(true);
+    const at = on.anchors.indexOf('fit-game-colors');
+    expect(on.anchors.slice(at - 1, at + 2)).toEqual([
+      'color-vision',
+      'fit-game-colors',
+      'readable-highlights',
+    ]);
+    const off = await fitSwitch({ ...config(), fit_game_colors: false });
+    expect(off.checked).toBe(false);
+  });
+
+  it('leads Accessibility with Color vision, Typical until you pick another', async () => {
+    const visionRow = async (cfg: UiConfig, pick?: string) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      let saved: UiConfig | null = null;
+      await act(async () => {
+        root.render(
+          createElement(AccessibilityPage, {
+            target: { group: 'accessibility' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: (next) => {
+              saved = next(cfg);
+            },
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const anchors = findAll(container, (el) => el.getAttribute('data-st-anchor') !== null).map(
+        (el) => el.getAttribute('data-st-anchor'),
+      );
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'color-vision',
+      );
+      const [select] = findAll(row, (el) => el.nodeName === 'SELECT');
+      const options = select.options.map((o) => ({ label: o.textContent, value: o.value }));
+      const value = select.options.find(
+        (o) => (o as unknown as { selected?: boolean }).selected,
+      )?.value;
+      if (pick !== undefined) {
+        // The fake DOM sends no events, so call the handler React keeps.
+        const key = Object.keys(select).find((k) => k.startsWith('__reactProps$'));
+        const props = key
+          ? (select as unknown as Record<string, { onChange?: (e: unknown) => void }>)[key]
+          : undefined;
+        await act(async () => {
+          props?.onChange?.({ target: { value: pick } });
+        });
+      }
+      await act(async () => {
+        root.unmount();
+      });
+      return { anchors, label: row.textContent, options, value, saved: saved as UiConfig | null };
+    };
+
+    const typical = await visionRow(config(), 'deuteranopia');
+    expect(typical.anchors.slice(0, 3)).toEqual(['color', 'color-vision', 'fit-game-colors']);
+    expect(typical.label).toContain('Color vision');
+    expect(typical.label).toContain(
+      'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
+    );
+    // Typical changes nothing, so the row says nothing more.
+    expect(typical.label).not.toContain('turn');
+    expect(typical.options).toEqual([
+      { label: 'Typical', value: 'typical' },
+      { label: 'Deuteranopia', value: 'deuteranopia' },
+      { label: 'Protanopia', value: 'protanopia' },
+      { label: 'Tritanopia', value: 'tritanopia' },
+    ]);
+    expect(typical.value).toBe('typical');
+    // A pick saves with the rest of the config.
+    expect(typical.saved?.color_vision).toBe('deuteranopia');
+    // The row says what the vision swaps, the same on every theme.
+    const picked = await visionRow({ ...config(), color_vision: 'tritanopia' });
+    expect(picked.value).toBe('tritanopia');
+    expect(picked.label).toContain(
+      'In the game text blues turn purple and magentas turn pink. The window keeps danger, warn and success where you tell them apart, and makes them lighter or darker where they sit near. An accent Vosh picks moves clear of them.',
+    );
+    const kanso = { ...config(), theme: 'kanso-zen', color_vision: 'deuteranopia' as const };
+    const swapped =
+      'In the game text greens turn blue, reds lean toward orange and blues toward violet, as far as your theme leaves room. In the window success turns blue and danger leans toward orange.';
+    expect((await visionRow(kanso)).label).toContain(swapped);
+    // Fit game colors off swaps the published colors, so the row says
+    // the same.
+    expect((await visionRow({ ...kanso, fit_game_colors: false })).label).toContain(swapped);
+    // While the theme's colors are off for MUD text, the game text keeps
+    // your base palette.
+    const base = await visionRow({ ...kanso, theme_terminal_colors: false });
+    expect(base.label).toContain(
+      "Game text keeps your base palette while the theme's colors are off for MUD text. In the window success turns blue and danger leans toward orange.",
+    );
+  });
+
+  it('draws Keep highlight colors readable under Color and contrast, on unless you turn it off', async () => {
+    const readableSwitch = async (cfg: UiConfig) => {
+      const container = doc.createElement('div');
+      doc.body.appendChild(container);
+      const root = createRoot(container as unknown as HTMLElement);
+      await act(async () => {
+        root.render(
+          createElement(AccessibilityPage, {
+            target: { group: 'accessibility' },
+            navSeq: 0,
+            config: cfg,
+            setConfig: () => undefined,
+            onError: () => undefined,
+            pathB: false,
+            navigate: () => undefined,
+            setLeaveGuard: () => undefined,
+          }),
+        );
+      });
+      const [row] = findAll(
+        container,
+        (el) => el.getAttribute('data-st-anchor') === 'readable-highlights',
+      );
+      const [input] = findAll(row, (el) => el.getAttribute('role') === 'switch');
+      const checked = (input as unknown as { checked: boolean }).checked;
+      await act(async () => {
+        root.unmount();
+      });
+      return { label: row.textContent, checked };
+    };
+
+    const on = await readableSwitch(config());
+    expect(on.label).toContain('Keep highlight colors readable');
+    expect(on.checked).toBe(true);
+    const off = await readableSwitch({ ...config(), readable_highlights: false });
+    expect(off.checked).toBe(false);
   });
 });

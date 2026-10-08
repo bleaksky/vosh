@@ -49,14 +49,15 @@ import {
 } from './scene';
 
 // Save a scene (board 5 of the Alerts and Scenes review), a page inside
-// General at general:scene. The toolbar picks the log, a From and a To on
+// Logs at logs:scene. The toolbar picks the log, a From and a To on
 // the log's own 24 hour clock, and the format. Prompts, Your commands
 // and Channels left out say what the scene leaves out (Q10), and the
 // preview shows every line in the range, what stays out drawn quiet with
 // the reason beside it. A click on a time starts the scene on that line,
 // and a Shift click ends it there. Save scene writes the file to
 // Downloads (Q12), and the main window says so with a button that shows
-// it. Cancel goes back to Session logs.
+// it. Cancel goes back to the log view when the scene came from it, and
+// to the Logs tab otherwise.
 
 const FORMATS: readonly { value: SceneFormat; label: string }[] = [
   { value: 'text', label: 'Text' },
@@ -68,7 +69,7 @@ const FORMATS: readonly { value: SceneFormat; label: string }[] = [
 const PREVIEW_DELAY_MS = 120;
 
 interface Props extends SettingsPageProps {
-  /** The log Save a scene… in Session logs picked, or null to open on
+  /** The log Save a scene… in the log view picked, or null to open on
    *  the newest log of the selected session. */
   log: number | null;
 }
@@ -371,7 +372,13 @@ export function ScenePage({ config, onError, navigate, log: picked }: Props) {
           </span>
         </div>
         <div className="st-savebar-actions">
-          <Button onClick={() => navigate({ group: 'general', section: 'logs' })}>Cancel</Button>
+          <Button
+            onClick={() =>
+              navigate(picked === null ? { group: 'logs' } : { group: 'logs', section: 'search' })
+            }
+          >
+            Cancel
+          </Button>
           <Button variant="primary" disabled={!canSave} onClick={() => void save()}>
             Save scene
           </Button>

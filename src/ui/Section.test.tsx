@@ -4,6 +4,7 @@ import { HELP_TOPICS } from '../help/helpContent';
 import general from '../settings/general/GeneralPage.tsx?raw';
 import inputPrompt from '../settings/input/InputPrompt.tsx?raw';
 import layout from '../settings/layout/LayoutPage.tsx?raw';
+import logs from '../settings/logs/LogsPage.tsx?raw';
 import appearance from '../settings/appearance/AppearancePage.tsx?raw';
 import characters from '../settings/characters/CharactersPage.tsx?raw';
 import { Section } from './Section';
@@ -38,7 +39,14 @@ describe('a Settings section with help', () => {
 describe('the Settings sections that link to help', () => {
   // Each `help={{ topic: ... }}` in Settings names a topic that exists,
   // so a book button never opens Help on nothing.
-  const files: Record<string, string> = { general, inputPrompt, layout, appearance, characters };
+  const files: Record<string, string> = {
+    general,
+    inputPrompt,
+    layout,
+    logs,
+    appearance,
+    characters,
+  };
   const links = Object.entries(files).flatMap(([file, source]) =>
     [...source.matchAll(/help=\{\{ topic: '([^']+)', subject: '([^']+)' \}\}/g)].map((m) => ({
       file,

@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import {
   BUNDLED_FONTS,
-  colorVisionNote,
   fontChoices,
   pairChoices,
   panelFontChoices,
@@ -9,7 +8,7 @@ import {
   sizeChoices,
   themeCaption,
 } from '../../theme/appearanceSettings';
-import { toColorVision, type ColorVision } from '../../theme/gameFit';
+import { type ColorVision } from '../../theme/gameFit';
 import { normalizePanelFont } from '../../panel/panelFont';
 import { normalizePanelSize } from '../../panel/panelSize';
 import type { CustomTheme } from '../../ipc/theme';
@@ -61,14 +60,13 @@ import { fitAndKeep } from './fitAndKeep';
 // caption that describes the theme on screen and credits its colors,
 // then Switch themes, which follows the system with a light and dark
 // pair or the game's day with a day and night pair (Alerts board 8). Terminal text holds the font, the size, the line height,
-// whether MUD text takes the theme's colors, whether play fits the
-// game's colors to the theme, which color vision the game text and the
-// window's status colors follow, whether Vosh
-// keeps the colors your triggers set readable on the theme, and whether
-// a line the same as the one before it shows once with a count. While that is on, two rows
-// under it choose whether the lines of a fight collapse, and whether
-// attack lines do. A link to either row shows them even while it is
-// off, so search lands on them. Panel text holds the font and the size
+// whether MUD text takes the theme's colors, and whether a line the
+// same as the one before it shows once with a count. While that is on,
+// two rows under it choose whether the lines of a fight collapse, and
+// whether attack lines do. A link to either row shows them even while
+// it is off, so search lands on them. Fit game colors, Color vision,
+// Keep highlight colors readable and Blinking text left for
+// Accessibility (Settings layout Q6). Panel text holds the font and the size
 // that every pane and the status line draw in, so each section sets one
 // thing. A quiet Advanced row at the end holds what the board leaves
 // out. Every change saves on its own.
@@ -85,13 +83,6 @@ const THEME_FOLLOW_CHOICES = [
   { value: 'game', label: 'With the game' },
 ] as const;
 
-const COLOR_VISIONS = [
-  { value: 'typical', label: 'Typical' },
-  { value: 'deuteranopia', label: 'Deuteranopia' },
-  { value: 'protanopia', label: 'Protanopia' },
-  { value: 'tritanopia', label: 'Tritanopia' },
-] as const;
-
 // The four formats parseThemeFile reads. macOS lists every file anyway,
 // which Ghostty's theme files need, since they have no extension.
 const THEME_FILE_TYPES = '.itermcolors,.conf,.toml,.yml,.yaml';
@@ -100,7 +91,6 @@ const ADVANCED_ANCHORS: ReadonlySet<string> = new Set([
   'custom-theme',
   'base-palette',
   'bright-bold',
-  'blink-text',
   'font-stack',
 ]);
 
@@ -230,10 +220,6 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   // An id no theme has draws the fallback theme, so the caption names it.
   const shownTheme = themes.find((t) => t.id === shown) ?? findTheme(shown);
   const caption = themeCaption(shownTheme);
-  const visionNote = colorVisionNote(
-    config.color_vision,
-    resolveThemeTerminalColors(config.theme_terminal_colors),
-  );
   // With the system the arrow keys stay among the themes the OS shows
   // now, so stepping through the gallery never fills the other slot and
   // each step lands on the radio it checks. With the game a pick fills
@@ -443,48 +429,6 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           <Toggle
             checked={resolveThemeTerminalColors(config.theme_terminal_colors)}
             onChange={(on) => update({ theme_terminal_colors: on }, { now: true })}
-          />
-        </Row>
-        <Row
-          anchor="fit-game-colors"
-          label="Fit game colors"
-          description="While you play, Vosh lifts the game colors that fade on the theme, and Settings keeps the theme as published."
-        >
-          <Toggle
-            checked={config.fit_game_colors}
-            onChange={(on) => update({ fit_game_colors: on }, { now: true })}
-          />
-        </Row>
-        <Row
-          anchor="color-vision"
-          label="Color vision"
-          description={
-            <>
-              Vosh swaps the colors your eyes confuse for colors they tell apart, the way color
-              blind modes in games do.
-              {visionNote !== '' && (
-                <>
-                  <br />
-                  {visionNote}
-                </>
-              )}
-            </>
-          }
-        >
-          <Select
-            value={config.color_vision}
-            options={COLOR_VISIONS}
-            onChange={(vision) => update({ color_vision: toColorVision(vision) }, { now: true })}
-          />
-        </Row>
-        <Row
-          anchor="readable-highlights"
-          label="Keep highlight colors readable"
-          description="Vosh darkens or lightens a color your triggers set when the theme would make it faint."
-        >
-          <Toggle
-            checked={config.readable_highlights}
-            onChange={(on) => update({ readable_highlights: on }, { now: true })}
           />
         </Row>
         <Row

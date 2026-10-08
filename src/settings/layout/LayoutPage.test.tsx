@@ -92,10 +92,10 @@ describe('VitalsSection', () => {
     expect(update).toHaveBeenLastCalledWith({ vitals_hide_when_pinned: false });
   });
 
-  it('renders every search anchor Layout, Vitals lists', () => {
+  it('renders every search anchor the Vitals tab lists outside Customize vitals', () => {
     const html = draw();
     const anchors = SETTINGS_ROWS.filter(
-      (r) => r.target.group === 'layout' && r.target.section === 'vitals',
+      (r) => r.target.group === 'vitals' && r.target.section === undefined,
     ).map((r) => r.target.anchor);
     expect(anchors).toEqual(['style', 'place', 'hide-pinned']);
     for (const anchor of anchors) {

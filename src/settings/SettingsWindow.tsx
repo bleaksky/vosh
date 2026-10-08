@@ -54,15 +54,19 @@ import { WindowControls } from '../ui/WindowControls';
 import { ChevronRightIcon, CoachRing } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
 import { GeneralPage } from './general/GeneralPage';
+import { LogsPage } from './logs/LogsPage';
 import { LayoutPage } from './layout/LayoutPage';
+import { VitalsPage } from './vitals/VitalsPage';
 import { InputPage } from './input/InputPage';
+import { PromptPage } from './prompt/PromptPage';
 import { AutomationPage } from './automation/AutomationPage';
 import { CharactersPage } from './characters/CharactersPage';
 import { AppearancePage } from './appearance/AppearancePage';
+import { AccessibilityPage } from './accessibility/AccessibilityPage';
 import { ScriptsPage } from './scripts/ScriptsPage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
-// with search and the seven group nav, and a content column with the
+// with search and the nav of eleven groups in four clusters, and a content column with the
 // breadcrumb in the 32 px band over the group's page. With two or more
 // sessions open, the band names the session and the profile Settings
 // edits at its right (ShownSession.tsx). On macOS the
@@ -83,11 +87,15 @@ interface GroupPage {
 }
 
 const PAGES: Record<SettingsGroup, GroupPage> = {
-  // The session logs page pins its toolbar over the results.
-  general: { Page: GeneralPage, selfScroll: (target) => settingsSubpage(target) !== null },
+  general: { Page: GeneralPage },
   appearance: { Page: AppearancePage },
+  accessibility: { Page: AccessibilityPage },
   layout: { Page: LayoutPage },
+  vitals: { Page: VitalsPage },
+  prompt: { Page: PromptPage },
   input: { Page: InputPage },
+  // The log view and the scene page pin their toolbars over the lines.
+  logs: { Page: LogsPage, selfScroll: (target) => settingsSubpage(target) !== null },
   automation: { Page: AutomationPage, selfScroll: true },
   // A plugin's page pins its editor and Output to the window.
   scripts: { Page: ScriptsPage, selfScroll: (target) => settingsSubpage(target) !== null },
