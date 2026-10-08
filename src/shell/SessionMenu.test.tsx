@@ -94,6 +94,9 @@ const cleanups: (() => Promise<void>)[] = [];
 
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  // A row the pointer reaches looks for open submenus it could be in
+  // the way of, and this popover opens none.
+  Object.assign(doc, { querySelectorAll: () => [] });
   vi.stubGlobal('document', doc);
   vi.stubGlobal('window', {
     document: doc,
@@ -251,6 +254,18 @@ describe('the session popover with the sidebar folded', () => {
     expect(menu.getAttribute('class')).toBe('menu is-listed');
     const list = findAll(menu, hasClass('shell-menu-sessions'))[0];
     expect(findAll(list, (el) => el.getAttribute('role') === 'menuitem')).toHaveLength(3);
+  });
+
+  // The row under focus is lit and no other, so the pointer moves the
+  // focus as the arrow keys do, and pointing at a close button lights
+  // its row.
+  it('gives the row under the pointer the focus, its close button too', async () => {
+    const { menu, items } = await mount(true);
+    await act(async () => on(items[1]).onPointerMove({ currentTarget: items[1] }));
+    expect(doc.activeElement).toBe(items[1]);
+    const closers = findAll(menu, hasClass('shell-menu-session-close'));
+    await act(async () => on(closers[2]).onPointerEnter({ currentTarget: closers[2] }));
+    expect(doc.activeElement).toBe(items[2]);
   });
 
   it('lists no session while the sidebar shows', async () => {

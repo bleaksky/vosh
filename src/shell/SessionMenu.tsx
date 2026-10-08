@@ -1,4 +1,4 @@
-import { useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
@@ -233,9 +233,15 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
       if (document.activeElement !== el) el.focus();
     });
   };
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const focusRow = () => {
+    const el = rowRef.current;
+    if (el && document.activeElement !== el) el.focus();
+  };
   return (
     <div className="shell-menu-session-slot">
       <button
+        ref={rowRef}
         type="button"
         role="menuitem"
         className="shell-menu-session"
@@ -250,12 +256,14 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
       </button>
       {/* A sibling of the row, since a button holds no button. It shows
         only under the pointer, so the arrow keys pass it by, and ⌘W
-        closes the session in front from the keyboard. */}
+        closes the session in front from the keyboard. Pointing at it
+        lights its row. */}
       <button
         type="button"
         className="shell-menu-session-close"
         aria-label="Close session"
         tabIndex={-1}
+        onPointerEnter={focusRow}
         onClick={onCloseSession}
       >
         <CloseIcon />

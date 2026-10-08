@@ -618,8 +618,10 @@
   cursor: default;
 }
 
-.shell-menu-session:focus,
-.shell-menu-session-slot:hover .shell-menu-session {
+/* The row under focus is lit, and only that one. The pointer moves the
+   focus, so a row under a resting pointer goes dark once the arrow keys
+   move on (Q1). */
+.shell-menu-session:focus {
   background: var(--menu-hi);
   outline: none;
 }
