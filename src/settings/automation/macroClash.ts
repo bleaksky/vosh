@@ -1,8 +1,9 @@
-import { APP_SHORTCUTS, appKeyOfMacro, type MacroKeptShortcutId } from '../../lib/appMenu';
+import { appKeyOfMacro, appShortcut, type MacroKeptShortcutId } from '../../lib/appMenu';
 import { shortcutLabel } from '../../lib/shortcuts';
 
 // The note over a macro's Key when the key is also one of the session
-// keys (Sessions Q11) or one of the Settings keys. The macro keeps the key in every session on its
+// keys (Sessions Q11), the sessions toggle's key or one of the Settings
+// keys. The macro keeps the key in every session on its
 // profile, so the note says what the key does elsewhere.
 
 const ORDINALS = [
@@ -23,6 +24,7 @@ const DOES: Record<MacroKeptShortcutId, string> = {
   'close-window': 'closes the window',
   'session-next': 'goes to the next session',
   'session-previous': 'goes to the previous session',
+  'sessions-sidebar': 'shows or hides your sessions',
   'settings-triggers': 'opens Triggers in Settings',
   'settings-aliases': 'opens Aliases in Settings',
   'settings-macros': 'opens Macros in Settings',
@@ -37,6 +39,6 @@ export function macroClashNote(canonical: string, mac: boolean): string | null {
   const does =
     hit.kind === 'goto'
       ? `${shortcutLabel(`Mod+${hit.place}`, mac)} also goes to your ${ORDINALS[hit.place - 1]} session.`
-      : `${shortcutLabel(APP_SHORTCUTS[hit.id], mac)} also ${DOES[hit.id]}.`;
+      : `${shortcutLabel(appShortcut(hit.id, mac), mac)} also ${DOES[hit.id]}.`;
   return `${does} In sessions on this profile it runs this macro.`;
 }
