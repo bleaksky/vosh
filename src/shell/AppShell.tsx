@@ -88,6 +88,10 @@ interface Props {
    *  and goes, and never remounts. */
   snoop?: ReactNode;
   terminal: ReactNode;
+  /** The game lines a screen reader reads, after the terminal in its
+   *  slot, so they read the same under the macOS underlay and under
+   *  xterm, or null. */
+  reader?: ReactNode;
   input: ReactNode;
   statusLine: ReactNode;
   panel: ReactNode;
@@ -123,6 +127,7 @@ export function AppShell({
   titleBand,
   snoop = null,
   terminal,
+  reader = null,
   input,
   statusLine,
   panel,
@@ -274,6 +279,7 @@ export function AppShell({
       <section className="shell-slot-term" aria-label="Terminal" tabIndex={0}>
         {snoop}
         {terminal}
+        {reader}
       </section>
       <section className="shell-slot-input" aria-label="Command line">
         {input}

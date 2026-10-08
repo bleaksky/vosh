@@ -206,7 +206,8 @@ describe('the Tab order', () => {
           onSessionsWidth={() => undefined}
           sessionsToggle={<button>Sessions</button>}
           titleBand={<button>Session</button>}
-          terminal={<div role="log" aria-label="Output" />}
+          terminal={<div className="terminal-area" />}
+          reader={<ol role="log" aria-label="Game lines" />}
           input={<textarea aria-label="Command line" />}
           statusLine={null}
           panel={<button>Pane</button>}
@@ -230,7 +231,11 @@ describe('the Tab order', () => {
       'Pane',
       'Panel width',
     ]);
-    expect(html).toContain('<section class="shell-slot-term" aria-label="Terminal" tabindex="0">');
+    // The game lines a screen reader reads follow the terminal in its
+    // slot, so the one stop holds them under the underlay and xterm.
+    expect(html).toContain(
+      '<section class="shell-slot-term" aria-label="Terminal" tabindex="0"><div class="terminal-area"></div><ol role="log" aria-label="Game lines"></ol></section>',
+    );
     expect(html).toContain('<section class="shell-slot-input" aria-label="Command line">');
   });
 });

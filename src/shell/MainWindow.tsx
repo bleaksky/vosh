@@ -11,6 +11,7 @@ import { CornerNotices } from './overlays/CornerNotices';
 import { FindToolbar } from '../terminal/FindToolbar';
 import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
+import { ScreenReaderFeed } from '../terminal/ScreenReaderFeed';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
 import { markDone, openList as openGetStarted } from './getStarted/getStartedStore';
@@ -847,6 +848,7 @@ function MainWindow() {
         />
       }
       terminal={terminalAreaElement}
+      reader={<ScreenReaderFeed />}
       input={inputElement}
       statusLine={
         <StatusLine

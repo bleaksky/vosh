@@ -1003,13 +1003,9 @@ export function Terminal({
 
   return (
     <div ref={sizingRef} className="terminal-sizer" hidden={!shown}>
-      <div
-        ref={containerRef}
-        className="terminal-host"
-        role="log"
-        aria-live="polite"
-        aria-label="MUD output"
-      />
+      {/* The host holds xterm's canvas and no text to read. The game
+          reaches a screen reader through ScreenReaderFeed beside it. */}
+      <div ref={containerRef} className="terminal-host" />
     </div>
   );
 }
