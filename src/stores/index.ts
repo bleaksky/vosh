@@ -3,6 +3,7 @@ import { startGroupStore } from './gmcp/groupStore';
 import { startImmStore } from './gmcp/immStore';
 import { startAffectFullStore } from './gmcp/affectFullStore';
 import { startAffectsDisplayStore } from './config/affectsDisplayStore';
+import { startAlertNoticeStore } from './session/alertNoticeStore';
 import { startAffectsStore } from './gmcp/affectsStore';
 import { startChatColorsStore } from './config/chatColorsStore';
 import { startChipStyleStore } from './config/chipStyleStore';
@@ -44,6 +45,7 @@ export function startStores(): void {
   startConnectionStore();
   startSessionRowStore();
   startReconnectStore();
+  startAlertNoticeStore();
   // Then the hidden state, so every store that ORs it in finds it
   // listening.
   startHiddenStore();

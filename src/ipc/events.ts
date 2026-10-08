@@ -24,6 +24,7 @@ export const GAME_PROMPT_SEEN = 'session://game-prompt-seen';
 export const PROMPT_GAG_WITHOUT_READER = 'session://prompt-gag-without-reader';
 export const ALERT = 'session://alert';
 export const MARK = 'session://mark';
+export const ALERTS_ENDED = 'session://alerts-ended';
 export const RECONNECT = 'session://reconnect';
 
 export const LUA_OUTPUT = 'session://lua-output';
