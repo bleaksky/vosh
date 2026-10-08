@@ -14,6 +14,7 @@ import { MoreIcon } from '../ui/icons';
 import { SnoopMenu, type SnoopPick } from './SnoopMenu';
 import { EyeIcon } from './icons';
 import { useMinuteClock } from './sessionLine';
+import { SNOOP_REQUEST_EVENT, type SnoopRequest } from './snoopKeys';
 import { endedLine, tabTitle } from './snoopLine';
 import {
   dragTo,
@@ -43,6 +44,13 @@ import {
 // It shows nothing with no tab or while the session's snoops sit in
 // their window. Nothing here takes the caret: a start leaves it on the
 // command line, and a press on the strip hands it back there.
+//
+// Cmd J is the one way in (SN7). From the command line it puts the
+// caret in the tab in front, unfolding the split first, and inside a
+// snoop it steps to the next tab. While the snoops sit in their window
+// it brings the window forward. Cmd F inside a snoop opens its Find,
+// and Copy in the menu bar copies what you selected in it
+// (shell/snoopKeys.ts).
 
 interface Props {
   session: number;
@@ -90,6 +98,10 @@ export function SnoopSplit({
   const actRef = useRef<HTMLDivElement | null>(null);
   const actWidth = useRef(0);
   const moreRef = useRef<HTMLButtonElement | null>(null);
+  // Cmd J asked for the caret in the tab in front, which takes it once
+  // the tab shows.
+  const [caretAsked, setCaretAsked] = useState(0);
+  const caretWanted = useRef(false);
 
   const folded = drag ? drag.folded : size.folded;
   const front = tabs.find((tab) => tab.name === selected) ?? null;
@@ -150,6 +162,58 @@ export function SnoopSplit({
   // The names and Stop change as tabs come, go and change hands.
   useLayoutEffect(measure, [tabs, selected, unread, front?.live]);
 
+  const failed = (e: unknown) => pushToast({ kind: 'error', message: String(e) });
+  const fold = (on: boolean) => {
+    void saveSnoopSize({ share: size.share, folded: on }).catch(failed);
+  };
+  const openFind = () => {
+    if (size.folded) fold(false);
+    setFinding(true);
+  };
+
+  // What Cmd J, Cmd F and Copy ask of the split.
+  const onRequest = (request: SnoopRequest) => {
+    if (tabs.length === 0) return;
+    if (windowed) {
+      if (request === 'enter' || request === 'next') snoopWindowOpen(session).catch(failed);
+      return;
+    }
+    const handle = selected ? handles.current.get(selected) : undefined;
+    if (request === 'copy') {
+      const text = handle?.selection() ?? '';
+      if (text) void navigator.clipboard.writeText(text).catch(() => {});
+      return;
+    }
+    if (request === 'find') {
+      openFind();
+      return;
+    }
+    if (request === 'next') {
+      const at = tabs.findIndex((tab) => tab.name === selected);
+      selectSnoop(tabs[(at + 1) % tabs.length].name);
+    }
+    if (size.folded) fold(false);
+    caretWanted.current = true;
+    setCaretAsked((n) => n + 1);
+  };
+  const requests = useRef(onRequest);
+  requests.current = onRequest;
+  useEffect(() => {
+    const hear = (event: Event) => requests.current((event as CustomEvent<SnoopRequest>).detail);
+    window.addEventListener(SNOOP_REQUEST_EVENT, hear);
+    return () => window.removeEventListener(SNOOP_REQUEST_EVENT, hear);
+  }, []);
+
+  // The caret goes to the tab in front once it shows, after the split
+  // unfolds and the tab Cmd J stepped to comes to the front.
+  useEffect(() => {
+    if (!caretWanted.current || size.folded || windowed || !selected) return;
+    const handle = handles.current.get(selected);
+    if (!handle) return;
+    caretWanted.current = false;
+    handle.focus();
+  }, [caretAsked, size.folded, windowed, selected]);
+
   if (!shown) return null;
 
   const room: SnoopRoom | null = column > 0 && row > 0 ? { column, row } : null;
@@ -161,17 +225,9 @@ export function SnoopSplit({
         ? `${snoopHeight(size.share, room)}px`
         : `${size.share * 100}%`;
 
-  const failed = (e: unknown) => pushToast({ kind: 'error', message: String(e) });
   const act = (run: () => Promise<void>) => {
     run().catch(failed);
     onCaret();
-  };
-  const fold = (on: boolean) => {
-    void saveSnoopSize({ share: size.share, folded: on }).catch(failed);
-  };
-  const openFind = () => {
-    if (size.folded) fold(false);
-    setFinding(true);
   };
   const closeFind = () => {
     if (selected) handles.current.get(selected)?.clearSearch();

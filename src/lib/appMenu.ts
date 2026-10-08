@@ -52,6 +52,7 @@ const WINDOW_SHORTCUTS: readonly AppShortcutId[] = [
   'settings',
   'help',
   'split',
+  'snoop',
   'session-new',
   'session-close',
   'close-window',
@@ -116,10 +117,13 @@ export type ShortcutHit =
 /** What a primary modifier key press means in the main window. Null
  *  leaves the key to the page. `macroBound` says whether the selected
  *  session's profile binds a macro to this press, and is asked only for
- *  a session key. */
+ *  a session key. `snooping` says whether the selected session has a
+ *  snoop open. Without one the snoop key stays the page's, so a macro
+ *  on Ctrl+J on Windows and Linux keeps working. */
 export function resolveShortcut(
   press: ShortcutPress,
   macroBound: () => boolean = () => false,
+  snooping: () => boolean = () => false,
 ): ShortcutHit | null {
   const { key, code, shift } = press;
   if (key === 'r' && shift) return { kind: 'take' };
@@ -131,6 +135,7 @@ export function resolveShortcut(
     const spec = specKey(APP_SHORTCUTS[id]);
     const physical = PHYSICAL_KEYS[spec.key];
     if (spec.shift !== shift || (physical ? code !== physical : spec.key !== key)) continue;
+    if (id === 'snoop' && !snooping()) return null;
     return isSessionShortcut(id) && macroBound() ? { kind: 'macro' } : { kind: 'run', id };
   }
   return null;
@@ -197,6 +202,9 @@ export interface MenuState {
   /** You keep the sessions sidebar showing, checked in View, though a
    *  narrow window can fold it. */
   sessionsShown: boolean;
+  /** How many snoop tabs the selected session has, live or ended. View
+   *  lists Go to snoop while there is one. */
+  snoops: number;
 }
 
 export interface MenuStateInput {
@@ -218,6 +226,7 @@ export interface MenuStateInput {
   theme: string;
   sessions: number;
   sessionsShown: boolean;
+  snoops: number;
 }
 
 /** The menu's view of the window, the same checks the palette shows. */
@@ -242,6 +251,7 @@ export function buildMenuState(input: MenuStateInput): MenuState {
     theme: input.theme,
     sessions: input.sessions,
     sessionsShown: input.sessionsShown,
+    snoops: input.snoops,
   };
 }
 

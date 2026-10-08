@@ -110,6 +110,32 @@ describe('resolveShortcut', () => {
   });
 });
 
+describe('the snoop key', () => {
+  it('goes to the snoop while the session has one open', () => {
+    expect(resolveShortcut(letter('j'), undefined, () => true)).toEqual({
+      kind: 'run',
+      id: 'snoop',
+    });
+  });
+
+  it('stays the page key with no snoop open, so a macro on it still fires', () => {
+    expect(resolveShortcut(letter('j'))).toBeNull();
+    expect(
+      resolveShortcut(
+        letter('j'),
+        () => true,
+        () => false,
+      ),
+    ).toBeNull();
+  });
+
+  it('is Mod+J, a window key that runs once per press', () => {
+    expect(APP_SHORTCUTS.snoop).toBe('Mod+J');
+    expect(commandRepeats('snoop')).toBe(false);
+    expect(resolveShortcut(letter('j', true), undefined, () => true)).toBeNull();
+  });
+});
+
 describe('sessionKeyOfMacro', () => {
   it('finds the session key a macro key shares on macOS', () => {
     expect(sessionKeyOfMacro('Meta+1', true)).toEqual({ kind: 'goto', place: 1 });
@@ -203,6 +229,7 @@ describe('buildMenuState', () => {
     theme: 'nord',
     sessions: 1,
     sessionsShown: false,
+    snoops: 0,
     ...over,
   });
 
@@ -264,6 +291,11 @@ describe('buildMenuState', () => {
     });
   });
 
+  it('carries how many snoops the session has, which lists Go to snoop', () => {
+    expect(buildMenuState(input()).snoops).toBe(0);
+    expect(buildMenuState(input({ snoops: 2 })).snoops).toBe(2);
+  });
+
   it('sends no world name when there is none to show', () => {
     expect(buildMenuState(input({ worldName: '  ' })).worldName).toBeNull();
     expect(buildMenuState(input({ worldName: null })).worldName).toBeNull();
@@ -289,6 +321,7 @@ describe('setAppMenuState', () => {
       theme: 'nord',
       sessions: 1,
       sessionsShown: false,
+      snoops: 0,
     });
     setAppMenuState(state);
     setAppMenuState({ ...state });

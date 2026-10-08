@@ -15,7 +15,10 @@ const fake = vi.hoisted(() => ({
     resets: number;
     cols: number;
     disposed: boolean;
+    focused: boolean;
+    keys: ((event: KeyboardEvent) => boolean) | null;
   }[],
+  sent: [] as string[],
   texts: new Map<string, string>(),
   listeners: new Set<(session: number, name: string, text: string, whole: boolean) => void>(),
 }));
@@ -35,6 +38,8 @@ vi.mock('@xterm/xterm', () => {
     resets = 0;
     cols = 30;
     disposed = false;
+    focused = false;
+    keys: ((event: KeyboardEvent) => boolean) | null = null;
     constructor(options: Record<string, unknown>) {
       this.options = { ...options };
       fake.terms.push(this);
@@ -49,6 +54,12 @@ vi.mock('@xterm/xterm', () => {
       this.written = [];
     }
     onResize = none;
+    attachCustomKeyEventHandler(keys: (event: KeyboardEvent) => boolean) {
+      this.keys = keys;
+    }
+    focus() {
+      this.focused = true;
+    }
     scrollToBottom() {}
     getSelection() {
       return '';
@@ -97,7 +108,9 @@ beforeAll(async () => {
     HTMLIFrameElement: class {},
     addEventListener() {},
     removeEventListener() {},
-    dispatchEvent() {},
+    dispatchEvent(event: Event) {
+      fake.sent.push(event.type);
+    },
   });
   vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
   const storage = { getItem: () => null, setItem() {}, removeItem() {} };
@@ -124,6 +137,7 @@ beforeEach(() => {
   fake.terms.length = 0;
   fake.texts.clear();
   fake.listeners.clear();
+  fake.sent.length = 0;
 });
 
 const STAFF = 1;
@@ -196,6 +210,37 @@ describe('a snoop terminal', () => {
     expect(text()).toBe(
       '\x1b[?25l\x1b[0;33mA rocky mountain path\x1b[0;0m and the\r\ncold air from the mountains\n\r',
     );
+  });
+
+  it('hands Esc and a key that types back to the command line (SN7)', async () => {
+    const { term, unmount } = await mount('Tolliver');
+    let prevented = 0;
+    const key = (key: string, over: Partial<KeyboardEvent> = {}) =>
+      ({
+        type: 'keydown',
+        key,
+        metaKey: false,
+        ctrlKey: false,
+        isComposing: false,
+        preventDefault: () => (prevented += 1),
+        ...over,
+      }) as unknown as KeyboardEvent;
+    const keys = term.keys;
+    if (!keys) throw new Error('no key handler');
+    // A key that types goes back and is left to type there, so xterm
+    // must leave it alone and nothing takes it.
+    expect(keys(key('l'))).toBe(false);
+    expect(prevented).toBe(0);
+    // Esc goes back and is taken.
+    expect(keys(key('Escape'))).toBe(false);
+    expect(prevented).toBe(1);
+    expect(fake.sent).toEqual(['vosh:focus-input', 'vosh:focus-input']);
+    // Cmd J, the arrows, and the key's other events stay with the snoop.
+    expect(keys(key('j', { metaKey: true }))).toBe(true);
+    expect(keys(key('ArrowUp'))).toBe(true);
+    expect(keys(key('l', { type: 'keyup' }))).toBe(true);
+    expect(fake.sent).toHaveLength(2);
+    unmount();
   });
 
   it('leaves out every part of your automation that paints your terminal', () => {

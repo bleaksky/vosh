@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
+import { snoopHandoff } from '../input/snoopHandoff';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { SNOOP_LINES, snoopText, subscribeSnoopOutput } from '../stores/session/snoopStore';
 import { subscribeBaseAnsi } from '../theme/baseAnsi';
@@ -40,6 +41,10 @@ import { WordWrapper } from './wordWrap';
 //
 // The split reads its row height, to size itself in whole rows, and
 // finds in it with the search your terminal uses.
+//
+// Cmd J puts the caret here, though you never type here. Esc or a key
+// that types hands the caret back to the command line, and the key
+// types there (input/snoopHandoff.ts).
 
 /** What the snoop split asks of a snoop terminal. */
 export interface SnoopTerminalHandle {
@@ -49,6 +54,10 @@ export interface SnoopTerminalHandle {
   findPrevious: (query: string, options: FindOptions) => boolean;
   /** Clear the matches once the find bar closes. */
   clearSearch: () => void;
+  /** Put the caret here, which Cmd J does. */
+  focus: () => void;
+  /** What you selected here, or an empty string. */
+  selection: () => string;
 }
 
 /** The match in front and how many there are, as the find bar shows. */
@@ -143,6 +152,18 @@ export function SnoopTerminal({
     termRef.current = term;
 
     const wrapper = new WordWrapper(term.cols);
+    // Esc or a key that types goes back to the command line. xterm does
+    // nothing with a key this answers false for, so a key that types is
+    // left to type where the caret went.
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true;
+      const handoff = snoopHandoff(event);
+      if (handoff === 'stay') return true;
+      if (handoff === 'escape') event.preventDefault();
+      window.dispatchEvent(new Event('vosh:focus-input'));
+      return false;
+    });
+
     const write = (text: string) => term.write(wrapper.process(text) + wrapper.flush());
     let row = 0;
     // A tab behind keeps the size of the one in front, unseen, so it
@@ -202,6 +223,8 @@ export function SnoopTerminal({
       findNext: (query, options) => search.findNext(query, searchOptions(options)),
       findPrevious: (query, options) => search.findPrevious(query, searchOptions(options)),
       clearSearch: () => search.clearDecorations(),
+      focus: () => term.focus(),
+      selection: () => term.getSelection(),
     });
 
     return () => {

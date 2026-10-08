@@ -8,6 +8,7 @@ import snoopCss from '../styles/snoop.css?raw';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { shortcutLabel } from '../lib/shortcuts';
 import { SnoopSplit } from './SnoopSplit';
+import { SNOOP_REQUEST_EVENT, type SnoopRequest } from './snoopKeys';
 import { endedLine, tabTitle } from './snoopLine';
 
 // The snoop split of boards 01 to 04 of the Snoop review. The snoop
@@ -25,6 +26,8 @@ const fake = vi.hoisted(() => ({
   stops: [] as unknown[],
   closes: [] as unknown[],
   windows: [] as unknown[],
+  carets: [] as string[],
+  copied: [] as string[],
 }));
 
 const NOW = 1_800_000_000_000;
@@ -32,7 +35,10 @@ const MIN = 60_000;
 
 vi.mock('../stores/session/snoopStore', () => ({
   useSnoops: () => fake.snoops,
-  selectSnoop: (name: string) => fake.selected.push(name),
+  selectSnoop: (name: string) => {
+    fake.selected.push(name);
+    fake.snoops = { ...fake.snoops, selected: name };
+  },
   setSnoopsFolded: (on: boolean) => fake.folds.push(on),
 }));
 vi.mock('../stores/config/snoopSizeStore', () => ({
@@ -56,10 +62,33 @@ vi.mock('../ipc/snoop', () => ({
   snoopClose: async (session?: number, name?: string) => void fake.closes.push([session, name]),
   snoopWindowOpen: async (session?: number) => void fake.windows.push(session),
 }));
-vi.mock('../terminal/SnoopTerminal', () => ({
-  SnoopTerminal: ({ name, shown }: { name: string; shown: boolean }) =>
-    createElement('div', { 'data-term': name, hidden: !shown }),
-}));
+vi.mock('../terminal/SnoopTerminal', async () => {
+  const { useEffect } = await import('react');
+  return {
+    SnoopTerminal: ({
+      name,
+      shown,
+      onReady,
+    }: {
+      name: string;
+      shown: boolean;
+      onReady?: (handle: unknown) => void;
+    }) => {
+      useEffect(() => {
+        onReady?.({
+          findNext: () => false,
+          findPrevious: () => false,
+          clearSearch: () => {},
+          focus: () => fake.carets.push(name),
+          selection: () => `${name} selected`,
+        });
+        return () => onReady?.(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return createElement('div', { 'data-term': name, hidden: !shown });
+    },
+  };
+});
 
 const live = (name: string, last: number | null = null): SnoopTab => ({
   name,
@@ -113,6 +142,8 @@ beforeEach(() => {
   fake.stops.length = 0;
   fake.closes.length = 0;
   fake.windows.length = 0;
+  fake.carets.length = 0;
+  fake.copied.length = 0;
 });
 
 /** The Find row, with its keys as this platform writes them. */
@@ -209,6 +240,7 @@ describe('what a tab says', () => {
 describe('the strip buttons', () => {
   const doc = new FakeDocument();
   let createRoot: typeof import('react-dom/client').createRoot;
+  const heard = new Map<string, Set<(event: unknown) => void>>();
 
   beforeAll(async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -217,10 +249,19 @@ describe('the strip buttons', () => {
       document: doc,
       location: { protocol: 'about:' },
       HTMLIFrameElement: class {},
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener(type: string, cb: (event: unknown) => void) {
+        if (!heard.has(type)) heard.set(type, new Set());
+        heard.get(type)?.add(cb);
+      },
+      removeEventListener(type: string, cb: (event: unknown) => void) {
+        heard.get(type)?.delete(cb);
+      },
     });
-    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+    vi.stubGlobal('navigator', {
+      userAgent: 'node',
+      platform: '',
+      clipboard: { writeText: async (text: string) => void fake.copied.push(text) },
+    });
     vi.stubGlobal('Node', FakeNode);
     vi.stubGlobal('Element', FakeElement);
     vi.stubGlobal('HTMLElement', FakeElement);
@@ -261,8 +302,16 @@ describe('the strip buttons', () => {
       findAll(host, (el) => el.getAttribute('role') === 'menuitem').map((el) => el.textContent);
     const handle = () => findAll(host, (el) => el.getAttribute('role') === 'separator')[0];
     const finding = () => findAll(host, (el) => el.getAttribute('data-find') === '').length > 0;
+    const ask = (request: SnoopRequest) =>
+      act(() => {
+        for (const cb of heard.get(SNOOP_REQUEST_EVENT) ?? []) cb({ detail: request });
+      });
+    const rerender = () =>
+      act(() => root.render(createElement(SnoopSplit, { ...props, onCaret: () => (carets += 1) })));
     return {
       press,
+      ask,
+      rerender,
       more,
       items,
       handle,
@@ -358,6 +407,71 @@ describe('the strip buttons', () => {
       await split.press(FIND);
       expect(split.finding()).toBe(true);
       expect(fake.saves).toEqual([]);
+      split.unmount();
+    });
+  });
+
+  describe('Cmd J, Cmd F and Copy (SN7)', () => {
+    it('puts the caret in the tab in front', async () => {
+      snoops([live('Tolliver'), live('Orla')], 'Orla');
+      const split = await mount();
+      split.ask('enter');
+      expect(fake.carets).toEqual(['Orla']);
+      expect(fake.selected).toEqual([]);
+      split.unmount();
+    });
+
+    it('steps to the next tab from inside one, and round to the first', async () => {
+      snoops([live('Tolliver'), live('Maren'), ended('Orla', NOW - MIN)], 'Maren');
+      const split = await mount();
+      split.ask('next');
+      split.ask('next');
+      expect(fake.selected).toEqual(['Orla', 'Tolliver']);
+      expect(fake.carets).toEqual(['Orla', 'Tolliver']);
+      split.unmount();
+    });
+
+    it('unfolds a folded split and puts the caret in once it shows', async () => {
+      fake.size = { share: 0.4, folded: true };
+      snoops([live('Tolliver')], 'Tolliver');
+      const split = await mount();
+      split.ask('enter');
+      expect(fake.saves).toEqual([{ share: 0.4, folded: false }]);
+      expect(fake.carets).toEqual([]);
+      fake.size = { share: 0.4, folded: false };
+      split.rerender();
+      expect(fake.carets).toEqual(['Tolliver']);
+      split.unmount();
+    });
+
+    it('brings the snoop window forward while the snoops sit there', async () => {
+      snoops([live('Tolliver')], 'Tolliver', [], true);
+      const split = await mount();
+      split.ask('enter');
+      split.ask('next');
+      expect(fake.windows).toEqual([1, 1]);
+      expect(fake.carets).toEqual([]);
+      split.unmount();
+    });
+
+    it('does nothing with no snoop', async () => {
+      snoops([], null);
+      const split = await mount();
+      split.ask('enter');
+      split.ask('find');
+      expect(fake.carets).toEqual([]);
+      expect(fake.windows).toEqual([]);
+      split.unmount();
+    });
+
+    it('opens Find on the tab in front and copies what you selected in it', async () => {
+      snoops([live('Tolliver'), live('Maren')], 'Maren');
+      const split = await mount();
+      split.ask('find');
+      expect(split.finding()).toBe(true);
+      split.ask('copy');
+      await Promise.resolve();
+      expect(fake.copied).toEqual(['Maren selected']);
       split.unmount();
     });
   });
