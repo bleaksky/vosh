@@ -13,8 +13,8 @@ import {
 // this window or the window is too narrow to hold it (board 8). Either
 // way it folds and the session popover lists the sessions. Once you hide
 // it, it stays hidden as sessions open and close, and Show sessions in
-// the title band brings it back. The width
-// you drag it to is kept in localStorage, as the split's height is,
+// the title band brings it back once the window has room for it. The
+// width you drag it to is kept in localStorage, as the split's height is,
 // since it belongs to the install and to no profile.
 
 const WIDTH_KEY = 'vosh.layout.sessionsWidth';
@@ -47,9 +47,9 @@ export interface SessionsSidebar {
   /** Two or more sessions are open and the sidebar does not show them,
    *  so the session popover does. */
   folded: boolean;
-  /** Two or more sessions are open and you hid the sidebar, so Show
-   *  sessions sits in the title band. A session you open keeps it
-   *  hidden. */
+  /** Two or more sessions are open, you hid the sidebar and the window
+   *  has room for it, so Show sessions sits in the title band. A
+   *  session you open keeps it hidden. */
   hidden: boolean;
   /** Its rows' width, 180 to 320. */
   width: number;
@@ -79,7 +79,7 @@ export function useSessionsSidebar(count: number, panelOpen: boolean): SessionsS
     shown,
     wanted,
     folded: count >= 2 && !shown,
-    hidden: count >= 2 && hidden,
+    hidden: count >= 2 && hidden && !narrow,
     width,
     setWidth: (px) => {
       setWidth(px);

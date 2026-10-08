@@ -135,6 +135,16 @@ describe('the sessions sidebar in the main window', () => {
     expect(seen.now?.hidden).toBe(true);
   });
 
+  it('offers Show sessions only while the window has room for the sidebar', async () => {
+    const m = await mount(1280);
+    await m.run(() => m.get().hide());
+    expect(m.get()).toMatchObject({ hidden: true, folded: true });
+    await m.resizeTo(720);
+    expect(m.get()).toMatchObject({ hidden: false, folded: true });
+    await m.resizeTo(1280);
+    expect(m.get()).toMatchObject({ hidden: true, folded: true });
+  });
+
   it('shows nothing and lists nothing with one session', async () => {
     const m = await mount(1280, 1);
     expect(m.get()).toMatchObject({ shown: false, wanted: false, folded: false });
