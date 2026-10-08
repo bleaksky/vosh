@@ -270,7 +270,7 @@ export class WashPainter {
       this.pending.push(tok);
       return;
     }
-    this.emit(tok);
+    this.put(tok);
   }
 
   /** Whether `tok` paints differently once its row shows whether it
@@ -287,7 +287,7 @@ export class WashPainter {
     const toks = this.pending;
     this.pending = [];
     this.forced = washed;
-    for (const tok of toks) this.emit(tok);
+    for (const tok of toks) this.put(tok);
     this.forced = null;
   }
 
@@ -322,7 +322,8 @@ export class WashPainter {
     this.outBg = bg;
   }
 
-  private emit(tok: string): void {
+  /** Write one token out, under the background it takes. */
+  private put(tok: string): void {
     if (rowEnds(tok)) {
       if (this.rowText && this.washed()) {
         this.setBg(this.rowField());
