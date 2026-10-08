@@ -466,17 +466,17 @@ export function WritingCard({
   };
 
   // ── Where it sits and how big ─────────────────────────────────────
-  const narrowPx = 11;
-  const [px, setPx] = useState(fontSize);
-  const lineH = Math.round(px * 1.3);
-  const chW = useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
-  const boxWidth = 32 + 82 * chW;
+  // The card is as wide as 80 columns of your terminal face. In a window
+  // too narrow for that it spans the window and sets its text at 11 px
+  // to keep 80 columns (Description Editor board 6).
   const guideOn = file.guide && !preview;
-  const cardWidth = boxWidth + 32 + (guideOn ? 248 : 0);
-  const place = useWritingPlace(host, cell, cardWidth);
-  useEffect(() => {
-    setPx(place?.right !== null && place?.right !== undefined ? narrowPx : fontSize);
-  }, [place?.right, fontSize]);
+  const naturalColumn = useMemo(() => columnWidth(fontFamily, fontSize), [fontFamily, fontSize]);
+  const naturalWidth = 32 + 82 * naturalColumn + 32 + (guideOn ? 248 : 0);
+  const place = useWritingPlace(host, cell, naturalWidth);
+  const narrow = place?.right !== null && place?.right !== undefined;
+  const px = narrow ? 11 : fontSize;
+  const lineH = Math.round(px * 1.3);
+  const boxWidth = 32 + 82 * useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
   const fieldsH = info.board ? (info.room || draft.language !== null ? 102 : 68) : 0;
   const chrome = 46 + 1 + 1 + 52 + 12 + 16 + 10 + fieldsH;
   const fit = place ? Math.floor((place.maxHeight - chrome) / lineH) : 12;
