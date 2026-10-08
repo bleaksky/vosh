@@ -1,6 +1,6 @@
 use super::profile::{load_profile_file, slash_profile, PROFILE_SAVE_BUSY};
 use super::script::slash_script;
-use super::slash::{parse_braced_pattern, HELP_TEXT};
+use super::slash::{parse_braced_pattern, HELP_TEXT, SLASH_COMMANDS};
 use super::target::{read_room_chars, set_room_chars};
 use super::*;
 use crate::profile::file::ProfileConfig;
@@ -2165,6 +2165,27 @@ fn unknown_slash_returns_error_echo() {
     let r = process(&mut p, "#nope");
     let leftover = &r.bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
+    assert!(r.echo.iter().any(|l| l.contains("unknown slash command")));
+}
+
+#[test]
+fn slash_commands_list_every_name_the_dispatcher_runs() {
+    for name in SLASH_COMMANDS {
+        let mut p = Profile::default();
+        let r = process(&mut p, &format!("#{name}"));
+        assert!(
+            !r.echo.iter().any(|l| l.contains("unknown slash command")),
+            "#{name}: {:?}",
+            r.echo
+        );
+    }
+}
+
+#[test]
+fn slash_a_word_outside_the_list_is_unknown() {
+    assert!(!SLASH_COMMANDS.contains(&"walkies"));
+    let mut p = Profile::default();
+    let r = process(&mut p, "#walkies");
     assert!(r.echo.iter().any(|l| l.contains("unknown slash command")));
 }
 

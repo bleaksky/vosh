@@ -21,6 +21,49 @@ use crate::profile::live::Profile;
 use crate::script::ApplyResult;
 use crate::session::connection::Connection;
 
+/// Every `#` command Vosh runs, so the page can color what you type
+/// without guessing. `#walk` runs before the match below, so it goes
+/// in by hand. A test keeps this list and the match in step.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the page reads it once input_known_words lands")
+)]
+pub(crate) const SLASH_COMMANDS: &[&str] = &[
+    "alias",
+    "unalias",
+    "aliases",
+    "var",
+    "unvar",
+    "vars",
+    "trigger",
+    "untrigger",
+    "triggers",
+    "prompt",
+    "unprompt",
+    "group",
+    "groups",
+    "tick",
+    "lag",
+    "script",
+    "scripts",
+    "lua",
+    "echo",
+    "showme",
+    "profile",
+    "import-tintin",
+    "logs",
+    "record",
+    "endrec",
+    "target",
+    "tarn",
+    "tarp",
+    "tarclear",
+    "qkey",
+    "qkeys",
+    "help",
+    "walk",
+];
+
 pub(super) fn handle_slash(
     state: &AppState,
     profile: &mut Profile,
