@@ -71,7 +71,7 @@ import {
   sentNote,
   type Ask,
 } from './cardDialogs';
-import { draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
+import { checkable, draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
 import { useBoxSize, useWritingPlace } from './useWritingPlace';
 import {
@@ -507,11 +507,13 @@ export function WritingCard({
     });
   };
 
-  const check = () =>
+  const check = () => {
+    if (!canCheck) return;
     setConfirm({
       ...checkAsk(kind, counted),
       run: () => run({ kind: kind === 'description' ? kind : 'history', action: 'check', name }),
     });
+  };
 
   const readAgain = () => {
     const go = () => run({ kind, action: 'read', name });
@@ -649,6 +651,7 @@ export function WritingCard({
       ? null
       : lineNote(rows[caretRow]?.text ?? '', caretRow, width, helpWidth, immortal);
   const matches = readNow && !empty && !!draft.game && sameLines(lines, draft.game);
+  const canCheck = checkable({ live, running: running !== null, matches, phase, game: draft.game });
   const foot = footFor({
     kind,
     running,
@@ -802,7 +805,7 @@ export function WritingCard({
     sentView,
     canRead: live && running === null,
     canRestore: !!draft.game && !sameLines(lines, draft.game),
-    canCheck: live && running === null && (matches || phase === 'sent'),
+    canCheck,
   }).map((row) => (row === 'separator' ? row : { ...row, run: moreActions[row.id] }));
 
   // ── Moving, sizing and pinning ────────────────────────────────────
