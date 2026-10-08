@@ -22,7 +22,11 @@ import {
 } from '../../ipc/uiConfig';
 import type { Appearance } from '../../theme/chrome';
 import type { SettingsTarget } from '../../lib/settingsNav';
-import { getDaylight, subscribeDaylight } from '../../stores/session/daylightStore';
+import {
+  getDaylight,
+  startDaylightStore,
+  subscribeDaylight,
+} from '../../stores/session/daylightStore';
 import {
   activeThemeFor,
   applyThemePrefs,
@@ -184,6 +188,13 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // The page hears the game's day or night from the start, so choosing
+  // With the game knows whether the game already said, and keeps your
+  // theme when it did.
+  useEffect(() => {
+    startDaylightStore();
   }, []);
 
   // A custom theme that keeps no fit is fitted once the page opens on

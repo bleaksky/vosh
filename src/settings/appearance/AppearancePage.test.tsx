@@ -41,11 +41,21 @@ const fitting = vi.hoisted(() => {
   return { asked, fitOffThread, answer: (fitted: Partial<XtermPalette>) => answer(fitted) };
 });
 vi.mock('../../theme/fitOffThread', () => ({ fitOffThread: fitting.fitOffThread }));
-// The selected session's day or night, which a test sets.
-const daylight = vi.hoisted(() => ({ now: null as 'day' | 'night' | null }));
+// The selected session's day or night, which a test sets. Like the real
+// store it says nothing until something starts it.
+const daylight = vi.hoisted(() => ({
+  now: null as 'day' | 'night' | null,
+  started: false,
+}));
 vi.mock('../../stores/session/daylightStore', () => ({
-  getDaylight: () => daylight.now,
-  subscribeDaylight: () => () => undefined,
+  getDaylight: () => (daylight.started ? daylight.now : null),
+  startDaylightStore: () => {
+    daylight.started = true;
+  },
+  subscribeDaylight: () => {
+    daylight.started = true;
+    return () => undefined;
+  },
 }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
@@ -1142,6 +1152,28 @@ describe('AppearancePage', () => {
       press(segment(c, 'With the game')),
     );
     expect(kept.saved).toMatchObject({ day_theme: 'nord', night_theme: 'obsidian-ember' });
+  });
+
+  it('keeps your theme when you choose With the game after the game said', async () => {
+    // A window that never followed the game until now.
+    daylight.started = false;
+    daylight.now = 'night';
+    const system: UiConfig = {
+      ...config(),
+      theme_follow: 'system',
+      follow_system_appearance: true,
+      dark_theme: 'tokyo-night',
+    };
+    const game = await themeCard(system, (c) => press(segment(c, 'With the game')));
+    expect(game.saved).toMatchObject({
+      theme_follow: 'game',
+      theme: 'nord',
+      day_theme: 'tokyo-night',
+      night_theme: 'tokyo-night',
+    });
+    const off = await themeCard(game.saved as UiConfig, (c) => press(segment(c, 'Off')));
+    expect(off.saved).toMatchObject({ theme_follow: 'off', theme: 'nord' });
+    daylight.now = null;
   });
 
   it('saves Off as follow system appearance off', async () => {
