@@ -299,6 +299,7 @@
       "plugins"
     ],
     "characters": [
+      "add-affect",
       "import-profile",
       "layout",
       "login",
