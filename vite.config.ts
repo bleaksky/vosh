@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readHelp } from './src/help/readHelp';
 
 const host = process.env.TAURI_DEV_HOST;
 const pkg: { version: string } = JSON.parse(
@@ -10,6 +11,15 @@ const pkg: { version: string } = JSON.parse(
 export default defineConfig(async () => ({
   plugins: [
     react(),
+    // The Help window reads HELP.md as it loads. Reading it here first
+    // turns a topic with no id line, or an id used twice, into a failed
+    // build instead of a Help window that throws.
+    {
+      name: 'vosh-help-check',
+      buildStart() {
+        readHelp(readFileSync(new URL('./HELP.md', import.meta.url), 'utf8'));
+      },
+    },
     // Dev-only diagnostics sink. WKWebView gives a dev run no console,
     // so a page or a scripted check can POST text here and it lands in
     // the tauri dev log where it can actually be read.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, readHelp } from './helpContent';
+import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody } from './helpContent';
+import { readHelp } from './readHelp';
 import { ALERT_PRESETS } from '../automation/alertPresets';
 import { SETTINGS_MENU } from '../terminal/settingsMenu';
 
