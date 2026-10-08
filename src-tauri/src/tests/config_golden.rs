@@ -440,6 +440,7 @@ fn full_ui() -> UiConfig {
         writing_card_left: None,
         writing_card_top: None,
         writing_card_rows: None,
+        writing_card_cols: None,
         writing_card_pinned: false,
         chat_colors: BTreeMap::from([
             ("ooc".into(), "brightBlue".into()),

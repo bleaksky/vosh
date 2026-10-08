@@ -90,6 +90,7 @@
     "writing_card_left": 140.5,
     "writing_card_top": 96.5,
     "writing_card_rows": 14,
+    "writing_card_cols": 96,
     "writing_card_pinned": true
   }
 }

@@ -110,6 +110,7 @@ pub(crate) struct UiConfigPayload {
     pub writing_card_left: Option<f64>,
     pub writing_card_top: Option<f64>,
     pub writing_card_rows: Option<u32>,
+    pub writing_card_cols: Option<u32>,
     pub writing_card_pinned: bool,
 }
 
@@ -184,6 +185,7 @@ impl UiConfigPayload {
             writing_card_left: ui.writing_card_left,
             writing_card_top: ui.writing_card_top,
             writing_card_rows: ui.writing_card_rows,
+            writing_card_cols: ui.writing_card_cols,
             writing_card_pinned: ui.writing_card_pinned,
         }
     }
@@ -277,6 +279,7 @@ pub(crate) enum UiField {
     WritingCardLeft(Option<f64>),
     WritingCardTop(Option<f64>),
     WritingCardRows(Option<u32>),
+    WritingCardCols(Option<u32>),
     WritingCardPinned(bool),
 }
 
@@ -420,6 +423,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::WritingCardLeft(v) => ui.writing_card_left = cfg::coerce_writing_card_edge(v),
             UiField::WritingCardTop(v) => ui.writing_card_top = cfg::coerce_writing_card_edge(v),
             UiField::WritingCardRows(v) => ui.writing_card_rows = cfg::coerce_writing_card_rows(v),
+            UiField::WritingCardCols(v) => ui.writing_card_cols = cfg::coerce_writing_card_cols(v),
             UiField::WritingCardPinned(v) => ui.writing_card_pinned = v,
         }
     }
