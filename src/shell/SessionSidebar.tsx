@@ -14,6 +14,7 @@ import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, PlusIcon } from '../ui/icons';
+import { VisuallyHidden } from '../ui/VisuallyHidden';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
@@ -218,7 +219,8 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
         </div>
       </div>
       <h2 className={scrolled ? 'shell-sessions-head is-scrolled' : 'shell-sessions-head'}>
-        Sessions<span className="shell-sessions-total">{rows.length}</span>
+        Sessions<VisuallyHidden>, </VisuallyHidden>
+        <span className="shell-sessions-total">{rows.length}</span>
       </h2>
       <ul
         ref={list}

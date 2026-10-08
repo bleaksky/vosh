@@ -702,7 +702,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
-          aria-label="command input"
+          aria-label="Command line"
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}

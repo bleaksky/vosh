@@ -176,8 +176,8 @@ describe('the session popover with the sidebar folded', () => {
     const { menu, items } = await mount(true);
     expect(findAll(menu, hasClass('shell-menu-head'))[0]?.textContent).toBe('Sessions');
     expect(items.map((el) => el.textContent)).toEqual([
-      'TolliverThickening Woods100%',
-      'Orla18252Fighting a Blackwatch guard18%',
+      'TolliverThickening WoodsHealth 100%',
+      'Orla18252Fighting a Blackwatch guardHealth 18%',
       'The Forsaken Lands1825⌘3The Forsaken Lands',
       'Edit connection…',
       'Rename session…',

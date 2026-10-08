@@ -4,6 +4,7 @@ import { sessionLabel } from '../lib/sessionLabel';
 import { MARK_WORDS, type RowMark } from '../stores/session/sessionRowStore';
 import { useLiveSnoops } from '../stores/session/snoopStore';
 import { HandIcon, SpinnerIcon, TriangleIcon } from '../ui/icons';
+import { VisuallyHidden } from '../ui/VisuallyHidden';
 import { EyeIcon } from './icons';
 import { useSessionLine, type SessionLine } from './sessionLine';
 
@@ -100,6 +101,7 @@ function SecondLine({ line }: { line: SessionLine }) {
       </span>
       {health !== null && (
         <span className={low ? 'shell-sessions-health is-low' : 'shell-sessions-health'}>
+          <VisuallyHidden>Health </VisuallyHidden>
           {health}%
         </span>
       )}
