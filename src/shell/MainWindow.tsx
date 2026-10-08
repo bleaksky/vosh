@@ -12,7 +12,7 @@ import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
-import { openList as openGetStarted } from './getStarted/getStartedStore';
+import { markDone, openList as openGetStarted } from './getStarted/getStartedStore';
 import { showMe } from './getStarted/showMe';
 import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
@@ -799,6 +799,7 @@ function MainWindow() {
           themeTerminalColors={themeTerminalColors}
           brightBold={brightBold}
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onPromptDone={() => markDone('prompt')}
           onClose={closePromptCard}
         />
       )}
