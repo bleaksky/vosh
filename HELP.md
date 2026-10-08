@@ -341,6 +341,7 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 - An application's guide reads your subject the way the game does and shows the help for it, such as help psi requirements. Pick `Custom race application` in the `⋯` menu for a custom race.
 - `Post…` asks first, since you can't change a note once it's posted. Vosh sets `To` and `Subject`, sends your text through the game's editor, reads it back, and posts only when the game holds it as you wrote it. When the game says no, its reason prints under the card and your draft stays.
 - The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
+- If you're disconnected mid send, the card shows how far it got once you're back, and `Post again` starts over. When the drop came as it posted, Vosh checks the board's list first, and it never posts again on its own.
 - Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` sends your history to the immortals, once.
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
