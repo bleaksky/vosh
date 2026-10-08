@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranMapPacket } from '../../test/aabahranGmcp';
 import { hexToRgba } from '../../theme/color';
 import { MAP_COLORS, roomFill, sectorForCode } from './mapPalette';
-import { offerOf, planWalk, walkAhead, type WalkMark } from './mapWalk';
+import { offerOf, planWalk, stepOnItsWay, walkAhead, type WalkMark } from './mapWalk';
 import {
   DOOR_COLORS,
   corridors,
@@ -480,6 +480,21 @@ describe('a walk a click sent', () => {
     expect(walkAhead(VAL_MIRAN, route, { kind: 'idle' }, HERE)).toBeNull();
     // Nor before the game names the room you stand in.
     expect(walkAhead(VAL_MIRAN, route, walking, null)).toBeNull();
+  });
+
+  it('finds the room the step on its way lands in, so a click plans from there', () => {
+    const north = { cell: { row: 9, col: 10 }, room: 20604 };
+    const clicked = { kind: 'walking', done: 2, total: 8, left: '4n2e', route: true } as const;
+    expect(stepOnItsWay(VAL_MIRAN, route, clicked, HERE)).toEqual(north);
+    // A walk you typed takes its first step left out of your cell.
+    const typed = { kind: 'walking', done: 0, total: 2, left: '2n', route: false } as const;
+    expect(stepOnItsWay(VAL_MIRAN, null, typed, HERE)).toEqual(north);
+    // A step up leaves your floor, and nothing is on its way at a stop.
+    expect(stepOnItsWay(VAL_MIRAN, null, { ...typed, left: 'u' }, HERE)).toBeNull();
+    const stop = { kind: 'stopped', done: 2, total: 8, why: 'plain' } as const;
+    expect(stepOnItsWay(VAL_MIRAN, route, stop, HERE)).toBeNull();
+    // The plan from there starts one room north.
+    expect(planWalk(VAL_MIRAN, 6, 12, north.cell)?.steps.join('')).toBe('nnnee');
   });
 
   it('keeps the steps Vosh sent but never saw land solid after a stop', () => {

@@ -355,6 +355,8 @@ describe('a walk on the map', () => {
       gmcp('Room.Info', { num: 20605, name: 'The Central Square of Val Miran', exits: {} });
     });
     cleanups.push(async () => {
+      // The walk store outlives the view, so each test starts idle.
+      await progress({ kind: 'idle' });
       await act(async () => root.unmount());
     });
     const classOf = (el: FakeElement) => el.getAttribute('class') ?? '';
@@ -529,6 +531,25 @@ describe('a walk on the map', () => {
     expect(view.chip()).toEqual(['Stopped after 4 of 6 steps']);
     await progress({ kind: 'stopped', done: 0, total: 6, why: 'lost_track' });
     expect(view.chip()).toEqual(['Stopped']);
+  });
+
+  it('plans a click mid walk from the room the step on its way lands in', async () => {
+    const view = await map();
+    await view.click(6, 12);
+    await progress({ kind: 'walking', done: 0, total: 6, left: '4n2e', route: true });
+    const before = (await routes()).length;
+    await view.click(10, 11);
+    // The step north to 20604 is on its way, and the walker lets the
+    // click take over once it lands there.
+    expect((await routes()).slice(before)).toEqual([
+      { steps: 'se', start: 20604, rooms: [20605, 20610], session: 1 },
+    ]);
+    // A walk you typed plans from its first step left too.
+    await progress({ kind: 'walking', done: 0, total: 2, left: '2n', route: false });
+    await view.click(10, 11);
+    expect((await routes()).slice(before + 1)).toEqual([
+      { steps: 'se', start: 20604, rooms: [20605, 20610], session: 1 },
+    ]);
   });
 
   it('says nothing of a stopped walk you typed', async () => {

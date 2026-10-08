@@ -670,3 +670,46 @@ fn progress_follows_a_click_that_takes_over() {
     let _ = w.command(stop(), t);
     assert_eq!(w.progress(), stopped(0, 1, Why::Plain));
 }
+
+#[test]
+fn a_click_planned_from_where_the_step_lands_takes_over_a_walk_going_well() {
+    let t = Instant::now();
+    // The click back east to the fountain, planned from the Common Road.
+    let back = |start: i64| WalkCommand::Start {
+        plan: WalkPlan {
+            steps: parse_steps("e").expect("the steps read"),
+            route: Some(Route {
+                start,
+                rooms: vec![FOUNTAIN],
+            }),
+        },
+        rest: Vec::new(),
+    };
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(route_from(FOUNTAIN), t);
+    // The step west is on its way, so the page plans the click from the
+    // road it reaches, and the click takes over once it lands.
+    assert_eq!(w.command(back(ROAD), t), WalkOut::default());
+    assert_eq!(
+        arrive(&mut w, ROAD, t),
+        WalkOut {
+            send: b"e\r\n".to_vec(),
+            lines: vec!["[walk] Stopped after 1 of 2 steps.".to_string()],
+            ..WalkOut::default()
+        }
+    );
+    assert_eq!(w.progress(), walking(0, 1, "e", true));
+    assert_eq!(arrive(&mut w, FOUNTAIN, t), WalkOut::default());
+    assert_eq!(w.progress(), WalkProgress::Idle);
+
+    // Planned from the room the step leaves, the click drops where the
+    // step lands, and the walk stops there.
+    let mut w = standing_in(FOUNTAIN, t);
+    let _ = w.command(route_from(FOUNTAIN), t);
+    let _ = w.command(back(FOUNTAIN), t);
+    assert_eq!(
+        arrive(&mut w, ROAD, t),
+        said(&["[walk] Stopped after 1 of 2 steps."])
+    );
+    assert_eq!(w.progress(), stopped(1, 2, Why::Plain));
+}

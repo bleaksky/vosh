@@ -22,6 +22,7 @@ import {
   offerOf,
   planWalk,
   speedwalk,
+  stepOnItsWay,
   walkAhead,
   type GridSpot,
   type WalkMark,
@@ -229,22 +230,27 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     onPick: (at) => {
       // A click walks the plan for the room it lands on, from the room
       // the game last said you stand in, and the map keeps the route to
-      // light it as the walk goes on. Rust drops a click planned from a
-      // room you have since left, and the game has the final word on
-      // every step.
+      // light it as the walk goes on. While you walk it plans from the
+      // room the step on its way lands in, since Rust lets the click
+      // take over only there. The game has the final word on every
+      // step.
       const target = spotAt(at);
-      const plan = tiles && target && planWalk(tiles, target.row, target.col);
-      const session = getSelected();
-      const start = here;
-      if (!tiles || !target || !plan || plan.steps.length === 0 || start === null) return;
+      if (!tiles || !target || here === null) return;
       const { rows, cols } = gridDims(tiles);
+      const from = stepOnItsWay(tiles, walk.route, walk.progress, here) ?? {
+        cell: playerCellOf(tiles, rows, cols),
+        room: here,
+      };
+      const plan = planWalk(tiles, target.row, target.col, from.cell);
+      if (!plan || plan.steps.length === 0) return;
+      const session = getSelected();
       noteWalkRoute(session, {
-        cells: [playerCellOf(tiles, rows, cols), ...plan.cells],
-        rooms: [start, ...plan.rooms],
+        cells: [from.cell, ...plan.cells],
+        rooms: [from.room, ...plan.rooms],
         target,
         kind: plan.kind,
       });
-      void walkRoute(speedwalk(plan.steps), start, plan.rooms, session).catch(() => {});
+      void walkRoute(speedwalk(plan.steps), from.room, plan.rooms, session).catch(() => {});
     },
   });
 

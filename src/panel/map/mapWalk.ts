@@ -134,19 +134,21 @@ function planOf(path: Edge[], kind: WalkKind): WalkPlan {
   };
 }
 
-/** The walk from your room to the room at targetRow, targetCol on your
- *  floor, or null when there is none to offer. Your own room, an empty
- *  cell and a room no lowercase exits reach give null. Rooms on other
- *  floors are not in the grid, so they never take a walk. */
+/** The walk from your room, or from the cell `from` on your floor, to
+ *  the room at targetRow, targetCol, or null when there is none to
+ *  offer. The room it starts from, an empty cell and a room no
+ *  lowercase exits reach give null. Rooms on other floors are not in
+ *  the grid, so they never take a walk. */
 export function planWalk(
   payload: MapTilesPayload,
   targetRow: number,
   targetCol: number,
+  from?: GridSpot,
 ): WalkPlan | null {
   const target = { row: targetRow, col: targetCol };
   if (!getCell(payload, targetRow, targetCol)) return null;
   const { rows, cols } = gridDims(payload);
-  const you = playerCellOf(payload, rows, cols);
+  const you = from ?? playerCellOf(payload, rows, cols);
   if (you.row === targetRow && you.col === targetCol) return null;
 
   const open = search(payload, you, target, (edge) => !edge.door && !edge.shore);
@@ -226,4 +228,40 @@ export function walkAhead(
     kind: route.kind,
   };
   return progress.kind === 'stopped' ? { ...mark, solid: Math.max(0, progress.done - at) } : mark;
+}
+
+/** A room on your floor, its cell and its num. */
+export interface WalkStart {
+  cell: GridSpot;
+  room: number;
+}
+
+/** Where the step on its way lands while you walk, so a click mid walk
+ *  plans from there. The walker lets a new walk take over only once
+ *  that step lands, and drops one planned from another room. A click
+ *  walk names the room in its route, after `here`, the room the last
+ *  Room.Info names. A walk you typed takes the first step it has left
+ *  out of your cell, to the room that exit's `ex` names. Null when
+ *  nothing walks or the step leaves your floor. */
+export function stepOnItsWay(
+  payload: MapTilesPayload,
+  route: WalkRoute | null,
+  progress: WalkProgress,
+  here: number | null,
+): WalkStart | null {
+  if (progress.kind !== 'walking' || here === null) return null;
+  const { rows, cols } = gridDims(payload);
+  const you = playerCellOf(payload, rows, cols);
+  if (progress.route) {
+    const at = route ? route.rooms.indexOf(here) : -1;
+    if (!route || at < 0 || at + 1 >= route.rooms.length) return null;
+    const [was, next] = [route.cells[at], route.cells[at + 1]];
+    return {
+      cell: { row: next.row + you.row - was.row, col: next.col + you.col - was.col },
+      room: route.rooms[at + 1],
+    };
+  }
+  const dir = /[a-z]/.exec(progress.left)?.[0];
+  const edge = edgesFrom(payload, you.row, you.col).find((e) => e.dir === dir);
+  return edge ? { cell: { row: edge.row, col: edge.col }, room: edge.room } : null;
 }
