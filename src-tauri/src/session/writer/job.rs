@@ -7,8 +7,8 @@
 //! a line where the game would take it as something else.
 //!
 //! A command at the game's prompt waits for the game's next prompt, the
-//! GMCP prompt tick (`comm.c:1625`), and reads the lines before it as its
-//! answer. A command inside the editor waits for the editor's `> `
+//! GMCP prompt tick (`comm.c:1629`) once the text of its pulse is in, and
+//! reads the lines it gathered as its answer. A command inside the editor waits for the editor's `> `
 //! (`comm.c:1583`). A line of your text counts as taken when a `> `
 //! comes alone, and after three pulses with none, since the game writes
 //! one after anything it sends you while the editor is open, a say or a
@@ -310,20 +310,23 @@ impl Job {
         }
     }
 
-    /// The game's prompt tick, which comes only at the game's own prompt.
-    pub(crate) fn tick(&mut self, now: Instant, out: &mut Vec<String>) {
+    /// The game's prompt tick, which comes only at the game's own prompt,
+    /// once the text of its pulse is in. Returns true when a command still
+    /// waits for its answer, which the next text brings.
+    pub(crate) fn tick(&mut self, now: Instant, out: &mut Vec<String>) -> bool {
         match std::mem::replace(&mut self.phase, Phase::Idle) {
             Phase::Tick { ask, lines, since } => {
                 let answered = ask.is_none() || lines.iter().any(|l| !l.plain.trim().is_empty());
                 if !answered {
                     self.phase = Phase::Tick { ask, lines, since };
-                    return;
+                    return true;
                 }
                 self.in_editor = false;
                 match ask {
                     None => self.advance(now, out),
                     Some(ask) => self.answered(ask, &lines, now, out),
                 }
+                false
             }
             Phase::Editor { lines, .. } => {
                 // The editor never opened, or it closed under the card.
@@ -345,6 +348,7 @@ impl Job {
                         line: None,
                     });
                 }
+                false
             }
             Phase::Sending { .. } => {
                 self.in_editor = false;
@@ -352,8 +356,9 @@ impl Job {
                     why: Why::Closed,
                     line: None,
                 });
+                false
             }
-            Phase::Idle => {}
+            Phase::Idle => false,
         }
     }
 
