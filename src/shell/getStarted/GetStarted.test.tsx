@@ -12,6 +12,9 @@ type Handler = (event: { payload: unknown }) => void;
 const bus = vi.hoisted(() => ({
   saved: null as unknown,
   enabled: ['none'] as string[],
+  shared: false,
+  /** Where the last Settings link pointed. */
+  link: null as string | null,
   calls: [] as [string, unknown][],
   keydown: null as ((event: unknown) => void) | null,
 }));
@@ -25,6 +28,8 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (cmd === 'get_started_get') return bus.saved;
     if (cmd === 'ui_get_config') return { enabled_presets: bus.enabled };
     if (cmd === 'preset_edits_get') return {};
+    if (cmd === 'loadouts_get_state')
+      return { path_b_active: bus.shared, active: [], loadouts: [] };
     if (cmd === 'triggers_list' || cmd === 'macros_list') return [];
     bus.calls.push([cmd, args]);
     if (cmd === 'presets_enabled_set') return { installed: 0, removed: [] };
@@ -54,7 +59,12 @@ let toasts: typeof import('../../stores/toasts');
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('document', doc);
-  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined });
+  vi.stubGlobal('localStorage', {
+    getItem: () => null,
+    setItem: (_key: string, value: string) => {
+      bus.link = value;
+    },
+  });
   vi.stubGlobal('window', {
     document: doc,
     location: { protocol: 'about:' },
@@ -92,6 +102,7 @@ async function load() {
 beforeEach(() => {
   bus.calls = [];
   bus.enabled = ['none'];
+  bus.shared = false;
   facts.value = { ...facts.value, enabledPresets: ['none'] };
 });
 
@@ -264,5 +275,62 @@ describe('Get started', () => {
     expect(text).toContain('Connect to The Forsaken LandsOrla');
     expect(text).not.toContain('After you log in');
     expect(text).toContain('Get started stays in Help.Done');
+  });
+
+  it('lists the five suggestions with their switches, and saves each flip at once', async () => {
+    facts.value = { ...facts.value, enabledPresets: ['room_and_time'] };
+    bus.enabled = ['room_and_time'];
+    const view = await mount({ atLaunch: true, done: ['connect'] });
+    await view.press('Color what the game prints');
+    const text = view.text();
+    expect(text).toContain('BackColor what the game prints1 on');
+    expect(text).toContain('Each switch saves to this profile at once.');
+    expect(text).toContain('Suggested for The Forsaken LandsTurn on all five');
+    const names = ['Room, time and weather colors', 'Your damage verbs', 'Damage to you'];
+    for (const name of names) expect(text).toContain(name);
+    expect(text).toContain('Cures and heals');
+    expect(text).toContain('Gold, experience, and levels');
+    expect(text).not.toContain('Tells you send');
+    await view.flip('Damage to you');
+    const sets = () => bus.calls.filter(([cmd]) => cmd === 'presets_enabled_set');
+    expect(sets()).toHaveLength(1);
+    expect(sets()[0][1]).toMatchObject({ changes: [{ id: 'combat_incoming', on: true }] });
+    await view.flip('Room, time and weather colors');
+    expect(sets()).toHaveLength(2);
+    expect(sets()[1][1]).toMatchObject({ changes: [{ id: 'room_and_time', on: false }] });
+  });
+
+  it('turns on every suggestion that is off in one call', async () => {
+    facts.value = { ...facts.value, enabledPresets: ['room_and_time'] };
+    bus.enabled = ['room_and_time'];
+    const view = await mount({ atLaunch: true, done: ['connect'] });
+    await view.press('Color what the game prints');
+    await view.press('Turn on all five');
+    await act(settle);
+    const sets = bus.calls.filter(([cmd]) => cmd === 'presets_enabled_set');
+    expect(sets).toHaveLength(1);
+    expect(sets[0][1]).toMatchObject({
+      changes: [
+        { id: 'combat_outgoing', on: true },
+        { id: 'combat_incoming', on: true },
+        { id: 'healing_basics', on: true },
+        { id: 'loot_progression', on: true },
+      ],
+    });
+  });
+
+  it('opens Presets on the first suggestion that is off', async () => {
+    facts.value = { ...facts.value, enabledPresets: ['room_and_time'] };
+    const view = await mount({ atLaunch: true, done: ['connect'] });
+    await view.press('Color what the game prints');
+    await view.press('Open Presets');
+    expect(bus.link).toBe('automation:presets#presets:combat_outgoing');
+  });
+
+  it('says a switch saves for every character in loadout mode', async () => {
+    bus.shared = true;
+    const view = await mount({ atLaunch: true, done: ['connect'] });
+    await view.press('Color what the game prints');
+    expect(view.text()).toContain('Each switch saves at once, for every character.');
   });
 });

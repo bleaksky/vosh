@@ -4,7 +4,6 @@ import { PRESETS, type Preset } from '../../automation/presets';
 import type { PromptShowState } from '../../ipc/prompt';
 import { useEscape } from '../../lib/escapeStack';
 import { APP_SHORTCUTS } from '../../lib/appMenu';
-import { openSettingsTab } from '../../lib/settingsLink';
 import { shortcutKeys } from '../../lib/shortcuts';
 import type { PromptCardHost } from '../../prompt/PromptCard';
 import type { CellSize } from '../../prompt/pinnedDock';
@@ -29,10 +28,12 @@ import {
   stepMeta,
   stepsFor,
   suggestedPresets,
+  suggestionsOn,
   type GetStartedFacts,
   type Step,
   type StepId,
 } from './steps';
+import { OpenPresets, PresetsStep } from './PresetsStep';
 import { switchPresets } from './switchPresets';
 import { TellSample } from './TellSample';
 
@@ -309,7 +310,7 @@ function StepList({
   } else {
     foot = (
       <>
-        {!onForsakenLands(world) && <OpenPresets />}
+        {!onForsakenLands(world) && <OpenPresets host={world} facts={facts} />}
         <span className="pc-spacer" />
         {SHOWS.includes(step.id) ? (
           showMe(step)
@@ -338,12 +339,6 @@ function StepList({
       <Foot>{foot}</Foot>
     </>
   );
-}
-
-/** Open Settings on Presets, where every preset shows its sample, so
- *  you judge whether your game prints those lines. */
-function OpenPresets() {
-  return <Button onClick={() => openSettingsTab('automation:presets')}>Open Presets</Button>;
 }
 
 /** A step's page, board 2: Back, what the step does in a line, and
@@ -376,7 +371,15 @@ function StepPage({
   );
   let foot: ReactNode;
   if (step.id === 'connect' && !play.live) foot = connectButtons;
-  else {
+  else if (step.id === 'presets') {
+    foot = (
+      <>
+        <OpenPresets host={world} facts={facts} />
+        <span className="pc-spacer" />
+        {nextButton}
+      </>
+    );
+  } else {
     foot = (
       <>
         {next && showMe}
@@ -391,9 +394,15 @@ function StepPage({
 
   return (
     <>
-      <Header title={step.title} meta={null} back onClose={onClose} />
+      <Header
+        title={step.title}
+        meta={step.id === 'presets' ? `${suggestionsOn(world, facts)} on` : null}
+        back
+        onClose={onClose}
+      />
       <div className="pc-body">
         <p className="pc-question">{step.line}</p>
+        {step.id === 'presets' && <PresetsStep host={world} facts={facts} />}
         {step.id === 'panes' && (
           <>
             <p className="pc-copy">

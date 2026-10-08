@@ -45,8 +45,8 @@ import { Button, Card, CardNote, cx, Keycap, Row, Toggle } from '../../ui';
 import { AlertDetailRows, AlertRow, BannerOffNote, type AlertDetail } from './AlertRows';
 import { DraftEditor } from './DraftEditor';
 import { PresetColors } from './PresetColors';
-import { PresetSample } from './PresetSample';
-import { SamplePaintContext, useSamplePaint } from './samplePaint';
+import { PresetSample } from '../../automation/PresetSampleView';
+import { SamplePaintContext, useSamplePaint } from '../../automation/samplePaint';
 import type { DetailProps, DirtyReport, KindSpec, TriggersLink } from './types';
 import { useBannerPermission } from './useBannerPermission';
 

@@ -101,7 +101,7 @@ export function stepsFor(target: ConnectionTarget): Step[] {
 }
 
 /** How many of the suggested presets are on. */
-function suggestionsOn(host: string, facts: GetStartedFacts): number {
+export function suggestionsOn(host: string, facts: GetStartedFacts): number {
   if (!facts.enabledPresets) return 0;
   const on = new Set(enabledPresetIds(facts.enabledPresets));
   return suggestedPresets(host).filter((p) => on.has(p.id)).length;

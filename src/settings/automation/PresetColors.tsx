@@ -5,7 +5,7 @@ import type { Preset, PresetColor } from '../../automation/presets';
 import type { PresetEdit } from '../../ipc/presetEdits';
 import { ColorField, cx, Select } from '../../ui';
 import { FixChoice } from './fields';
-import { SamplePaintContext } from './samplePaint';
+import { SamplePaintContext } from '../../automation/samplePaint';
 
 // The Colors block of a preset's card (Presets board 1, Q3, Q4 and Q8):
 // one swatch for each color the preset paints, on the grid Appearance

@@ -1,9 +1,9 @@
 import { createContext, useMemo } from 'react';
-import type { SamplePaint } from '../../automation/presetSample';
-import type { UiConfig } from '../../ipc/uiConfig';
-import { nativeThemeOf } from '../../terminal/terminalTheme';
-import { resolveThemeTerminalColors } from '../../theme/themes';
-import { useActiveTheme } from '../../theme/useActiveTheme';
+import type { SamplePaint } from './presetSample';
+import type { UiConfig } from '../ipc/uiConfig';
+import { nativeThemeOf } from '../terminal/terminalTheme';
+import { resolveThemeTerminalColors } from '../theme/themes';
+import { useActiveTheme } from '../theme/useActiveTheme';
 
 /** What the samples on the page paint with, and the terminal's text
  *  color. Null draws them in the page's text color alone. */
