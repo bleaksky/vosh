@@ -428,7 +428,11 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
       ['1250 ', '230'],
       ['experience points.', '248'],
     ],
-    [['You raise a level!!', '120']],
+    [
+      ['You have become better at ', '120'],
+      ['knot tying', '230'],
+      ['!', '120'],
+    ],
   ],
   potion_labels: [
     [
