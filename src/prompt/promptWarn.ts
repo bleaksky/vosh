@@ -1,8 +1,7 @@
 // The parts of your design no value fills, which the card rings on your
 // prompt and Settings rings in its preview, in --warn: a name Vosh does
 // not know, and a value only a code of your prompt in the game sends
-// while your prompt leaves that code out and no package sends it
-// (section 7 steps 6 and 13, and P14's part your prompt no longer feeds).
+// while your prompt leaves that code out and no package sends it.
 
 import { needsCode } from './pickerRows';
 import type { PromptFieldState } from '../ipc/prompt';

@@ -90,7 +90,7 @@ interface TextFootProps {
   onDone: () => void;
 }
 
-/** The foot under your vitals text (Vitals Styles Q10): where it draws
+/** The foot under your vitals text: where it draws
  *  on the left, since Style and Show your vitals in say whether and
  *  where, then the preview and Done. */
 export function TextFoot({ note, preview, forsaken, onPreview, onDone }: TextFootProps) {

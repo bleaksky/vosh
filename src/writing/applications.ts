@@ -1,12 +1,12 @@
 import type { Guide } from './kinds';
 
 // The guide of an application reads its subject the way the game does,
-// and shows the help of the application it names (Note Editor Q9). The
-// game checks a class application at post when the subject holds a word
-// that starts with the class and one that starts with app
-// (recycle.c:2705, 2825, is_auto_name in handler.c:2723), and staff read
-// the rest by the words their helps ask for. Vosh checks none of these
-// rows and puts no word in your subject.
+// and shows the help of the application it names. The game checks a
+// class application at post when the subject holds a word that starts
+// with the class and one that starts with app (recycle.c:2705, 2825,
+// is_auto_name in handler.c:2723), and staff read the rest by the words
+// their helps ask for. Vosh checks none of these rows and puts no word
+// in your subject.
 
 interface Application {
   /** What the guide calls it. */

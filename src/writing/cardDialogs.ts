@@ -4,9 +4,8 @@ import type { Count } from './text';
 import { readers, type Note } from './words';
 
 // What the writing card asks before it does what can't be taken back,
-// and what it says once the game took a text (Description Editor Q13,
-// Note Editor Q7 and Q8). Each confirm says who reads the text or what
-// goes, in short plain words.
+// and what it says once the game took a text. Each confirm says who
+// reads the text or what goes, in short plain words.
 
 export interface Ask {
   title: string;

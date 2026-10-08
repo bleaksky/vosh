@@ -5,13 +5,12 @@ import type { WritingKind } from '../ipc/writing';
 import { useWriting } from '../stores/session/writingStore';
 
 // The card's offer when you open the game's editor yourself on a text
-// Vosh can name (Description Editor Q3, Note Editor Q3, board 3). It is
-// the update notice's recipe at the terminal's lower right: the accent
-// dot, Write this in Vosh?, Keep typing and Open in Vosh. It goes when you
-// choose, when anything else goes out after your line, and when the
-// game's prompt returns, since the writer takes the offer back then.
-// Settings › Input › Offer the card when the game's editor opens turns
-// it off.
+// Vosh can name. It is the update notice's recipe at the terminal's
+// lower right: the accent dot, Write this in Vosh?, Keep typing and
+// Open in Vosh. It goes when you choose, when anything else goes out
+// after your line, and when the game's prompt returns, since the writer
+// takes the offer back then. Settings › Input › Offer the card when the
+// game's editor opens turns it off.
 
 // A press on the notice's buttons leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();

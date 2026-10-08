@@ -7,7 +7,7 @@ import { listJoin } from '../lib/text';
 // capture takes it, Vosh says so once with the codes it now reads. When
 // the new setting no longer shows a part your design reads and no
 // package sends it either, Vosh says that once too, and the card and
-// Settings ring that part (P14). Only the session in front, the selected
+// Settings ring that part. Only the session in front, the selected
 // one, says so, since the toast names no session.
 
 /** The toast for one report, or null when the capture took nothing. */

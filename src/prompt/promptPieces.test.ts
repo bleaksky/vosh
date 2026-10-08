@@ -330,7 +330,7 @@ describe('the rows of a part', () => {
 });
 
 describe('where the marks sit', () => {
-  // The boards' grid: text at x 16, rows 17.5 apart, cells 7.8 wide.
+  // The terminal grid: text at x 16, rows 17.5 apart, cells 7.8 wide.
   const grid: Grid = { left: 16, top: 38, cellW: 7.8, cellH: 17.5 };
 
   it('rings the picked part on the open row (P5)', () => {

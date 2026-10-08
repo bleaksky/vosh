@@ -2,10 +2,10 @@ import type { Draft, WritingCharacter, WritingFile, WritingKind } from '../ipc/w
 import { KINDS } from './kinds';
 import { count } from './text';
 
-// The writing card's two menus as rows (Note Editor boards 1, 2 and 7):
-// the title's, which lists your drafts, the kinds under New, your posts
-// under Sent and the other characters with drafts, and the ⋯ menu,
-// which differs between a note and a text the game saves in place.
+// The writing card's two menus as rows: the title's, which lists your
+// drafts, the kinds under New, your posts under Sent and the other
+// characters with drafts, and the ⋯ menu, which differs between a note
+// and a text the game saves in place.
 
 /** A row of the title's menu that opens one draft or one post. */
 export interface DraftRow {
@@ -38,7 +38,7 @@ export type MoreRow =
 /** The ⋯ menu. A note's keeps the description card's Rewrap all, Check
  *  spelling and Copy all, and adds a language, Copy to a new draft and
  *  Delete the draft…. Read again and Restore are a text about you's,
- *  since the game holds no copy of a note to go back to (board 1), and
+ *  since the game holds no copy of a note to go back to, and
  *  so is the check, which you send whenever you like. */
 export function moreRows(m: {
   kind: WritingKind;

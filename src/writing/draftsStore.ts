@@ -11,11 +11,11 @@ import {
 import { createDebouncedWrite, pendingWrites, type DebouncedWrite } from '../lib/pendingWrites';
 import { createStore } from '../stores/store';
 
-// Your drafts and posts for the writing card, as writing.toml keeps them
-// for each character on each world (Note Editor Q10). The card changes
-// a character here as you type, and each change reaches the file a
-// moment later, or at once when the window flushes its writes on quit.
-// A draft saves as you type, so closing the card never asks.
+// Your drafts and posts for the writing card, as writing.toml keeps
+// them for each character on each world. The card changes a character
+// here as you type, and each change reaches the file a moment later, or
+// at once when the window flushes its writes on quit. A draft saves as
+// you type, so closing the card never asks.
 
 /** Where a character plays. */
 export interface World {

@@ -91,38 +91,39 @@ import { DesignFoot, TextFoot } from './PromptFoot';
 import { DrawOff, Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
-// The prompt card (section 7 of the prompt build spec). It opens from the
-// terminal menu on any row, the palette, or Customize… in Settings, over
-// your prompt: 4 px above the row right above it in the text and lifted,
-// 4 px above the band while it is pinned, and over the last row while no
-// prompt is open. It is saved for the character that owns the profile.
+// The prompt card. It opens from the terminal menu on any row, the
+// palette, or Customize… in Settings, over your prompt: 4 px above the
+// row right above it in the text and lifted, 4 px above the band while
+// it is pinned, and over the last row while no prompt is open. It is
+// saved for the character that owns the profile.
 //
 // With no capture it walks you through the capture steps: the codes the
-// game sent (P3), your setting when the game sent none (P2), or the line
-// another game prints (P15). Then it offers designs to start from (P4),
-// and on every later open it rests with the Presets menu. Click a part of
-// your prompt to change it (P5, P7, P10), or past its end to place the
-// caret, add a value there with Insert value… (P6), or edit the design as
-// text (P9). Left and Right pick parts, Option with them moves one,
-// Delete removes it, typing adds text at the caret and Return a line
-// break. Every change saves as you make it, and Command Z takes the last
-// one back. While it reads your codes your prompt shows the line the game
-// sent with the values it reads marked, and once it draws your design it
-// labels each value with nothing to show, so you can point at it, over
-// the band of Lifted in the text. Closing it puts your live prompt back.
-// At its foot, beside Draw your prompt, a button picks where your prompt
-// shows, and the card moves with your prompt to the place you pick. A
-// menu before Done picks the preview while drawing is on (DesignFoot).
+// game sent, your setting when the game sent none, or the line another
+// game prints. Then it offers designs to start from, and on every later
+// open it rests with the Presets menu. Click a part of your prompt to
+// change it, or past its end to place the caret, add a value there with
+// Insert value…, or edit the design as text. Left and Right pick parts,
+// Option with them moves one, Delete removes it, typing adds text at
+// the caret and Return a line break. Every change saves as you make it,
+// and Command Z takes the last one back. While it reads your codes your
+// prompt shows the line the game sent with the values it reads marked,
+// and once it draws your design it labels each value with nothing to
+// show, so you can point at it, over the band of Lifted in the text.
+// Closing it puts your live prompt back. At its foot, beside Draw your
+// prompt, a button picks where your prompt shows, and the card moves
+// with your prompt to the place you pick. A menu before Done picks the
+// preview while drawing is on (DesignFoot).
 //
 // Bound to your vitals text (VITALS_TEXT_BINDING) it is titled Your
-// vitals text (Vitals Styles Q10). It reads no prompt, so it has no
-// capture steps and rests at once, and it keeps the parts, Insert
-// value…, Edit as text, Command Z, the Preview menu and Done. Its
-// Presets are Vosh's text, Yours, Your text before that and Your 0.7
-// text, and its foot says where the text draws in place of Draw your
-// prompt and where your prompt shows. It floats over the terminal 12 px
-// from the panel, its foot over the input band, and rings the part you
-// pick on the footer, where a click on a part turns the card to it.
+// vitals text, apart from Customize vitals…. It reads no prompt, so it
+// has no capture steps and rests at once, and it keeps the parts,
+// Insert value…, Edit as text, Command Z, the Preview menu and Done.
+// Its Presets are Vosh's text, Yours, Your text before that and Your
+// 0.7 text, and its foot says where the text draws in place of Draw
+// your prompt and where your prompt shows. It floats over the terminal
+// 12 px from the panel, its foot over the input band, and rings the
+// part you pick on the footer, where a click on a part turns the card
+// to it.
 //
 // The card works on one session's prompt, the selected session's, and
 // names that session on every call, so an edit or a save still under
@@ -170,7 +171,7 @@ interface PromptCardProps {
   onClose: () => void;
 }
 
-/** What the Lament preview hides, under the card at rest (P8c). */
+/** What the Lament preview hides, under the card at rest. */
 const LAMENT_NOTE =
   "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
 
@@ -376,9 +377,9 @@ export function PromptCard({
     if (asked === 'text') setTextFocus((n) => n + 1);
   }, [opening.at, asked, vitals]);
 
-  // The code reader you chose on another host gives it the Forsaken Lands
-  // rules while the card stays open, so the game's reply to prompt fills
-  // P2's fields (D17). Closing the card lets it go.
+  // The code reader you chose on another host gives it the Forsaken
+  // Lands rules while the card stays open, so the game's reply to
+  // prompt fills the setting's fields. Closing the card lets it go.
   useEffect(() => {
     void promptCodeReaderSet(codesChosen, session).catch(() => {});
   }, [codesChosen, session]);
@@ -398,7 +399,7 @@ export function PromptCard({
   }, [step, reading, drawn, session, vitals]);
 
   // Past the capture steps the card works on your design: as text even
-  // with drawing off (P11), and on your prompt while drawing is on.
+  // with drawing off, and on your prompt while drawing is on.
   const editing = step === 'start' || step === 'rest';
   const designing = editing && (config?.draw ?? false);
   // Where the marks go: your prompt in the terminal, or for a vitals
@@ -700,7 +701,7 @@ export function PromptCard({
       case 'start':
       case 'rest': {
         // With drawing off the card says so at rest, and Edit as text
-        // still works on the design you keep (P11).
+        // still works on the design you keep.
         const drawOff = !config.draw && step === 'rest' && view === 'design';
         let content: ReactNode;
         if (drawOff) {

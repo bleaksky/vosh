@@ -2,19 +2,18 @@ import type { JobProgress, WritingKind } from '../ipc/writing';
 import { KINDS } from './kinds';
 import { progressLine, type Note } from './words';
 
-// What the writing card's footer shows (Description Editor board 1, Note
-// Editor boards 1 and 4). On the left, in this order: a job's progress,
-// what the last job left, what a paste changed, a text past the game's
-// room, a run the game takes as spam, the caret's line, a game busy in
-// another editor, and the count. On the right, the fix for what the left
-// says beside the card's main button.
+// What the writing card's footer shows. On the left, in this order: a
+// job's progress, what the last job left, what a paste changed, a text
+// past the game's room, a run the game takes as spam, the caret's line,
+// a game busy in another editor, and the count. On the right, the fix
+// for what the left says beside the card's main button.
 
 /** What the last job left in the footer until you change the text, and
  *  the buttons it brings. */
 export interface Ended {
   note: Note;
   /** `done` ends the card where the game said no for good, such as an
-   *  application it turned down (Note Editor board 5). */
+   *  application it turned down. */
   actions: ('restore' | 'again' | 'clear-other' | 'done')[];
   /** The board whose note `clear-other` clears. */
   other?: WritingKind | null;
@@ -141,17 +140,16 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
       label: again ? 'Post again' : f.asksPost ? 'Post…' : 'Post',
       primary: true,
       // The game holds one note, so Post… waits while another board's
-      // note is there (Note Editor board 7), and after a drop it waits
-      // for the board's list (board 8).
+      // note is there, and after a drop it waits for the board's list.
       disabled: !f.canPost || f.finding || f.ended?.actions.includes('clear-other') === true,
     });
   } else if (f.phase === 'sent') {
     buttons.push({ id: 'done', label: 'Done', primary: true });
   } else {
     // The game holds the text as the card shows it, so Done shows, and
-    // Send to game takes its place once it differs (Note Editor board 6).
-    // After a drop Send again stays. The check waits in the ⋯ menu, since
-    // the game keeps a text unchecked as long as you like.
+    // Send to game takes its place once it differs. After a drop Send
+    // again stays. The check waits in the ⋯ menu, since the game keeps
+    // a text unchecked as long as you like.
     if (f.matches && info.check) {
       if (!again) {
         buttons.push({ id: 'done', label: 'Done', primary: true });

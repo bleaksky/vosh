@@ -15,7 +15,7 @@ import {
 
 // What the writing card says: the header's line about the draft, the
 // footer's count, the note about the line the caret is on, and what a
-// job's end leaves. Each is short and plain, in the boards' words.
+// job's end leaves. Each is short and plain.
 
 /** A footer note: its first sentence reads stronger, and its tone sets
  *  its dot. */
@@ -27,7 +27,7 @@ export interface Note {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** One, two... as the boards spell a small count in prose. */
+/** One, two... as a small count reads in prose. */
 function spelled(n: number): string {
   return (
     ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][n] ?? String(n)
@@ -40,9 +40,9 @@ export function roomFor(kind: WritingKind): number {
   return kind === 'bug' || kind === 'typo' ? 4550 : EDITOR_ROOM;
 }
 
-/** The footer's count. A description counts its lines against the help's
- *  ten to thirty, and every other kind against the room the game's
- *  editor gives. Empty lines are named apart (Description Editor Q8). */
+/** The footer's count. A description counts its lines against the
+ *  help's ten to thirty, and every other kind against the room the
+ *  game's editor gives. Empty lines are named apart. */
 export function countLine(
   kind: WritingKind,
   c: Count,

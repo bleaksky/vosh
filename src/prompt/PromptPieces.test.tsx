@@ -80,7 +80,7 @@ const form = (format: PromptForm['format'], segment: string, label = segment): P
   show_as: true,
 });
 
-// P5: the hp value of his template, italic from the %s_italic before it.
+// The hp value of his template, italic from the %s_italic before it.
 const HP: PromptPiece = {
   piece: 3,
   kind: 'value',
@@ -156,7 +156,7 @@ describe('a picked part', () => {
     expect(html).not.toContain('Width');
     expect(html).toContain('Insert value…');
     expect(html).toContain('>Remove<');
-    // The theme swatches in board order, in the theme's colors.
+    // The theme swatches in their order, in the theme's colors.
     const swatches = [
       ...row(html, 'Color').matchAll(/aria-label="(Theme [a-z]+)"[^>]*background:([^"]*)"/g),
     ].map((m) => [m[1], m[2]]);
@@ -241,7 +241,7 @@ describe('a picked part', () => {
   it('gives every part that takes a color a Background, under Color (styles board)', () => {
     const html = draw(HP);
     const ground = row(html, 'Background');
-    // The hint stays right under Color, as P5 draws it.
+    // The hint stays right under Color.
     expect(html.indexOf(THEME_HINT)).toBeGreaterThan(html.indexOf('aria-label="Color"'));
     expect(html.indexOf('aria-label="Background"')).toBeGreaterThan(html.indexOf(THEME_HINT));
     expect(ground).toMatch(/aria-label="Terminal background"[^>]*aria-pressed="true"/);

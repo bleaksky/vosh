@@ -36,7 +36,7 @@ function field(name: string, over: Partial<PromptFieldState> = {}): PromptFieldS
   };
 }
 
-// The P6 board: Ilsabet out of a fight on the new build, his PROMPT with
+// Ilsabet out of a fight on the new build, his PROMPT with
 // no %S or %b, Char.State and Room.Info sent.
 const HEALTH = field('hp', {
   label: 'Health',

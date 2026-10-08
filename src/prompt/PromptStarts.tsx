@@ -9,10 +9,10 @@ import { Button, CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '
 import { CardMenu } from './CardMenu';
 import { CellLine } from './PromptCells';
 
-// P4: the designs to start from, each drawn with your live values in its
+// The designs to start from, each drawn with your live values in its
 // real colors, on first use as the card's body and on every later open
-// in the Presets menu of the card at rest. P11's body shows while drawing
-// is off.
+// in the Presets menu of the card at rest. While drawing is off it
+// shows the game's own prompt instead.
 
 /** A design drawn as a sample: its lines out of a fight, after the lines
  *  it draws only in a fight, which carry the tag. */
@@ -40,9 +40,9 @@ function sampleOf(live: string, fight: string): Sample {
   };
 }
 
-/** Each design drawn, by its template, with the live values of `session`
- *  or samples. A design in `fought` adds the lines it draws only in a
- *  fight, as Detailed does on P4. */
+/** Each design drawn, by its template, with the live values of
+ *  `session` or samples. A design in `fought` adds the lines it draws
+ *  only in a fight, as Detailed does. */
 function useSamples(
   session: number,
   templates: readonly string[],
@@ -210,12 +210,12 @@ function StartList({
 }
 
 /** The sample column of the start list, 429 px, and of the Presets
- *  menu, 410 px (P4 and P0). A sample wider than its column ends on an
+ *  menu, 410 px. A sample wider than its column ends on an
  *  ellipsis inside it. */
 const LIST_SAMPLE_PX = 429;
 const MENU_SAMPLE_PX = 410;
 /** The row's text column in the start list, where a fight line and its
- *  tag may run past the sample column (P4). */
+ *  tag may run past the sample column. */
 const LIST_ROW_PX = 498;
 
 interface StartsProps {
@@ -238,21 +238,21 @@ interface StartsProps {
   /** The hint at rest. */
   restHint?: string | undefined;
   /** A line under the hint at rest, such as what the Lament preview
-   *  hides (P8c). */
+   *  hides. */
   note?: string | null;
   /** You turned prompts off in the game, so the card at rest says so in
-   *  place of its hint (P14). */
+   *  place of its hint. */
   promptsOff?: boolean;
   /** The not matching sentence while no prompt has matched, which the
    *  card at rest says in place of its hint after prompts off. */
   notMatching?: string | null;
   /** What goes between the hint and the list on first use: the Line
-   *  triggers that matched your prompt (D6). */
+   *  triggers that matched your prompt, since they no longer see it. */
   children?: ReactNode;
 }
 
-/** P4's body: the start list on first use, or the card at rest with
- *  Insert value… and the Presets menu. */
+/** The card's body: the start list on first use, or the card at rest
+ *  with Insert value… and the Presets menu. */
 export function Starts({
   session,
   mode,
@@ -278,7 +278,7 @@ export function Starts({
   );
   const templates = useMemo(() => list.rows.map((r) => r.template), [list]);
   // Detailed shows its fight line with the sample opponent, tagged, so
-  // you see what it adds in a fight (P4). The other starts draw your
+  // you see what it adds in a fight. The other starts draw your
   // prompt as it is now.
   const fought = useMemo(
     () => new Set(list.rows.filter((r) => r.id === 'detailed').map((r) => r.template)),
@@ -381,7 +381,7 @@ interface DrawOffProps {
   onForget: () => void;
 }
 
-/** P11: drawing is off, so you see the game's own prompt, and Forget
+/** Drawing is off, so you see the game's own prompt, and Forget
  *  your game's prompt stops Vosh reading it. */
 export function DrawOff({ name, other, confirming, onForget }: DrawOffProps) {
   return (

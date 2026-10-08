@@ -4,7 +4,7 @@ import type { PromptFieldState } from '../ipc/prompt';
 import type { PromptPiece, PromptSpan, PromptToken } from '../ipc/promptDesign';
 
 // The parts of your design no value fills, which the card and Settings
-// ring in --warn (section 7 steps 6 and 13, P14).
+// ring in --warn.
 
 const field = (over: Partial<PromptFieldState>): PromptFieldState => ({
   name: 'hp',

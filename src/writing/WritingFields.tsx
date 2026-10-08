@@ -1,12 +1,12 @@
 import type { KeyboardEvent } from 'react';
 
-// To and Subject over a note's text, one block on the terminal ground
-// (Note Editor board 1, Q5). The label reads in the UI face and the
-// value in the terminal face, since the value is what the game gets. A
-// board that takes only immortal in To shows Immortal fixed, a note
-// written in a tongue gains Language, and a bug or typo report shows the
-// room you stand in, which the game records as you post. Tab and Return
-// move from To to Subject to the text.
+// To and Subject over a note's text, one block on the terminal ground.
+// The label reads in the UI face and the value in the terminal face,
+// since the value is what the game gets. A board that takes only
+// immortal in To shows Immortal fixed, a note written in a tongue gains
+// Language, and a bug or typo report shows the room you stand in, which
+// the game records as you post. Tab and Return move from To to Subject
+// to the text.
 
 export type FieldName = 'to' | 'subject' | 'language';
 

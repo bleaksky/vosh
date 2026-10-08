@@ -1,5 +1,4 @@
-// Which piece of your prompt a pointer is on (the prompt build spec,
-// section 7 step 6, and the 2026-09-30 addendum item 4).
+// Which piece of your prompt a pointer is on.
 //
 // In the text and lifted, your prompt is the open row, a region the
 // session marked. Each renderer knows where that region starts in its own

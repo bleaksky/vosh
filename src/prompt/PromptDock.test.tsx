@@ -62,7 +62,7 @@ const pinned: PromptShowState = {
   promptsOff: false,
 };
 
-// The board cell: JetBrains Mono 13 in a 17.5 row.
+// The card's cell: JetBrains Mono 13 in a 17.5 row.
 const CELL: CellSize = { width: 7.8, height: 17.5, cols: 120 };
 
 function draw(pin: string | null, patch: Partial<PromptShowState> = {}, cell = CELL): string {
@@ -100,7 +100,7 @@ function dockBox(html: string): { height: number; reach: number; place: number }
 describe('the pinned band', () => {
   it('is one row tall out of a fight, a blank line and 6 px under the text', () => {
     // The gap is one blank line, as the game leaves before each prompt,
-    // and the 6 px the boards keep: "there's no space between prompt and
+    // and 6 px more: "there's no space between prompt and
     // last line now."
     expect(dockGap(17.5)).toBe(17.5 + DOCK_GAP);
     expect(dockHeight(1, 17.5)).toBe(23.5 + 27.5 + 3.5 - 6);
@@ -177,7 +177,7 @@ describe('the pinned band', () => {
     const html = draw('\x1b[32m1020\x1b[39m/1020hp ');
     const band = style(html, 'data-prompt-band');
     expect(px(band, 'left')).toBe(-4);
-    // The board's band ends 9.5 px above the input band, 3.5 inside the
+    // The band ends 9.5 px above the input band, 3.5 inside the
     // dock, whose bottom is the terminal area's 6 px above it.
     expect(px(band, 'bottom')).toBe(3.5);
     expect(px(band, 'height')).toBe(17.5 + 4);
@@ -240,9 +240,9 @@ describe('the pinned band', () => {
   });
 });
 
-// The card maps a pointer on the dock from the dock's own grid (addendum
-// item 4). Each glyph the band draws, at its center, maps to the piece
-// whose span covers it, at two cell sizes.
+// The card maps a pointer on the dock from the dock's own grid. Each
+// glyph the band draws, at its center, maps to the piece whose span
+// covers it, at two cell sizes.
 describe('a pointer on the pinned band', () => {
   /** Each glyph the markup draws, with its center from the dock's top
    *  left. */
