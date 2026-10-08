@@ -1,5 +1,5 @@
 import { onWalk, type WalkProgress } from '../../ipc/session';
-import type { GridSpot, WalkKind } from '../../panel/map/mapWalk';
+import type { WalkRoute } from '../../panel/map/mapWalk';
 import { createSessionStore } from '../sessionStore';
 
 // Where the selected session's walk stands, for the map's Walking chip
@@ -8,22 +8,11 @@ import { createSessionStore } from '../sessionStore';
 // Panels review, board 9). The walker in Rust sends session://walk on
 // each change, and each session keeps its own.
 //
-// The route holds the cells of the grid the click planned on and the
-// room num of each, your room first and then in the order the steps
-// reach them, the room clicked and how the walk ends. It stays while the
-// walk goes on and after it stops, since the Stopped toast dashes the
-// steps left, and goes when the walk arrives, when a walk you typed
-// takes its place and at a disconnect. A typed walk still under way as
-// you click keeps the new route, since the walker finishes its step in
-// flight before the route takes over.
-
-/** The route a click on the map sent. */
-export interface WalkRoute {
-  cells: GridSpot[];
-  rooms: number[];
-  target: GridSpot;
-  kind: WalkKind;
-}
+// The route stays while the walk goes on and after it stops, since the
+// Stopped toast dashes the steps left, and goes when the walk arrives,
+// when a walk you typed takes its place and at a disconnect. A typed
+// walk still under way as you click keeps the new route, since the
+// walker finishes its step in flight before the route takes over.
 
 export interface WalkState {
   progress: WalkProgress;

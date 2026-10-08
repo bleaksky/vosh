@@ -173,6 +173,7 @@ A few imports still run from `src/ipc`, `src/stores`, `src/theme` and `src/lib` 
 - `src/ipc/uiConfig.ts` and `src/theme/appearanceSettings.ts` use the Panel font and Panel size normalizers in `src/panel/panelFont.ts` and `src/panel/panelSize.ts`. The page copy of the UI config keeps them, since Rust reads most stored values as written and coerces them only on a save, so the page still turns a value a hand edit wrote into one it knows. appearanceSettings also reads the named choices beside them for the two menus in Settings.
 - `src/stores/config/chatColorsStore.ts` uses `NO_CHAT_COLORS`, `normalizeChatColors` and `sameChatColors` from `src/panel/chat/chatColors.ts` and passes them to the config store factory.
 - `src/stores/gmcp/mapTilesStore.ts` imports the `MapTilesPayload` type from `src/panel/map/mapTiles.ts`.
+- `src/stores/session/walkStore.ts` imports the `WalkRoute` type from `src/panel/map/mapWalk.ts`, which imports nothing from the store.
 - `src/stores/session/pinnedPromptStore.ts` uses `dockRows` from `src/prompt/pinnedDock.ts`, which is pure.
 - `src/lib/helpLink.ts` uses `rankTopics` and `resolveHelpTarget` from `src/help/helpNav.ts`. 2.5 of the plan makes helpLink the one deep link helper.
 - `src/lib/appMenu.ts` uses `PANE_TYPES` from `src/panel/paneLayout.ts` for the panes the macOS menu bar lists.

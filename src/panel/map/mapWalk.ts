@@ -10,7 +10,6 @@ import {
   type MapTilesPayload,
 } from './mapTiles';
 import type { WalkProgress } from '../../ipc/session';
-import type { WalkRoute } from '../../stores/session/walkStore';
 
 // Click to walk on the tiles the game sends (Scripts and Panels review,
 // board 9, Q14 and Q15). A path runs over the lowercase n, e, s
@@ -182,6 +181,17 @@ export interface WalkMark {
   target: GridSpot;
   kind: WalkKind;
   solid?: number;
+}
+
+/** The route a click on the map sent, which the walk store keeps. The
+ *  cells of the grid the click planned on and the room num of each,
+ *  the room the walk starts from first and then in the order the steps
+ *  reach them, the room clicked and how the walk ends. */
+export interface WalkRoute {
+  cells: GridSpot[];
+  rooms: number[];
+  target: GridSpot;
+  kind: WalkKind;
 }
 
 /** The walk the map offers for `plan`, to the room at `target`. */

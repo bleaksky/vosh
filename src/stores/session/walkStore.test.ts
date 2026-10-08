@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WalkRoute } from './walkStore';
+import type { WalkRoute } from '../../panel/map/mapWalk';
 
 // Drives the walk store through a fake Tauri event bus with two
 // sessions, Tolliver's (1) and Orla's (2). Each test loads fresh store
