@@ -876,6 +876,25 @@ The terminal font lives in Settings under Appearance, then Terminal text. The pa
 
 Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size.
 
+### 6.5 Hear the game with a screen reader
+
+Vosh can hand the game to your screen reader, such as VoiceOver on macOS or NVDA on Windows. The switches live in Settings under Accessibility, in the Screen reader section, and each one is off until you turn it on.
+
+- Open Settings and choose Accessibility.
+- Under Screen reader, turn on `Read new game lines`. Your screen reader then reads each line the game shows, after your gags and routes, so a line your gags hide or your routes take out of the terminal stays quiet.
+- The lines that land within one pulse of the game join one announcement, so a room look reads as one piece.
+- Pick a number in `Long bursts`, 4, 8, 16 or 32. When more lines than that land at once, you hear how many came and then the last one, such as `12 lines.` and the line. It starts at 8.
+- Turn on `Read your prompt` to hear your prompt after the lines of each pulse. Your prompt comes every pulse, so it starts off. With it off, press `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows and Linux to hear your latest prompt when you want it. `Read your prompt` in the command palette does the same.
+- Turn on `Read in the background` to keep hearing the game while you work in another app. With it off, Vosh stays quiet while another app is in front.
+
+Vosh also keeps the last 500 lines of the session in front in a list named Game lines, right after the terminal. Step through it with your screen reader to read back what you missed, line by line. The list reads nothing aloud by itself. A session behind keeps its lines quietly, and its list shows them when you bring it to the front. It all works with either terminal renderer.
+
+The prompt key works only while `Read new game lines` is on. With it off, a macro you bound to `Ctrl+Shift+P` keeps working.
+
+Each change applies at once and saves with your profile.
+
+When a screen reader runs as Vosh starts and `Read new game lines` is off, the terminal says once where to find it. On macOS Vosh asks whether VoiceOver is on. On Windows it asks for the sign Narrator, NVDA, JAWS and other screen readers give the system. Linux gets no line, since no sign of a running screen reader holds across its desktops.
+
 ## Characters and data
 
 ### 7.1 Manage profiles
@@ -1095,6 +1114,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
+- `Cmd+Shift+P` reads your latest prompt aloud while `Read new game lines` is on under Accessibility.
 - `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers and `Cmd+Option+4` on Macros. They work in Settings too. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
 
 For your sessions, in the main window.
