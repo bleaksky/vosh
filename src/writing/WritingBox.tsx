@@ -70,6 +70,9 @@ export interface WritingBoxProps {
   onChange: (rows: Row[]) => void;
   onCaret: (row: number) => void;
   onPaste: (note: PasteNote) => void;
+  /** What the box says in its text's place while the text is empty,
+   *  and the game's line under it. */
+  empty?: { says: string; line: string | null } | null;
 }
 
 /** Text from outside the box, which no flow touches. */
@@ -370,6 +373,7 @@ export function WritingBox({
   onChange,
   onCaret,
   onPaste,
+  empty = null,
 }: WritingBoxProps) {
   const [view, setView] = useState<EditorView | null>(null);
   // The look the decorations and the gutter read, through refs, so the
@@ -511,6 +515,12 @@ export function WritingBox({
 
   return (
     <div className="wr-box" style={style} data-width={width}>
+      {empty && (
+        <p className="wr-empty">
+          {empty.says}
+          {empty.line && <code>{empty.line}</code>}
+        </p>
+      )}
       <CodeMirror
         value={start.doc}
         theme="none"

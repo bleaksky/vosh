@@ -347,6 +347,25 @@
   background: var(--wr-code);
 }
 
+/* An empty beast description: what lookers see in the text's place. */
+.wr-empty {
+  position: absolute;
+  z-index: 1;
+  left: calc(22px + 2ch);
+  top: 6px;
+  right: 12px;
+  margin: 0;
+  font: 400 12px / var(--wr-lh, 17px) var(--font-ui);
+  color: var(--tertiary);
+  pointer-events: none;
+}
+
+.wr-empty code {
+  display: block;
+  font: 400 var(--wr-px, 13px) / var(--wr-lh, 17px) var(--wr-family, var(--font-mud));
+  color: var(--secondary);
+}
+
 /* The text as readers get it: no gutter and no guide. */
 .wr-preview {
   box-sizing: border-box;

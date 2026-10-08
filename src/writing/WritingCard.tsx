@@ -28,7 +28,7 @@ import {
   withoutDraft,
   type World,
 } from './draftsStore';
-import { hasBeast, keepsCodes, KINDS, switchOf, widthOf, writable } from './kinds';
+import { BEAST_LOOKS, hasBeast, keepsCodes, KINDS, switchOf, widthOf, writable } from './kinds';
 import { cutLine, count, rewrapAll, rewrapParagraph, spamRun, storedBytes, type Row } from './text';
 import { WritingBox, type BoxText, type PasteNote } from './WritingBox';
 import { WritingFields, type FieldName } from './WritingFields';
@@ -130,9 +130,15 @@ export function WritingCard({
   const writing = useWriting();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
 
-  const live = connection.status.kind === 'connected' && connection.character !== null;
-  const name = connection.character ?? row?.character ?? null;
-  const world: World | null = row?.host && row.port ? { host: row.host, port: row.port } : null;
+  // Another character's drafts, opened from Other characters, wait for
+  // a session that plays them (Note Editor board 7).
+  const [other, setOther] = useState<{ world: World; name: string } | null>(null);
+  const playing = connection.status.kind === 'connected' && connection.character !== null;
+  const name = other?.name ?? connection.character ?? row?.character ?? null;
+  const world: World | null =
+    other?.world ?? (row?.host && row.port ? { host: row.host, port: row.port } : null);
+  const live =
+    playing && (other === null || other.name.toLowerCase() === connection.character?.toLowerCase());
   const character = world && name ? characterOf(file, world, name) : null;
   const level = status.level ?? character?.level ?? null;
   const race = status.race ?? character?.race ?? null;
@@ -524,12 +530,10 @@ export function WritingCard({
   ));
 
   // ── Header ────────────────────────────────────────────────────────
-  const switchKinds = (() => {
-    const kinds = switchOf(kind);
-    if (!kinds) return null;
-    if (kinds.includes('beast')) return hasBeast(race, level) ? kinds : null;
-    return kinds;
-  })();
+  // Description and Beast for a werebeast past level 15, and History,
+  // Personality and Purpose for everyone.
+  const switchKinds =
+    switchOf(kind)?.includes('beast') && !hasBeast(race, level) ? null : switchOf(kind);
 
   const meta = metaLine({
     name: name ?? 'you',
@@ -564,8 +568,12 @@ export function WritingCard({
       switchTo(d.kind, d);
       setSentView(true);
     },
-    onOther: () => {
-      pushToast({ kind: 'info', message: 'Play that character to open their drafts.' });
+    onOther: (key) => {
+      const them = file.characters[key];
+      if (!them) return;
+      setOther({ world: { host: them.host, port: them.port }, name: them.name });
+      const d = them.drafts.find((x) => KINDS[x.kind].board) ?? them.drafts[0];
+      if (d) switchTo(d.kind, d);
     },
   };
 
@@ -624,8 +632,13 @@ export function WritingCard({
       ? applicationGuide(draft.subject ?? '', draft.custom_race === true)
       : info.guide;
 
+  // Read help folds the card to its header while the game prints the
+  // help, keeping its top where it was (Description Editor board 5).
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [foldTop, setFoldTop] = useState<number | null>(null);
   const help = () => {
     void sendInput(`help ${guide.help}`, session).catch(() => {});
+    setFoldTop(cardRef.current?.getBoundingClientRect().top ?? null);
     setFolded(true);
   };
 
@@ -656,8 +669,9 @@ export function WritingCard({
     ...(place?.right !== null && place?.right !== undefined
       ? { left: place.left, right: place.right }
       : { left: place?.left ?? 12 }),
-    bottom: place?.bottom ?? 0,
-    maxHeight: place?.maxHeight,
+    ...(folded && foldTop !== null
+      ? { top: foldTop }
+      : { bottom: place?.bottom ?? 0, maxHeight: place?.maxHeight }),
     visibility: place ? 'visible' : 'hidden',
     ['--wr-px' as string]: `${px}px`,
     ['--wr-lh' as string]: `${lineH}px`,
@@ -673,6 +687,7 @@ export function WritingCard({
   return (
     <>
       <div
+        ref={cardRef}
         className={`pc-card st-controls wr-card${folded ? ' is-folded' : ''}`}
         role="dialog"
         aria-label={info.title}
@@ -683,7 +698,7 @@ export function WritingCard({
         <WritingHead
           kind={kind}
           title={info.title}
-          switchKinds={switchKinds ?? (switchOf(kind)?.includes('history') ? switchOf(kind) : null)}
+          switchKinds={switchKinds}
           onSwitch={(k) => {
             switchTo(k);
             readIfNoDraft(k, openDraft(k));
@@ -747,6 +762,14 @@ export function WritingCard({
                 ) : (
                   <WritingBox
                     text={box}
+                    empty={
+                      kind === 'beast' && lines.every((l) => l.length === 0)
+                        ? {
+                            says: `Lookers see the game’s own line for your ${character?.beast ?? 'beast'}.`,
+                            line: character?.beast ? (BEAST_LOOKS[character.beast] ?? null) : null,
+                          }
+                        : null
+                    }
                     width={width}
                     helpWidth={helpWidth}
                     immortal={immortal}

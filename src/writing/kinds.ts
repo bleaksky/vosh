@@ -339,3 +339,16 @@ export function keepsCodes(level: number | null | undefined): boolean {
 export function widthOf(customRace: boolean): number {
   return customRace ? 70 : 75;
 }
+
+/** What a looker sees of each beast with no beast description, the
+ *  game's own lines (act_info.c:1077 to 1121). */
+export const BEAST_LOOKS: Record<string, string> = {
+  tiger: 'You see a fierce tiger standing upright on its hind legs.',
+  wolf: 'You see a fearsome wolf standing upright on its hind legs.',
+  bear: 'You see a massive bear standing upright on its hind legs.',
+  falcon: 'A fierce Werefalcon spreads its wings before you.',
+  badger: 'You see a fierce badger standing upright on its hind legs.',
+  vulture: 'A fierce vulture spreads its wings before you, carrion dripping from its talons.',
+  boar: 'You see a fierce boar standing upright on its hind legs, tusks ready to impale.',
+  jaguar: 'You see a fierce jaguar standing upright on its hind legs.',
+};
