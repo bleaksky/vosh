@@ -1,3 +1,4 @@
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { BandEnv } from '../terminal/bandCells';
@@ -7,6 +8,7 @@ import type { PromptCheckRead } from '../ipc/prompt';
 import { CandidateBox, MatchRow } from './PromptCandidate';
 import { CodesEntry } from './PromptCodes';
 import { DrawOff } from './PromptStarts';
+import { NameGroup } from './PromptPoint';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -317,5 +319,43 @@ describe('where a card menu opens', () => {
       top: 8,
       maxHeight: 208,
     });
+  });
+});
+
+// The pointer and the arrow keys share one highlight in the name menu,
+// so the row under the pointer takes the focus.
+describe('the name menu', () => {
+  it('gives the row under the pointer the focus', () => {
+    type Props = { role?: string; onPointerMove?: (e: { currentTarget: unknown }) => void };
+    const rows: Props[] = [];
+    const walk = (node: ReactNode) => {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (isValidElement<Props & { children?: ReactNode }>(node)) {
+        if (node.props.role?.startsWith('menuitem')) rows.push(node.props);
+        walk(node.props.children);
+      }
+    };
+    walk(
+      NameGroup({
+        first: true,
+        choices: [{ name: 'hp', label: 'Health' }],
+        current: '',
+        onChoose: () => undefined,
+      }),
+    );
+    expect(rows).toHaveLength(1);
+    const doc: { activeElement: unknown } = { activeElement: null };
+    vi.stubGlobal('document', doc);
+    try {
+      const row = {
+        focus() {
+          doc.activeElement = row;
+        },
+      };
+      rows[0].onPointerMove?.({ currentTarget: row });
+      expect(doc.activeElement).toBe(row);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

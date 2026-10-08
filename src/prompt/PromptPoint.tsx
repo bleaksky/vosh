@@ -381,7 +381,7 @@ export function PointName({
   );
 }
 
-function NameGroup({
+export function NameGroup({
   first,
   choices,
   current,
