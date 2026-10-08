@@ -159,8 +159,9 @@ export function TerminalMenu({
   const plain = { onHover: closeSub, onFocus: closeSub };
 
   /** A row that opens `which` beside the menu. Pointing at it opens the
-   *  list and leaves focus on the row. ArrowRight, Enter, Space or a
-   *  click open it with focus on its first row. */
+   *  list and leaves focus on the row, where ArrowLeft shuts it.
+   *  ArrowRight, Enter, Space or a click open it with focus on its
+   *  first row. */
   const subRow = (which: Sub, label: string) => (
     <MenuItem
       itemRef={(el) => {
@@ -171,6 +172,7 @@ export function TerminalMenu({
         open: sub?.which === which,
         controls: LIST_ID[which],
         onOpen: (focus) => setSub((prev) => openPaneSubmenu(prev, which, focus)),
+        onClose: closeSub,
       }}
       trailing={<ChevronRightIcon className="menu-chevron" />}
     >

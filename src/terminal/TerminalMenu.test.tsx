@@ -410,7 +410,7 @@ describe('the Settings list in the terminal menu', () => {
     expect(m.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens on Enter and Space too', async () => {
+  it('opens on Enter and Space too, and ArrowLeft on its row shuts it', async () => {
     const m = await mount();
     await downToSettings(m);
     for (const k of ['Enter', ' ']) {
@@ -420,6 +420,14 @@ describe('the Settings list in the terminal menu', () => {
       await m.key('ArrowLeft');
       expect(m.list(), k).toBeNull();
     }
+    // Opened by pointing, the list leaves focus on its row, where
+    // ArrowLeft shuts it.
+    await act(async () => point(m.row('Settings')));
+    expect(m.list()).not.toBeNull();
+    expect(doc.activeElement).toBe(m.row('Settings'));
+    await m.key('ArrowLeft');
+    expect(m.list()).toBeNull();
+    expect(doc.activeElement).toBe(m.row('Settings'));
     expect(m.onClose).not.toHaveBeenCalled();
   });
 

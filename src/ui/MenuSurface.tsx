@@ -299,8 +299,15 @@ interface ItemProps {
   keys?: string;
   /** Right aligned after the shortcut: a check or a chevron. */
   trailing?: ReactNode;
-  /** Menu attributes for a row that opens a submenu. */
-  submenu?: { open: boolean; controls: string; onOpen: (focusFirst: boolean) => void };
+  /** Menu attributes for a row that opens a submenu. With `onClose`,
+   *  ArrowLeft on the row shuts a submenu the pointer opened while
+   *  focus stays on the row. */
+  submenu?: {
+    open: boolean;
+    controls: string;
+    onOpen: (focusFirst: boolean) => void;
+    onClose?: () => void;
+  };
   /** Pointer entered the row. Rows without a submenu use it to close
    *  a sibling's submenu. */
   onHover?: () => void;
@@ -365,6 +372,10 @@ export function MenuItem({
             e.preventDefault();
             e.stopPropagation();
             submenu.onOpen(true);
+          } else if (submenu?.open && submenu.onClose && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            e.stopPropagation();
+            submenu.onClose();
           }
         }}
         onClick={() => {
