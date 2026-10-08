@@ -327,10 +327,10 @@ export const PRESETS: Preset[] = [
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', { fg: 'line' }),
       highlight('cure.feel_better', 'You feel better\\.$', { fg: 'line' }),
-      highlight('cure.feel_much_better', 'You feel much better!$', { fg: 'line' }),
+      // The herb cure, as do_herb prints it in skills2.c.
+      highlight('cure.feel_much_better', 'You feel much better\\.$', { fg: 'line' }),
       highlight('cure.righteous', 'You feel righteous\\.$', { fg: 'line' }),
       highlight('cure.less_sick', 'You feel less sick\\.$', { fg: 'line' }),
-      highlight('cure.no_longer_poisoned', 'You are no longer poisoned\\.$', { fg: 'line' }),
       highlight('cure.less_tired', 'You feel less tired\\.$', { fg: 'line' }),
     ],
   },

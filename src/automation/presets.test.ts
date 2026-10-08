@@ -293,6 +293,28 @@ function triggerMatches(trigger: ReturnType<typeof presetTrigger>, line: string)
   return trigger.patterns.some((p) => p.enabled && new RegExp(p.pattern).test(line));
 }
 
+// The cure and heal lines as the game prints them: cure critical, cure
+// serious, bless and refresh in magic.c, the herb in skills2.c, and
+// poison wearing off in const.c.
+describe('the Cures and heals preset', () => {
+  it('lights each cure line the game prints, word for word', () => {
+    const lines: [string, string][] = [
+      ['cure.feel_lot_better', 'You feel a lot better!'],
+      ['cure.feel_better', 'You feel better.'],
+      ['cure.feel_much_better', 'You feel much better.'],
+      ['cure.righteous', 'You feel righteous.'],
+      ['cure.less_sick', 'You feel less sick.'],
+      ['cure.less_tired', 'You feel less tired.'],
+    ];
+    expect(presetById('healing_basics')?.triggers.map((t) => t.name)).toEqual(
+      lines.map(([name]) => name),
+    );
+    for (const [name, line] of lines) {
+      expect(triggerMatches(presetTrigger('healing_basics', name), line)).toBe(true);
+    }
+  });
+});
+
 // The level up, as gain_exp and advance_level print it in update.c: the
 // level on one line, then what you gain on the next, with hit point and
 // practice singular when one.
@@ -650,7 +672,7 @@ describe('the colors each preset names', () => {
     expect(none).toEqual(now);
   });
 
-  it('gives 24 swatches over the 75 triggers, each painting the triggers of the table', () => {
+  it('gives 24 swatches over the 74 triggers, each painting the triggers of the table', () => {
     const table = Object.fromEntries(
       PRESETS.map((p) => [
         p.id,
@@ -663,7 +685,7 @@ describe('the colors each preset names', () => {
       ]),
     );
     expect(table).toEqual({
-      healing_basics: [['The line', 'bright_green', 'highlight', 7]],
+      healing_basics: [['The line', 'bright_green', 'highlight', 6]],
       defensive_combat: [
         ['Routine defenses', 'fg:240', 'template', 15],
         ['Shadows envelop', 'fg:253', 'template', 1],
@@ -703,7 +725,7 @@ describe('the colors each preset names', () => {
       numpad_movement: [],
     });
     expect(PRESETS.flatMap((p) => Object.keys(p.colors))).toHaveLength(24);
-    expect(PRESETS.flatMap((p) => p.triggers)).toHaveLength(75);
+    expect(PRESETS.flatMap((p) => p.triggers)).toHaveLength(74);
   });
 
   it('names in each template and highlight only keys its preset has, each where it sits', () => {
