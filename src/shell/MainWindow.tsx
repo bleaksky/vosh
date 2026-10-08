@@ -12,7 +12,7 @@ import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
-import { fold as foldGetStarted } from './getStarted/getStartedStore';
+import { fold as foldGetStarted, openList as openGetStarted } from './getStarted/getStartedStore';
 import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
@@ -430,6 +430,7 @@ function MainWindow() {
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: openHelpWindow,
+    openGetStarted,
     openFind,
     openSettings: openSettingsWindow,
     openSettingsTab,
