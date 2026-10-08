@@ -759,6 +759,7 @@ function MainWindow() {
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
+          onShowSessions={sessionsSidebar.hidden ? sessionsSidebar.toggle : undefined}
         />
       }
       snoop={

@@ -11,7 +11,9 @@ import {
 // Whether the main window shows the sessions sidebar, and how wide. It
 // shows while two or more sessions are open (Q17), unless you hid it in
 // this window or the window is too narrow to hold it (board 8). Either
-// way it folds and the session popover lists the sessions. The width
+// way it folds and the session popover lists the sessions. Once you hide
+// it, it stays hidden as sessions open and close, and Show sessions in
+// the title band brings it back. The width
 // you drag it to is kept in localStorage, as the split's height is,
 // since it belongs to the install and to no profile.
 
@@ -45,6 +47,10 @@ export interface SessionsSidebar {
   /** Two or more sessions are open and the sidebar does not show them,
    *  so the session popover does. */
   folded: boolean;
+  /** Two or more sessions are open and you hid the sidebar, so Show
+   *  sessions sits in the title band. A session you open keeps it
+   *  hidden. */
+  hidden: boolean;
   /** Its rows' width, 180 to 320. */
   width: number;
   setWidth: (px: number) => void;
@@ -73,6 +79,7 @@ export function useSessionsSidebar(count: number, panelOpen: boolean): SessionsS
     shown,
     wanted,
     folded: count >= 2 && !shown,
+    hidden: count >= 2 && hidden,
     width,
     setWidth: (px) => {
       setWidth(px);
