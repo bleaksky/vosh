@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnoopSnapshot, SnoopTab } from '../../ipc/snoop';
+import type { Snoops } from './snoopStore';
 
 // Drives the snoop store through a fake Tauri event bus with two
 // sessions, Staff (1) snooping and Builder (2). Each test loads fresh
@@ -249,5 +250,47 @@ describe('the snoop store', () => {
     select(BUILDER);
     await settle();
     expect(store.snoopText(BUILDER, 'Orla')).toBe('A rocky mountain path\n\r');
+  });
+
+  it('reads a session the snoop window shows whatever is selected', async () => {
+    commands.set('snoop_get', ({ session }) =>
+      session === BUILDER
+        ? {
+            tabs: [
+              { ...live('Maren', 9), text: 'A rocky mountain path\n\r' },
+              { ...live('Orla', 9), text: '' },
+            ],
+            windowed: true,
+          }
+        : EMPTY,
+    );
+    const store = await load();
+    const { FakeDocument, FakeElement, FakeNode } = await import('../../test/fakeDom');
+    const doc = new FakeDocument();
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('Node', FakeNode);
+    vi.stubGlobal('Element', FakeElement);
+    vi.stubGlobal('HTMLElement', FakeElement);
+    vi.stubGlobal('HTMLIFrameElement', class {});
+    const { act, createElement } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    let seen: Snoops | null = null;
+    const Reader = () => {
+      seen = store.useSnoopsOf(BUILDER);
+      return null;
+    };
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () => root.render(createElement(Reader)));
+    await act(settle);
+    expect(seen).toMatchObject({ windowed: true, selected: 'Orla' });
+    expect(store.snoopText(BUILDER, 'Maren')).toBe('A rocky mountain path\n\r');
+    // The session in front keeps its own.
+    expect(store.getSnoops().tabs).toEqual([]);
+
+    await act(async () => store.selectSnoop('Maren', BUILDER));
+    expect(seen).toMatchObject({ selected: 'Maren' });
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
   });
 });
