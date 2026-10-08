@@ -1561,6 +1561,24 @@ Checks. Your approval of each board, then the app check of every window that use
 
 Size. About 800 lines removed.
 
+What R21a built, One menu. It is a9854e05 to 037daa79 on refactor/r21-merges, six commits before this record, and Board 01 of the merges review with Q1 to Q3 is the spec. MenuSurface is now the one menu, and the title band, session, terminal and prompt card menus all render through it.
+
+- One class set (a9854e05). The pane menu recipe moved into overlays.css as `menu`, `menu-item`, `menu-sep`, `menu-keys`, `menu-check` and `menu-chevron`, with `is-danger` for a row that removes or ends something. No pixel changed.
+- Rows and the surface (96e69186, 1b4bc39e). A MenuItem row takes a shortcut drawn as plain text in the tertiary tone, the danger tone and the radio role. The surface places a menu itself or through a placer the caller passes, sizes it 232 to 320 from its longest row, can take focus itself with no row lit, and can keep its keys from what sits under it. Only the session menu passes a width, 272.
+- The terminal menu (1cf1165b), then the title band and session menus (f907b0a9), render through it.
+- The prompt card menus (037daa79). CardMenu wraps MenuSurface and keeps the swap above or below its button and the scroll in a short window from `menuPosition`. More, Preview, Where your prompt shows and From another profile are MenuItem rows. More styles and the name menu keep their own rows on the `menu-item` class. The pc-menu and ov-menu rules are gone, and `.pc-menu-button`, a button, stays.
+
+What changed on screen. Add a pane and the session row menu grew from 200 and 212 to 232, and the title band menus moved from z 800 to 1000 with the rest. More, More styles and the name menu grew from 160, 184 and 208 to at least 232 by Q2, and so did the Preview and Where your prompt shows menus at 160. The row under focus is lit, and the pointer moves focus, so the mouse and the keys share one highlight.
+
+Where it departs, for you to check.
+
+- The terminal menu and the prompt card menus now close on a window resize and when the window loses focus, as every MenuSurface menu not hung from the title band does.
+- The lit row stays lit after the pointer leaves the menu, since it is the row under focus.
+- Presets holds the start list with its samples, not rows, so it keeps 468 through `.menu.pc-presets-menu`, beside the `.menu.wr-menu-wide` exception. Board 01 does not draw it.
+- The name menu no longer lights the checked name. Its check marks it, and the light follows focus alone.
+
+At this close every gate passed on 037daa79 on the first run. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 4,086 tests passed and 173 skipped, cargo fmt, clippy on macOS and for Windows, and the workspace tests with 2,770 passed and 6 ignored. The six menu frames shot in dark and light against the board. The pane, terminal and card menus match it pixel for pixel, and Add a pane, the session menu and the connection buttons match it in the menu and differ only in the window behind. docs/architecture.md names none of the four menus, so it stays.
+
 ### 4.7 Phase 10, docs and guards
 
 #### R22. Phase 10. Logs, scrollback and search (required)
