@@ -32,7 +32,7 @@ import { GlyphsOverlay } from './GlyphsOverlay';
 import { subscribeThemeChanges } from '../../theme/theme';
 import { pushToast } from '../../stores/toasts';
 import { walkRoute } from '../../ipc/session';
-import { getRoomOf } from '../../stores/gmcp/roomStore';
+import { useRoom } from '../../stores/gmcp/roomStore';
 import { getSelected } from '../../stores/session/sessionsStore';
 import { noteWalkRoute, useWalk } from '../../stores/session/walkStore';
 import {
@@ -208,9 +208,10 @@ export function MapView({ emptyText }: MapViewProps = {}) {
   // arrive or stand off its route. The walk on offer under the pointer
   // shows over it.
   const walk = useWalk();
+  const here = useRoom().info?.vnum ?? null;
   const ahead = useMemo(
-    () => (tiles && walk.route ? walkAhead(tiles, walk.route, walk.progress) : null),
-    [tiles, walk],
+    () => (tiles && walk.route ? walkAhead(tiles, walk.route, walk.progress, here) : null),
+    [tiles, walk, here],
   );
   const mark = useMemo(
     (): WalkMark | null => (hover ? offerOf(hover.plan, hover.target) : ahead),
@@ -234,8 +235,8 @@ export function MapView({ emptyText }: MapViewProps = {}) {
       const target = spotAt(at);
       const plan = tiles && target && planWalk(tiles, target.row, target.col);
       const session = getSelected();
-      const start = getRoomOf(session)?.vnum;
-      if (!tiles || !target || !plan || plan.steps.length === 0 || start == null) return;
+      const start = here;
+      if (!tiles || !target || !plan || plan.steps.length === 0 || start === null) return;
       const { rows, cols } = gridDims(tiles);
       noteWalkRoute(session, {
         cells: [playerCellOf(tiles, rows, cols), ...plan.cells],

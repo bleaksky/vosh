@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aabahranMapPacket } from '../../test/aabahranGmcp';
 import { hexToRgba } from '../../theme/color';
 import { MAP_COLORS, roomFill, sectorForCode } from './mapPalette';
-import { offerOf, planWalk, roomNumAt, walkAhead, type WalkMark } from './mapWalk';
+import { offerOf, planWalk, walkAhead, type WalkMark } from './mapWalk';
 import {
   DOOR_COLORS,
   corridors,
@@ -458,7 +458,8 @@ describe('the walk under the pointer', () => {
 describe('a walk a click sent', () => {
   const plan = planWalk(VAL_MIRAN, 6, 12);
   if (!plan) throw new Error('no walk to 6,12');
-  const center = { row: 10, col: 10 };
+  /** The room you stand in, the square, as Room.Info names it. */
+  const HERE = 20605;
   /** The walk to [6][12], clicked two rooms south of the square, so on
    *  the grid it planned on the square sat two rows higher. */
   const route = {
@@ -470,22 +471,20 @@ describe('a walk a click sent', () => {
     kind: 'open' as const,
   };
 
-  it('reads the room you stand in from the ex of a room beside it', () => {
-    expect(roomNumAt(VAL_MIRAN, center)).toBe(20605);
-  });
-
   it('draws what is left ahead from the room you stand in', () => {
     const walking = { kind: 'walking', done: 2, total: 8, left: '4n2e', route: true } as const;
-    expect(walkAhead(VAL_MIRAN, route, walking)).toEqual(offerOf(plan, { row: 6, col: 12 }));
+    expect(walkAhead(VAL_MIRAN, route, walking, HERE)).toEqual(offerOf(plan, { row: 6, col: 12 }));
     // Off the route, the map draws none of it.
     const elsewhere = { ...route, rooms: route.rooms.map((room) => room + 1000) };
-    expect(walkAhead(VAL_MIRAN, elsewhere, walking)).toBeNull();
-    expect(walkAhead(VAL_MIRAN, route, { kind: 'idle' })).toBeNull();
+    expect(walkAhead(VAL_MIRAN, elsewhere, walking, HERE)).toBeNull();
+    expect(walkAhead(VAL_MIRAN, route, { kind: 'idle' }, HERE)).toBeNull();
+    // Nor before the game names the room you stand in.
+    expect(walkAhead(VAL_MIRAN, route, walking, null)).toBeNull();
   });
 
   it('keeps the steps Vosh sent but never saw land solid after a stop', () => {
     const stop = (done: number) =>
-      walkAhead(VAL_MIRAN, route, { kind: 'stopped', done, total: 8, why: 'lost_sight' });
+      walkAhead(VAL_MIRAN, route, { kind: 'stopped', done, total: 8, why: 'lost_sight' }, HERE);
     expect(stop(3)?.solid).toBe(1);
     expect(stop(2)?.solid).toBe(0);
   });
