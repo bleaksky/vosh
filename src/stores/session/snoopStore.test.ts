@@ -273,6 +273,8 @@ describe('the snoop store', () => {
     vi.stubGlobal('Element', FakeElement);
     vi.stubGlobal('HTMLElement', FakeElement);
     vi.stubGlobal('HTMLIFrameElement', class {});
+    // Node 20 has no navigator, and React DOM reads it.
+    vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
     const { act, createElement } = await import('react');
     const { createRoot } = await import('react-dom/client');
     let seen: Snoops | null = null;
