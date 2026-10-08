@@ -5,6 +5,7 @@ import gmcpEvents from '../../fixtures/ipc/gmcp-events.json';
 import { aabahranPacket } from '../test/aabahranGmcp';
 import {
   onGmcpPackage,
+  onScreenReader,
   reconnectCancel,
   reconnectGet,
   reconnectNow,
@@ -107,5 +108,23 @@ describe('onGmcpPackage', () => {
     const [event, handler] = vi.mocked(listen).mock.calls[0];
     handler({ event, id: 1, payload: { session: 2, data } });
     expect(heard).toHaveBeenCalledWith(data, 2);
+  });
+});
+
+describe('onScreenReader', () => {
+  it('hands its listener what one read gave the reader and the session apart', async () => {
+    vi.mocked(listen).mockClear();
+    const heard = vi.fn();
+    await onScreenReader(heard);
+    const [event, handler] = vi.mocked(listen).mock.calls[0];
+    expect(event).toBe('session://screen-reader');
+    const feed = {
+      lines: ['You are thirsty.', 'You are hungry.'],
+      count: 2,
+      prompt: null,
+      away: true,
+    };
+    handler({ event, id: 1, payload: { session: 2, ...feed } });
+    expect(heard).toHaveBeenCalledWith(feed, 2);
   });
 });

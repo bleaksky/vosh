@@ -11,6 +11,7 @@ mod log_kinds;
 mod log_sessions;
 mod lua_panes;
 mod reconnect;
+mod screen_reader;
 mod scrollback_size;
 mod sessions;
 mod snoop;

@@ -43,6 +43,7 @@ mod log_sink;
 mod pointer;
 mod preview;
 mod prompt_table;
+mod reader;
 mod repaint;
 mod right;
 mod room;
@@ -186,6 +187,8 @@ struct Read {
     sends: Vec<String>,
     gmcp: bool,
     prompt: bool,
+    /// What a screen reader reads of the read.
+    reader: crate::session::reader::ReaderFeed,
 }
 
 /// The session's state for one connection, fed through its own steps.
@@ -312,6 +315,7 @@ impl Session {
             sends,
             gmcp: batch.gmcp,
             prompt: batch.prompt,
+            reader: batch.reader,
         }
     }
 

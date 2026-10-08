@@ -1171,7 +1171,7 @@ const FIGHT_LINE: &str = "[159/1020hp 310/800mn 489/930mv]";
 
 /// A profile that reads Aabahran's codes `prompt` and draws
 /// `template` in its place.
-fn codes_profile(prompt: &str, template: &str) -> Live {
+pub(super) fn codes_profile(prompt: &str, template: &str) -> Live {
     let (mut p, mut c) = Live::default();
     take_config(
         &mut p,
