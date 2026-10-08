@@ -82,7 +82,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `label` is its accessible name, like `Ilsabet options` or `Move Haste up`. It is required, since the button shows no text.
 - `icon` is the icon.
 
-`Keycap` draws one key. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
+`Keycap` draws one key. Set a row of them in a `keys` wrapper, a `<kbd>` or a `<span>`, which spaces them 4 apart, and put the margin on a class of its own. Build the keys with `shortcutKeys` from `src/lib/shortcuts.ts` so macOS reads ⌘ and the other systems read Ctrl.
 
 `Chip` is a pill with an optional close button.
 

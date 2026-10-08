@@ -50,40 +50,6 @@
   top: 56px;
 }
 
-/* Keycaps: 20 square, radius 4, a ring and no fill, the glyph in the
-   UI face. Spelled out keys (Ctrl, Shift) widen to fit. */
-.ov-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  margin: 0 0 0 12px;
-  padding: 0;
-  font-family: inherit;
-}
-
-.ov-key {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--key-ring);
-  border-radius: var(--r-key);
-  background: none;
-  box-sizing: border-box;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 400;
-  color: var(--secondary);
-}
-
-.ov-key.is-wide {
-  padding: 0 4px;
-}
-
 /* Command palette (SPEC 7). 560 wide, centered on the window, top at
    15% of the window height. The search row is 46 tall with the icon
    at x 14 and the text at x 45. Rows sit in 36 slots with a 34
@@ -266,6 +232,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--tertiary);
+}
+
+/* A row's shortcut keys, 12 after its title or meta. Scoped to the
+   palette so it outranks the keys row in controls.css, which loads
+   later. */
+.ov-palette .keys {
+  margin-left: 12px;
 }
 
 /* Alias commands go to the MUD, so they take the terminal face. */

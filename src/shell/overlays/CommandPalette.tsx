@@ -13,6 +13,7 @@ import {
 } from './palette';
 import { shortcutKeys } from '../../lib/shortcuts';
 import { scrollWithin } from '../../lib/scrollWithin';
+import { Keycap } from '../../ui';
 
 interface Props {
   deps: PaletteDeps;
@@ -40,11 +41,9 @@ const ICON = {
 /** Keycaps for a shortcut spec, in the platform's glyphs. */
 function Keycaps({ spec }: { spec: string }) {
   return (
-    <kbd className="ov-keys">
+    <kbd className="keys">
       {shortcutKeys(spec).map((key, i) => (
-        <kbd key={i} className={`ov-key${key.length > 1 ? ' is-wide' : ''}`}>
-          {key}
-        </kbd>
+        <Keycap key={i}>{key}</Keycap>
       ))}
     </kbd>
   );
