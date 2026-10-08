@@ -15,27 +15,27 @@ import { useTauriEvent } from '../ipc/useTauriEvent';
 import { getColorVision } from '../theme/fitGameColors';
 import { getCurrentThemeId } from '../theme/theme';
 import { findTheme, themeTokens } from '../theme/themes';
-import { parseHex, toRgba } from '../theme/color';
+import { findMarks } from '../theme/findMarks';
 import { usePromptReach } from '../stores/session/promptReachStore';
 import { NATIVE_FAILED_KEY, nativeSurfaceEnabled } from '../terminal/terminalRenderer';
 
 // Hand the native surface the chrome colors the page derives with its
 // theme tokens: the split divider, the selection and its text, find
-// matches in ANSI yellow (28% for every match as Menus.dc.html draws them,
-// stronger for the current one), links in the accent, and the scrollbar
+// matches in ANSI yellow (28% for every match and 60% for the current one,
+// as every find marks them), links in the accent, and the scrollbar
 // in the tertiary tone. A lifted prompt's band takes the selected row
 // fill, with its inset ring on a light theme. Runs on every theme apply,
 // so light themes never get the renderer's dark defaults.
 function pushNativeChromeTokens(): void {
   const theme = findTheme(getCurrentThemeId());
   const tokens = themeTokens(theme, getColorVision());
-  const yellow = parseHex(theme.xterm.yellow);
+  const marks = findMarks(theme.xterm);
   void nativeSurfaceSetTokens({
     divider: tokens.sep,
     selection: tokens.selection,
     selectionText: tokens.selectionText,
-    findMatch: yellow ? toRgba(yellow, 0.28) : null,
-    currentMatch: yellow ? toRgba(yellow, 0.6) : null,
+    findMatch: marks?.match ?? null,
+    currentMatch: marks?.current ?? null,
     link: tokens.accent,
     scrollbar: tokens.tertiary,
     selrow: tokens.selrow,
