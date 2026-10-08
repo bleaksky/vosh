@@ -169,7 +169,7 @@ export function WizardDialog({
     >
       <div
         ref={cardRef}
-        className="ov-wizard"
+        className="ov-confirm ov-wizard"
         tabIndex={-1}
         role="dialog"
         aria-modal="true"

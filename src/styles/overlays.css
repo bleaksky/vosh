@@ -812,29 +812,22 @@
   margin-top: 12px;
 }
 
-/* The shared catalog preview, a confirm grown to 600 wide. The head
-   takes the confirm's title and body, the kit sections scroll in the
-   middle, and the foot with its hint and buttons stays put under a
-   hairline. A layer 24 in from the window edge holds the card. */
+/* The shared catalog preview, a confirm grown to 600 wide. The card
+   keeps the confirm's recipe and takes only its size and columns here.
+   The head takes the confirm's title and body, the kit sections scroll
+   in the middle, and the foot with its hint and buttons stays put under
+   a hairline. A layer 24 in from the window edge holds the card. */
 .ov-confirm-layer.ov-wizard-layer {
   padding: 24px;
 }
 
-.ov-wizard {
+.ov-confirm.ov-wizard {
   display: flex;
   flex-direction: column;
   width: min(600px, 100%);
   max-height: 100%;
   overflow: hidden;
-  border-radius: var(--r-float);
-  background: var(--raised);
-  box-shadow: var(--shadow-float);
-  font-family: var(--font-ui);
-  color: var(--text);
-}
-
-.ov-wizard:focus {
-  outline: none;
+  padding: 0;
 }
 
 .ov-wizard-head {
