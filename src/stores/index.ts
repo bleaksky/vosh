@@ -19,7 +19,9 @@ import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startPluginRowsStore } from './session/pluginRowsStore';
 import { startReconnectStore } from './session/reconnectStore';
 import { startRoomStore } from './gmcp/roomStore';
+import { startReaderStore } from './session/readerStore';
 import { startRoundTripStore } from './session/roundTripStore';
+import { startScreenReaderStore } from './config/screenReaderStore';
 import { startSessionRowStore } from './session/sessionRowStore';
 import { startSessionsStore } from './session/sessionsStore';
 import { startSnoopStore } from './session/snoopStore';
@@ -80,4 +82,6 @@ export function startStores(): void {
   startWalkStore();
   startCharStatusStore();
   startWritingStore();
+  startScreenReaderStore();
+  startReaderStore();
 }
