@@ -354,11 +354,13 @@ pub(crate) fn install_preset_macros(p: &mut Profile, macros: Vec<Macro>) -> Resu
 /// macro tagged with it and holds, for each of its macros, one of yours
 /// on the same key with the same command. Each such copy takes the tag,
 /// so [`install_preset_macros`] replaces it, with its group kept, and
-/// your own macro on the key keeps it. A preset you turn on finds its
-/// macros tagged by the install that turns it on, so only the launch
-/// that installs the presets already on runs this, and a preset you turn
-/// on never takes a macro of yours that happens to match. Returns the
-/// number tagged.
+/// your own macro on the key keeps it. The install appends the preset's
+/// macros after yours and holds one off while yours keeps its key, so of
+/// two copies on one key the one off, else the later one, is taken as
+/// the preset's. Every install of the presets already on runs this, and
+/// turning a preset on does not, since that install tags its macros
+/// itself, so a preset you turn on never takes a macro of yours that
+/// happens to match. Returns the number tagged.
 pub(crate) fn retag_returned_macros(p: &mut Profile, macros: &[Macro]) -> usize {
     let presets: BTreeSet<&str> = macros.iter().filter_map(|m| m.preset.as_deref()).collect();
     let mut tagged = 0;
@@ -368,14 +370,18 @@ pub(crate) fn retag_returned_macros(p: &mut Profile, macros: &[Macro]) -> usize 
         }
         let mut copies: Vec<usize> = Vec::new();
         for want in macros.iter().filter(|m| m.preset.as_deref() == Some(id)) {
-            let copy = p.macros.iter().enumerate().position(|(i, m)| {
-                m.preset.is_none()
-                    && m.key == want.key
-                    && m.command == want.command
-                    && !copies.contains(&i)
-            });
-            match copy {
-                Some(i) => copies.push(i),
+            let fits: Vec<usize> = (0..p.macros.len())
+                .filter(|i| {
+                    let m = &p.macros[*i];
+                    m.preset.is_none()
+                        && m.key == want.key
+                        && m.command == want.command
+                        && !copies.contains(i)
+                })
+                .collect();
+            let held = fits.iter().rev().find(|i| !p.macros[**i].enabled);
+            match held.or(fits.last()) {
+                Some(i) => copies.push(*i),
                 None => {
                     copies.clear();
                     break;
@@ -895,6 +901,40 @@ mod tests {
         // Turning the preset off leaves your rec alone.
         remove_preset_macros(&mut p, "numpad_movement");
         assert_eq!(p.macros, [yours("Numpad3", "rec")]);
+    }
+
+    #[test]
+    fn the_preset_copies_take_the_tag_where_yours_match_them_too() {
+        // Your own six on the numpad, then Numpad movement turned on,
+        // which holds its six off. Then you bind the six again after it.
+        for yours_first in [true, false] {
+            let mut p = Profile::default();
+            let mine = || NUMPAD.iter().map(|(k, c)| yours(k, c));
+            if yours_first {
+                p.macros.extend(mine());
+            }
+            install_preset_macros(&mut p, numpad()).unwrap();
+            if !yours_first {
+                p.macros.extend(mine());
+                hold_profile_keys(&mut p);
+            }
+            let before = p.macros.clone();
+
+            // 0.8.1 leaves twelve untagged macros, the held six off.
+            for m in &mut p.macros {
+                m.preset = None;
+            }
+            assert_eq!(retag_returned_macros(&mut p, &numpad()), 6);
+            install_preset_macros(&mut p, numpad()).unwrap();
+            let [on, off] = on_and_off(&p);
+            assert_eq!(on, NUMPAD, "each key still sends your macro");
+            assert_eq!(off, NUMPAD);
+            let mut after = p.macros.clone();
+            let mut before = before;
+            after.sort_by(|a, b| (&a.key, &a.preset).cmp(&(&b.key, &b.preset)));
+            before.sort_by(|a, b| (&a.key, &a.preset).cmp(&(&b.key, &b.preset)));
+            assert_eq!(after, before);
+        }
     }
 
     #[test]
