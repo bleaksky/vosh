@@ -2,7 +2,7 @@
 //! characters share in loadout mode. Vosh runs in loadout mode while the
 //! file is on disk.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::path::Path;
 
@@ -14,7 +14,7 @@ use vosh_automation::trigger::{Trigger, TriggerStore};
 
 use super::gating::apply_effective_state;
 use super::preset_edits::PresetEdits;
-use super::presets::hold_taken_keys;
+use super::presets::{hold_profile_keys, hold_taken_keys};
 use super::set::LoadoutSet;
 use super::LoadoutStoreError;
 use crate::disk::atomic::write_with_backup;
@@ -61,12 +61,17 @@ pub(crate) struct GlobalCatalog {
 impl GlobalCatalog {
     /// The catalog as the live profile holds it: its aliases, triggers,
     /// macros, enabled presets, alert presets and preset edits. A save in
-    /// loadout mode writes this.
+    /// loadout mode writes this. Its preset macros take the hold with no
+    /// group left out, so the file never says which character saved last,
+    /// and each profile lays its own groups over it, see
+    /// [`hold_profile_keys`].
     pub(crate) fn from_profile(profile: &crate::profile::live::Profile) -> Self {
+        let mut macros = profile.macros.clone();
+        hold_taken_keys(&mut macros, &BTreeSet::new());
         Self {
             aliases: profile.aliases.list().into_iter().cloned().collect(),
             triggers: profile.triggers.list(),
-            macros: profile.macros.clone(),
+            macros,
             enabled_presets: Some(profile.ui.enabled_presets.clone()),
             alerts: profile.alerts.clone(),
             preset_edits: profile.preset_edits.clone(),
@@ -140,8 +145,8 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
         macros.retain(|x| x.key != m.key || x.preset != m.preset);
         macros.push(m);
     }
-    hold_taken_keys(&mut macros);
     p.macros = macros;
+    p.on_catalog = true;
     // The presets that are on belong to the catalog with the preset
     // triggers, so the profile's own list gives way to it.
     if let Some(list) = &catalog.enabled_presets {
@@ -150,8 +155,9 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
         p.alerts.clone_from(&catalog.alerts);
         p.preset_edits.clone_from(&catalog.preset_edits);
     }
-    if let Some(set) = set {
-        apply_effective_state(set, p);
+    match set {
+        Some(set) => apply_effective_state(set, p),
+        None => hold_profile_keys(p),
     }
 }
 
@@ -200,7 +206,6 @@ pub(crate) fn lay_catalog_change_over(
             None => p.macros.push(changed.clone()),
         }
     }
-    hold_taken_keys(&mut p.macros);
     if after.enabled_presets != before.enabled_presets {
         if let Some(list) = &after.enabled_presets {
             p.ui.enabled_presets.clone_from(list);
@@ -212,8 +217,9 @@ pub(crate) fn lay_catalog_change_over(
     if after.preset_edits != before.preset_edits {
         p.preset_edits.clone_from(&after.preset_edits);
     }
-    if let Some(set) = set {
-        apply_effective_state(set, p);
+    match set {
+        Some(set) => apply_effective_state(set, p),
+        None => hold_profile_keys(p),
     }
 }
 
@@ -441,7 +447,7 @@ mod tests {
         // holds d off.
         let mut after = before.clone();
         after.macros.push(bind("Numpad3", "rec", None));
-        hold_taken_keys(&mut after.macros);
+        hold_taken_keys(&mut after.macros, &BTreeSet::new());
         lay_catalog_change_over(&mut p, &before, &after, None);
         assert_eq!(sends(&p), [("n", true), ("d", false), ("rec", true)]);
         // It deletes rec again, and d takes the key back.

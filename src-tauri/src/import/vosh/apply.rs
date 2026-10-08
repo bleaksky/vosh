@@ -20,7 +20,7 @@ use crate::app::state::SharedState;
 use crate::disk::save::{persist_state, PERSIST_LOCK};
 use crate::loadouts::catalog::{lay_catalog_over, GlobalCatalog};
 use crate::loadouts::gating::apply_effective_state;
-use crate::loadouts::presets::hold_taken_keys;
+use crate::loadouts::presets::hold_profile_keys;
 use crate::loadouts::set::LoadoutSet;
 use crate::profile::file::ProfileConfig;
 use crate::profile::inactive::{broadcast_profile_changed, edit_inactive_locked, Stored};
@@ -423,7 +423,7 @@ async fn gate_of(state: &SharedState, name: Option<&str>) -> Option<LoadoutSet> 
 /// plays, whose save writes them to catalog.toml. An item `p` has by
 /// then, for a macro one of yours on its key, stays as it is, like each
 /// one the clash list names. A preset macro on the key of a macro that
-/// joined is held off, see [`hold_taken_keys`]. Returns how many joined.
+/// joined is held off, see [`hold_profile_keys`]. Returns how many joined.
 fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
     let mut joined = 0;
     for trigger in join.triggers {
@@ -452,7 +452,7 @@ fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
             joined += 1;
         }
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     joined
 }
 

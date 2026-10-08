@@ -190,18 +190,38 @@ pub(crate) fn adopt_catalog_presets(
 /// Hold off each preset macro on a key one of your macros uses, and turn
 /// every other preset macro on, so a key you already use stays yours
 /// (Scripts Q13). Yours keeps the key while it is on, off or in a group
-/// that is off. A held macro saves with `enabled` false, so the command
-/// line and 0.8.1 both pass it over. Every step that changes the macros
-/// runs this before it saves.
-pub(crate) fn hold_taken_keys(macros: &mut [Macro]) {
+/// that is off, except a group in `off`, which [`hold_profile_keys`]
+/// fills in loadout mode. A held macro saves with `enabled` false, so
+/// the command line and 0.8.1 both pass it over. Every step that changes
+/// the macros runs this before it saves.
+pub(crate) fn hold_taken_keys(macros: &mut [Macro], off: &BTreeSet<String>) {
     let yours: BTreeSet<String> = macros
         .iter()
         .filter(|m| m.preset.is_none())
+        .filter(|m| !m.group.as_ref().is_some_and(|g| off.contains(g)))
         .map(|m| m.key.clone())
         .collect();
     for m in macros.iter_mut().filter(|m| m.preset.is_some()) {
         m.enabled = !yours.contains(&m.key);
     }
+}
+
+/// [`hold_taken_keys`] over the live profile `p`. In loadout mode every
+/// character shares the catalog, and the groups each one keeps off are
+/// what sets them apart, so a macro of yours in a group `p` keeps off
+/// keeps no key there. Otherwise a character whose only Numpad3 was the
+/// preset's d would lose d to a macro another character brought to the
+/// catalog. catalog.toml stores the hold with no group left out, see
+/// [`GlobalCatalog::from_profile`]. Each step that changes the macros or
+/// turns a macro group on or off runs this.
+pub(crate) fn hold_profile_keys(p: &mut Profile) {
+    let none = BTreeSet::new();
+    let off = if p.on_catalog {
+        &p.disabled_macro_groups
+    } else {
+        &none
+    };
+    hold_taken_keys(&mut p.macros, off);
 }
 
 /// The triggers half of [`presets_install`] over the live profile `p`,
@@ -323,7 +343,7 @@ pub(crate) fn install_preset_macros(p: &mut Profile, macros: Vec<Macro>) -> Resu
         }
         p.macros.push(m);
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     Ok(installed)
 }
 
@@ -431,7 +451,7 @@ pub(crate) fn set_macro(
             preset: None,
         });
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
     Ok(())
 }
 
@@ -441,7 +461,7 @@ pub(crate) fn set_macro(
 /// [`macros_delete`]: crate::ipc::automation::macros_delete
 pub(crate) fn delete_macro(p: &mut Profile, key: &str) {
     p.macros.retain(|m| m.preset.is_some() || m.key != key);
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
 }
 
 /// The macros half of [`import_apply`] over the live profile `p`. Each
@@ -462,7 +482,7 @@ pub(crate) fn import_macros(p: &mut Profile, imported: &[Macro]) {
             p.macros.push(m.clone());
         }
     }
-    hold_taken_keys(&mut p.macros);
+    hold_profile_keys(p);
 }
 
 #[cfg(test)]
@@ -878,6 +898,40 @@ mod tests {
     }
 
     #[test]
+    fn in_loadout_mode_a_macro_in_a_group_you_keep_off_keeps_no_key() {
+        // Another character's rec sits on Numpad3 in a group this one
+        // keeps off, so d sends here.
+        let mut p = Profile {
+            on_catalog: true,
+            ..Profile::default()
+        };
+        p.macros.push(Macro {
+            group: Some("(Healer)".into()),
+            ..yours("Numpad3", "rec")
+        });
+        p.disabled_macro_groups.insert("(Healer)".into());
+        install_preset_macros(&mut p, numpad()).unwrap();
+        let [_, off] = on_and_off(&p);
+        assert!(off.is_empty(), "{off:?}");
+
+        // Turning the group on gives the key back to rec, and off again
+        // to d.
+        crate::script::set_list_group(&mut p, crate::script::GroupList::Macros, "(Healer)", true);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+        crate::script::set_list_group(&mut p, crate::script::GroupList::Macros, "(Healer)", false);
+        let [_, off] = on_and_off(&p);
+        assert!(off.is_empty(), "{off:?}");
+
+        // Per profile mode keeps Q13, and rec keeps the key in a group
+        // that is off.
+        p.on_catalog = false;
+        hold_profile_keys(&mut p);
+        let [_, off] = on_and_off(&p);
+        assert_eq!(off, [("Numpad3", "d")]);
+    }
+
+    #[test]
     fn your_own_macros_never_join_a_preset() {
         // The preset still holds its macros, so your copies stay yours.
         let mut p = Profile::default();
@@ -956,6 +1010,9 @@ mod tests {
     #[derive(serde::Deserialize)]
     struct KeptCase {
         about: String,
+        /// The macro groups the hold leaves out, as in loadout mode.
+        #[serde(default)]
+        off: BTreeSet<String>,
         macros: Vec<Macro>,
         kept: Vec<String>,
     }
@@ -969,7 +1026,7 @@ mod tests {
             serde_json::from_str(include_str!("../../../fixtures/macros/kept-keys.json")).unwrap();
         for case in file.cases {
             let mut held = case.macros.clone();
-            hold_taken_keys(&mut held);
+            hold_taken_keys(&mut held, &case.off);
             assert_eq!(held, case.macros, "{}", case.about);
             let off: Vec<&str> = held
                 .iter()

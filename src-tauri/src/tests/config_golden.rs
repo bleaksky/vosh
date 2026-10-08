@@ -1503,7 +1503,7 @@ fn every_golden_still_reads_in_0_8_1_and_your_macro_keeps_its_key() {
     assert_eq!(full, 4);
     // The full macros hold what the hold leaves.
     let mut held = full_macros();
-    crate::loadouts::presets::hold_taken_keys(&mut held);
+    crate::loadouts::presets::hold_taken_keys(&mut held, &std::collections::BTreeSet::new());
     assert_eq!(held, full_macros());
 }
 
