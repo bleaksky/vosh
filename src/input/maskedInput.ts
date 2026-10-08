@@ -19,7 +19,7 @@ export function colorizeEcho(line: string, color: string | null): string {
 /** The grey `›` and space before each command you send, in the theme's
  *  bright black (SGR 90), so both renderers draw it in the active theme.
  *  U+203A is one cell wide. The backend echoes a quick key with the same
- *  bytes (ECHO_CARET in src-tauri/src/input.rs). Each renderer leaves it
+ *  bytes (echo_mark in src-tauri/src/input.rs). Each renderer leaves it
  *  out when the row your echo lands on already ends in `>`, as a game's
  *  prompt such as `Account name> ` does (RegionWriter in
  *  terminalRegion.ts, and the native grid). */

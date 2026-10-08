@@ -260,7 +260,8 @@ impl TermGrid {
     /// comes back as it is. The page's twin is `withoutMark` in
     /// terminalRegion.ts.
     fn without_mark<'a>(&self, bytes: &'a [u8]) -> &'a [u8] {
-        match bytes.strip_prefix(crate::input::ECHO_CARET.as_bytes()) {
+        let mark = crate::input::echo_mark(&crate::profile::ui::UiConfig::default());
+        match bytes.strip_prefix(mark.as_bytes()) {
             Some(rest) if self.ends_in_prompt() => rest,
             _ => bytes,
         }

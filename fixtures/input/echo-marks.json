@@ -1,0 +1,107 @@
+{
+  "notes": "Hand written. Each case gives the mark fields of the [ui] table, a command you send, and the exact echo the command line draws for it, without the line end. Fields left out keep their defaults, the chevron with no colors and Dim sent commands off. A test in src-tauri/src/input/tests.rs holds command_echo, which echoes a quick key, to every case.",
+  "cases": [
+    {
+      "about": "The chevron, the default. Board 02.",
+      "ui": {},
+      "command": "look",
+      "echo": "\u001b[90m› \u001b[0mlook"
+    },
+    {
+      "about": "The greater than sign. Board 02.",
+      "ui": {
+        "input_echo_mark": "gt"
+      },
+      "command": "look",
+      "echo": "\u001b[90m> \u001b[0mlook"
+    },
+    {
+      "about": "Your own text. Board 02.",
+      "ui": {
+        "input_echo_mark": "own",
+        "input_echo_mark_text": "you:"
+      },
+      "command": "look",
+      "echo": "\u001b[90myou: \u001b[0mlook"
+    },
+    {
+      "about": "Your own text left blank draws no mark.",
+      "ui": {
+        "input_echo_mark": "own"
+      },
+      "command": "look",
+      "echo": "look"
+    },
+    {
+      "about": "Off. Board 02.",
+      "ui": {
+        "input_echo_mark": "off",
+        "input_echo_mark_text": "you:"
+      },
+      "command": "look",
+      "echo": "look"
+    },
+    {
+      "about": "A Mark color colors the mark alone. Board 03.",
+      "ui": {
+        "input_echo_mark_color": "#c6a46a"
+      },
+      "command": "look",
+      "echo": "\u001b[38;2;198;164;106m› \u001b[0mlook"
+    },
+    {
+      "about": "A Mark color that does not read keeps bright black.",
+      "ui": {
+        "input_echo_mark_color": "gold"
+      },
+      "command": "look",
+      "echo": "\u001b[90m› \u001b[0mlook"
+    },
+    {
+      "about": "A Command color colors the command alone. Board 03.",
+      "ui": {
+        "input_echo_color": "#8fa7d9"
+      },
+      "command": "kick ogre",
+      "echo": "\u001b[90m› \u001b[0m\u001b[38;2;143;167;217mkick ogre\u001b[0m"
+    },
+    {
+      "about": "Dim sent commands draws the command faint, the mark unchanged. Board 03.",
+      "ui": {
+        "input_echo_dim": true
+      },
+      "command": "look",
+      "echo": "\u001b[90m› \u001b[0m\u001b[2mlook\u001b[0m"
+    },
+    {
+      "about": "Dim with a Command color.",
+      "ui": {
+        "input_echo_dim": true,
+        "input_echo_color": "#8fa7d9"
+      },
+      "command": "look",
+      "echo": "\u001b[90m› \u001b[0m\u001b[2;38;2;143;167;217mlook\u001b[0m"
+    },
+    {
+      "about": "Dim with every mark color and your own text.",
+      "ui": {
+        "input_echo_mark": "own",
+        "input_echo_mark_text": "T>",
+        "input_echo_mark_color": "#c6a46a",
+        "input_echo_dim": true,
+        "input_echo_color": "#8fa7d9"
+      },
+      "command": "look",
+      "echo": "\u001b[38;2;198;164;106mT> \u001b[0m\u001b[2;38;2;143;167;217mlook\u001b[0m"
+    },
+    {
+      "about": "Dim with the mark off.",
+      "ui": {
+        "input_echo_mark": "off",
+        "input_echo_dim": true
+      },
+      "command": "look",
+      "echo": "\u001b[2mlook\u001b[0m"
+    }
+  ]
+}

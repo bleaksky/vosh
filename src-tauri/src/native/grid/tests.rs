@@ -1649,7 +1649,8 @@ mod stage_into_grid {
 /// Your echo with the grey mark Mark your commands draws, as the page
 /// writes it after you type `command`.
 fn send_typed(g: &mut TermGrid, command: &str) {
-    g.local_write(format!("{}{command}\r\n", crate::input::ECHO_CARET).as_bytes());
+    let mark = crate::input::echo_mark(&crate::profile::ui::UiConfig::default());
+    g.local_write(format!("{mark}{command}\r\n").as_bytes());
 }
 
 /// A quick key's echo of `command`, as the session sends it.

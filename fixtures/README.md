@@ -51,6 +51,11 @@ fixtures/
                come from a port of the server's own map code run over
                the game's area files instead. Read by the tests in
                crates/prompt/tests, values.rs and aabahran.rs among them.
+  input/     echo-marks.json, the mark fields of the [ui] table, a
+             command you send and the exact echo of it, for each mark,
+             Mark color, Command color and Dim sent commands. Read by
+             src-tauri/src/input/tests.rs, which holds command_echo to it.
+             Hand written.
   ipc/       names.txt, every name the page and the app share, each command
              with the keys its function reads and each event with who
              sends it and whether the page hears it. The IPC contract
