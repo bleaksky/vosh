@@ -72,10 +72,10 @@ export function SnoopSplit({
   const shown = tabs.length > 0 && !windowed;
 
   // Lines that reach the front tab while the split is folded leave the
-  // unread dot.
+  // unread dot. The fold is the profile's, which the session shown plays.
   useEffect(() => {
-    setSnoopsFolded(size.folded);
-  }, [size.folded]);
+    setSnoopsFolded(size.folded, session);
+  }, [size.folded, session]);
 
   // The column's height sizes the split.
   useLayoutEffect(() => {

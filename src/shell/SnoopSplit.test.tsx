@@ -109,7 +109,7 @@ function snoops(
   unread: string[] = [],
   windowed = false,
 ) {
-  fake.snoops = { tabs, windowed, selected, unread: new Set(unread) };
+  fake.snoops = { tabs, windowed, selected, folded: false, unread: new Set(unread) };
 }
 
 const props = {
