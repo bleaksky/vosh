@@ -84,6 +84,27 @@
   --status-line: round(28px * var(--panel-text-px, 12) / 12, 1px);
   --panel-w: 300px;
 
+  /* The seven layers (board 07 of the merges review). Every z-index of
+     10 or more reads one of them. Values 1 to 9 inside a component stay
+     plain numbers, since they only order its own children.
+       30    --z-overlay  the sessions sidebar over the terminal, the
+                          sessions toggle one above it, the Settings
+                          suggestions
+       40    --z-in-pane  the scroll depth chip and the find bar
+       60    --z-edge     the window edge and the corner notices
+       800   --z-card     the session hover card, the prompt card's marks
+                          50 above it and the prompt card 100 above
+       1000  --z-menu     every menu, the palette, the migration wizard
+       1050  --z-coach    the coach ring and its tip
+       1100  --z-dialog   the confirm dialog */
+  --z-overlay: 30;
+  --z-in-pane: 40;
+  --z-edge: 60;
+  --z-card: 800;
+  --z-menu: 1000;
+  --z-coach: 1050;
+  --z-dialog: 1100;
+
   /* Inter and the wizard's shadow. Only html and body in base.css and
      the migration wizard read them, until D23 retires both. New chrome
      takes --font-ui, and a new floating surface --shadow-float. */

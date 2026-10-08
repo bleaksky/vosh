@@ -1705,7 +1705,7 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 20;
+  z-index: var(--z-overlay);
   min-width: 200px;
   max-height: 222px;
   margin: 0;

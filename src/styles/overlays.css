@@ -14,7 +14,7 @@
   position: absolute;
   top: 8px;
   right: 16px;
-  z-index: 40;
+  z-index: var(--z-in-pane);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -59,7 +59,7 @@
   position: fixed;
   top: 15vh;
   left: max(16px, calc(50% - 280px));
-  z-index: 1000;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   width: min(560px, calc(100vw - 32px));
@@ -271,7 +271,7 @@
    the Panel font. */
 .menu {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-menu);
   min-width: 232px;
   max-width: 320px;
   margin: 0;
@@ -436,7 +436,7 @@
   position: absolute;
   top: 8px;
   right: 16px;
-  z-index: 50;
+  z-index: var(--z-in-pane);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -585,7 +585,7 @@
   position: absolute;
   right: 16px;
   bottom: 16px;
-  z-index: 60;
+  z-index: var(--z-edge);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -687,7 +687,7 @@
    toast recipe beside it. Neither takes a press. */
 .cm-ring {
   position: fixed;
-  z-index: 1050;
+  z-index: var(--z-coach);
   border-radius: 10px;
   box-shadow: 0 0 0 2px var(--accent);
   pointer-events: none;
@@ -709,7 +709,7 @@
 
 .cm-tip {
   position: fixed;
-  z-index: 1050;
+  z-index: var(--z-coach);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -725,7 +725,7 @@
 .ov-confirm-layer {
   position: fixed;
   inset: 0;
-  z-index: 1100;
+  z-index: var(--z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
