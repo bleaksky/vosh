@@ -121,6 +121,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         profiles::profile_set_scope,
         windows::open_settings_window,
         windows::open_help_window,
+        windows::snoop_window_open,
         windows::window_backdrop_set,
         terminal::highlight_ground_set,
         panes::pane_layout_get,

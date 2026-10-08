@@ -10,19 +10,20 @@ use tauri::{AppHandle, State};
 use crate::app::state::SharedState;
 use crate::input::{command_echo, NOT_CONNECTED};
 use crate::output;
-use crate::session::snoop::{self, SnoopTabText};
+use crate::session::snoop::{self, SnoopSnapshot};
 use crate::sessions::SessionId;
 
 /// Every player `session` snoops, or the selected session does, in the
-/// order they started, each with its text as the game sent it.
+/// order they started, each with its text as the game sent it, and
+/// whether they show in the snoop window.
 #[tauri::command]
 pub(crate) async fn snoop_get(
     state: State<'_, SharedState>,
     session: Option<SessionId>,
-) -> Result<Vec<SnoopTabText>, String> {
+) -> Result<SnoopSnapshot, String> {
     let session = state.session(session)?;
-    let tabs = session.connection.lock().snoops.all();
-    Ok(tabs)
+    let snapshot = session.connection.lock().snoops.snapshot();
+    Ok(snapshot)
 }
 
 /// What Stop sends the game: `snoop stop` and the player's name, or

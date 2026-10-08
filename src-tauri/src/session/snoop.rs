@@ -15,6 +15,11 @@
 //! or the link. The session sends the tab list on `session://snoop`
 //! and new text on `session://snoop-output` once per read, and the page
 //! reads every tab with its text through `snoop_get`.
+//!
+//! Open in a window moves every tab of a session into a window of its
+//! own (SN1). [`Snoops`] keeps whether it is out, and the tab list
+//! carries it, so the split closes while the window is open and comes
+//! back with the same tabs once it closes.
 
 use std::collections::VecDeque;
 
@@ -131,10 +136,12 @@ pub(crate) struct SnoopTab {
 }
 
 /// What `session://snoop` carries beside the session: every tab, in the
-/// order they started.
+/// order they started, and whether they show in the snoop window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SnoopPayload {
     pub(crate) tabs: Vec<SnoopTab>,
+    /// The tabs show in the snoop window, and the split stays closed.
+    pub(crate) windowed: bool,
 }
 
 /// What `session://snoop-output` carries beside the session: the text
@@ -153,6 +160,14 @@ pub(crate) struct SnoopTabText {
     pub(crate) text: String,
 }
 
+/// What `snoop_get` returns: every tab with its text, in the order they
+/// started, and whether they show in the snoop window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SnoopSnapshot {
+    pub(crate) tabs: Vec<SnoopTabText>,
+    pub(crate) windowed: bool,
+}
+
 /// What changed since the last send.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct SnoopChanges {
@@ -166,6 +181,8 @@ pub(crate) struct SnoopChanges {
 #[derive(Debug, Default)]
 pub(crate) struct Snoops {
     tabs: Vec<Tab>,
+    /// The tabs show in the snoop window.
+    windowed: bool,
     list_changed: bool,
     output: Vec<SnoopOutputPayload>,
     /// Text for the log, each with the name of its player, in the order
@@ -329,8 +346,25 @@ impl Snoops {
             .collect()
     }
 
+    /// The snoop window opened, `on`, or closed. The tab list goes again
+    /// when that changes where the tabs show.
+    pub(crate) fn set_windowed(&mut self, on: bool) {
+        if self.windowed != on {
+            self.windowed = on;
+            self.list_changed = true;
+        }
+    }
+
+    /// Every tab with its text, and whether they show in the window.
+    pub(crate) fn snapshot(&self) -> SnoopSnapshot {
+        SnoopSnapshot {
+            tabs: self.all(),
+            windowed: self.windowed,
+        }
+    }
+
     /// Every tab with its text, in the order they started.
-    pub(crate) fn all(&self) -> Vec<SnoopTabText> {
+    fn all(&self) -> Vec<SnoopTabText> {
         self.tabs
             .iter()
             .map(|tab| SnoopTabText {
@@ -344,6 +378,7 @@ impl Snoops {
     pub(crate) fn take_changes(&mut self) -> SnoopChanges {
         let list = std::mem::take(&mut self.list_changed).then(|| SnoopPayload {
             tabs: self.tabs.iter().map(Tab::row).collect(),
+            windowed: self.windowed,
         });
         SnoopChanges {
             list,
@@ -371,6 +406,13 @@ pub(crate) fn emit<R: tauri::Runtime>(
 pub(crate) fn emit_changes<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session) {
     let changes = session.connection.lock().snoops.take_changes();
     emit(app, session, changes);
+}
+
+/// Mark the snoops of `session` as shown in the snoop window, `on`, or
+/// back in the split, and send the tab list when that changed.
+pub(crate) fn set_windowed<R: tauri::Runtime>(app: &AppHandle<R>, session: &Session, on: bool) {
+    session.connection.lock().snoops.set_windowed(on);
+    emit_changes(app, session);
 }
 
 #[cfg(test)]
@@ -494,6 +536,22 @@ mod tests {
         stop(&mut s, "Maren", 2);
         s.close(Some("Maren"));
         assert_eq!(s.take_changes().output, Vec::new());
+    }
+
+    #[test]
+    fn the_window_flag_sends_the_list_only_when_it_changes() {
+        let mut s = Snoops::default();
+        start(&mut s, "Tolliver");
+        s.take_changes();
+        s.set_windowed(true);
+        let list = s.take_changes().list.expect("the list");
+        assert!(list.windowed);
+        assert_eq!(list.tabs.len(), 1);
+        s.set_windowed(true);
+        assert_eq!(s.take_changes().list, None);
+        assert!(s.snapshot().windowed);
+        s.set_windowed(false);
+        assert!(!s.take_changes().list.expect("the list").windowed);
     }
 
     #[test]

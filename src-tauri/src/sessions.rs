@@ -79,9 +79,9 @@ impl SessionId {
         Self(n)
     }
 
-    /// The session numbered `n`, as a banner Vosh posted names it. It may
-    /// name a session that has since closed, which a lookup then refuses.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    /// The session numbered `n`, as a banner Vosh posted or a snoop
+    /// window's label names it. It may name a session that has since
+    /// closed, which a lookup then refuses.
     pub(crate) const fn from_number(n: u32) -> Self {
         Self(n)
     }

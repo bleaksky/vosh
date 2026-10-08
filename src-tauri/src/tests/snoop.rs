@@ -106,12 +106,12 @@ fn tab(name: &str, live: bool) -> (String, bool) {
     (name.to_string(), live)
 }
 
-/// What `snoop_get` returns for the first session.
+/// The tabs `snoop_get` returns for the first session.
 async fn got(h: &Harness) -> Json {
-    let tabs = crate::ipc::snoop::snoop_get(h.app.state(), Some(h.first))
+    let got = crate::ipc::snoop::snoop_get(h.app.state(), Some(h.first))
         .await
         .expect("the tabs");
-    serde_json::to_value(tabs).expect("json")
+    serde_json::to_value(got.tabs).expect("json")
 }
 
 /// Everything the client sent the game, as text.

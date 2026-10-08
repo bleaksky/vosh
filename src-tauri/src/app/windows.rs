@@ -1,24 +1,28 @@
-//! The Settings and Help windows, the ground and native appearance a
-//! new window opens on, what the main window's close and blur do, and
-//! spellcheck in the macOS webview.
+//! The Settings, Help and snoop windows, the ground and native
+//! appearance a new window opens on, what the main window's close and
+//! blur do, and spellcheck in the macOS webview.
 //!
-//! Settings and Help open hidden and show themselves once their page has
+//! Settings, Help and each snoop window open hidden and show themselves once their page has
 //! painted the theme. A frame the page has not painted yet shows the
 //! window's own background, so every theme paint in any window reports
 //! the theme's ground to [`set_backdrop`], and [`open_aux_window`]
-//! builds the window on it. An open Settings or Help window takes each
-//! new ground as it arrives. The appearance pins the light or dark native
+//! builds the window on it. An open Settings, Help or snoop window takes
+//! each new ground as it arrives. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
 //! theme follows the system, so the window follows the system too. A
 //! theme whose ground is not one solid color reports no ground, and the
 //! window keeps its own clear color.
 
+use std::borrow::Cow;
 use std::sync::Mutex;
 
 use tauri::{
     window::Color, AppHandle, Manager, Runtime, Theme, WebviewUrl, WebviewWindowBuilder, Window,
 };
 use tracing::warn;
+
+use crate::app::state::SharedState;
+use crate::sessions::SessionId;
 
 /// What a new window opens on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,22 +131,24 @@ impl Backdrop {
     }
 }
 
-/// The windows that open on the reported backdrop and take each new
-/// ground while open.
-const DRESSED_WINDOWS: [&str; 2] = ["settings", "help"];
+/// Whether the window `label` opened on the reported backdrop and takes
+/// each new ground while open: Settings, Help and each snoop window.
+fn is_dressed(label: &str) -> bool {
+    label == SETTINGS_WINDOW.label || label == HELP_WINDOW.label || snoop_session(label).is_some()
+}
 
 /// A theme paint in a window reported the ground and appearance a new
 /// window should open on. Keep them for the next window, and give the
-/// ground to an open Settings or Help window now, so a theme change
-/// while it is open leaves no old color under it.
+/// ground to each open Settings, Help or snoop window now, so a theme
+/// change while it is open leaves no old color under it.
 pub(crate) fn set_backdrop(
     app: &AppHandle,
     background: Option<&str>,
     appearance: Option<&str>,
 ) -> Result<(), String> {
     let backdrop = Backdrop::record(background, appearance)?;
-    for label in DRESSED_WINDOWS {
-        if let Some(window) = app.get_webview_window(label) {
+    for (label, window) in app.webview_windows() {
+        if is_dressed(&label) {
             backdrop.redress(&window.as_ref().window());
         }
     }
@@ -150,14 +156,16 @@ pub(crate) fn set_backdrop(
 }
 
 /// A window beside the main one that loads the same bundle with its own
-/// `?view=`, like Settings and Help. Each opens hidden on the theme's
-/// ground and shows itself once its page has painted your theme.
+/// `?view=`, like Settings, Help and the snoop window. Each opens hidden
+/// on the theme's ground and shows itself once its page has painted your
+/// theme. The window state plugin keeps its size and place under its
+/// label, as it keeps the main window's.
 pub(crate) struct AuxWindow {
     /// The window label, which the capabilities and the menu name.
-    label: &'static str,
+    label: Cow<'static, str>,
     /// The page the bundle renders, `index.html?view=...`.
-    url: &'static str,
-    title: &'static str,
+    url: Cow<'static, str>,
+    title: Cow<'static, str>,
     /// The default size, the approved boards' window.
     size: (f64, f64),
     /// The smallest size whose layout still fits.
@@ -167,9 +175,9 @@ pub(crate) struct AuxWindow {
 /// Settings, at the approved boards' 880×600. Under 820×560 its two
 /// column layouts no longer fit.
 pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
-    label: "settings",
-    url: "index.html?view=settings",
-    title: "Settings",
+    label: Cow::Borrowed("settings"),
+    url: Cow::Borrowed("index.html?view=settings"),
+    title: Cow::Borrowed("Settings"),
     size: (880.0, 600.0),
     min_size: (820.0, 560.0),
 };
@@ -177,12 +185,62 @@ pub(crate) const SETTINGS_WINDOW: AuxWindow = AuxWindow {
 /// Help, at the approved Help boards' 1040×700. Under 860 wide the
 /// article no longer keeps its measure beside the 280 px sidebar.
 pub(crate) const HELP_WINDOW: AuxWindow = AuxWindow {
-    label: "help",
-    url: "index.html?view=help",
-    title: "Help",
+    label: Cow::Borrowed("help"),
+    url: Cow::Borrowed("index.html?view=help"),
+    title: Cow::Borrowed("Help"),
     size: (1040.0, 700.0),
     min_size: (860.0, 560.0),
 };
+
+/// What each snoop window's label starts with, before its session's
+/// number.
+const SNOOP_PREFIX: &str = "snoop-";
+
+/// The snoop window of the session `session`, which Open in a window
+/// opens with every tab of the session in it (Snoop SN1), at the
+/// approved board's 760×480. Its title reads `Snoop, ` and the
+/// session's label, `label`, so the Window menu and Mission Control can
+/// tell one apart from another. Under 480×240 the band no longer holds
+/// a few tabs and Stop over some rows of text.
+pub(crate) fn snoop_window(session: SessionId, label: Option<&str>) -> AuxWindow {
+    AuxWindow {
+        label: Cow::Owned(snoop_label(session)),
+        url: Cow::Owned(format!("index.html?view=snoop&session={session}")),
+        title: Cow::Owned(match label {
+            Some(label) => format!("Snoop, {label}"),
+            None => "Snoop".to_string(),
+        }),
+        size: (760.0, 480.0),
+        min_size: (480.0, 240.0),
+    }
+}
+
+/// The label of the snoop window of `session`.
+pub(crate) fn snoop_label(session: SessionId) -> String {
+    format!("{SNOOP_PREFIX}{session}")
+}
+
+/// The session whose snoop window has the label `label`, or None for
+/// any other window.
+fn snoop_session(label: &str) -> Option<SessionId> {
+    let number = label.strip_prefix(SNOOP_PREFIX)?;
+    if !number.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    number.parse().ok().map(SessionId::from_number)
+}
+
+/// The snoop window `label` closed. The tabs of its session go back to
+/// the split, which comes back with them. A session that closed first
+/// has nothing to take them.
+fn snoop_window_closed<R: Runtime>(app: &AppHandle<R>, state: &SharedState, label: &str) {
+    let Some(id) = snoop_session(label) else {
+        return;
+    };
+    if let Ok(session) = state.session(Some(id)) {
+        crate::session::snoop::set_windowed(app, &session, false);
+    }
+}
 
 /// The logical size a window should take when the window state plugin
 /// restored it at `restored`, or None when it already fits. A side under
@@ -244,7 +302,7 @@ fn show_backstop(window: tauri::WebviewWindow) {
 /// tells the React entry which page to render. Every window shares the
 /// one Rust backend state.
 pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), String> {
-    if let Some(existing) = app.get_webview_window(spec.label) {
+    if let Some(existing) = app.get_webview_window(&spec.label) {
         let visible = existing.is_visible().unwrap_or(true);
         let minimized = existing.is_minimized().unwrap_or(false);
         if shows_on_reopen(visible, minimized) {
@@ -253,8 +311,9 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
         }
         return Ok(());
     }
-    let builder = WebviewWindowBuilder::new(app, spec.label, WebviewUrl::App(spec.url.into()))
-        .title(spec.title)
+    let url = WebviewUrl::App(spec.url.as_ref().into());
+    let builder = WebviewWindowBuilder::new(app, spec.label.as_ref(), url)
+        .title(spec.title.as_ref())
         .inner_size(spec.size.0, spec.size.1)
         .min_inner_size(spec.min_size.0, spec.min_size.1)
         .resizable(true)
@@ -308,10 +367,7 @@ pub(crate) fn open_aux_window(app: &AppHandle, spec: &AuxWindow) -> Result<(), S
 pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
     // The focus rule of the alerts counts Vosh in front while any of its
     // windows has focus, Settings and Help included.
-    if let Some(state) = window
-        .app_handle()
-        .try_state::<crate::app::state::SharedState>()
-    {
+    if let Some(state) = window.app_handle().try_state::<SharedState>() {
         match event {
             tauri::WindowEvent::Focused(focused) => {
                 state.focus.set(window.label(), *focused);
@@ -330,6 +386,7 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
                         crate::ipc::profiles::hold_edits(&state, None).await;
                     });
                 }
+                snoop_window_closed(window.app_handle(), state.inner(), window.label());
             }
             _ => {}
         }
@@ -362,7 +419,7 @@ pub(crate) fn on_window_event(window: &Window, event: &tauri::WindowEvent) {
 #[cfg(windows)]
 pub(crate) fn second_start<R: Runtime>(app: &AppHandle<R>) {
     let newest = app
-        .try_state::<crate::app::state::SharedState>()
+        .try_state::<SharedState>()
         .and_then(|state| state.banners.take_newest());
     match newest {
         Some(session) => crate::alert::banner::show_session(app, session),
@@ -435,8 +492,10 @@ pub(crate) fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        shows_on_reopen, window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
+        is_dressed, shows_on_reopen, snoop_label, snoop_session, snoop_window, snoop_window_closed,
+        window_fit, Backdrop, HELP_WINDOW, PAINTS_WINDOW, SETTINGS_WINDOW,
     };
+    use crate::sessions::SessionId;
     use tauri::{window::Color, Theme};
 
     #[test]
@@ -605,5 +664,75 @@ mod tests {
         // A side under the minimum goes back to the board size.
         assert_eq!(fit((700.0, 800.0)), Some((1040.0, 800.0)));
         assert_eq!(fit((900.0, 400.0)), Some((900.0, 700.0)));
+    }
+
+    #[test]
+    fn a_snoop_window_opens_per_session_at_the_board_size() {
+        let id = SessionId::numbered(3);
+        let window = snoop_window(id, Some("Staff"));
+        assert_eq!(window.label, "snoop-3");
+        assert_eq!(window.url, "index.html?view=snoop&session=3");
+        assert_eq!(window.title, "Snoop, Staff");
+        assert_eq!(window.size, (760.0, 480.0));
+        assert_eq!(window_fit(&window, (760.0, 480.0)), None);
+        assert_eq!(window_fit(&window, (300.0, 600.0)), Some((760.0, 600.0)));
+        // A session with nothing to go by yet.
+        assert_eq!(snoop_window(id, None).title, "Snoop");
+        assert_eq!(snoop_label(id), "snoop-3");
+    }
+
+    #[test]
+    fn only_a_snoop_label_names_a_session() {
+        assert_eq!(snoop_session("snoop-12"), Some(SessionId::numbered(12)));
+        for label in [
+            "main", "settings", "help", "snoop-", "snoop-x", "snoop-+1", "snoop",
+        ] {
+            assert_eq!(snoop_session(label), None, "{label}");
+        }
+        assert!(is_dressed("settings"));
+        assert!(is_dressed("help"));
+        assert!(is_dressed("snoop-1"));
+        assert!(!is_dressed("main"));
+    }
+
+    #[test]
+    fn the_split_gives_its_tabs_to_the_window_and_takes_them_back() {
+        use std::sync::{Arc, Mutex};
+
+        use serde_json::json;
+        use tauri::test::{mock_builder, mock_context, noop_assets};
+        use tauri::{Listener, Manager};
+
+        use crate::app::events::SNOOP;
+        use crate::app::state::{AppState, SharedState};
+        use crate::profile::live::Profile;
+
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage::<SharedState>(Arc::new(AppState::default()));
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        let orla = state.add_open_profile("Orla", Profile::default());
+        let session = state.open_session(orla);
+        let lists = Arc::new(Mutex::new(Vec::new()));
+        let heard = lists.clone();
+        app.listen_any(SNOOP, move |event| {
+            let list: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
+            heard.lock().unwrap().push(list);
+        });
+        let windowed = || session.connection.lock().snoops.snapshot().windowed;
+        let handle = app.handle();
+        let label = snoop_label(session.id);
+
+        // Open in a window marks the tabs as windowed and sends the list.
+        crate::session::snoop::set_windowed(handle, &session, true);
+        assert!(windowed());
+        // Another window closing leaves them there.
+        snoop_window_closed(handle, &state, "snoop-99");
+        snoop_window_closed(handle, &state, "help");
+        assert!(windowed());
+        // The window going brings them back to the split.
+        snoop_window_closed(handle, &state, &label);
+        assert!(!windowed());
+        let want = |on| json!({ "session": session.id, "tabs": [], "windowed": on });
+        assert_eq!(*lists.lock().unwrap(), [want(true), want(false)]);
     }
 }
