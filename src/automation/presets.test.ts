@@ -826,6 +826,8 @@ describe('the colors a sample draws in', () => {
       sampleBars(text, bars).map((at) => text.slice(...at));
     expect(words(xp.text, xp.bars)).toEqual(['1250']);
     expect(words(skill.text, skill.bars)).toEqual(['dagger']);
+    const [hit] = presetById('combat_outgoing')!.sample;
+    expect(words(hit.text, hit.bars)).toEqual(['a villager']);
     expect(words("You tell Tolliver 'The day has begun.'", ['Tolliver'])).toEqual([
       'Tolliver',
       'The day has begun.',

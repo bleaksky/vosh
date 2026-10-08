@@ -660,7 +660,7 @@ describe('the Presets page of First Run board 4', () => {
       'Suggested',
       'Adds',
     ]);
-    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to a villager!']);
+    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to !|']);
     expect(editor.value('Suggested')).toBe('For The Forsaken Lands');
     expect(editor.value('Adds')).toBe('2 triggers');
 

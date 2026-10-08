@@ -570,7 +570,13 @@ export const PRESETS: Preset[] = [
       'and the rest of the line keeps its color.',
     // The top hit in dam_message in fight.c, on a villager, mob 5287 in
     // area/fortblac.are.
-    sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
+    sample: [
+      {
+        text: 'You do UNSPEAKABLE things to a villager!',
+        shows: 'combat.outgoing',
+        bars: ['a villager'],
+      },
+    ],
     suggest: [FORSAKEN_LANDS],
     colors: {
       line: inTemplate('The rest of the line', 'fg:253'),
