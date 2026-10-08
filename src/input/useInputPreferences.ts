@@ -53,7 +53,7 @@ export function useInputPreferences() {
         pasteDelayRef.current = cfg.paste_line_delay_ms;
         echoColorRef.current = cfg.input_echo_color;
         echoMacrosRef.current = cfg.echo_macros;
-        echoCaretRef.current = cfg.input_echo_caret;
+        echoCaretRef.current = cfg.input_echo_mark !== 'off';
         setSpellcheckPrompt(cfg.spellcheck_prompt);
         setCursorStyle(cfg.input_cursor_style);
       })

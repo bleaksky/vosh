@@ -62,7 +62,12 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
     pub echo_macros: bool,
-    pub input_echo_caret: bool,
+    /// `off`, `chevron`, `gt` or `own`.
+    pub input_echo_mark: String,
+    pub input_echo_mark_text: String,
+    pub input_echo_mark_color: Option<String>,
+    pub input_echo_dim: bool,
+    pub input_line_mark: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
     pub writing_offer: bool,
@@ -157,7 +162,11 @@ impl UiConfigPayload {
             split_divider_color: ui.split_divider_color.clone(),
             input_echo_color: ui.input_echo_color.clone(),
             echo_macros: ui.echo_macros,
-            input_echo_caret: ui.input_echo_caret,
+            input_echo_mark: ui.input_echo_mark.clone(),
+            input_echo_mark_text: ui.input_echo_mark_text.clone(),
+            input_echo_mark_color: ui.input_echo_mark_color.clone(),
+            input_echo_dim: ui.input_echo_dim,
+            input_line_mark: ui.input_line_mark,
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
             writing_offer: ui.writing_offer,
@@ -253,7 +262,13 @@ pub(crate) enum UiField {
     SplitDividerColor(Option<String>),
     InputEchoColor(Option<String>),
     EchoMacros(bool),
-    InputEchoCaret(bool),
+    /// Mark your commands keeps `input_echo_caret` in step for an older
+    /// build.
+    InputEchoMark(String),
+    InputEchoMarkText(String),
+    InputEchoMarkColor(Option<String>),
+    InputEchoDim(bool),
+    InputLineMark(bool),
     PasteLineDelayMs(u32),
     SpellcheckPrompt(bool),
     WritingOffer(bool),
@@ -401,7 +416,15 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             }
             UiField::InputEchoColor(v) => ui.input_echo_color = cfg::normalize_optional_color(v),
             UiField::EchoMacros(v) => ui.echo_macros = v,
-            UiField::InputEchoCaret(v) => ui.input_echo_caret = v,
+            UiField::InputEchoMark(v) => cfg::set_input_echo_mark(ui, v),
+            UiField::InputEchoMarkText(v) => {
+                ui.input_echo_mark_text = cfg::coerce_input_echo_mark_text(v);
+            }
+            UiField::InputEchoMarkColor(v) => {
+                ui.input_echo_mark_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputEchoDim(v) => ui.input_echo_dim = v,
+            UiField::InputLineMark(v) => ui.input_line_mark = v,
             UiField::PasteLineDelayMs(v) => {
                 ui.paste_line_delay_ms = cfg::coerce_paste_line_delay_ms(v);
             }

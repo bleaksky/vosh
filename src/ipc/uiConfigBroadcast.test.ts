@@ -216,7 +216,7 @@ describe('a replaced UI config', () => {
     // The main window last sent these values at a profile switch.
     const loaded = raw({
       echo_macros: false,
-      input_echo_caret: false,
+      input_echo_mark: 'off',
       paste_line_delay_ms: 200,
       spellcheck_prompt: true,
       input_cursor_style: 'underline',

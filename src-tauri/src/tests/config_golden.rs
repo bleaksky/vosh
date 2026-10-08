@@ -394,6 +394,11 @@ fn full_ui() -> UiConfig {
         input_echo_color: Some("#88aaff".into()),
         echo_macros: false,
         input_echo_caret: false,
+        input_echo_mark: "off".into(),
+        input_echo_mark_text: "T>".into(),
+        input_echo_mark_color: Some("#c6a46a".into()),
+        input_echo_dim: true,
+        input_line_mark: false,
         side_panels_fill_height: true,
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,
@@ -1374,6 +1379,22 @@ fn a_grouped_preset_trigger_with_no_edits_still_loads() {
     assert_eq!(sanctuary.group.as_deref(), Some("fights"));
     let edits = &config.preset_edits;
     assert!(edits.is_empty(), "{edits:?}");
+}
+
+/// Profile files from before the marks keep `input_echo_caret = true`,
+/// which reads as the › mark, and a save keeps the old switch for them.
+#[test]
+fn an_old_mark_your_commands_switch_reads_as_the_chevron() {
+    for name in [
+        "old/profile-grouped-preset.toml",
+        "old/profile-numpad-0.8.1.toml",
+    ] {
+        let config = load_old_profile(name);
+        assert_eq!(config.ui.input_echo_mark, "chevron", "{name}");
+        let text = config.to_toml().unwrap();
+        assert!(text.contains("input_echo_caret = true"), "{name}: {text}");
+        assert!(!text.contains("input_echo_mark"), "{name}: {text}");
+    }
 }
 
 #[test]

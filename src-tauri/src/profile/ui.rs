@@ -330,11 +330,37 @@ pub(crate) struct UiConfig {
     /// when stacked macro sends make the scrollback too noisy.
     #[serde(default = "default_echo_macros")]
     pub echo_macros: bool,
-    /// When true (the default), the echo of each command you send starts
-    /// with a grey `›` and a space, so your commands stand apart from the
-    /// game's lines. A profile from before the setting reads it on.
-    #[serde(default = "default_input_echo_caret")]
+    /// The switch the mark grew from, kept in step with
+    /// `input_echo_mark` on every save (true unless the mark is `off`), so
+    /// an older build still marks your commands or leaves them bare. A
+    /// file without `input_echo_mark` reads the mark from it (see
+    /// [`read_input_echo_mark`]).
+    #[serde(default = "default_true")]
     pub input_echo_caret: bool,
+    /// The mark the echo of each command you send starts with, so your
+    /// commands stand apart from the game's lines. `off`, `chevron` for
+    /// `›`, `gt` for `>`, or `own` for `input_echo_mark_text`. Written
+    /// only once it is not `chevron`. Unknown values coerce to `chevron`.
+    #[serde(
+        default = "default_input_echo_mark",
+        skip_serializing_if = "is_default_input_echo_mark"
+    )]
+    pub input_echo_mark: String,
+    /// Your own mark, at most four characters. It stays while another
+    /// mark is picked, so picking `own` again brings it back.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub input_echo_mark_text: String,
+    /// CSS hex color of the mark. None means the theme's bright black,
+    /// SGR 90.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_echo_mark_color: Option<String>,
+    /// Draw the echo of each command you send faint. The mark keeps its
+    /// own color. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_echo_dim: bool,
+    /// Start the line you type in with the same mark. On by default.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub input_line_mark: bool,
     /// Whether the old side panel zones filled the window height. The
     /// pane panel has no such zones, so nothing reads it. Every
     /// save writes back the value it loaded, so 0.7.2 keeps it on a
@@ -1268,10 +1294,6 @@ fn default_echo_macros() -> bool {
     true
 }
 
-fn default_input_echo_caret() -> bool {
-    true
-}
-
 fn default_writing_offer() -> bool {
     true
 }
@@ -1368,6 +1390,11 @@ impl Default for UiConfig {
             input_echo_color: None,
             echo_macros: true,
             input_echo_caret: true,
+            input_echo_mark: default_input_echo_mark(),
+            input_echo_mark_text: String::new(),
+            input_echo_mark_color: None,
+            input_echo_dim: false,
+            input_line_mark: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
@@ -1494,6 +1521,60 @@ pub(crate) fn set_follow_system_appearance(ui: &mut UiConfig, on: bool) {
         (false, kept) => kept.to_string(),
     };
     set_theme_follow(ui, mode);
+}
+
+/// The marks the echo of a command you send can start with. Anything
+/// else saves as `chevron`.
+pub(crate) const INPUT_ECHO_MARKS: [&str; 4] = ["off", "chevron", "gt", "own"];
+
+/// The most characters your own mark keeps.
+pub(crate) const INPUT_ECHO_MARK_TEXT_MAX: usize = 4;
+
+fn default_input_echo_mark() -> String {
+    "chevron".to_string()
+}
+
+fn is_default_input_echo_mark(value: &str) -> bool {
+    value == "chevron"
+}
+
+/// Keep a known mark and turn anything else into `chevron`.
+pub(crate) fn coerce_input_echo_mark(value: String) -> String {
+    if INPUT_ECHO_MARKS.contains(&value.as_str()) {
+        value
+    } else {
+        default_input_echo_mark()
+    }
+}
+
+/// Your own mark as it saves. Control characters drop, the ends trim, and
+/// it keeps at most [`INPUT_ECHO_MARK_TEXT_MAX`] characters.
+pub(crate) fn coerce_input_echo_mark_text(value: String) -> String {
+    let clean: String = value.chars().filter(|c| !c.is_control()).collect();
+    let kept: String = clean
+        .trim()
+        .chars()
+        .take(INPUT_ECHO_MARK_TEXT_MAX)
+        .collect();
+    kept.trim_end().to_string()
+}
+
+/// The mark a file reads as. `input_echo_caret` false is `off` whatever
+/// `input_echo_mark` says, so a file without the key keeps the choice an
+/// older build saved. True with `off` means an older build turned the mark
+/// back on, which reads as `chevron`. Else the mark stays, coerced.
+pub(crate) fn read_input_echo_mark(input_echo_caret: bool, input_echo_mark: &str) -> String {
+    match (input_echo_caret, input_echo_mark) {
+        (false, _) => "off".to_string(),
+        (true, "off") => default_input_echo_mark(),
+        (true, mark) => coerce_input_echo_mark(mark.to_string()),
+    }
+}
+
+/// Set the mark and keep `input_echo_caret` true unless it is `off`.
+pub(crate) fn set_input_echo_mark(ui: &mut UiConfig, value: String) {
+    ui.input_echo_mark = coerce_input_echo_mark(value);
+    ui.input_echo_caret = ui.input_echo_mark != "off";
 }
 
 /// Trim a day or night theme pick. A blank one stays blank, which the
@@ -1976,23 +2057,114 @@ name = "haste"
     }
 
     #[test]
-    fn a_profile_from_before_mark_your_commands_reads_it_on() {
-        let parsed = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
-        assert!(parsed.ui.input_echo_caret);
-        let off = ProfileConfig::from_toml("[ui]\ninput_echo_caret = false\n").unwrap();
-        assert!(!off.ui.input_echo_caret);
-        assert!(off.to_toml().unwrap().contains("input_echo_caret = false"));
+    fn the_old_mark_switch_reads_as_the_mark_and_saves_in_step() {
+        let read = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        // A profile from before the setting, or with the switch on, reads ›.
+        for text in [
+            "[ui]\ntheme = \"nord\"\n",
+            "[ui]\ninput_echo_caret = true\n",
+        ] {
+            assert_eq!(read(text).input_echo_mark, "chevron", "{text}");
+        }
+        let off = read("[ui]\ninput_echo_caret = false\n");
+        assert_eq!(off.input_echo_mark, "off");
+        let text = through_text(&off);
+        assert!(text.contains("input_echo_caret = false"), "{text}");
+        assert!(text.contains("input_echo_mark = \"off\""), "{text}");
+        // An older build that turns the switch off drops the mark, and one
+        // that turns it back on reads as ›.
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = false\ninput_echo_mark = \"gt\"\n").input_echo_mark,
+            "off"
+        );
+        assert_eq!(
+            read("[ui]\ninput_echo_caret = true\ninput_echo_mark = \"off\"\n").input_echo_mark,
+            "chevron"
+        );
+        // Every mark but off saves the switch on, and only › is left out.
+        for mark in INPUT_ECHO_MARKS {
+            let mut ui = UiConfig::default();
+            set_input_echo_mark(&mut ui, mark.to_string());
+            let text = through_text(&ui);
+            let on = mark != "off";
+            assert!(
+                text.contains(&format!("input_echo_caret = {on}")),
+                "{mark}: {text}"
+            );
+            assert_eq!(
+                text.contains("input_echo_mark ="),
+                mark != "chevron",
+                "{mark}: {text}"
+            );
+            assert_eq!(through_toml(&ui).input_echo_mark, mark);
+        }
+        let mut ui = UiConfig::default();
+        set_input_echo_mark(&mut ui, "caret".into());
+        assert_eq!(
+            (ui.input_echo_mark.as_str(), ui.input_echo_caret),
+            ("chevron", true)
+        );
     }
 
-    /// Save `ui` to a profile file and read it back.
-    fn through_toml(ui: &UiConfig) -> UiConfig {
+    #[test]
+    fn your_own_mark_keeps_four_characters_and_no_control_ones() {
+        for (typed, kept) in [
+            ("T>", "T>"),
+            ("  ab  ", "ab"),
+            ("\u{1b}[1m>>", "[1m>"),
+            ("a\tb\nc", "abc"),
+            ("abc def", "abc"),
+            ("ᚠᚢᚦᚨᚱ", "ᚠᚢᚦᚨ"),
+            ("\u{7}", ""),
+        ] {
+            assert_eq!(coerce_input_echo_mark_text(typed.into()), kept, "{typed:?}");
+        }
+        let ui = ProfileConfig::from_toml("[ui]\ninput_echo_mark_text = \" >>>>> \"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.input_echo_mark_text, ">>>>");
+    }
+
+    #[test]
+    fn the_mark_settings_save_only_once_they_change() {
+        let text = through_text(&UiConfig::default());
+        for key in [
+            "input_echo_mark",
+            "input_echo_mark_text",
+            "input_echo_mark_color",
+            "input_echo_dim",
+            "input_line_mark",
+        ] {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let ui = UiConfig {
+            input_echo_mark: "own".into(),
+            input_echo_mark_text: "T>".into(),
+            input_echo_mark_color: Some("#c6a46a".into()),
+            input_echo_dim: true,
+            input_line_mark: false,
+            ..UiConfig::default()
+        };
+        let back = through_toml(&ui);
+        assert_eq!(back.input_echo_mark, "own");
+        assert_eq!(back.input_echo_mark_text, "T>");
+        assert_eq!(back.input_echo_mark_color.as_deref(), Some("#c6a46a"));
+        assert!(back.input_echo_dim);
+        assert!(!back.input_line_mark);
+    }
+
+    /// The profile file a save of `ui` writes.
+    fn through_text(ui: &UiConfig) -> String {
         let config = ProfileConfig {
             ui: ui.clone(),
             ..ProfileConfig::default()
         };
-        ProfileConfig::from_toml(&config.to_toml().unwrap())
-            .unwrap()
-            .ui
+        config.to_toml().unwrap()
+    }
+
+    /// Save `ui` to a profile file and read it back.
+    fn through_toml(ui: &UiConfig) -> UiConfig {
+        ProfileConfig::from_toml(&through_text(ui)).unwrap().ui
     }
 
     #[test]

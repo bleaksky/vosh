@@ -116,8 +116,8 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
           anchor="mark-commands"
         >
           <Toggle
-            checked={config.input_echo_caret}
-            onChange={(on) => update({ input_echo_caret: on })}
+            checked={config.input_echo_mark !== 'off'}
+            onChange={(on) => update({ input_echo_mark: on ? 'chevron' : 'off' })}
           />
         </Row>
         <Row label="Sent command color" anchor="sent-color">

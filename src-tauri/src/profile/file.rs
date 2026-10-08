@@ -20,7 +20,8 @@ use crate::profile::live::{Macro, Profile, Timer};
 use crate::profile::set::ProfileSet;
 use crate::profile::shared::GlobalConfig;
 use crate::profile::ui::{
-    coerce_affects_thresholds, read_theme_follow, set_theme_follow, UiConfig,
+    coerce_affects_thresholds, coerce_input_echo_mark_text, read_input_echo_mark,
+    read_theme_follow, set_input_echo_mark, set_theme_follow, UiConfig,
 };
 use crate::tick::{TickConfig, TickSettings};
 
@@ -435,6 +436,10 @@ impl ProfileConfig {
         config.merge_legacy_prompt();
         let mode = read_theme_follow(config.ui.follow_system_appearance, &config.ui.theme_follow);
         set_theme_follow(&mut config.ui, mode);
+        let mark = read_input_echo_mark(config.ui.input_echo_caret, &config.ui.input_echo_mark);
+        set_input_echo_mark(&mut config.ui, mark);
+        config.ui.input_echo_mark_text =
+            coerce_input_echo_mark_text(std::mem::take(&mut config.ui.input_echo_mark_text));
         // A hand edit can set almost gone above running out. Read it as
         // running out, as a save would write it.
         (

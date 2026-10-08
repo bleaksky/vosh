@@ -155,7 +155,11 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   await emitChanged(SPLIT_DIVIDER_CHANGED, config.split_divider_color, before?.split_divider_color);
   await emitChanged(INPUT_ECHO_COLOR_CHANGED, config.input_echo_color, before?.input_echo_color);
   await emitChanged(ECHO_MACROS_CHANGED, config.echo_macros, before?.echo_macros);
-  await emitChanged(INPUT_ECHO_CARET_CHANGED, config.input_echo_caret, before?.input_echo_caret);
+  await emitChanged(
+    INPUT_ECHO_CARET_CHANGED,
+    config.input_echo_mark !== 'off',
+    before && before.input_echo_mark !== 'off',
+  );
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,

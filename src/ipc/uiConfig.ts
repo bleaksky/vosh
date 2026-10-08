@@ -205,6 +205,17 @@ export function normalizeThemeFollow(value: unknown): ThemeFollow {
   return THEME_FOLLOWS.find((mode) => mode === value) ?? 'off';
 }
 
+/** The mark the echo of a command you send starts with: none, `›`,
+ *  `>`, or your own text. */
+export const INPUT_ECHO_MARKS = ['off', 'chevron', 'gt', 'own'] as const;
+
+export type InputEchoMark = (typeof INPUT_ECHO_MARKS)[number];
+
+/** Coerce an unknown mark back to `›`. */
+export function normalizeInputEchoMark(value: unknown): InputEchoMark {
+  return INPUT_ECHO_MARKS.find((mark) => mark === value) ?? 'chevron';
+}
+
 /** Where your vitals show, under the panel's panes or in the status
  *  line. */
 export const VITALS_PLACES = ['panel', 'status'] as const;
@@ -491,9 +502,19 @@ export interface UiConfig {
    *  locally like typed commands, so under lag the keybind visibly
    *  registered before the world responds. */
   echo_macros: boolean;
-  /** When true (default), each command you send echoes after a grey
-   *  `›` and a space, Mark your commands under Input in Settings. */
-  input_echo_caret: boolean;
+  /** The mark each command you send echoes after, one of
+   *  INPUT_ECHO_MARKS. `›` by default. */
+  input_echo_mark: InputEchoMark;
+  /** Your own mark, at most four characters, kept while another mark is
+   *  picked. Rust coerces it. */
+  input_echo_mark_text: string;
+  /** Hex color of the mark. Null means the theme's bright black. */
+  input_echo_mark_color: string | null;
+  /** Draw the echo of each command faint, the mark unchanged. Off by
+   *  default. */
+  input_echo_dim: boolean;
+  /** Start the line you type in with the same mark. On by default. */
+  input_line_mark: boolean;
   /** Milliseconds to wait between lines when sending a multi-line
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
@@ -684,7 +705,11 @@ export interface RawUiConfig {
   split_divider_color?: string | null;
   input_echo_color?: string | null;
   echo_macros?: boolean;
-  input_echo_caret?: boolean;
+  input_echo_mark?: string;
+  input_echo_mark_text?: string;
+  input_echo_mark_color?: string | null;
+  input_echo_dim?: boolean;
+  input_line_mark?: boolean;
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   writing_offer?: boolean;
@@ -818,7 +843,15 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         ? cfg.input_echo_color
         : null,
     echo_macros: cfg.echo_macros !== false,
-    input_echo_caret: cfg.input_echo_caret !== false,
+    input_echo_mark: normalizeInputEchoMark(cfg.input_echo_mark),
+    input_echo_mark_text:
+      typeof cfg.input_echo_mark_text === 'string' ? cfg.input_echo_mark_text : '',
+    input_echo_mark_color:
+      typeof cfg.input_echo_mark_color === 'string' && cfg.input_echo_mark_color.length > 0
+        ? cfg.input_echo_mark_color
+        : null,
+    input_echo_dim: cfg.input_echo_dim === true,
+    input_line_mark: cfg.input_line_mark !== false,
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
