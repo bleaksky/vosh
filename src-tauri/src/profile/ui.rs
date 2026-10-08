@@ -1809,6 +1809,13 @@ mod tests {
     }
 
     #[test]
+    fn update_checks_stay_off_until_you_turn_them_on() {
+        assert!(!UiConfig::default().auto_update);
+        let parsed = ProfileConfig::from_toml("[ui]\nfont_size = 14\n").unwrap();
+        assert!(!parsed.ui.auto_update);
+    }
+
+    #[test]
     fn tracked_affects_accept_legacy_bare_strings() {
         // A profile written by an older build (Vec<String>) must still
         // load after the schema change. Each bare string promotes to
