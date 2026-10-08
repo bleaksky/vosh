@@ -13,7 +13,9 @@ import { progressLine, type Note } from './words';
  *  the buttons it brings. */
 export interface Ended {
   note: Note;
-  actions: ('restore' | 'again' | 'clear-other')[];
+  /** `done` ends the card where the game said no for good, such as an
+   *  application it turned down (Note Editor board 5). */
+  actions: ('restore' | 'again' | 'clear-other' | 'done')[];
   /** The board whose note `clear-other` clears. */
   other?: WritingKind | null;
 }
@@ -123,21 +125,36 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
     buttons.push({ id: 'restore', label: 'Restore the game’s copy' });
   const again = f.ended?.actions.includes('again') ?? false;
   const checkLabel = f.kind === 'description' ? 'Send for approval…' : 'Send for review…';
-  if (f.phase === 'posted' || f.phase === 'checked' || f.sentView) {
+  if (
+    f.phase === 'posted' ||
+    f.phase === 'checked' ||
+    f.sentView ||
+    f.ended?.actions.includes('done')
+  ) {
     buttons.push({ id: 'done', label: 'Done', primary: true });
   } else if (info.board) {
     buttons.push({
       id: 'post',
       label: again ? 'Post again' : 'Post…',
       primary: true,
-      disabled: !f.canPost,
+      // The game holds one note, so Post… waits while another board's
+      // note is there (Note Editor board 7).
+      disabled: !f.canPost || f.ended?.actions.includes('clear-other') === true,
     });
   } else if (f.phase === 'sent') {
     if (info.check) buttons.push({ id: 'check', label: checkLabel, disabled: !f.live });
     buttons.push({ id: 'done', label: 'Done', primary: true });
   } else {
-    if (f.matches && info.check)
+    // The game holds the text as the card shows it, so the check sits
+    // beside Done, and Send to game takes Done's place once it differs
+    // (Note Editor board 6). After a drop Send again stays.
+    if (f.matches && info.check) {
       buttons.push({ id: 'check', label: checkLabel, disabled: !f.live });
+      if (!again) {
+        buttons.push({ id: 'done', label: 'Done', primary: true });
+        return { left, buttons };
+      }
+    }
     buttons.push({
       id: 'send',
       label: again ? 'Send again' : 'Send to game',

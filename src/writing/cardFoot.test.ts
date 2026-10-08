@@ -40,8 +40,10 @@ describe('the footer', () => {
     expect(footFor({ ...base, flagged }).left).toEqual({ note: flagged.note });
   });
 
-  it('offers the check once the game holds the text, and Done after a send', () => {
-    expect(ids({ ...base, matches: true })).toEqual(['check', 'send']);
+  it('offers the check beside Done once the game holds the text, and after a send', () => {
+    expect(ids({ ...base, matches: true })).toEqual(['check', 'done']);
+    expect(ids({ ...base, kind: 'history', matches: true })).toEqual(['check', 'done']);
+    expect(ids({ ...base, kind: 'beast', matches: true })).toEqual(['send']);
     expect(ids({ ...base, phase: 'sent' })).toEqual(['check', 'done']);
     expect(ids({ ...base, kind: 'beast', phase: 'sent' })).toEqual(['done']);
   });
@@ -92,6 +94,26 @@ describe('the footer', () => {
     expect(
       ids({ ...base, kind: 'journal', ended: { ...ended, actions: [] }, phase: 'posted' }),
     ).toEqual(['done']);
+  });
+
+  it('ends on Done when the game turns an application down', () => {
+    const ended = {
+      note: { lead: 'The game turned your application down.', rest: '', tone: 'bad' as const },
+      actions: ['done' as const],
+    };
+    expect(ids({ ...base, kind: 'application', ended })).toEqual(['done']);
+  });
+
+  it('keeps Post… off while another board’s note waits in the game', () => {
+    const ended = {
+      note: { lead: 'You had an idea started in the game.', rest: '', tone: 'warn' as const },
+      actions: ['clear-other' as const],
+      other: 'idea' as const,
+    };
+    expect(footFor({ ...base, kind: 'note', ended }).buttons).toEqual([
+      { id: 'clear-other', label: 'Clear it…' },
+      { id: 'post', label: 'Post…', primary: true, disabled: true },
+    ]);
   });
 
   it('keeps the busy note and the room past the game’s behind a job’s end', () => {

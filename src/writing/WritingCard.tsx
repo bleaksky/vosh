@@ -358,7 +358,10 @@ export function WritingCard({
         if (result.field === 'to' || result.field === 'subject' || result.field === 'language') {
           setBadField(result.field);
         }
-        setEnded({ note: resultNote(result, k)!, actions: [] });
+        setEnded({
+          note: resultNote(result, k)!,
+          actions: result.field === 'post' ? ['done'] : [],
+        });
         return;
       case 'dropped': {
         const drop = find?.drop ?? { sent: result.sent, total: lines.length };
@@ -825,14 +828,17 @@ export function WritingCard({
                     readOnly={running !== null || sentView}
                     onTo={(to) => {
                       setBadField(null);
+                      setEnded(null);
                       keep({ ...draft, to });
                     }}
                     onSubject={(s) => {
                       setBadField(null);
+                      setEnded(null);
                       keep({ ...draft, subject: s });
                     }}
                     onLanguage={(language) => {
                       setBadField(null);
+                      setEnded(null);
                       keep({ ...draft, language });
                     }}
                     onText={() =>
