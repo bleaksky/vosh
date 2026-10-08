@@ -275,7 +275,7 @@ describe('the pane select', () => {
     expect(text).toContain('min-width: 0;');
     expect(text).toContain('overflow: hidden;');
     expect(text).toContain('text-overflow: ellipsis;');
-    expect(rule('.pane-label:has(+ .pane-select)')).toContain('flex: 0 1 auto;');
+    expect(rule('.pane-label')).toContain('flex: 0 1 auto;');
   });
 
   it('keeps the chevron whole', () => {

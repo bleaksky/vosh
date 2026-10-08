@@ -305,8 +305,9 @@ describe('the panel in panel.css', () => {
   });
 
   it('keeps the first count a digit wide, the label giving way last', () => {
-    // A label followed by a count may shrink, ending in an ellipsis.
-    const label = declarations('.pane-label:has(+ .pane-meta)');
+    // The label may shrink, ending in an ellipsis, with a count beside
+    // it or alone.
+    const label = declarations('.pane-label');
     expect(label.get('flex')).toBe('0 1 auto');
     expect(label.get('min-width')).toBe('0');
     expect(label.get('overflow')).toBe('hidden');
@@ -328,8 +329,14 @@ describe('the panel in panel.css', () => {
     expect(declarations('.pane-meta + .pane-meta').get('margin-left')).toBe('10px');
     expect(RULES.filter((r) => r.selector === '.pane-meta + .pane-meta')).toHaveLength(1);
     expect(declarations('.pane-header > .pane-label + *').get('margin-left')).toBe('8px');
-    // A label with no count beside it never shrinks, as before.
-    expect(declarations('.pane-label').get('flex')).toBe('none');
+    // The label rule says it once, with no rule per neighbor.
+    expect(RULES.filter((r) => r.selector.includes('.pane-label:has('))).toHaveLength(0);
+    // A label with no count beside it ends in an ellipsis before the
+    // more button, inside the header's 40 px right padding.
+    expect(label.get('white-space')).toBe('nowrap');
+    expect(declarations('.pane-header').get('padding')).toBe(
+      'round(6px * var(--mud-scale), 1px) 40px 0 18px',
+    );
   });
 
   it('sets every text in the panes at your panel size, and the menus at their own', () => {
