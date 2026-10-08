@@ -463,8 +463,8 @@ pub(crate) struct PresetsInstalled {
 /// comes out. This command validates and inserts them so the engine
 /// starts matching and the keys start sending at once.
 #[tauri::command]
-pub(crate) async fn presets_install(
-    app: AppHandle,
+pub(crate) async fn presets_install<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
     macros: Vec<Macro>,

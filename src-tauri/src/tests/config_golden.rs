@@ -82,7 +82,7 @@ const GOLDENS: [&str; 17] = [
 /// Every old input, by its path under `fixtures/config`, with the FNV-1a
 /// digest of its bytes. An old input never changes, so its digest never
 /// does either.
-const OLD_INPUTS: [(&str, u64); 9] = [
+const OLD_INPUTS: [(&str, u64); 11] = [
     (
         "old/profile-bare-tracked-affects.toml",
         0x69a9_7976_173d_2eb4,
@@ -95,6 +95,8 @@ const OLD_INPUTS: [(&str, u64); 9] = [
     ("old/catalog-no-presets.toml", 0x14b5_7fe9_05dc_d105),
     ("old/profile-grouped-preset.toml", 0x331a_f4ec_0d11_5763),
     ("old/profiles-0.8.1.toml", 0x1d95_4204_e236_f3be),
+    ("old/profile-numpad-0.8.1.toml", 0x6b65_2022_e085_43d7),
+    ("old/catalog-numpad-0.8.1.toml", 0xe4b2_17b0_8396_9e7e),
 ];
 
 fn writing() -> bool {
@@ -1155,6 +1157,92 @@ fn an_index_from_0_8_1_keeps_get_started_shut() {
     assert_eq!(set.get_started(), None);
     set.save_index().unwrap();
     assert_eq!(read(&path), old_input("old/profiles-0.8.1.toml"));
+}
+
+/// Launch over `dir` as Vosh does, then install Numpad movement, which
+/// the file has on, as the main window does at launch, through
+/// `presets_install` with the macros src/automation/presets.ts holds.
+/// The six macros 0.8.1 saved as yours take their preset back, n keeps
+/// its group, and your rec keeps Numpad3, so the preset d stays off.
+/// `saved` reads the macros back from the file the save wrote, where
+/// no seventh macro and no second rec turn up.
+async fn numpad_comes_home(dir: &Path, saved: impl Fn() -> Vec<Macro>) {
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::Manager;
+
+    let state: SharedState = Arc::new(AppState::default());
+    let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+    app.manage::<SharedState>(state.clone());
+    crate::app::launch::load(&state, dir).await;
+    let preset = |key: &str, command: &str| Macro {
+        key: key.into(),
+        command: command.into(),
+        group: None,
+        enabled: true,
+        preset: Some("numpad_movement".into()),
+    };
+    let library = [
+        ("Numpad8", "n"),
+        ("Numpad6", "e"),
+        ("Numpad2", "s"),
+        ("Numpad4", "w"),
+        ("Numpad9", "u"),
+        ("Numpad3", "d"),
+    ];
+    let library = library.iter().map(|(k, c)| preset(k, c)).collect();
+    crate::ipc::automation::presets_install(
+        app.handle().clone(),
+        app.state(),
+        Vec::new(),
+        library,
+        None,
+    )
+    .await
+    .unwrap();
+    let rec = Macro {
+        preset: None,
+        ..preset("Numpad3", "rec")
+    };
+    let want = vec![
+        rec,
+        Macro {
+            group: Some("travel".into()),
+            ..preset("Numpad8", "n")
+        },
+        preset("Numpad6", "e"),
+        preset("Numpad2", "s"),
+        preset("Numpad4", "w"),
+        preset("Numpad9", "u"),
+        Macro {
+            enabled: false,
+            ..preset("Numpad3", "d")
+        },
+    ];
+    assert_eq!(state.selected_profile().await.macros, want);
+    assert_eq!(saved(), want);
+}
+
+/// A profile file that came back through 0.8.1, which drops the preset
+/// tag, gets its six Numpad movement macros back as the preset's.
+#[tokio::test]
+async fn preset_macros_back_from_a_0_8_1_profile_file_take_their_preset_back() {
+    let (dir, path) = place("old/profile-numpad-0.8.1.toml", "profiles/default.toml");
+    numpad_comes_home(dir.path(), || ProfileConfig::load(&path).unwrap().macros).await;
+}
+
+/// The same in loadout mode, where 0.8.1 wrote the macros to
+/// catalog.toml and the launch install lands there.
+#[tokio::test]
+async fn preset_macros_back_from_a_0_8_1_catalog_take_their_preset_back() {
+    let (dir, _path) = place("old/catalog-numpad-0.8.1.toml", "catalog.toml");
+    let mut file = load_old_profile("old/profile-numpad-0.8.1.toml");
+    file.macros.clear();
+    file.save(&dir.path().join("profiles/default.toml"))
+        .unwrap();
+    numpad_comes_home(dir.path(), || {
+        load_global_catalog(dir.path()).unwrap().macros
+    })
+    .await;
 }
 
 #[test]
