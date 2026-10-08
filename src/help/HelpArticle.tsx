@@ -6,12 +6,11 @@ import { helpItemId, matchRanges, type OutlineEntry } from './helpNav';
 import { openGetStarted } from '../ipc/getStarted';
 import { Button, Keycap } from '../ui';
 
-// One help topic as the approved Help boards draw it: the H1 at 26/32,
-// prose and lists on a 528 measure at 14/22, a table as a Settings
-// card, a code block on the same band in your terminal font, a button
-// as a primary Settings button, and each backticked span as a mono
-// chip, an SF 600 label, or keycaps
-// (src/help/helpInline.ts). While the search holds words every
+// One help topic as it draws: the H1 at 26/32, prose and lists on a 528
+// measure at 14/22, a table as a Settings card, a code block on the
+// same band in your terminal font, a button as a primary Settings
+// button, and each backticked span as a mono chip, an SF 600 label, or
+// keycaps (src/help/helpInline.ts). While the search holds words every
 // match is marked the way the session logs page marks one, and the
 // match you are on carries a ring.
 

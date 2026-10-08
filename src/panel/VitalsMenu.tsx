@@ -16,10 +16,9 @@ import {
 } from './vitalsPicks';
 
 // The menu a right click on your vitals opens, on the panel footer or
-// on the status line's vitals (board 4 of the Vitals Styles review,
-// Q16). It opens at the pointer, as the terminal's menu does, with
+// on the status line's vitals. It opens at the pointer, as the terminal's menu does, with
 // Style and Values, each a submenu with a check on your pick, Style's
-// with a line between families of styles (More Vitals Styles Q29), then
+// with a line between families of styles, then
 // Customize vitals…, which opens Settings there. Under Text it adds Edit
 // your text…, which opens the card for your text, and Values goes quiet, since your text writes its own
 // values. Colors stay in Customize vitals. A pick saves alone for the

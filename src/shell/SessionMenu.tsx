@@ -16,28 +16,28 @@ import { RenameSessionForm } from './RenameSessionForm';
 import { SessionRowBody, WaitingCount } from './SessionRowBody';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
-// The session popover under the title button, by board 4 of the
-// Sessions review: Connect to the selected session's world or
-// Disconnect, Edit connection, Rename session, and New session. Edit
-// connection swaps the list for a host, port and TLS form in the same
-// popover. Rename session turns the selected row's name into a field
-// while the sessions sidebar shows (board 9), and swaps in a form with
-// one Name field while it does not, as with one session. New session
-// opens a session and comes back on that session's own form. Disconnect
-// is destructive, so it sits last in the danger tone and is never the
-// row focus lands on. While a redial waits after a drop the popover
-// offers both, Connect to dial now and Disconnect to end the tries.
+// The session popover under the title button: Connect to the selected
+// session's world or Disconnect, Edit connection, Rename session, and
+// New session. Edit connection swaps the list for a host, port and TLS
+// form in the same popover. Rename session turns the selected row's
+// name into a field while the sessions sidebar shows, and swaps in a
+// form with one Name field while it does not, as with one session. New
+// session opens a session and comes back on that session's own form.
+// Disconnect is destructive, so it sits last in the danger tone and is
+// never the row focus lands on. While a redial waits after a drop the
+// popover offers both, Connect to dial now and Disconnect to end the
+// tries.
 //
 // While the sidebar is folded with two or more sessions open, in a
 // narrow window or after Hide sessions, the popover lists every session
-// at its top under SESSIONS, board 8, in the sidebar's two line rows
-// (S7 of the Sessions Sidebar review, board 05). The selected one wears
-// the check in the right column, a session behind the count of what
-// waits there, and any other one the key that brings it to the front. A
-// click brings that session to the front. The list takes the sidebar's
-// place, so under the pointer each row shows the close button in the
-// right column, which closes that session as the sidebar's does (Q13). A
-// list too long for the window scrolls, and the rows under it stay put.
+// at its top under SESSIONS, in the sidebar's two line rows. The
+// selected one wears the check in the right column, a session behind
+// the count of what waits there, and any other one the key that brings
+// it to the front. A click brings that session to the front. The list
+// takes the sidebar's place, so under the pointer each row shows the
+// close button in the right column, which closes that session as the
+// sidebar's does. A list too long for the window scrolls, and the rows
+// under it stay put.
 
 const MENU_WIDTH = 272;
 
@@ -185,7 +185,7 @@ export function SessionMenu({
       <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
       </ShellMenuItem>
-      {/* Board 05 draws no line here while the list sits above, so
+      {/* No line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
       {!listSessions && <ShellMenuSeparator />}
       <ShellMenuItem

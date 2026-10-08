@@ -3,7 +3,7 @@ import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { DrawnOpponent, DrawnVitals, MarkRows, type DrawnVitalsProps } from './VitalsDrawn';
 import { traceSeries, type RowMarkFit } from './vitalsDrawnFit';
 
-// Traces (More Vitals Styles, board 3): each vital over its last
+// Traces: each vital over its last
 // minute, a line over the area it fills, from empty at the foot to
 // your max at the top, after Edward Tufte's sparklines. The height at
 // the right edge reads like a gauge, a dot marks now, and the value

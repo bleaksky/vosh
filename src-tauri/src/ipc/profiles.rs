@@ -141,8 +141,8 @@ pub(crate) async fn profile_set_scope(
 /// this right before invoking `session_connect` so a matching
 /// profile can be switched to ahead of the connection. With
 /// `any_character`, a claim that names characters counts as if one of
-/// them logged in, which the New session form asks before anyone logs in
-/// (Sessions Q2), see [`ProfileSet::resolve_before_login`].
+/// them logged in, which the New session form asks before anyone logs
+/// in, see [`ProfileSet::resolve_before_login`].
 ///
 /// [`ProfileSet::resolve_before_login`]: crate::profile::set::ProfileSet::resolve_before_login
 #[tauri::command]

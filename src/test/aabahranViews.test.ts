@@ -11,7 +11,7 @@ import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 
 // The stores' reading of each Aabahran packet against
 // fixtures/gmcp/aabahran/views.json, which the prompt engine's tests in
-// crates/prompt/tests/views.rs read too (D29). The engine keeps its own
+// crates/prompt/tests/views.rs read too. The engine keeps its own
 // copy of the packages to draw your prompt, and the panes read these
 // stores, so both readings are held to one record. A package no store
 // reads keeps its record for the engine alone (ENGINE_ONLY).

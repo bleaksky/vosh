@@ -1,5 +1,4 @@
-//! `prompt_edit`, the only place Vosh writes template text (sections 1.4
-//! and 6 of the build spec).
+//! `prompt_edit`, the only place Vosh writes template text.
 //!
 //! An edit names a piece by its index in [`Template::pieces`], the index
 //! every span of a render carries, so the card can point at the part you
@@ -15,7 +14,7 @@
 //!
 //! The writer keeps the text of every token it does not touch, writes new
 //! tokens in their short form where the grammar has one, and uses braces
-//! whenever the next character would extend a name (D15).
+//! whenever the next character would extend a name.
 
 mod doc;
 
@@ -107,7 +106,7 @@ impl FormatChoice {
     }
 }
 
-/// The formats of section 1.4, and the two pieces the parser folds:
+/// The formats a value takes, and the two pieces the parser folds:
 /// Current and max (`%hp/%{maxhp}`) and Percent (`%pct_hp%%`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]

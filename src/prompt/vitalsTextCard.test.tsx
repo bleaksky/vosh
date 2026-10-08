@@ -18,7 +18,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// The card bound to your vitals text (Vitals Styles Q10, board 5).
+// The card bound to your vitals text.
 
 const ENV: BandEnv = {
   palette: Array.from({ length: 16 }, () => '#888888'),
@@ -171,7 +171,7 @@ describe('what the vitals text card saves', () => {
   });
 
   it('starts on your 0.7 template while it was on, and saves that as none', async () => {
-    // Vitals Styles Q13: a profile whose 0.7 template was on starts its Text there.
+    // A profile whose 0.7 template was on starts its Text there.
     const table = vitalsTable('', [], LEGACY);
     expect(table.template).toBe(LEGACY);
     expect(vitalsTextSave(table, LEGACY).vitals_text).toBe('');

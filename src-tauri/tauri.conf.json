@@ -36,7 +36,10 @@
     "targets": ["dmg", "app", "msi", "nsis", "deb", "rpm", "appimage"],
     "category": "Utility",
     "shortDescription": "A desktop MUD client called Vosh.",
-    "longDescription": "Vosh is a desktop MUD client for macOS, Windows, and Linux. Telnet, GMCP, ANSI rendering, triggers, aliases, scripting, and a connected map window.",
+    "longDescription": "Vosh is a desktop MUD client for macOS, Windows, and Linux. It speaks telnet and GMCP, draws full ANSI color, and gives you split panes, a map pane, a tick timer, triggers, aliases, and Lua scripting.",
+    "resources": {
+      "../public/fonts/OFL.txt": "licenses/JetBrainsMono-OFL.txt"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",

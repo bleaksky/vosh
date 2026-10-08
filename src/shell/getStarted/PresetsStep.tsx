@@ -12,14 +12,14 @@ import { Button, Toggle } from '../../ui';
 import { suggestedPresets, type GetStartedFacts } from './steps';
 import { switchPresets } from './switchPresets';
 
-// The presets step of board 3: the presets suggested for the world you
+// The presets step: the presets suggested for the world you
 // connect to, outside Chat, each with its description from presets.ts
 // and its sample in the colors it paints on your theme. A switch turns
 // one on and saves at once, and Turn on all turns on every one that is
-// off in a single call (Q4, Q5, Q17).
+// off in a single call.
 
-/** The order board 3 lists the suggestions in, as Q5 names them: the
- *  room, a fight from both sides, a cure and what you gain. */
+/** The order the suggestions list in: the room, a fight from both
+ *  sides, a cure and what you gain. */
 const ORDER = [
   'room_and_time',
   'combat_outgoing',
@@ -28,8 +28,7 @@ const ORDER = [
   'loot_progression',
 ];
 
-/** The suggestions in board 3's order, any the board does not name
- *  last. */
+/** The suggestions in that order, any the order does not name last. */
 function listed(host: string): Preset[] {
   const at = (p: Preset) => (ORDER.includes(p.id) ? ORDER.indexOf(p.id) : ORDER.length);
   return [...suggestedPresets(host)].sort((a, b) => at(a) - at(b));
@@ -41,8 +40,8 @@ function presetsOn(facts: GetStartedFacts): Set<string> | null {
   return facts.enabledPresets ? new Set(enabledPresetIds(facts.enabledPresets)) : null;
 }
 
-/** Where Open Presets lands: the first suggestion that is off, the
- *  anchor B5 added, or the list. */
+/** Where Open Presets lands: the first suggestion that is off, by
+ *  its card's anchor, or the list. */
 function presetsLink(host: string, facts: GetStartedFacts): string {
   const on = presetsOn(facts);
   const off = listed(host).find((p) => !on?.has(p.id));
@@ -56,7 +55,7 @@ export function OpenPresets({ host, facts }: { host: string; facts: GetStartedFa
 
 export function PresetsStep({ host, facts }: { host: string; facts: GetStartedFacts }) {
   const [config, setConfig] = useState<UiConfig | null>(null);
-  // In loadout mode every character shares one list (Q17).
+  // In loadout mode every character shares one list.
   const [shared, setShared] = useState(false);
   useEffect(() => {
     let alive = true;

@@ -1,5 +1,5 @@
 //! The candidates ring as the card reads it: groups by shape, and the
-//! capture check with its match line (section 4).
+//! capture check with its match line.
 
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::card::candidates::{check, groups, shape_of, CaptureCheck, CheckRead, Mark};

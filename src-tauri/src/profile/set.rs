@@ -118,7 +118,7 @@ pub(crate) struct ProfilesIndex {
     /// restore. Left out with `selected` while they say nothing `active`
     /// does not, see [`SessionEntry::list`]. An older build drops both on
     /// its next save, and the launch after it opens one session on
-    /// `active` (D14).
+    /// `active`.
     #[serde(default, rename = "session", skip_serializing_if = "Vec::is_empty")]
     pub sessions: Vec<SessionEntry>,
     /// The session that was selected.
@@ -130,7 +130,7 @@ pub(crate) struct ProfilesIndex {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub get_started: Option<GetStarted>,
     /// Keep logs for, in days, once for the whole install, since every
-    /// profile shares logs.sqlite (D34). None keeps logs forever and
+    /// profile shares logs.sqlite. None keeps logs forever and
     /// stays out of the file. An older build drops it on its next save.
     /// A hand edit outside [`KEEP_DAYS`] reads as forever.
     #[serde(
@@ -220,9 +220,9 @@ impl SessionEntry {
 
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 
-/// The theme a new install starts on, and its light theme (Themes review
-/// Q3 and Q4). `UiConfig` keeps Obsidian Ember and Vellum as its
-/// defaults, which a file without these keys still reads.
+/// The theme a new install starts on, and its light theme. `UiConfig`
+/// keeps Obsidian Ember and Vellum as its defaults, which a file without
+/// these keys still reads.
 const NEW_INSTALL_THEME: &str = "triad";
 const NEW_INSTALL_LIGHT_THEME: &str = "rubric";
 
@@ -1248,7 +1248,7 @@ pub(crate) mod tests {
     }
 
     /// New profile copies the profile you play, your preset edits with
-    /// the list of presets that are on (Presets board 5).
+    /// the list of presets that are on.
     #[tokio::test]
     async fn a_new_profile_copies_the_preset_edits_with_the_list() {
         use crate::loadouts::preset_edits::lilac_line;

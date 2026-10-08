@@ -1,8 +1,7 @@
-//! The commands for alerts (the Alerts and Scenes review, Q1 to Q5): what
-//! the alert presets of a profile do, whether the
-//! system lets Vosh post banners, the system's own question, and the
-//! system page where you turn banners on. The Alerts category of the
-//! Presets page calls the two preset commands, and the Alert row the
+//! The commands for alerts: what the alert presets of a profile do,
+//! whether the system lets Vosh post banners, the system's own question,
+//! and the system page where you turn banners on. The Alerts category of
+//! the Presets page calls the two preset commands, and the Alert row the
 //! other three.
 
 use std::collections::BTreeMap;

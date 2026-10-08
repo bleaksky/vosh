@@ -115,17 +115,16 @@ interface TokenSheet {
   tokens: Record<ChromeColorKey, string>;
 }
 
-// The token sheets under the one ground rule (Themes review Q7, board
-// 11). The One Window canvas sheets predate it, so the panel now sits
-// on the ground, the lines step in lightness, and the title takes the
-// secondary tone. Ember's is the sheet the board draws, and Nord's is
-// the rule's with its pins. The light sheet is Rubric's from the
-// shortlist, since Rubric took Vellum's place (Q14) and Vellum's sheet
-// went with it. The selection is each scheme's own, opaque, with its
-// own text (Q9), where the canvas drew the accent with alpha. The
-// control washes (Q10) on Ember are the ones the stylesheets fixed, and
-// on Nord and Rubric they are the rule's, with Rubric's field its
-// raised paper.
+// The token sheets under the one ground rule. The first canvas sheets
+// predate it, so the panel now sits on the ground, the lines step in
+// lightness, and the title takes the secondary tone. Ember's is the
+// sheet the rule was set on, and Nord's is the rule's with its pins.
+// The light sheet is Rubric's from the shortlist, since Rubric took
+// Vellum's place and Vellum's sheet went with it. The selection is each
+// scheme's own, opaque, with its own text, where the canvas drew the
+// accent with alpha. The control washes on Ember are the ones the
+// stylesheets fixed, and on Nord and Rubric they are the rule's, with
+// Rubric's field its raised paper.
 const NORD: TokenSheet = {
   id: 'nord',
   appearance: 'dark',
@@ -380,8 +379,8 @@ describe('control washes', () => {
 
   it('paints Obsidian Ember within dE 1 of the washes the stylesheets fixed', () => {
     const t = themeTokens(findTheme('obsidian-ember'));
-    // The edge is the ring inside a floating surface, white 0.12, which
-    // board 11 draws. The window edges took 0.10 and 0.18 and move to it.
+    // The edge is the ring inside a floating surface, white 0.12. The
+    // window edges took 0.10 and 0.18 and move to it.
     const fixed: Record<Wash, number> = {
       field: 0.06,
       track: 0.16,
@@ -723,7 +722,7 @@ describe('fitted game colors', () => {
     // Off, play draws the theme as published.
     for (const theme of BUILTIN_THEMES)
       expect(playPalette(theme, false), theme.id).toBe(theme.xterm);
-    // Solarized Dark keeps out, so play draws it as published (Q20).
+    // Solarized Dark keeps out, so play draws it as published.
     const dark = findTheme('solarized-dark');
     expect(playPalette(dark, true)).toBe(dark.xterm);
   });
@@ -800,9 +799,9 @@ describe('fitted game colors', () => {
     expect(checks(findTheme('melange-light').xterm).filter((c) => !c.ok)).toHaveLength(11);
   });
 
-  // The palettes the Themes review read into shortlist.json and the fits
-  // its survey computed (metrics/fit-survey.json, github-dark-default and
-  // iceberg-dark), which you picked on October 5.
+  // The palettes read into shortlist.json and the fits the survey
+  // computed for them (metrics/fit-survey.json, github-dark-default and
+  // iceberg-dark).
   it('ships Harbor Dark and Iceberg Dark as the review drew them', () => {
     const harbor = findTheme('harbor-dark');
     const iceberg = findTheme('iceberg-dark');
@@ -831,7 +830,7 @@ describe('fitted game colors', () => {
         '#84a0c6 #a093c7 #89b8c2 #c6c8d1 #6b7089 #e98989 #c0ca8e #e9b189 #91acd1 #ada0d3 ' +
         '#95c4ce #d2d4de',
     );
-    // The review counts 26 and 15 of 46 as published.
+    // The metrics count 26 and 15 of 46 as published.
     expect(checks(harbor.xterm).filter((c) => c.ok)).toHaveLength(26);
     expect(checks(iceberg.xterm).filter((c) => c.ok)).toHaveLength(15);
     // The survey moves 11 and 15 slots and leaves these short.

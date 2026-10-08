@@ -1,18 +1,18 @@
 /* The migration wizard. The .settings-app wrapper ImportPanel opens it
    in, the .settings-btn chip, and the wizard modal and its lists. These
-   are interim styles. They stay here until D23 moves the wizard onto
-   the shared kit. */
+   are interim styles. They stay here until the wizard moves onto the
+   shared kit. */
 
 /* The wrapper ImportPanel puts around the migration wizard. It keeps
-   the chrome font and size the Settings window used before
-   milestone 2, independent of the user's terminal font. */
+   the chrome font and size the Settings window used before its rebuild
+   on the shared kit, independent of the user's terminal font. */
 .settings-app {
   font-family: var(--font-chrome);
   font-size: 12.5px;
   line-height: 1.45;
 }
 
-/* Ember action chip: quiet bordered pill, replacing the old bracket
+/* Action chip: quiet bordered pill, replacing the old bracket
    text-button idiom. Labels lost their literal [brackets] when this
    landed — the border is the affordance now. */
 .settings-btn {

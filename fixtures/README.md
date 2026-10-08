@@ -1,13 +1,18 @@
 # Fixtures
 
-Captured byte streams used by parser tests.
+Byte streams, game lines and shared cases that the tests read. Every file here is synthetic or generated. None is a capture of a live session.
 
 ## Layout
 
 ```
 fixtures/
-  telnet/    Raw telnet negotiation captures (IAC sequences).
-  ansi/      ANSI escape sequence captures, including 256 color and truecolor.
+  alerts/    low-latch.json, the low latch on a vital, step by step and
+             as runs of Char.Vitals values, shared by nextLow on the page
+             and next_low in src-tauri, so the vitals panes and the Low
+             health alert agree on when a vital runs low. Read by
+             src-tauri/src/alert/presets/tests.rs,
+             src/stores/gmcp/vitalsStore.test.ts and
+             src/shell/sessionLine.test.ts. Hand written.
   collapse/  splits.b64, the session's payloads with Collapse repeated lines
              on, for pulses, a fight and lines with no prompt from the fake
              Aabahran, your prompt pinned and for the pulses in the text
@@ -28,15 +33,24 @@ fixtures/
              only in a commit tied to a numbered bug or a lettered
              decision, and VOSH_WRITE_CONFIG=1 writes them again. Each
              one still reads in 0.8.0, which knows Line and Prompt
-             triggers only, so Room triggers go under room_triggers (D14).
+             triggers only, so Room triggers go under room_triggers and
+             going back a version never loses a file. Read by
+             src-tauri/src/tests/config_golden.rs.
     old/     Files in the shapes older builds wrote, written by hand. They
-             never change, and each one still loads.
+             never change, and config_golden.rs loads each one.
+  font-stacks/ cases.json, a font list as Settings saves it and the
+             families each renderer tries for it, in order, shared by
+             renderFontStack in src/lib/fontLoader.ts and the native
+             atlas, so xterm and the native grid land on the same face.
+             Read by src/lib/fontLoader.test.ts and
+             src-tauri/src/native/gpu/tests.rs. Hand written.
   gmcp/      GMCP message captures.
     aabahran/  Hand written Aabahran packets, one payload per file, for the
                new server build and the two older builds. Its README lists
                what each one stands for. The Map.Tiles packets in map/
                come from a port of the server's own map code run over
-               the game's area files instead.
+               the game's area files instead. Read by the tests in
+               crates/prompt/tests, values.rs and aabahran.rs among them.
   ipc/       names.txt, every name the page and the app share, each command
              with the keys its function reads and each event with who
              sends it and whether the page hears it. The IPC contract
@@ -51,20 +65,24 @@ fixtures/
              Automation tests read it as the reply.
   links/     Golden lists of the ids that links name, taken from the code.
              help-topics.json holds every help topic id with its number,
-             in rail order, for src/lib/helpTopicIds.test.ts.
+             in rail order, for src/help/helpTopicIds.test.ts.
              settings-anchors.json holds every Settings link that search,
              the palette, the pane menu and other pages open, where each
              lands, the anchors each page draws and the help topics the
-             pages open, for src/components/settings/settingsAnchors.test.tsx.
+             pages open, for src/settings/settingsAnchors.test.tsx.
              Change either only in a commit tied to a numbered bug or a
              lettered decision.
   macros/    kept-keys.json, macros stores with the six macros of the
              Numpad movement preset and the keys your macros keep from
              it, shared by hold_taken_keys in src-tauri and
-             keysYourMacrosKeep on the page. The Macros page tests mount
-             its first case. Hand written.
-  mccp/      MCCP compressed stream captures.
-  pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
+             keysYourMacrosKeep on the page. Read by
+             src-tauri/src/loadouts/presets.rs and
+             src/automation/automationRecords.test.ts, and
+             src/settings/automation/MacrosEditor.test.tsx mounts its
+             first case. Hand written.
+  pane-layout/  sanitize.json, pane tree cases shared by the sanitize tests
+             in src-tauri/src/profile/panes.rs and
+             src/panel/paneLayout.test.ts.
   presets/   triggers.json, the triggers every preset installs while you
              leave its colors alone, as presetTriggers gives them, so
              src/automation/presets.test.ts holds the library to them
@@ -72,13 +90,17 @@ fixtures/
   prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
                and cell sizes, shared by layoutBands on xterm and
                band_rects on the native grid, so both renderers draw the
-               same bands. Hand written.
+               same bands. Read by src/terminal/xterm/liftBands.test.ts
+               and src-tauri/src/native/gpu/tests.rs. Hand written.
   prompt/
     aabahran/  Aabahran prompt lines as the game sends them, raw and plain,
-               and PROMPT settings for the compiler in crates/prompt.
+               and PROMPT settings for the compiler in crates/prompt,
+               read by crates/prompt/tests/aabahran_lines.rs.
       wire/    Synthetic socket reads the fake Aabahran in the test kit
                plays, one .bin of raw telnet bytes per case with a
                .notes.md that says what it holds and marks it synthetic.
+               crates/prompt/tests/wire.rs holds each file to the fake,
+               and VOSH_WRITE_WIRE=1 writes them again.
       pinned/  splits.b64, the session's payloads with your prompt pinned
                for every wire case and a few pulses back to back, as one
                read and as two cut at every place, with the native grid's
@@ -133,8 +155,9 @@ fixtures/
   scenes/    pairing.json, two lines of a look ahead of a say and a tell
                with their Comm.Channel packets, played with the packets
                ahead of the text as the game sent them before d50e4a24 and
-               after each line as it sends them since, for the log kinds
-               test in src-tauri. Hand written from room-colors.
+               after each line as it sends them since, for
+               src-tauri/src/tests/log_kinds.rs. Hand written from
+               room-colors.
   session-labels/ cases.json, what a session goes by, its name, its
                character or the world where it dials with or without its
                port, shared by sessionLabel on the page and label_of in
@@ -145,7 +168,8 @@ fixtures/
                shared by keptRows and gameSize on xterm and
                grid_and_game_rows on the native grid. Hand written.
   themes/    One theme file per format the Appearance import reads (Ghostty,
-             iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
+             iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML), read by
+             src/theme/themeImport.test.ts.
   ui-config/ defaults.json, the UI config Rust sends for a profile that
              sets nothing, which normalizeUiConfig on the page fills in
              for a field that arrives missing. Hand written.
@@ -164,25 +188,22 @@ fixtures/
              engine bakes into the line and the field it stands for. The
              test in crates/automation/src/trigger/color.rs checks both
              against the code. Written from the sources.
-  wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
-             TypeScript WordWrapper, so both renderers break lines alike.
+  wrap/      cases.json, word wrap cases shared by the Rust wrap in
+             crates/prompt/src/wrap.rs and the TypeScript WordWrapper, so
+             both renderers break lines alike. Read there, in
+             src-tauri/src/native/grid/tests.rs and in
+             src/terminal/wordWrap.test.ts.
 ```
 
-## Capturing From Aabahran
+## Where the Bytes Come From
 
-Run a session through `socat` or `nc` with hex logging to record raw bytes. Strip credentials before committing.
+The wire fixtures are synthetic, and they stay that way. The fake Aabahran in `crates/prompt/src/testkit/` writes them from the server's own format strings, and the hand written files take their lines from the server source and the game's area files. No fixture holds bytes recorded from a live session.
 
-Sample.
-
-```
-socat -x -v TCP:theforsakenlands.com:9009 - 2> capture.hex
-```
-
-Trim the hex log to the interesting region, then drop it under the matching subdirectory with a short descriptive name. Add a sibling `.notes.md` if the capture needs context (server version, what command produced it, expected parser output).
+A new fixture follows the same path. Write it from the server source or have the fake play it, mark it synthetic, and name the test that reads it here.
 
 ## Rules
 
-- No credentials, no character names, no chat content, no PII.
-- Each fixture must have a parser test that consumes it.
+- No credentials, no real character names, no chat content, no PII. Samples use invented names.
+- Each fixture has a test that reads it, and this README names that test.
 - Prefer many small fixtures over a few big ones.
-- A fixture written by hand rather than captured says so. A capture file gets a `.notes.md` that marks it synthetic, and a JSON fixture says it in its `notes` field. It stays marked until an approved socat capture takes its place.
+- A fixture written by hand says so. A byte stream file gets a `.notes.md` that marks it synthetic, and a JSON fixture says it in its `notes` field.

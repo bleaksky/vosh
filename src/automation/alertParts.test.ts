@@ -29,7 +29,7 @@ function tomlTable(text: string, head: string): Record<string, unknown> {
 /** The default table, which rings nothing. */
 const QUIET: AlertParts = { banner: false, background: true, words: false };
 
-/** The frame's visitor, every part on. */
+/** A visitor trigger with every part on. */
 const VISITOR: AlertParts = {
   banner: true,
   sound: 'chime',

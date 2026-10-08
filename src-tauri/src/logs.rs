@@ -66,7 +66,7 @@ pub(crate) struct Scrollback {
     run: Option<RingRun>,
     /// The ring changed since its file was last written.
     changed: bool,
-    /// The most lines the ring keeps, Scrollback size (D40).
+    /// The most lines the ring keeps, Scrollback size.
     cap: usize,
 }
 
@@ -331,7 +331,7 @@ async fn save_scrollback(
 }
 
 /// Keep `lines` of scrollback in `session`: its ring, and so its file,
-/// and its native grid. xterm follows the same field on the page (D40).
+/// and its native grid. xterm follows the same field on the page.
 pub(crate) async fn keep_scrollback_lines(session: &crate::sessions::Session, lines: u32) {
     session.scrollback.lock().await.set_cap(lines as usize);
     #[cfg(any(native_surface, test))]

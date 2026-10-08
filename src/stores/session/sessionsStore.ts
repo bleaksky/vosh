@@ -33,7 +33,7 @@ import { pushToast } from '../toasts';
 // selects, which launch started, and each session whose selection the
 // app finished since, the one a banner click makes among them. A
 // session launch restored reads its scrollback only as its first
-// selection finishes (Q16), so its terminal waits for that. A session
+// selection finishes, so its terminal waits for that. A session
 // leaves the list as it closes.
 
 interface Sessions {
@@ -204,8 +204,8 @@ export function getOpened(): number[] {
   return store.get().opened;
 }
 
-/** The session `step` rows from the selected one, going round the ends
- *  as otty's tabs do, or null while fewer than two are open. */
+/** The session `step` rows from the selected one, going round the ends,
+ *  or null while fewer than two are open. */
 export function sessionStep(step: 1 | -1): number | null {
   const { rows, selected } = store.get();
   if (rows.length < 2) return null;

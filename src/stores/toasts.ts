@@ -15,7 +15,7 @@ export interface Toast {
   message: string;
   /** Optional right-aligned mono detail (host:port, reason, file). */
   meta?: string;
-  /** The meta reads in the terminal's face, as prompt codes do (P14). */
+  /** The meta reads in the terminal's face, as prompt codes do. */
   metaMono?: boolean;
   action?: ToastAction;
 }
@@ -24,7 +24,7 @@ export interface ToastInput {
   kind: ToastKind;
   message: string;
   meta?: string;
-  /** The meta reads in the terminal's face, as prompt codes do (P14). */
+  /** The meta reads in the terminal's face, as prompt codes do. */
   metaMono?: boolean;
   action?: ToastAction;
   /** Auto-dismiss delay override. Defaults below apply otherwise. */

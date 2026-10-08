@@ -34,13 +34,13 @@ import { VitalSwatch } from './VitalSwatch';
 import { VitalsTextRows } from './VitalsTextRows';
 import { customDiffers, movedTo, movedWords, textDiffers } from './vitalsStyles';
 
-// Customize vitals under Settings, Layout (boards 2 to 5 of the Vitals
-// Styles review, Q3). One set of choices every drawn style shares: which
-// vitals show and their order, a color for each, where your opponent
-// sits, Values, Meter and the warning. Each pick saves alone, and Reset
-// to default puts the set back and leaves your style, Show your vitals
-// in and the pinned switch alone. Show each hit sits with the warning,
-// since both change how a vital reads as it changes (Q21). It rests until something differs.
+// Customize vitals under Settings, Layout. One set of choices every
+// drawn style shares: which vitals show and their order, a color for
+// each, where your opponent sits, Values, Meter and the warning. Each
+// pick saves alone, and Reset to default puts the set back and leaves
+// your style, Show your vitals in and the pinned switch alone. Show each
+// hit sits with the warning, since both change how a vital reads as it
+// changes. It rests until something differs.
 //
 // The list moves a vital with its grip, by the pointer or from the
 // keyboard, as the Sessions list moves a session. Under Status line the

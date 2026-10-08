@@ -19,14 +19,14 @@ import { ManifestCard } from './ManifestCard';
 import { errorMark, saveStatus, stopNote, type PluginSave } from './pluginState';
 import { switchPlugin } from './switchPlugin';
 
-// A plugin's own page under Scripts (Scripts and Panels, boards 1 and
-// 3). The toolbar switches between the file the plugin runs first and
-// its Manifest, with On for this profile at its right. Under the file
-// sit the stop note while Vosh holds the plugin off, the editor, and
-// Output with this plugin's lines and a console that runs inside it.
-// Both tabs edit one draft, and the save bar writes it. Leaving the
-// page, by another group or the crumb back to Scripts, or closing the
-// window with unsaved changes asks first, as Automation does.
+// A plugin's own page under Scripts. The toolbar switches between the
+// file the plugin runs first and its Manifest, with On for this profile
+// at its right. Under the file sit the stop note while Vosh holds the
+// plugin off, the editor, and Output with this plugin's lines and a
+// console that runs inside it. Both tabs edit one draft, and the save
+// bar writes it. Leaving the page, by another group or the crumb back
+// to Scripts, or closing the window with unsaved changes asks first, as
+// Automation does.
 
 type Tab = 'code' | 'manifest';
 

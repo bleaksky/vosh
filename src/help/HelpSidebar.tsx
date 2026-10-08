@@ -12,13 +12,13 @@ import { scrollWithin } from '../lib/scrollWithin';
 import { Keycap, SearchIcon, VisuallyHidden } from '../ui';
 import { sectionIcon } from './sectionIcons';
 
-// The Help sidebar (the approved Help boards), the Settings sidebar 280
-// wide: the drag strip under the traffic lights, the search pill at
-// (12, 44) with its keycaps, and the nine sections as Settings rows
-// from y 84. The section you are in opens under itself with its topics
-// at the label's x, and the topic you read carries the selected row
-// fill. While the search holds words its results replace the nav, best
-// first, and the article shows the one you are on.
+// The Help sidebar, the Settings sidebar 280 wide: the drag strip under
+// the traffic lights, the search pill at (12, 44) with its keycaps, and
+// the nine sections as Settings rows from y 84. The section you are in
+// opens under itself with its topics at the label's x, and the topic
+// you read carries the selected row fill. While the search holds words
+// its results replace the nav, best first, and the article shows the
+// one you are on.
 
 interface Props {
   /** The topic the article shows. */

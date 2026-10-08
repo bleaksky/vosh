@@ -805,7 +805,7 @@ fn lift_boxes_gather_each_lift_across_its_rows() {
 
 #[test]
 fn a_band_reaches_as_far_as_the_boards_measure() {
-    // P4 at 1x: 35 cells of 7.8 by 17.5 draw 281 by 21.5.
+    // A band at 1x: 35 cells of 7.8 by 17.5 draw 281 by 21.5.
     let boxes = [LiftBox {
         id: 1,
         top: 3,

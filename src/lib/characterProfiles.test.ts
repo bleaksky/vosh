@@ -260,8 +260,8 @@ describe('typed values', () => {
   });
 });
 
-// Board 7 and board 9 of the Sessions review: Default, Build on the build
-// port and Healer, with Tolliver on the play port.
+// Three profiles: Default, Build on the build port and Healer, with
+// Tolliver on the play port.
 const BOARD: ProfileEntry[] = [
   { name: 'default', auto_match: { host: TFL, port: 1848, characters: ['Tolliver'] } },
   { name: 'Build', auto_match: { host: TFL, port: 1825, characters: ['Orla'] } },
@@ -370,7 +370,7 @@ describe('the line under the Characters list', () => {
 });
 
 describe('the line after a login pin', () => {
-  // Board 7: Tolliver claimed for Build on the build port, where Default
+  // Tolliver claimed for Build on the build port, where Default
   // held him on the host alone.
   const build = { name: 'Build', auto_match: { host: TFL, port: 1825, characters: ['Tolliver'] } };
   const claim = (pinned: LoginClaim['pinned'], released: string[] = []): LoginClaim => ({

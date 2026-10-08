@@ -23,12 +23,13 @@ import { parseSgrCells } from '../terminal/sgrCells';
 import { cx, Field, SearchIcon } from '../ui';
 import { CellLine } from './PromptCells';
 
-// Insert value… (P6, P6b): every field Vosh can draw, grouped by topic,
-// inside the card so the panel and your prompt stay in view. The left
-// list shows what each field reads now, or why it reads nothing. The
-// right pane says where the highlighted field comes from and draws each
-// of its forms with the values the card shows. A click on a form, or
-// Enter, adds it at the caret. Right moves into the forms and Left back.
+// Insert value…: every field Vosh can draw, grouped by topic, inside
+// the card so the panel and your prompt stay in view. The left list
+// shows what each field reads now, or why it reads nothing. The right
+// pane says where the highlighted field comes from and draws each of
+// its forms with the values the card shows. A click on a form, or
+// Enter, adds it at the caret. Right moves into the forms and Left
+// back.
 
 const LAYOUT_HELP: Record<LayoutId, { help: string; sample: string }> = {
   nl: { help: 'Starts a new line.', sample: '↵' },
@@ -48,7 +49,7 @@ interface PromptPickerProps {
   onInsert: (field: string, format: PromptFormatChoice) => void;
   onInsertLayout: (id: LayoutId) => void;
   /** You opened it from the keyboard, so the search takes focus and you
-   *  can type at once. Opened with a click it rests, as P6 draws it. */
+   *  can type at once. Opened with a click it rests. */
   focusSearch?: boolean;
 }
 

@@ -1,8 +1,7 @@
-//! The vitals text push through the real session against the fake game
-//! (Q7 to Q9 of the Vitals Styles review): nothing goes out until a
-//! footer or the status line watches, then a render on the watch, on
-//! each Char.Vitals, each second while the text reads the tick, and on a
-//! new text from Settings.
+//! The vitals text push through the real session against the fake game:
+//! nothing goes out until a footer or the status line watches, then a
+//! render on the watch, on each Char.Vitals, each second while the text
+//! reads the tick, and on a new text from Settings.
 
 use std::time::Duration;
 

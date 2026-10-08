@@ -8,8 +8,9 @@
 //! never walks you somewhere. A walk takes at most [`MAX_STEPS`] steps.
 //!
 //! A typed line, an alias expansion, a macro command or a `;` piece of a
-//! typed line that starts with `#walk` runs it (Q16). What follows
-//! `#walk` in the same line waits for the walk to end (Q28).
+//! typed line that starts with `#walk` runs it. What follows `#walk` in
+//! the same line waits for the walk to end, so it runs where the walk
+//! takes you.
 
 use vosh_automation::alias::{ExpandError, ExpandStep};
 
@@ -62,7 +63,7 @@ impl Dir {
     }
 }
 
-/// The rooms a walk planned on the map passes through (Q14): the room it
+/// The rooms a walk planned on the map passes through: the room it
 /// starts in, and the room each step should reach, one for each step.
 /// The walker drops a plan made from a room you have since left.
 #[derive(Debug, Clone, PartialEq, Eq)]

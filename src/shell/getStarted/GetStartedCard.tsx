@@ -37,10 +37,10 @@ import { OpenPresets, PresetsStep } from './PresetsStep';
 import { switchPresets } from './switchPresets';
 import { TellSample } from './TellSample';
 
-// The Get started card of First Run boards 1, 2 and 5, on the prompt
-// card's recipe where the prompt card sits (Q2). It is a region with no
+// The Get started card, on the prompt card's recipe where the prompt
+// card sits, since the two never show together. It is a region with no
 // scrim and no focus trap, so the name you type at the login prompt
-// still goes to the command line (Q14). Inside, the arrows move through
+// still goes to the command line. Inside, the arrows move through
 // the steps, Enter opens one, Space flips a switch, and Esc folds the
 // card to its notice and hands the caret back.
 
@@ -62,7 +62,7 @@ interface Props {
   host: PromptCardHost;
   cell: CellSize | null;
   show: PromptShowState | null;
-  /** Fold the card and open what a step is about (Q3). */
+  /** Fold the card and open what a step is about. */
   onShowMe: (step: StepId) => void;
   focusInput: () => void;
   /** The card slides away after a fold, out of reach. */
@@ -71,7 +71,7 @@ interface Props {
   onFolded: () => void;
 }
 
-/** Tells you send, which the Chat step suggests (Q5). */
+/** Tells you send, which the Chat step suggests. */
 const SENT_TELLS = PRESETS.find((p) => p.id === 'sent_tells') as Preset;
 
 /** The steps a Show me opens something for. Connect dials, and the
@@ -101,7 +101,7 @@ export function GetStartedCard({
 }: Props) {
   // The prompt card keeps the row over your prompt in view. Get started
   // points at no prompt, so it sits one row lower, its foot one row and
-  // 4 px above the command line (board 1).
+  // 4 px above the command line.
   const anchor = useCardPlace(host, cell, show, false);
   const row = cell?.height ?? 17.5;
   const world = view.target.host;
@@ -133,7 +133,7 @@ export function GetStartedCard({
     focusInput();
   };
   // A step after the login waits for the game to name you, and the
-  // prompt on another game for the link (Q6).
+  // prompt on another game for the link.
   const ready = (step: Step) => {
     if (step.afterLogin) return play.character !== null;
     return step.id !== 'prompt' || play.live;
@@ -239,8 +239,8 @@ function Foot({ children }: { children: ReactNode }) {
   );
 }
 
-/** The list of board 1, and with every step done the summary of board 5,
- *  each meta read live. */
+/** The list of steps, and with every step done the summary, each meta
+ *  read live. */
 function StepList({
   steps,
   done,
@@ -358,7 +358,7 @@ function StepList({
   );
 }
 
-/** A step's page, board 2: Back, what the step does in a line, and
+/** A step's page: Back, what the step does in a line, and
  *  Show me or what the step holds. */
 function StepPage({
   step,
@@ -437,7 +437,7 @@ function StepPage({
 }
 
 /** Tells you send, which the Chat step suggests, since it shows nothing
- *  until a Chat pane does (board 2). */
+ *  until a Chat pane does. */
 function SentTells({ facts }: { facts: GetStartedFacts }) {
   const stored = facts.enabledPresets;
   const on = stored !== null && enabledPresetIds(stored).includes(SENT_TELLS.id);

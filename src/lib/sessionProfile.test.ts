@@ -3,7 +3,7 @@ import type { ProfileEntry } from '../ipc/profiles';
 import type { SessionRow } from '../ipc/session';
 import { profileLines, showsProfileRow } from './sessionProfile';
 
-// The Profile row of the New session form, board 4. The line under the
+// The Profile row of the New session form. The line under the
 // row says why the pick shows, or names the other session that plays
 // it, or notes another session already connected to the world's own
 // port. Rust makes the pick itself, and the tests of

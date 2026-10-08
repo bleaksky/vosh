@@ -73,7 +73,7 @@ export interface AppTheme {
 // ── Kanso Zen ───────────────────────────────────────────────────────
 // Mirrors the user's Ghostty config exactly, so Settings and exports
 // match the terminal outside Vosh. In play Fit game colors retunes the
-// game colors (Themes review Q15).
+// game colors.
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
@@ -106,7 +106,7 @@ const kansoZen: AppTheme = {
     brightWhite: '#c5c9c7',
   },
   // The palette stays as the Ghostty config has it, and in play the fit
-  // retunes 16 slots to pass 44 of 46 (Q15).
+  // retunes 16 slots to pass 44 of 46.
   fitted: {
     foreground: '#c9cdcb',
     black: '#656565',
@@ -130,7 +130,7 @@ const kansoZen: AppTheme = {
 };
 
 // ── Obsidian Ember ──────────────────────────────────────────────────
-// The Ember redesign palette. A warm near-black ground, pastel ANSI,
+// Vosh's own palette. A warm near-black ground, pastel ANSI,
 // and an ember cursor the theme pins as its single accent. The orange
 // sits 8.1 dE from the danger red, under the 12 the chrome rule asks of
 // an accent it picks itself, so without the pin the rule would take
@@ -182,8 +182,8 @@ const obsidianEmber: AppTheme = {
     brightMagenta: '#d0aae2',
     brightCyan: '#9de3ee',
   },
-  // The ember accent, and the ember ink the approved canvas sets on
-  // accent buttons.
+  // The ember accent, and the dark ember ink that reads on accent
+  // buttons.
   chrome: { accent: '#ef8f2f', onAccent: '#140b02' },
 };
 
@@ -377,10 +377,10 @@ const nord: AppTheme = {
     brightCyan: '#b6e4e3',
     brightWhite: '#feffff',
   },
-  // otty's Nord, measured from otty's own theme file. The panel and
+  // Nord, measured from a published terminal theme file. The panel and
   // floating surfaces stay on the terminal ground, and the text tiers
   // follow nord5 rather than the terminal's nord4 foreground. Danger
-  // words use the lighter red the approved boards draw them in.
+  // words use a lighter red.
   chrome: {
     panel: '#2e3440',
     raised: '#2e3440',
@@ -535,7 +535,7 @@ const classicVivid: AppTheme = {
     brightWhite: '#ffffff',
   },
   // The fit lifts blue from Lc 0 to 39 in play and leaves 6 checks
-  // short, red at Lc 40.7 among them (Q17).
+  // short, red at Lc 40.7 among them.
   fitted: {
     black: '#232323',
     red: '#ef5746',
@@ -648,7 +648,7 @@ const monokai: AppTheme = {
     brightWhite: '#f9f8f5',
   },
   // Bright white has no room above body text, so the fit lowers body
-  // text to #e4e4df in play (Q19).
+  // text to #e4e4df in play.
   fitted: {
     foreground: '#e4e4df',
     black: '#363831',
@@ -673,9 +673,9 @@ const monokai: AppTheme = {
 
 // ── One Half Dark ───────────────────────────────────────────────────
 // One Half Dark as its Sublime Text and iTerm2 ports ship it. Atom's
-// One Dark colors with a brighter foreground (#dcdfe4), which lifts body
-// text from Lc 56 to Lc 83. It took the place of One Dark (Themes review
-// Q13), so a saved One Dark shows it (RETIRED_THEMES).
+// One Dark colors with a brighter foreground (#dcdfe4), which lifts
+// body text from Lc 56 to Lc 83. It took the place of One Dark, so a
+// saved One Dark shows it (RETIRED_THEMES).
 const oneHalfDark: AppTheme = {
   id: 'one-half-dark',
   label: 'One Half Dark',
@@ -762,7 +762,7 @@ const tangoDark: AppTheme = {
     brightWhite: '#eeeeec',
   },
   // The fit lifts blue and magenta past Lc 45 in play. Red stays at
-  // Lc 36.2, with 4 checks short in all (Q18).
+  // Lc 36.2, with 4 checks short in all.
   fitted: {
     foreground: '#d4d8d0',
     black: '#3d4345',
@@ -825,7 +825,7 @@ const highContrast: AppTheme = {
     brightWhite: '#ffffff',
   },
   // Bright white has no room above body text, so the fit lowers body
-  // text to #e4e4e4 in play (Q19).
+  // text to #e4e4e4 in play.
   fitted: {
     foreground: '#e4e4e4',
     black: '#242424',
@@ -1005,7 +1005,7 @@ const greenScreen: AppTheme = {
     brightWhite: '#ffffff',
   },
   // The fit lifts blue to Lc 45.1 in play. Cyan at Lc 53.8 and bright
-  // blue at 58.8 stay short (Q17).
+  // blue at 58.8 stay short.
   fitted: {
     foreground: '#8dde93',
     black: '#242424',
@@ -1061,10 +1061,10 @@ const greenScreen: AppTheme = {
 // panel and the raised surface, the value the chrome derives from red
 // itself. The light theme reads plain red and needs no pin.
 //
-// The dark theme stays out of Fit game colors (Themes review Q20). Its
-// body text reads at Lc 39.5, far under the Lc 75 the game asks, and
-// that is what Solarized is. Fitted, it would stop looking like the
-// scheme you picked.
+// The dark theme stays out of Fit game colors. Its body text reads at
+// Lc 39.5, far under the Lc 75 the game asks, and that is what
+// Solarized is. Fitted, it would stop looking like the scheme you
+// picked.
 const solarizedDark: AppTheme = {
   id: 'solarized-dark',
   label: 'Solarized Dark',
@@ -1187,7 +1187,7 @@ const srcery: AppTheme = {
     brightWhite: '#fce8c3',
   },
   // In play the fit moves 15 slots and passes 45 of 46. Red stays short
-  // at Lc 40.3 (Q1).
+  // at Lc 40.3.
   fitted: {
     foreground: '#e8d5b0',
     black: '#282625',
@@ -1245,7 +1245,7 @@ const nightfly: AppTheme = {
     brightWhite: '#d6deeb',
   },
   // In play the fit moves 16 slots by small steps and passes 44 of 46.
-  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9 (Q1).
+  // Red stays short at Lc 38.1 and the yellow pair at dE 7.9.
   fitted: {
     foreground: '#c9cdd2',
     red: '#f24746',
@@ -1305,7 +1305,7 @@ const melangeDark: AppTheme = {
     brightWhite: '#ece1d7',
   },
   // In play the fit moves 16 slots and passes 44 of 46. Yellow stays
-  // short at Lc 58.5 and red at Lc 41.5 (Q1).
+  // short at Lc 58.5 and red at Lc 41.5.
   fitted: {
     black: '#393531',
     red: '#c08485',
@@ -1411,8 +1411,8 @@ const modusVivendi: AppTheme = {
     brightWhite: '#ffffff',
   },
   // In play the fit lowers body text to #e4e4e4, so bold white reads
-  // above it, and lifts black to the dimmed ground Modus uses itself. It
-  // moves 15 slots and passes 45 of 46, with red short at Lc 43.5 (Q1).
+  // above it, and lifts black to the dimmed ground Modus uses itself.
+  // It moves 15 slots and passes 45 of 46, with red short at Lc 43.5.
   fitted: {
     foreground: '#e4e4e4',
     black: '#1e1e1e',
@@ -1435,10 +1435,10 @@ const modusVivendi: AppTheme = {
 
 // ── Harbor Dark ─────────────────────────────────────────────────────
 // The GitHub Dark Default palette of GitHub's theme for VS Code, as
-// published, under a name of its own, since GitHub is a trademark
-// (Themes review Q6). GitHub publishes no terminal selection, so the
-// selection is its list selection, #6e768166 laid over the ground. The
-// blue cursor is the accent the review picked, and the theme pins it.
+// published, under a name of its own, since GitHub is a trademark.
+// GitHub publishes no terminal selection, so the selection is its list
+// selection, #6e768166 laid over the ground. The blue cursor is the
+// accent, and the theme pins it.
 const harborDark: AppTheme = {
   id: 'harbor-dark',
   label: 'Harbor Dark',
@@ -1491,7 +1491,7 @@ const harborDark: AppTheme = {
 // ── Iceberg Dark ────────────────────────────────────────────────────
 // The dark terminal colors of iceberg.vim, as published. Its cursor is
 // the gray of its text, so the theme pins its magenta, a soft violet,
-// as the accent the review picked.
+// as the accent.
 const icebergDark: AppTheme = {
   id: 'iceberg-dark',
   label: 'Iceberg Dark',
@@ -2333,14 +2333,13 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
  *  (default_theme in profile/ui.rs), and the theme Vosh falls back to.
  *  It is not the theme a new install starts on. A new install starts on
  *  Triad, which NEW_INSTALL_THEME in profile/set.rs writes to the first
- *  config (Themes review Q3). */
+ *  config. */
 export const DEFAULT_THEME_ID = 'obsidian-ember';
 
 /** Themes Vosh no longer ships, each by the id of the theme that took
- *  its place (Themes review Q13, Q14 and Q16). A saved pick keeps the
- *  retired id until you pick another theme, so an older build that still
- *  ships the theme reads it as it was, and this build shows the
- *  successor. */
+ *  its place. A saved pick keeps the retired id until you pick another
+ *  theme, so an older build that still ships the theme reads it as it
+ *  was, and this build shows the successor. */
 export const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ['one-dark', 'one-half-dark'],
   ['vellum', 'rubric'],
@@ -2369,10 +2368,9 @@ export function resolveThemeTerminalColors(stored: boolean | null): boolean {
 
 /** The light theme a profile that never chose one is saved with, as
  *  Rust saves it (default_light_theme in profile/ui.rs). Vosh retired
- *  Vellum for Rubric (Themes review Q14), so the id shows Rubric
- *  (RETIRED_THEMES), and Vosh 0.8.1 still reads it as Vellum. A new
- *  install starts with Rubric itself, which NEW_INSTALL_LIGHT_THEME in
- *  profile/set.rs writes (Q4). */
+ *  Vellum for Rubric, so the id shows Rubric (RETIRED_THEMES), and Vosh
+ *  0.8.1 still reads it as Vellum. A new install starts with Rubric
+ *  itself, which NEW_INSTALL_LIGHT_THEME in profile/set.rs writes. */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
 /** The dark theme a profile that never saved one starts with: its

@@ -448,10 +448,10 @@ describe('the switch on a group heading', () => {
   });
 });
 
-// Board 7 of the Sessions review. Unsaved changes hold the profile
-// Settings shows while the selection moves to a session on another
-// profile, and the save lands on the profile it was made on. This runs
-// last, since the profile Settings shows stays at module scope.
+// Unsaved changes hold the profile Settings shows while the selection
+// moves to a session on another profile, and the save lands on the
+// profile it was made on. This runs last, since the profile Settings
+// shows stays at module scope.
 describe('a draft with unsaved changes', () => {
   const ROWS = [
     {

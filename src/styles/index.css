@@ -4,10 +4,10 @@
    ties with changes order. The comment on each import names the class
    prefixes its sheet holds. */
 
-@import '@fontsource-variable/inter'; /* Inter, for html and body and the migration wizard until D23, bundled so the app never fetches a font */
+@import '@fontsource-variable/inter'; /* Inter, for html and body and the migration wizard until it goes, bundled so the app never fetches a font */
 @import './fonts.css'; /* the bundled mono faces, no classes */
 @import './base.css'; /* the reset, html and body, and the scrollbars, no classes */
-@import './tokens.css'; /* the One Window tokens, no classes */
+@import './tokens.css'; /* the shared tokens, no classes */
 @import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */
 @import './migration.css'; /* settings-app, settings-btn, migration- */

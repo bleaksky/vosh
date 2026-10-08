@@ -9,8 +9,8 @@ import { CheckIcon } from '../../ui/icons';
 // box's bottom right corner that shows while you point at the map or
 // tab to it, and opens a menu of map styles, zoom, and the rows of the
 // style you picked, the tileset in Tileset and the floors, sprites and
-// view in 3D. At rest the pane shows only the drawing, as in the
-// approved boards.
+// view in 3D. At rest the pane shows only the drawing, so nothing
+// covers the rooms.
 
 const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   squares: 'Squares',

@@ -1,5 +1,5 @@
-//! The kernel's smoothed round trip time for a TCP socket (Round Trip
-//! Readout P3). Every TCP connection keeps one, so reading it sends
+//! The kernel's smoothed round trip time for a TCP socket. Every TCP
+//! connection keeps one, so reading it sends
 //! nothing over the wire. macOS reports `tcpi_srtt` in milliseconds
 //! through `TCP_CONNECTION_INFO`, Linux `tcpi_rtt` in microseconds
 //! through `TCP_INFO`, and Windows `RttUs` through `SIO_TCP_INFO`. The

@@ -3,9 +3,9 @@ import { useTauriEvent } from '../ipc/useTauriEvent';
 import { revealLabel } from '../lib/revealLabel';
 import { pushToast } from '../stores/toasts';
 
-/** The toast a saved scene raises in the main window (board 5): it names
- *  the file, and its button shows it in Finder or Explorer, or opens the
- *  folder on Linux, through Scripts Q27's command. */
+/** The toast a saved scene raises in the main window: it names the
+ *  file, and its button shows it in Finder or Explorer, or opens the
+ *  folder on Linux, through the command Scripts uses. */
 export function sceneSavedToast(name: string, platform: string | undefined): void {
   pushToast({
     kind: 'success',

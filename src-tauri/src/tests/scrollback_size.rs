@@ -1,4 +1,4 @@
-//! Scrollback size (D40) from the field you pick to the ring each
+//! Scrollback size from the field you pick to the ring each
 //! session keeps: a new size trims every session on the profile, a
 //! session takes its profile's size as it connects, and a launch reads
 //! as much of the scrollback file as the size keeps.

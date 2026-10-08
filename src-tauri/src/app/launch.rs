@@ -401,8 +401,8 @@ async fn read_scrollback(session: &Session, app_data: &Path) {
 
 /// Create the app data folder and the `scripts` folder in it, where
 /// `#script load` finds Lua files. The map store's opener did this until
-/// D3 retired the store. maps.sqlite stays on disk as it is, and nothing
-/// reads or writes it.
+/// the store retired, since nothing read it back. maps.sqlite stays on
+/// disk as it is, and nothing reads or writes it.
 fn create_scripts_dir(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(paths::scripts_dir(&dir))?;

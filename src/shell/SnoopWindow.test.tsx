@@ -6,11 +6,11 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { shortcutLabel } from '../lib/shortcuts';
 import { SnoopWindow } from './SnoopWindow';
 
-// The snoop window of board 06 of the Snoop review. The snoop store, the
-// look and the window are faked, and each snoop terminal stands in as a
-// plain element that names its player, so what shows is what the window
-// draws. The menu draws in place, not in a portal, and the find bar
-// stands in as a plain element.
+// The snoop window. The snoop store, the look and the window are faked,
+// and each snoop terminal stands in as a plain element that names its
+// player, so what shows is what the window draws. The menu draws in
+// place, not in a portal, and the find bar stands in as a plain
+// element.
 
 const fake = vi.hoisted(() => ({
   snoops: { tabs: [], windowed: true, selected: null, unread: new Set() } as unknown as Snoops,

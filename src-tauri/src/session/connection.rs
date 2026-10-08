@@ -172,8 +172,8 @@ impl Connection {
 /// commands share. The loop takes it for every line the game sends, right
 /// after the profile lock, and an async mutex there costs each line a
 /// poll and a share of the task's cooperative budget, about 3 percent of
-/// P2. No step holds it across an await, and a task's guard cannot cross
-/// one, so a plain mutex fits.
+/// the output throughput test. No step holds it across an await, and a
+/// task's guard cannot cross one, so a plain mutex fits.
 ///
 /// The price is that a waiter blocks its runtime thread instead of
 /// yielding, for as long as the holder keeps the guard. A line the game

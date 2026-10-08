@@ -14,8 +14,8 @@
 // sides, and the window picks the side the OS shows now, so an OS flip
 // while Vosh was closed still opens on the right side. While it follows
 // the game it holds both sides and the day or night last shown, so a
-// drop or a relaunch opens on what you saw until World.Time comes again
-// (Alerts Q15).
+// drop or a relaunch opens on what you saw until World.Time comes
+// again.
 //
 // This module stays free of the theme catalog and the Tauri API so the
 // startup paint costs next to nothing. theme/theme.ts writes the cache.

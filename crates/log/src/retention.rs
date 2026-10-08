@@ -1,5 +1,6 @@
 //! Keep logs for. Finds the logs that ended before a cutoff, deletes each
-//! whole, and gives the file's space back a little at a time (D34).
+//! whole, and gives the file's space back a little at a time, so no
+//! launch waits on one long rebuild.
 //!
 //! `SQLite` gives free pages back in steps only once the file keeps
 //! `auto_vacuum = INCREMENTAL`. A new file starts that way (see

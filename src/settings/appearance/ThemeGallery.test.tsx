@@ -128,8 +128,9 @@ describe('the Vision preview', () => {
     }
   });
 
-  // Board 9 of the Themes review draws Triad as a deuteranope and a
-  // protanope see it, from the review's own simulation.
+  // The colors below are Triad as a deuteranope and a protanope see it,
+  // worked out by a separate simulation, so the preview answers to more
+  // than its own math.
   it('draws Triad as board 9 does', () => {
     const triad = findTheme('triad').xterm;
     const board: [string, string, string][] = [

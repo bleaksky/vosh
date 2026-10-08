@@ -3,7 +3,7 @@ import type { Ended } from './cardFoot';
 import { KINDS } from './kinds';
 import { resultNote } from './words';
 
-// What the writing card does after a drop (Note Editor board 8). A drop
+// What the writing card does after a drop. A drop
 // mid send says how far it got. A drop after the post went out waits
 // for a look at the board's list, which runs once the session plays
 // again, and only then says whether it posted or offers Post again.

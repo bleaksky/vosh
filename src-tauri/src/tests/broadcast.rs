@@ -417,7 +417,7 @@ fn a_group_switch_tells_every_window_once() {
     assert_eq!(heard, want);
 }
 
-/// `wait_full` as the Scripts design writes it, which never returns
+/// `wait_full`, a plugin whose loop never ends, which never returns
 /// while you are hurt.
 const WAIT_FULL: &str = "mud.on_gmcp('Char.Vitals', function(data)
   while data.hp < data.maxhp do end

@@ -1,6 +1,6 @@
 //! Save a scene: a stretch of one log as a file to share, with your
 //! prompt, your commands, the lines outside play and the channels you pick
-//! left out (boards 5 and 6 of the Alerts and Scenes review, Q9 to Q12).
+//! left out.
 //!
 //! The rows come from the log with the kind the session gave each, and
 //! [`older`] reads the kind of a row an older build wrote from its text.
@@ -8,7 +8,7 @@
 //! for the preview and the file. The file is the plain text, the bytes the
 //! game sent with their colors, or one HTML page ([`html`]), named after
 //! the first room in the range and the day, and it goes to Downloads, as
-//! every file Vosh writes for you does (Q12).
+//! every file Vosh writes for you does.
 
 pub(crate) mod html;
 mod older;

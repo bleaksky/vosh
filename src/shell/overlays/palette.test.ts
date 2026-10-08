@@ -63,8 +63,7 @@ function sessionRow(id: number, character: string | null, port: number): Session
   };
 }
 
-/** Tolliver and Orla on the build port, Tolliver in front, as board 4
- *  draws them. */
+/** Tolliver and Orla on the build port, Tolliver in front. */
 function sessions() {
   return {
     rows: [sessionRow(1, 'Tolliver', 1848), sessionRow(2, 'Orla', 1825)],

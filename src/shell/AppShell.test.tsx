@@ -189,7 +189,7 @@ describe('the sessions column', () => {
   });
 });
 
-// A snoop that opens takes the top of the terminal column (Snoop SN1).
+// A snoop that opens takes the top of the terminal column.
 // The split renders first in the terminal's slot, so the live terminal
 // keeps its parent and never remounts, which would reload its scrollback.
 describe('the snoop slot', () => {

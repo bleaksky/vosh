@@ -1,11 +1,10 @@
-/* The writing card (Description Editor and Note Editor reviews). It is
-   the prompt card's recipe in prompt.css, pc-card, its header 46, a
-   hairline, the body, a hairline, the footer 52, with the text box on
-   the terminal ground. The box is 80 columns of your terminal face wide
-   beside a two digit gutter, with the guide a hairline at the right edge
-   of the width the card keeps. WritingCard writes --wr-px and --wr-lh,
-   the face's size and row, --wr-family, and --wr-fg and --wr-ground,
-   the terminal's text and ground. */
+/* The writing card. It is the prompt card's recipe in prompt.css,
+   pc-card, its header 46, a hairline, the body, a hairline, the footer
+   52, with the text box on the terminal ground. The box is 80 columns
+   of your terminal face wide beside a two digit gutter, with the guide
+   a hairline at the right edge of the width the card keeps. WritingCard
+   writes --wr-px and --wr-lh, the face's size and row, --wr-family, and
+   --wr-fg and --wr-ground, the terminal's text and ground. */
 
 .pc-card.wr-card {
   width: auto;

@@ -2,11 +2,10 @@ import { useSyncExternalStore } from 'react';
 import type { PromptPreviewName } from '../../ipc/promptDesign';
 import { createStore } from '../store';
 
-// What the vitals text card shows on the footer it edits (board 5 of
-// the Vitals Styles review): the part you picked, ringed, and the
-// preview. A click on a part in the footer turns the card to it. The
-// card sets it while it is open and the footer reads it. Null while the
-// card is closed.
+// What the vitals text card shows on the footer it edits: the part you
+// picked, ringed, and the preview. A click on a part in the footer
+// turns the card to it. The card sets it while it is open and the
+// footer reads it. Null while the card is closed.
 
 export interface VitalsCardMarks {
   /** The text the card edits, which the footer draws for a preview. */

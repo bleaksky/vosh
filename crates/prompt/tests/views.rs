@@ -1,6 +1,6 @@
 //! The engine's reading of each Aabahran packet against
 //! `fixtures/gmcp/aabahran/views.json`, which the webview's store tests
-//! read too (D29). The engine keeps its own copy of the packages, since
+//! read too. The engine keeps its own copy of the packages, since
 //! the session draws the prompt without the webview, so this file and
 //! `src/test/aabahranViews.test.ts` hold both readings to one record.
 //! No webview store reads Char.State or Room.Weather, so their records
@@ -36,7 +36,7 @@ fn field_json(resolved: Resolved) -> Json {
 }
 
 /// The room as the prompt engine reads it on the new build, the only
-/// build whose Room.Info feeds Exits (D26). Exits read as direction
+/// build whose Room.Info feeds Exits. Exits read as direction
 /// words in the game's door order.
 fn room_view(msg: &vosh_protocol::gmcp::Message) -> Json {
     let mut vars = Vars::new(true);

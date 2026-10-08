@@ -4,7 +4,7 @@ import overlaysCss from '../styles/overlays.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
 import type { Coach } from './coach';
 
-// Show me's ring (First Run Q3, board 2): it finds what to pick once it
+// Show me's ring: it finds what to pick once it
 // draws, moves focus there, rings it 2 px out with its line beside it,
 // and goes at the pick, at Esc, at a press anywhere, or when the menu
 // it rings closes.

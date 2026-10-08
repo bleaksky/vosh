@@ -11,17 +11,16 @@ import {
 } from '../stores/gmcp/vitalsStore';
 import { rowLook, useSessionRow, type SessionRowState } from '../stores/session/sessionRowStore';
 
-// The second line of a session's row, S3 of the Sessions Sidebar
-// review. While you play it reads the room from Room.Info, or who you
-// fight from Char.Combat while the fight lasts, with your health as a
-// whole percent at the right. The health takes the danger tone on the
-// same latch the Low health alert rings on, and shows nothing while the
-// game hides your vitals. Otherwise the line says what happened in
-// plain words, following the row's mark: the game waits for your login,
-// Vosh dials or dials again, the link dropped or never reached the
-// game, or, while the session is not connected, where it would dial. A
-// session you named starts the line with its character, so you never
-// lose who plays it.
+// The second line of a session's row. While you play it reads the room
+// from Room.Info, or who you fight from Char.Combat while the fight
+// lasts, with your health as a whole percent at the right. The health
+// takes the danger tone on the same latch the Low health alert rings
+// on, and shows nothing while the game hides your vitals. Otherwise the
+// line says what happened in plain words, following the row's mark: the
+// game waits for your login, Vosh dials or dials again, the link
+// dropped or never reached the game, or, while the session is not
+// connected, where it would dial. A session you named starts the line
+// with its character, so you never lose who plays it.
 //
 // Room, fight and vitals come from the GMCP stores, which keep a state
 // for every session behind, each read through the view its panes read.

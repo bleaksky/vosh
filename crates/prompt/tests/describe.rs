@@ -1,7 +1,6 @@
-//! What the prompt card reads about a design (section 7, steps 6, 7, 9
-//! and 10): each piece's field, form, When, color and style, what it
-//! reads now, the forms Show as and the picker offer, and each token of
-//! the text with its piece.
+//! What the prompt card reads about a design: each piece's field, form,
+//! When, color and style, what it reads now, the forms Show as and the
+//! picker offer, and each token of the text with its piece.
 
 use vosh_prompt::card::describe::{describe, forms, PieceView, TokenKindName};
 use vosh_prompt::card::edit::{ColorChoice, FormatName, StyleChoice, When};
@@ -90,7 +89,7 @@ fn a_piece_reads_every_style_its_ground_and_its_underline() {
 
 #[test]
 fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
-    // P5: the hp value piece picked in his template.
+    // The hp value piece picked in his template.
     let described = describe(&Template::parse(JAMES), &Sampled { fight: false }, false);
     let hp = piece(&described.pieces, "%c_reset%s_italic%hp");
     assert_eq!(hp.kind, PieceKind::Value);
@@ -160,7 +159,7 @@ fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
 
 #[test]
 fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
-    // P8b: the opponent bar of Detailed under the Fight preview.
+    // The opponent bar of Detailed under the Fight preview.
     let described = describe(&Template::parse(DETAILED), &Sampled { fight: true }, true);
     let bar = piece(&described.pieces, "%{opponent_hp:bar:10}");
     assert_eq!(bar.label, "Opponent health");
@@ -177,7 +176,7 @@ fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
     );
     assert_eq!(bar.meta.as_deref(), Some("60 percent in this preview"));
     assert_eq!(segments(bar), ["60%", "Bar"]);
-    // P10: the line break in the same section.
+    // The line break in the same section.
     let nl = piece(&described.pieces, "%nl");
     assert_eq!(nl.kind, PieceKind::Nl);
     assert_eq!(nl.label, "Line break");
@@ -304,7 +303,7 @@ fn the_picker_offers_every_form_with_a_live_sample() {
         "{:?}",
         bar.sample.ansi
     );
-    // Exits read as letters and in the game's style (P6b).
+    // Exits read as letters and in the game's style.
     let exits: Vec<(&str, String)> = forms(&FieldRef::new("exits"), &values)
         .iter()
         .map(|f| (f.label, f.sample.plain.clone()))

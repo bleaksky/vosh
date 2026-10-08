@@ -2,8 +2,8 @@ import { normalizeAffectName } from '../../lib/affects';
 import { CRITICAL_TICKS, EXPIRING_TICKS, type AffectFulls } from '../../ipc/affects';
 import { HARMFUL_AFFECTS, harmfulSet } from './harmfulAffects';
 
-// View model for the Affects pane, the at a glance checklist (board
-// Affects A, timers first). Pure so the ordering rules are unit tested
+// View model for the Affects pane, the at a glance checklist, timers
+// first. Pure so the ordering rules are unit tested
 // without a pane or a server.
 //
 // Rows come out in two runs:

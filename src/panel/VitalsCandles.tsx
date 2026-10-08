@@ -3,7 +3,7 @@ import { DrawnOpponent, DrawnVitals, MarkRows, type DrawnVitalsProps } from './V
 import type { RowMarkFit } from './vitalsDrawnFit';
 import { hitFill, type HitView } from './vitalsHit';
 
-// Candles (More Vitals Styles, board 2): a taper on its side between
+// Candles: a taper on its side between
 // each label and value. The wax is the fill, 6 tall on a hairline shelf
 // that runs to your max, so the burned part still shows how long the
 // candle was. A 1 px wick and a 6 by 9 flame sit at the burning end, in

@@ -1,9 +1,9 @@
 // Gallery thumbnails for the Appearance tab. Each tile paints a tiny
 // window in five colors derived from the theme (theme/chrome), so an
 // imported theme gets a true thumbnail without anyone picking swatches.
-// The tile recipe (SettingsAppearance board): the ground in bg, a 22 px
-// panel strip in panel behind a 1 px sep line, a 6 px accent dot, and
-// three text bars in text at full, 0.6, and 0.35 opacity.
+// The tile recipe: the ground in bg, a 22 px panel strip in panel
+// behind a 1 px sep line, a 6 px accent dot, and three text bars in
+// text at full, 0.6, and 0.35 opacity.
 
 import type { Appearance } from './chrome';
 import { themeTokens, type AppTheme } from './themes';
@@ -39,9 +39,8 @@ export function themeThumb(theme: AppTheme): ThemeThumb {
   };
 }
 
-/** The themes the gallery shows first: Vosh's signature pair, then the
- *  six the approved board shows first, in its order, less Vellum, which
- *  Rubric replaced (Themes review Q14). */
+/** The themes the gallery shows first: Vosh's signature pair, then six
+ *  more in a set order, less Vellum, which Rubric replaced. */
 export const GALLERY_LEAD_IDS = [
   'triad',
   'rubric',

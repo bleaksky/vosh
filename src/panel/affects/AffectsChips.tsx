@@ -43,10 +43,10 @@ import { usePaneText } from '../paneTextSize';
 // the left toward empty as the hours run down, over the affect's own
 // cast (gaugeFraction, from the fulls the backend keeps), with a
 // hairline to show the chip's full width. One running out takes the
-// board's yellow, and red once it is almost gone, over the whole chip,
+// warn yellow, and red once it is almost gone, over the whole chip,
 // at the hours you set, two and one unless you change them. Its gauge
 // shows stronger over that while it drains. Other chips keep the
-// board's hairline ring, and a harmful one its danger ring.
+// hairline ring, and a harmful one its danger ring.
 //
 // Draining chips (fill drain) is the same pane, and only a chip running
 // out draws differently: no tint over the whole chip, a hairline for

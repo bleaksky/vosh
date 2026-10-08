@@ -90,13 +90,13 @@ describe('the Tells you send preset', () => {
   });
 });
 
-// The preset that colors a room look and the clock as the redesign
-// mockups do, and each change in the weather in a blue of its own. Every
-// line comes from fixtures/room-colors/lines.json, game text built from
-// the server's own format strings and area files, and its README says
-// where each one comes from. The patterns are Rust regex and use only
-// what JavaScript reads the same way. The Rust tests run the same
-// triggers, from preset.json, through the session's own steps.
+// The preset that colors a room look and the clock, and each change in
+// the weather in a blue of its own. Every line comes from
+// fixtures/room-colors/lines.json, game text built from the server's own
+// format strings and area files, and its README says where each one
+// comes from. The patterns are Rust regex and use only what JavaScript
+// reads the same way. The Rust tests run the same triggers, from
+// preset.json, through the session's own steps.
 describe('the Room, time and weather colors preset', () => {
   const preset = presetById('room_and_time');
   const triggers = preset ? presetTriggers(preset) : [];
@@ -548,9 +548,9 @@ describe('the sample of every preset', () => {
   });
 });
 
-// Numpad movement binds the six directions the game has (Scripts board 7,
-// Q12) and adds no trigger. It came after the defaults froze, so it
-// starts off, and Get started suggests it on no world (First Run Q18).
+// Numpad movement binds the six directions the game has and adds no
+// trigger. It came after the defaults froze, so it starts off, and Get
+// started suggests it on no world.
 describe('the Numpad movement preset', () => {
   const preset = presetById('numpad_movement');
   if (!preset) throw new Error('no numpad_movement preset');
@@ -581,9 +581,8 @@ describe('the Numpad movement preset', () => {
 
 // Get started suggests presets by the world you connect to. Six suit The
 // Forsaken Lands, whose lines they match, and none suit another game.
-// The presets step lists the five outside Chat (Q5 of the first run
-// review), and the Chat step lists Tells you send, which the Presets page
-// rings as suggested too.
+// The presets step lists the five outside Chat, and the Chat step lists
+// Tells you send, which the Presets page rings as suggested too.
 describe('the worlds each preset suits', () => {
   const suggested = PRESETS.filter((p) => p.suggest.includes('The Forsaken Lands'));
 
@@ -650,8 +649,8 @@ describe('the preset trigger names an import keeps', () => {
 });
 
 // Each preset names its colors once, by what they mark, and its templates
-// and highlights name them by key (Presets Q3, Q4). The swatch table of
-// board 1 gives each swatch, its color and the triggers it paints.
+// and highlights name them by key. The swatch table gives each swatch,
+// its color and the triggers it paints.
 describe('the colors each preset names', () => {
   // The keys `trigger` names, each once, in the order it names them.
   const keysOf = (trigger: PresetTrigger): string[] => {

@@ -2,10 +2,10 @@ import type { PluginInstallCheck } from '../../ipc/scripts';
 import { listJoin } from '../../lib/text';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 
-// Install asks once (board 4, Scripts Q6): the confirm recipe in the
-// primary tone, naming the plugin with its version and author over the
-// warning every plugin carries. Over a plugin you have, it says which
-// one goes and that the install starts off everywhere.
+// Install asks once: the confirm recipe in the primary tone, naming the
+// plugin with its version and author over the warning every plugin
+// carries. Over a plugin you have, it says which one goes and that the
+// install starts off everywhere.
 
 /** The plugin as the manifest names it, like `weather_pane 0.2.0`. */
 function named(name: string, version: string): string {

@@ -5,10 +5,10 @@ import promptCss from './prompt.css?raw';
 import settingsCss from './settings.css?raw';
 import tokensCss from './tokens.css?raw';
 
-// prompt.css draws the prompt card, the bands and the pinned dock on One
-// Window tokens only (section 8 of the prompt build spec): every color
-// comes from a token, never a literal, so each theme and appearance gives
-// the prompt its own colors.
+// prompt.css draws the prompt card, the bands and the pinned dock on
+// the shared tokens only: every color comes from a token, never a
+// literal, so each theme and appearance gives the prompt its own
+// colors.
 
 const bare = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 

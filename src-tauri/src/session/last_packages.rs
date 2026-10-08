@@ -6,7 +6,7 @@
 //! so it shows your affects and vitals at once instead of after the next
 //! packet. The session also keeps the last [`HISTORY`] `Char.Vitals`
 //! with the time each came, so the Traces tile in Settings draws your
-//! last minute (More Vitals Styles Q27). Nothing of it reaches the disk.
+//! last minute. Nothing of it reaches the disk.
 
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};

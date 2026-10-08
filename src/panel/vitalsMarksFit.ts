@@ -1,7 +1,7 @@
 import { textPx } from './paneTextSize';
 import { FOOTER_INSETS, type MeasureText } from './vitalsLedgerFit';
 
-// The Gauges and Pips vitals styles (Vitals Styles, boards 1 and 6).
+// The Gauges and Pips vitals styles.
 // Each vital is a 22 px pane row of its label, a mark and its value,
 // the marks starting together after the longest label and ending
 // together before the widest value. Gauges draws a 6 px pill that fills

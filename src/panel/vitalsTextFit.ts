@@ -2,8 +2,7 @@ import type { PromptRendered, PromptSpan } from '../ipc/promptDesign';
 import type { VitalsText } from '../ipc/vitals';
 import { parseSgrCells, type Cell } from '../terminal/sgrCells';
 
-// How the Text style fits your vitals text to the footer (Vitals Styles
-// Q8). The session renders the text at the live values and again with
+// How the Text style fits your vitals text to the footer. The session renders the text at the live values and again with
 // each vital at its max and your opponent at 100, both for the
 // footer's width in cells. Each row wraps where the full render wraps,
 // at the same spaces, so a value that loses a digit in a fight never
@@ -125,7 +124,7 @@ export function fitText(
 
 /** The lines the footer draws of `text` at `cols` cells. `fightOnly`
  *  keeps only the rows that read your fight, for Hide vitals while your
- *  prompt is pinned (Q9), with everything else you wrote on them. With
+ *  prompt is pinned, with everything else you wrote on them. With
  *  `pieces` each cell carries the piece that drew it. */
 export function vitalsTextLines(
   text: VitalsText,

@@ -6,11 +6,10 @@ import { closePresetFix, presetFixStore } from '../../stores/presetFixStore';
 const keepCaret = (event: MouseEvent) => event.preventDefault();
 
 // The notice a preset fix leaves when it changed a row you edited, or
-// took away a trigger you edited (Presets board 4). It sits on the update
-// notice recipe in the warn tone and stays until you close it. Close
-// leaves the marks in Settings. Show opens Settings on the trigger, or on
-// the preset's card for a swatch or a trigger the preset no longer
-// builds.
+// took away a trigger you edited. It sits on the update notice recipe
+// in the warn tone and stays until you close it. Close leaves the marks
+// in Settings. Show opens Settings on the trigger, or on the preset's
+// card for a swatch or a trigger the preset no longer builds.
 export function PresetFixNotice() {
   const notice = useSyncExternalStore(
     presetFixStore.subscribe,

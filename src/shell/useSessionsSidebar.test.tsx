@@ -3,12 +3,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 import type { SessionsSidebar } from './useSessionsSidebar';
 
-// Whether the main window shows the sessions sidebar, board 8. It shows
-// with two or more sessions, folds in a window too narrow for it or
-// after the toggle hides it, and comes back as the window widens. In a
-// narrow window the toggle slides it over the terminal until you press
-// it again or press Esc (Sessions toggle T5). Its width stays in
-// localStorage, held between 180 and 320.
+// Whether the main window shows the sessions sidebar. It shows with two
+// or more sessions, folds in a window too narrow for it or after the
+// toggle hides it, and comes back as the window widens. In a narrow
+// window the toggle slides it over the terminal until you press it
+// again or press Esc. Its width stays in localStorage, held between 180
+// and 320.
 
 const doc = new FakeDocument();
 const resize = new Set<() => void>();

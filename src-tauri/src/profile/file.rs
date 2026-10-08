@@ -1,4 +1,4 @@
-//! Per-profile TOML serialization. Phase 9.
+//! Per-profile TOML serialization.
 //!
 //! [`ProfileConfig`] is a serde-friendly snapshot of the parts of a
 //! [`crate::profile::live::Profile`] that survive across app launches.
@@ -88,21 +88,21 @@ pub(crate) struct ProfileConfig {
         with = "vosh_prompt::config::file_table"
     )]
     pub prompt: Option<vosh_prompt::PromptConfig>,
-    /// What each alert preset does, by preset id, the `[alerts]` table
-    /// of Alerts Q5. Whether a preset rings is in `ui.enabled_presets`,
+    /// What each alert preset does, by preset id, the `[alerts]` table.
+    /// Whether a preset rings is in `ui.enabled_presets`,
     /// as for any preset. Left out while it holds none, and a build that
-    /// knows no alert skips it (D14).
+    /// knows no alert skips it, so a rollback still loads the file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub alerts: BTreeMap<String, AlertParts>,
-    /// Your edits to the presets, the `[preset_edits]` table of the
-    /// Presets review (Q1, Q2), beside `ui.enabled_presets` as `[alerts]`
-    /// is. Left out while it holds none, and a build that knows no edit
+    /// Your edits to the presets, the `[preset_edits]` table, beside
+    /// `ui.enabled_presets` as `[alerts]` is. Left out while it holds
+    /// none, and a build that knows no edit
     /// skips it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub preset_edits: PresetEdits,
-    /// Vosh dials again after the link drops while you play (Alerts Q13
-    /// and Q14). On for every profile, so the file says
-    /// `reconnect = false` only once you turn it off.
+    /// Vosh dials again after the link drops while you play. On for
+    /// every profile, so the file says `reconnect = false` only once
+    /// you turn it off.
     #[serde(default, skip_serializing_if = "OnSwitch::is_on")]
     pub reconnect: OnSwitch,
 }
@@ -156,10 +156,9 @@ impl GroupFolders {
 /// target triggers under `room_triggers`. Builds up to 0.8.0 read
 /// `triggers` with `line` and `prompt` as the only targets, and a `room`
 /// or a `room_target` there would fail the whole file, so a rollback
-/// would start on defaults (D14).
-/// They skip the key they do not know, and a load here puts the two
-/// lists back together, so the field holds every trigger in memory. Use
-/// it on a `Vec<Trigger>` field with
+/// would start on defaults. They skip the key they do not know, and a
+/// load here puts the two lists back together, so the field holds every
+/// trigger in memory. Use it on a `Vec<Trigger>` field with
 /// `#[serde(flatten, with = "trigger_lists")]`.
 pub(crate) mod trigger_lists {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};

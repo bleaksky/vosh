@@ -14,14 +14,14 @@ import { doneByFacts, onForsakenLands, type GetStartedFacts, type StepId } from 
 
 // Where Get started stands in the main window. profiles.toml keeps the
 // install's place in it, read with getStartedGet as the window mounts.
-// A missing table keeps the card shut, and at_launch opens it (Q1, Q12).
+// A missing table keeps the card shut, and at_launch opens it.
 // The world follows the saved target, so the steps match where Connect
-// dials (Q7).
+// dials.
 //
 // The card shows its list or a step's page, folds to the notice in the
 // corner and comes back where you left it. Close or Done ends it, which
 // clears at_launch, and the Help menu, the palette and Help open it on
-// its list again (Q13). The first connect clears at_launch and adds
+// its list again. The first connect clears at_launch and adds
 // `connect` to done, and each later step adds its id. Steps finish only
 // once Get started has a place to keep them, so a player who never
 // opened it leaves profiles.toml as it is.
@@ -95,7 +95,7 @@ export function unfold(): void {
 }
 
 /** End Get started, from Close or Done, on the card or the notice. It
- *  no longer opens at launch, and a toast says where it lives (board 1). */
+ *  no longer opens at launch, and a toast says where it lives. */
 export function end(): void {
   const { saved } = store.get();
   update({ shows: 'shut', page: null });

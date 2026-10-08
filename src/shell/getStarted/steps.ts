@@ -3,11 +3,10 @@ import { PRESETS, type Preset } from '../../automation/presets';
 import type { ConnectionTarget } from '../../ipc/session';
 import { knownWorld } from '../../lib/knownWorlds';
 
-// The steps of Get started, board 2 of the First Run review. The list
-// follows the world you connect to (Q6, Q7). The Forsaken Lands gets
-// five steps, the last two under After you log in. Any other game gets
-// two, since the presets and the Affects, Chat and Group panes wait on
-// what only Aabahran sends.
+// The steps of Get started. The list follows the world you connect to.
+// The Forsaken Lands gets five steps, the last two under After you log
+// in. Any other game gets two, since the presets and the Affects, Chat
+// and Group panes wait on what only Aabahran sends.
 //
 // A step is done once its rule holds, and Get started keeps its id from
 // then on. Connect is done when the game names you in Char.Status or
@@ -124,7 +123,7 @@ export function doneByFacts(host: string, facts: GetStartedFacts): StepId[] {
   return done;
 }
 
-/** What a step holds now, for its meta in the summary of board 5, or
+/** What a step holds now, for its meta in the summary, or
  *  null while it holds nothing. */
 export function stepMeta(id: StepId, host: string, facts: GetStartedFacts): string | null {
   switch (id) {

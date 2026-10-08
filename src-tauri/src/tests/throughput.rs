@@ -1,11 +1,11 @@
-//! P2 of the perf set, output throughput. A captured session goes
+//! Output throughput. A captured session goes
 //! through the real session loop to the native grid as fast as the
 //! socket takes it, and the test reports how long the grid took to show
 //! all of it.
 //!
 //! The session is the fake Aabahran's greeting and the synthetic reads in
-//! `fixtures/prompt/aabahran/wire`, which D37 keeps until a socat capture
-//! takes their place. It plays `login-new` once, then [`CYCLES`] rounds
+//! `fixtures/prompt/aabahran/wire`, which stay synthetic. It plays
+//! `login-new` once, then [`CYCLES`] rounds
 //! of `quiet`, `fight-tank` and `lament-new`, each round closed by the
 //! numbered pulse the fake game writes for `pulses`. Nobody types, so
 //! each answer starts on the row of the prompt before it. The game

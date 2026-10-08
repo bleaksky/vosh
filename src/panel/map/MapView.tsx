@@ -312,8 +312,8 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // A pane's drawing sits on the panel's own color with no box
-    // around it, as the approved Map pane shows: rooms, corridors, and
-    // doors, nothing behind them.
+    // around it, so the pane shows rooms, corridors, and doors with
+    // nothing behind them.
     const ground = MAP_COLORS.panel;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);

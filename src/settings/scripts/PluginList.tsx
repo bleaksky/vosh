@@ -20,16 +20,16 @@ import { PluginMenu } from './PluginMenu';
 import { droppedPackage, zipPackage } from './pluginPackage';
 import { switchPlugin } from './switchPlugin';
 
-// The Plugins section of Scripts (boards 2 and 4). One row for each
-// plugin in your plugins folder, its name in the MUD font over its
-// description, with Stopped while Vosh holds it off, the switch that
-// turns it on or off for the profile you play, and its more button. A
-// press on the row opens the plugin's page, as a profile row does in
-// Characters, and New plugin asks for the name of a new one. A plugin
-// whose folder you named by hand outside the rule still loads, so its
-// row shows too and says how to make it one the page can open. Its
-// switch only turns it off, and its menu stays shut, since every other
-// Scripts command holds a plugin name to the rule.
+// The Plugins section of Scripts. One row for each plugin in your
+// plugins folder, its name in the MUD font over its description, with
+// Stopped while Vosh holds it off, the switch that turns it on or off
+// for the profile you play, and its more button. A press on the row
+// opens the plugin's page, as a profile row does in Characters, and New
+// plugin asks for the name of a new one. A plugin whose folder you
+// named by hand outside the rule still loads, so its row shows too and
+// says how to make it one the page can open. Its switch only turns it
+// off, and its menu stays shut, since every other Scripts command holds
+// a plugin name to the rule.
 //
 // Install takes a .zip you pick or a folder you drop anywhere on the
 // list page, and asks once. Each row's menu reloads, shows, exports and

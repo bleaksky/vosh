@@ -1,10 +1,10 @@
-/* The snoop split at the top of the terminal column (Snoop SN1, SN2, SN3
-   and SN7, boards 01 to 04). A 32 strip with the eye, a tab for each
-   snooped player, Stop or Close and the more button, then the snoop's
-   own terminal in the well's insets, closed by the pane handle's 1 px
-   line. It paints the terminal's ground, so it stays opaque while the
-   native surface draws your terminal under the page. It sits over the
-   terminal area, so the line's grab area reaches past its edge. */
+/* The snoop split at the top of the terminal column. A 32 strip with
+   the eye, a tab for each snooped player, Stop or Close and the more
+   button, then the snoop's own terminal in the well's insets, closed by
+   the pane handle's 1 px line. It paints the terminal's ground, so it
+   stays opaque while the native surface draws your terminal under the
+   page. It sits over the terminal area, so the line's grab area reaches
+   past its edge. */
 
 .snoop {
   position: relative;
@@ -251,7 +251,7 @@
   visibility: hidden;
 }
 
-/* The snoop window, board 06 (SN1). The strip sits in the 32 band beside
+/* The snoop window. The strip sits in the 32 band beside
    the traffic lights, as the Settings header sits there, and the band
    drags the window. The tabs' terminals start 17 under it. On Windows
    and Linux the frameless window draws its own edge and its controls at

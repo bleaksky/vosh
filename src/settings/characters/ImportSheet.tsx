@@ -17,15 +17,15 @@ import {
   type ImportFile,
 } from './profileImport';
 
-// The import sheet (board 5 of the Scripts design, Scripts Q9 and Q10).
-// It takes the detail column while you decide where a profile export
-// goes. New profile is the default and starts from the name in the file
-// name. Replace a profile swaps in a select of your profiles and keeps
-// that profile's world and characters, so the world section leaves.
-// In this file says what the file holds, with the Lua warning when a
-// trigger or an alias runs Lua. Each character the file names gets the
-// login switch: one no profile has starts on, and one another profile
-// has starts off, with a note on what turning it on moves.
+// The import sheet. It takes the detail column while you decide where a
+// profile export goes. New profile is the default and starts from the
+// name in the file name. Replace a profile swaps in a select of your
+// profiles and keeps that profile's world and characters, so the world
+// section leaves. In this file says what the file holds, with the Lua
+// warning when a trigger or an alias runs Lua. Each character the file
+// names gets the login switch: one no profile has starts on, and one
+// another profile has starts off, with a note on what turning it on
+// moves.
 
 interface Props {
   file: ImportFile;

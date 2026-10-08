@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { isMacPlatform } from '../lib/shortcuts';
 
 // Whether you hold the key Mod means, ⌘ on macOS and Ctrl elsewhere,
-// which numbers the sessions sidebar's rows (board 8). It shows once the
+// which numbers the sessions sidebar's rows. It shows once the
 // key has been held alone for a moment, so a quick shortcut such as ⌘C
 // never flashes the numbers, and it stays until you let go, so you can
 // read the next number while you press one.

@@ -2,9 +2,9 @@ import { codePieces } from './helpCode';
 import { classifyInline, inlinePieces } from './helpInline';
 import { HELP_TOPICS, parseHelpBody, searchTopics, type HelpTopic } from './helpContent';
 
-// Finding your way in the Help window (the approved Help boards): the
-// search ranks topics and counts its matches, a long reference list
-// gets an outline, and every link into Help names a topic or a search.
+// Finding your way in the Help window: the search ranks topics and
+// counts its matches, a long reference list gets an outline, and every
+// link into Help names a topic or a search.
 
 /** The topics of one section, in catalog order. */
 export function sectionTopics(section: string, topics: HelpTopic[] = HELP_TOPICS): HelpTopic[] {

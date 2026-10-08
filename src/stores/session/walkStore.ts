@@ -4,9 +4,9 @@ import { createSessionStore } from '../sessionStore';
 
 // Where the selected session's walk stands, for the map's Walking chip
 // and Stopped toast, with the route a click on the map last sent, so the
-// map knows which path to light and which steps are left (Scripts and
-// Panels review, board 9). The walker in Rust sends session://walk on
-// each change, and each session keeps its own.
+// map knows which path to light and which steps are left. The walker in
+// Rust sends session://walk on each change, and each session keeps its
+// own.
 //
 // The route stays while the walk goes on and after it stops, since the
 // Stopped toast dashes the steps left, and goes when the walk arrives,

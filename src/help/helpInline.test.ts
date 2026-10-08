@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HELP_TOPICS, parseHelpBody } from './helpContent';
 import { classifyInline, inlinePieces, keyGlyph, keyParts } from './helpInline';
 
-// Help draws a backticked span three ways (G5): a label you see in
+// Help draws a backticked span three ways: a label you see in
 // Vosh in SF 600, a key as keycaps, and MUD text or a code as a mono
 // chip.
 

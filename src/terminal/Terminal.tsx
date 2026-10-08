@@ -134,7 +134,7 @@ interface Props {
   /// (src/terminal/xterm/xtermBlink.ts) while WebGL draws the pane. Off, or on the
   /// DOM renderer, it draws it steady.
   blinkText?: boolean;
-  /// Scrollback size, the lines xterm keeps above the screen (D40).
+  /// Scrollback size, the lines xterm keeps above the screen.
   scrollback?: number;
 }
 

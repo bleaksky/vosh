@@ -588,7 +588,8 @@ mod tests {
     }
 
     /// An export carries the list of presets that are on, your edits to
-    /// them and the preset triggers as installed (Presets Q11).
+    /// them and the preset triggers as installed, as an export of an
+    /// open profile does.
     #[tokio::test]
     async fn an_export_carries_the_preset_edits_in_per_profile_mode() {
         use crate::loadouts::preset_edits::lilac_line;

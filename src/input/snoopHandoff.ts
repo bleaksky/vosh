@@ -1,6 +1,6 @@
-// What a key pressed in a snoop terminal does (Snoop SN7). Esc or any
-// key that types puts the caret back on the command line, so what you
-// type always goes to your own character. A key that types lands there
+// What a key pressed in a snoop terminal does. Esc or any key that
+// types puts the caret back on the command line, so what you type
+// always goes to your own character. A key that types lands there
 // too: the caret moves while the key is down, and the browser types it
 // into the command line. Keys with Cmd or Ctrl stay, so Cmd J, Cmd F
 // and Cmd C still reach the snoop, and so do the keys that type

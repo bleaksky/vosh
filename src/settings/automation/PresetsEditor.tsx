@@ -88,9 +88,9 @@ function suggestedWorld(): string | undefined {
  *  edit Reset to preset took back to the preset's in the trigger store,
  *  and the parts of each alert preset you changed, then runs the preset plan for the profile, which turns on and
  *  off only the presets you flipped here, over the list as the profile
- *  holds it then, through presets_enabled_set (First Run Q17), and
- *  builds the presets in your colors. The page follows that command and
- *  your preset edits as the trigger list follows its store. */
+ *  holds it then, through presets_enabled_set, and builds the presets
+ *  in your colors. The page follows that command and your preset edits
+ *  as the trigger list follows its store. */
 export function PresetsEditor({
   config,
   setConfig,
@@ -226,11 +226,11 @@ export function PresetsEditor({
   );
 }
 
-/** The card of a preset of the library, as Presets board 1 draws it:
- *  the description, Looks like, Colors, Suggested, Adds and Your changes,
- *  with Reset to preset under it while it holds your edits. Its links
- *  open Triggers while the preset is on, and read as plain text while it
- *  is off, since Triggers then holds none of its triggers. */
+/** The card of a preset of the library: the description, Looks like,
+ *  Colors, Suggested, Adds and Your changes, with Reset to preset under
+ *  it while it holds your edits. Its links open Triggers while the preset
+ *  is on, and read as plain text while it is off, since Triggers then
+ *  holds none of its triggers. */
 export function PresetDetail({
   value: t,
   update,
@@ -300,7 +300,7 @@ export function PresetDetail({
 }
 
 /** The warn ring of a preset a fix changed under your edits, with the
- *  note a reader hears, on or off (board 4). */
+ *  note a reader hears, on or off. */
 function fixWarn(preset: Preset | undefined, edit: PresetEdit | undefined): { warn?: string } {
   const count = preset ? flagCount(preset, edit) : 0;
   if (count === 0) return {};
@@ -356,13 +356,13 @@ function isPresetDefault(alert: AlertParts): boolean {
   return serializeValue(alert) === serializeValue(PRESET_ALERT_DEFAULT);
 }
 
-/** The card of an alert preset, as board 2 draws it: its toggle, what
- *  it listens to, the Alert row, the rows of the parts that are pressed
- *  and the switch. Banner shows waits for a preset whose banner can
- *  carry words. A preset always holds its parts, so releasing every one
- *  keeps the table and the preset rings nothing. Turning on a preset
- *  whose Banner is on asks first, as pressing Banner does (board 3), and
- *  while the system turns banners off the card opens with a note. */
+/** The card of an alert preset: its toggle, what it listens to, the
+ *  Alert row, the rows of the parts that are pressed and the switch.
+ *  Banner shows waits for a preset whose banner can carry words. A
+ *  preset always holds its parts, so releasing every one keeps the table
+ *  and the preset rings nothing. Turning on a preset whose Banner is on
+ *  asks first, as pressing Banner does, and while the system turns
+ *  banners off the card opens with a note. */
 export function AlertPresetDetail({
   value: t,
   update,
@@ -420,12 +420,12 @@ export function AlertPresetDetail({
   );
 }
 
-/** The keys a macro preset binds, as Scripts board 7 draws them, each
- *  on a keycap before the command it sends, in the preset's order. The
- *  card names the numpad, so a numpad key's cap holds its digit alone. A
- *  key one of your macros uses stays yours, so its pair wears the warn
- *  ring and a note closes the card. The note shows with the preset on or
- *  off, since it is true either way. */
+/** The keys a macro preset binds, each on a keycap before the command it
+ *  sends, in the preset's order. The card names the numpad, so a numpad
+ *  key's cap holds its digit alone. A key one of your macros uses stays
+ *  yours, so its pair wears the warn ring and a note closes the card.
+ *  The note shows with the preset on or off, since it is true either
+ *  way. */
 function PresetKeys({ preset }: { preset: Preset }) {
   const kept = new Set(keysYourMacrosKeep(preset, useMacroList()));
   const binds = preset.macros ?? [];

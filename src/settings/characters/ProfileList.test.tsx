@@ -4,9 +4,9 @@ import type { ProfilesList } from '../../ipc/profiles';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
 import { ProfileList } from './ProfileList';
 
-// Export to Downloads from a profile's more menu (Scripts Q10). A
-// profile with characters on its world asks which ones the file names,
-// all off to start, and one with none exports at once.
+// Export to Downloads from a profile's more menu. A profile with
+// characters on its world asks which ones the file names, all off to
+// start, and one with none exports at once.
 
 const calls = vi.hoisted(() => ({
   invoked: [] as { cmd: string; args: unknown }[],
@@ -58,7 +58,7 @@ vi.mock('../../ui/ConfirmDialog', () => ({
 
 const WORLD = 'play.theforsakenlands.com';
 
-// Board 5's list: Default on The Forsaken Lands with no character, and
+// The list: Default on The Forsaken Lands with no character, and
 // Healer with Orla. Maren names a character but has no world.
 const LIST: ProfilesList = {
   active: 'default',

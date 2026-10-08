@@ -3,9 +3,9 @@ import type { ImportPreview, ImportResult } from '../../ipc/characters';
 import type { ProfileEntry } from '../../ipc/profiles';
 import { claimNote, importedSentence, importSummary, type SummaryRow } from './profileImport';
 
-// What the import sheet says about a profile export (board 5 of the
-// Scripts design), from the preview Rust gives for the full golden
-// export (src-tauri/src/import/vosh.rs) and the results it returns.
+// What the import sheet says about a profile export, from the preview
+// Rust gives for the full golden export (src-tauri/src/import/vosh.rs)
+// and the results it returns.
 
 const WORLD = 'play.theforsakenlands.com';
 

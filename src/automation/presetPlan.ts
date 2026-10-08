@@ -1,8 +1,8 @@
 // The preset triggers and macros of one profile, built in the page from
 // presets.ts with your edits laid over them, and installed for that
-// profile (Presets Q10). It runs each time a profile opens, at launch, on
-// a switch and when #profile load or an import replaces the config, so a
-// profile never runs another profile's edits or a stale copy.
+// profile. It runs each time a profile opens, at launch, on a switch and
+// when #profile load or an import replaces the config, so a profile never
+// runs another profile's edits or a stale copy.
 
 import { presetLaunchPlan } from './automationRecords';
 import { buildPreset, type RowRef } from './presetEdits';

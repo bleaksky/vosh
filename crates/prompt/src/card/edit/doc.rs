@@ -455,7 +455,7 @@ impl Doc {
 
     fn set_when(&mut self, index: usize, when: When) -> Result<(), EditError> {
         // A line break shows nothing, but it starts a row only when it
-        // draws, so it takes When as a part that shows does (P10). So does
+        // draws, so it takes When as a part that shows does. So does
         // a push to the right edge.
         let piece = self.piece(index)?;
         if !piece.shows() && !matches!(piece.kind, PieceKind::Nl | PieceKind::Right) {

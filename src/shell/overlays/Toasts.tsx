@@ -41,12 +41,12 @@ function startCopyToasts() {
 
 // Toast stack at the bottom right of the terminal column, 16 in from
 // its right edge and 16 above the input band. Each toast is a floating
-// card (radius 16, the SPEC 3 recipe) with a leading status mark: a
-// check in the success color, or a dot in danger for errors and in the
-// accent for info. The store owns the dismiss timers, and clicking a
-// toast dismisses it early. It works inside the positioned terminal
-// area or as a direct child of the shell grid, where overlays.css pins
-// it to the terminal cell.
+// card (radius 16, the floating card recipe) with a leading status
+// mark: a check in the success color, or a dot in danger for errors and
+// in the accent for info. The store owns the dismiss timers, and
+// clicking a toast dismisses it early. It works inside the positioned
+// terminal area or as a direct child of the shell grid, where
+// overlays.css pins it to the terminal cell.
 //
 // A toast with a button, such as Undo, is a card like the update
 // notice instead, since a button cannot hold another. The timer still

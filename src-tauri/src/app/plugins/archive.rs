@@ -1,5 +1,5 @@
-//! A plugin as it travels from one player to another (Q6 of the Scripts
-//! review). Export to Downloads writes a plugin's folder as one .zip, and
+//! A plugin as it travels from one player to another. Export to Downloads
+//! writes a plugin's folder as one .zip, and
 //! Install takes a .zip or a folder you drop on the window.
 //!
 //! Install reads all of it here, and nothing lands on disk until every
@@ -72,8 +72,7 @@ struct Entry {
     bytes: Option<Vec<u8>>,
 }
 
-// What Install says when it refuses `file`, in the words of board 4 of
-// the Scripts design.
+// What Install says when it refuses `file`.
 
 fn no_manifest(file: &str) -> String {
     format!("Vosh found no manifest.toml in {file}.")
@@ -400,7 +399,7 @@ mod tests {
 
     use super::*;
 
-    /// `weather_pane`'s manifest as board 4 of the Scripts design shows it.
+    /// The manifest of `weather_pane`, a sample plugin with a pane.
     const WEATHER_MANIFEST: &str = "[plugin]
 name = \"weather_pane\"
 version = \"0.2.0\"

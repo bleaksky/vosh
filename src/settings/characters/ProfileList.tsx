@@ -49,19 +49,18 @@ import { Button, Field, IconButton, MoreIcon, PlusIcon, VisuallyHidden, cx } fro
 import { ExportDialog } from './ExportDialog';
 import type { ImportFile } from './profileImport';
 
-// The profile list on the Characters board: one 38 px row per profile
-// in index order, every profile a session plays marked by an accent dot
-// (board 7 of the Sessions review), its world as quiet meta, and New
-// profile under it. Selecting a row only shows that profile. It never
-// switches a session. Each row has a more menu (SPEC 7) that switches
-// the selected session, renames, duplicates, exports, and deletes. A
-// quiet line under the list says what the last action did when that is
-// not plain to see, and otherwise, with two or more sessions open,
-// which sessions play each profile. Export to Downloads first asks
-// which characters the file names, when the profile has any. Import…
-// beside New profile reads a Vosh profile export you pick (board 5 of
-// the Scripts design), and the page shows its sheet. A file that is no
-// export reads as such on the line under the list.
+// The profile list on the Characters page: one 38 px row per profile
+// in index order, every profile a session plays marked by an accent
+// dot, its world as quiet meta, and New profile under it. Selecting a
+// row only shows that profile. It never switches a session. Each row
+// has a more menu that switches the selected session, renames,
+// duplicates, exports, and deletes. A quiet line under the list says
+// what the last action did when that is not plain to see, and
+// otherwise, with two or more sessions open, which sessions play each
+// profile. Export to Downloads first asks which characters the file
+// names, when the profile has any. Import… beside New profile reads a
+// Vosh profile export you pick, and the page shows its sheet. A file
+// that is no export reads as such on the line under the list.
 
 interface Props {
   list: ProfilesList;
@@ -278,9 +277,8 @@ export function ProfileList({
   };
 
   // Read the file you picked. A refusal, like a file that is no
-  // export, reads on the line under the list, as board 5 draws it. A
-  // file the window cannot read gets the sentence Vosh gives one it
-  // cannot parse.
+  // export, reads on the line under the list. A file the window cannot
+  // read gets the sentence Vosh gives one it cannot parse.
   const importFile = async (file: File) => {
     onError(null);
     let text: string;
@@ -305,7 +303,7 @@ export function ProfileList({
     });
 
   // A profile with characters on its world asks which ones the file
-  // names (Scripts Q10). One with none exports at once.
+  // names. One with none exports at once.
   const exportProfile = (name: string) => {
     const characters = exportCharacters(list.profiles.find((p) => p.name === name));
     if (characters.length === 0) saveExport(name, []);

@@ -2,13 +2,12 @@ import type { SnoopTab } from '../ipc/snoop';
 import { shortcutLabel } from '../lib/shortcuts';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
 
-// The snoop split's more menu, board 02 of the Snoop review (SN2): the
-// pane menu recipe, 232 wide, hanging 6 under the more button with its
-// right edge on the button's. Stop snooping the player in front, or
-// Close an ended tab, then Stop every snoop, which sends `snoop stop`
-// for the game to read as stop all. After a rule, Find in the tab in
-// front, Open in a window and Fold, or Unfold while folded. The snoop
-// window's menu stops at Find (board 06).
+// The snoop split's more menu: the pane menu recipe, 232 wide, hanging
+// 6 under the more button with its right edge on the button's. Stop
+// snooping the player in front, or Close an ended tab, then Stop every
+// snoop, which sends `snoop stop` for the game to read as stop all.
+// After a rule, Find in the tab in front, Open in a window and Fold, or
+// Unfold while folded. The snoop window's menu stops at Find.
 
 /** What a row of the menu does. */
 export type SnoopPick = 'stop' | 'stop-all' | 'find' | 'window' | 'fold';

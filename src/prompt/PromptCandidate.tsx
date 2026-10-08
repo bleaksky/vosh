@@ -14,8 +14,8 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon, IconButton } from '../ui';
 import { CellLine } from './PromptCells';
 
 // The parts the capture steps share: the candidate box that shows a
-// prompt as the game sent it with each value marked and named under it
-// (P3, P3b, P3c), and the match line with the stepper beside it.
+// prompt as the game sent it with each value marked and named under it,
+// and the match line with the stepper beside it.
 
 interface CandidateBoxProps {
   read: PromptCheckRead;
@@ -65,10 +65,10 @@ interface StepperProps {
   onStep: (index: number) => void;
 }
 
-/** A2's stepper: which prompt the box shows, and the way to a newer or
- *  an older one. Like the find bar it comes from, it goes round from the
- *  newest to the oldest. It walks the box only and never scrolls the
- *  terminal (D19). */
+/** The stepper: which prompt the box shows, and the way to a newer or
+ *  an older one. Like the find bar it comes from, it goes round from
+ *  the newest to the oldest. It walks the box only and never scrolls
+ *  the terminal, so the text stays where you left it. */
 export function Stepper({ index, count, onStep }: StepperProps) {
   return (
     <div className="pc-stepper">
@@ -93,7 +93,7 @@ interface MatchRowProps {
   check: PromptCaptureCheck | null;
   index: number;
   onStep: (index: number) => void;
-  /** A warning that takes the match line's place, as on P3b. */
+  /** A warning that takes the match line's place, as when codes run together. */
   warning?: string | null;
 }
 

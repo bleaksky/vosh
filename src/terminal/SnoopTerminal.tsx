@@ -21,7 +21,7 @@ import { remeasureWhenLoaded } from './terminalFont';
 import { xtermThemeFor } from './terminalTheme';
 import { WordWrapper } from './wordWrap';
 
-// One snooped player's screen (Snoop SN3), a small xterm for each tab of
+// One snooped player's screen, a small xterm for each tab of
 // the snoop split. It draws in your terminal's face, size and line
 // height and in the theme's colors, keeps the game's ANSI, and word
 // wraps at its width as your terminal does. It keeps 5,000 lines.

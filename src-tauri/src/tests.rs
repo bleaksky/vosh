@@ -2,6 +2,7 @@
 
 mod alerts;
 mod broadcast;
+mod bundle;
 mod config_golden;
 mod echo;
 mod fake_mud;
@@ -16,6 +17,7 @@ mod sessions;
 mod snoop;
 mod throughput;
 mod upgrade_order;
+mod version;
 mod vitals_text;
 pub(crate) mod walk;
 mod wizard_roundtrip;

@@ -1,19 +1,18 @@
 //! The writer, the session side of the writing card. It follows where
 //! the game takes your input, its prompt, a line editor or its pager,
-//! and runs the one job the card asks of the game at a time (Description
-//! Editor Q5, Note Editor Q13).
+//! and runs the one job the card asks of the game at a time, so no
+//! command of the card lands in the middle of another.
 //!
 //! It also notices when a line you typed opened the game's editor on a
 //! text it can name, and offers the card while nothing else went out
-//! after that line (Description Editor Q3, Note Editor Q3). Until the
-//! game's prompt returns, the page sends what you type there raw and
-//! counts it against the text's width.
+//! after that line. Until the game's prompt returns, the page sends
+//! what you type there raw and counts it against the text's width.
 //!
 //! While a job runs, every other send of the session waits: what
 //! triggers, timers, Lua and `#walk` send stays in the stream's hold and
 //! goes once the job ends. A line you type goes at once, as `./` and
 //! your line while the editor is open, which the editor runs as a game
-//! command (`olc.c:3617`), and as typed at the game's prompt (Q6).
+//! command (`olc.c:3617`), and as typed at the game's prompt.
 //!
 //! The game's prompt tick comes as GMCP, and where it lands beside the
 //! text of its pulse depends on the server. Aabahran writes GMCP straight

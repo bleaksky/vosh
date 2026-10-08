@@ -3,8 +3,8 @@ import { resolveThemeTerminalColors } from '../../theme/themes';
 import { PromptSection } from '../input/InputPrompt';
 import type { SettingsPageProps } from '../pageTypes';
 
-// Prompt (Settings layout, answered October 8): the Prompt section,
-// moved whole from Input with its anchors (Q3). Your game's prompt,
+// Prompt: the Prompt section, moved whole from Input with its anchors
+// so old links still land. Your game's prompt,
 // Draw your own prompt, Where your prompt shows and the preview, saved
 // for the profile Settings shows.
 

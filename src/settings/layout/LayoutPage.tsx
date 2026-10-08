@@ -46,18 +46,17 @@ import {
   type SelectOption,
 } from '../../ui';
 
-// Settings, Layout (SettingsLayout.dc.html). How the window is
-// arranged. The Panel card edits the panel of the character you are
-// playing, named in its heading, and follows a profile switch live.
-// Show the panel and Width write that profile's pane layout through
-// the panel layout store, so the main window follows at once. What
-// each character keeps, its panes and tracked affects, stays in
-// Characters, which the last Panel row opens. Affects, Split terminal,
-// and Status line save with the rest of the config. Each profile keeps
-// its own, but they say how a pane draws, not what a character tracks,
-// so they sit here beside the Tick counts rows that work the same way.
-// Vitals left for a tab of its own (Settings layout Q4), which draws
-// VitalsSection below and Customize vitals.
+// Settings, Layout. How the window is arranged. The Panel card edits
+// the panel of the character you are playing, named in its heading, and
+// follows a profile switch live. Show the panel and Width write that
+// profile's pane layout through the panel layout store, so the main
+// window follows at once. What each character keeps, its panes and
+// tracked affects, stays in Characters, which the last Panel row opens.
+// Affects, Split terminal, and Status line save with the rest of the
+// config. Each profile keeps its own, but they say how a pane draws, not
+// what a character tracks, so they sit here beside the Tick counts rows
+// that work the same way. Vitals has a tab of its own, which draws
+// VitalsSection and Customize vitals.
 
 // The keycaps read the shortcut table the menu bar and the palette
 // read, so every place shows the same keys.
@@ -219,16 +218,15 @@ const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKER
     : { value: id, name: AFFECTS_MARKER_LABELS[id], label: <MarkerPicture marker={id} /> },
 );
 
-/** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
- *  three approved boards or Draining chips, the mark beside each
- *  tracked affect, the wash behind what to recast, and the hours at
- *  which an affect runs out and is almost gone. Both chip styles show
- *  the state on each chip and always mark what to recast, so Marker
- *  and Tint go quiet while one is chosen and keep your picks for the
- *  other two. The hours apply to every style. Almost gone never goes
- *  over running out. Its field stops at running out, and running out
- *  set below it takes it down too, the way the backend coerces a hand
- *  edit. Exported for its test. */
+/** How the Affects pane draws: one of the three styles or Draining
+ *  chips, the mark beside each tracked affect, the wash behind what to
+ *  recast, and the hours at which an affect runs out and is almost
+ *  gone. Both chip styles show the state on each chip and always mark
+ *  what to recast, so Marker and Tint go quiet while one is chosen and
+ *  keep your picks for the other two. The hours apply to every style.
+ *  Almost gone never goes over running out. Its field stops at running
+ *  out, and running out set below it takes it down too, the way the
+ *  backend coerces a hand edit. Exported for its test. */
 export function AffectsSection({
   config,
   update,
@@ -332,8 +330,7 @@ const PLACES: readonly SegmentedOption<VitalsPlace>[] = [
   { value: 'status', label: 'Status line' },
 ];
 
-/** Your vitals (VitalsOptions.dc.html, then board 2 of the Vitals
- *  Styles review). The Style gallery draws each style with your numbers
+/** Your vitals. The Style gallery draws each style with your numbers
  *  and picks one, and Show your vitals in moves them to the status line.
  *  Each default is the panel you had before these rows, so nothing
  *  changes until you pick something, except the pinned switch. It starts

@@ -1,9 +1,9 @@
 //! What the session pushes to a footer or the status line that draws
-//! your vitals text (Q7 to Q9 of the Vitals Styles review): the text at
+//! your vitals text: the text at
 //! the live values, the same text at full values, which a narrow panel
-//! lays out from so a fight never moves a line (Q8), and for each row
+//! lays out from so a fight never moves a line, and for each row
 //! whether it reads a fight, which keeps the row under Hide vitals while
-//! your prompt is pinned (Q9).
+//! your prompt is pinned.
 
 use std::collections::BTreeMap;
 
@@ -40,7 +40,7 @@ pub struct VitalsText {
     /// For each live row, whether it reads one of [`FIGHT_FIELDS`].
     pub fight: Vec<bool>,
     /// The pieces that are a `%{right}`, so the footer finds in the spans
-    /// where a row pushes and keeps what follows whole (Q8).
+    /// where a row pushes and keeps what follows whole.
     pub right: Vec<usize>,
 }
 

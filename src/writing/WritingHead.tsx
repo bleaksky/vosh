@@ -19,7 +19,7 @@ import type { DraftRow } from './cardMenus';
 import { draftItem, newKindRows } from './kindsMenuRows';
 import { SWITCH_LABELS } from './kinds';
 
-// The writing card's header (Note Editor board 1): the kind you write
+// The writing card's header: the kind you write
 // as a button that opens what else you can write and your drafts, the
 // switch a text about you shares its card through, the line about the
 // draft, Guide, the ⋯ menu, the pin and Close. You move the card by
@@ -53,7 +53,7 @@ interface Props {
   guide: boolean;
   onGuide: () => void;
   /** Preview stays pressed in the header while it shows, and a press
-   *  goes back to writing (Note Editor board 4). */
+   *  goes back to writing. */
   preview: boolean;
   onPreview: () => void;
   folded: boolean;

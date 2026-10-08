@@ -23,8 +23,7 @@ export interface ColorFieldProps {
   allowEmpty?: boolean;
   /** Shown while the field is empty, like `Theme default`. */
   placeholder?: string;
-  /** Width in px or any CSS length. 160 by default, the boards' color
-   *  field. */
+  /** Width in px or any CSS length. 160 by default. */
   width?: number | string;
   /** What the swatch shows while the field is empty, like the theme
    *  color the setting falls back to. Any CSS color, var() included, or

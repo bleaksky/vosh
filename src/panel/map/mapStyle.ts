@@ -2,7 +2,7 @@
 // a storage reader so the fallbacks are unit tested.
 
 /** How the map draws. `squares` is the default, as it was before the
- *  One Window redesign: your room held at the center, doors in their
+ *  window redesign: your room held at the center, doors in their
  *  state colors, the floors above and below, and the terrain. `3d`
  *  stacks the floors as boxes you can turn and tilt. The redesign drew
  *  a `plain` style for a while. That drawing is gone, and a stored one

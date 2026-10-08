@@ -84,9 +84,9 @@ describe('where the card opens', () => {
   });
 
   it('reads the codes the game sent once you choose the code reader on another host', () => {
-    // A local server of The Forsaken Lands gets its rules from More. The
-    // game may have sent your codes already, which the card reads at
-    // once, as it does on the game's own host (D25).
+    // A local server of The Forsaken Lands gets its rules from More.
+    // The game may have sent your codes already, which the card reads
+    // at once, as it does on the game's own host.
     expect(codeReaderStep(true)).toBe('codes');
     expect(codeReaderStep(false)).toBe('codes-entry');
   });
@@ -291,7 +291,7 @@ describe('the candidate box', () => {
     label,
     warn,
   });
-  // SF 11 widths of the board's labels, near enough.
+  // SF 11 widths of the labels, near enough.
   const widths: Record<string, number> = {
     Wizi: 21.6,
     Incog: 27.6,
@@ -708,7 +708,8 @@ describe('naming the numbers of another game', () => {
   });
 
   it('lays the buttons out as P15 draws them, and stacks the ones that would touch', () => {
-    // P15: three pairs far apart, one row 35.5 down a box 66 tall.
+    // Another game: three pairs far apart, one row 35.5 down a box 66
+    // tall.
     const width = (label: string) => ({ Health: 33.5, Mana: 26.4, Moves: 31 })[label] ?? 82;
     const apart = placeNameButtons(
       [
@@ -767,7 +768,7 @@ describe('naming the numbers of another game', () => {
 
 describe('where the card sits', () => {
   it('ends 4 px above the row right above your prompt, as the boards draw it', () => {
-    // The board window: rows 17.5 tall from y 38, the prompt on row 38.
+    // A window with rows 17.5 tall from y 38, the prompt on row 38.
     const anchor = cardAnchor({
       pinned: false,
       promptTop: 38 + 38 * 17.5,
@@ -888,10 +889,10 @@ describe('a request to open the card', () => {
 });
 
 describe('a preset sample cut to its column', () => {
-  // JetBrains Mono at 13 is 7.8 wide. The boards cut each sample as a
-  // column with text-overflow ellipsis does.
+  // JetBrains Mono at 13 is 7.8 wide. Each sample cuts as a column with
+  // text-overflow ellipsis does.
   it('keeps what fits with its ellipsis, as P4 and the Presets menu cut', () => {
-    // P4's 429 column: Detailed's 59 cells end "2 m…".
+    // The start list's 429 column: Detailed's 59 cells end "2 m…".
     expect(sampleCut(59, 7.8, 429)).toEqual({ kept: 53, width: 429 });
     // The Presets menu's 410: "930/930…".
     expect(sampleCut(59, 7.8, 410)).toEqual({ kept: 51, width: 410 });

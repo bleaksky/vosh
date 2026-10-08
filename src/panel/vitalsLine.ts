@@ -1,9 +1,9 @@
-// The One line vitals density (Settings, Layout, Vitals). Health, Mana,
+// The One line vitals density (Settings, Vitals). Health, Mana,
 // and Moves sit side by side on one row, each a label, the value, and
 // a meter under it. The labels drop only when the row cannot fit every
 // label beside its value. With Ilsabet's 1020 / 1020 that happens under
 // 372 pt, about the 360 you asked for, while Current and Percent keep
-// the labels even at 300 (VitalsOptions.dc.html). A panel too narrow
+// the labels even at 300. A panel too narrow
 // for even the values, near the 200 minimum or with long numbers,
 // stacks them in rows, so no value ever runs into the next.
 

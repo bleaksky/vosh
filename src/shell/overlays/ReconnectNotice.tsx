@@ -20,11 +20,11 @@ interface Props {
   onError: (message: string, session: number) => void;
 }
 
-// The reconnect notice of the Alerts review (board 7), in the update
-// notice's card at the toasts' corner. While a try waits it counts down
-// with Cancel and Reconnect now, while a try dials it rings in the
-// success tone with Cancel, and once the tries run out it offers Try
-// again, which dials as Connect does.
+// The reconnect notice, in the update notice's card at the toasts'
+// corner. While a try waits it counts down with Cancel and Reconnect
+// now, while a try dials it rings in the success tone with Cancel, and
+// once the tries run out it offers Try again, which dials as Connect
+// does.
 export function ReconnectNotice({ session, onTryAgain, onError }: Props) {
   const redial = useReconnect();
   const [now, setNow] = useState(Date.now);

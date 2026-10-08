@@ -72,7 +72,7 @@ pub(super) struct Planned {
 
 /// Your text as it goes out and as the game should hold it. A line that
 /// starts with a dot, `@` or `!` goes as one space and is mended into
-/// place with `.rl` (Description Editor board 6).
+/// place with `.rl`.
 pub(super) fn plan(spec: &WriteJob) -> Vec<Planned> {
     if !matches!(spec.action, Action::Send | Action::Post | Action::Paste) {
         return Vec::new();

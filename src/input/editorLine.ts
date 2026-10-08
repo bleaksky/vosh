@@ -5,9 +5,9 @@ import { columns, startsAsCommand } from '../writing/text';
 
 // The command line while the game's own line editor holds a text Vosh
 // names, after you typed description edit or note edit and kept typing
-// there (Description Editor board 3, Note Editor board 3). Each line
-// goes raw, a paste goes on the game's > as the card's lines do, and the
-// line shows a tick at the right edge of column 75 with its count.
+// there. Each line goes raw, a paste goes on the game's > as the card's
+// lines do, and the line shows a tick at the right edge of column 75
+// with its count.
 
 /** What the command line shows of the editor, or null while it holds no
  *  text Vosh names, or the card drives it. */

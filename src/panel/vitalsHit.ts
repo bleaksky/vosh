@@ -1,6 +1,6 @@
 import type { Vital } from '../ipc/uiConfig';
 
-// Show each hit (More Vitals Styles, Q21 and Q26). A hit leaves the
+// Show each hit. A hit leaves the
 // part it took pale between the new fill and the old one for 600 ms,
 // then the pale part drains toward the fill in 400 ms. Another hit
 // while it holds extends the same trail. A heal draws the other way

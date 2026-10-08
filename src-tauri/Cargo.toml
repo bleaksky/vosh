@@ -100,7 +100,7 @@ core-text = "20"
 # The font list reads each family's monospace trait from its CoreText
 # font descriptor (app/system_fonts.rs). 0.9 is the version core-text 20 uses.
 core-foundation = "0.9"
-# Tier 3 native terminal renderer (docs/native-renderer.md), macOS only
+# The native terminal renderer (docs/renderer.md), macOS only
 # like the `native_surface` cfg in build.rs. wgpu drives a Metal surface;
 # pollster blocks on its async init during setup; raw-window-handle
 # bridges the native view.
@@ -108,7 +108,7 @@ wgpu = "0.20"
 pollster = "0.3"
 raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
-# post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
+# post-telnet byte stream; the wgpu renderer draws this grid.
 # Off macOS the grid builds for the tests too, through the dev table below.
 alacritty_terminal = "0.24"
 # font-kit selects the font and supplies metrics + glyph bounds.

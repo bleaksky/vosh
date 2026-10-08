@@ -1,10 +1,10 @@
 import { codeSlot } from './gameCodes';
 
-// The text as a looker or a reader gets it, from Preview in the ⋯ menu
-// (Description Editor board 2, Note Editor board 4): no gutter, guide or
-// marks, the colors the codes draw, and for a note the two lines the
-// game's show prints over it. A code inside a line colors the rest only
-// from trust 55, as the game keeps it (comm.c:1499).
+// The text as a looker or a reader gets it, from Preview in the ⋯ menu:
+// no gutter, guide or marks, the colors the codes draw, and for a note
+// the two lines the game's show prints over it. A code inside a line
+// colors the rest only from trust 55, as the game keeps it
+// (comm.c:1499).
 
 interface Piece {
   text: string;

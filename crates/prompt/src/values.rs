@@ -1,4 +1,4 @@
-//! The values a template reads (section 1 of the build spec).
+//! The values a template reads.
 //!
 //! [`CATALOG`] names every field Vosh knows, with its label, kind, group,
 //! sources, a sample for previews and the words the picker searches.
@@ -72,7 +72,8 @@ pub trait Values {
 /// `is_max_of` in design/pieces.rs knows the same four spellings, in
 /// another order, to find a current and max piece. The order matters only
 /// here, where the first spelling a session holds a value for wins, so it
-/// stays the first renderer's (refactor plan D26).
+/// stays the first renderer's, since a merge would change what the live
+/// prompt draws.
 pub(crate) fn max_spellings(name: &str) -> [String; 4] {
     [
         format!("m{name}"),
@@ -138,7 +139,7 @@ fn since_of(secs: i64, interval: Option<i64>) -> Option<i64> {
     interval.map(|i| (i - secs).max(0))
 }
 
-/// True when the Forsaken Lands rules hold (D17). They hold when the host
+/// True when the Forsaken Lands rules hold. They hold when the host
 /// is The Forsaken Lands or the active capture reads Aabahran's codes.
 pub(crate) fn forsaken_lands(known_host: bool, aabahran_capture: bool) -> bool {
     known_host || aabahran_capture
@@ -184,7 +185,7 @@ impl Vars {
     }
 
     /// The server is the new build: the Forsaken Lands rules hold and a
-    /// Char.Prompt has come since the socket connected (D24).
+    /// Char.Prompt has come since the socket connected.
     pub fn new_build(&self) -> bool {
         self.forsaken && self.gmcp.prompt_seen()
     }

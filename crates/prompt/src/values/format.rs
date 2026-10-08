@@ -1,5 +1,4 @@
-//! The values a template draws and the plain text of each format
-//! (section 1.4 of the build spec).
+//! The values a template draws and the plain text of each format.
 //!
 //! A resolver hands the renderer a [`Resolved`] per field. The renderer
 //! draws the colored forms itself (bars, the game's tank bar, hidden marks)

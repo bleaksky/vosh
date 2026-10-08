@@ -215,8 +215,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   // The game's line editor, open on a text Vosh names, after you kept
   // typing there: each line goes raw, and the line shows the tick and
-  // the count (Description Editor Q3). The card's Check spelling covers
-  // it, since all you type there is your text.
+  // the count. The card's Check spelling covers it, since all you type
+  // there is your text.
   const writing = useWriting();
   const editor = editorLineOf(writing);
   const editorRef = useRef(editor);
@@ -342,7 +342,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     if (!text.includes('\n') && !text.includes('\r')) return;
     event.preventDefault();
     // In the game's editor a paste wraps and folds as the card's does,
-    // keeps its empty lines, and goes on the game's > (board 3).
+    // keeps its empty lines, and goes on the game's >.
     const open = editorRef.current;
     if (open) {
       const lines = pasted(text, open.width).rows.map((row) => row.text);
@@ -382,7 +382,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     for (let i = 0; i < total; i++) {
       if (pasteCancelRef.current) break;
       // The writing card holds the session's other sends while it
-      // drives the game's editor, a paste in flight among them (Q6).
+      // drives the game's editor, a paste in flight among them.
       while (writingHolds(to) && !pasteCancelRef.current) await sleep(100);
       if (pasteCancelRef.current) break;
       await submitLine(lines[i], to);

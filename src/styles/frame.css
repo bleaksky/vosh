@@ -1,8 +1,7 @@
-/* One Window frame: the AppShell grid, the title band, the status
+/* The window frame: the AppShell grid, the title band, the status
    line, and the title band's menus. Loads after every other sheet but
    sessions.css, which holds the sessions sidebar inside its column.
-   Every rule sits under .shell or a shell- class. Geometry and colors
-   follow SPEC 1, 3, 7, 9, and 10 and the approved artboards. */
+   Every rule sits under .shell or a shell- class. */
 
 /* ── Frame ─────────────────────────────────────────────────────────── */
 
@@ -32,9 +31,8 @@
   }
 }
 
-/* Window edge (SPEC 1) for the frameless window on Windows and Linux,
-   drawn over the bands and the panel but under every floating
-   surface. */
+/* Window edge for the frameless window on Windows and Linux, drawn over
+   the bands and the panel but under every floating surface. */
 .shell::after {
   content: '';
   position: absolute;
@@ -59,7 +57,7 @@
 }
 
 /* The sessions sidebar spans every row of the first column, so its
-   ground runs to the top edge under the traffic lights (Q17). */
+   ground runs to the top edge under the traffic lights. */
 .shell-slot-sessions {
   grid-row: 1 / -1;
   grid-column: 1;
@@ -103,7 +101,7 @@
 }
 
 /* The panel spans every row. Its ground runs to the top edge under the
-   band, and its panes start just below the band (SPEC 9). */
+   band, and its panes start just below the band. */
 .shell-slot-panel {
   grid-row: 1 / -1;
   grid-column: 3;
@@ -126,7 +124,7 @@
   visibility: hidden;
 }
 
-/* The panel's left edge: a full height 1 px --sep line (SPEC 1) that
+/* The panel's left edge: a full height 1 px --sep line that
    is also the width handle. The hit area reaches 3 px each side. */
 .shell-panel-edge {
   grid-row: 1 / -1;
@@ -193,14 +191,14 @@
   padding: 0 216px;
 }
 
-/* The sessions toggle holds one spot in the frame's top left corner
-   (Sessions toggle T1), 10 in as the band's right buttons sit, and on
-   macOS 8 past the 66 the traffic lights take, as the snoop window's eye
-   clears them. Its top is the sidebar's New session top, so the two
-   share a line while the sidebar shows. It sits over the sidebar's top,
-   or the sidebar over the terminal, and over the band's left end while
-   the sidebar hides. There the title's insets grow to clear it on
-   macOS, as they do for the right buttons with the panel hidden. */
+/* The sessions toggle holds one spot in the frame's top left corner, 10
+   in as the band's right buttons sit, and on macOS 8 past the 66 the
+   traffic lights take, as the snoop window's eye clears them. Its top
+   is the sidebar's New session top, so the two share a line while the
+   sidebar shows. It sits over the sidebar's top, or the sidebar over
+   the terminal, and over the band's left end while the sidebar hides.
+   There the title's insets grow to clear it on macOS, as they do for
+   the right buttons with the panel hidden. */
 .shell-lead {
   position: absolute;
   top: 4px;
@@ -278,7 +276,7 @@
   display: block;
 }
 
-/* Session button: no chrome at rest (SPEC 1, G2). */
+/* Session button: no chrome at rest. */
 .shell-title-button {
   display: flex;
   align-items: center;
@@ -360,11 +358,11 @@
 
 /* ── Status line ───────────────────────────────────────────────────── */
 
-/* SPEC 10 G4: 12 px, tertiary, tabular numbers, items 20 apart with no
-   separators. It draws in the panel face and at the panel size, the
-   picks under Panel text, like the panes. Its text, its line, and its
-   row (--status-line) scale by your size over 12, rounded to whole px
-   as panel.css rounds them. The gaps, the insets and the icons keep
+/* The status line: 12 px, tertiary, tabular numbers, items 20 apart
+   with no separators. It draws in the panel face and at the panel size,
+   the picks under Panel text, like the panes. Its text, its line, and
+   its row (--status-line) scale by your size over 12, rounded to whole
+   px as panel.css rounds them. The gaps, the insets and the icons keep
    their px. */
 .shell-statusline {
   display: flex;
@@ -565,7 +563,7 @@
 
 /* ── Title band menus ──────────────────────────────────────────────── */
 
-/* SPEC 7 menus on the SPEC 3 floating ground: padding 6, rows 30 tall
+/* Menus on the floating ground: padding 6, rows 30 tall
    with radius 8, the label 12 inside the row, shortcuts in tertiary at
    the right, 1 px --divider separators. */
 .shell-menu {
@@ -655,8 +653,8 @@
 }
 
 /* The connection form the session menu swaps in. Fields, buttons, and
-   the toggle follow SPEC 4. Host and port are text for the MUD, so
-   they take the terminal face. */
+   the toggle are the shared controls. Host and port are text for the
+   MUD, so they take the terminal face. */
 .shell-form {
   display: flex;
   flex-direction: column;

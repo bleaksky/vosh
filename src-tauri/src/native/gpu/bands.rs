@@ -10,8 +10,8 @@ use super::style::{paint_to_rgba, srgb_to_linear, Rgba};
 use crate::color::Paint;
 use crate::native::grid::regions::LiftSpan;
 
-// The band under a lifted prompt in CSS px, as the prompt boards measure it
-// and src/terminal/xterm/liftBands.ts draws it on xterm. It reaches 4 past the text
+// The band under a lifted prompt in CSS px, as
+// src/terminal/xterm/liftBands.ts draws it on xterm. It reaches 4 past the text
 // on each side and 2 above and below, at radius 4. Lifts on adjacent rows
 // stop 1 inside their shared row edge, so 2 of ground stays between them.
 // Both sides run fixtures/prompt-bands/cases.json, so keep them in step.

@@ -22,14 +22,14 @@ import type { BoxInks } from './boxInks';
 import { codeSlot } from './gameCodes';
 import { flow, leadingCode, marks, pasted, type Folded, type Row } from './text';
 
-// The text box of the writing card (Description Editor board 1). Its
-// lines are the lines the game gets: a two digit gutter, the guide at
-// the right edge of the width the card keeps, and the marks the card
-// draws on what the game would change. A paragraph flows as you type
-// and a break you make with Return stays (text.ts). While Vosh sends,
-// the gutter checks off each line the game took. A line longer than the
-// box scrolls the text sideways under a gutter that stays put on the
-// box's ground, so each row in the box stays one line the game gets.
+// The text box of the writing card. Its lines are the lines the game
+// gets: a two digit gutter, the guide at the right edge of the width
+// the card keeps, and the marks the card draws on what the game would
+// change. A paragraph flows as you type and a break you make with
+// Return stays (text.ts). While Vosh sends, the gutter checks off each
+// line the game took. A line longer than the box scrolls the text
+// sideways under a gutter that stays put on the box's ground, so each
+// row in the box stays one line the game gets.
 
 /** What a send looks like in the box: the lines the game took, and the
  *  line on its way. */
@@ -610,7 +610,7 @@ export function WritingBox({
 
 /** The attributes of the text: the card's own spell check, and no
  *  autocorrect, capitals or text predictions, as the command line keeps
- *  them off (Description Editor Q9). */
+ *  them off. */
 function contentAttributes(spellcheck: boolean): Extension {
   return EditorView.contentAttributes.of({
     spellcheck: spellcheck ? 'true' : 'false',

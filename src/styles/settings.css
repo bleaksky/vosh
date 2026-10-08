@@ -1,10 +1,9 @@
-/* Settings window (milestone 2). The frame, the sidebar, the content
-   column, the sections, cards and rows, and each page. Every rule sits
-   under an st- class and reads the One Window tokens. The controls the
-   pages draw live in controls.css. Geometry follows the approved
-   boards SettingsAppearance, SettingsAutomation, and SettingsCharacters.
-   The root is not under .settings-app. That wrapper and .settings-btn
-   live in migration.css, for the migration wizard ImportPanel opens. */
+/* Settings window. The frame, the sidebar, the content column, the
+   sections, cards and rows, and each page. Every rule sits under an st-
+   class and reads the shared tokens. The controls the pages draw live
+   in controls.css. The root is not under .settings-app. That wrapper
+   and .settings-btn live in migration.css, for the migration wizard
+   ImportPanel opens. */
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
@@ -295,9 +294,8 @@
 }
 
 /* The session and the profile Settings edits, right of the breadcrumb
-   on the title button's measures, while two or more sessions are open
-   (board 7 of the Sessions review). A press on it drags the window like
-   the rest of the band. */
+   on the title button's measures, while two or more sessions are open.
+   A press on it drags the window like the rest of the band. */
 .st-who {
   display: flex;
   align-items: center;
@@ -328,7 +326,7 @@
   color: var(--tertiary);
 }
 
-/* Another session on the same profile, after a hairline (board 9). */
+/* Another session on the same profile, after a hairline. */
 .st-who-also {
   margin-left: 8px;
   padding-left: 8px;
@@ -567,8 +565,8 @@
   margin-top: 12px;
 }
 
-/* A row whose control waits on something else, as P13 draws the Draw
-   row without a capture: the label in the tertiary tone and the control
+/* A row whose control waits on something else, as the Draw row does
+   without a capture: the label in the tertiary tone and the control
    at 40 percent. */
 .st-row.is-disabled .st-row-label {
   color: var(--tertiary);
@@ -580,7 +578,7 @@
 
 /* Draw your own prompt: Customize… then the switch, 12 apart. Without a
    capture the switch waits at 40 percent, and Customize… stays whole,
-   since it opens the card that reads your prompt (P13). */
+   since it opens the card that reads your prompt. */
 .st-draw-row .st-row-control {
   gap: 12px;
 }
@@ -736,7 +734,7 @@
   margin-left: 8px;
 }
 
-/* Save a scene… joins the copy button once you pick a log (board 5). */
+/* Save a scene… joins the copy button once you pick a log. */
 .st-logs-scene {
   margin-left: 12px;
 }
@@ -844,9 +842,9 @@
 
 /* ── Save a scene ─────────────────────────────────────────────────── */
 
-/* The page of board 5 in the Alerts and Scenes review. The toolbar holds
-   the log, From and To, and the format. The options card sits above the
-   preview, so an 80 column line fits on one row. */
+/* The scene page. The toolbar holds the log, From and To, and the
+   format. The options card sits above the preview, so an 80 column line
+   fits on one row. */
 .sc-range {
   display: flex;
   align-items: center;
@@ -1007,7 +1005,7 @@
 }
 
 /* The Vision switch above the tiles, its label then the segments 12
-   apart, as board 9 of the Themes review sets it. */
+   apart. */
 .st-gallery-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1151,11 +1149,11 @@
   text-wrap: pretty;
 }
 
-/* The vitals Style gallery (board 2 of the Vitals Styles review): six
-   tiles, two a row 12 apart, as the theme gallery lays its tiles. Each
-   tile is 120 px of panel ground on a 1 px edge, and the footer inside
-   draws at your panel's width, scaled to the tile from the center. Its
-   name sits 8 px below it, and the caption shares the theme caption. */
+/* The vitals Style gallery: six tiles, two a row 12 apart, as the theme
+   gallery lays its tiles. Each tile is 120 px of panel ground on a 1 px
+   edge, and the footer inside draws at your panel's width, scaled to
+   the tile from the center. Its name sits 8 px below it, and the
+   caption shares the theme caption. */
 .st-vitals-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1231,11 +1229,10 @@
   color: var(--tertiary);
 }
 
-/* Customize vitals (boards 2 to 5 of the Vitals Styles review). The
-   head names the list, 10 over and 4 under. Each vital is a 40 px row:
-   the grip, the name, its color and its switch, 12 apart, with a
-   hairline between rows inset 16. A vital you turned off keeps its row,
-   its name tertiary. */
+/* Customize vitals. The head names the list, 10 over and 4 under. Each
+   vital is a 40 px row: the grip, the name, its color and its switch,
+   12 apart, with a hairline between rows inset 16. A vital you turned
+   off keeps its row, its name tertiary. */
 .st-block.st-vitals-head {
   padding: 10px 16px 4px;
 }
@@ -1645,10 +1642,9 @@
   display: none;
 }
 
-/* What a profile export holds, in the import sheet (board 5 of the
-   Scripts design): label and value pairs 24 high in two columns, with
-   Runs Lua and Plugins across both. Under the Lua warning the pairs
-   start at once. */
+/* What a profile export holds, in the import sheet: label and value
+   pairs 24 high in two columns, with Runs Lua and Plugins across both.
+   Under the Lua warning the pairs start at once. */
 .st-import-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1750,7 +1746,7 @@
   outline-offset: 2px;
 }
 
-/* Suggestions hang under the field on the floating recipe (SPEC 7). */
+/* Suggestions hang under the field on the floating recipe. */
 .st-suggest {
   position: absolute;
   top: calc(100% + 6px);
@@ -2188,13 +2184,12 @@
 }
 
 /* A preset suggested for your world wears the accent ring while it is
-   off (First Run board 4). */
+   off. */
 .st-auto-dot.is-off.is-suggested {
   box-shadow: inset 0 0 0 1.25px var(--accent);
 }
 
-/* The pencil of an item you edited sits just before its dot (Presets
-   Q6). */
+/* The pencil of an item you edited sits just before its dot. */
 .st-auto-mark {
   flex: none;
   margin-left: auto;
@@ -2236,7 +2231,7 @@
 }
 
 /* Detail column. The card takes the width the list leaves, 376 at the
-   board's 880, and the column scrolls when Advanced opens. */
+   window's 880, and the column scrolls when Advanced opens. */
 .st-auto-detail {
   flex: 1 1 376px;
   min-width: 0;
@@ -2348,7 +2343,7 @@
 }
 
 /* A link inside a card's text, in the quiet tone of Edit all as JSON…
-   with a hairline underline (Presets board 1). */
+   with a hairline underline. */
 .st-auto-link {
   display: inline;
   margin: 0;
@@ -2376,8 +2371,7 @@
 }
 
 /* A row of a preset trigger you changed says what the preset has, under
-   the label for a switch or a number and under the field for text
-   (Presets board 2). */
+   the label for a switch or a number and under the field for text. */
 .st-auto-changed {
   display: block;
 }
@@ -2426,9 +2420,8 @@
   line-height: 15px;
 }
 
-/* A row a preset fix changed under your edit (Presets board 4): what
-   the preset now has in warn, then Take the fix and Keep mine on the
-   24 px chip recipe. */
+/* A row a preset fix changed under your edit: what the preset now has
+   in warn, then Take the fix and Keep mine on the 24 px chip recipe. */
 .st-auto-fix {
   display: block;
 }
@@ -2482,7 +2475,7 @@
   white-space: nowrap;
 }
 
-/* The Keys row of a macro preset (Scripts board 7). Each key on a
+/* The Keys row of a macro preset. Each key on a
    keycap 4 before the command it sends, in the game's font, and the
    pairs 12 apart. A pair your macro holds takes the warn ring. */
 .st-auto-keys {
@@ -2535,7 +2528,7 @@
 }
 
 /* A line too long for the box wraps three cells in, under the words
-   after a ## mark (Presets board 1). */
+   after a ## mark. */
 .st-auto-sample-line {
   padding-left: 3ch;
   text-indent: -3ch;
@@ -2598,7 +2591,7 @@
 }
 
 /* The button that plays the alert tone, 24 square and 8 px before the
-   Sound select, as board 1 of the Alerts review draws it. */
+   Sound select. */
 .st-icon-button.st-auto-play {
   width: 24px;
   height: 24px;
@@ -2752,12 +2745,11 @@
 
 /* Last in the sheet, after every Settings rule it might tie with. */
 
-/* Settings, Input, Prompt (P12, P13, and the Settings specimens on P0
-   and P14). The game prompt block sets two label and code rows in an
-   88 px label column, each 28 tall and 8 below the line above, then
-   the meta 8 below them: 10 + 35 + 8 + 28 + 8 + 28 + 8 + 15 + 10 = 150.
-   On the new build the codes read as text at a field's text position,
-   10 in, with no field ground or ring. */
+/* Settings, Input, Prompt. The game prompt block sets two label and
+   code rows in an 88 px label column, each 28 tall and 8 below the line
+   above, then the meta 8 below them: 10 + 35 + 8 + 28 + 8 + 28 + 8 + 15
+   + 10 = 150. On the new build the codes read as text at a field's text
+   position, 10 in, with no field ground or ring. */
 .st-prompt-codes {
   margin: 0;
 }
@@ -2804,7 +2796,7 @@
   white-space: nowrap;
 }
 
-/* Its counts and times set in proportional figures, as P12 draws them. */
+/* Its counts and times set in proportional figures. */
 .st-prompt-meta {
   margin: 8px 0 0;
   color: var(--secondary);
@@ -2839,7 +2831,7 @@
   width: 600px;
 }
 
-/* The line you pointed at, for a pattern (A4's capture row): the line
+/* The line you pointed at, for a pattern: the line
    in the terminal face at meta size with each value Vosh reads in the
    selection token, then when Vosh last read it. */
 .st-prompt-line {
@@ -2865,7 +2857,7 @@
   white-space: nowrap;
 }
 
-/* No prompt has matched (P14): the sentence in warn after its 8 px dot,
+/* No prompt has matched: the sentence in warn after its 8 px dot,
    wrapping in the text column. */
 .st-prompt-line-meta.is-warn {
   display: flex;
@@ -2903,8 +2895,8 @@
   left: 10px;
 }
 
-/* A part of your design no value fills, ringed in the Settings preview as
-   the card rings it on your prompt (P14). */
+/* A part of your design no value fills, ringed in the Settings preview
+   as the card rings it on your prompt. */
 .st-prompt-preview-warn {
   position: absolute;
   border-radius: var(--r-key);
@@ -2912,7 +2904,7 @@
   pointer-events: none;
 }
 
-/* ── Scripts (Scripts and Panels, boards 2 and 4) ──────────────────── */
+/* ── Scripts ───────────────────────────────────────────────────────── */
 
 /* A plugin row names the plugin in the MUD font, as its folder reads,
    and keeps its description to one line. */
@@ -2960,7 +2952,7 @@
 }
 
 /* The more button of the row whose menu is open keeps the selected row
-   fill while the menu shows (board 4). */
+   fill while the menu shows. */
 .st-plugin-row .st-icon-button[aria-expanded='true'] {
   background: var(--selrow);
   box-shadow: var(--st-selrow-ring);
@@ -3074,13 +3066,13 @@
   pointer-events: none;
 }
 
-/* A plugin's page (boards 1 and 3): the file and On for this profile,
+/* A plugin's page: the file and On for this profile,
    then the stop note while Vosh holds the plugin off, the editor and
    Output, 12 apart over the save bar. In the 880 by 600 window the
    editor shows 14 lines of 18.2 px, or 12 under the note, and Output
    takes the rest of the column. A taller or shorter window grows or
    shrinks the editor alone, so Output keeps the lines it shows at 600,
-   the stop line of board 3 among them. */
+   the stop line among them. */
 .st-plugin-page {
   display: flex;
   flex-direction: column;
@@ -3115,7 +3107,7 @@
 /* Output fills what the editor leaves, its lines scroll inside the
    well, and the field sits at the foot of it. The space over the first
    line scrolls with the lines, so a well a few pixels short of its
-   lines, as board 1's is at 600, hides that space before any text. It
+   lines, as it is at 600, hides that space before any text. It
    never drops under its head and its 8 px gap, the newest two lines,
    and the field with its margins. */
 .st-plugin-output {

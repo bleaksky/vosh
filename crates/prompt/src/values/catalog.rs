@@ -54,7 +54,7 @@ pub enum Kind {
     Raw,
 }
 
-/// A format a field offers in the picker (section 1.4).
+/// A format a field offers in the picker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormatId {
     Value,

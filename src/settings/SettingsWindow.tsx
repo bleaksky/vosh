@@ -65,13 +65,13 @@ import { AppearancePage } from './appearance/AppearancePage';
 import { AccessibilityPage } from './accessibility/AccessibilityPage';
 import { ScriptsPage } from './scripts/ScriptsPage';
 
-// The Settings window (the approved Settings boards). A 200 px sidebar
-// with search and the nav of eleven groups in four clusters, and a content column with the
+// The Settings window. A 200 px sidebar with search and the nav of
+// eleven groups in four clusters, and a content column with the
 // breadcrumb in the 32 px band over the group's page. With two or more
 // sessions open, the band names the session and the profile Settings
-// edits at its right (ShownSession.tsx). On macOS the
-// native traffic lights sit over the sidebar. Windows and Linux draw
-// minimize, maximize, and close at the right of the band.
+// edits at its right (ShownSession.tsx). On macOS the native traffic
+// lights sit over the sidebar. Windows and Linux draw minimize,
+// maximize, and close at the right of the band.
 //
 // Every way into Settings names a target (src/lib/settingsNav.ts): the
 // nav, a search hit, a deep link from the main window. The frame shows

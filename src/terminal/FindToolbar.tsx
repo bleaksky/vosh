@@ -70,8 +70,8 @@ function Toggle(props: {
   );
 }
 
-// Find bar that floats over the top right of the terminal (Menus
-// board): 40 tall on the floating recipe, 8 below the band and 16 in
+// Find bar that floats over the top right of the terminal: 40
+// tall on the floating recipe, 8 below the band and 16 in
 // from the panel edge. A search glyph, the query, "5 of 6", previous
 // and next, a hairline, then the match case, whole word and regex
 // toggles, and close. It drives xterm's SearchAddon or the native

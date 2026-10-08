@@ -1,5 +1,4 @@
-//! A fake Aabahran that plays one connection (section 9 of the build
-//! spec).
+//! A fake Aabahran that plays one connection.
 //!
 //! [`Mud`] answers what a client sends with the bytes the game would
 //! write, in the game's wire order. The game writes each GMCP packet
@@ -175,7 +174,7 @@ pub struct Options {
     pub account: Vec<String>,
     /// `telnetga` is on, so each prompt ends in IAC GA.
     pub ga: bool,
-    /// The game plays server proposal S3 with no state kept: it answers
+    /// The game keeps no EOR state of its own: it answers
     /// each IAC DO EOR it reads with IAC WILL EOR, and once it has, ends
     /// each prompt with IAC EOR in place of GA. A client that answered
     /// each WILL EOR with DO EOR would go back and forth with it forever.

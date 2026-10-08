@@ -2,7 +2,7 @@ import { isTrackedRow, type AffectRow } from './affectsView';
 import { affectsColumns, pageCells, type AffectsCell } from './affectsGrid';
 import { PANE_TEXT_BASE, PANE_TEXT_PX, paneText } from '../paneTextSize';
 
-// Where each affect sits in the Countdown style (board Affects B). One
+// Where each affect sits in the Countdown style. One
 // run sorted by the hours left: the tracked affects you are missing
 // first, in your order, then every other affect, fewest hours first,
 // permanent after every timed one and unknown last. It fills down the

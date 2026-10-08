@@ -1,5 +1,5 @@
 //! The `[vosh_export]` table Export to Downloads writes after a profile's
-//! settings (Scripts Q10). It names the world the profile plays and the
+//! settings. It names the world the profile plays and the
 //! characters you tick, so an import can take them, and its presence
 //! tells an export from any other TOML file. A profile file skips keys it
 //! does not know, so this build and every older one read an export as

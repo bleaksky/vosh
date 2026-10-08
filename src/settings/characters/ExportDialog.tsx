@@ -3,10 +3,9 @@ import { profileDisplayName } from '../../lib/characterProfiles';
 import { Toggle } from '../../ui';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 
-// Export to Downloads for a profile that has characters (Scripts Q10).
-// No board draws it, so it is the smallest one: the confirm recipe in
-// the primary tone with a switch for each character, all off, so a
-// profile you share names your characters only when you choose.
+// Export to Downloads for a profile that has characters: the confirm
+// recipe in the primary tone with a switch for each character, all off,
+// so a profile you share names your characters only when you choose.
 
 interface Props {
   /** The profile, raw like `default`. */

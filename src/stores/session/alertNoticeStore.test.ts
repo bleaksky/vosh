@@ -3,8 +3,7 @@ import type { SessionRow } from '../../ipc/session';
 
 // Drives the alert notice through a fake Tauri event bus with Orla's
 // session (1) selected and Tolliver's (2) behind it, to hold it to the
-// corner notice of board 5 of the Sessions review (Q10). Each test
-// loads fresh store modules.
+// corner notice. Each test loads fresh store modules.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();

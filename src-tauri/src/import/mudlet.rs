@@ -415,8 +415,8 @@ mod tests {
     }
 
     /// A trigger named for a preset trigger joins the clash list and
-    /// never replaces the preset's, its preset on or off (Presets board
-    /// 5).
+    /// never replaces the preset's, its preset on or off, since the
+    /// next install would put the preset's back.
     #[test]
     fn a_mudlet_trigger_named_for_a_preset_trigger_clashes() {
         use crate::import::vosh::{Clash, ClashKind};

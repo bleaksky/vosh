@@ -14,7 +14,7 @@ import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsPa
 import { affectHours, affectsEmptyText, affectWords } from '../paneText';
 import { usePaneText } from '../paneTextSize';
 
-// The at a glance checklist, board Affects A, timers first. Two columns
+// The at a glance checklist, timers first. Two columns
 // of 22 px rows at 12 px, taller at a larger panel size, each the
 // hours left in a right aligned column and then the name exactly as
 // the game sends it, both at your panel size. The column is three

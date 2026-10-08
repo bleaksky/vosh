@@ -27,7 +27,7 @@ interface Props {
   onCancel: () => void;
 }
 
-// A confirm on the floating recipe (SPEC 3): a 320 wide card, radius
+// A confirm on the floating recipe: a 320 wide card, radius
 // 16, the title at 15/20 semibold, quiet body copy, any fields, and
 // right-aligned Cancel, or the label you name, and the confirm button, danger by default. No
 // scrim. A clear layer behind the card still catches a press outside

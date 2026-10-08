@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # release.yml calls this workflow so a tag runs the same gates first.
+  workflow_call: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,8 +17,28 @@ env:
   RUSTFLAGS: '-D warnings'
 
 jobs:
+  # Builds the page once for the three Rust jobs. The frontend checks run
+  # beside it, so a failed page check never hides a Rust result.
+  page:
+    name: Page build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: page
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
+
   frontend:
-    name: Frontend (lint, typecheck, test, build)
+    name: Frontend (lint, typecheck, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +50,13 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run knip
+      - run: npm run css:usage
       - run: npm test
-      - run: npm run build
 
   rust:
     name: Rust (${{ matrix.os }})
+    needs: page
     strategy:
       fail-fast: false
       matrix:
@@ -64,13 +88,14 @@ jobs:
         with:
           workspaces: '. -> target'
 
-      - name: Build frontend (needed for tauri context)
-        uses: actions/setup-node@v4
+      # tauri generate_context embeds dist at compile time, and nothing else
+      # in the Rust build needs node. The page job builds the page once and
+      # every Rust job downloads that same dist.
+      - name: Download the page built by the page job
+        uses: actions/download-artifact@v4
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
+          name: page
+          path: dist
 
       - name: cargo fmt
         run: cargo fmt --all -- --check

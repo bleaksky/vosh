@@ -43,34 +43,33 @@ import { roundTripText, roundTripTone, SLOW_MS, WIDEST_ROUND_TRIP } from './roun
 import { statusMoons } from './statusMoons';
 import { useVitalsMenu } from '../panel/useVitalsMenu';
 
-// The quiet line under the input band (SPEC 10 G4): your vitals when
+// The quiet line under the input band: your vitals when
 // the line carries them, your opponent, your target, then the tick, the
 // round trip to the game, then the tick, the game time, and the moons
 // together, 20 px apart in the panel face, the Panel font, with tabular
 // numbers.
 //
 // The line carries your vitals with the panel hidden, or with Show your
-// vitals in on Status line, which takes them out of the panel (Vitals
-// Styles Q6). Every drawn style but Text shows one quiet form here,
-// labels and values with no mark and no color. It follows the order,
-// the vitals you turned off, Values and Warn before you run low from
-// Customize vitals, keeps every vital you leave on with or without a
-// max, and ignores Hide vitals while your prompt is pinned. In a fight
-// your opponent follows your vitals with its health in the warn tone,
-// wherever Customize vitals places its row in the panel. A target you
-// set on the same mob joins that item, and a target on another mob
+// vitals in on Status line, which takes them out of the panel, so they
+// never show twice. Every drawn style but Text shows one quiet form
+// here, labels and values with no mark and no color. It follows the
+// order, the vitals you turned off, Values and Warn before you run low
+// from Customize vitals, keeps every vital you leave on with or without
+// a max, and ignores Hide vitals while your prompt is pinned. In a
+// fight your opponent follows your vitals with its health in the warn
+// tone, wherever Customize vitals places its row in the panel. A target
+// you set on the same mob joins that item, and a target on another mob
 // keeps its own Target item after it. Out of a fight, or while the line
 // leaves your vitals to the panel, your target shows by name alone. As
-// the line runs short the opponent's name, the labels, Values, the moons,
-// a fine round trip and the game time give way in that order
+// the line runs short the opponent's name, the labels, Values, the
+// moons, a fine round trip and the game time give way in that order
 // (statusLineFit.ts).
 //
 // The round trip to the game is the selected session's, which it reads
-// every two seconds (Round Trip Readout). Nothing shows before the first
-// reading or once the connection ends. It reads in tertiary under
-// 300 ms, in the warn tone from 300 ms, and in seconds in the danger
-// text tone from a second, and a slow one never gives way
-// (roundTrip.ts).
+// every two seconds. Nothing shows before the first reading or once the
+// connection ends. It reads in tertiary under 300 ms, in the warn tone
+// from 300 ms, and in seconds in the danger text tone from a second,
+// and a slow one never gives way (roundTrip.ts).
 //
 // Text writes your vitals text here on one line, in the terminal face,
 // with a 20 px gap for each new line and each %{right}, and ends in an

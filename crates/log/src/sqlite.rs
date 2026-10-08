@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn low_fsync_pragmas_are_applied_on_open() {
-        // Regression guard for the Phase 2 perf fix: if the pragmas
+        // Regression guard for the low fsync pragmas: if the pragmas
         // ever get dropped, per-line fsync pressure returns and every
         // server line stalls behind a flush. The synchronous pragma
         // works on every backend so we assert it directly; journal

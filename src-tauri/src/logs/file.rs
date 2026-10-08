@@ -1,4 +1,4 @@
-//! Save as file in the log view (D29): every line a scope holds, oldest
+//! Save as file in the log view: every line a scope holds, oldest
 //! first, as plain text, with the game's colors, or as one HTML page drawn
 //! by the scene's renderer. With times on, each line starts with the time
 //! it came on the local 24 hour clock, as the log view shows it, and a

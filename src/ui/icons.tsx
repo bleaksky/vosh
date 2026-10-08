@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 
-// The SPEC 6 icon set that Settings, Help, the prompt card, the panes,
+// The icon set that Settings, Help, the prompt card, the panes,
 // the terminal menu, the title band and the sessions sidebar draw: 16
 // unit strokes at 1.25, round caps and joins, drawn in currentColor so
 // each control sets the tone. At 12 px the stroke keeps its 1.25 px
-// weight through vector-effect, the way the boards draw the chevrons
-// and the chip close icon. shell/icons.tsx draws the panel glyph and
+// weight through vector-effect, so the chevrons and the chip close
+// icon keep it. shell/icons.tsx draws the panel glyph and
 // the status line glyphs on the same Glyph.
 
 interface IconProps {
@@ -312,9 +312,9 @@ export function MaximizeIcon(props: IconProps) {
   );
 }
 
-// The Help section icons from the approved Help boards. Automate, Shape
-// the window, Make it yours, and Characters and data reuse BoltIcon,
-// LayoutIcon, AppearanceIcon, and UserIcon.
+// The Help section icons. Automate, Shape the window, Make it yours,
+// and Characters and data reuse BoltIcon, LayoutIcon, AppearanceIcon,
+// and UserIcon.
 
 /** A plug: Get connected. */
 export function PlugIcon(props: IconProps) {
@@ -367,11 +367,10 @@ export function BookIcon(props: IconProps) {
   );
 }
 
-// The marks a session's row in the sessions sidebar shows at its left,
-// after otty's badges (Sessions Q8, board 3). Each draws in a 16 square
-// in currentColor, so the row sets its tone.
+// The marks a session's row in the sessions sidebar shows at its left.
+// Each draws in a 16 square in currentColor, so the row sets its tone.
 
-/** Vosh dials or redials: otty's spinner, eight spokes in a 1.5 stroke
+/** Vosh dials or redials: a spinner, eight spokes in a 1.5 stroke
  *  fading round the circle from the one at 12 o clock. */
 export function SpinnerIcon({ size = 16, className }: IconProps) {
   return (
@@ -399,7 +398,7 @@ export function SpinnerIcon({ size = 16, className }: IconProps) {
   );
 }
 
-/** The game waits for your login: otty's raised hand, 12 across. */
+/** The game waits for your login: a raised hand, 12 across. */
 export function HandIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -411,7 +410,7 @@ export function HandIcon(props: IconProps) {
   );
 }
 
-/** Connect again yourself: otty's failure badge, a filled triangle 10.5
+/** Connect again yourself: a failure badge, a filled triangle 10.5
  *  across. Its ! is a hole in the fill, so the row's own ground shows
  *  through it, the pill or the hover tone included. */
 export function TriangleIcon({ size = 16, className }: IconProps) {
@@ -432,8 +431,8 @@ export function TriangleIcon({ size = 16, className }: IconProps) {
   );
 }
 
-// The Settings group icons the Settings layout review added (October
-// 8). Prompt reuses TerminalIcon.
+// The icons of the Accessibility, Vitals and Logs groups in Settings.
+// Prompt reuses TerminalIcon.
 
 /** A figure in a ring: Accessibility. */
 export function AccessibilityIcon(props: IconProps) {

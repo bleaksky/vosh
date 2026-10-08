@@ -22,9 +22,9 @@ interface Props {
 // Get started in the main window. It reads where the install stands
 // as the window mounts and follows the facts that finish steps while
 // the card is shut too. Connect folds the card before the game's first
-// screen arrives, so nothing covers the name prompt (board 1), and the
+// screen arrives, so nothing covers the name prompt, and the
 // prompt card folds it as it opens, so the two never show together.
-// A fold slides the card away, out of reach while it goes (Q14). The
+// A fold slides the card away, out of reach while it goes. The
 // prompt card's fold and reduced motion take it at once.
 export function GetStarted({ play, covered, ...card }: Props) {
   useEffect(() => mountGetStarted(), []);

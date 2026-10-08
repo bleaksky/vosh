@@ -15,7 +15,7 @@
   overflow: hidden;
   /* Containing block for the floating find toolbar overlay (Cmd+F). */
   position: relative;
-  /* Text starts 16 in and 6 under the band (SPEC 1), and the bottom
+  /* Text starts 16 in and 6 under the band, and the bottom
      keeps a 6 px buffer above the input band so the last row never
      reads as touching it. The padding lives here and never on the host
      or .xterm. The sizer inside fills the box within the padding and JS
@@ -165,18 +165,18 @@
   overflow: hidden;
 }
 
-/* Underlay (macOS). The native surface sits BELOW the webview and paints
-   the terminal background across the whole window, so every ancestor of
-   the terminal pane goes transparent and the grid shows through. The
-   list names each wrapper between the One Window shell root and the
-   sizer (AppShell, then MainWindow's terminal slot), and html, body, and #root
-   are transparent already. A wrapper added there with a background of
-   its own turns the terminal into a flat colored hole. The title band
-   and the status line carry no fill, so the same ground shows under
-   them. The input band and the panel paint their own surfaces over it.
-   The xterm copy stays mounted for sizing but is never shown, and the
-   DOM owns the cursor over the pane, taking the shape the native
-   surface asks for through --terminal-cursor. */
+/* Underlay (macOS). The native surface sits BELOW the webview and
+   paints the terminal background across the whole window, so every
+   ancestor of the terminal pane goes transparent and the grid shows
+   through. The list names each wrapper between the shell root and the
+   sizer (AppShell, then MainWindow's terminal slot), and html, body,
+   and #root are transparent already. A wrapper added there with a
+   background of its own turns the terminal into a flat colored hole.
+   The title band and the status line carry no fill, so the same ground
+   shows under them. The input band and the panel paint their own
+   surfaces over it. The xterm copy stays mounted for sizing but is
+   never shown, and the DOM owns the cursor over the pane, taking the
+   shape the native surface asks for through --terminal-cursor. */
 html[data-underlay] .shell,
 html[data-underlay] .shell-slot-term,
 html[data-underlay] .terminal-area,

@@ -54,22 +54,22 @@ import { CollapseRows } from './CollapseRows';
 import { ThemeGallery } from './ThemeGallery';
 import { fitAndKeep } from './fitAndKeep';
 
-// Appearance, from the approved board (SettingsAppearance.dc.html).
-// Theme holds Import… and the gallery of every theme, with a Vision
-// switch that previews the tiles as each color vision sees them, a
-// caption that describes the theme on screen and credits its colors,
-// then Switch themes, which follows the system with a light and dark
-// pair or the game's day with a day and night pair (Alerts board 8). Terminal text holds the font, the size, the line height,
-// whether MUD text takes the theme's colors, and whether a line the
-// same as the one before it shows once with a count. While that is on,
-// two rows under it choose whether the lines of a fight collapse, and
-// whether attack lines do. A link to either row shows them even while
-// it is off, so search lands on them. Fit game colors, Color vision,
-// Keep highlight colors readable and Blinking text left for
-// Accessibility (Settings layout Q6). Panel text holds the font and the size
+// Appearance. Theme holds Import… and the gallery of every theme, with
+// a Vision switch that previews the tiles as each color vision sees
+// them, a caption that describes the theme on screen and credits its
+// colors, then Switch themes, which follows the system with a light and
+// dark pair or the game's day with a day and night pair. Terminal text
+// holds the font, the size, the line height, whether MUD text takes the
+// theme's colors, and whether a line the same as the one before it
+// shows once with a count. While that is on, two rows under it choose
+// whether the lines of a fight collapse, and whether attack lines do. A
+// link to either row shows them even while it is off, so search lands
+// on them. Fit game colors, Color vision, Keep highlight colors
+// readable and Blinking text live on Accessibility, with the other
+// settings that help you read. Panel text holds the font and the size
 // that every pane and the status line draw in, so each section sets one
-// thing. A quiet Advanced row at the end holds what the board leaves
-// out. Every change saves on its own.
+// thing. A quiet Advanced row at the end holds the rest. Every change
+// saves on its own.
 
 const LINE_HEIGHTS = [
   { value: 'compact', label: 'Compact' },
@@ -246,9 +246,9 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
   };
 
   // Choosing With the game starts a blank day or night slot on the
-  // theme showing, so nothing changes until you pick (Alerts Q17).
-  // Before the game says day or night your theme shows, so it takes the
-  // theme showing too.
+  // theme showing, so nothing changes until you pick. Before the game
+  // says day or night your theme shows, so it takes the theme showing
+  // too.
   const setFollow = (mode: ThemeFollow) => {
     const patch: Partial<UiConfig> = {
       theme_follow: mode,

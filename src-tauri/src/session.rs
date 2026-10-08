@@ -535,7 +535,7 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     // What the plugins printed at launch, if nothing showed it yet.
     crate::app::plugins::show_launch_lines(&app, session);
 
-    // Log sessions decides whether the connection writes the log (D34).
+    // Log sessions decides whether the connection writes the log.
     let (logged, lines) = {
         let p = session.lock_profile().await;
         (

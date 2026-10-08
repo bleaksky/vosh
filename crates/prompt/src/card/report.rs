@@ -1,4 +1,4 @@
-//! What a capture compiles to, for `prompt_compile` (section 6).
+//! What a capture compiles to, for `prompt_compile`.
 //!
 //! The report is pure. It says whether Vosh can read the prompt, the ways
 //! the game prints it, the card's code legend, the warnings with the span

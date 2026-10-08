@@ -53,14 +53,13 @@ import { useActiveTheme } from '../../theme/useActiveTheme';
 import { arrowPick, galleryCaption, tileFit, type GalleryVitals } from './vitalsStyles';
 import { measurable, useGalleryVitals, usePanelText } from './usePanelVitals';
 
-// The Style gallery under Settings, Layout, Vitals (board 2 of the
-// Vitals Styles review, Q17). Six tiles, two a row, as the theme
-// gallery lays its tiles. Each tile draws the real footer of its style
-// at your panel's width, in your panel font and size, with your
-// Customize vitals choices, and scales it to the tile, down to three
-// quarters. A panel too wide for that draws at the widest width that
-// allows. The tiles leave your opponent out and keep their height, so
-// the gallery never jumps in a fight.
+// The Style gallery under Settings, Layout, Vitals. Six tiles, two a
+// row, as the theme gallery lays its tiles. Each tile draws the real
+// footer of its style at your panel's width, in your panel font and
+// size, with your Customize vitals choices, and scales it to the tile,
+// down to three quarters. A panel too wide for that draws at the widest
+// width that allows. The tiles leave your opponent out and keep their
+// height, so the gallery never jumps in a fight.
 //
 // The numbers are your own, from the snapshot Settings asks for as it
 // opens, or the prompt catalog's samples, 1020, 800 and 930, while no

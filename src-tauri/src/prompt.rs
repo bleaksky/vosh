@@ -127,12 +127,12 @@ pub(crate) fn prompt_look(c: &Connection) -> (bool, String, vosh_prompt::PromptS
 /// that looks different for it. `chosen` is the table the edit left in
 /// the engine of `session`, which the profile keeps. Each engine takes
 /// your choices and keeps what its own game showed it, through
-/// [`vosh_prompt::PromptEngine::take_choice`] (Q29 of the sessions
-/// review). The sessions come from the map before the profile lock, and
-/// each connection is locked in turn under it, never two at once. Each
-/// repaint goes from a task of its own once the locks let go, so a
-/// session loop that runs a `#prompt` line never waits on the slot of
-/// another session. Call with no lock held.
+/// [`vosh_prompt::PromptEngine::take_choice`], so each session keeps
+/// reading its own game. The sessions come from the map before the
+/// profile lock, and each connection is locked in turn under it, never
+/// two at once. Each repaint goes from a task of its own once the locks
+/// let go, so a session loop that runs a `#prompt` line never waits on
+/// the slot of another session. Call with no lock held.
 pub(crate) async fn choose_in_other_sessions(
     state: &AppState,
     session: SessionId,

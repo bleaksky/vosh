@@ -11,11 +11,11 @@ import { SnoopSplit } from './SnoopSplit';
 import { SNOOP_REQUEST_EVENT, type SnoopRequest } from './snoopKeys';
 import { endedLine, tabTitle } from './snoopLine';
 
-// The snoop split of boards 01 to 04 of the Snoop review. The snoop
-// store, the saved size and the minute clock are faked, and each snoop
-// terminal stands in as a plain element that names its player, so what
-// shows is what the split draws. The menu draws in place, not in a
-// portal, and the find bar stands in as a plain element.
+// The snoop split. The snoop store, the saved size and the minute clock
+// are faked, and each snoop terminal stands in as a plain element that
+// names its player, so what shows is what the split draws. The menu
+// draws in place, not in a portal, and the find bar stands in as a
+// plain element.
 
 const fake = vi.hoisted(() => ({
   snoops: { tabs: [], windowed: false, selected: null, unread: new Set() } as unknown as Snoops,

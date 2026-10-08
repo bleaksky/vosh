@@ -7,7 +7,7 @@ import { hitFill, type HitView } from './vitalsHit';
 import { ledgerFigure } from './vitalsLedgerFit';
 import { VITAL_LABELS } from './vitalsView';
 
-// Vials (More Vitals Styles, board 2): a small vial for each vital, 18
+// Vials: a small vial for each vital, 18
 // by 44, after the Path of Exile flasks and the Diablo potion belt. The
 // glass is a 1 px rim at 55 percent of the vital's tone over a 6 percent
 // wash, and the liquid fills from the round foot to the shoulder in the

@@ -1,9 +1,8 @@
-// The prompt card's decisions (section 7 of the prompt build spec, boards
-// P1 to P4, P11, P13 and P15): which step it opens on, what its header and
-// More menu offer, the copy that says where your codes came from, how the
-// candidate box names each value, the rows the start list shows, how
-// another game's numbers take names, and where the card sits over your
-// prompt. Pure, so the components stay about layout.
+// The prompt card's decisions: which step it opens on, what its header
+// and More menu offer, the copy that says where your codes came from,
+// how the candidate box names each value, the rows the start list
+// shows, how another game's numbers take names, and where the card sits
+// over your prompt. Pure, so the components stay about layout.
 
 import { profileDisplayName } from '../lib/characterProfiles';
 import { listJoin, possessive } from '../lib/text';
@@ -25,10 +24,10 @@ import type {
 } from '../ipc/prompt';
 import type { GamePromptSeen } from '../stores/gmcp/gamePromptStore';
 
-/** The card's steps. `codes-entry` is P2, `codes` P3 with its states P3b
- *  and P3c, `point` B2's question and `name` A2's naming of P15, `start`
- *  the start list of P4 on first use, and `rest` the card at rest on
- *  every later open. */
+/** The card's steps. `codes-entry` asks for your setting, `codes` reads
+ *  the codes the game sent, `point` asks which line is your prompt on
+ *  another game and `name` names its numbers, `start` is the start list
+ *  on first use, and `rest` the card at rest on every later open. */
 export type CardStep = 'codes-entry' | 'codes' | 'point' | 'name' | 'start' | 'rest';
 
 /** True when the profile reads a prompt. */
@@ -42,10 +41,10 @@ function isMigrated(capture: PromptCapture): boolean {
 }
 
 /** Where the card opens. With no capture it asks for one: on The
- *  Forsaken Lands it reads the codes the game sent (P3), or asks for them
- *  when the game sent none this session (P2), and on any other game it
- *  points at the line (P15). The pattern your old capture trigger left
- *  counts as none there, so the codes replace it. Otherwise it rests. */
+ *  Forsaken Lands it reads the codes the game sent, or asks for them
+ *  when the game sent none this session, and on any other game it
+ *  points at the line. The pattern your old capture trigger left counts
+ *  as none there, so the codes replace it. Otherwise it rests. */
 export function openingStep(input: {
   capture: PromptCapture;
   forsaken: boolean;
@@ -58,8 +57,8 @@ export function openingStep(input: {
 }
 
 /** Where Use Forsaken Lands prompt codes… goes on another host: the
- *  codes the game sent this session (P3), as on the game's own host, or
- *  your setting when it sent none (P2). */
+ *  codes the game sent this session, as on the game's own host, or your
+ *  setting when it sent none. */
 export function codeReaderStep(gameSent: boolean): CardStep {
   return openingStep({ capture: { kind: 'none' }, forsaken: true, gameSent });
 }
@@ -75,7 +74,7 @@ const FORGET: MoreItem = { id: 'forget', label: "Forget your game's prompt", dan
 
 /** The card's title, which names it to a reader too, and the name of
  *  its More button. A vitals text has its own title, which keeps it
- *  apart from Customize vitals…, which opens Settings (Q10). */
+ *  apart from Customize vitals…, which opens Settings. */
 export function cardNames(kind: 'prompt' | 'vitals'): { title: string; options: string } {
   return kind === 'vitals'
     ? { title: 'Your vitals text', options: 'Vitals text options' }
@@ -88,13 +87,12 @@ export const VITALS_MORE: readonly MoreItem[] = [
   { id: 'customize-vitals', label: 'Customize vitals…' },
 ];
 
-/** What More in the card's header offers (section 7.1 header). On The
- *  Forsaken Lands: Change codes… only when the game sent no prompt
- *  setting this session, then Point at the line instead…. On another
- *  game: the code reader. Then Forget your game's prompt after a
- *  separator, once the profile has a capture. The capture steps P2 and
- *  P3 offer nothing, and pointing at the line offers no second way to
- *  point at it. */
+/** What More in the card's header offers. On The Forsaken Lands: Change
+ *  codes… only when the game sent no prompt setting this session, then
+ *  Point at the line instead…. On another game: the code reader. Then
+ *  Forget your game's prompt after a separator, once the profile has a
+ *  capture. The capture steps that read codes offer nothing, and
+ *  pointing at the line offers no second way to point at it. */
 export function moreItems(input: {
   step: CardStep;
   forsaken: boolean;
@@ -151,7 +149,7 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-/** The source line on P3, P3b and P3c while the game sent your codes. */
+/** The source line on the codes step while the game sent your codes. */
 export function codesSourceLine(game: GamePromptSeen | null): string | null {
   if (!game) return null;
   const when = game.atLogin ? 'when you logged in' : `at ${clockTime(new Date(game.receivedAt))}`;
@@ -168,8 +166,9 @@ export function lastSeenLine(seen: PromptLastSeen | null, now: Date): string | n
   return `Vosh found it in your log from ${MONTHS[at.getMonth()]} ${at.getDate()}.`;
 }
 
-/** The title and body of P2: Vosh saw your setting, it shows the codes
- *  the profile holds for Change codes…, or it asks for your setting. */
+/** The title and body of the setting step: Vosh saw your setting, it
+ *  shows the codes the profile holds for Change codes…, or it asks for
+ *  your setting. */
 export function entryCopy(seenLine: string | null, saved = false): { title: string; body: string } {
   if (seenLine) {
     return {
@@ -236,9 +235,9 @@ export function localStamp(at: Date): string {
 // The candidate box
 // ---------------------------------------------------------------------
 
-/** The candidate box's geometry (A2's recipe, measured on P3 and P3c):
- *  10 above the first line, 17.5 per line, its names 4 under it in rows
- *  15 tall and 2 apart, 6 between lines, 10.5 under the last. */
+/** The candidate box's geometry: 10 above the first line, 17.5 per
+ *  line, its names 4 under it in rows 15 tall and 2 apart, 6 between
+ *  lines, 10.5 under the last. */
 const BOX_TOP = 10;
 const LINE_H = 17.5;
 const NAME_GAP = 4;
@@ -275,9 +274,9 @@ export function cellsBefore(line: string, index: number): number {
 }
 
 /** Where each name goes under the line it names: under its first
- *  character, `cellW` per cell from the box's text edge. A name that would
- *  come within 8 px of the one before it on the first row takes the second
- *  row, as the maxes do on P3 and the tank does on P3c. */
+ *  character, `cellW` per cell from the box's text edge. A name that
+ *  would come within 8 px of the one before it on the first row takes
+ *  the second row. */
 export function placeLabels(
   read: PromptCheckRead,
   cellW: number,
@@ -354,7 +353,7 @@ export function readMarks(read: PromptCheckRead): { from: number; to: number; wa
 }
 
 /** The legend's two columns, filled down the first and then the second,
- *  the first taking the odd row (P3). */
+ *  the first taking the odd row. */
 export function legendColumns<T>(rows: readonly T[]): [T[], T[]] {
   const half = Math.ceil(rows.length / 2);
   return [rows.slice(0, half), rows.slice(half)];
@@ -387,8 +386,7 @@ export function migratedNote(capture: PromptCapture): string | null {
   return isMigrated(capture) ? 'This replaces the pattern from your old capture trigger.' : null;
 }
 
-/** The match line, a sentence to a line, as P3c sets it beside the
- *  stepper. */
+/** The match line, a sentence to a line beside the stepper. */
 export function matchSentences(text: string): string[] {
   return text
     .split(/(?<=\.)\s+/)
@@ -396,9 +394,9 @@ export function matchSentences(text: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-/** The lines of the match copy: each sentence on its own line, as P3c
- *  puts the fight count under the match, but the empty ring copy as one
- *  paragraph that wraps, as the P0 specimen sets it. */
+/** The lines of the match copy: each sentence on its own line, so
+ *  the fight count sits under the match, but the empty ring copy as one
+ *  paragraph that wraps. */
 export function matchLines(check: PromptCaptureCheck): string[] {
   return check.total === 0 ? [check.text] : matchSentences(check.text);
 }
@@ -421,7 +419,7 @@ export interface StartRow {
   checked: boolean;
 }
 
-/** The rows of the start list and the Presets menu (section 7 step 5):
+/** The rows of the start list and the Presets menu, in order:
  *  Vosh's default, Yours, Your design before that when it exists, then
  *  the presets in their order, the designs other profiles hold for From
  *  another profile, and Start empty. An earlier design the same as the
@@ -474,11 +472,10 @@ export function startRows(
   return { rows, others, empty };
 }
 
-/** The Presets of the vitals text card (Vitals Styles Q10): Vosh's
- *  text, Yours, Your text before that from the earlier texts, and Your
- *  0.7 text while your 0.7 template was on. A text the same as a row
- *  above it is left out, and the first row that holds your text takes
- *  the check. */
+/** The Presets of the vitals text card: Vosh's text, Yours, Your text
+ *  before that from the earlier texts, and Your 0.7 text while your 0.7
+ *  template was on. A text the same as a row above it is left out, and
+ *  the first row that holds your text takes the check. */
 export function vitalsStartRows(
   config: PromptConfig,
   vosh: string,
@@ -501,7 +498,7 @@ export function vitalsStartRows(
 }
 
 // ---------------------------------------------------------------------
-// Naming another game's numbers (P15)
+// Naming another game's numbers
 // ---------------------------------------------------------------------
 
 export interface NumberButton {
@@ -527,10 +524,10 @@ export function numberButtons(numbers: readonly PromptLineNumber[]): NumberButto
   return out;
 }
 
-/** The name buttons' geometry on P15: the first row 35.5 down the box,
+/** The name buttons' geometry: the first row 35.5 down the box,
  *  each button 20 tall with its label 6 in from its left, a 2 px gap, a
  *  12 px chevron and 4 at its right, in a box 66 tall. A further row
- *  goes 2 under the one above, as the names of P3 do. */
+ *  goes 2 under the one above, as the names on the codes step do. */
 const NAME_BUTTON_TOP = 35.5;
 const NAME_BUTTON_H = 20;
 const NAME_BUTTON_ROW_GAP = 2;
@@ -620,12 +617,12 @@ const CARD_GAP = 4;
 /** How far under the top of the terminal the card may reach. */
 const CARD_TOP_MARGIN = 8;
 
-/** Where the card ends, as CSS `bottom` from the window's bottom, and the
- *  most it may be tall. In the text and lifted it ends 4 px above the row
- *  right above your prompt's first row, so no row is cut in half next to
- *  the line you edit, and with no open row it sits as it would over a
- *  prompt on the last row (B2, P2 to P15). Pinned, it ends 4 px above the
- *  band's first row (the 2026-09-30 addendum, item 1). */
+/** Where the card ends, as CSS `bottom` from the window's bottom, and
+ *  the most it may be tall. In the text and lifted it ends 4 px above
+ *  the row right above your prompt's first row, so no row is cut in
+ *  half next to the line you edit, and with no open row it sits as it
+ *  would over a prompt on the last row. Pinned, it ends 4 px above the
+ *  band's first row. */
 export function cardAnchor(input: {
   pinned: boolean;
   /** The client y of the open row's first row. */
@@ -650,7 +647,7 @@ export function cardAnchor(input: {
 }
 
 /** The vitals text card's gap to the panel and its foot's to the input
- *  band (board 5 of the Vitals Styles review). */
+ *  band. */
 const BESIDE_GAP = 12;
 const ABOVE_INPUT = 16;
 
@@ -843,10 +840,10 @@ export function nextCardRequest(prev: CardRequest | null, view: CardRequestView)
   return { view, at: (prev?.at ?? 0) + 1 };
 }
 
-/** A sample cut to a column `column` px wide, as the boards cut it with
- *  text-overflow ellipsis: whole when its cells fit, else the cells that
- *  fit with the ellipsis after them, with the hair a fit needs, and the
- *  column's whole width. */
+/** A sample cut to a column `column` px wide, as text-overflow ellipsis
+ *  cuts it: whole when its cells fit, else the cells that fit with the
+ *  ellipsis after them, with the hair a fit needs, and the column's
+ *  whole width. */
 export function sampleCut(
   total: number,
   cellW: number,

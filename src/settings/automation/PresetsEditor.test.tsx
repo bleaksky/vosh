@@ -5,14 +5,13 @@ import { normalizeUiConfig } from '../../ipc/uiConfig';
 import type { PresetToggle } from '../../automation/automationRecords';
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 
-// The preset card of Scripts board 7: Numpad movement's toggle, Adds,
-// the Keys row and the note when a macro of yours keeps a key. This
-// mounts the card over a fake event bus and a fake macros_list, so the
-// macro list store loads, follows each list the backend sends and asks
-// again on a profile switch, as it does in the app. Then the Alerts
-// category of board 2 of the Alerts review, in the whole editor over a
-// fake profile, and the ask before the first banner of board 3 with the
-// warn ring and the note.
+// The preset card: Numpad movement's toggle, Adds, the Keys row and the
+// note when a macro of yours keeps a key. This mounts the card over a
+// fake event bus and a fake macros_list, so the macro list store loads,
+// follows each list the backend sends and asks again on a profile
+// switch, as it does in the app. Then the Alerts category, in the whole
+// editor over a fake profile, and the ask before the first banner with
+// the warn ring and the note.
 
 type Handler = (event: { payload: unknown }) => void;
 const bus = vi.hoisted(() => ({
@@ -625,8 +624,8 @@ describe('the Alerts category', () => {
   });
 });
 
-// First Run board 4: every preset off, the suggestions ringed, and the
-// card with Looks like and Suggested.
+// Every preset off, the suggestions ringed, and the card with Looks
+// like and Suggested.
 describe('the Presets page of First Run board 4', () => {
   it('rings each suggestion for your world while it is off', async () => {
     const editor = await mountEditor(['sent_tells'], [], {});
@@ -702,7 +701,7 @@ const LILAC = { disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg
 /** What Save sent, but the removes of the presets that are off. */
 const sentCalls = () => bus.calls.filter(([cmd]) => cmd !== 'presets_remove');
 
-// Presets board 1: a preset's colors on its card, one swatch for each.
+// A preset's colors on its card, one swatch for each.
 describe('the Colors block', () => {
   it('shows the preset color in each empty swatch and Back to under one you changed', async () => {
     const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, LILAC);
@@ -763,7 +762,7 @@ describe('the Colors block', () => {
     expect(sentCalls()[1][0]).toBe('presets_install');
   });
 
-  // Board 4: a fix to the line color Orla changed.
+  // A fix to the line color Orla changed.
   const FIXED = {
     disarm_buff_fade: { colors: { line: { value: '#c3a6ff', was: 'fg:172', seen: 'fg:178' } } },
   };
@@ -830,7 +829,7 @@ const ORLA = {
   },
 };
 
-// Presets board 1 and 5: Your changes, its links, and Reset to preset.
+// Your changes, its links, and Reset to preset.
 describe('Your changes and Reset to preset', () => {
   it('names each change, and its links open Triggers while the preset is on', async () => {
     const editor = await mountEditor(['disarm_buff_fade'], [], {}, 'granted', null, ORLA);
@@ -948,9 +947,8 @@ describe('Your changes and Reset to preset', () => {
 const CHANGED_NOTE =
   'Your presets changed outside Settings while you edited them. Save keeps those changes and adds yours.';
 
-// The While you edit Presets frame of First Run board 4: the card in the
-// main window turns a preset on through presets_enabled_set while the
-// page is open.
+// The card in the main window turns a preset on through
+// presets_enabled_set while the Presets page is open.
 describe('following the presets another window turns on', () => {
   it('loads the new list at once while the page is clean', async () => {
     const editor = await mountEditor(['none'], [], {});

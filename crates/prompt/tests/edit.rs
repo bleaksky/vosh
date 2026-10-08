@@ -1,4 +1,4 @@
-//! `prompt_edit` tests (section 9, piece looks). Every op keeps the text
+//! `prompt_edit` tests. Every op keeps the text
 //! and the look of every piece it does not change, and the writer never
 //! writes a token that reads back as something else.
 
@@ -1141,7 +1141,7 @@ fn a_push_to_the_right_goes_in_moves_and_takes_when_as_a_line_break_does() {
 
 #[test]
 fn when_puts_a_line_break_in_a_fight_and_takes_it_out_again() {
-    // The card offers When on a line break (P10), and the picker's Line
+    // The card offers When on a line break, and the picker's Line
     // break in a fight sets it on the break it adds.
     let template = "%hp%nl%mana";
     let fight = edit(

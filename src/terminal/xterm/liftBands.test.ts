@@ -277,7 +277,7 @@ describe('layoutBands', () => {
     expect(band.top).toBe(3 * cell.h - BAND_Y);
     expect(band.width).toBeCloseTo(35 * cell.w + 2 * BAND_X, 6);
     expect(band.height).toBe(cell.h + 2 * BAND_Y);
-    // P4 measures 281 wide by 21.5 tall for 35 cells.
+    // 35 cells on one row measure 281 wide by 21.5 tall.
     expect(band.width).toBeCloseTo(281, 6);
     expect(band.height).toBe(21.5);
   });
@@ -289,7 +289,7 @@ describe('layoutBands', () => {
       cell.w,
       cell.h,
     );
-    // P8b measures 39 tall for two rows.
+    // Two rows measure 39 tall.
     expect(band.height).toBe(39);
     expect(band.width).toBeCloseTo(59 * cell.w + 8, 6);
   });

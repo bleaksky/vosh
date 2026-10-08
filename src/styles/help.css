@@ -1,8 +1,8 @@
-/* Help window (the approved Help boards). It wears the Settings frame
-   from settings.css (.st-app, the sidebar, the search, the nav rows, the
-   band and its breadcrumb) and adds the hp- rules below, which read only
-   the One Window tokens and the --st- fills, so light themes follow
-   through the same variables. */
+/* Help window. It wears the Settings frame from settings.css
+   (.st-app, the sidebar, the search, the nav rows, the band and its
+   breadcrumb) and adds the hp- rules below, which read only the
+   shared tokens and the --st- fills, so light themes follow through
+   the same variables. */
 
 /* The sidebar is 280 wide, so the longest topic title sits on one line
    under its section. */
@@ -112,8 +112,8 @@
   padding: 0 0 0 20px;
 }
 
-/* A button row, 16 under the text above it, as First Run board 5
-   draws Open Get started. */
+/* A button row, 16 under the text above it, such as
+   Open Get started. */
 .hp-actions {
   display: flex;
   gap: 8px;

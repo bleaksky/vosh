@@ -11,7 +11,7 @@ import { hitFill, type HitView } from './vitalsHit';
 import { ledgerFigure } from './vitalsLedgerFit';
 import { VITAL_LABELS } from './vitalsView';
 
-// Dials (More Vitals Styles, board 3): one open 270 degree arc for
+// Dials: one open 270 degree arc for
 // each vital, 4 px wide on the divider track with round ends, running
 // clockwise from the lower left, after the Breath of the Wild stamina
 // wheel. The pane label caps sit above, the figure inside and the max

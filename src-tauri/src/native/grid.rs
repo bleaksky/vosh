@@ -1,4 +1,4 @@
-//! Tier 3 native terminal renderer, M2b (see docs/native-renderer.md).
+//! The native terminal renderer (see docs/renderer.md).
 //!
 //! Wraps `alacritty_terminal`'s `Term` so the post-telnet byte stream
 //! (the same bytes Vosh hands xterm) builds a real cell grid: characters,
@@ -164,7 +164,7 @@ impl TermGrid {
     }
 
     /// Keep `lines` of history above the screen, dropping the oldest
-    /// past it, as Scrollback size sets it (D40).
+    /// past it, as Scrollback size sets it.
     pub(crate) fn set_history(&mut self, lines: usize) {
         self.term.set_options(Config {
             scrolling_history: lines,
@@ -486,7 +486,7 @@ pub(crate) fn show(session: SessionId) {
 }
 
 /// Keep `lines` of history in the grid of `session`, now and in a grid
-/// it makes later (D40).
+/// it makes later.
 pub(crate) fn set_history(session: SessionId, lines: usize) {
     with_session(session, |held| {
         held.history = Some(lines);

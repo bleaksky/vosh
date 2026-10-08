@@ -493,7 +493,7 @@ pub(crate) async fn presets_install<R: tauri::Runtime>(
 }
 
 /// Turn presets on and off in one step, for First Run's Get started and
-/// the Presets page (First Run Q17, Presets Q10). Each preset `changes`
+/// the Presets page. Each preset `changes`
 /// turns off loses its triggers and macros, and `triggers` and `macros`,
 /// which the page built for the presets it turns on, install as
 /// [`presets_install`] installs them. Then the switches land on the

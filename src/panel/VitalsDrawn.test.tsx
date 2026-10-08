@@ -322,7 +322,7 @@ describe('Candles', () => {
 });
 
 describe('Show each hit', () => {
-  // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
+  // A hit in a fight: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;
   const HEALTH = (744 / 1038) * 100;
   const HITS: HitViews = {

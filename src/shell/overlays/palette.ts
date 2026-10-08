@@ -30,14 +30,14 @@ import { BUILTIN_THEMES, THEMES, themeShownBy, type AppTheme } from '../../theme
 // ── Registry ─────────────────────────────────────────────────────────
 
 /** Home sections, in the order the palette lists them. With nothing
- *  typed the palette shows Recent, View, and Session (SPEC 7), so
+ *  typed the palette shows Recent, View, and Session, so
  *  Disconnect is the final row. Aliases, settings, help, find and the
  *  sessions to go to surface as you type or through Recent. */
 export type PaletteSection = 'input' | 'view' | 'aliases' | 'session' | 'goto';
 
 /** Input holds the prompt card's rows, which show only as you type, so
- *  the palette still opens on View and Session. Go to follows Session,
- *  as board 4 of the Sessions review draws it. */
+ *  the palette still opens on View and Session. Go to follows Session.
+ *  */
 export const SECTION_ORDER: PaletteSection[] = ['input', 'view', 'aliases', 'session', 'goto'];
 
 export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
@@ -94,8 +94,7 @@ export interface PaletteSessions {
   toggleShown: () => void;
 }
 
-/** The selected session's snoops, for the rows that reach them (Snoop
- *  SN8). */
+/** The selected session's snoops, for the rows that reach them. */
 export interface PaletteSnoops {
   /** Every tab, live or ended, in the order they started. */
   tabs: readonly SnoopTab[];
@@ -192,7 +191,7 @@ const PANE_TITLES: Record<OfferedPaneType, string> = {
 
 // Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
 // `settings-<id>`, a palette Recent id, so the old tab ids stay. The
-// Settings layout move (October 8) brought back the vitals row, now for
+// move to eleven Settings groups brought back the vitals row, now for
 // the Vitals tab, and added rows for Accessibility, Prompt and the Logs
 // tab. The logs row keeps its id and opens the search, as the bare
 // link does, so the Logs tab row names its first section.
@@ -283,7 +282,7 @@ const SETTINGS_TABS: {
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
 
-  // The prompt card's rows (P0's palette specimen), found as you type.
+  // The prompt card's rows, found as you type.
   if (deps.openPromptCard) {
     const open = deps.openPromptCard;
     entries.push({
@@ -318,7 +317,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   }
 
   // The writing card's rows, one for each kind, named for what you do,
-  // so bug finds Report a bug… (Note Editor Q2).
+  // so bug finds Report a bug….
   if (deps.writing) {
     const { kinds, beast, open } = deps.writing;
     const shown: WritingKind[] = [...kinds, 'description', 'history', 'personality', 'purpose'];
@@ -455,7 +454,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   }
 
   // The rows that move between sessions wait for a second session, as
-  // the sidebar does (Q12, Q17).
+  // the sidebar does.
   const sessions = deps.sessions && deps.sessions.rows.length >= 2 ? deps.sessions : null;
   if (deps.newSession) {
     entries.push({
@@ -539,7 +538,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       });
     });
   }
-  // The snoop rows, while the session has a snoop open (SN8). Next
+  // The snoop rows, while the session has a snoop open. Next
   // snoop waits for a second tab, Stop for a live one and Close ended
   // snoops for an ended one.
   const snoops = deps.snoops && deps.snoops.tabs.length > 0 ? deps.snoops : null;

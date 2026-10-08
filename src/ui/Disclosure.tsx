@@ -17,8 +17,8 @@ export interface DisclosureProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   note?: ReactNode;
 }
 
-/** A row sized button that opens more settings, like the boards'
- *  `Advanced` row: the label and description on the left and a 16 px
+/** A row sized button that opens more settings, like the
+ *  `Advanced` rows: the label and description on the left and a 16 px
  *  chevron right in the tertiary color that turns down while open. As
  *  the last child of a Card it takes the card's bottom corners. */
 export function Disclosure({

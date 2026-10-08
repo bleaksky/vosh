@@ -1,12 +1,12 @@
-// Edit as text in the prompt card (section 7 step 9 of the build spec,
-// board P9): your design byte for byte, each token colored by what it is,
-// the token under the caret marked with the part it draws, names Vosh has
-// no value for underlined, and the token rows that add a token at the
-// caret. Pure, so PromptText.tsx stays about the field.
+// Edit as text in the prompt card: your design byte for byte, each
+// token colored by what it is, the token under the caret marked with
+// the part it draws, names Vosh has no value for underlined, and the
+// token rows that add a token at the caret. Pure, so PromptText.tsx
+// stays about the field.
 
 import type { PromptToken } from '../ipc/promptDesign';
 
-/** The token rows under the field, as P9 draws them. */
+/** The token rows under the field. */
 export const TOKEN_ROWS: readonly { label: string; tokens: readonly string[] }[] = [
   { label: 'Forms', tokens: ['%pct_hp%%', '%hp_bar:10', '%hp/%{maxhp}'] },
   { label: 'Color', tokens: ['%c_hp', '%c_4', '%{c:#80c8ff}', '%c_default', '%c_reset'] },

@@ -7,15 +7,15 @@ import { pluginOwner, type LuaLine, type PluginStop } from '../../ipc/scripts';
 import type { CodeMark } from '../../ui/codeEditorStyle';
 import { saveTime } from './scriptTimes';
 
-/** What each stop of the Scripts design says the call did. */
+/** What each stop says the call did. */
 const STOP_REASON: Readonly<Record<PluginStop, string>> = {
   time: 'one call ran past 100 ms',
   call_memory: 'one call used more than 32 MB',
   state_memory: 'your scripts held more than 128 MB',
 };
 
-/** The warn note over the editor of a plugin Vosh stopped, as board 3
- *  writes it for the time limit. */
+/** The warn note over the editor of a plugin Vosh stopped, as it reads
+ *  for the time limit. */
 export function stopNote(name: string, stop: PluginStop): string {
   return `Vosh stopped ${name} because ${STOP_REASON[stop]}. It stays off until you save it or restart Vosh.`;
 }

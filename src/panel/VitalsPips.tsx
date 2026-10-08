@@ -2,7 +2,7 @@ import { VitalsMarks, type MarkedVitalsProps } from './VitalsMarks';
 import { hitFill, type HitViews } from './vitalsHit';
 import { pipLights, type PipLight, type PipsFit } from './vitalsMarksFit';
 
-// Pips (Vitals Styles, board 1): ten 6 px discs beside each value, one
+// Pips: ten 6 px discs beside each value, one
 // for every tenth, lit in halves as the status line's moons are, the
 // whole disc at a fifth of its tone and the lit part at full. Five
 // discs, each a fifth, where ten do not fit beside the whole label,

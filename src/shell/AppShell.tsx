@@ -18,7 +18,7 @@ import {
   sessionsColumn,
 } from './sessionsColumn';
 
-// The One Window frame (SPEC 1). A CSS grid with the sessions column,
+// The one window frame. A CSS grid with the sessions column,
 // the terminal column and the panel column. Rows are the 32 px title
 // band, the terminal, the input band (at least 40, taller while you
 // compose several lines), and the 28 px status line. The band spans
@@ -41,11 +41,12 @@ import {
 // column takes 0, and the frame is the one it was before sessions.
 //
 // The sessions toggle holds one spot in the frame's top left corner,
-// over the sidebar's top while it shows and at the band's left end while
-// it hides (Sessions toggle T1). The root says which with data-lead, so
-// the band's title keeps clear of it only while it sits over the band.
-// In a window too narrow for the sidebar's column, the sidebar slides
-// over the terminal from the left edge instead (T5), under the toggle.
+// over the sidebar's top while it shows and at the band's left end
+// while it hides, so you find it in the same place either way. The root
+// says which with data-lead, so the band's title keeps clear of it only
+// while it sits over the band. In a window too narrow for the sidebar's
+// column, the sidebar slides over the terminal from the left edge
+// instead, under the toggle.
 //
 // The sidebar's 1 px line is its width handle too, below the sidebar's
 // top 32, the way the panel's edge is the panel's. Each drag writes its

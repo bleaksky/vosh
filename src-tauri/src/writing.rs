@@ -1,9 +1,9 @@
-//! Your writing, kept in `writing.toml` in the app data folder (Note
-//! Editor Q10). Each character on each world keeps its drafts, newest
+//! Your writing, kept in `writing.toml` in the app data folder. Each
+//! character on each world keeps its drafts, newest
 //! first, and its last 20 posts under Sent, with the game's copy of each
 //! text the game saves in place and the race and level last seen, so a
 //! werebeast keeps its Beast switch after a login that sends no
-//! Char.Status (Description Editor Q11). The card's own switches, Check
+//! Char.Status. The card's own switches, Check
 //! spelling and the guide, sit at the top of the file.
 //!
 //! A file of its own means a keystroke never rewrites a profile. The page
@@ -40,7 +40,7 @@ fn version() -> i64 {
 pub(crate) struct WritingFile {
     #[serde(default = "version")]
     pub(crate) version: i64,
-    /// The card checks spelling as you type (Description Editor Q9).
+    /// The card checks spelling as you type.
     #[serde(default = "yes")]
     pub(crate) spelling: bool,
     /// The guide shows beside the text. It opens the first time and

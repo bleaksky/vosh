@@ -1,11 +1,10 @@
 import { Button } from '../ui';
 import type { Guide } from './kinds';
 
-// The guide beside the text (Description Editor Q9, board 5). The help's
-// reminders in Vosh's words, as plain rows with no mark, since Vosh
-// checks none of them. The width and the count live in the marks and
-// the footer. Vosh's own words sit under them, and the button asks the
-// game for the help itself.
+// The guide beside the text. The help's reminders in Vosh's words, as
+// plain rows with no mark, since Vosh checks none of them. The width
+// and the count live in the marks and the footer. Vosh's own words sit
+// under them, and the button asks the game for the help itself.
 
 export function WritingGuide({ guide, onHelp }: { guide: Guide; onHelp: () => void }) {
   return (

@@ -1,7 +1,7 @@
 import type { WritingKind } from '../ipc/writing';
 
-// The kinds of text the writing card takes, one row each (Note Editor
-// Q4, Q5, Q6 and board 2). A kind sets the card's title, its fields, its
+// The kinds of text the writing card takes, one row each.
+// A kind sets the card's title, its fields, its
 // width, its guide and how it ends. The writer in Rust holds the game's
 // side of each, the commands that open, read and end it.
 

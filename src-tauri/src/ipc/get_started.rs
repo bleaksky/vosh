@@ -1,5 +1,5 @@
-//! The commands for Get started, the short list a new install opens on
-//! (First Run Q1 and Q12). `profiles.toml` keeps where you are in it once
+//! The commands for Get started, the short list a new install opens on.
+//! `profiles.toml` keeps where you are in it once
 //! for the whole install, and Help opens it again in the main window.
 
 use serde::Serialize;

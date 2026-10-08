@@ -3,10 +3,9 @@ import type { SnoopFindResults, SnoopTerminalHandle } from '../terminal/SnoopTer
 import type { FindOptions } from '../terminal/terminalHandle';
 
 // The snoop terminals of the split or the snoop window, and Find on the
-// tab in front (Snoop SN2 and SN3). Each terminal hands its handle over
-// as it sets up, and the find bar searches the one in front with the
-// search your terminal uses. The bar closes when another tab comes to
-// the front.
+// tab in front. Each terminal hands its handle over as it sets up, and
+// the find bar searches the one in front with the search your terminal
+// uses. The bar closes when another tab comes to the front.
 
 /** The find bar before a search runs. */
 const NO_RESULTS: SnoopFindResults = { index: -1, count: 0 };

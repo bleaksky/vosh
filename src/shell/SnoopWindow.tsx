@@ -11,13 +11,13 @@ import { SnoopStrip } from './SnoopStrip';
 import { useSnoopFind } from './useSnoopFind';
 import { useSnoopWindowLook } from './useSnoopWindowLook';
 
-// The snoop window, board 06 of the Snoop review (SN1). Open in a window
-// moves every tab of a session here, for a second screen. The strip of
-// the split moves up into the 32 band beside the traffic lights, as the
-// Settings header sits there, and its menu has no Open in a window and
-// no Fold. Under it each tab's terminal, the one in front shown, 17
-// below the band. There is no command line: you type in the main
-// window, and Cmd J there brings this window forward.
+// The snoop window. Open in a window moves every tab of a session here,
+// for a second screen. The strip of the split moves up into the 32 band
+// beside the traffic lights, as the Settings header sits there, and its
+// menu has no Open in a window and no Fold. Under it each tab's
+// terminal, the one in front shown, 17 below the band. There is no
+// command line: you type in the main window, and Cmd J there brings
+// this window forward.
 //
 // It reads the snoops of its session from the snoop store, whatever
 // session the main window shows, every tab with its text fresh from

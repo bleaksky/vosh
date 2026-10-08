@@ -9,9 +9,9 @@ import { createConfigStore } from './configStore';
 
 // How much of the terminal column the snoop split takes, from UiConfig
 // snoop_share, 40 percent until you drag it, and whether it is folded
-// to its strip, from snoop_folded (Snoop SN7). Each profile keeps its
-// own, and a #profile load, reset or import reads them again. A drag or
-// a fold saves both fields alone and the split follows at once.
+// to its strip, from snoop_folded. Each profile keeps its own, and a
+// #profile load, reset or import reads them again. A drag or a fold
+// saves both fields alone and the split follows at once.
 
 export interface SnoopSize {
   share: number;

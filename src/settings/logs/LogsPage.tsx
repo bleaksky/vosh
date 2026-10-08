@@ -11,9 +11,8 @@ import { SessionLogs } from '../general/SessionLogs';
 import type { SettingsPageProps } from '../pageTypes';
 import { useSettingsAutoSave } from '../useSettingsAutoSave';
 
-// Logs (Settings layout, answered October 8): Session logs and
-// Scrollback, the two things Vosh keeps of what you saw, on disk and in
-// the terminal. The tab opens on its settings (Q2). Search logs… opens
+// Logs: Session logs and Scrollback, the two things Vosh keeps of what
+// you saw, on disk and in the terminal. The tab opens on its settings. Search logs… opens
 // the log view inside Logs at logs:search (SessionLogs.tsx), and Save a
 // scene…, here or in the log view, opens the scene page at logs:scene
 // (ScenePage.tsx). The bare link `logs`, which palette Recent and older
@@ -85,7 +84,7 @@ function computerName(): string {
 
 /** Saved logs with the ways into the scene page and the log view, Log
  *  sessions for the profile Settings shows, and Keep logs for, which
- *  every profile shares since they share one log file (D34). Log
+ *  every profile shares since they share one log file. Log
  *  sessions reads the world the selected session dials until you
  *  choose, on for a game and off for this computer. */
 function SessionLogsSection({
@@ -171,7 +170,7 @@ function SessionLogsSection({
 
 /** How many logs and lines Vosh saved, leaving out connections to
  *  this machine the way the log view does. A log is one connection,
- *  which the store calls a session (Q21). */
+ *  which the store calls a session. */
 function SavedLogsCount({ onError }: { onError: (message: string | null) => void }) {
   const [counts, setCounts] = useState<{ logs: number; lines: number } | null>(null);
   useEffect(() => {

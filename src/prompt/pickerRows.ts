@@ -1,8 +1,7 @@
-// The picker inside the prompt card (section 7 step 7 of the build spec,
-// boards P6 and P6b): every field Vosh can draw, grouped by topic, with
-// what each reads now on the right, search over names, other words and
-// the game's codes, and the line that says where a field comes from.
-// Pure, so PromptPicker.tsx stays about layout.
+// The picker inside the prompt card: every field Vosh can draw, grouped
+// by topic, with what each reads now on the right, search over names,
+// other words and the game's codes, and the line that says where a
+// field comes from. Pure, so PromptPicker.tsx stays about layout.
 
 import type { PromptFieldGroup, PromptFieldState } from '../ipc/prompt';
 

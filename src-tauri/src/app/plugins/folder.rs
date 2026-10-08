@@ -322,8 +322,7 @@ mod tests {
 
     use super::*;
 
-    /// The two files board 2 of the Scripts design shows New plugin
-    /// writing for `wait_full`.
+    /// The two files New plugin writes for `wait_full`.
     const WAIT_FULL_MANIFEST: &str = "[plugin]
 name = \"wait_full\"
 version = \"0.1.0\"

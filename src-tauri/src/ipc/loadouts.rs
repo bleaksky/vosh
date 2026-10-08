@@ -1,6 +1,6 @@
 //! The commands for loadout mode. Settings reads your loadouts and which
 //! of them are on, and the Loadouts editor turns them on and off. Each
-//! profile keeps its own stack of loadouts that are on (Sessions Q22), so
+//! profile keeps its own stack of loadouts that are on, so
 //! both commands take the `profile` they mean, which a session must play,
 //! and act on the selected session's when they name none.
 

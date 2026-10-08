@@ -5,11 +5,11 @@ import type { OpenedSession } from '../lib/appMenu';
 import type { Connection } from '../stores/session/useConnection';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 
-// The New session form of board 4 (Q2 and Q12 of the Sessions review).
-// The Profile row follows the address until you choose a profile, each
-// pick moves the new session to it, Connect waits for that move and
-// then dials, and a form that goes any other way closes the session it
-// opened. newSession.test.ts holds how the row opens.
+// The New session form. The Profile row follows the address until you
+// choose a profile, each pick moves the new session to it, Connect
+// waits for that move and then dials, and a form that goes any other
+// way closes the session it opened. newSession.test.ts holds how the
+// row opens.
 
 /** Every step the form took, in order, the dial among them. */
 const steps = vi.hoisted(() => [] as unknown[]);

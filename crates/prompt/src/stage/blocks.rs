@@ -48,7 +48,7 @@ pub struct Block {
     pub lines: Vec<BlockLine>,
     /// The lines the drawn prompt replaces, by index. The drawn prompt
     /// always replaces the final line. A line above it shows as the game
-    /// sent it unless your design reads a value it carries (D7).
+    /// sent it unless your design reads a value it carries.
     pub replaced: Vec<usize>,
     /// What each group read, by variable.
     pub values: BTreeMap<String, String>,

@@ -169,7 +169,7 @@ describe('derivation rules', () => {
     expect(contrast(hex(t.dangerText), hex(t.panel))).toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
     // A red that already reads as words keeps one color for both.
     expect(deriveChrome(ember).dangerText).toBe(deriveChrome(ember).danger);
-    // Nord pins the tier to the red the approved boards draw words in.
+    // Nord pins the tier to the lighter red its danger words take.
     expect(deriveChrome(nord.xterm, nord.chrome).dangerText).toBe('#dc8a92');
   });
 

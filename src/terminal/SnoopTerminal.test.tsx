@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 import source from './SnoopTerminal.tsx?raw';
 
-// The terminal of one snooped player (Snoop SN3). React DOM mounts it on
+// The terminal of one snooped player. React DOM mounts it on
 // a stand in DOM (src/test/fakeDom.ts) with xterm standing in, so what
 // reaches xterm is what it would draw. The snoop store stands in too,
 // with the text each tab holds and the pieces it hands on.

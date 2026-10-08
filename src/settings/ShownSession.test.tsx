@@ -3,10 +3,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SessionRow } from '../ipc/session';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 
-// The session and profile Settings names at the right of its header,
-// board 7 and board 9 of the Sessions review. The sessions come through
-// a fake Tauri event bus, and each test loads fresh modules, since the
-// stores keep the list at module scope.
+// The session and profile Settings names at the right of its header.
+// The sessions come through a fake Tauri event bus, and each test loads
+// fresh modules, since the stores keep the list at module scope.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();

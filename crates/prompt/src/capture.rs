@@ -177,7 +177,7 @@ pub fn from_trigger(patterns: &[&str], body: &str) -> Result<RegexCapture, NotAC
 /// A `kind = "regex"` capture reads one line. Aabahran's codes compile
 /// into the shapes of [`crate::aabahran::shapes`], and a shape may span
 /// lines, so the stage holds the lines that start one until the rest
-/// arrives (D7).
+/// arrives.
 #[derive(Debug, Clone)]
 pub struct Recognizer {
     pub(crate) reader: Reader,
@@ -264,7 +264,7 @@ pub struct Recognized {
     /// The game's away prompt, which shows as sent.
     pub afk: bool,
     /// The groups each line reads, top line first, so the stage knows
-    /// what a line above the last one carries (D7).
+    /// what a line above the last one carries.
     pub lines: Vec<Vec<String>>,
 }
 

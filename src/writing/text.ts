@@ -1,9 +1,9 @@
 // The rules a line in the writing card follows: how wide the game reads
 // it, how it flows as you type, how a paste and a rewrap break it, what
-// the card marks on it, and how the footer counts it (Description Editor
-// Q7, Q8 and Q10, Note Editor Q6). Every line in the card is a line the
-// game gets, so nothing here wraps softly or changes a word. It moves
-// breaks and spaces, and folds only what the game would drop.
+// the card marks on it, and how the footer counts it. Every line in the
+// card is a line the game gets, so nothing here wraps softly or changes
+// a word. It moves breaks and spaces, and folds only what the game
+// would drop.
 
 /** The most a text may hold in the game's editor, MDL less 4
  *  (olc.c:3832, merc.h:169). */
@@ -39,7 +39,7 @@ export function innerCodes(line: string): [number, number][] {
 /** How many columns a line takes as a looker sees it. A code counts
  *  nothing, as the game measures it when it folds a line for a looker
  *  (comm.c:6919) and when it formats (olc.c:4224), and nor do spaces at
- *  its end, which go when Vosh sends it (Description Editor Q8). */
+ *  its end, which go when Vosh sends it. */
 export function columns(text: string): number {
   const line = text.replace(/ +$/, '');
   let n = line.length;
@@ -153,7 +153,7 @@ export interface Caret {
 }
 
 /** A paragraph starts after an empty line or at a line that starts with
- *  spaces (Description Editor Q7). */
+ *  spaces. */
 function startsParagraph(line: string): boolean {
   return /^ /.test(line);
 }

@@ -14,8 +14,8 @@ interface AdvancedAppearanceProps {
 }
 
 /** The quiet Advanced row at the end of Appearance. It holds what the
- *  board leaves out and you still use: custom themes, the base palette,
- *  bold bright text and the font stack. Blinking text lives on
+ *  main rows leave out and you still use: custom themes, the base
+ *  palette, bold bright text and the font stack. Blinking text lives on
  *  Accessibility, the split divider color on Layout and the sent
  *  command color on Input. */
 export function AdvancedAppearance({ config, update, open, onToggle }: AdvancedAppearanceProps) {

@@ -106,19 +106,18 @@ import {
   type Note,
 } from './words';
 
-// The writing card (Description Editor and Note Editor reviews). One card
-// for every text the game's line editor takes, your description, a note
-// on any board, your history, with the kind in its title. It floats over
-// the terminal on the prompt card's recipe, its foot over the six newest
-// rows, and keeps each draft for its character in writing.toml as you
-// type. Send to game and Post… run a job in the session's writer, which
-// drives the game's editor, and the game's answers show in the rows under
-// the card. You can drag it anywhere in the window by its header, drag
-// its box taller or shorter by the grip on its free edge, and pin it to
-// the panel, where it fills its own pane (cardPlace.ts, pinnedPane.ts).
-// The card draws through a portal into a box of its own, which moves
-// between the window and the pane's slot, so pinning never starts it
-// over.
+// The writing card. One card for every text the game's line editor
+// takes, your description, a note on any board, your history, with the
+// kind in its title. It floats over the terminal on the prompt card's
+// recipe, its foot over the six newest rows, and keeps each draft for
+// its character in writing.toml as you type. Send to game and Post… run
+// a job in the session's writer, which drives the game's editor, and
+// the game's answers show in the rows under the card. You can drag it
+// anywhere in the window by its header, drag its box taller or shorter
+// by the grip on its free edge, and pin it to the panel, where it fills
+// its own pane (cardPlace.ts, pinnedPane.ts). The card draws through a
+// portal into a box of its own, which moves between the window and the
+// pane's slot, so pinning never starts it over.
 
 /** What the card was asked to open on. */
 export interface WritingRequest {
@@ -202,7 +201,7 @@ export function WritingCard({
   );
 
   // Another character's drafts, opened from Other characters, wait for
-  // a session that plays them (Note Editor board 7).
+  // a session that plays them.
   const [other, setOther] = useState<{ world: World; name: string } | null>(null);
   const playing = connection.status.kind === 'connected' && connection.character !== null;
   const name = other?.name ?? connection.character ?? row?.character ?? null;
@@ -216,7 +215,7 @@ export function WritingCard({
   const immortal = keepsCodes(level);
 
   // Keep the race and level last seen, so a login that sends no
-  // Char.Status keeps the Beast switch (Description Editor Q11).
+  // Char.Status keeps the Beast switch.
   const worldHost = world?.host ?? null;
   const worldPort = world?.port ?? null;
   useEffect(() => {
@@ -247,7 +246,7 @@ export function WritingCard({
   const [sentView, setSentView] = useState(false);
   const [dropped, setDropped] = useState<Drop | null>(null);
   // A drop after the post went out, which a look at the board's list
-  // settles once the session plays again (Note Editor board 8).
+  // settles once the session plays again.
   const [find, setFind] = useState<Find | null>(null);
 
   /** The draft of `k` to open on: the newest of a board's, or the one a
@@ -310,7 +309,7 @@ export function WritingCard({
   }, [request.n, ready]);
 
   /** With no draft, a text the game saves in place reads from the game
-   *  once its prompt shows (Description Editor Q4). */
+   *  once its prompt shows. */
   function readIfNoDraft(k: WritingKind, d: Draft) {
     if (KINDS[k].board || d.text.length > 0 || !live) return;
     jobs.run({ kind: k, action: 'read', name });
@@ -493,7 +492,7 @@ export function WritingCard({
         language: info.language ? (draft.language ?? null) : null,
         adopt,
         // After a drop the game holds the note the card put there,
-        // which Post again clears with no question (Note Editor board 8).
+        // which Post again clears with no question.
         clear_first: ended?.actions.includes('again') ?? false,
       });
     if (!postAsks) {
@@ -562,7 +561,7 @@ export function WritingCard({
   // ── Where it sits and how big ─────────────────────────────────────
   // The card is as wide as 80 columns of your terminal face. In a window
   // too narrow for that it spans the window and sets its text at 11 px
-  // to keep 80 columns (Description Editor board 6).
+  // to keep 80 columns.
   const guideOn = file.guide && !preview;
   const naturalColumn = useMemo(() => columnWidth(fontFamily, fontSize), [fontFamily, fontSize]);
   const naturalWidth = 32 + 82 * naturalColumn + 32 + (guideOn ? 248 : 0);
@@ -1006,7 +1005,7 @@ export function WritingCard({
       : info.guide;
 
   // Read help folds the card to its header while the game prints the
-  // help, keeping its top where it was (Description Editor board 5).
+  // help, keeping its top where it was.
   const [foldTop, setFoldTop] = useState<number | null>(null);
   const help = () => {
     void sendInput(`help ${guide.help}`, session).catch(() => {});
@@ -1060,8 +1059,7 @@ export function WritingCard({
     ['--wr-ground' as string]: env.bg,
   };
 
-  // A confirm sits over the card's foot, 12 in from its right, as the
-  // boards draw it.
+  // A confirm sits over the card's foot, 12 in from its right.
   const cardBox = confirm ? cardRef.current?.getBoundingClientRect() : null;
   const confirmAt = cardBox
     ? {

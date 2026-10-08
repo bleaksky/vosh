@@ -7,7 +7,8 @@ import { errorMark, saveStatus, stopNote } from './pluginState';
 
 const at = (h: number, m: number, s: number) => new Date(2026, 9, 4, h, m, s).getTime();
 
-// Board 1's Output for vitals_alert and board 3's stop of wait_full.
+// The Output of vitals_alert, and the stop of wait_full, a plugin whose
+// loop never ends.
 const BOARD_ONE: LuaLine[] = [
   {
     ts_ms: at(21, 14, 3),
@@ -80,7 +81,7 @@ describe('errorMark', () => {
   });
 
   it('marks nothing once the plugin loaded again after its error', () => {
-    // Board 1's reload at 21:14:31 came after the error at line 22.
+    // The reload at 21:14:31 came after the error at line 22.
     const reloaded = at(21, 14, 31);
     expect(errorMark(BOARD_ONE, 'vitals_alert', 'main.lua', reloaded)).toBeNull();
     // An error the load itself prints carries its time or a later one.

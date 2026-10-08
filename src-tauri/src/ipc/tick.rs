@@ -24,7 +24,7 @@ pub(crate) async fn tick_get_config(
 
 /// Apply a new tick configuration through [`apply_tick_config`], which
 /// changes every field or none, to the profile `profile` names, or the
-/// selected session's, and every count on it follows (Sessions Q30).
+/// selected session's, and every count on it follows.
 /// Persists the profile and broadcasts `vosh://tick-config-changed`, while
 /// the profile is in front, only after the whole configuration applied.
 #[tauri::command]

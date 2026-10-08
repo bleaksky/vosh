@@ -1,5 +1,4 @@
-// The prompt card's pieces (section 7, steps 6, 10 and the keyboard rules
-// of the build spec, boards P5 to P10): which parts you can pick, where
+// The prompt card's pieces: which parts you can pick, where
 // Left and Right go, how Option with them moves a part, where typing,
 // Return and Insert value… put what they add, what the Color row checks
 // and says, and where the marks sit on your prompt. Pure, so the
@@ -105,9 +104,9 @@ export function moveBack(
 }
 
 /** The place right after the last part that shows, before the codes a
- *  design may end on, such as the `%c_reset` after your prompt's trailing
- *  space. A click past the end of your prompt puts the caret there, as
- *  P6 draws it. */
+ *  design may end on, such as the `%c_reset` after your prompt's
+ *  trailing space. A click past the end of your prompt puts the caret
+ *  there. */
 export function endPlace(pieces: readonly PieceShape[]): number {
   const parts = pickable(pieces);
   return parts.length > 0 ? parts[parts.length - 1] + 1 : 0;
@@ -121,9 +120,10 @@ export function insertPlace(pieces: readonly PieceShape[], from: Pointing): numb
   return endPlace(pieces);
 }
 
-/** The edits a value added at `place` makes. Added at the end of a design
- *  that ends in a space, as the game's prompt and every preset do, a
- *  space follows it, so your typed command stays a cell off it (P7). */
+/** The edits a value added at `place` makes. Added at the end of a
+ *  design that ends in a space, as the game's prompt and every
+ *  preset do, a space follows it, so your typed command stays a cell
+ *  off it. */
 export function insertOps(
   pieces: readonly Pick<PromptPiece, 'piece' | 'kind' | 'shows' | 'literal'>[],
   place: number,
@@ -180,7 +180,7 @@ export function caretAfter(op: PromptEditOp, landed: number | null): number | nu
 // The rows of a part
 // ---------------------------------------------------------------------
 
-/** The swatches of the Color row, in board order (P5): the terminal's
+/** The swatches of the Color row, in order: the terminal's
  *  text, By value, then the theme's red, green, yellow, blue, magenta,
  *  cyan and gray. */
 export const THEME_SWATCHES: readonly { index: number; label: string }[] = [
@@ -276,7 +276,7 @@ export function colorHint(
   return steps(color) || steps(background) ? STEPS_HINT : THEME_HINT;
 }
 
-/** The line under a line break's When row (P10), or none while it shows
+/** The line under a line break's When row, or none while it shows
  *  always. */
 export function breakHint(when: PromptWhen): string | null {
   if (when === 'fight') {
@@ -292,11 +292,11 @@ export function breakHint(when: PromptWhen): string | null {
 export const WHEN_FIXED_HINT =
   'Another part decides when this part shows. Change it in Edit as text.';
 
-/** The rows a part shows (P5, P7, P10): a value has Show as, a bar Width
- *  and no Style, text its words, and a line break or a push to the right
- *  edge only When. Every part
- *  that takes a color takes a Background, and the Underline row with its
- *  kind and color shows while an underline is on. */
+/** The rows a part shows: a value has Show as, a bar Width and no
+ *  Style, text its words, and a line break or a push to the right edge
+ *  only When. Every part that takes a color takes a Background, and the
+ *  Underline row with its kind and color shows while an underline is
+ *  on. */
 export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms' | 'underline'>): {
   showAs: boolean;
   text: boolean;
@@ -321,8 +321,7 @@ export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms' | 'u
   };
 }
 
-/** The kinds of underline the Underline row offers, in the order of the
- *  styles board, each with the CSS line its segment draws. */
+/** The kinds of underline the Underline row offers, in order, each with the CSS line its segment draws. */
 export const UNDERLINE_KINDS: readonly {
   style: PromptUnderlineStyle;
   label: string;
@@ -485,7 +484,7 @@ export interface MarkLayout {
   /** The part you picked: the accent tint and a 1 px accent ring. */
   picked: Box[];
   /** Each value Vosh reads on the game's own line, or the whole line,
-   *  while the card reads your codes: the accent tint alone (P2, P3). */
+   *  while the card reads your codes: the accent tint alone. */
   values: Box[];
   /** Parts Vosh cannot fill: a 1 px warn ring. */
   warn: Box[];
@@ -575,7 +574,7 @@ export interface RawMark {
   warn: boolean;
 }
 
-/** The marks on the game's own lines (P2, P3, P3b): every line whole
+/** The marks on the game's own lines: every line whole
  *  while you tell Vosh your prompt, else each value the newest read
  *  marks, on a line the row shows. A read whose lines differ from what
  *  the row shows marks nothing. Its marks count characters. */
@@ -608,8 +607,7 @@ export function rawMarks(
 }
 
 /** The marks on the game's own line through `mapper`: each value in the
- *  accent tint alone, and a run Vosh cannot read in the warn ring (P2,
- *  P3, P3b). */
+ *  accent tint alone, and a run Vosh cannot read in the warn ring. */
 export function rawLayout(raw: readonly RawMark[], mapper: CellMapper): MarkLayout {
   const boxes = (warn: boolean) =>
     raw.filter((m) => m.warn === warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width));

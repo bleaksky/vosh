@@ -47,12 +47,12 @@ import { hitFill, type HitView, type HitViews } from './vitalsHit';
 import { HitGhost } from './HitGhost';
 import { useVitalsHits } from './useVitalsHits';
 
-// Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
+// Vitals pinned under the panes. Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
 // when the vital runs low. In a fight the opponent gets a row on top
 // with its health in warn. Nothing pulses.
 //
-// Settings, Layout, Vitals shapes it (VitalsOptions.dc.html). Density
+// Settings, Vitals shapes it. Density
 // picks Rows, one row per vital, or One line, Health, Mana, and Moves
 // side by side, each with its label at the left, its value at the
 // right, and its meter under both. One line drops the labels only when
@@ -98,8 +98,7 @@ import { useVitalsHits } from './useVitalsHits';
 // (VitalsLedger.tsx). Meter sets the line under each column there.
 // Gauges and Pips draw a pill or discs between each label and value
 // (VitalsGauges.tsx, VitalsPips.tsx), their own marks, so Meter goes
-// quiet for them. So do the styles of the More Vitals Styles review,
-// Bands (VitalsBands.tsx), which stands a tick where a fight began, and
+// quiet for them. So do the drawn styles (VitalsDrawn.tsx), Bands (VitalsBands.tsx), which stands a tick where a fight began, and
 // Ladders (VitalsLadders.tsx), which lights segments as a meter does.
 
 /** `opponentOnly` keeps only the opponent row, for while your pinned

@@ -1,9 +1,8 @@
-//! What each log row is, as the session tells it apart when it writes
-//! the row, so Save a scene can leave out your prompt, your commands,
-//! the lines outside play and the channels you pick (Q9 of the Alerts
-//! and Scenes review). Two columns of `log_lines` hold it, `kind` and
-//! `channel`. A row an older build wrote has neither, and a scene reads
-//! it by its text instead.
+//! What each log row is, as the session tells it apart when it writes the
+//! row, so Save a scene can leave out your prompt, your commands, the lines
+//! outside play and the channels you pick. Two columns of `log_lines` hold
+//! it, `kind` and `channel`. A row an older build wrote has neither, and a
+//! scene reads it by its text instead.
 
 use serde::Serialize;
 

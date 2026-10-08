@@ -1,8 +1,7 @@
-// Your edits to the presets, laid over the presets as they ship (the
-// Presets review, Q1, Q3 and Q5). An edit keeps each row you changed
-// alone, as your value and the preset's value you changed it from, so a
-// fix to the preset still reaches every row you left alone, and a fix to
-// a row you changed shows as one.
+// Your edits to the presets, laid over the presets as they ship. An edit
+// keeps each row you changed alone, as your value and the preset's value
+// you changed it from, so a fix to the preset still reaches every row
+// you left alone, and a fix to a row you changed shows as one.
 //
 // A trigger's rows key by field name, as enabled or send. A row in a list
 // keys by what the preset holds there, a pattern by its text and each
@@ -390,8 +389,8 @@ export function keepMine(row: EditRow, now: EditValue): EditRow {
 }
 
 /** The rows of `trigger`, a preset trigger as the library builds it,
- *  that a fix changed while `held`, your edits to it, keeps them yours
- *  (board 4), each with the preset's value now. */
+ *  that a fix changed while `held`, your edits to it, keeps them yours,
+ *  each with the preset's value now. */
 export function flaggedRows(
   trigger: PresetTrigger,
   held: Readonly<Record<string, EditRow>> | undefined,
@@ -468,9 +467,9 @@ export interface RowRef {
   row: string | null;
 }
 
-/** What the corner notice says after a preset plan run (board 4): the
- *  message, the trigger or the preset it names first as its meta, and
- *  the Settings link Show opens. */
+/** What the corner notice says after a preset plan run: the message,
+ *  the trigger or the preset it names first as its meta, and the
+ *  Settings link Show opens. */
 export interface FixNotice {
   message: string;
   meta: string;

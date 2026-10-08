@@ -3,13 +3,13 @@ import { useEscape } from '../lib/escapeStack';
 import { menuPosition, type MenuPlace } from './cardRules';
 
 // A menu the prompt card opens from one of its buttons: More, Presets,
-// From another profile, More styles, or the name menu of P15. The ov-menu recipe
-// (radius 16, padding 6, --raised, --shadow-float), placed 4 px from its
-// button and kept inside the window, on the other side of its button
-// when its own side has no room (menuPosition). Esc closes it before the
-// card, a press outside closes it, and the arrow keys move between its
-// items. Focus moves into it as it opens and back to its button as it
-// closes.
+// From another profile, More styles, or the name menu on another game.
+// The ov-menu recipe (radius 16, padding 6, --raised, --shadow-float),
+// placed 4 px from its button and kept inside the window, on the other
+// side of its button when its own side has no room (menuPosition). Esc
+// closes it before the card, a press outside closes it, and the arrow
+// keys move between its items. Focus moves into it as it opens and back
+// to its button as it closes.
 
 const ITEMS =
   '[role="menuitem"]:not(:disabled),[role="menuitemradio"]:not(:disabled),[role="menuitemcheckbox"]:not(:disabled)';

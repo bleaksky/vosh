@@ -23,7 +23,7 @@ interface ThemeGalleryProps {
   onVision?: ((vision: ColorVision) => void) | undefined;
 }
 
-/** The Vision switch, after board 9 of the Themes review. */
+/** The Vision switch. */
 const VISIONS = [
   { value: 'typical', label: 'Typical' },
   { value: 'deuteranopia', label: 'Deuteranopia' },
@@ -38,17 +38,17 @@ const STEPS: Readonly<Record<string, 1 | -1>> = {
   ArrowUp: -1,
 };
 
-/** The Theme gallery from the Appearance board: one radio per theme,
- *  drawn as a 90×59 thumbnail in the theme's own colors with its name
- *  under it. The arrow keys move the pick, as in any radio group, and
- *  focus goes with it. While follow system appearance is on they skip
- *  the themes of the other appearance, since a pick of one of those
- *  fills the other slot and leaves the theme on screen as it is.
+/** The Theme gallery: one radio per theme, drawn as a 90×59 thumbnail
+ *  in the theme's own colors with its name under it. The arrow keys
+ *  move the pick, as in any radio group, and focus goes with it. While
+ *  follow system appearance is on they skip the themes of the other
+ *  appearance, since a pick of one of those fills the other slot and
+ *  leaves the theme on screen as it is.
  *
  *  The Vision switch above the tiles shows every tile as a player with
  *  that color vision sees it, through the matrices the game color fit
- *  measures with (gameFit seenBy), as board 9's Vision switch does. It
- *  only previews, and never changes a theme. */
+ *  measures with (gameFit seenBy). It only previews, and never changes
+ *  a theme. */
 export function ThemeGallery({
   themes,
   selected,

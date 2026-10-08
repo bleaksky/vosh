@@ -22,15 +22,14 @@ import { setPromptReach } from '../stores/session/promptReachStore';
 import { shownColumns } from '../terminal/sgrCells';
 import type { PromptCardHost } from './PromptCard';
 
-// The prompt card's marks on your prompt (section 7, steps 6 and 10, and
-// the 2026-09-30 addendum, items 2 to 4): the part you picked with the
-// accent tint and a 1 px accent ring, the caret where what you add goes,
-// a ↵ after each row a line break ends, and the warn ring on a part Vosh
-// cannot fill. While the card reads your codes the tint sits on each
-// value Vosh reads in the game's own line. They are DOM over the terminal,
-// tints and 1 px rings that leave the glyphs readable. The edit band under
-// them is the renderer's own band pass, never a fill here. They draw only
-// while the terminal shows its newest rows.
+// The prompt card's marks on your prompt: the part you picked with the
+// accent tint and a 1 px accent ring, the caret where what you add
+// goes, a ↵ after each row a line break ends, and the warn ring on a
+// part Vosh cannot fill. While the card reads your codes the tint sits
+// on each value Vosh reads in the game's own line. They are DOM over
+// the terminal, tints and 1 px rings that leave the glyphs readable.
+// The edit band under them is the renderer's own band pass, never a
+// fill here. They draw only while the terminal shows its newest rows.
 //
 // A click on a part of your prompt picks it, a click past its last cell
 // puts the caret there, and a click on a ↵ picks the line break. Clicks

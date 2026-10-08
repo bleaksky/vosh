@@ -1,9 +1,9 @@
 //! The kinds the session logs, through the real session against the fake
-//! game (Q9 of the Alerts and Scenes review). fixtures/scenes/pairing.json
-//! plays two lines of a look ahead of a say and a tell, with each packet
-//! ahead of the text as the game sent it before d50e4a24 and right after
-//! its own line as it sends it since. Either way the say and the tell
-//! take their channel, and the lines before them stay plain.
+//! game. fixtures/scenes/pairing.json plays two lines of a look ahead of a
+//! say and a tell, with each packet ahead of the text as the game sent it
+//! before d50e4a24 and right after its own line as it sends it since.
+//! Either way the say and the tell take their channel, and the lines
+//! before them stay plain.
 
 use serde::Deserialize;
 use vosh_log::LineKind;

@@ -86,7 +86,7 @@ describe('buildPreset with no edits', () => {
   });
 });
 
-// Board 4's table, every edit of Then send on disarm.secondary against
+// A table of every edit of Then send on disarm.secondary against
 // the dual fix.
 describe('the dual fix on disarm.secondary', () => {
   it('lands where you made no edit', () => {
@@ -393,7 +393,7 @@ describe('keepMine', () => {
   });
 });
 
-// The swatches of a preset's card (Presets board 1, Q4 and Q8).
+// The swatches of a preset's card.
 describe('the swatches of the card', () => {
   const lilac: PresetEdit = { colors: { line: { value: '#c3a6ff', was: 'fg:178' } } };
 
@@ -432,7 +432,7 @@ describe('the swatches of the card', () => {
     });
   });
 
-  // Board 4: a fix that changes a swatch you changed.
+  // A fix that changes a swatch you changed.
   it('flags a swatch a fix changed, and Keep mine or Take the fix clears it', () => {
     const flagged: PresetEdit = {
       colors: { line: { value: '#c3a6ff', was: 'fg:172', seen: 'fg:178' } },
@@ -467,8 +467,7 @@ describe('the swatches of the card', () => {
   });
 });
 
-// Presets board 2: a preset trigger's card in Triggers, and what its
-// Save sends.
+// A preset trigger's card in Triggers, and what its Save sends.
 describe('the card of a preset trigger', () => {
   const SANCTUARY = 'buff.sanctuary';
   const stored = (name: string, edit?: PresetEdit) =>
@@ -561,7 +560,7 @@ describe('the card of a preset trigger', () => {
     ]);
   });
 
-  // Board 4: Orla cleared Then send before the dual fix.
+  // Orla cleared Then send before the dual fix.
   const cleared: PresetEdit = {
     triggers: { [SECONDARY]: { send: { value: '', was: WIELD, seen: DUAL } } },
   };
@@ -613,7 +612,7 @@ describe('the card of a preset trigger', () => {
   });
 });
 
-// Board 4: the corner notice at the launch that finds a fix.
+// The corner notice at the launch that finds a fix.
 describe('fixNotice', () => {
   const row = (trigger: string | null, key: string | null) => ({
     preset: 'disarm_buff_fade',

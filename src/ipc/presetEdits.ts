@@ -1,7 +1,7 @@
-// Your edits to the presets, the [preset_edits] table of the Presets
-// review (Q1, Q2, Q10). Each call names the profile it means, or names
-// none and reaches the profile the selected session plays. In loadout
-// mode every profile shares the catalog's table.
+// Your edits to the presets, the [preset_edits] table. Each call names
+// the profile it means, or names none and reaches the profile the
+// selected session plays. In loadout mode every profile shares the
+// catalog's table.
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';

@@ -10,7 +10,7 @@ export function useCaret(
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement>,
   value: string,
 ) {
-  // Ember block caret. The textarea's native caret is transparent in
+  // The block caret. The textarea's native caret is transparent in
   // CSS and replaced with an absolutely-positioned accent block. The
   // position comes from a hidden mirror div cloning the textarea's
   // text up to selectionStart with identical font, padding, and

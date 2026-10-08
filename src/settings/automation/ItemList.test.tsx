@@ -99,8 +99,8 @@ describe('the warn ring in the Automation list', () => {
     expect(noteOf('c')).toBe('Second note.');
   });
 
-  // Presets board 4: a fix that changed a row you edited rings the row
-  // on or off, and its note wins over the prompt note.
+  // A fix that changed a row you edited rings the row on or off, and
+  // its note wins over the prompt note.
   it('rings a row a fix flagged while it is off too', () => {
     const fix = 'A fix to Disarms and fading buffs changed Then send, a row you edited.';
     const html = renderList({
@@ -318,8 +318,8 @@ describe('the switch on a group heading', () => {
   });
 });
 
-// First Run board 4: a suggested preset that is off wears the accent ring
-// where the off ring sits, and a reader hears Suggested, off.
+// A suggested preset that is off wears the accent ring where the off ring
+// sits, and a reader hears Suggested, off.
 describe('the suggested ring in the Automation list', () => {
   const html = renderList({
     sections: buildSections([
@@ -354,8 +354,8 @@ describe('the suggested ring in the Automation list', () => {
   });
 });
 
-// Presets Q6: a preset you edited wears a 12 px pencil just before its
-// dot, and a reader hears edited after its name.
+// A preset you edited wears a 12 px pencil just before its dot, and a
+// reader hears edited after its name.
 describe('the pencil of an edited preset', () => {
   const html = renderList({
     sections: buildSections([

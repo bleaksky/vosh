@@ -20,7 +20,7 @@ export interface LoadoutsState {
 }
 
 /** Loadout mode and a profile's stack of active loadouts, the selected
- *  session's profile's when it names none (Q22). */
+ *  session's profile's when it names none. */
 export async function loadoutsGetState(profile?: string | null): Promise<LoadoutsState> {
   return invoke('loadouts_get_state', { profile });
 }

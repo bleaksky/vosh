@@ -25,7 +25,7 @@
 //! Your edits to a preset fold into the catalog's table when every
 //! profile that edits it agrees, and make one conflict for the preset,
 //! each profile's version, when they differ, as the copies of an alias
-//! do (Presets board 5).
+//! do.
 //!
 //! ## Scope
 //!

@@ -127,11 +127,10 @@ function MainWindow() {
   // The sessions this window opened. Each keeps a live terminal of its
   // own until it closes, and only the selected session's shows.
   const opened = useOpened();
-  // Every open session, which the sessions sidebar lists. It shows while
-  // two or more are open, until the sessions toggle hides it for this
-  // window (Q17) or the window grows too narrow to hold it (board 8),
-  // where the toggle slides it over the terminal instead (Sessions
-  // toggle T5).
+  // Every open session, which the sessions sidebar lists. It shows
+  // while two or more are open, until the sessions toggle hides it for
+  // this window or the window grows too narrow to hold it, where the
+  // toggle slides it over the terminal instead.
   const sessions = useSessions();
   const panelOpen = panelLayout?.panel_open ?? true;
   // The status line carries your vitals with the panel hidden, or with
@@ -144,7 +143,7 @@ function MainWindow() {
   );
   const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
-  // sidebar shows (Q7), and in the session popover's own form while it
+  // sidebar shows, and in the session popover's own form while it
   // does not, as with one session.
   const sidebar = useRef<SessionSidebarHandle | null>(null);
   const renameSession = () => {
@@ -173,7 +172,7 @@ function MainWindow() {
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
   // The selected session's macros, which the command line fires and the
-  // session keys ask after (Q11).
+  // session keys ask after, since a macro on a session key keeps it.
   const macroKeys = useMacroKeys();
   // Puts the caret back on the command line.
   const focusInput = () => inputRef.current?.focus();

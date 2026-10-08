@@ -3,13 +3,13 @@ import { createStore } from '../store';
 import { getSelected, subscribeSelected } from './sessionsStore';
 
 // The day or night in the selected session's game, which Switch themes
-// With the game follows (Alerts Q16, Sessions Q23). Rust keeps each
-// session's beside its tick, so every window can read it, and only the
-// main window hears GMCP. Each window keeps its own copy. It reads
-// daylight_get as it starts and again each time the selection moves to
-// another session, a banner click on vosh://session-selected among them,
-// and takes each vosh://daylight-changed of the selected session. A turn
-// in a session behind changes nothing here.
+// With the game follows. Rust keeps each session's beside its tick, so
+// every window can read it, and only the main window hears GMCP. Each
+// window keeps its own copy. It reads daylight_get as it starts and
+// again each time the selection moves to another session, a banner click
+// on vosh://session-selected among them, and takes each
+// vosh://daylight-changed of the selected session. A turn in a session
+// behind changes nothing here.
 //
 // A turn heard or a selection made after a read began wins over its
 // answer, so an older answer never puts back the phase it replaced.

@@ -3,10 +3,10 @@ import { profileHoldEdits } from '../ipc/profiles';
 import { createStore } from '../stores/store';
 import { getSelected, getSessions, subscribeSessions } from '../stores/session/sessionsStore';
 
-// The profile Settings shows and edits, by Q14 and board 7 of the
-// Sessions review. Settings shows the profile the selected session
-// plays and names it in every call, so a save that lands after the
-// selection moved still reaches the profile it was made on.
+// The profile Settings shows and edits. Settings shows the profile the
+// selected session plays and names it in every call, so a save that
+// lands after the selection moved still reaches the profile it was made
+// on.
 //
 // A page with unsaved edits holds its profile. While it holds, a
 // selection that brings another profile to the front leaves Settings

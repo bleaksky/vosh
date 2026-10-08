@@ -116,7 +116,7 @@ pub fn contrast(a: Rgb, b: Rgb) -> f64 {
 }
 
 /// APCA lightness contrast, Lc, of `text` on `ground`, by the constants of
-/// APCA 0.0.98G-4g, the release the theme review read every Lc with. It
+/// APCA 0.0.98G-4g, the release every Lc in the theme checks uses. It
 /// is positive for text darker than its ground and negative for text
 /// lighter than it, from about 106 for black on white to about -108 for
 /// white on black, and 0 for two colors too close for APCA to read apart.
@@ -1263,7 +1263,7 @@ mod tests {
         assert!((apca_lc((255, 255, 255), gray) + 68.541).abs() < 0.001);
         assert!((apca_lc((0, 0, 0), (255, 255, 255)) - 106.041).abs() < 0.001);
         assert!((apca_lc((255, 255, 255), (0, 0, 0)) + 107.885).abs() < 0.001);
-        // The figures the review read: gray 249 at Lc 26.8 on Rubric, the
+        // Known figures: gray 249 at Lc 26.8 on Rubric, the
         // Wizi tag at -16.8 on Triad, and desert yellow at 0 on Rubric.
         assert!((apca_lc(xterm256(249).unwrap(), RUBRIC) - 26.783).abs() < 0.001);
         assert!((apca_lc(xterm256(240).unwrap(), TRIAD) + 16.765).abs() < 0.001);

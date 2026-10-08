@@ -1,12 +1,12 @@
-//! Banners on macOS, through `UNUserNotificationCenter` (Alerts Q1). The
+//! Banners on macOS, through `UNUserNotificationCenter`. The
 //! notification plugin goes through the deprecated
 //! `NSUserNotificationCenter` there, which drops banners, so Vosh keeps a
 //! small module of its own. It posts, answers a click by selecting the
 //! session, lets a banner show while Vosh is in front when its alert asks
 //! for that, reads whether you allow banners and asks, and takes back the
 //! banners of a plugin that turned off. It also plays
-//! a system sound through `NSSound`, which Alerts Q4 names for a window
-//! too hidden to play its own tone.
+//! a system sound through `NSSound`, for a window too hidden to play its
+//! own tone.
 //!
 //! `UNUserNotificationCenter` works only in a bundled app. A dev build runs
 //! from no bundle and touching the center there aborts, so every call

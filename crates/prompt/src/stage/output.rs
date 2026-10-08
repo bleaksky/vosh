@@ -30,7 +30,7 @@ pub struct Replace {
 }
 
 /// The lines a drawn prompt shows as sent right above its region, such as
-/// a tank line your design does not read (D7). A text prompt carries no
+/// a tank line your design does not read. A text prompt carries no
 /// mark before them, so a renderer finds them by their text: when the
 /// rows right above the open region show `plain`, it erases from their
 /// first row and writes `bytes` there in place of the replace's own

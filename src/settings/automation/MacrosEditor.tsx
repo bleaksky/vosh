@@ -106,8 +106,7 @@ function MacroDetail({ value: m, update, fresh, revealInList }: DetailProps<Macr
 
   const set = (patch: Partial<MacroRecord>) => update((v) => ({ ...v, ...patch }));
   // A key the session keys share stays with this macro in the sessions
-  // on its profile (Sessions Q11), and the card says what it does
-  // elsewhere.
+  // on its profile, and the card says what it does elsewhere.
   const clash = macroClashNote(m.key, isMacPlatform());
 
   return (

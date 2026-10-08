@@ -1,5 +1,5 @@
-//! The commands for your edits to the presets (the Presets review, Q1,
-//! Q2 and Q10): read the `[preset_edits]` table of a profile, and save
+//! The commands for your edits to the presets: read the
+//! `[preset_edits]` table of a profile, and save
 //! the rows one preset's card or one preset trigger's card changed.
 
 use tauri::{AppHandle, State};

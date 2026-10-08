@@ -3,9 +3,9 @@ import type { ColorVision } from '../../theme/gameFit';
 import { findTheme, playPalette, themeTokens } from '../../theme/themes';
 import { colorChoices, colorMarks, COLOR_MARK_WORDS } from './vitalColorMarks';
 
-// The marks a vital's color list shows, measured as Q5 of the Vitals
-// Styles review says: the play palette with Fit game colors on, against
-// the window's low and warn tones, as your Color vision sees both.
+// The marks a vital's color list shows, measured on the play palette
+// with Fit game colors on, against the window's low and warn tones, as
+// your Color vision sees both.
 
 function marks(theme: string, vision: ColorVision, warn: boolean) {
   const t = findTheme(theme);

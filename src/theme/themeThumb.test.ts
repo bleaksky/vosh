@@ -3,7 +3,7 @@ import { galleryThemes, themeThumb } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
 
 describe('themeThumb', () => {
-  // The approved Appearance board paints these exact colors.
+  // The thumbnail paints these exact colors.
   it('matches the board for Nord', () => {
     expect(themeThumb(findTheme('nord'))).toEqual({
       bg: '#2e3440',
@@ -31,8 +31,7 @@ describe('themeThumb', () => {
   });
 
   it('matches the shortlist for Rubric', () => {
-    // Rubric took Vellum's place on the board (Themes review Q14), and
-    // these are its shortlist tokens.
+    // Rubric took Vellum's place, and these are its shortlist tokens.
     expect(themeThumb(findTheme('rubric'))).toEqual({
       bg: '#f0e5cf',
       // The panel sits on the paper under the one ground rule, and the

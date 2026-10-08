@@ -1,5 +1,4 @@
-//! The stage: what Vosh writes to the terminal around your prompt
-//! (section 4 of the build spec).
+//! The stage: what Vosh writes to the terminal around your prompt.
 //!
 //! Everything a socket read writes goes out as one [`Output`], so a prompt
 //! that arrives in one read never flashes. The stage decides the bytes
@@ -14,13 +13,14 @@
 //! after it, and only then erases from its start and writes the new bytes.
 //! The stage never counts rows, since the two renderers wrap at different
 //! widths and your typed echo reaches the webview before the backend
-//! knows of it (D22).
+//! knows of it.
 //!
 //! The open row is the drawn prompt while it is the last thing on screen.
 //! Only it is ever repainted. Any other output, a send, a local write, a
 //! window size change and a disconnect close it.
 //!
-//! A prompt may span lines (D7). The stage holds a line that starts one
+//! A prompt may span lines, as the tank line above your vitals does in
+//! a fight. The stage holds a line that starts one
 //! until the rest arrives, within the read, and paints held lines as a
 //! region at the end of a read, so the prompt that finishes them replaces
 //! it. A line that does not finish them releases them to the Line pass,
@@ -208,7 +208,7 @@ impl Stage {
     }
 
     /// Take the fields your design reads, which decide the lines above
-    /// the last one it hides (D7). The last prompt read follows at once,
+    /// the last one it hides. The last prompt read follows at once,
     /// so a repaint after an edit shows a line above the last one as sent
     /// exactly when the new design leaves it alone.
     pub(crate) fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
@@ -431,7 +431,7 @@ impl Stage {
     }
 
     /// Note Line triggers that matched a line Vosh read as your prompt,
-    /// which they no longer see (D6).
+    /// which they no longer see.
     pub fn line_triggers_matched<'a>(&mut self, names: impl IntoIterator<Item = &'a str>) {
         self.line_triggers
             .extend(names.into_iter().map(str::to_string));

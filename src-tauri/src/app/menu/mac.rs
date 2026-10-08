@@ -55,7 +55,7 @@ impl MenuHandles {
     }
 }
 
-/// Build the menu bar, exactly the board's menus and order, and keep
+/// Build the menu bar, its menus in their order, and keep
 /// the rows that change. Runs once, in the Builder's `.menu()`.
 pub(crate) fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let sep = || PredefinedMenuItem::separator(app);

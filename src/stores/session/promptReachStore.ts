@@ -4,7 +4,7 @@ import { createStore } from '../store';
 // How far past your prompt's widest row the pinned band reaches while the
 // prompt card is open, in CSS px. The card's ↵ adds two cells after a row
 // that a line break ends, and its caret reaches past the last cell, and
-// the band grows to hold both (the 2026-09-30 addendum, item 3). The card
+// the band grows to hold both, so neither spills past it. The card
 // sets it and the dock reads it. 0 while the card is closed.
 
 const store = createStore(0);

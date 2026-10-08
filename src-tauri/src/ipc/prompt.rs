@@ -145,7 +145,7 @@ pub(crate) async fn prompt_compile(
 }
 
 /// What a capture built from one entry of the candidates ring reads: the
-/// line another game prints before each command (P15). `names` names its
+/// line another game prints before each command. `names` names its
 /// numbers in order, an empty name leaves one out, and the rest take the
 /// names Vosh suggests from the letters after them. It changes nothing.
 #[tauri::command]

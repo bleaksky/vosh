@@ -35,13 +35,13 @@ import {
   VitalsIcon,
 } from '../ui';
 
-// The Settings sidebar (the approved boards): a 32 px drag strip where
-// macOS puts the traffic lights, the search pill at (12, 44), and the
-// nav of eleven groups at (8, 84), in four clusters set off by 13 px
-// gaps with no headings (Settings layout Q9). Prompt wears the terminal
-// glyph Help draws for Play. While the search holds text its results
-// replace the nav. Each result is a row, not a group. Enter or a click
-// opens it, and the frame scrolls the row into view and flashes it.
+// The Settings sidebar: a 32 px drag strip where macOS puts the traffic
+// lights, the search pill at (12, 44), and the nav of eleven groups at
+// (8, 84), in four clusters set off by 13 px gaps with no headings, so
+// the list stays short enough to scan. Prompt wears the terminal glyph
+// Help draws for Play. While the search holds text its results replace
+// the nav. Each result is a row, not a group. Enter or a click opens it,
+// and the frame scrolls the row into view and flashes it.
 
 const GROUP_ICONS: Record<SettingsGroup, () => ReactNode> = {
   general: () => <GearIcon />,

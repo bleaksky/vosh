@@ -1,4 +1,4 @@
-//! What each row the session logs is, for Save a scene (Q9). The lines
+//! What each row the session logs is, for Save a scene. The lines
 //! are game text from fixtures/room-colors.
 
 use serde_json::json;

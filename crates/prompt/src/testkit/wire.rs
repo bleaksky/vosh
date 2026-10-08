@@ -1,5 +1,4 @@
-//! The synthetic pulses in `fixtures/prompt/aabahran/wire` (section 9 of
-//! the build spec).
+//! The synthetic pulses in `fixtures/prompt/aabahran/wire`.
 //!
 //! Each case is what the fake game writes for a few steps of play, as
 //! the bytes of one socket read. [`play`] plays a case again, so a test
@@ -17,7 +16,7 @@ pub struct Case {
     pub prompt: &'static str,
 }
 
-/// Every case, in the order section 9 lists them.
+/// Every case.
 pub const CASES: [Case; 10] = [
     Case {
         name: "quiet",

@@ -35,7 +35,7 @@ pub struct GamePromptSeen {
     /// The catalog names of the parts of your design the capture fed
     /// before it took the settings and nothing feeds now: no code in the
     /// new settings, and no package that sends it this session. Vosh says
-    /// so once, and the card and Settings ring those parts (P14). Left
+    /// so once, and the card and Settings ring those parts. Left
     /// out of the event when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub lost: Vec<String>,
@@ -55,7 +55,7 @@ pub struct SessionSetting {
     pub at: DateTime<FixedOffset>,
 }
 
-/// What the observer keeps between lines (section 3).
+/// What the observer keeps between lines.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Observer {
     /// When you last sent a line, in milliseconds since the epoch.

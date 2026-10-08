@@ -1,6 +1,6 @@
-// The five alert presets, the Alerts category of the Presets page
-// (Alerts Q5, board 2). They hold no triggers. Rust listens for each one
-// in src-tauri/src/alert/presets.rs, and the profile's `[alerts]` table
+// The five alert presets, the Alerts category of the Presets page. They
+// hold no triggers. Rust listens for each one in
+// src-tauri/src/alert/presets.rs, and the profile's `[alerts]` table
 // says what each does. They sit apart from the library in presets.ts,
 // which installs triggers and macros, so the wizard and Get started
 // never offer them.
@@ -12,7 +12,7 @@ export interface AlertPreset {
   name: string;
   description: string;
   /** The GMCP package and values, or the source, Rust listens to for
-   *  it, which the card shows in mono as frame b2-presets draws it. */
+   *  it, which the card shows in mono. */
   listensTo: string;
   /** Rust passes the banner the words of a tell or of the line, so
    *  Banner shows has a choice to make. The other three ring a title

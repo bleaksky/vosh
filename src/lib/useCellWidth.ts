@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 // The prompt card sets terminal text, a prompt line or a preset's sample,
-// in the terminal's face at 13 px on 17.5 px rows, as the boards do, and
-// places each character on its own cell so a mark lines up with it.
+// in the terminal's face at 13 px on 17.5 px rows, and places each
+// character on its own cell so a mark lines up with it.
 
 /** The card's terminal text size and row height. */
 export const CARD_MONO_PX = 13;

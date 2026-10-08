@@ -55,10 +55,10 @@ import type { Cell } from '../terminal/sgrCells';
 // the pane holds with a one row band, so a fight sends it no new size
 // (src/terminal/terminalRows.ts).
 //
-// The band is drawn as the boards draw the edit band: --selrow, radius 4,
-// 4 px past the text on each side and 2 px above and below its rows, its
-// bottom 9.5 px above the input band. Each character sits on the
-// terminal's own cell grid, so the columns line up with the text above.
+// The band is drawn as the edit band is: --selrow, radius 4, 4 px past
+// the text on each side and 2 px above and below its rows, its bottom
+// 9.5 px above the input band. Each character sits on the terminal's
+// own cell grid, so the columns line up with the text above.
 
 interface PromptDockProps {
   state: PromptShowState;

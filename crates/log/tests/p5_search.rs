@@ -2,12 +2,11 @@
 //! goes into a fresh log file through the real `LogStore`, and the test
 //! times the searches the Settings log view runs over it.
 //!
-//! The week comes from the generator the Phase 10 check wrote, with its
-//! seed and its size. Seven days of two four hour sessions, each hour
-//! 30 minutes of fighting, 15 of walking and 15 idle with chat, plus a
-//! short session to 127.0.0.1 every third day, which the view hides.
-//! That is 702,987 lines in an 83.5 MB file, the heavy week the plan
-//! reckons with.
+//! The week comes from a fixed generator, with its seed and its size. Seven
+//! days of two four hour sessions, each hour 30 minutes of fighting, 15 of
+//! walking and 15 idle with chat, plus a short session to 127.0.0.1 every
+//! third day, which the view hides. That is 702,987 lines in an 83.5 MB
+//! file, the heavy week the plan reckons with.
 //!
 //! Skipped by default. Run it with
 //! `cargo test -p vosh-log --release --test p5_search -- --ignored --nocapture`.
@@ -29,10 +28,11 @@
 //! name as the run prints it, such as `rare name` or `common word, page
 //! 2`. The test then times that step alone.
 //!
-//! In release each first page must come in under a second, fresh, the
-//! Phase 10 demo. `p5_last_7_days_of_eight_weeks` holds the demo over
-//! eight weeks of the same play too, searching the last 7 days of the
-//! world, as the view opens (D35).
+//! In release each first page must come in under a second, fresh, so a
+//! search never keeps you waiting. `p5_last_7_days_of_eight_weeks` holds
+//! the same bar over eight weeks of the same play, searching the last 7
+//! days of the world, as the view opens, so a log that grows for years
+//! searches as fast as a week.
 //!
 //! The numbers alone guard nothing, so each search is also held to what
 //! a plain scan of the week finds. The newest 500 matches, oldest first,
@@ -58,7 +58,7 @@ const SESSION_LIST: &str = "session list";
 /// The step that times the page before the first `common word` page.
 const PAGE_2: &str = "common word, page 2";
 
-/// The Phase 10 check's seed and week.
+/// The generator's seed and week.
 const SEED: u64 = 0xA5A5_1234;
 const DAYS: u64 = 7;
 const SESSIONS_PER_DAY: u64 = 2;
@@ -67,7 +67,7 @@ const HOURS_PER_SESSION: u64 = 4;
 const GAME_HOST: &str = "play.theforsakenlands.com";
 const GAME_PORT: u16 = 9009;
 
-// ---------- the Phase 10 check's generator ----------
+// ---------- the week's generator ----------
 
 /// splitmix64, so the week is the same on every run.
 struct Rng(u64);
@@ -639,7 +639,7 @@ struct Query {
     scoped: bool,
 }
 
-/// The Phase 10 check's suite. Each one is a first page with its count,
+/// The searches the test times. Each one is a first page with its count,
 /// as the view asks when you type.
 const SUITE: [Query; 9] = [
     Query {
@@ -976,7 +976,7 @@ fn p5_search_a_heavy_week() {
     }
 }
 
-/// The Phase 10 demo: a release build finds the first page of a search,
+/// The one second bar: a release build finds the first page of a search,
 /// with its count, in under a second, fresh. A dev build only prints
 /// its times.
 fn demo(what: &str, times: &Times) {
@@ -993,11 +993,11 @@ fn demo(what: &str, times: &Times) {
 /// How many weeks the long log holds.
 const WEEKS: u64 = 8;
 
-/// The Phase 10 demo over a long log: eight weeks of the same heavy
-/// play, about 5.6 million lines, and the searches the view runs when it
-/// opens on Last 7 days of the world you play, each first page with its
-/// count under a second in release (D35). Skipped by default, since
-/// writing the log takes a while. Run it with
+/// The one second bar over a long log: eight weeks of the same heavy play,
+/// about 5.6 million lines, and the searches the view runs when it opens on
+/// Last 7 days of the world you play, each first page with its count under
+/// a second in release. Skipped by default, since writing the log takes a
+/// while. Run it with
 /// `cargo test -p vosh-log --release --test p5_search p5_last_7 -- --ignored --nocapture`.
 #[allow(clippy::cast_precision_loss)]
 #[ignore = "P5 benchmark, run with --ignored"]

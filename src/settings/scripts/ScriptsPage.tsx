@@ -19,13 +19,13 @@ import { PluginList } from './PluginList';
 import { PluginPage } from './PluginPage';
 import type { PluginSave } from './pluginState';
 
-// Settings > Scripts (Scripts and Panels, boards 1 to 4). Your plugins
-// as the selected session sees them, and the Console with every [lua]
-// line it printed. The page reads both as it opens and again when you
-// select another session, and follows them through the plugin and Lua
-// output events, taking the lines of the selected session alone, so its
-// own state holds them and no store does. A plugin opens on a page of its own inside
-// the group, `scripts:<name>`, which takes its share of both.
+// Settings > Scripts. Your plugins as the selected session sees them,
+// and the Console with every [lua] line it printed. The page reads both
+// as it opens and again when you select another session, and follows
+// them through the plugin and Lua output events, taking the lines of
+// the selected session alone, so its own state holds them and no store
+// does. A plugin opens on a page of its own inside the group,
+// `scripts:<name>`, which takes its share of both.
 
 /** The lines the page keeps, as many as a session's Output ring. */
 const CONSOLE_LINES = 500;

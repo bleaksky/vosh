@@ -3,10 +3,11 @@
    select, the fields, the buttons, the keycaps, the chips, the
    disclosure and the glyph toggle, and the focus ring they all wear. */
 
-/* Control rings and the segmented track from SPEC 4. The fills are the
-   theme's control tones in tokens.css. Light themes swap each one below.
-   A surface outside Settings that draws these controls, such as the
-   prompt card in the main window, takes .st-controls for the same rings. */
+/* Control rings and the segmented track. The fills are the theme's
+   control tones in tokens.css. Light themes swap each one below. A
+   surface outside Settings that draws these controls, such as the
+   prompt card in the main window, takes .st-controls for the same
+   rings. */
 .st-app,
 .st-controls {
   --st-fill-ring: 0 0 0 0 transparent;
@@ -16,9 +17,8 @@
 }
 
 /* On paper a field is the raised paper, so it takes a hairline ring.
-   The segmented track takes the black wash of the menu highlight, as
-   SPEC 4 drew it, so the pressed segment on the raised paper stands
-   out of it. */
+   The segmented track takes the black wash of the menu highlight, so
+   the pressed segment on the raised paper stands out of it. */
 :root[data-appearance='light'] .st-app,
 :root[data-appearance='light'] .st-controls {
   --st-fill-ring: inset 0 0 0 1px var(--sep);
@@ -122,7 +122,7 @@
 
 /* A group whose segments press on and off on their own, like the Alert
    row. A pressed one leads with the check in the accent, pulled 3 px
-   into its padding, as board 1 of the Alerts review draws it. */
+   into its padding. */
 .st-seg.is-multi .st-seg-item {
   display: inline-flex;
   align-items: center;
@@ -560,8 +560,8 @@
   transform: rotate(90deg);
 }
 
-/* A glyph drawn as text that turns on and off, like the find bar's Aa
-   (SPEC 6): tertiary while off, the selected row fill while on. */
+/* A glyph drawn as text that turns on and off, like the find bar's Aa:
+   tertiary while off, the selected row fill while on. */
 .st-glyph-toggle {
   display: flex;
   align-items: center;

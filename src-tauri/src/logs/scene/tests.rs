@@ -1,4 +1,4 @@
-//! Save a scene over the stretch board 5 draws: the look at Thickening
+//! Save a scene over a stretch of play: the look at Thickening
 //! Woods from fixtures/room-colors/looks.json, Maren's arrival, then a
 //! newbie line, a say, a tell and your own say and tell from
 //! fixtures/room-colors/lines.json, with the prompts and commands between.

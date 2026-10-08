@@ -2,13 +2,13 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CARD_FOOT, type CardFacts } from './cardFacts';
 
-// The card that opens beside a session's row when you point at it, S6
-// of the Sessions Sidebar review, boards 03 and 07. It holds what does
-// not fit on the row's two lines: the world with the profile, then the
-// room, the area, the fight, your vitals, how long you have been online
-// and what waits for you, each row dropping out while the session has
-// nothing for it. A session that is not connected shows the world, the
-// profile and when it last played. The foot says how to rename.
+// The card that opens beside a session's row when you point at it. It
+// holds what does not fit on the row's two lines: the world with the
+// profile, then the room, the area, the fight, your vitals, how long
+// you have been online and what waits for you, each row dropping out
+// while the session has nothing for it. A session that is not connected
+// shows the world, the profile and when it last played. The foot says
+// how to rename.
 //
 // It floats on the recipe of the title band's menus, 12 right of the
 // sidebar line and level with the row. useHoverCard says when it opens

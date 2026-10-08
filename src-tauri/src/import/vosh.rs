@@ -1,5 +1,5 @@
-//! A Vosh profile export, read for the import under Characters (Scripts
-//! Q9, Q10 and Q26). [`preview`] says what the file holds and where it
+//! A Vosh profile export, read for the import under Characters.
+//! [`preview`] says what the file holds and where it
 //! would go, and changes nothing. [`plan`] works out what the import
 //! writes before anything is written, and [`apply`] writes it. Files from
 //! other clients go through the importers beside this one, under
@@ -52,7 +52,7 @@ pub(crate) struct ImportPreview {
     pub characters: Vec<ImportCharacter>,
     /// In loadout mode, whether the file holds presets, a list of them,
     /// their triggers or macros, or your edits to them, which stay out as
-    /// the catalog's presets serve every character (Presets Q11). The
+    /// the catalog's presets serve every character. The
     /// sheet then says the presets stay as the catalog has them.
     pub presets_stay: bool,
 }
@@ -92,7 +92,8 @@ pub(crate) struct ImportCharacter {
 #[derive(Debug)]
 pub(crate) struct ImportPlan {
     /// The profile file to write. Its `[plugins]` list is empty, since an
-    /// import brings each plugin in off (Q9), and the settings your scope
+    /// import brings each plugin in off, so no code from the file runs
+    /// before you turn it on, and the settings your scope
     /// shares sit at their defaults, so your shared theme and font stay.
     /// In loadout mode it holds no triggers, aliases, macros, alert
     /// presets, list of presets that are on or edits to them, which
@@ -106,7 +107,7 @@ pub(crate) struct ImportPlan {
 }
 
 /// The triggers, aliases and macros of an export as the catalog takes
-/// them in loadout mode (Q26). A profile file's own items lay over the
+/// them in loadout mode. A profile file's own items lay over the
 /// catalog at every launch, so they go to the catalog instead.
 #[derive(Debug, PartialEq)]
 pub(crate) struct CatalogJoin {
@@ -289,7 +290,7 @@ fn holds_presets(file: &ProfileConfig) -> bool {
 /// loadout mode the file's triggers, aliases and macros move to the
 /// catalog in a group named for the file, and the presets the catalog
 /// keeps stay as they are: its list, your edits to them and the alert
-/// presets (Presets Q11).
+/// presets, since they serve every character.
 pub(crate) fn plan(
     file_name: &str,
     text: &str,
@@ -322,7 +323,7 @@ pub(crate) fn plan(
 fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> CatalogJoin {
     let mut clashes = Vec::new();
     // The catalog's preset triggers serve every character, so the file's
-    // stay out, or the catalog would file them as yours (Presets Q11).
+    // stay out, or the catalog would file them as yours.
     let yours: Vec<Trigger> = file
         .triggers
         .iter()
@@ -459,7 +460,7 @@ mod tests {
     }
 
     /// In loadout mode the sheet says the presets stay as the catalog has
-    /// them, when the file holds any (Presets Q11).
+    /// them, when the file holds any.
     #[test]
     fn a_loadout_preview_flags_the_presets_that_stay_out() {
         let set = set_with_profiles(vec![]);

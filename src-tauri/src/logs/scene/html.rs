@@ -1,10 +1,9 @@
-//! A scene as one HTML file that opens anywhere (Q11 of the Alerts and
-//! Scenes review, board 6). A short header names the place, your
-//! character and the time, the lines sit in one `pre`, and each run of one
-//! SGR state is a span with a class: `c0` to `c15` for the 16 colors, `g0`
-//! to `g15` for a ground in one of them, and `b`, `i` and `u` for bold,
-//! italic and underline. The ground and the 16 colors of the theme
-//! showing when you save are CSS variables in one style block. A 256
+//! A scene as one HTML file that opens anywhere. A short header names the
+//! place, your character and the time, the lines sit in one `pre`, and
+//! each run of one SGR state is a span with a class: `c0` to `c15` for the
+//! 16 colors, `g0` to `g15` for a ground in one of them, and `b`, `i` and
+//! `u` for bold, italic and underline. The ground and the 16 colors of the
+//! theme showing when you save are CSS variables in one style block. A 256
 //! color past the 16 or a true color has no name in the palette, so it
 //! goes inline. No script, no font file and no request, so the file reads
 //! the same offline and in a mail preview. Every piece of text is escaped,

@@ -1,5 +1,4 @@
-//! The shapes your PROMPT settings compile to (section 3 of the build
-//! spec).
+//! The shapes your PROMPT settings compile to.
 //!
 //! A shape is one way the game can print your prompt, as a pattern per
 //! line. `%c` always ends a line. `%C`, `%n`, `%p` and `%P` print only

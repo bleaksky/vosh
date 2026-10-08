@@ -23,7 +23,8 @@ use crate::profile::open::OpenProfile;
 /// references groups in the global catalog. Each character's vars,
 /// tick and connection live in its profile file. A loadouts.toml that
 /// an older build wrote with `profile_vars`, `tick` or `connection`
-/// tables still loads, and the next save leaves them out (D12).
+/// tables still loads, and the next save leaves them out, since nothing
+/// reads them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Loadout {
     pub name: String,
@@ -31,7 +32,7 @@ pub(crate) struct Loadout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// A world and character list in the profile `auto_match` shape.
-    /// Nothing reads it and nothing matches on it (D33). It stays a
+    /// Nothing reads it and nothing matches on it. It stays a
     /// stored value so a hand edited loadouts.toml that carries one
     /// keeps it across a save.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -89,7 +90,8 @@ pub(crate) struct LoadoutSet {
     /// The stacks of the profiles that keep their own, by profile name,
     /// see [`LoadoutSet::set_stack`]. Left out of the file while empty,
     /// and an older build, which reads `active` and `dormant` above as
-    /// the one stack, passes over it (D14).
+    /// the one stack, passes over it, so a rollback still loads the
+    /// file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub profiles: BTreeMap<String, Stack>,
 }
@@ -367,7 +369,7 @@ mod tests {
         );
     }
 
-    /// A loadouts.toml from before D12 carries the vars, tick and
+    /// A loadouts.toml from an older build carries the vars, tick and
     /// connection tables every save used to write. It still loads, with
     /// the rest of each loadout intact, and a save leaves the tables out.
     #[test]

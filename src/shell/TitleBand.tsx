@@ -30,18 +30,17 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 import { chatRefToAdd } from '../panel/paneActions';
 import { TitleButton } from './TitleButton';
 
-// The 32 px title band across the top of the window (SPEC 1 and 9). No
-// fill and no line of its own: the terminal ground runs up under it and
-// the panel ground runs up on the right. Its empty areas drag the
-// window. The session button sits centered over the terminal column.
-// The sessions toggle belongs to the frame (AppShell), which holds it at
-// the band's left end while the sidebar hides.
-// Add a pane, Search commands, the panel toggle, and Settings sit at
-// the right, over the panel. On macOS the native traffic lights own the
-// left corner. Windows and Linux draw minimize, maximize, and close
-// here, after Settings, and the panel draws at least 248 px wide there
-// to keep all seven over it. They have no menu bar, so there the gear
-// is how you find Settings.
+// The 32 px title band across the top of the window. No fill and no
+// line of its own: the terminal ground runs up under it and the panel
+// ground runs up on the right. Its empty areas drag the window. The
+// session button sits centered over the terminal column. The sessions
+// toggle belongs to the frame (AppShell), which holds it at the band's
+// left end while the sidebar hides. Add a pane, Search commands, the
+// panel toggle, and Settings sit at the right, over the panel. On macOS
+// the native traffic lights own the left corner. Windows and Linux draw
+// minimize, maximize, and close here, after Settings, and the panel
+// draws at least 248 px wide there to keep all seven over it. They have
+// no menu bar, so there the gear is how you find Settings.
 
 const ADD_MENU_WIDTH = 200;
 

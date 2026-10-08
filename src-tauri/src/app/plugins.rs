@@ -632,7 +632,7 @@ mod tests {
         assert!(quiet.actions.is_empty(), "{:?}", quiet.actions);
     }
 
-    /// `wait_full` as the Scripts design writes it, which never returns
+    /// `wait_full`, a plugin whose loop never ends, which never returns
     /// while you are hurt.
     const WAIT_FULL: &str = "-- wait_full
 -- Stand up once your hit points are full.

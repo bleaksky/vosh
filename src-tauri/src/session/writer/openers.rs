@@ -1,5 +1,5 @@
 //! Which text a line you typed opens in the game's editor, read the way
-//! the game reads it (Note Editor Q3). `interpret` runs the first
+//! the game reads it. `interpret` runs the first
 //! command in its table that the word starts (`interp.c:1222`), so a
 //! short word reaches an editor only when no command before it starts
 //! the same way. The banner never names the text (`olc.c:3385`), so the

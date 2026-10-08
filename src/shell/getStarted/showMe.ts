@@ -7,7 +7,7 @@ import { fold } from './getStartedStore';
 import type { StepId } from './steps';
 
 // Show me on a step of Get started folds the card, opens what the step
-// is about as a click would, and rings what to pick (First Run Q3).
+// is about as a click would, and rings what to pick.
 // Tracked affects ring in the Settings window, which reads the ring off
 // the Add affect anchor.
 

@@ -151,9 +151,8 @@ export interface ProfileWorld {
 }
 
 /** The world meta a profile row shows, `The Forsaken Lands` on the
- *  world's own port and `The Forsaken Lands 1825` on another, by Q7 of
- *  the Sessions review. Any other host shows as typed. Null when the
- *  profile has no world. */
+ *  world's own port and `The Forsaken Lands 1825` on another. Any other
+ *  host shows as typed. Null when the profile has no world. */
 export function profileWorld(entry: ProfileEntry): ProfileWorld | null {
   const host = entry.auto_match?.host?.trim();
   if (!host) return null;
@@ -166,8 +165,7 @@ export function profileWorld(entry: ProfileEntry): ProfileWorld | null {
 // Sessions
 // ---------------------------------------------------------------
 
-/** The profiles the open sessions play, by board 7 of the Sessions
- *  review. */
+/** The profiles the open sessions play. */
 export interface PlayedProfiles {
   /** Every profile a session plays, which the list marks with a dot and
    *  Delete refuses. */
@@ -268,11 +266,11 @@ export function movedSentence(
   return `Vosh moved ${character} from ${from} to ${profileDisplayName(to)}.`;
 }
 
-/** What a pin did, by Q2 of the Sessions review: where the character
- *  now plays each profile, then each pinned claim's new port and every
- *  other character that moved with it, like `Tolliver plays Default on
- *  1848 and Build on 1825. Default's claim now sits on 1848.` One toggle
- *  pins every claim to the same port, the world's own. */
+/** What a pin did: where the character now plays each profile, then each
+ *  pinned claim's new port and every other character that moved with it,
+ *  like `Tolliver plays Default on 1848 and Build on 1825. Default's
+ *  claim now sits on 1848.` One toggle pins every claim to the same
+ *  port, the world's own. */
 function pinnedSentence(character: string, claim: LoginClaim, to: string): string | null {
   const port = claim.entry.auto_match?.port;
   if (claim.pinned.length === 0 || port == null) return null;

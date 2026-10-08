@@ -156,7 +156,7 @@ pub(crate) struct Session {
     /// The character the session played last, which its row names once
     /// the live connection has none: through a drop, every try of a
     /// redial and a disconnect, so two sessions that redial on one world
-    /// still read apart (Sessions Q10, board 3). A login sets it, and a
+    /// still read apart. A login sets it, and a
     /// connect you start clears it, since the row then names the world
     /// until you log in. A leaf lock, held for a copy.
     played: std::sync::Mutex<Option<String>>,

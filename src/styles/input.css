@@ -1,7 +1,7 @@
 /* The command line. The input row in your terminal font, the caret
    and its shapes, the caret mirror, the line gutter and the paste chip. */
 
-/* The input band (SPEC 1). It spans the terminal at 40 tall or more,
+/* The input band. It spans the terminal at 40 tall or more,
    in the --inputband fill with no border and no radius, and grows
    while you compose several lines. It fills its slot in the shell grid
    and never shrinks. Its position and z-index keep it painted over the
@@ -77,11 +77,10 @@
   caret-color: transparent;
 }
 
-/* Ember block caret. A 7x15 accent block, absolutely positioned
-   by Input.tsx at the measured caret spot.
-   Blinks on a stepped keyframe like a hardware cursor; useCaret.ts
-   restarts the animation on every value change so the caret holds
-   solid while the user types. */
+/* Block caret. A 7x15 accent block, absolutely positioned by Input.tsx
+   at the measured caret spot. Blinks on a stepped keyframe like a
+   hardware cursor; useCaret.ts restarts the animation on every value
+   change so the caret holds solid while the user types. */
 .input-caret {
   position: absolute;
   box-sizing: border-box;

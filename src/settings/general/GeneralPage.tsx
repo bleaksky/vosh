@@ -29,12 +29,11 @@ import {
 import { ReconnectRow } from './ReconnectRow';
 import { OTHER, worldChoice, worldValue } from './worldChoice';
 
-// General (the approved SettingsGeneral board): where Connect dials,
-// updates and the settings every character shares. Session logs and
-// Scrollback left for the Logs tab (Settings layout Q1, LogsPage.tsx).
-// Windows and Linux add an Advanced disclosure at the end with the GPU
-// rendering switch, which drives the xterm renderer macOS does not
-// show.
+// General: where Connect dials, updates and the settings every
+// character shares. Session logs and Scrollback live on the Logs tab
+// (LogsPage.tsx). Windows and Linux add an Advanced disclosure at the
+// end with the GPU rendering switch, which drives the xterm renderer
+// macOS does not show.
 
 export function GeneralPage({ target, navSeq, config, setConfig, onError }: SettingsPageProps) {
   const { update } = useSettingsAutoSave(setConfig, onError);
@@ -57,11 +56,11 @@ export function GeneralPage({ target, navSeq, config, setConfig, onError }: Sett
 
 /** Where Connect and Cmd+R dial the selected session, the same target
  *  the session popover's Edit connection… edits, which each session
- *  keeps for itself (board 7). The World select picks a known world or
- *  Other…, which clears host and port for you to type. Host and port
- *  save when you leave them or press Enter, and go back to the target
- *  when they do not make one. Reconnect when the link drops belongs to
- *  the profile Settings shows, not the session. */
+ *  keeps for itself. The World select picks a known world or Other…,
+ *  which clears host and port for you to type. Host and port save when
+ *  you leave them or press Enter, and go back to the target when they
+ *  do not make one. Reconnect when the link drops belongs to the
+ *  profile Settings shows, not the session. */
 function ConnectionSection({ onError }: { onError: (message: string | null) => void }) {
   const [target, storeTarget] = useSessionTarget();
   const sessions = useSessions().length;

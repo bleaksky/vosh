@@ -4,7 +4,7 @@ import { hitFill } from './vitalsHit';
 import { MarkValue } from './VitalsMarks';
 import { toneProps, VITAL_LABELS } from './vitalsView';
 
-// Rings (More Vitals Styles, board 3): your vitals as arcs nested in
+// Rings: your vitals as arcs nested in
 // one 56 pt glyph, outer to inner in your order, with a legend of
 // labels and values beside it, after Apple's Activity rings. Each arc
 // starts at the top and runs clockwise, and with Show each hit on the

@@ -1,9 +1,9 @@
-// Trigger logic for Settings, Automation. The board shows a trigger as
-// a name, a group, one pattern, a Style, and one command to send. A
-// stored trigger holds a list of patterns and a list of actions, so
-// these helpers read and write the board's fields as views over those
-// lists. An edit changes the action it names in place and leaves the
-// rest of the list, and its order, as it was.
+// Trigger logic for Settings, Automation. The trigger card shows a
+// trigger as a name, a group, one pattern, a Style, and one command to
+// send. A stored trigger holds a list of patterns and a list of
+// actions, so these helpers read and write the card's fields as views
+// over those lists. An edit changes the action it names in place and
+// leaves the rest of the list, and its order, as it was.
 
 import { normalizeAlert } from './alertParts';
 import { saveDraftOnto, type Draft } from './automationDraft';
@@ -24,7 +24,7 @@ import {
 } from '../ipc/automation';
 import { quoted } from '../lib/text';
 
-/** The Style select on the board. */
+/** The Style select on the trigger card. */
 export type TriggerStyle = 'none' | 'highlight' | 'wash' | 'replace' | 'hide';
 
 export const TRIGGER_STYLE_OPTIONS: readonly { value: TriggerStyle; label: string }[] = [
@@ -251,7 +251,7 @@ export function withPatternSource(row: TriggerPattern, value: string): TriggerPa
   return isTextRow(row) ? { ...row, text: value } : { ...row, pattern: value };
 }
 
-/** The modes the Pattern row offers, in board 6's order. */
+/** The modes the Pattern row offers, in the order it lists them. */
 export const MATCH_MODE_OPTIONS: readonly { value: MatchMode; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'starts_with', label: 'Starts with' },
@@ -375,7 +375,7 @@ export function triggerForSave(trigger: TriggerRecord): TriggerRecord {
   };
 }
 
-/** A new trigger: no name, one empty Text pattern (Q11), Style None. */
+/** A new trigger: no name, one empty Text pattern, Style None. */
 export function blankTrigger(): TriggerRecord {
   return {
     name: '',
@@ -390,8 +390,8 @@ export function blankTrigger(): TriggerRecord {
  *  name, names must differ (the store keys by name, so a second one
  *  would replace the first), and a trigger needs a pattern. A trigger of
  *  yours never takes the name of a trigger in the preset library, its
- *  preset on or off, since the next launch would put the preset's in
- *  its place (Presets board 2). */
+ *  preset on or off, since the next launch would put the preset's in its
+ *  place. */
 export function validateTriggers(list: readonly TriggerRecord[]): string | null {
   for (const t of list) {
     if (t.preset) continue;
@@ -460,7 +460,7 @@ const isStored = (t: unknown): t is Stored => t !== null && typeof t === 'object
 
 /** Set the trigger named `name` to match Prompts, as Match does in the
  *  Triggers editor. The prompt card offers it for a Line trigger that
- *  matched your prompt as a line (D6), which no longer sees it once the
+ *  matched your prompt as a line, which no longer sees it once the
  *  profile reads your prompt. It reads the store's list again and writes
  *  it back with only that trigger's target changed, every other field as
  *  the store wrote it. */

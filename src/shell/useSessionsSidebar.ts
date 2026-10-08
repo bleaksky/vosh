@@ -10,19 +10,19 @@ import {
 } from './sessionsColumn';
 
 // Whether the main window shows the sessions sidebar, and how wide. It
-// shows while two or more sessions are open (Q17), unless you hid it in
-// this window or the window is too narrow to hold it (board 8). Either
-// way it folds and the session popover lists the sessions. Once you hide
-// it, it stays hidden as sessions open and close. One toggle in the
-// window's top left corner hides it and shows it again, as do Ctrl Cmd
-// S, the View menu and the palette (Sessions toggle T1 to T3). In a
-// window too narrow for it, the toggle slides it over the terminal
-// instead, until you pick a row, press the toggle again or press Esc
-// (T5), and widening the window or dropping to one session puts it
-// away. The caret goes back to the command line whenever the sidebar
-// over the terminal goes, and when a toggle press would leave it on the
-// toggle or on a sidebar that hides. The width you drag it to is kept in localStorage, as the
-// split's height is, since it belongs to the install and to no profile.
+// shows while two or more sessions are open, unless you hid it in this
+// window or the window is too narrow to hold it. Either way it folds
+// and the session popover lists the sessions. Once you hide it, it
+// stays hidden as sessions open and close. One toggle in the window's
+// top left corner hides it and shows it again, as do Ctrl Cmd S, the
+// View menu and the palette. In a window too narrow for it, the toggle
+// slides it over the terminal instead, until you pick a row, press the
+// toggle again or press Esc, and widening the window or dropping to one
+// session puts it away. The caret goes back to the command line
+// whenever the sidebar over the terminal goes, and when a toggle press
+// would leave it on the toggle or on a sidebar that hides. The width
+// you drag it to is kept in localStorage, as the split's height is,
+// since it belongs to the install and to no profile.
 
 const WIDTH_KEY = 'vosh.layout.sessionsWidth';
 

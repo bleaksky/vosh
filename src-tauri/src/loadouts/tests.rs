@@ -143,7 +143,8 @@ fn the_stacks_of_the_profiles_save_under_their_names_after_the_top_level() {
     save_loadout_set(dir.path(), &set).unwrap();
     let text = fs::read_to_string(loadouts_path(dir.path())).unwrap();
     // An older build reads the top-level stack as the one stack and
-    // passes over the table it does not know (D14).
+    // passes over the table it does not know, so a rollback still loads
+    // the file.
     assert_eq!(
         text,
         "active = [\"Melee\"]\ndormant = false\n\n[[loadouts]]\nname = \"Melee\"\n\

@@ -1,11 +1,11 @@
-// The players a session snoops (Snoop SN2, SN3 and SN5), which
-// src-tauri/src/session/snoop.rs keeps and stores/session/snoopStore.ts
-// follows. The page reads every tab with its text the first time it
-// shows a session, then hears session://snoop for the tab list and
-// session://snoop-output for new text. Stop asks the game to end a snoop,
-// Close drops an ended tab, and Open in a window moves the tabs into a
-// window of their own. Each call acts on the session it names, or on the
-// selected session when it names none.
+// The players a session snoops, which src-tauri/src/session/snoop.rs
+// keeps and stores/session/snoopStore.ts follows. The page reads every
+// tab with its text the first time it shows a session, then hears
+// session://snoop for the tab list and session://snoop-output for new
+// text. Stop asks the game to end a snoop, Close drops an ended tab, and
+// Open in a window moves the tabs into a window of their own. Each call
+// acts on the session it names, or on the selected session when it names
+// none.
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';

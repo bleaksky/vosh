@@ -1,9 +1,9 @@
 import { editorCount, type EditorLine } from './editorLine';
 
 // The tick at the right edge of the width and the count at the command
-// line's right, while the game's editor holds a text Vosh names
-// (Description Editor board 3). Past the width the count turns danger or
-// warn, and what runs past the tick takes the same wash.
+// line's right, while the game's editor holds a text Vosh names. Past
+// the width the count turns danger or warn, and what runs past the tick
+// takes the same wash.
 
 export function EditorMarks({
   field,

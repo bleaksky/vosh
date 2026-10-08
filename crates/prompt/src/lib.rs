@@ -40,11 +40,6 @@
 //!   game does, plays a fake Aabahran for tests and scripted runs, and
 //!   holds the designs and clocks many tests share.
 //! - [`wrap`] is the word wrap both renderers share.
-//!
-//! Bare tags in the comments, such as (D10), section 3, decision 6 and
-//! correction 27, point at the prompt build spec, which lives outside the
-//! repo. A tag that names the refactor plan points at
-//! `docs/refactor-plan.md`.
 
 pub mod aabahran;
 pub mod capture;

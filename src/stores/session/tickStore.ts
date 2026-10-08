@@ -22,7 +22,7 @@ import { playTickSound } from './tickSound';
 // interval on as well, so the ring before the tick in the Icon style
 // fills against it.
 //
-// Each session runs its own count (Q10), so the store keeps the last
+// Each session runs its own count, so the store keeps the last
 // report of each session and shows the selected one's. The tick settings
 // are the profile's, and the store reads those of the profile in front,
 // the selected session's, again on each vosh://profile-switched, which a

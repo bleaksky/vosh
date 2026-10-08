@@ -2,14 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import type { PromptCardHost } from '../prompt/PromptCard';
 import type { CellSize } from '../prompt/pinnedDock';
 
-// Where the writing card sits over the terminal (Description Editor
-// Q1): 12 px in from the terminal's left, its foot 1 px over the sixth
-// row above your prompt, so the six newest rows and your prompt stay in
-// view and the game's answers to what the card sends land there. In a
-// window too narrow for the card it spans the window 12 in from each
-// side, over the panel, and its text gets smaller to keep 80 columns.
-// That is the card's own place. Once you drag it somewhere else it goes
-// where you put it (cardPlace.ts), and Put the card back brings it here.
+// Where the writing card sits over the terminal: 12 px in from the
+// terminal's left, its foot 1 px over the sixth row above your prompt,
+// so the six newest rows and your prompt stay in view and the game's
+// answers to what the card sends land there. In a window too narrow for
+// the card it spans the window 12 in from each side, over the panel,
+// and its text gets smaller to keep 80 columns. That is the card's own
+// place. Once you drag it somewhere else it goes where you put it
+// (cardPlace.ts), and Put the card back brings it here.
 
 /** The rows under the card that stay in view, your prompt's aside. */
 export const ROWS_IN_VIEW = 6;

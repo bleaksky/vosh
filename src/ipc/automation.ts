@@ -82,8 +82,7 @@ export interface TriggerRecord {
    *  backend's default). */
   target?: TriggerTarget;
   /** The alert the trigger rings when it matches, in a table of its own
-   *  beside the actions (Alerts Q6). Left out while the trigger rings
-   *  none. */
+   *  beside the actions. Left out while the trigger rings none. */
   alert?: AlertParts;
 }
 

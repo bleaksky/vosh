@@ -13,12 +13,12 @@ const keepCaret = (event: MouseEvent) => event.preventDefault();
 
 // Update notice at the bottom right of the terminal column, where the
 // toasts sit. It checks once on mount when auto update is on and shows
-// a floating card (radius 16, the SPEC 3 recipe) while a new version is
-// out: a dot in the accent, Update available, the version in the
-// tertiary tone, then Later and Install and restart. Install downloads,
-// installs, and relaunches from the backend. A failed install turns the
-// dot to danger, says so, and offers Try again. Toasts that arrive
-// meanwhile stack above the card (overlays.css).
+// a floating card (radius 16, the floating card recipe) while a new
+// version is out: a dot in the accent, Update available, the version in
+// the tertiary tone, then Later and Install and restart. Install
+// downloads, installs, and relaunches from the backend. A failed
+// install turns the dot to danger, says so, and offers Try again.
+// Toasts that arrive meanwhile stack above the card (overlays.css).
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [installing, setInstalling] = useState(false);

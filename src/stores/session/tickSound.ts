@@ -5,7 +5,7 @@ import { getSelected } from './sessionsStore';
 // Play a sound on it also carries sound true, and the tick store plays
 // this short soft tone. Web Audio draws it, so Vosh ships no sound file.
 // Every session keeps its own count, but only the session in front, the
-// selected one, plays its tick (Q10), so two sessions never ring over
+// selected one, plays its tick, so two sessions never ring over
 // each other.
 //
 // The sound was switched off while the backend fired on its own clock,

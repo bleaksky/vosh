@@ -238,7 +238,7 @@ describe('the band under the map', () => {
   });
 });
 
-// Click to walk, board 9 of the Scripts and Panels review. The map view
+// Click to walk. The map view
 // draws in a fake DOM with no canvas, 404 by 300, so Squares at zoom 1
 // puts the room at [row][col] of the Val Miran packet at (2 + 20 col,
 // -50 + 20 row), and you stand in The Central Square at [10][10].
