@@ -52,12 +52,14 @@ import { partShift, useRowDrag } from '../lib/useRowDrag';
 // name, Return or F2 on a row that has the keyboard, or Rename session…
 // from the row menu or anywhere else while the sidebar shows, brings
 // the session to the front and turns its name into a field in place
-// (Q7, S5 of the Sessions Sidebar review). Space still selects, and F2
-// never reaches the command line from a row. The field spans the name
-// and the right column, the mark stays, and line two says how to finish.
-// Return or a click elsewhere keeps what you typed, Escape leaves the
-// row as it was, and a blank field clears the name, so the row reads
-// the character again.
+// (Q7, S5 of the Sessions Sidebar review). Up and Down move the
+// keyboard between rows and stop at either end, so Return or F2 renames
+// the row they reach (board 4). They select nothing, Space still
+// selects, and F2 never reaches the command line from a row. The field
+// spans the name and the right column, the mark stays, and line two
+// says how to finish. Return or a click elsewhere keeps what you typed,
+// Escape leaves the row as it was, and a blank field clears the name,
+// so the row reads the character again.
 //
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
@@ -134,6 +136,13 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     ROW_PITCH,
   );
   const card = useHoverCard(drag !== null);
+  // Each row's button, by session, for Up and Down. A row being renamed
+  // has none.
+  const buttons = useRef(new Map<number, HTMLButtonElement>());
+  const step = (from: number, delta: number) => {
+    const to = rows[from + delta];
+    if (to) buttons.current.get(to.id)?.focus();
+  };
   // The session whose name is a field, and the row whose menu is open,
   // with the pointer it opened at and whether the row had the keyboard.
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -237,6 +246,11 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
                 : 0
             }
             onPress={(e) => press(e, row.id)}
+            onButton={(el) => {
+              if (el) buttons.current.set(row.id, el);
+              else buttons.current.delete(row.id);
+            }}
+            onStep={(delta) => step(i, delta)}
             onRest={(slot) => card.rest(row.id, slot)}
             card={card.shown?.session === row.id ? { slot: card.shown.slot, side } : null}
             dropped={dropped}
@@ -305,6 +319,10 @@ interface SlotProps {
   offset: number;
   /** A press that may lift the row. */
   onPress: (e: PointerEvent<HTMLButtonElement>) => void;
+  /** Hands the sidebar the row's button, or null as it goes. */
+  onButton: (el: HTMLButtonElement | null) => void;
+  /** Move the keyboard `delta` rows down, or up when negative. */
+  onStep: (delta: number) => void;
   /** The pointer moved on the row's slot. */
   onRest: (slot: HTMLElement) => void;
   /** Where the row's card shows while it does, level with its slot and
@@ -334,6 +352,8 @@ function SessionSlot({
   lifted,
   offset,
   onPress,
+  onButton,
+  onStep,
   onRest,
   card,
   dropped,
@@ -376,6 +396,7 @@ function SessionSlot({
       onPointerMove={(e) => onRest(e.currentTarget)}
     >
       <button
+        ref={onButton}
         type="button"
         className={rowClass}
         aria-current={current ? 'true' : undefined}
@@ -388,8 +409,13 @@ function SessionSlot({
           onCaret();
         }}
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' && e.key !== 'F2') return;
           if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.nativeEvent.isComposing) return;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            onStep(e.key === 'ArrowUp' ? -1 : 1);
+            return;
+          }
+          if (e.key !== 'Enter' && e.key !== 'F2') return;
           e.preventDefault();
           e.stopPropagation();
           onRename();
