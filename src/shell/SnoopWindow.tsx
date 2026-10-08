@@ -31,7 +31,7 @@ interface Props {
 
 export function SnoopWindow({ session }: Props) {
   const mac = isMacPlatform();
-  const look = useSnoopWindowLook();
+  const look = useSnoopWindowLook(session);
   const snoops = useSnoopsOf(session);
   const { tabs, selected } = snoops;
   const finder = useSnoopFind(session, selected);

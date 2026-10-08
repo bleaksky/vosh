@@ -252,3 +252,10 @@ export function useSelectedRow(): SessionRow | null {
 export function useOpened(): number[] {
   return useSyncExternalStore(subscribeSessions, getOpened);
 }
+
+/** The profile `session` plays, null while its row names none, and
+ *  undefined until a list names the session. */
+export function useProfileOf(session: number): string | null | undefined {
+  const profile = () => store.get().rows.find((row) => row.id === session)?.profile;
+  return useSyncExternalStore(subscribeSessions, profile, profile);
+}
