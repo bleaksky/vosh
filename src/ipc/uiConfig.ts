@@ -40,6 +40,7 @@ import {
   READABLE_HIGHLIGHTS_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
   WRITING_OFFER_CHANGED,
+  WRITING_ASK_POST_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_TERMINAL_COLORS_CHANGED,
@@ -495,6 +496,9 @@ export interface UiConfig {
   /** Offer the writing card in a notice when you open the game's line
    *  editor yourself. Default on. */
   writing_offer: boolean;
+  /** The writing card asks before it posts a note. Off, Post posts at
+   *  once. Default on. */
+  writing_ask_post: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
   /** How the vitals under the panel's panes lay out, one of
@@ -649,6 +653,7 @@ export interface RawUiConfig {
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   writing_offer?: boolean;
+  writing_ask_post?: boolean;
   input_cursor_style?: string;
   vitals_density?: string;
   vitals_values?: string;
@@ -774,6 +779,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
     writing_offer: cfg.writing_offer !== false,
+    writing_ask_post: cfg.writing_ask_post !== false,
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
@@ -1089,6 +1095,11 @@ export function subscribeSpellcheckPromptChanged(cb: (on: boolean) => void): Pro
 /** Hear Offer the card when the game's editor opens change. */
 export function subscribeWritingOfferChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>(WRITING_OFFER_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Ask before you post change. */
+export function subscribeWritingAskPostChanged(cb: (on: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>(WRITING_ASK_POST_CHANGED, (event) => cb(event.payload));
 }
 
 /** Hear Caret shape change. */

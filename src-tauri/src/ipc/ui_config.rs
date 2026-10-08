@@ -61,6 +61,7 @@ pub(crate) struct UiConfigPayload {
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
     pub writing_offer: bool,
+    pub writing_ask_post: bool,
     pub input_cursor_style: String,
     pub vitals_density: String,
     pub vitals_values: String,
@@ -144,6 +145,7 @@ impl UiConfigPayload {
             paste_line_delay_ms: ui.paste_line_delay_ms,
             spellcheck_prompt: ui.spellcheck_prompt,
             writing_offer: ui.writing_offer,
+            writing_ask_post: ui.writing_ask_post,
             input_cursor_style: ui.input_cursor_style.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
@@ -228,6 +230,7 @@ pub(crate) enum UiField {
     PasteLineDelayMs(u32),
     SpellcheckPrompt(bool),
     WritingOffer(bool),
+    WritingAskPost(bool),
     InputCursorStyle(String),
     VitalsDensity(String),
     VitalsValues(String),
@@ -353,6 +356,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             }
             UiField::SpellcheckPrompt(v) => ui.spellcheck_prompt = v,
             UiField::WritingOffer(v) => ui.writing_offer = v,
+            UiField::WritingAskPost(v) => ui.writing_ask_post = v,
             UiField::InputCursorStyle(v) => {
                 ui.input_cursor_style = cfg::coerce_input_cursor_style(v);
             }

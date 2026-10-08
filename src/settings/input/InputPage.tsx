@@ -119,6 +119,16 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
           <Toggle checked={config.writing_offer} onChange={(on) => update({ writing_offer: on })} />
         </Row>
         <Row
+          label="Ask before you post"
+          description="Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in."
+          anchor="writing-ask-post"
+        >
+          <Toggle
+            checked={config.writing_ask_post}
+            onChange={(on) => update({ writing_ask_post: on })}
+          />
+        </Row>
+        <Row
           label="Mark your commands"
           description="Draws a grey › before each command you send, except after a prompt that already ends in >."
           anchor="mark-commands"

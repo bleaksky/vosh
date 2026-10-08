@@ -60,6 +60,7 @@
     "input:command-line#keep-last",
     "input:command-line#spellcheck",
     "input:command-line#writing-offer",
+    "input:command-line#writing-ask-post",
     "input:command-line#mark-commands",
     "input:command-line#sent-color",
     "input:command-line#echo-macros",
@@ -279,6 +280,7 @@
       "prompt-show",
       "sent-color",
       "spellcheck",
+      "writing-ask-post",
       "writing-offer"
     ],
     "automation": [
