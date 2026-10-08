@@ -21,7 +21,9 @@
 //! line on `session://round-trip` and into the [`RoundTrip`] the
 //! connection keeps, which `#lag` reads.
 //!
-//! A stall is any stretch of readings at [`SLOW`] or more. The session
+//! A stall is any stretch of readings at [`SLOW`] or more. One that a
+//! wait reads begins when the line it counts from left, see [`Sample`],
+//! so `#lag` lists its real start and length. The session
 //! keeps the last [`KEPT_STALLS`] of the connection, and the readings
 //! of the last [`USUAL_OVER`] for the usual round trip, their median.
 
@@ -88,22 +90,54 @@ impl Waits {
         self.game = None;
     }
 
-    /// The reading at `now` from what the kernel says of the socket,
-    /// the longest of the round trip, the link half and the game half.
+    /// The sample at `now` from what the kernel says of the socket, the
+    /// longest of the round trip, the link half and the game half.
     /// Nothing in flight means the game's machine has every line, so the
     /// link half starts over with your next line. The game half counts
     /// only past [`HELD_AT_MOST`], since a shorter silence may be a lag
     /// the game holds your line for.
-    pub(crate) fn reading(&mut self, kernel: kernel::Reading, now: Instant) -> Duration {
+    pub(crate) fn reading(&mut self, kernel: kernel::Reading, now: Instant) -> Sample {
         if !kernel.in_flight {
             self.link = None;
         }
-        let since = |sent: Option<Instant>| sent.map_or(Duration::ZERO, |s| now.duration_since(s));
-        let link = since(self.link);
-        let game = Some(since(self.game))
-            .filter(|w| *w > HELD_AT_MOST)
-            .unwrap_or_default();
-        kernel.round_trip.max(link).max(game)
+        let wait = |sent: Option<Instant>| {
+            sent.map(|s| Sample {
+                reading: now.duration_since(s),
+                began: Some(s),
+            })
+        };
+        let game = wait(self.game).filter(|w| w.reading > HELD_AT_MOST);
+        [wait(self.link), game].into_iter().flatten().fold(
+            Sample::kernel(kernel.round_trip),
+            |best, w| {
+                if w.reading > best.reading {
+                    w
+                } else {
+                    best
+                }
+            },
+        )
+    }
+}
+
+/// One reading of the round trip, and when its wait began when the
+/// wait for a line of yours is the reading, so a stall lists when the
+/// line left rather than when a reading first caught it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Sample {
+    pub(crate) reading: Duration,
+    /// When the line the wait counts from left, None when the kernel's
+    /// round trip is the reading.
+    pub(crate) began: Option<Instant>,
+}
+
+impl Sample {
+    /// The kernel's round trip is the reading.
+    pub(crate) fn kernel(reading: Duration) -> Self {
+        Self {
+            reading,
+            began: None,
+        }
     }
 }
 
@@ -161,8 +195,9 @@ impl RoundTrip {
         *self = Self::default();
     }
 
-    /// Take `reading` at `now`, `at` on your local clock.
-    pub(crate) fn record(&mut self, reading: Duration, now: Instant, at: NaiveTime) {
+    /// Take `sample` at `now`, `at` on your local clock.
+    pub(crate) fn record(&mut self, sample: Sample, now: Instant, at: NaiveTime) {
+        let reading = sample.reading;
         self.latest = Some(reading);
         self.recent.push_back((now, reading));
         while self
@@ -177,10 +212,16 @@ impl RoundTrip {
             Some(stall) if reading >= SLOW => stall.worst = stall.worst.max(reading),
             Some(stall) => stall.ended = Some(now),
             None if reading >= SLOW => {
+                // A wait began when its line left, but never before the
+                // last stall ended, so stalls never overlap.
+                let after = self.stalls.back().and_then(|s| s.ended);
+                let began = sample.began.map_or(now, |b| after.map_or(b, |a| b.max(a)));
+                let back =
+                    chrono::TimeDelta::from_std(now.duration_since(began)).unwrap_or_default();
                 self.stall_count += 1;
                 self.stalls.push_back(Stall {
-                    at,
-                    began: now,
+                    at: at - back,
+                    began,
                     worst: reading,
                     ended: None,
                 });
@@ -286,17 +327,17 @@ mod tests {
         // network holds it and the wait is a stall.
         let mut waits = Waits::default();
         waits.sent(sent, true);
-        assert_eq!(waits.reading(link(true), now), ms(1500));
+        assert_eq!(waits.reading(link(true), now).reading, ms(1500));
         assert_eq!(waits.link, Some(sent));
 
         // It has the line, and the game holds it while a skill lags you.
         // The reading is the link's, and the wait starts over.
-        assert_eq!(waits.reading(link(false), now), ms(38));
+        assert_eq!(waits.reading(link(false), now).reading, ms(38));
         assert_eq!(waits.link, None);
 
         // A wait shorter than the round trip reads the round trip.
         waits.sent(now - ms(10), true);
-        assert_eq!(waits.reading(link(true), now), ms(38));
+        assert_eq!(waits.reading(link(true), now).reading, ms(38));
     }
 
     /// The kernel reading 38 ms, with bytes in flight or none.
@@ -318,13 +359,13 @@ mod tests {
         waits.sent(start + ms(400), true);
         waits.sent(start + ms(900), true);
         for i in 1..=3 {
-            let reading = waits.reading(link(false), start + READ_EVERY * i);
+            let reading = waits.reading(link(false), start + READ_EVERY * i).reading;
             assert_eq!(reading, ms(38));
             assert!(reading < SLOW);
         }
         // The lag ends and the game answers kick.
         waits.heard();
-        assert_eq!(waits.reading(link(false), start + ms(6500)), ms(38));
+        assert_eq!(waits.reading(link(false), start + ms(6500)).reading, ms(38));
     }
 
     #[test]
@@ -333,7 +374,10 @@ mod tests {
         let mut waits = Waits::default();
         waits.sent(start, true);
         waits.sent(start + ms(800), false);
-        assert_eq!(waits.reading(link(true), start + ms(1500)), ms(1500));
+        assert_eq!(
+            waits.reading(link(true), start + ms(1500)).reading,
+            ms(1500)
+        );
 
         // The game's machine took the first, so the link half starts
         // over with the second. The game half keeps the first.
@@ -341,7 +385,10 @@ mod tests {
         waits.sent(start, true);
         waits.sent(start + ms(5000), true);
         let later = start + HELD_AT_MOST + ms(1000);
-        assert_eq!(waits.reading(link(false), later), HELD_AT_MOST + ms(1000));
+        assert_eq!(
+            waits.reading(link(false), later).reading,
+            HELD_AT_MOST + ms(1000)
+        );
     }
 
     #[test]
@@ -349,15 +396,47 @@ mod tests {
         let start = Instant::now();
         let mut waits = Waits::default();
         waits.sent(start, true);
-        let reading = waits.reading(link(true), start + ms(1500));
-        assert_eq!(reading, ms(1500));
+        let sample = waits.reading(link(true), start + ms(1500));
+        assert_eq!(sample.reading, ms(1500));
+        assert_eq!(sample.began, Some(start));
 
+        // The stall began when the line left, a second and a half before
+        // the reading caught it at 21:14:05.
         let mut trip = RoundTrip::default();
         trip.connect(clock(19, 42, 0));
-        trip.record(reading, start + ms(1500), clock(21, 14, 1));
+        trip.record(sample, start + ms(1500), clock(21, 14, 5));
+        waits.heard();
+        let answered = waits.reading(link(false), start + ms(3000));
+        assert_eq!(answered, Sample::kernel(ms(38)));
+        trip.record(answered, start + ms(3000), clock(21, 14, 6));
         assert_eq!(
-            trip.report(start + ms(1500))[1],
-            "1 stall since you connected at 19:42"
+            trip.report(start + ms(3000))[1..],
+            [
+                "1 stall since you connected at 19:42",
+                "  21:14:03  worst 1.5s, lasted 3s",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wait_stall_begins_no_earlier_than_the_last_stall_ended() {
+        let start = Instant::now();
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        trip.record(Sample::kernel(ms(900)), start, clock(21, 14, 1));
+        trip.record(Sample::kernel(ms(40)), start + ms(2000), clock(21, 14, 3));
+        let wait = Sample {
+            reading: ms(5000),
+            began: Some(start),
+        };
+        trip.record(wait, start + ms(5000), clock(21, 14, 6));
+        trip.record(Sample::kernel(ms(40)), start + ms(7000), clock(21, 14, 8));
+        assert_eq!(
+            trip.report(start + ms(7000))[2..],
+            [
+                "  21:14:01  worst 900ms, lasted 2s",
+                "  21:14:03  worst 5.0s, lasted 5s",
+            ]
         );
     }
 
@@ -371,20 +450,23 @@ mod tests {
         let mut now = start;
         for i in 1..=17 {
             now = start + READ_EVERY * i;
-            let reading = waits.reading(link(false), now);
+            let sample = waits.reading(link(false), now);
             if now.duration_since(start) > HELD_AT_MOST {
-                assert_eq!(reading, now.duration_since(start));
+                assert_eq!(sample.reading, now.duration_since(start));
+                assert_eq!(sample.began, Some(start));
             } else {
-                assert_eq!(reading, ms(38));
+                assert_eq!(sample, Sample::kernel(ms(38)));
             }
-            trip.record(reading, now, clock(21, 14, 2 * i));
+            trip.record(sample, now, clock(21, 14, 2 * i));
         }
+        // The stall lists when the line left at 21:14:00, not the
+        // reading at 21:14:32 that first caught it.
         assert_eq!(
             trip.report(now),
             [
                 "round trip to the game 34.0s, usually 38ms over the last 10 minutes",
                 "1 stall since you connected at 19:42",
-                "  21:14:32  34.0s now, 2s so far",
+                "  21:14:00  34.0s now, 34s so far",
             ]
         );
     }
@@ -396,7 +478,10 @@ mod tests {
         // A trigger sends a line, and the game answers in the pulse.
         waits.sent(start, true);
         waits.heard();
-        assert_eq!(waits.reading(link(false), start + READ_EVERY), ms(38));
+        assert_eq!(
+            waits.reading(link(false), start + READ_EVERY).reading,
+            ms(38)
+        );
 
         // A timer sends a line while a skill lags you 24 seconds, the
         // longest skill lag (handler.c), and the game says nothing until
@@ -404,10 +489,16 @@ mod tests {
         let sent = start + ms(3000);
         waits.sent(sent, true);
         for i in 1..=12 {
-            assert_eq!(waits.reading(link(false), sent + READ_EVERY * i), ms(38));
+            assert_eq!(
+                waits.reading(link(false), sent + READ_EVERY * i).reading,
+                ms(38)
+            );
         }
         waits.heard();
-        assert_eq!(waits.reading(link(false), sent + ms(25_000)), ms(38));
+        assert_eq!(
+            waits.reading(link(false), sent + ms(25_000)).reading,
+            ms(38)
+        );
     }
 
     #[test]
@@ -416,10 +507,13 @@ mod tests {
         let mut waits = Waits::default();
         waits.sent(start, true);
         let later = start + HELD_AT_MOST + ms(4000);
-        assert_eq!(waits.reading(link(true), later), HELD_AT_MOST + ms(4000));
+        assert_eq!(
+            waits.reading(link(true), later).reading,
+            HELD_AT_MOST + ms(4000)
+        );
         // A GMCP packet alone, with no text, is the game answering.
         waits.heard();
-        assert_eq!(waits.reading(link(true), later), ms(38));
+        assert_eq!(waits.reading(link(true), later).reading, ms(38));
     }
 
     /// A connection at 19:42 that took `readings`, one every two seconds
@@ -429,7 +523,11 @@ mod tests {
         for (i, r) in readings.iter().enumerate() {
             now = start + READ_EVERY * i as u32;
             let secs = 1 + 2 * i as u32;
-            trip.record(ms(*r), now, clock(21, 14 + secs / 60, secs % 60));
+            trip.record(
+                Sample::kernel(ms(*r)),
+                now,
+                clock(21, 14 + secs / 60, secs % 60),
+            );
         }
         now
     }
@@ -545,10 +643,10 @@ mod tests {
         let mut trip = RoundTrip::default();
         trip.connect(clock(19, 42, 0));
         let start = Instant::now();
-        trip.record(ms(900), start, clock(19, 43, 0));
-        trip.record(ms(900), start + ms(1000), clock(19, 43, 1));
+        trip.record(Sample::kernel(ms(900)), start, clock(19, 43, 0));
+        trip.record(Sample::kernel(ms(900)), start + ms(1000), clock(19, 43, 1));
         let later = start + USUAL_OVER + ms(1500);
-        trip.record(ms(40), later, clock(19, 53, 2));
+        trip.record(Sample::kernel(ms(40)), later, clock(19, 53, 2));
         assert_eq!(
             trip.report(later)[0],
             "round trip to the game 40ms, usually 40ms over the last 10 minutes"

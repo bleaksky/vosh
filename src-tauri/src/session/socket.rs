@@ -14,7 +14,7 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
-use super::round_trip::Waits;
+use super::round_trip::{Sample, Waits};
 
 /// Hard cap on a connect attempt. Bad hosts and silent firewalls otherwise
 /// hang the UI for the OS-level timeout (often minutes).
@@ -93,8 +93,9 @@ impl Stream {
     /// game is not answering. The network still carrying the line is the
     /// link not answering. The game sending nothing at all past the
     /// longest lag it puts on you is the game not answering. None where
-    /// the system does not say. See [`super::round_trip`].
-    pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Duration> {
+    /// the system does not say. The sample says when the wait began
+    /// when the wait is the reading. See [`super::round_trip`].
+    pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Sample> {
         let kernel = self.kernel()?;
         Some(self.waits.reading(kernel, now))
     }
@@ -209,7 +210,10 @@ mod tests {
         let mut stream = connect("127.0.0.1", port, false).await.expect("the game");
         let mut game = game.await.expect("the game task");
 
-        let fine = stream.round_trip(Instant::now()).expect("a reading");
+        let fine = stream
+            .round_trip(Instant::now())
+            .expect("a reading")
+            .reading;
         assert!(fine < SLOW, "{fine:?}");
 
         // A bash lags you, and you type ahead. The game reads both lines
@@ -221,7 +225,10 @@ mod tests {
             .await
             .expect("the game hears them");
         tokio::time::sleep(Duration::from_millis(400)).await;
-        let held = stream.round_trip(Instant::now()).expect("a reading");
+        let held = stream
+            .round_trip(Instant::now())
+            .expect("a reading")
+            .reading;
         assert!(held < SLOW, "{held:?}");
 
         game.write_all(b"You see Tolliver here.\r\n")
@@ -229,7 +236,10 @@ mod tests {
             .expect("the answer");
         let mut buf = [0u8; 64];
         assert!(stream.read(&mut buf).await.expect("the answer") > 0);
-        let answered = stream.round_trip(Instant::now()).expect("a reading");
+        let answered = stream
+            .round_trip(Instant::now())
+            .expect("a reading")
+            .reading;
         assert!(answered < SLOW, "{answered:?}");
     }
 
@@ -250,7 +260,7 @@ mod tests {
         let mut line = [0u8; 6];
         game.read_exact(&mut line).await.expect("the game hears it");
         let silent = Instant::now() + HELD_AT_MOST + Duration::from_secs(1);
-        let stalled = stream.round_trip(silent).expect("a reading");
+        let stalled = stream.round_trip(silent).expect("a reading").reading;
         assert!(stalled >= HELD_AT_MOST, "{stalled:?}");
 
         let mut gmcp = vec![255, 250, 201];
@@ -261,7 +271,7 @@ mod tests {
         game.write_all(&gmcp).await.expect("the packet");
         let mut buf = [0u8; 128];
         assert!(stream.read(&mut buf).await.expect("the packet") > 0);
-        let answered = stream.round_trip(silent).expect("a reading");
+        let answered = stream.round_trip(silent).expect("a reading").reading;
         assert!(answered < SLOW, "{answered:?}");
     }
 }
