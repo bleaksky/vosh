@@ -10,7 +10,7 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 
 - TCP and TLS connections, with optional StartTLS.
 - Telnet option negotiation with RFC 1143 state for each option, covering IAC, SB, SE, GA, EOR, DO, DONT, WILL and WONT.
-- TTYPE answered with MTTS, NAWS, `NEW-ENVIRON`, CHARSET, EOR and GMCP. Vosh turns down every other option, MSDP, MCCP and MXP among them.
+- TTYPE answered with MTTS, NAWS, `NEW-ENVIRON`, CHARSET, EOR, ECHO for password lines, SGA and GMCP. Vosh turns down every other option, MSDP, MCCP and MXP among them.
 - ANSI color, 256 color and 24 bit truecolor.
 - Configurable charset per profile, UTF 8 by default with a latin 1 fallback.
 - Auto reconnect with backoff and a manual override.
@@ -150,7 +150,7 @@ The kickoff promised auto reconnect, and the Alerts and Scenes review of October
 
 ### The protocols Vosh speaks
 
-The kickoff listed MCCP2, MCCP3, MSSP, MSDP, ATCP and MXP beside the options Vosh speaks, and an MSDP fallback for servers without GMCP. Vosh speaks TTYPE with MTTS, NAWS, `NEW-ENVIRON`, CHARSET, EOR and GMCP, and turns down every other option. None of the others ever worked, so the list now names only what Vosh speaks, the MSDP fallback left with MSDP, and README makes the same claim.
+The kickoff listed MCCP2, MCCP3, MSSP, MSDP, ATCP and MXP beside the options Vosh speaks, and an MSDP fallback for servers without GMCP. Vosh speaks TTYPE with MTTS, NAWS, `NEW-ENVIRON`, CHARSET, EOR, ECHO, SGA and GMCP, and turns down every other option. None of the others ever worked, so the list now names only what Vosh speaks, the MSDP fallback left with MSDP, and README makes the same claim.
 
 ### The native surface stays on macOS
 

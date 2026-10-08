@@ -13,6 +13,8 @@ Vosh speaks telnet and negotiates each option with the RFC 1143 state machine. I
 - NEW-ENVIRON.
 - CHARSET, which agrees on UTF-8.
 - EOR, so the server marks the end of each prompt.
+- ECHO, which the server turns on while you type a password, so Vosh masks that line.
+- SGA, so neither side sends the telnet go ahead.
 - GMCP.
 
 Vosh turns down every other option, MSDP, MCCP, and MXP among them.
