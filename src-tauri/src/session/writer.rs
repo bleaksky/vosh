@@ -15,6 +15,17 @@
 //! your line while the editor is open, which the editor runs as a game
 //! command (`olc.c:3617`), and as typed at the game's prompt (Q6).
 //!
+//! The game's prompt tick comes as GMCP, and where it lands beside the
+//! text of its pulse depends on the server. Aabahran writes GMCP straight
+//! to the socket and the pulse's text after it, so Char.Vitals comes
+//! before the reply it goes with (`gmcp.c:21`, `comm.c:1629`). A server
+//! that sends GMCP in the stream puts it after the reply and before the
+//! prompt text, or after the prompt text. So the tick only arms, and fires
+//! once the text that came with it is in: at a GA or EOR after it, or
+//! once the link stayed quiet for [`GRACE`] after text. A tick with no
+//! text before or after it fires after [`SILENT`]. A job the tick finds
+//! still waiting for its answer keeps a tick armed for the next text.
+//!
 //! The writer only decides. Each event hands back the lines to send and
 //! the session does the IO, as the walker does.
 //!
@@ -33,6 +44,8 @@ mod openers;
 pub(crate) mod payloads;
 mod plan;
 
+use std::time::Duration;
+
 use serde::Serialize;
 use tokio::time::Instant;
 
@@ -42,6 +55,28 @@ use kinds::Kind;
 use payloads::{JobProgress, JobResult, WriteJob};
 
 pub(crate) use payloads::Action;
+
+/// How long the link stays quiet after the text of a pulse before its
+/// prompt tick fires. The game writes a pulse's GMCP and its text back to
+/// back with Nagle off (`comm.c:1134`), and its next pulse comes 250 ms
+/// later (`merc.h:407`), so the pulse ends well inside this.
+const GRACE: Duration = Duration::from_millis(100);
+
+/// How long a prompt tick with no text before or after it waits for some
+/// before it fires, four pulses. With the prompt off and compact on, a
+/// command that prints nothing gets the GMCP alone (`comm.c:1621`).
+const SILENT: Duration = Duration::from_millis(1000);
+
+/// A prompt tick that waits for the text of its pulse.
+#[derive(Debug, Clone, Copy)]
+struct Armed {
+    /// Text came since the writer last sent, or after the tick.
+    text: bool,
+    /// A GA or EOR came after it, which ends the prompt.
+    marked: bool,
+    /// When it fires, or None while it waits for text.
+    at: Option<Instant>,
+}
 
 /// Where the game takes what you send.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
@@ -133,6 +168,10 @@ pub(crate) struct Writer {
     waiting: Option<WriteJob>,
     done: Option<Done>,
     next_offer: u64,
+    /// The game's prompt tick, until the text of its pulse is in.
+    armed: Option<Armed>,
+    /// Text came since the writer last sent.
+    heard: bool,
 }
 
 impl Writer {
@@ -149,7 +188,12 @@ impl Writer {
 
     /// When the job next needs a look.
     pub(crate) fn deadline(&self) -> Option<Instant> {
-        self.job.as_ref().and_then(Job::deadline)
+        let job = self.job.as_ref().and_then(Job::deadline);
+        let tick = self.armed.and_then(|a| a.at);
+        match (job, tick) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     pub(crate) fn state(&self, held: usize) -> WritingState {
@@ -241,19 +285,27 @@ impl Writer {
         }
     }
 
-    /// The end of a read: the text it brought, without colors, and the
+    /// The end of a read: the text it brought while the writer watched,
+    /// without colors, whether it brought any text at all, and the
     /// partial it ended on. Returns the lines to send.
     pub(crate) fn read_end(
         &mut self,
         text: &str,
+        data: bool,
         partial: &str,
         out: u64,
         now: Instant,
     ) -> Vec<String> {
+        self.heard |= data;
         if editor_waits(partial) {
             self.game = Game::Editor;
         } else if pager_waits(partial) {
             self.game = Game::Pager;
+        }
+        // The editor and the pager come with no prompt tick (`comm.c:1583`),
+        // so a tick still armed is from before them.
+        if editor_waits(partial) || pager_waits(partial) {
+            self.armed = None;
         }
         if let Some(open) = &mut self.open {
             let waits = editor_waits(partial);
@@ -273,30 +325,74 @@ impl Writer {
         if let Some(job) = &mut self.job {
             job.read_end(lone_prompts(text), partial, now, &mut send);
         }
+        if let Some(armed) = &mut self.armed {
+            armed.text |= data;
+            if armed.text && armed.marked {
+                self.fire(now, &mut send);
+            } else if armed.text {
+                armed.at = Some(now + GRACE);
+            }
+        }
+        self.went(&send);
         send
     }
 
-    /// The game's prompt tick. The editor and the pager closed.
-    pub(crate) fn tick(&mut self, now: Instant) -> Vec<String> {
+    /// The game's prompt tick: the editor and the pager closed. What the
+    /// tick does to a job waits for the text of its pulse (module notes).
+    pub(crate) fn tick(&mut self, now: Instant) {
         self.game = Game::Prompt;
         self.opener = None;
         self.open = None;
-        let mut send = Vec::new();
-        if let Some(job) = &mut self.job {
-            job.tick(now, &mut send);
-        } else if let Some(spec) = self.waiting.take() {
-            self.begin(spec, now, &mut send);
+        let text = self.heard || self.armed.is_some_and(|a| a.text);
+        self.armed = Some(Armed {
+            text,
+            marked: false,
+            at: Some(now + if text { GRACE } else { SILENT }),
+        });
+    }
+
+    /// A GA or EOR, which ends the game's prompt.
+    pub(crate) fn marker(&mut self) {
+        if let Some(armed) = &mut self.armed {
+            armed.marked = true;
         }
-        send
     }
 
     /// A look at the time.
     pub(crate) fn poll(&mut self, now: Instant) -> Vec<String> {
         let mut send = Vec::new();
+        if self.armed.and_then(|a| a.at).is_some_and(|at| now >= at) {
+            self.fire(now, &mut send);
+        }
         if let Some(job) = &mut self.job {
             job.poll(now, &mut send);
         }
+        self.went(&send);
         send
+    }
+
+    /// The prompt tick, with the text of its pulse in. A job still waiting
+    /// for its answer keeps a tick armed for the text that brings it.
+    fn fire(&mut self, now: Instant, send: &mut Vec<String>) {
+        self.armed = None;
+        if let Some(job) = &mut self.job {
+            if job.tick(now, send) {
+                self.armed = Some(Armed {
+                    text: false,
+                    marked: false,
+                    at: None,
+                });
+            }
+        } else if let Some(spec) = self.waiting.take() {
+            self.begin(spec, now, send);
+        }
+    }
+
+    /// Lines went out, so the text that comes next answers them.
+    fn went(&mut self, send: &[String]) {
+        if !send.is_empty() {
+            self.heard = false;
+        }
     }
 
     /// Run what the page asked. `out` is the count of lines the session
@@ -317,9 +413,13 @@ impl Writer {
                     if self.game == Game::Editor {
                         self.begin(spec, now, &mut send);
                     }
+                    self.went(&send);
                     return send;
                 }
                 match self.game {
+                    // The rest of a pulse still on its way would read as
+                    // the answer, so the job starts once its tick fires.
+                    Game::Prompt if self.armed.is_some() => self.waiting = Some(spec),
                     Game::Prompt => self.begin(spec, now, &mut send),
                     Game::Editor => self.finish(spec.id, JobResult::Busy),
                     // The pager takes an empty line as Return, and the
@@ -355,6 +455,7 @@ impl Writer {
                 }
             }
         }
+        self.went(&send);
         send
     }
 
@@ -375,6 +476,8 @@ impl Writer {
         self.game = Game::Unknown;
         self.opener = None;
         self.open = None;
+        self.armed = None;
+        self.heard = false;
     }
 
     /// Take a job that ended out of the way, keeping how it ended.
@@ -387,6 +490,8 @@ impl Writer {
         };
         let id = job.id();
         self.job = None;
+        // A tick kept for the job's answer goes with it.
+        self.armed = self.armed.filter(|a| a.at.is_some());
         self.finish(id, result);
     }
 

@@ -1,6 +1,10 @@
 //! The writer against the game's own answers, line by line, as
 //! `string_add` and `parse_note` give them.
+//!
+//! Each test runs in the three orders a server can put its prompt tick
+//! in beside the text of its pulse (see [`Order`]).
 
+use std::cell::Cell;
 use std::time::Duration;
 
 use tokio::time::Instant;
@@ -8,11 +12,32 @@ use tokio::time::Instant;
 use super::game_text::GameLine;
 use super::kinds::Kind;
 use super::payloads::{Action, Field, JobResult, Why, WriteJob};
-use super::{Game, Writer, WriterCommand};
+use super::{Game, Writer, WriterCommand, GRACE, SILENT};
+
+/// Where the game's prompt tick comes beside the text of its pulse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Order {
+    /// Before the reply, as Aabahran sends it: `gmcp_send` writes
+    /// straight to the socket and the pulse's text follows
+    /// (`gmcp.c:21`, `comm.c:1629`).
+    First,
+    /// After the reply and before the prompt text, as a server that
+    /// writes GMCP into its output buffer as it prints the prompt.
+    Middle,
+    /// After the prompt text.
+    Last,
+}
+
+thread_local! {
+    static ORDER: Cell<Order> = const { Cell::new(Order::First) };
+}
+
+const PROMPT: &str = "<1020hp 800m 930mv> ";
 
 /// A writer and the game it talks to, with the lines it sent.
 struct Table {
     writer: Writer,
+    order: Order,
     now: Instant,
     /// Lines the session sent.
     out: u64,
@@ -28,6 +53,7 @@ impl Table {
     fn new() -> Self {
         let mut table = Self {
             writer: Writer::default(),
+            order: ORDER.with(Cell::get),
             now: Instant::now(),
             out: 0,
             sent: Vec::new(),
@@ -60,7 +86,10 @@ impl Table {
             text
         });
         text.push_str(partial);
-        let send = self.writer.read_end(&text, partial, self.out, self.now);
+        let data = !text.is_empty();
+        let send = self
+            .writer
+            .read_end(&text, data, partial, self.out, self.now);
         self.take(send)
     }
 
@@ -69,19 +98,46 @@ impl Table {
         self.game(&[], "> ")
     }
 
-    /// The game's prompt and its tick.
-    fn tick(&mut self) -> Vec<String> {
-        let send = self.writer.tick(self.now);
-        self.take(send)
+    /// The game's prompt tick, its GMCP alone in a read.
+    fn vitals(&mut self) {
+        self.writer.tick(self.now);
     }
 
-    /// The game's lines, its prompt and its tick.
+    /// One pulse at the game's prompt: `lines`, the prompt and its tick in
+    /// the table's order, then the quiet after it.
+    fn pulse(&mut self, lines: &[&str]) -> Vec<String> {
+        let early = match self.order {
+            Order::First => {
+                self.vitals();
+                self.game(lines, PROMPT)
+            }
+            Order::Middle => {
+                let mut early = self.game(lines, "");
+                self.vitals();
+                early.extend(self.game(&[], PROMPT));
+                early
+            }
+            Order::Last => {
+                let early = self.game(lines, PROMPT);
+                self.vitals();
+                early
+            }
+        };
+        assert_eq!(early, Vec::<String>::new(), "sent before the pulse ended");
+        self.later(GRACE)
+    }
+
+    /// The game's prompt with nothing before it.
+    fn tick(&mut self) -> Vec<String> {
+        self.pulse(&[])
+    }
+
+    /// The game's lines, the blank line before its prompt, the prompt
+    /// and its tick.
     fn answer(&mut self, lines: &[&str]) -> Vec<String> {
         let mut all: Vec<&str> = lines.to_vec();
         all.push("");
-        let send = self.game(&all, "<1020hp 800m 930mv> ");
-        assert_eq!(send, Vec::<String>::new(), "sent before the prompt");
-        self.tick()
+        self.pulse(&all)
     }
 
     fn typed(&mut self, line: &str) -> Vec<u8> {
@@ -157,7 +213,6 @@ fn send_to_check(t: &mut Table, spec: WriteJob) {
     assert_eq!(t.took(), vec![".s"]);
 }
 
-#[test]
 fn sends_a_description_and_reads_it_back() {
     let mut t = Table::new();
     send_to_check(&mut t, job(1, Kind::Description, Action::Send, &TEXT));
@@ -179,7 +234,6 @@ fn sends_a_description_and_reads_it_back() {
     assert_eq!(t.writer.state(0).job, None);
 }
 
-#[test]
 fn counts_a_line_taken_after_three_pulses_with_no_prompt_alone() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -200,7 +254,6 @@ fn counts_a_line_taken_after_three_pulses_with_no_prompt_alone() {
     assert_eq!(t.later(Duration::from_millis(300)), vec![TEXT[2]]);
 }
 
-#[test]
 fn stops_to_ask_when_the_game_holds_another_text() {
     let mut t = Table::new();
     let mut spec = job(1, Kind::Description, Action::Send, &TEXT);
@@ -217,7 +270,6 @@ fn stops_to_ask_when_the_game_holds_another_text() {
     );
 }
 
-#[test]
 fn mends_a_line_that_differs_and_then_leaves() {
     let mut t = Table::new();
     send_to_check(&mut t, job(1, Kind::Description, Action::Send, &TEXT));
@@ -229,7 +281,6 @@ fn mends_a_line_that_differs_and_then_leaves() {
     assert_eq!(t.lists(&TEXT), vec!["@"]);
 }
 
-#[test]
 fn deletes_an_extra_line_and_sends_a_missing_one() {
     let mut t = Table::new();
     send_to_check(&mut t, job(1, Kind::Description, Action::Send, &TEXT));
@@ -239,7 +290,6 @@ fn deletes_an_extra_line_and_sends_a_missing_one() {
     assert_eq!(t.took(), vec![".s"]);
 }
 
-#[test]
 fn puts_a_line_that_starts_with_a_dot_in_with_rl() {
     let mut t = Table::new();
     let text = ["...the nightgaunt waits.", "It does not move."];
@@ -260,7 +310,6 @@ fn puts_a_line_that_starts_with_a_dot_in_with_rl() {
     );
 }
 
-#[test]
 fn mends_a_line_that_opens_with_a_code_by_sending_it_again() {
     let mut t = Table::new();
     let text = ["A plain line.", "`#A bold yellow line."];
@@ -281,7 +330,6 @@ fn mends_a_line_that_opens_with_a_code_by_sending_it_again() {
     assert_eq!(t.lists(&text), vec!["@"]);
 }
 
-#[test]
 fn gives_up_after_two_mends() {
     let mut t = Table::new();
     send_to_check(&mut t, job(1, Kind::Description, Action::Send, &TEXT));
@@ -301,7 +349,6 @@ fn gives_up_after_two_mends() {
     );
 }
 
-#[test]
 fn ends_when_the_text_runs_past_what_the_editor_holds() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -318,7 +365,6 @@ fn ends_when_the_text_runs_past_what_the_editor_holds() {
     assert!(!t.writer.holds());
 }
 
-#[test]
 fn turns_the_pager_while_the_editor_lists_a_long_text() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -333,7 +379,6 @@ fn turns_the_pager_while_the_editor_lists_a_long_text() {
     assert_eq!(t.game(&[LISTED[1]], "> "), vec![".s"]);
 }
 
-#[test]
 fn reads_your_description_without_the_editor() {
     let mut t = Table::new();
     assert_eq!(
@@ -356,7 +401,6 @@ fn reads_your_description_without_the_editor() {
     );
 }
 
-#[test]
 fn reads_a_beast_through_its_editor_for_its_name() {
     let mut t = Table::new();
     assert_eq!(
@@ -379,7 +423,6 @@ fn reads_a_beast_through_its_editor_for_its_name() {
     );
 }
 
-#[test]
 fn waits_for_the_games_prompt_and_turns_away_from_an_editor() {
     let mut t = Table::new();
     t.game(&[], "> ");
@@ -412,7 +455,6 @@ fn note(id: u64, action: Action) -> WriteJob {
     spec
 }
 
-#[test]
 fn posts_a_note_once_the_game_holds_it_as_written() {
     let mut t = Table::new();
     assert_eq!(
@@ -446,7 +488,6 @@ fn posts_a_note_once_the_game_holds_it_as_written() {
     );
 }
 
-#[test]
 fn stops_at_a_refused_to_and_clears_after_a_refused_subject() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(note(1, Action::Post)));
@@ -480,7 +521,6 @@ fn stops_at_a_refused_to_and_clears_after_a_refused_subject() {
     );
 }
 
-#[test]
 fn finds_a_note_started_on_another_board() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(note(1, Action::Post)));
@@ -506,7 +546,6 @@ fn finds_a_note_started_on_another_board() {
     }
 }
 
-#[test]
 fn clears_its_copy_when_the_game_turns_a_post_down() {
     let mut t = Table::new();
     let mut spec = note(1, Action::Post);
@@ -546,7 +585,6 @@ fn clears_its_copy_when_the_game_turns_a_post_down() {
     );
 }
 
-#[test]
 fn stop_leaves_the_editor_and_clears_the_note_it_started() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(note(1, Action::Post)));
@@ -561,7 +599,6 @@ fn stop_leaves_the_editor_and_clears_the_note_it_started() {
     assert_eq!(t.done(), Some(JobResult::Stopped { sent: 0 }));
 }
 
-#[test]
 fn sends_your_typed_line_as_a_game_command_while_the_editor_is_open() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -575,7 +612,6 @@ fn sends_your_typed_line_as_a_game_command_while_the_editor_is_open() {
     assert_eq!(t.typed("flee"), b"./ flee\r\n");
 }
 
-#[test]
 fn offers_the_card_after_you_open_the_editor_and_opens_on_its_listing() {
     let mut t = Table::new();
     t.typed("desc edit");
@@ -596,7 +632,6 @@ fn offers_the_card_after_you_open_the_editor_and_opens_on_its_listing() {
     );
 }
 
-#[test]
 fn takes_the_offer_back_when_anything_else_went_out() {
     let mut t = Table::new();
     t.typed("history edit");
@@ -614,7 +649,6 @@ fn takes_the_offer_back_when_anything_else_went_out() {
     assert_eq!(t.writer.state(0).editor, None);
 }
 
-#[test]
 fn reads_a_notes_fields_once_you_take_the_offer() {
     let mut t = Table::new();
     t.typed("note edit");
@@ -645,7 +679,6 @@ fn reads_a_notes_fields_once_you_take_the_offer() {
     }
 }
 
-#[test]
 fn a_drop_ends_the_job_with_what_the_game_took() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -670,7 +703,6 @@ fn a_drop_ends_the_job_with_what_the_game_took() {
     assert_eq!(t.writer.state(0).game, Game::Unknown);
 }
 
-#[test]
 fn checks_your_description_once() {
     let mut t = Table::new();
     assert_eq!(
@@ -700,7 +732,6 @@ fn find(kind: Kind) -> (Table, WriteJob) {
     (Table::new(), spec)
 }
 
-#[test]
 fn finds_your_note_on_the_boards_list_and_sends_nothing_else() {
     let (mut t, spec) = find(Kind::Journal);
     assert_eq!(t.run(WriterCommand::Start(spec)), vec!["journal list"]);
@@ -712,7 +743,6 @@ fn finds_your_note_on_the_boards_list_and_sends_nothing_else() {
     assert_eq!(t.sent, vec!["journal list"]);
 }
 
-#[test]
 fn finds_your_note_after_a_cabal_and_before_its_language() {
     let (mut t, spec) = find(Kind::Note);
     assert_eq!(t.run(WriterCommand::Start(spec)), vec!["note list"]);
@@ -720,7 +750,6 @@ fn finds_your_note_after_a_cabal_and_before_its_language() {
     assert_eq!(t.done(), Some(JobResult::Found { number: 5 }));
 }
 
-#[test]
 fn turns_the_pager_for_a_long_list() {
     let (mut t, spec) = find(Kind::Note);
     t.run(WriterCommand::Start(spec));
@@ -737,7 +766,6 @@ fn turns_the_pager_for_a_long_list() {
     assert_eq!(t.sent, vec!["note list", ""]);
 }
 
-#[test]
 fn says_when_the_list_holds_no_such_note() {
     let (mut t, spec) = find(Kind::Note);
     t.run(WriterCommand::Start(spec));
@@ -749,10 +777,201 @@ fn says_when_the_list_holds_no_such_note() {
     assert_eq!(t.done(), Some(JobResult::NotFound));
 }
 
-#[test]
 fn cannot_tell_on_a_board_only_immortals_read() {
     let (mut t, spec) = find(Kind::Idea);
     assert_eq!(t.run(WriterCommand::Start(spec)), vec!["idea list"]);
     t.answer(&["Only immortals may read ideas."]);
     assert_eq!(t.done(), Some(JobResult::CantTell));
 }
+
+/// The note `note show` prints once TEXT went in.
+const SHOWN: [&str; 5] = ["Orla: The Great Milieu", "To: all", TEXT[0], " ", TEXT[2]];
+
+#[test]
+fn a_tick_before_its_text_waits_for_the_rest_of_the_pulse() {
+    let mut t = Table::new();
+    t.run(WriterCommand::Start(note(1, Action::Post)));
+    // Aabahran's tick, then its text in two reads, the second a little
+    // after the first.
+    t.vitals();
+    assert_eq!(t.game(&SHOWN[..2], ""), Vec::<String>::new());
+    assert_eq!(t.later(GRACE / 2), Vec::<String>::new());
+    assert_eq!(t.game(&SHOWN[2..], PROMPT), Vec::<String>::new());
+    assert_eq!(t.later(GRACE / 2), Vec::<String>::new());
+    assert_eq!(t.later(GRACE / 2), Vec::<String>::new());
+    assert_eq!(
+        t.done(),
+        Some(JobResult::SameNote {
+            note: shown(&SHOWN)
+        })
+    );
+}
+
+fn shown(lines: &[&str]) -> super::game_text::ShownNote {
+    let lines: Vec<GameLine> = lines
+        .iter()
+        .map(|l| GameLine::new(l, l.as_bytes()))
+        .collect();
+    super::game_text::shown_note(&lines, Some("Orla")).expect("a note")
+}
+
+#[test]
+fn a_go_ahead_after_the_prompt_fires_the_tick_at_once() {
+    let mut t = Table::new();
+    t.run(WriterCommand::Start(note(1, Action::Post)));
+    t.vitals();
+    t.writer.marker();
+    // A GA that came before the text ends no prompt of this pulse.
+    assert_eq!(t.game(&[], ""), Vec::<String>::new());
+    t.vitals();
+    t.writer
+        .line(&GameLine::new(super::game_text::NO_NOTE, b""), t.out);
+    t.writer.marker();
+    assert_eq!(t.game(&[""], PROMPT), vec!["note to all"]);
+}
+
+#[test]
+fn a_tick_that_found_no_answer_fires_again_with_the_text() {
+    let mut t = Table::new();
+    t.run(WriterCommand::Start(note(1, Action::Post)));
+    t.vitals();
+    assert_eq!(t.later(SILENT), Vec::<String>::new());
+    assert_eq!(t.done(), None);
+    t.game(&["You have no note in progress.", ""], PROMPT);
+    assert_eq!(t.later(GRACE), vec!["note to all"]);
+}
+
+#[test]
+fn a_job_asked_for_while_a_pulse_comes_in_starts_after_it() {
+    let mut t = Table::new();
+    // Someone arrives: the tick, then the line, which is no answer.
+    t.vitals();
+    assert_eq!(
+        t.run(WriterCommand::Start(note(1, Action::Post))),
+        Vec::<String>::new()
+    );
+    t.game(&["", "Maren has arrived."], PROMPT);
+    assert_eq!(t.later(GRACE), vec!["note show"]);
+    assert_eq!(
+        t.answer(&["You have no note in progress."]),
+        vec!["note to all"]
+    );
+}
+
+#[test]
+fn the_editor_opening_drops_a_tick_from_before_it() {
+    let mut t = Table::new();
+    assert_eq!(
+        t.run(WriterCommand::Start(job(
+            1,
+            Kind::Description,
+            Action::Send,
+            &TEXT,
+        ))),
+        vec!["description edit"]
+    );
+    // Someone says something at the game's prompt, then the game reads
+    // the opener.
+    t.vitals();
+    t.game(&["", "Maren says 'hello'"], PROMPT);
+    assert_eq!(t.opens(&[], &LISTED), vec![".s"]);
+    assert_eq!(t.later(GRACE), Vec::<String>::new());
+    assert_eq!(t.done(), None);
+}
+
+/// A post that dropped once its `post` went out, then the find on the
+/// next link, which waits for the game's first prompt.
+fn find_after_a_drop() {
+    let mut t = Table::new();
+    t.run(WriterCommand::Start(note(1, Action::Post)));
+    t.answer(&["You have no note in progress."]);
+    t.answer(&["Ok."]);
+    t.answer(&["Ok."]);
+    t.opens(&[], &[""]);
+    t.game(&["String cleared."], "> ");
+    t.took();
+    t.took();
+    t.took();
+    t.lists(&TEXT);
+    t.tick();
+    assert_eq!(t.answer(&SHOWN), vec!["note post"]);
+    t.writer.dropped();
+    t.writer.settle();
+    assert_eq!(
+        t.done(),
+        Some(JobResult::Dropped {
+            sent: 3,
+            posted: true
+        })
+    );
+    let mut spec = note(2, Action::Find);
+    spec.lines.clear();
+    assert_eq!(t.run(WriterCommand::Start(spec)), Vec::<String>::new());
+    // The login's own text comes with the first tick and is no answer.
+    assert_eq!(
+        t.answer(&["Reconnecting. Type replay to see missed tells."]),
+        vec!["note list"]
+    );
+    t.answer(&["[  3N] Orla: The Great Milieu"]);
+    assert_eq!(t.done(), Some(JobResult::Found { number: 3 }));
+}
+
+/// Each test once in each [`Order`].
+macro_rules! in_every_order {
+    ($($name:ident),* $(,)?) => {
+        mod first {
+            $(#[test]
+            fn $name() {
+                super::ORDER.with(|o| o.set(super::Order::First));
+                super::$name();
+            })*
+        }
+        mod middle {
+            $(#[test]
+            fn $name() {
+                super::ORDER.with(|o| o.set(super::Order::Middle));
+                super::$name();
+            })*
+        }
+        mod last {
+            $(#[test]
+            fn $name() {
+                super::ORDER.with(|o| o.set(super::Order::Last));
+                super::$name();
+            })*
+        }
+    };
+}
+
+in_every_order!(
+    find_after_a_drop,
+    sends_a_description_and_reads_it_back,
+    counts_a_line_taken_after_three_pulses_with_no_prompt_alone,
+    stops_to_ask_when_the_game_holds_another_text,
+    mends_a_line_that_differs_and_then_leaves,
+    deletes_an_extra_line_and_sends_a_missing_one,
+    puts_a_line_that_starts_with_a_dot_in_with_rl,
+    mends_a_line_that_opens_with_a_code_by_sending_it_again,
+    gives_up_after_two_mends,
+    ends_when_the_text_runs_past_what_the_editor_holds,
+    turns_the_pager_while_the_editor_lists_a_long_text,
+    reads_your_description_without_the_editor,
+    reads_a_beast_through_its_editor_for_its_name,
+    waits_for_the_games_prompt_and_turns_away_from_an_editor,
+    posts_a_note_once_the_game_holds_it_as_written,
+    stops_at_a_refused_to_and_clears_after_a_refused_subject,
+    finds_a_note_started_on_another_board,
+    clears_its_copy_when_the_game_turns_a_post_down,
+    stop_leaves_the_editor_and_clears_the_note_it_started,
+    sends_your_typed_line_as_a_game_command_while_the_editor_is_open,
+    offers_the_card_after_you_open_the_editor_and_opens_on_its_listing,
+    takes_the_offer_back_when_anything_else_went_out,
+    reads_a_notes_fields_once_you_take_the_offer,
+    a_drop_ends_the_job_with_what_the_game_took,
+    checks_your_description_once,
+    finds_your_note_on_the_boards_list_and_sends_nothing_else,
+    finds_your_note_after_a_cabal_and_before_its_language,
+    turns_the_pager_for_a_long_list,
+    says_when_the_list_holds_no_such_note,
+    cannot_tell_on_a_board_only_immortals_read,
+);

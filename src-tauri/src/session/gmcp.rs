@@ -203,10 +203,11 @@ async fn walk_gmcp<R: tauri::Runtime>(
         }
         "Room.Info" => conn.walker.room_info(&msg.data, Instant::now()),
         // Char.Vitals comes only with the game's own prompt
-        // (`gmcp.c:935`), so the editor and the pager closed.
+        // (`gmcp.c:935`), so the editor and the pager closed. Aabahran
+        // sends it before the text of its pulse, so the writer arms the
+        // tick and fires it once that text is in.
         "Char.Vitals" => {
-            let send = conn.writer.tick(Instant::now());
-            conn.writer_send.extend(send);
+            conn.writer.tick(Instant::now());
             return Ok(());
         }
         "Char.Combat" => conn.walker.combat(&msg.data),

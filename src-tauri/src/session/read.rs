@@ -52,8 +52,12 @@ impl<R: tauri::Runtime> Conn<R> {
         // The text of the read, for the writer, which counts a `> ` that
         // came alone in it.
         let mut text = Vec::new();
+        // Whether the read brought any text, which the writer's prompt
+        // tick waits for.
+        let mut data_seen = false;
         for event in events {
             if let TelnetEvent::Data(data) = &event {
+                data_seen |= !data.is_empty();
                 if self.writer.watching() {
                     text.extend_from_slice(data);
                 }
@@ -71,9 +75,13 @@ impl<R: tauri::Runtime> Conn<R> {
             .map(vosh_protocol::ansi::plain_text)
             .unwrap_or_default();
         let text = vosh_protocol::ansi::plain_text(&text);
-        let send = self
-            .writer
-            .read_end(&text, &partial, self.stream.lines_out(), Instant::now());
+        let send = self.writer.read_end(
+            &text,
+            data_seen,
+            &partial,
+            self.stream.lines_out(),
+            Instant::now(),
+        );
         self.writer_send.extend(send);
         if let Err(e) = end_read(self, log_sink, &mut batch).await {
             warn!(error = %e, "prompt handling at the end of a read failed");
@@ -212,6 +220,7 @@ async fn handle_event<R: tauri::Runtime>(
                 deliver_line_step(conn, log_sink, batch, &open, step).await?;
             }
             conn.stream.game_prompted(true);
+            conn.writer.marker();
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
