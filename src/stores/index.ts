@@ -23,6 +23,7 @@ import { startTrackedAffectsStore } from './config/trackedAffectsStore';
 import { startVitalsOptionsStore } from './config/vitalsOptionsStore';
 import { startVitalsStore } from './gmcp/vitalsStore';
 import { startVitalsTextStore } from './session/vitalsTextStore';
+import { startWalkStore } from './session/walkStore';
 import { startWorldStore } from './gmcp/worldStore';
 
 // Start every pane and status line store once, at launch, so packages
@@ -62,4 +63,5 @@ export function startStores(): void {
   startChipStyleStore();
   startPinnedPromptStore();
   startInputModeStore();
+  startWalkStore();
 }

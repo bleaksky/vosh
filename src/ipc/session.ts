@@ -249,7 +249,9 @@ export async function onWalk(
   cb: (progress: WalkProgress, session: number) => void,
 ): Promise<UnlistenFn> {
   return listen<WalkProgress & { session?: number }>(WALK, (event) => {
-    cb(event.payload, sessionOf(event.payload));
+    // The session rides beside the progress, so the callback gets them apart.
+    const { session: _session, ...progress } = event.payload;
+    cb(progress as WalkProgress, sessionOf(event.payload));
   });
 }
 
