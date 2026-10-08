@@ -80,6 +80,11 @@ import { PromptCard, type PromptCardHost } from '../prompt/PromptCard';
 import { nextCardRequest, type CardRequest, type CardRequestView } from '../prompt/cardRules';
 import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
+import { WritingCard, type WritingRequest } from '../writing/WritingCard';
+import { WritingOffer } from '../writing/WritingOffer';
+import { hasBeast, writable } from '../writing/kinds';
+import type { WritingKind } from '../ipc/writing';
+import { useCharStatus } from '../stores/gmcp/charStatusStore';
 import { useAlertTones } from './useAlertTones';
 import { useAppCommands } from './useAppCommands';
 import { useClosing } from './useClosing';
@@ -182,14 +187,31 @@ function MainWindow() {
   const [promptCard, setPromptCard] = useState<CardRequest | null>(null);
   // What the card edits: your prompt, or your vitals text.
   const [cardBinding, setCardBinding] = useState<CardBinding>(PROMPT_BINDING);
+  // The writing card, open over the terminal on a kind of text, or on
+  // the offer the game's editor brought. It and the prompt card share the
+  // place over your prompt, so one opening closes the other.
+  const [writingCard, setWritingCard] = useState<WritingRequest | null>(null);
   // Every request counts, so the open card hears a repeat of one.
   const openPromptCard = useCallback(
     (view: CardRequestView, binding: CardBinding = PROMPT_BINDING) => {
+      setWritingCard(null);
       setCardBinding(binding);
       setPromptCard((prev) => nextCardRequest(prev, view));
     },
     [],
   );
+  const openWriting = useCallback((kind: WritingKind, offer?: number) => {
+    setPromptCard(null);
+    setWritingCard((prev) => ({
+      kind,
+      n: (prev?.n ?? 0) + 1,
+      ...(offer !== undefined ? { offer } : {}),
+    }));
+  }, []);
+  // Your race and level, which decide the boards you write on and a
+  // werebeast's beast.
+  const charStatus = useCharStatus();
+  const writeKinds = writable(charStatus.level);
   // The card draws your design over the band of Lifted in the text.
   const [cardBand, setCardBand] = useState(false);
 
@@ -219,6 +241,10 @@ function MainWindow() {
   const closePromptCard = () => {
     setPromptCard(null);
     setCardBand(false);
+    focusInput();
+  };
+  const closeWriting = () => {
+    setWritingCard(null);
     focusInput();
   };
 
@@ -467,6 +493,11 @@ function MainWindow() {
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
     openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
+    writing: {
+      kinds: writeKinds,
+      beast: hasBeast(charStatus.race, charStatus.level),
+      open: (kind) => openWriting(kind),
+    },
     promptDraw: promptShow?.capture ? promptShow.draw : null,
     setPromptDraw: (on) => {
       const session = getSelected();
@@ -790,6 +821,7 @@ function MainWindow() {
             onError={handleError}
           />
         }
+        offer={<WritingOffer onOpen={openWriting} />}
       />
       <GetStarted
         play={{
@@ -813,6 +845,8 @@ function MainWindow() {
           inputRef={inputRef}
           onOpenFind={openFind}
           onCustomizePrompt={() => openPromptCard('design')}
+          writeKinds={writeKinds}
+          onWrite={(kind) => openWriting(kind)}
           onClose={() => setTerminalMenu(null)}
         />
       )}
@@ -837,6 +871,23 @@ function MainWindow() {
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
           onPromptDone={() => markDone('prompt')}
           onClose={closePromptCard}
+        />
+      )}
+      {writingCard && (
+        // A selection mounts the card again for the session it brings to
+        // the front.
+        <WritingCard
+          key={selected}
+          session={selected}
+          request={writingCard}
+          host={promptCardHost}
+          cell={cellSize}
+          fontFamily={renderFamily}
+          fontSize={fontSize}
+          themeTerminalColors={themeTerminalColors}
+          brightBold={brightBold}
+          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+          onClose={closeWriting}
         />
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}

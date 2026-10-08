@@ -21,6 +21,8 @@ import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';
 import { SETTINGS_MENU, type SettingsMenuRow } from './settingsMenu';
+import type { WritingKind } from '../ipc/writing';
+import { KINDS } from '../writing/kinds';
 
 interface Props {
   /** Pointer position in viewport coordinates. The menu opens with its
@@ -34,6 +36,11 @@ interface Props {
   onOpenFind: () => void;
   /** Open the prompt card over your prompt. */
   onCustomizePrompt: () => void;
+  /** The boards you can write on, which Write lists over your
+   *  description and history. */
+  writeKinds: WritingKind[];
+  /** Open the writing card on a kind. */
+  onWrite: (kind: WritingKind) => void;
   onClose: () => void;
 }
 
@@ -43,13 +50,19 @@ interface Item {
   /** Shortcut spec for the trailing hint, like 'Mod+C'. */
   keys?: string;
   danger?: boolean;
-  /** The row opens the Settings list instead of running. */
-  submenu?: boolean;
+  /** The row opens a list beside the menu instead of running. */
+  submenu?: Sub;
   run: () => void;
 }
 
-/** The id of the Settings list, which the Settings row controls. */
-const SETTINGS_LIST_ID = 'terminal-menu-settings';
+/** The lists a row opens beside the menu. */
+type Sub = 'write' | 'settings';
+
+/** The id of the list each row controls. */
+const LIST_ID: Record<Sub, string> = {
+  write: 'terminal-menu-write',
+  settings: 'terminal-menu-settings',
+};
 
 /** How close the menu may sit to the window edge after clamping. */
 const EDGE_MARGIN = 8;
@@ -59,7 +72,8 @@ const EDGE_MARGIN = 8;
 // shortcut hints on the right in the platform's glyphs, and hairline
 // separators. Customize prompt… comes first on every row, since Vosh
 // may not know yet which row is your prompt, and opens the prompt card
-// over it (P1). Settings opens a list beside the menu, built like the
+// over it (P1). Write under it opens the kinds of text the writing card
+// takes (Note Editor Q2). Settings opens a list beside the menu, built like the
 // pane menus' submenus, that goes straight to Triggers, Aliases, Macros
 // and Timers, to each Settings page, and to Help. Clear scrollback is
 // the one destructive item and comes last. Every action routes through
@@ -75,15 +89,17 @@ export function TerminalMenu({
   inputRef,
   onOpenFind,
   onCustomizePrompt,
+  writeKinds,
+  onWrite,
   onClose,
 }: Props) {
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const settingsRowRef = useRef<HTMLButtonElement | null>(null);
+  const subRowRefs = useRef<Partial<Record<Sub, HTMLButtonElement | null>>>({});
   const [pos, setPos] = useState({ x, y });
   const [active, setActive] = useState(-1);
-  // The Settings list, and whether it opened from the keyboard and so
-  // takes focus.
-  const [sub, setSub] = useState<PaneSubmenuState<'settings'> | null>(null);
+  // The list open beside the menu, and whether it opened from the
+  // keyboard and so takes focus.
+  const [sub, setSub] = useState<PaneSubmenuState<Sub> | null>(null);
 
   // Clamp to the viewport once the menu has a measurable size. Re-runs
   // when a second right-click moves the anchor while the menu is open.
@@ -171,25 +187,35 @@ export function TerminalMenu({
 
   // Groups split by separators.
   const groups: Item[][] = [
-    [{ id: 'customize-prompt', label: 'Customize prompt…', run: onCustomizePrompt }],
+    [
+      { id: 'customize-prompt', label: 'Customize prompt…', run: onCustomizePrompt },
+      { id: 'write', label: 'Write', submenu: 'write', run: () => openSub('write', true) },
+    ],
     [
       { id: 'copy', label: 'Copy', keys: APP_SHORTCUTS.copy, run: runCopy },
       { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
       { id: 'select-all', label: 'Select all', keys: 'Mod+A', run: runSelectAll },
     ],
     [{ id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind }],
-    [{ id: 'settings', label: 'Settings', submenu: true, run: () => openSub(true) }],
+    [
+      {
+        id: 'settings',
+        label: 'Settings',
+        submenu: 'settings',
+        run: () => openSub('settings', true),
+      },
+    ],
     [{ id: 'clear', label: 'Clear scrollback', danger: true, run: runClear }],
   ];
   const items = groups.flat();
-  const settingsAt = items.findIndex((item) => item.submenu);
+  const subAt = (which: Sub) => items.findIndex((item) => item.submenu === which);
 
-  // Open the Settings list beside its row. From the keyboard or a click
-  // it takes focus on its first row. Pointing at the row leaves focus
-  // in the menu, and leaves a list the keyboard opened as it is.
-  function openSub(focus: boolean) {
-    setActive(settingsAt);
-    setSub((prev) => openPaneSubmenu(prev, 'settings', focus));
+  // Open a list beside its row. From the keyboard or a click it takes
+  // focus on its first row. Pointing at the row leaves focus in the
+  // menu, and leaves a list the keyboard opened as it is.
+  function openSub(which: Sub, focus: boolean) {
+    setActive(subAt(which));
+    setSub((prev) => openPaneSubmenu(prev, which, focus));
   }
 
   // Close the list and hand focus back to the menu, so the arrow keys
@@ -200,7 +226,7 @@ export function TerminalMenu({
     if (el && document.activeElement !== el) el.focus({ preventScroll: true });
   };
 
-  // Highlight a row. Any row but Settings closes the list.
+  // Highlight a row. A row that opens no list closes the list.
   const highlight = (i: number) => {
     setActive(i);
     if (sub && !items[i]?.submenu) closeSub();
@@ -221,6 +247,11 @@ export function TerminalMenu({
     else openSettingsTab(row.link);
   };
 
+  const pickKind = (kind: WritingKind) => {
+    onClose();
+    onWrite(kind);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -236,7 +267,8 @@ export function TerminalMenu({
       highlight(items.length - 1);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      if (items[active]?.submenu) openSub(true);
+      const which = items[active]?.submenu;
+      if (which) openSub(which, true);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       if (sub) closeSub();
@@ -254,47 +286,69 @@ export function TerminalMenu({
     }
   };
 
-  // The Settings list, built like the pane menus' submenus. It opens
-  // right of the menu level with its row, flips left at the right edge
-  // and up at the bottom edge, and Esc or ArrowLeft steps back to the
-  // row. It draws apart from the menu, so its keys never reach the
+  // The list beside its row, built like the pane menus' submenus. It
+  // opens right of the menu level with its row, flips left at the right
+  // edge and up at the bottom edge, and Esc or ArrowLeft steps back to
+  // the row. It draws apart from the menu, so its keys never reach the
   // menu's own.
   let list: ReactNode = null;
-  const row = sub ? settingsRowRef.current : null;
+  const row = sub ? subRowRefs.current[sub.which] : null;
   if (sub && row && menuRef.current) {
-    list = (
-      <MenuSurface
-        id={SETTINGS_LIST_ID}
-        label="Settings"
-        nested
-        autoFocus={sub.focus}
-        className="pane-menu-sub"
-        at={submenuAt(row.getBoundingClientRect(), menuRef.current.getBoundingClientRect())}
-        onClose={() => {
-          setActive(settingsAt);
-          closeSub();
-        }}
-      >
-        {SETTINGS_MENU.map((group, g) => (
-          <Fragment key={group[0].id}>
-            {g > 0 && <MenuSeparator />}
-            {group.map((entry) => (
-              <MenuItem
-                key={entry.id}
-                onSelect={() => pickRow(entry)}
-                trailing={
-                  entry.keys ? (
-                    <kbd className="ov-menu-keys">{shortcutLabel(entry.keys)}</kbd>
-                  ) : null
-                }
-              >
-                {entry.label}
-              </MenuItem>
-            ))}
-          </Fragment>
-        ))}
-      </MenuSurface>
-    );
+    const at = submenuAt(row.getBoundingClientRect(), menuRef.current.getBoundingClientRect());
+    const back = () => {
+      setActive(subAt(sub.which));
+      closeSub();
+    };
+    list =
+      sub.which === 'write' ? (
+        <MenuSurface
+          id={LIST_ID.write}
+          label="Write"
+          nested
+          autoFocus={sub.focus}
+          className="pane-menu-sub"
+          at={at}
+          onClose={back}
+        >
+          {writeKinds.map((kind) => (
+            <MenuItem key={kind} onSelect={() => pickKind(kind)}>
+              {KINDS[kind].menu}
+            </MenuItem>
+          ))}
+          <MenuSeparator />
+          <MenuItem onSelect={() => pickKind('description')}>{KINDS.description.menu}</MenuItem>
+          <MenuItem onSelect={() => pickKind('history')}>{KINDS.history.menu}</MenuItem>
+        </MenuSurface>
+      ) : (
+        <MenuSurface
+          id={LIST_ID.settings}
+          label="Settings"
+          nested
+          autoFocus={sub.focus}
+          className="pane-menu-sub"
+          at={at}
+          onClose={back}
+        >
+          {SETTINGS_MENU.map((group, g) => (
+            <Fragment key={group[0].id}>
+              {g > 0 && <MenuSeparator />}
+              {group.map((entry) => (
+                <MenuItem
+                  key={entry.id}
+                  onSelect={() => pickRow(entry)}
+                  trailing={
+                    entry.keys ? (
+                      <kbd className="ov-menu-keys">{shortcutLabel(entry.keys)}</kbd>
+                    ) : null
+                  }
+                >
+                  {entry.label}
+                </MenuItem>
+              ))}
+            </Fragment>
+          ))}
+        </MenuSurface>
+      );
   }
 
   let index = -1;
@@ -308,7 +362,7 @@ export function TerminalMenu({
         tabIndex={-1}
         style={{ left: pos.x, top: pos.y }}
         onKeyDown={onKeyDown}
-        // Settings stays the active row while its list is open, so the
+        // A row stays the active one while its list is open, so the
         // pointer can cross into the list, or leave both, and Enter,
         // the arrows and the highlight still agree on where you are.
         onPointerLeave={() => {
@@ -324,24 +378,28 @@ export function TerminalMenu({
             {group.map((item) => {
               index += 1;
               const i = index;
-              // The active row is the one lit. While the Settings list
-              // is open, that row is Settings.
+              // The active row is the one lit. While a list is open, that
+              // row is the one that opened it.
               const lit = i === active;
               return (
                 <button
                   key={item.id}
-                  ref={item.submenu ? settingsRowRef : undefined}
+                  ref={(el) => {
+                    if (item.submenu) subRowRefs.current[item.submenu] = el;
+                  }}
                   type="button"
                   role="menuitem"
                   tabIndex={-1}
                   aria-haspopup={item.submenu ? 'menu' : undefined}
-                  aria-expanded={item.submenu ? sub !== null : undefined}
-                  aria-controls={item.submenu && sub ? SETTINGS_LIST_ID : undefined}
+                  aria-expanded={item.submenu ? sub?.which === item.submenu : undefined}
+                  aria-controls={
+                    item.submenu && sub?.which === item.submenu ? LIST_ID[item.submenu] : undefined
+                  }
                   className={`ov-menu-item${lit ? ' is-active' : ''}${
                     item.danger ? ' is-danger' : ''
                   }`}
                   onPointerMove={() => {
-                    if (item.submenu) openSub(false);
+                    if (item.submenu) openSub(item.submenu, false);
                     else if (i !== active || sub) highlight(i);
                   }}
                   // A row that takes focus, as Show me's ring gives it,

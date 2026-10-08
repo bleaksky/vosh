@@ -1,3 +1,4 @@
+import type { WritingKind } from '../ipc/writing';
 import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -43,15 +44,17 @@ const props = {
   inputRef: { current: null },
   onOpenFind: () => {},
   onCustomizePrompt: () => {},
+  writeKinds: ['note', 'journal', 'application', 'idea', 'bug', 'typo'] as WritingKind[],
+  onWrite: () => {},
 };
 
 describe('the terminal menu', () => {
   const labels = (html: string) =>
     [...html.matchAll(/class="ov-menu-label">([^<]*)</g)].map((m) => m[1]);
 
-  it('offers Customize prompt… first, apart from the rest, on any row (P1)', () => {
+  it('offers Customize prompt… and Write first, apart from the rest, on any row (P1, Note Editor Q2)', () => {
     const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
-    expect(labels(html).slice(0, 2)).toEqual(['Customize prompt…', 'Copy']);
+    expect(labels(html).slice(0, 3)).toEqual(['Customize prompt…', 'Write', 'Copy']);
     // A separator stands between it and Copy.
     const first = html.indexOf('Customize prompt…');
     const sep = html.indexOf('role="separator"');
@@ -63,6 +66,7 @@ describe('the terminal menu', () => {
     const html = renderToStaticMarkup(<TerminalMenu x={10} y={10} {...props} onClose={() => {}} />);
     expect(labels(html)).toEqual([
       'Customize prompt…',
+      'Write',
       'Copy',
       'Paste',
       'Select all',
@@ -268,9 +272,9 @@ async function mount(x = 100, y = 100): Promise<Mounted> {
   };
 }
 
-/** Arrow down from nothing lit to the Settings row. */
+/** Arrow down from nothing lit to the Settings row, the seventh. */
 async function downToSettings(m: Mounted) {
-  for (let i = 0; i < 6; i++) await m.key('ArrowDown');
+  for (let i = 0; i < 7; i++) await m.key('ArrowDown');
 }
 
 const lit = (el: FakeElement) => (el.getAttribute('class') ?? '').split(' ').includes('is-active');
