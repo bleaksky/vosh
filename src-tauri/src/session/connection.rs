@@ -62,6 +62,13 @@ pub(crate) struct Connection {
     /// that named one, and cleared by the prompt, GA or EOR that ends the
     /// pulse, and on a disconnect.
     pub(crate) fight_tail: bool,
+    /// The round that started your fight came before the Char.Combat that
+    /// names your opponent. A server that sends its prompt tick after the
+    /// text of the pulse sends the first round of a fight while Char.Combat
+    /// still names no one, so an attack line of yours starts the fight's
+    /// lines until the prompt, GA or EOR that ends the pulse. Cleared with
+    /// [`Connection::fight_tail`].
+    pub(crate) fight_head: bool,
     /// The tick's running count. The profile keeps the tick settings,
     /// which each of its methods takes. The session starts the count as
     /// it connects and stops it as it ends.
@@ -142,6 +149,7 @@ impl Connection {
         self.room_chars.clear();
         self.room_block = RoomBlock::default();
         self.fight_tail = false;
+        self.fight_head = false;
         self.preset_watch.reset();
         had
     }
@@ -268,6 +276,7 @@ mod tests {
         c.room_block.room_chars(1);
         assert_ne!(c.room_block, RoomBlock::default());
         c.fight_tail = true;
+        c.fight_head = true;
         c.vars.set("target", "goblin");
         assert!(c.clear_on_disconnect(), "a target was set");
         assert_eq!(c.vars.get("target"), None);
@@ -277,6 +286,7 @@ mod tests {
         assert!(leftover.is_empty(), "{leftover:?}");
         assert_eq!(c.room_block, RoomBlock::default());
         assert!(!c.fight_tail);
+        assert!(!c.fight_head);
         assert_eq!(c.target.quick_keys, [gg]);
         assert!(!c.clear_on_disconnect(), "no target is left");
     }

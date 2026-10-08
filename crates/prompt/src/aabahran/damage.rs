@@ -97,6 +97,20 @@ pub fn attack_line(plain: &str) -> bool {
         .any(|step| stands_in(body, step.vs) || stands_in(body, step.vp))
 }
 
+/// True when `plain` is an attack line of your own fight: you or yours
+/// hit, or the one hit is you, as the formats of `dam_message` that go to
+/// the attacker and to the one hit print it (`fight.c:12124` to
+/// `12214`). A hit you watch between others is none, and neither is a
+/// line a watch room sees, which starts with the room's name.
+pub fn your_attack_line(plain: &str) -> bool {
+    attack_line(plain)
+        && !plain.starts_with('[')
+        && (plain.starts_with("You ")
+            || plain.starts_with("Your ")
+            || plain.ends_with(" you.")
+            || plain.ends_with(" you!"))
+}
+
 /// The words that say whose something is. Lines about wounds put one
 /// right before `wounds`, as in `Some of your wounds disappear.`, and no
 /// format of `dam_message` puts one before its verb.
@@ -396,5 +410,27 @@ mod tests {
         assert_eq!(LADDER[turn].vs, "decimate");
         let leftover: Vec<&Step> = LADDER[turn..].iter().filter(|s| s.mark != '!').collect();
         assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn knows_an_attack_line_of_your_own_fight() {
+        for yours in [
+            "Your slash hits a Blackwatch guard.",
+            "You hit a Blackwatch guard.",
+            "A Blackwatch guard's slash hits you.",
+            "A Blackwatch guard decimates you!",
+            "You hit yourself.",
+            "The sun's rays hit you.",
+        ] {
+            assert!(your_attack_line(yours), "{yours}");
+        }
+        for not_yours in [
+            "Maren's slash hits a Blackwatch guard.",
+            "Tolliver hits Orla.",
+            "[Market Square] A Blackwatch guard's slash hits you.",
+            "You dodge a Blackwatch guard's attack.",
+        ] {
+            assert!(!your_attack_line(not_yours), "{not_yours}");
+        }
     }
 }

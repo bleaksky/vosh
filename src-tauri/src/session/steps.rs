@@ -338,15 +338,22 @@ fn text_line_step(
     let collapse = p.ui.collapse_repeats;
     c.prompt.stage.set_collapse(collapse);
     // In a fight and Attack lines say whether a line of a fight and an
-    // attack line join a run. The pulse's Char.Combat came before its
-    // text, so the line reads the fight it belongs to. The round that
-    // ends a fight comes after the Char.Combat {} that ended it, and its
-    // lines are still the fight's until the prompt that ends it.
+    // attack line join a run. Aabahran sends the pulse's Char.Combat
+    // before its text, so the line reads the fight it belongs to. The
+    // round that ends a fight comes after the Char.Combat {} that ended
+    // it, and its lines are still the fight's until the prompt that ends
+    // it. A server that sends the tick after the text sends the first
+    // round before the Char.Combat that names your opponent, so an attack
+    // line of yours starts the fight's lines until that prompt.
     let rules = vosh_prompt::stage::CollapseRules {
         fights: p.ui.collapse_fight_lines,
         attacks: p.ui.collapse_attack_lines,
     };
-    let fighting = c.prompt.vars.gmcp().fighting() || c.fight_tail;
+    let in_combat = c.prompt.vars.gmcp().fighting();
+    if !in_combat && vosh_prompt::aabahran::damage::your_attack_line(&plain) {
+        c.fight_head = true;
+    }
+    let fighting = in_combat || c.fight_tail || c.fight_head;
     let mut repeat = None;
     // Whether the ring keeps the line. While Collapse repeated lines is
     // on, it keeps what the screen shows, so the line end a pinned
@@ -453,6 +460,7 @@ fn prompt_block(
     c.room_block.end();
     c.link.prompt();
     c.fight_tail = false;
+    c.fight_head = false;
     let disagree = c.prompt.vars.capture(vosh_prompt::Capture {
         values: block.values.clone(),
         raw: Some(block.raw_text()),
@@ -686,6 +694,7 @@ pub(super) fn marker_step(
         // ended a fight.
         c.room_block.end();
         c.fight_tail = false;
+        c.fight_head = false;
         return steps;
     };
     let plain = vosh_protocol::ansi::plain_text(&partial.bytes);
@@ -725,6 +734,7 @@ pub(super) fn marker_step(
     }
     c.room_block.end();
     c.fight_tail = false;
+    c.fight_head = false;
     steps
 }
 
