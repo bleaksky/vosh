@@ -48,7 +48,7 @@ import { CheckIcon, ChevronRightIcon } from '../ui/icons';
 import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } from './paneTypes';
 
-// The more menu on every pane header (SPEC 9): Split right, Split
+// The more menu on every pane header: Split right, Split
 // down, Show here instead with a submenu of pane types and then, after
 // a rule, the Lua panes on offer, and Close pane.
 // The Affects pane adds Style and Marker, each a submenu with a check
@@ -61,7 +61,7 @@ import { PANE_LABELS, paneLabel, panesToShowInstead, type PanesToShowInstead } f
 // channels the game sends, each opening Default and the theme's 16 ANSI
 // colors with a check on the current pick, then Reset all. A Lua pane
 // adds Edit with its plugin's name, which opens that plugin under
-// Scripts in Settings (Scripts and Panels board 10). A pick saves
+// Scripts in Settings. A pick saves
 // alone for the profile and the pane follows at once. Closing a pane
 // loses nothing, so it carries no destructive color. A split the panel
 // has no room for, with every pane at its minimum at your panel size,

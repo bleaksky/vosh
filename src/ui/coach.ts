@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { createStore } from '../stores/store';
 
-// What Show me rings, which CoachRing draws (First Run Q3). Each window
+// What Show me rings, which CoachRing draws. Each window
 // keeps its own, so showCoach rings in the window that calls it.
 
 export interface Coach {

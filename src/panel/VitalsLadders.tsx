@@ -1,7 +1,7 @@
 import { DrawnOpponent, DrawnVitals, MarkRows, type DrawnVitalsProps } from './VitalsDrawn';
 import { FOE_LADDER, LADDER, ladderPeak, litSegments, type RowMarkFit } from './vitalsDrawnFit';
 
-// Ladders (More Vitals Styles, board 1): 24 segments 8 px tall with
+// Ladders: 24 segments 8 px tall with
 // 1 px gaps between each label and value, lit in the vital's tone and
 // unlit at a fifth of it, as a level meter lights. Your opponent's
 // ladder runs the footer in 48. With Show each hit on, the segment a

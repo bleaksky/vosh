@@ -3,7 +3,7 @@ import { VitalsMarks, type MarkedVitalsProps } from './VitalsMarks';
 import { hitFill, type HitViews } from './vitalsHit';
 import type { GaugesFit } from './vitalsMarksFit';
 
-// Gauges (Vitals Styles, board 1): the Group pane's member row made a
+// Gauges: the Group pane's member row made a
 // little bolder, a 6 px pill on the divider tone between each label and
 // value that fills in the vital's tone. A pill keeps 40 at least, and
 // on a narrower panel each drops under its label and value

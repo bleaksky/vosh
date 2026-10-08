@@ -492,7 +492,7 @@ export function WritingCard({
         language: info.language ? (draft.language ?? null) : null,
         adopt,
         // After a drop the game holds the note the card put there,
-        // which Post again clears with no question (Note Editor board 8).
+        // which Post again clears with no question.
         clear_first: ended?.actions.includes('again') ?? false,
       });
     if (!postAsks) {
@@ -561,7 +561,7 @@ export function WritingCard({
   // ── Where it sits and how big ─────────────────────────────────────
   // The card is as wide as 80 columns of your terminal face. In a window
   // too narrow for that it spans the window and sets its text at 11 px
-  // to keep 80 columns (Description Editor board 6).
+  // to keep 80 columns.
   const guideOn = file.guide && !preview;
   const naturalColumn = useMemo(() => columnWidth(fontFamily, fontSize), [fontFamily, fontSize]);
   const naturalWidth = 32 + 82 * naturalColumn + 32 + (guideOn ? 248 : 0);

@@ -9,7 +9,7 @@ import {
 import { thirdsTone } from '../vitalsView';
 import { PaneHeader, PaneMeta } from '../PaneHeader';
 
-// Your group at a glance (SPEC 9). One dense row per member: the name,
+// Your group at a glance. One dense row per member: the name,
 // a `lead` tag on the leader, a 48 by 3 health meter, and the percent.
 // The meter and percent stay quiet until a member drops into the
 // middle third (warn) or the bottom third (danger). Your own vitals

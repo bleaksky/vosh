@@ -47,7 +47,7 @@ import { hitFill, type HitView, type HitViews } from './vitalsHit';
 import { HitGhost } from './HitGhost';
 import { useVitalsHits } from './useVitalsHits';
 
-// Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
+// Vitals pinned under the panes. Each vital is a label,
 // the value, and a meter that stays tertiary at rest and turns danger
 // when the vital runs low. In a fight the opponent gets a row on top
 // with its health in warn. Nothing pulses.

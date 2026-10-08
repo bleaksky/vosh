@@ -185,7 +185,7 @@ export function SessionMenu({
       <ShellMenuItem onSelect={() => (renameInRow ? run(renameInRow) : setMode('rename'))}>
         Rename session…
       </ShellMenuItem>
-      {/* Board 05 draws no line here while the list sits above, so
+      {/* No line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
       {!listSessions && <ShellMenuSeparator />}
       <ShellMenuItem

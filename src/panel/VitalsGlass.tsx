@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react';
 
-// The glass Vials and Orbs draw (More Vitals Styles, board 2): a flat
+// The glass Vials and Orbs draw: a flat
 // vessel in the vital's tone with a hairline rim and no shine. Inside
 // it the liquid rises from the foot to `level`, the y in px its surface
 // stands at, with a 1 px surface line, and eases there in 160 ms. With

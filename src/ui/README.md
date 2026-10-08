@@ -125,7 +125,7 @@ A few classes in `settings.css` and `controls.css` cover small shapes that are n
 
 ## Icons
 
-`src/ui/icons.tsx` holds the SPEC 6 set, the icon set every window draws from. `GearIcon`, `ToothedGearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `CodeIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `PlayIcon`, `MoreIcon`, `GripIcon`, `MinimizeIcon`, and `MaximizeIcon`, with `PlugIcon`, `TerminalIcon`, `TickIcon`, `LifebuoyIcon`, and `BookIcon` for the Help sections. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`src/ui/icons.tsx` holds the icon set every window draws from. `GearIcon`, `ToothedGearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `CodeIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `PlayIcon`, `MoreIcon`, `GripIcon`, `MinimizeIcon`, and `MaximizeIcon`, with `PlugIcon`, `TerminalIcon`, `TickIcon`, `LifebuoyIcon`, and `BookIcon` for the Help sections. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
 
 `GearIcon` is the spoked gear beside General in Settings. `ToothedGearIcon` is the six tooth gear on the title band's Settings button, since the spoked one reads as a sun at that spot.
 

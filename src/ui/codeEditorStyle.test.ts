@@ -65,7 +65,7 @@ describe('codeEditorAttributes', () => {
   });
 });
 
-// wait_full as board 3 of the Scripts design shows it.
+// wait_full, the sample the Scripts page shows.
 const WAIT_FULL = [
   '-- wait_full',
   '-- Stand up once your hit points are full.',

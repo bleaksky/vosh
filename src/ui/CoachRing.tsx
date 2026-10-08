@@ -10,7 +10,7 @@ import {
   type Coach,
 } from './coach';
 
-// Show me's coach mark (First Run Q3, board 2). A 2 px accent ring 2 px
+// Show me's coach mark. A 2 px accent ring 2 px
 // out from what to pick, with one pulse that reduced motion drops, and
 // one line beside it on the toast recipe with no buttons, kept inside
 // the window. It reads its targets' rects each frame and draws over

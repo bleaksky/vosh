@@ -36,7 +36,7 @@ import { VitalsFooter } from './VitalsFooter';
 import { useVitalsMenu } from './useVitalsMenu';
 import type { TextColors } from './VitalsText';
 
-// The right-hand panel (SPEC 9): the active profile's pane tree from
+// The right-hand panel: the active profile's pane tree from
 // the title band down, then the vitals pinned at the bottom. While your
 // prompt shows pinned above the command line and Hide vitals while your
 // prompt is pinned is on, the vitals go and the panes take their room

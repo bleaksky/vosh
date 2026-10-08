@@ -437,7 +437,7 @@ function StepPage({
 }
 
 /** Tells you send, which the Chat step suggests, since it shows nothing
- *  until a Chat pane does (board 2). */
+ *  until a Chat pane does. */
 function SentTells({ facts }: { facts: GetStartedFacts }) {
   const stored = facts.enabledPresets;
   const on = stored !== null && enabledPresetIds(stored).includes(SENT_TELLS.id);

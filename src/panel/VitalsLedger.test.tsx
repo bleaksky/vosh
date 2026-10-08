@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Board 1's fight: Tolliver at 765 of 1020, Mana and Moves full, and a
+// A fight: Tolliver at 765 of 1020, Mana and Moves full, and a
 // Blackwatch guard at 54 percent.
 const FIGHT: Vitals = {
   hp: 765,

@@ -14,7 +14,7 @@ import { placeMenu, type MenuPlacement } from './menuPlacement';
 
 export type { MenuPlacement } from './menuPlacement';
 
-// A floating menu in the One Window recipe (SPEC 3 and 7): raised
+// A floating menu on the floating recipe: raised
 // ground, radius 16, the floating shadow, 6 px padding, 30 px rows.
 // It renders into document.body with role="menu".
 //

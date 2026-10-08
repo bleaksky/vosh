@@ -29,11 +29,11 @@ export type RowMarkFit = 'beside' | 'under';
 export const ROW_MARK_GAP = 10;
 
 /** The narrowest a row style's mark draws beside its label and value.
- *  Q24 words the rule as Gauges keeps it, under once the mark would be
- *  under 40 pt, but a ladder needs 2 px for each of its 24 segments and
- *  1 px for each gap, 71 in all, and board 5 drops the ladder under at
- *  the 200 pt floor where Gauges stays beside. So the row styles keep
- *  72, which agrees with the board, and drop under below it. */
+ *  Gauges drops its mark under once the mark would be under 40 pt,
+ *  but a ladder needs 2 px for each of its 24 segments and 1 px for
+ *  each gap, 71 in all, so a ladder drops under at the 200 pt floor
+ *  where Gauges stays beside. So the row styles keep 72 and drop under
+ *  below it. */
 export const ROW_MARK_MIN = 72;
 
 /** A row style keeps each mark beside the longest of `labels` and the
@@ -84,7 +84,7 @@ export function traceSeries(history: readonly VitalSample[], vital: Vital, now: 
 
 /** How a column style fits the panel. It keeps its columns at every
  *  width: in full, without the max, or with a smaller instrument and no
- *  max (Q24). */
+ *  max. */
 export type ColumnFit = 'full' | 'bare' | 'narrow';
 
 /** The width of each of `count` columns a footer `width` px wide holds,
@@ -154,7 +154,7 @@ export const ORB_FOE = 14;
 
 /** Orbs writes each value with its max under its orb while the widest
  *  fits its column, then drops the max, then draws the orbs at 40 where
- *  a column has no room round a 44 (Q24). */
+ *  a column has no room round a 44. */
 export function orbsFit(
   width: number,
   size: number,

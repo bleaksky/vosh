@@ -13,7 +13,7 @@ import {
 
 // Vosh's vitals text as the session renders it (crates/prompt vitals.rs
 // over Preview::Fight with a Blackwatch guard at 54 and Tolliver at 765
-// of 1020), 23 cells wide, the 200 pt panel of board 6. Piece 2 is the
+// of 1020), 23 cells wide, the narrowest 200 pt panel. Piece 2 is the
 // %{right}, and only its span matters here.
 
 const FIGHT_LIVE =

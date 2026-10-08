@@ -2,7 +2,7 @@ import type { VitalsValues } from '../ipc/uiConfig';
 import { textPx } from './paneTextSize';
 import { formatVital, hiddenVital } from './vitalsView';
 
-// The Ledger vitals style (Vitals Styles, boards 1 and 6). Your vitals
+// The Ledger vitals style. Your vitals
 // stand in columns, each the pane label caps over a figure of
 // round(16 px x your size over 12), the max beside it at the caps size,
 // and a line under it. Ledger never stacks. A column that runs short

@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Board 1: Tolliver worn at 765 of 1020 and low at 159, and a
+// A fight: Tolliver worn at 765 of 1020 and low at 159, and a
 // Blackwatch guard at 54 percent.
 const FIGHT: Vitals = {
   hp: 765,

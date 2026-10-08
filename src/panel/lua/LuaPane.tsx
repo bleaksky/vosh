@@ -15,7 +15,7 @@ import { chatInks, type ChatGround, type ChatInk } from '../chat/chatColors';
 import { closeHere, updateLeafProps, usePaneLeaf } from '../paneActions';
 import { PaneHeader, PaneMeta } from '../PaneHeader';
 
-// A pane a plugin draws with mud.pane (Scripts and Panels board 10),
+// A pane a plugin draws with mud.pane,
 // from the session in front. Its header names it by the title the plugin
 // draws now, else the last title it showed, else its id, with the
 // plugin's meta beside it. Rows and gauges line up like the Group pane.

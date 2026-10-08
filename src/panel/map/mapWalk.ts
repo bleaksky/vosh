@@ -11,11 +11,11 @@ import {
 } from './mapTiles';
 import type { WalkProgress } from '../../ipc/session';
 
-// Click to walk on the tiles the game sends (Scripts and Panels review,
-// board 9, Q14 and Q15). A path runs over the lowercase n, e, s
-// and w exits of your floor, the ones that land on the room in the next
-// cell, and each step expects the room the `ex` of the cell it leaves
-// names, which the walker checks against Room.Info.
+// Click to walk on the tiles the game sends. A path runs over the
+// lowercase n, e, s and w exits of your floor, the ones that land on
+// the room in the next cell, and each step expects the room the `ex`
+// of the cell it leaves names, which the walker checks against
+// Room.Info.
 //
 // The walk routes around a closed, locked or hidden door, and around
 // water (sector 7) and air (sector 9), even when you fly or carry a

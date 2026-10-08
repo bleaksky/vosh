@@ -8,7 +8,7 @@ import {
 } from './vitalsLedgerFit';
 
 /** A face with tabular digits 0.62 em wide, near the system face at
- *  weight 500, so the steps land where board 6 draws them. */
+ *  weight 500, so the steps land at the widths below. */
 const MEASURE: MeasureText = (text, px) => {
   let em = 0;
   for (const ch of text.replace(/[0-9]/g, '0')) {

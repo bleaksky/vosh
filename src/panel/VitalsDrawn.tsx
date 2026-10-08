@@ -16,9 +16,9 @@ import {
 // What the eight styles of the More Vitals Styles review share. Your
 // opponent draws its name and its health on one line across the footer
 // with the style's own mark under them in warn, 10 above your vitals or
-// 10 under them (Q25). The row styles set each vital's label, mark and
+// 10 under them. The row styles set each vital's label, mark and
 // value on a pane row, as Gauges does, and drop each mark under its
-// label and value on a narrow panel (Q24). The column styles stand
+// label and value on a narrow panel. The column styles stand
 // your vitals in columns, as Ledger does, and never stack.
 
 /** What every new style draws from. */

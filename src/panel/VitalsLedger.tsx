@@ -13,7 +13,7 @@ import {
   type VitalTone,
 } from './vitalsView';
 
-// Ledger (Vitals Styles, board 1): a column for each vital, the pane
+// Ledger: a column for each vital, the pane
 // label caps over the figure and its max, with a line under each
 // column, and your opponent's name and health across the footer above
 // or below them. The fit (vitalsLedger.ts) drops the max and steps the

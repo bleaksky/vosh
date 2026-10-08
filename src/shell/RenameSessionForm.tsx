@@ -3,8 +3,8 @@ import { sessionLabel, typedName } from '../lib/sessionLabel';
 import { getSelected, rename, useSessions } from '../stores/session/sessionsStore';
 
 // The Rename session form the session popover swaps in for its list
-// while no sessions sidebar shows, as with one session. Board 9 names a
-// session in a field in its row, and with no row to name it in, the
+// while no sessions sidebar shows, as with one session. The sidebar
+// names a session in a field in its row, and with no row to name it in, the
 // popover's own form recipe holds that one field. Name starts on what
 // the session reads, its text selected, and shows what it reads with no
 // name once you clear it. Save keeps what you typed, and a blank Name

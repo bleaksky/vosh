@@ -184,7 +184,7 @@ describe('the session popover with the sidebar folded', () => {
       'New session…⌘T',
       'Disconnect',
     ]);
-    // Frame 05 draws no line between Rename session… and New session…,
+    // No line between Rename session… and New session… while the list shows,
     // so five rows fit whole at 720 by 450.
     const actions = findAll(
       menu,

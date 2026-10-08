@@ -6,7 +6,7 @@ import { hitFill, type HitView } from './vitalsHit';
 import { ledgerFigure } from './vitalsLedgerFit';
 import { VITAL_LABELS } from './vitalsView';
 
-// Orbs (More Vitals Styles, board 2): a 44 pt circle for each vital,
+// Orbs: a 44 pt circle for each vital,
 // after the Diablo life and mana globes and the Hollow Knight soul
 // vessel. A flat fill rises from the foot and stops at a 1 pt surface
 // line, inside a hairline rim, with no gloss, highlight or glow. The

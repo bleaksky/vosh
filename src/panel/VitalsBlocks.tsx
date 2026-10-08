@@ -3,7 +3,7 @@ import { DrawnOpponent, DrawnVitals, MarkRows, type DrawnVitalsProps } from './V
 import { blockCells, blockRun, FULL_BLOCK, type RowMarkFit } from './vitalsDrawnFit';
 import { hitFill, type HitView } from './vitalsHit';
 
-// Blocks (More Vitals Styles, board 1): the bar in the game face at
+// Blocks: the bar in the game face at
 // your panel size, so it lines up with your prompt, as btop draws its
 // meters. Each bar counts the cells that fit between the label and the
 // widest value and writes a full block for each whole cell and an

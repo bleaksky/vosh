@@ -11,7 +11,7 @@ import {
   PEAK_HOLD,
 } from './vitalsHit';
 
-// Tolliver's health from 851 to 744 of 1038, as board 4 draws it.
+// Tolliver's health from 851 to 744 of 1038.
 const BEFORE = 82;
 const AFTER = 72;
 

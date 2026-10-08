@@ -4,7 +4,7 @@ import { DrawnOpponent, DrawnVitals, type DrawnVitalsProps } from './VitalsDrawn
 import { hitFill, type HitView } from './vitalsHit';
 import { maxOf, meterFill, toneProps, VITAL_LABELS } from './vitalsView';
 
-// Bands (More Vitals Styles, board 1): Stephen Few's bullet graph laid
+// Bands: Stephen Few's bullet graph laid
 // flat under each label and value. Two quiet bands mark under a
 // quarter, where low lets go, and under two thirds, where Warn before
 // you run low starts. A 4 px bar runs through the middle, and in a

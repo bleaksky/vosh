@@ -26,13 +26,13 @@ const MEASURE: MeasureText = (text, px) => {
   return Math.ceil(em * px);
 };
 
-// Board 1's labels and maxes, with the guard at 100 percent.
+// The labels and maxes of a full footer, with the guard at 100 percent.
 const LABELS = ['Health', 'Mana', 'Moves'];
 const VALUES = ['1038 / 1038', '870 / 870', '521 / 521', '100%'];
 
 describe('Blocks', () => {
   it('counts the whole cells that fit, once both are measured', () => {
-    // Board 1: a 124 px bar in a face whose block is 7.2 px holds 17.
+    // A 124 px bar in a face whose block is 7.2 px holds 17.
     expect(blockCells(124, 7.2)).toBe(17);
     expect(blockCells(3, 7.2)).toBe(1);
     expect(blockCells(0, 7.2)).toBe(0);

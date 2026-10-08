@@ -2,8 +2,7 @@ import type { MouseEvent } from 'react';
 import { stopWalk, type WalkProgress } from '../../ipc/session';
 import { getSelected } from '../../stores/session/sessionsStore';
 
-// Where a walk stands, at the bottom of the map (Scripts and Panels
-// review, board 9). While you walk it is the Walking chip on the update
+// Where a walk stands, at the bottom of the map. While you walk it is the Walking chip on the update
 // notice's shape, since it holds Stop, with the steps left as a #walk
 // string. A stopped walk leaves a toast with how far it got, or just
 // Stopped when Vosh lost track of it, as the terminal line says.

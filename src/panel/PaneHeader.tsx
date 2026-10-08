@@ -4,7 +4,7 @@ import { MoreIcon } from '../ui/icons';
 import { PaneMenu } from './PaneMenu';
 import { paneLabel } from './paneTypes';
 
-// The 28 px header every pane opens with (SPEC 9): the caps label at
+// The 28 px header every pane opens with: the caps label at
 // x 18, an optional meta 8 px after it, and the more button 8 px from
 // the pane's right edge. No fill and no line under it.
 
