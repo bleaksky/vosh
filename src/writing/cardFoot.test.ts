@@ -16,6 +16,7 @@ const base: FootInput = {
   sentView: false,
   canSend: true,
   canPost: true,
+  finding: false,
   matches: false,
   hasGame: true,
 };
@@ -94,6 +95,21 @@ describe('the footer', () => {
     expect(
       ids({ ...base, kind: 'journal', ended: { ...ended, actions: [] }, phase: 'posted' }),
     ).toEqual(['done']);
+  });
+
+  it('keeps Post… off while the board’s list after a drop is not read yet', () => {
+    const ended = {
+      note: {
+        lead: 'You were disconnected as the note posted.',
+        rest: ' Check the board before you post it again.',
+        tone: 'bad' as const,
+      },
+      actions: [],
+    };
+    expect(footFor({ ...base, kind: 'journal', ended, finding: true }).buttons).toEqual([
+      { id: 'post', label: 'Post…', primary: true, disabled: true },
+    ]);
+    expect(footFor({ ...base, kind: 'journal', finding: true }).buttons[0].disabled).toBe(true);
   });
 
   it('ends on Done when the game turns an application down', () => {

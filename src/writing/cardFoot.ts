@@ -63,6 +63,9 @@ export interface FootInput {
   sentView: boolean;
   canSend: boolean;
   canPost: boolean;
+  /** A look at the board's list after a drop waits or runs, so whether
+   *  the note posted is not known yet. */
+  finding: boolean;
   /** The game holds the text as the card shows it, read or sent. */
   matches: boolean;
   /** The card knows the game's copy, which Restore sends back. */
@@ -138,8 +141,9 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
       label: again ? 'Post again' : 'Post…',
       primary: true,
       // The game holds one note, so Post… waits while another board's
-      // note is there (Note Editor board 7).
-      disabled: !f.canPost || f.ended?.actions.includes('clear-other') === true,
+      // note is there (Note Editor board 7), and after a drop it waits
+      // for the board's list (board 8).
+      disabled: !f.canPost || f.finding || f.ended?.actions.includes('clear-other') === true,
     });
   } else if (f.phase === 'sent') {
     if (info.check) buttons.push({ id: 'check', label: checkLabel, disabled: !f.live });

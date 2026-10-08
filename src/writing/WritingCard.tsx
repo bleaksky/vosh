@@ -572,6 +572,7 @@ export function WritingCard({
     sentView,
     canSend,
     canPost: canSend && fieldsSet && spam === null,
+    finding: find !== null,
     matches: readNow && !empty && !!draft.game && sameLines(lines, draft.game),
     hasGame: !!draft.game,
   });
