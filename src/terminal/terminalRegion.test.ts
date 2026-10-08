@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { ECHO_CARET } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK } from '../input/maskedInput';
 import { LiftTracker } from './xterm/liftBands';
 import {
   closePinRow,
@@ -461,7 +461,7 @@ describe('RegionWriter held line ends', () => {
     const after = async (line: string, reply: string) => {
       const { term, writer } = setup();
       writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
-      writer.local(`${ECHO_CARET}${line}\r\n`);
+      writer.local(`${DEFAULT_ECHO_MARK}${line}\r\n`);
       writer.output({ text: reply, hold: '\r\n\r\n'.slice(reply ? 0 : 2), pinRow: true });
       await parsed(writer);
       const rows = screen(term);
@@ -1042,8 +1042,11 @@ describe('a run of repeated lines the session collapses', () => {
 // from tables.c, update.c and the prompt fixtures.
 describe('the mark before your echo', () => {
   const sends: [string, (writer: RegionWriter, command: string) => void][] = [
-    ['typed', (writer, command) => writer.local(`${ECHO_CARET}${command}\r\n`)],
-    ['quick key', (writer, command) => writer.output({ text: `${ECHO_CARET}${command}\r\n` })],
+    ['typed', (writer, command) => writer.local(`${DEFAULT_ECHO_MARK}${command}\r\n`)],
+    [
+      'quick key',
+      (writer, command) => writer.output({ text: `${DEFAULT_ECHO_MARK}${command}\r\n` }),
+    ],
   ];
   const motd = 'Prepare yourself. For you are about to <Enter> the Forsaken Lands!';
 
@@ -1132,7 +1135,7 @@ describe('the mark before your echo', () => {
   it('drops before a bare line end at a login prompt', async () => {
     const { term, writer } = setup();
     writer.output({ text: '\n\rYour choice> ' });
-    writer.local(`${ECHO_CARET}\r\n`);
+    writer.local(`${DEFAULT_ECHO_MARK}\r\n`);
     writer.output({ text: '\n\rYour choice> ' });
     await parsed(writer);
     expect(screen(term)).toEqual(['', 'Your choice> ', '', 'Your choice> ']);

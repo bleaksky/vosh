@@ -3,34 +3,63 @@
 // masked field until IAC WONT ECHO hands echo back. A line submitted
 // from the masked field leaves no trace in Vosh.
 
-/** Wrap an echoed input line in a truecolor SGR sequence so you can spot
- *  your own commands. Returns the line unchanged when no color is set or
- *  the hex cannot be parsed. The reset closes before the trailing CRLF. */
-export function colorizeEcho(line: string, color: string | null): string {
-  if (!color) return line;
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color.trim());
-  if (!m) return line;
-  const r = parseInt(m[1], 16);
-  const g = parseInt(m[2], 16);
-  const b = parseInt(m[3], 16);
-  return `\x1b[38;2;${r};${g};${b}m${line}\x1b[0m`;
+import { DEFAULT_ECHO_MARK_OPTIONS, type EchoMarkOptions } from '../ipc/uiConfig';
+
+/** The `r;g;b` of a Command or Mark color, the six hex digits at its
+ *  start after an optional `#`, or null when it does not read. */
+function echoRgb(color: string | null): string | null {
+  const m = color ? /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color.trim()) : null;
+  if (!m) return null;
+  return m
+    .slice(1)
+    .map((hex) => parseInt(hex, 16))
+    .join(';');
 }
 
-/** The grey `›` and space before each command you send, in the theme's
- *  bright black (SGR 90), so both renderers draw it in the active theme.
- *  U+203A is one cell wide. The backend echoes a quick key with the same
- *  bytes (echo_mark in src-tauri/src/input.rs). Each renderer leaves it
- *  out when the row your echo lands on already ends in `>`, as a game's
- *  prompt such as `Account name> ` does (RegionWriter in
- *  terminalRegion.ts, and the native grid). */
-export const ECHO_CARET = '\x1b[90m\u203a \x1b[0m';
+/** The command of an echo in the Command color when one reads, faint
+ *  when `dim` is on, or as it is with neither. The reset closes before
+ *  the line end. */
+function styleCommand(line: string, color: string | null, dim: boolean): string {
+  const rgb = echoRgb(color);
+  const sgr = [dim ? '2' : '', rgb ? `38;2;${rgb}` : ''].filter(Boolean).join(';');
+  return sgr ? `\x1b[${sgr}m${line}\x1b[0m` : line;
+}
 
-/** The echo of one command, with its line end: the caret first when
- *  `caret` is on, then the command in the echo color. A bare Enter
- *  echoes the caret alone, so you see each blank line you send. */
-export function commandEcho(line: string, color: string | null, caret: boolean): string {
-  const mark = caret ? ECHO_CARET : '';
-  return `${mark}${colorizeEcho(line, color)}\r\n`;
+/** The mark before each command you send, empty while it is off or your
+ *  own text is blank: the Mark color, or the theme's bright black (SGR
+ *  90) when none reads, so both renderers draw it in the active theme,
+ *  then `›`, `>` or your own text, then a space and a reset. U+203A is
+ *  one cell wide. The backend builds a quick key's mark the same way
+ *  (echo_mark in src-tauri/src/input.rs), and
+ *  fixtures/input/echo-marks.json holds both to the same bytes. Each
+ *  renderer leaves it out when the row your echo lands on already ends
+ *  in `>`, as a game's prompt such as `Account name> ` does (RegionWriter
+ *  in terminalRegion.ts, and the native grid). */
+export function echoMark({
+  mark,
+  text,
+  color,
+}: Pick<EchoMarkOptions, 'mark' | 'text' | 'color'>): string {
+  const glyph = mark === 'off' ? '' : mark === 'gt' ? '>' : mark === 'own' ? text : '\u203a';
+  if (glyph.length === 0) return '';
+  const rgb = echoRgb(color);
+  return `\x1b[${rgb ? `38;2;${rgb}` : '90'}m${glyph} \x1b[0m`;
+}
+
+/** The mark of a profile that never changed it, the grey `›`. */
+export const DEFAULT_ECHO_MARK = echoMark(DEFAULT_ECHO_MARK_OPTIONS);
+
+/** The echo of one command, with its line end: the `mark` from
+ *  echoMark, then the command in the Command color, faint when `dim` is
+ *  on. A bare Enter echoes the mark alone, so you see each blank line
+ *  you send. */
+export function commandEcho(
+  line: string,
+  color: string | null,
+  mark: string,
+  dim: boolean,
+): string {
+  return `${mark}${styleCommand(line, color, dim)}\r\n`;
 }
 
 /** What the command input does with one submitted line. */
@@ -54,11 +83,13 @@ export interface SubmitContext {
   /** The line starts with a quick key, whose expansion the backend
    *  echoes itself. */
   quickKey: boolean;
-  /** The echo color from Settings, or null for the terminal default. */
+  /** The Command color from Settings, or null for the terminal default. */
   echoColor: string | null;
-  /** Mark your commands from Settings, a grey `›` before each echo. Off
-   *  when left out. */
-  echoCaret?: boolean;
+  /** The mark from Mark your commands, built by echoMark, empty for
+   *  none. */
+  echoMark: string;
+  /** Dim sent commands from Settings. */
+  echoDim: boolean;
 }
 
 /** Whether a key press or a submitted line belongs to the masked field.
@@ -87,7 +118,7 @@ export function macroEcho(
   context: SubmitContext & { enabled: boolean },
 ): string | null {
   if (!context.enabled || context.masked || context.quickKey) return null;
-  return commandEcho(command, context.echoColor, context.echoCaret === true);
+  return commandEcho(command, context.echoColor, context.echoMark, context.echoDim);
 }
 
 /** The draft the input row keeps when it masks or unmasks. A flip either
@@ -102,9 +133,9 @@ export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft:
 /** Plan a submitted line. A line from the masked field echoes only a line
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
- *  echo color, after the caret while Mark your commands is on, unless a
- *  quick key echoes it, and joins history. A bare Enter echoes too, the
- *  caret alone or an empty line, as a telnet client shows each line you
+ *  Command color after your mark, unless a quick key echoes it, and
+ *  joins history. A bare Enter echoes too, the mark alone or an empty
+ *  line with the mark off, as a telnet client shows each line you
  *  send, pinned prompt or not. */
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   if (context.masked) {
@@ -112,7 +143,7 @@ export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   }
   const silent = context.quickKey;
   return {
-    echo: silent ? null : commandEcho(line, context.echoColor, context.echoCaret === true),
+    echo: silent ? null : commandEcho(line, context.echoColor, context.echoMark, context.echoDim),
     remember: line.length > 0,
     local: /^#nativesurface\b/i.test(line),
     masked: false,

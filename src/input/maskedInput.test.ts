@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import echoMarks from '../../fixtures/input/echo-marks.json';
+import { echoMarkOptionsOf, normalizeUiConfig, type RawUiConfig } from '../ipc/uiConfig';
 import {
+  commandEcho,
+  DEFAULT_ECHO_MARK,
   draftAfterMaskChange,
-  ECHO_CARET,
+  echoMark,
   isMasked,
   keepsLastCommand,
   macroEcho,
@@ -16,6 +20,8 @@ const typed = (patch: Partial<SubmitContext> = {}): SubmitContext => ({
   masked: false,
   quickKey: false,
   echoColor: null,
+  echoMark: '',
+  echoDim: false,
   ...patch,
 });
 
@@ -98,26 +104,35 @@ describe('a macro pressed at a password prompt', () => {
 });
 
 describe('Mark your commands', () => {
-  const marked = (patch: Partial<SubmitContext> = {}) => typed({ echoCaret: true, ...patch });
+  const marked = (patch: Partial<SubmitContext> = {}) =>
+    typed({ echoMark: DEFAULT_ECHO_MARK, ...patch });
 
-  it('draws a grey single width caret and a space in the theme bright black', () => {
-    expect(ECHO_CARET).toBe('\x1b[90m\u203a \x1b[0m');
+  it('builds each echo with the bytes the quick key echo uses', () => {
+    for (const { about, ui, command, echo } of echoMarks.cases) {
+      const config = normalizeUiConfig(ui as RawUiConfig);
+      const options = echoMarkOptionsOf(config);
+      const built = commandEcho(command, config.input_echo_color, echoMark(options), options.dim);
+      expect(built, about).toBe(`${echo}\r\n`);
+    }
   });
 
-  it('puts the caret before a typed command in the terminal text color', () => {
-    expect(planSubmit('look', marked()).echo).toBe(`${ECHO_CARET}look\r\n`);
+  it('draws a grey single width chevron and a space in the theme bright black by default', () => {
+    expect(DEFAULT_ECHO_MARK).toBe('\x1b[90m\u203a \x1b[0m');
   });
 
-  it('keeps the Sent command color on the command and the caret grey', () => {
-    expect(planSubmit('look', marked({ echoColor: '#102030' })).echo).toBe(
-      `${ECHO_CARET}\x1b[38;2;16;32;48mlook\x1b[0m\r\n`,
-    );
-  });
-
-  it('marks a macro command the same way', () => {
+  it('puts the mark before a typed command and a macro command alike', () => {
+    expect(planSubmit('look', marked()).echo).toBe(`${DEFAULT_ECHO_MARK}look\r\n`);
     expect(macroEcho('stand', { ...marked({ echoColor: '#ff8800' }), enabled: true })).toBe(
-      `${ECHO_CARET}\x1b[38;2;255;136;0mstand\x1b[0m\r\n`,
+      `${DEFAULT_ECHO_MARK}\x1b[38;2;255;136;0mstand\x1b[0m\r\n`,
     );
+    expect(planSubmit('look', marked({ echoDim: true })).echo).toBe(
+      `${DEFAULT_ECHO_MARK}\x1b[2mlook\x1b[0m\r\n`,
+    );
+  });
+
+  it('echoes the mark alone for a bare Enter, and an empty line with the mark off', () => {
+    expect(planSubmit('', marked()).echo).toBe(`${DEFAULT_ECHO_MARK}\r\n`);
+    expect(planSubmit('', typed()).echo).toBe('\r\n');
   });
 
   it('leaves a password and a quick key alone', () => {
@@ -126,8 +141,7 @@ describe('Mark your commands', () => {
     expect(macroEcho('stand', { ...marked({ masked: true }), enabled: true })).toBeNull();
   });
 
-  it('echoes bare with the setting off', () => {
-    expect(planSubmit('look', marked({ echoCaret: false })).echo).toBe('look\r\n');
+  it('echoes bare with the mark off', () => {
     expect(planSubmit('look', typed()).echo).toBe('look\r\n');
   });
 });

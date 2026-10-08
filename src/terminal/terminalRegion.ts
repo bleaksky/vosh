@@ -53,7 +53,7 @@
 // restore included. When the row it lands on already ends in `>` before
 // the cursor, as the game's own prompt does, the mark drops.
 
-import { ECHO_CARET } from '../input/maskedInput';
+import { DEFAULT_ECHO_MARK } from '../input/maskedInput';
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
@@ -610,7 +610,7 @@ export class RegionWriter {
    *  ends it ends on, as held line ends. */
   private landText(text: string, then?: () => void, hold = false): void {
     this.writeHold();
-    if (!text.startsWith(ECHO_CARET)) {
+    if (!text.startsWith(DEFAULT_ECHO_MARK)) {
       this.writeLanded(this.land(text), hold);
       then?.();
       return;
@@ -639,9 +639,9 @@ export class RegionWriter {
   private withoutMark(text: string): string {
     const buffer = this.term.buffer.active;
     const x = buffer.cursorX;
-    if (!text.startsWith(ECHO_CARET) || x >= this.term.cols) return text;
+    if (!text.startsWith(DEFAULT_ECHO_MARK) || x >= this.term.cols) return text;
     const before = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(false, 0, x);
-    return endsInPrompt(before ?? '') ? text.slice(ECHO_CARET.length) : text;
+    return endsInPrompt(before ?? '') ? text.slice(DEFAULT_ECHO_MARK.length) : text;
   }
 
   /** `text` as it lands at the cursor: without the line end that would

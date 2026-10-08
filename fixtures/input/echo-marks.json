@@ -1,5 +1,5 @@
 {
-  "notes": "Hand written. Each case gives the mark fields of the [ui] table, a command you send, and the exact echo the command line draws for it, without the line end. Fields left out keep their defaults, the chevron with no colors and Dim sent commands off. A test in src-tauri/src/input/tests.rs holds command_echo, which echoes a quick key, to every case.",
+  "notes": "Hand written. Each case gives the mark fields of the [ui] table, a command you send, and the exact echo the command line draws for it, without the line end. Fields left out keep their defaults, the chevron with no colors and Dim sent commands off. A test in src-tauri/src/input/tests.rs holds command_echo, which echoes a quick key, to every case, and src/input/maskedInput.test.ts holds the command line echo to them too.",
   "cases": [
     {
       "about": "The chevron, the default. Board 02.",

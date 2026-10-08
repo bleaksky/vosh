@@ -713,7 +713,7 @@ fn fires_quick_key(c: &Connection, line: &str) -> bool {
 /// The echo of a command you send, as the command line draws it: the
 /// mark from [`echo_mark`], then the command in the Command color when
 /// one is set, faint when Dim sent commands is on. The mark keeps its own
-/// color and never dims. Mirrors `planSubmit` and `colorizeEcho` in
+/// color and never dims. Mirrors `commandEcho` and `echoMark` in
 /// src/input/maskedInput.ts, so a quick key echoes like a typed command.
 /// The bytes for each case sit in fixtures/input/echo-marks.json. An
 /// empty line echoes as itself.

@@ -14,6 +14,7 @@ import {
   type InputCursorStyle,
 } from '../ipc/uiConfig';
 import { useTauriEvent } from '../ipc/useTauriEvent';
+import { echoMark } from './maskedInput';
 import { getEchoMarkOptions, subscribeEchoMarkOptions } from '../stores/config/echoMarkStore';
 
 /** The command line settings. The two that change what the row draws
@@ -41,9 +42,11 @@ export function useInputPreferences() {
   // on). Under lag the echo shows the keybind registered before the
   // world responds. Same load + subscribe pattern as keepLast.
   const echoMacrosRef = useRef<boolean>(true);
-  // Mark your commands, a grey caret before each echo (default on).
-  // Same load + subscribe pattern as keepLast.
-  const echoCaretRef = useRef<boolean>(getEchoMarkOptions().mark !== 'off');
+  // The mark each echo starts with, built from Mark your commands and
+  // the Mark color, and Dim sent commands, which the echo mark store
+  // keeps current.
+  const echoMarkRef = useRef<string>(echoMark(getEchoMarkOptions()));
+  const echoDimRef = useRef<boolean>(getEchoMarkOptions().dim);
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -85,7 +88,9 @@ export function useInputPreferences() {
   useEffect(
     () =>
       subscribeEchoMarkOptions(() => {
-        echoCaretRef.current = getEchoMarkOptions().mark !== 'off';
+        const options = getEchoMarkOptions();
+        echoMarkRef.current = echoMark(options);
+        echoDimRef.current = options.dim;
       }),
     [],
   );
@@ -97,6 +102,7 @@ export function useInputPreferences() {
     pasteDelayRef,
     echoColorRef,
     echoMacrosRef,
-    echoCaretRef,
+    echoMarkRef,
+    echoDimRef,
   };
 }

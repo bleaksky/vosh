@@ -243,7 +243,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     pasteDelayRef,
     echoColorRef,
     echoMacrosRef,
-    echoCaretRef,
+    echoMarkRef,
+    echoDimRef,
   } = useInputPreferences();
 
   useImperativeHandle(
@@ -289,7 +290,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       masked,
       quickKey: !masked && isQuickKey(firstWord),
       echoColor: echoColorRef.current,
-      echoCaret: echoCaretRef.current,
+      echoMark: echoMarkRef.current,
+      echoDim: echoDimRef.current,
     });
     if (plan.remember) remember(line, to);
     // #nativesurface is handled here, not in the backend, because the
@@ -439,7 +441,8 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           masked: maskedNow(),
           quickKey: isQuickKey(firstWord),
           echoColor: echoColorRef.current,
-          echoCaret: echoCaretRef.current,
+          echoMark: echoMarkRef.current,
+          echoDim: echoDimRef.current,
         });
         if (echo !== null) onLocalEcho?.(echo, session);
         try {
