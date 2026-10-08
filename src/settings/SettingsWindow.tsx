@@ -50,7 +50,7 @@ import { useSettingsClose } from './useSettingsClose';
 import { settingsSaveHolds } from './useSettingsAutoSave';
 import { vitalsStylePick } from '../panel/vitalsView';
 import { WindowControls } from '../ui/WindowControls';
-import { ChevronRightIcon } from '../ui';
+import { ChevronRightIcon, CoachRing } from '../ui';
 import type { LeaveGuard, SettingsPageProps } from './pageTypes';
 import { GeneralPage } from './general/GeneralPage';
 import { LayoutPage } from './layout/LayoutPage';
@@ -410,6 +410,7 @@ export function SettingsWindow() {
           />
         </div>
       </main>
+      <CoachRing />
     </div>
   );
 }

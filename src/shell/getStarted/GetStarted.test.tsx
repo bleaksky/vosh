@@ -128,7 +128,7 @@ async function mount(saved: unknown) {
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   let focused = 0;
-  const props = {
+  const props: Parameters<typeof GetStarted>[0] = {
     play: { live: false, character: null, connect: () => undefined },
     covered: false,
     host: { terminal: () => null, area: () => null, dock: () => null },
@@ -167,6 +167,14 @@ async function mount(saved: unknown) {
     });
   return {
     card,
+    button: (text: string) => {
+      const found = findAll(
+        container,
+        (el) => el.nodeName === 'BUTTON' && el.textContent.startsWith(text),
+      )[0];
+      if (!found) throw new Error(`no ${text}`);
+      return found;
+    },
     text: () => card()?.textContent ?? '',
     focused: () => focused,
     render,
@@ -259,6 +267,21 @@ describe('Get started', () => {
     expect(bus.calls.find(([cmd]) => cmd === 'presets_enabled_set')?.[1]).toMatchObject({
       changes: [{ id: 'sent_tells', on: true }],
     });
+  });
+
+  it('keeps Show me off on the steps after the login until the game names you', async () => {
+    const view = await mount({ atLaunch: true, done: ['connect'] });
+    const shown: string[] = [];
+    await view.render({ onShowMe: (step) => void shown.push(step) });
+    await view.press('Track the affects you keep up');
+    const showMe = () => view.button('Show me');
+    expect(showMe().getAttribute('disabled')).not.toBeNull();
+    expect(view.text()).toContain('Show me waits for your first room in the game.');
+    await view.render({ play: { live: false, character: 'Orla', connect: () => undefined } });
+    expect(showMe().getAttribute('disabled')).toBeNull();
+    expect(view.text()).not.toContain('waits for your first room');
+    await view.press('Show me');
+    expect(shown).toEqual(['affects']);
   });
 
   it('reads as a summary once every step is done', async () => {

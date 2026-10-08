@@ -94,6 +94,8 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
               <ChipButton
                 ref={addRef}
                 icon={<PlusIcon size={12} />}
+                data-st-anchor="add-affect"
+                data-st-coach="Pick Add affect… and name a spell you keep up."
                 onClick={() => setAdding(true)}
               >
                 Add affect…

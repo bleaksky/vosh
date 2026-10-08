@@ -1,9 +1,14 @@
+import { showCoach } from '../ui/coach';
+
 // Bringing a deep link or search hit into view. The frame hands this
 // the anchors a target names (settingsScrollIds), best first. Pages
 // draw some rows only after their data loads, and content above an
 // anchor can grow after it shows, so this keeps looking for a while,
 // settles for the section when the row never shows, and holds the
 // anchor in place until the page stops moving or you scroll yourself.
+// An anchor that carries data-st-coach is something to pick, as Show me
+// in Get started points at Add affect. It takes focus and the coach
+// ring with that line in place of the flash.
 
 const FLASH_MS = 1200;
 const FIND_EVERY_MS = 50;
@@ -56,7 +61,8 @@ function flash(el: HTMLElement) {
 }
 
 /** Scroll the first of `ids` that the page draws under `root` into
- *  view, and flash it when it is a row (it carries data-st-flash).
+ *  view, and flash it when it is a row (it carries data-st-flash) or
+ *  ring it when it is something to pick (data-st-coach).
  *  Returns a cleanup that stops looking and holding. */
 export function revealSettingsAnchor(root: HTMLElement, ids: readonly string[]): () => void {
   let findTimer: number | undefined;
@@ -74,11 +80,13 @@ export function revealSettingsAnchor(root: HTMLElement, ids: readonly string[]):
 
   const reveal = (el: HTMLElement) => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const row = el.hasAttribute('data-st-flash');
+    const coach = el.getAttribute('data-st-coach');
+    const row = el.hasAttribute('data-st-flash') || coach !== null;
     const scroller = scrollerFor(el, root);
     let placed = scrollTopFor(el, scroller, row);
     scroller.scrollTo({ top: placed, behavior: reduce ? 'auto' : 'smooth' });
-    if (row) flash(el);
+    if (coach !== null) showCoach({ find: () => [el], line: coach });
+    else if (row) flash(el);
     const started = Date.now();
     const hold = () => {
       if (stopped || !el.isConnected || Date.now() - started > HOLD_MS) return;

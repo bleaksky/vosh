@@ -342,6 +342,18 @@ describe('the Settings list in the terminal menu', () => {
     expect(m.onClose).not.toHaveBeenCalled();
   });
 
+  it('lights a row that takes focus, as Show me gives Customize prompt…, so Enter picks it', async () => {
+    const m = await mount();
+    const row = m.row('Customize prompt…');
+    await act(async () => {
+      row.focus();
+      on(row).onFocus();
+    });
+    expect(lit(row)).toBe(true);
+    await m.key('Enter');
+    expect(m.onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('opens on Enter and Space too, and ArrowLeft in the menu shuts it', async () => {
     const m = await mount();
     await downToSettings(m);

@@ -47,15 +47,18 @@ import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CoachRing } from '../ui/CoachRing';
+import { menuRows, showCoach } from '../ui/coach';
 import { openSettingsTab } from '../lib/settingsLink';
 import { ADD_PANE_MENU_EVENT, requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
-import { offeredPaneTypes } from '../panel/paneTypes';
+import { offeredPaneTypes, PANE_LABELS } from '../panel/paneTypes';
 import {
   getSelected,
   goTo,
   move,
+  profileInFront,
   rename,
   select,
   sessionStep,
@@ -455,21 +458,32 @@ function MainWindow() {
     },
   });
 
-  // Show me on a step of Get started folds the card and opens what the
-  // step is about, as a click would (First Run Q3).
+  // Show me on a step of Get started folds the card, opens what the
+  // step is about as a click would, and rings what to pick (First Run
+  // Q3). Tracked affects ring in the Settings window, which reads the
+  // ring off the Add affect anchor.
   const showMe = (step: StepId) => {
     foldGetStarted();
     if (step === 'panes') {
       setPanelOpen(true);
       requestAnimationFrame(() => window.dispatchEvent(new Event(ADD_PANE_MENU_EVENT)));
+      showCoach({
+        find: () => menuRows('Add a pane', [PANE_LABELS.chat, PANE_LABELS.group]),
+        line: 'Pick Chat or Group.',
+      });
     } else if (step === 'affects') {
-      openSettingsTab('characters#tracked');
+      const profile = profileInFront();
+      openSettingsTab(profile ? `characters:${profile}#add-affect` : 'characters#add-affect');
     } else if (step === 'prompt') {
       const area = terminalAreaRef.current?.getBoundingClientRect();
       const term = termRef.current;
       if (!area) return;
       const last = term ? term.rowTop(term.getSize().rows - 1) : null;
       setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
+      showCoach({
+        find: () => menuRows('Terminal', ['Customize prompt…']),
+        line: 'Pick Customize prompt…',
+      });
     }
   };
 
@@ -782,6 +796,7 @@ function MainWindow() {
           onClose={() => setTerminalMenu(null)}
         />
       )}
+      <CoachRing />
       {promptCard && (
         // A selection mounts the card again for the session it brings to
         // the front, and the card it leaves puts that session's live

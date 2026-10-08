@@ -266,3 +266,16 @@ describe('Import under Characters', () => {
     );
   });
 });
+
+describe('Show me on Track the affects you keep up', () => {
+  it('points at Add affect, the anchor its link names, with the line its ring says', async () => {
+    let add: FakeElement | undefined;
+    await run((root) => {
+      add = findAll(root, (el) => el.nodeName === 'BUTTON' && el.textContent === 'Add affect…')[0];
+    });
+    expect(add?.getAttribute('data-st-anchor')).toBe('add-affect');
+    expect(add?.getAttribute('data-st-coach')).toBe(
+      'Pick Add affect… and name a spell you keep up.',
+    );
+  });
+});
