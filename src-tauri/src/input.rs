@@ -763,6 +763,23 @@ pub(crate) fn keep_echo_mark(session: crate::sessions::SessionId, mark: String) 
     let _ = (session, mark);
 }
 
+/// Tell the native grid of every session on `open` the mark its profile
+/// gives, after a `#profile reset` or `#profile load` laid it over.
+pub(crate) async fn keep_profile_echo_mark(
+    state: &AppState,
+    open: &Arc<crate::profile::open::OpenProfile>,
+) {
+    let sessions = state.all_sessions();
+    let (players, mark) = {
+        let p = open.lock().await;
+        let players: Vec<_> = p.players(&sessions).map(|s| s.id).collect();
+        (players, echo_mark(&p.ui))
+    };
+    for session in players {
+        keep_echo_mark(session, mark.clone());
+    }
+}
+
 /// The red, green and blue of a Command or Mark color, the six hex digits
 /// at its start after an optional `#`, or None when it does not read.
 fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {
