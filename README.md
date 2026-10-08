@@ -1,31 +1,44 @@
 # Vosh
 
-A desktop MUD client for macOS, Windows, and Linux. Built for power users who want a connected map window, clean split panes, a tick timer, and the full alias and trigger toolkit they expect from TinTin++.
+A desktop MUD client for macOS, Windows, and Linux. Built for power users who want clean split panes, a map pane, a tick timer, and the full alias and trigger toolkit they expect from TinTin++.
 
-The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, and works with any server that speaks the same protocols. Vosh negotiates telnet options and speaks GMCP. It answers TTYPE with MTTS, sends your window size with NAWS, answers NEW-ENVIRON, and asks for EOR so the server marks each prompt. Text travels as UTF-8. Vosh turns down MSDP, MCCP, and MXP.
+The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, and works with any server that speaks the same protocols.
+
+## Protocols
+
+Vosh speaks telnet and negotiates each option with the RFC 1143 state machine. It answers these options.
+
+- TTYPE, with the MTTS flags on the last answer.
+- NAWS, which sends your window size and sends it again when the window changes.
+- NEW-ENVIRON.
+- CHARSET, which agrees on UTF-8.
+- EOR, so the server marks the end of each prompt.
+- GMCP.
+
+Vosh turns down every other option, MSDP, MCCP, and MXP among them.
 
 ## Status
 
-Phase 9 complete. The active profile (aliases, profile-scoped variables, triggers, tick config) saves to `<app_data_dir>/profile.toml` and auto-loads on startup. Use `#profile save`, `#profile load`, `#profile reset` to manage it from the input box. `#import-tintin <path>` reads a TinTin++ `.tin` file, imports its `#alias` and `#variable` lines, and reports any directives it skipped. Phase 10 lands logging, scrollback, and search.
-
-See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
+Vosh 0.9.0 is out, and the refactor before 1.0 is under way. `docs/requirements.md` says what 1.0 must do, and `docs/refactor-plan.md` holds the milestone plan with the status of each phase. `CHANGES.md` lists what each release changed.
 
 ## Goals
 
 - Equal TinTin++ for power users.
-- Add a connected map window driven by GMCP Room.Info.
+- Add a map pane driven by GMCP.
 - Add clean split panes per session, with a chat capture pane and a status pane.
 - Add a configurable tick timer with reset on detected events.
-- Ship signed native binaries on macOS, Windows, and Linux.
+- Ship native binaries on macOS, Windows, and Linux.
 - No required cloud accounts. No required login. No telemetry. No bundled trackers.
 
 ## Stack
 
-Tauri 2 shell. Rust backend with Tokio for async. TypeScript and React frontend. xterm.js for terminal rendering. Lua via mlua for scripting. SQLite for logs. TOML for human edited profile config.
+Tauri 2 shell. Rust backend with Tokio for async. TypeScript and React frontend. xterm.js for terminal rendering, with a native surface on macOS. Lua via mlua for scripting. SQLite for logs. TOML for human edited profile config.
 
 ## Run It
 
 You need rustup, Node 20 or newer, and the Tauri 2 system prerequisites for your platform. See the Tauri 2 prerequisites page. `rust-toolchain.toml` pins the Rust version, and rustup installs it on your first build.
+
+On Linux you also need the WebKitGTK and related dev packages. On Debian and Ubuntu these are `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libssl-dev`, and `patchelf`.
 
 ```
 npm install
@@ -44,13 +57,18 @@ npm run dev
 npm run tauri build
 ```
 
-Bundling stays disabled until icons land in Phase 11. The Rust binary still builds.
+This builds the release binary and the installers for your platform. Add `-- --no-bundle` to build the binary alone.
 
 ## Tests
 
+The app crate embeds the built page from `dist`, so build the page before you run the Rust tests.
+
 ```
-cargo test --workspace
+npm install
+npm run build
+npm test
 npm run typecheck
+cargo test --workspace
 ```
 
 ## License
@@ -61,4 +79,4 @@ The built in themes come from many authors. `public/theme-credits.txt` names the
 
 ## Contributing
 
-See `CONTRIBUTING.md` for development setup, lint and format expectations, commit message format, and the phased delivery rules.
+See `CONTRIBUTING.md` for development setup, the checks CI runs, commit message format, and where tests and fixtures go.
