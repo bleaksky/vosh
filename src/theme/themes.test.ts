@@ -279,11 +279,14 @@ describe('contrast floors', () => {
       expect(on('onAccent', hex(t.accent)), 'onAccent').toBeGreaterThanOrEqual(ON_ACCENT_CONTRAST);
       // The window floors of the one ground rule. The 1 px line stands
       // dL 8 to 12 off the ground, and 4 or more off a menu, where the
-      // menu separators draw in it.
-      const sep = stepDL(hex(t.sep), bg);
-      expect(sep, 'sep off the ground').toBeGreaterThanOrEqual(8);
-      expect(sep, 'sep off the ground').toBeLessThanOrEqual(12);
-      expect(stepDL(hex(t.sep), raised), 'sep off raised').toBeGreaterThanOrEqual(4);
+      // menu separators draw in it. A theme that pins its line (the High
+      // Contrast pair, at 3:1) keeps it as drawn.
+      if (theme.chrome?.sep === undefined) {
+        const sep = stepDL(hex(t.sep), bg);
+        expect(sep, 'sep off the ground').toBeGreaterThanOrEqual(8);
+        expect(sep, 'sep off the ground').toBeLessThanOrEqual(12);
+        expect(stepDL(hex(t.sep), raised), 'sep off raised').toBeGreaterThanOrEqual(4);
+      }
       // An accent the rule picks stands apart from every status color.
       // A pinned one stays as the theme drew it.
       if (theme.chrome?.accent === undefined) {
@@ -309,7 +312,7 @@ describe('contrast floors', () => {
   });
 
   // A pin keeps the accent a theme always drew. Tokyo Night, One Half
-  // Dark, Tango Dark, High Contrast and Green Screen pin none, so the rule
+  // Dark, Tango Dark and Green Screen pin none, so the rule
   // picks a hue clear of every status color (your answer on October 4).
   it('keeps each pinned accent and lets the rule pick the rest', () => {
     const accents: Record<string, string> = {
@@ -324,7 +327,7 @@ describe('contrast floors', () => {
       'one-half-dark': '#c678dd',
       'tango-dark': '#4e9a06',
       'classic-vivid': '#ffaa00',
-      'high-contrast': '#ff55ff',
+      'high-contrast': '#5cc8ff',
       'green-screen': '#ff55ff',
       'harbor-dark': '#2f81f7',
       'iceberg-dark': '#a093c7',
@@ -355,8 +358,9 @@ describe('control washes', () => {
       const steps: Partial<Record<Wash, number>> = WASH_STEP[t.appearance];
       for (const key of WASHES) {
         const step = steps[key];
-        // A light field is the raised paper, below.
-        if (step === undefined) continue;
+        // A light field is the raised paper, below, and a pinned wash
+        // stays as the theme drew it.
+        if (step === undefined || theme.chrome?.[key] !== undefined) continue;
         // Below Obsidian Ember's ground a wash keeps the alpha it takes
         // on Ember's, so on Modus Vivendi's pure black it steps as it
         // does there.
@@ -683,6 +687,7 @@ describe('Solarized', () => {
     expect(light.fitGameColors).toBeUndefined();
     expect(BUILTIN_THEMES.filter((t) => t.fitGameColors === false).map((t) => t.id)).toEqual([
       'solarized-dark',
+      'high-contrast',
     ]);
   });
 
@@ -774,19 +779,14 @@ describe('fitted game colors', () => {
     expect(value('tango-dark', 'T3 red Lc')).toBe(36.2);
   });
 
-  it('sets bright white dL 8 above body text in the six of Q19', () => {
-    for (const id of [
-      'monokai',
-      'rose-pine',
-      'everforest-dark',
-      'tokyo-night',
-      'gruvbox',
-      'high-contrast',
-    ]) {
+  // High Contrast was the sixth until Board 14 took it out of the fit,
+  // so its body text stays white.
+  it('sets bright white dL 8 above body text in the five of Q19 still fitted', () => {
+    for (const id of ['monokai', 'rose-pine', 'everforest-dark', 'tokyo-night', 'gruvbox']) {
       expect(value(id, 'T6 fg/brightWhite dL'), id).toBeGreaterThanOrEqual(8);
     }
     expect(findTheme('monokai').fitted?.foreground).toBe('#e4e4df');
-    expect(findTheme('high-contrast').fitted?.foreground).toBe('#e4e4e4');
+    expect(playPalette(findTheme('high-contrast'), true).foreground).toBe('#ffffff');
   });
 
   it('leaves the new schemes short where the review said (Q1)', () => {
@@ -856,6 +856,10 @@ describe('color vision swaps', () => {
     }
     return h.toString(16).padStart(8, '0');
   };
+  // Board 14 rebuilt High Contrast, so the digests below hold every
+  // other theme to the commit they name.
+  const REBUILT = ['high-contrast'];
+  const kept = (themes: readonly AppTheme[]) => themes.filter((t) => !REBUILT.includes(t.id));
   const sees = (p: XtermPalette, a: Slot, b: Slot, vision: ColorVision) =>
     seenApart(hex(p[a]), hex(p[b]), vision);
   const apart = (p: XtermPalette, a: Slot, b: Slot) => deltaEOk(hex(p[a]), hex(p[b]));
@@ -895,15 +899,18 @@ describe('color vision swaps', () => {
     }),
   );
 
-  // The 24 themes one-window (c5a6ebd0) shipped, their Typical fits and
-  // their play palettes with Fit game colors on, digested from that
-  // commit's themes.ts. Typical plays them byte for byte as it did.
+  // The 24 themes one-window (c5a6ebd0) shipped, less the rebuilt ones,
+  // their Typical fits and their play palettes with Fit game colors on,
+  // digested from that commit's themes.ts. Typical plays them byte for
+  // byte as it did.
   it('plays Typical byte for byte as before color vision', () => {
-    const before = BUILTIN_THEMES.filter((t) => !['harbor-dark', 'iceberg-dark'].includes(t.id));
-    expect(before).toHaveLength(24);
-    expect(digest(JSON.stringify(before.map((t) => [t.id, t.fitted ?? null])))).toBe('84775ab7');
+    const before = kept(BUILTIN_THEMES).filter(
+      (t) => !['harbor-dark', 'iceberg-dark'].includes(t.id),
+    );
+    expect(before).toHaveLength(23);
+    expect(digest(JSON.stringify(before.map((t) => [t.id, t.fitted ?? null])))).toBe('4a76b97c');
     expect(digest(JSON.stringify(before.map((t) => [t.id, playPalette(t, true)])))).toBe(
-      '188ff686',
+      '8fc72860',
     );
     for (const theme of BUILTIN_THEMES) {
       for (const fit of [true, false]) {
@@ -913,20 +920,17 @@ describe('color vision swaps', () => {
     }
   });
 
-  // The 26 themes one-window (a206426c) ships, their Typical fits, their
-  // play palettes with Fit game colors on and their window tokens,
-  // digested from that commit. Color vision changes none of them.
+  // The 26 themes one-window (a206426c) ships, less the rebuilt ones,
+  // their Typical fits, their play palettes with Fit game colors on and
+  // their window tokens, digested from that commit. Color vision changes none of them.
   it('fits and paints Typical byte for byte as at a206426c', () => {
-    expect(BUILTIN_THEMES).toHaveLength(26);
-    expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, t.fitted ?? null])))).toBe(
-      '3d4595e1',
+    const shipped = kept(BUILTIN_THEMES);
+    expect(shipped).toHaveLength(25);
+    expect(digest(JSON.stringify(shipped.map((t) => [t.id, t.fitted ?? null])))).toBe('6dc6293a');
+    expect(digest(JSON.stringify(shipped.map((t) => [t.id, playPalette(t, true)])))).toBe(
+      '3fcb0e5b',
     );
-    expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, playPalette(t, true)])))).toBe(
-      '9c975f41',
-    );
-    expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, themeTokens(t)])))).toBe(
-      '8b44151f',
-    );
+    expect(digest(JSON.stringify(shipped.map((t) => [t.id, themeTokens(t)])))).toBe('f4935d5a');
     for (const theme of BUILTIN_THEMES) {
       expect(themeTokens(theme, 'typical'), theme.id).toEqual(themeTokens(theme));
     }
@@ -1038,10 +1042,8 @@ describe('color vision swaps', () => {
     'protanopia tango-dark fitted': 'blue brightGreen',
     'deuteranopia classic-vivid fitted': 'brightGreen',
     'protanopia classic-vivid fitted': 'brightGreen',
-    'deuteranopia high-contrast fitted': 'brightGreen',
     'deuteranopia high-contrast published': 'brightGreen',
-    'protanopia high-contrast fitted': 'red blue brightGreen',
-    'protanopia high-contrast published': 'red brightGreen',
+    'protanopia high-contrast published': 'brightGreen brightBlue',
     'deuteranopia everforest-dark fitted': 'red',
     'tritanopia everforest-dark fitted': 'brightBlue',
     'deuteranopia green-screen fitted': 'blue',
@@ -1367,14 +1369,10 @@ describe('color vision swaps', () => {
       'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 14.6 of 18.0. T2 brightRed Lc, T6 red pair dE, T7 red/brightRed dL, brightGreen chroma, channel brightGreen/brightCyan, channel yellow/brightGreen, least brightGreen/brightCyan, least yellow/brightGreen, text brightGreen/foreground',
     'protanopia classic-vivid fitted':
       'move brightGreen 0.0 of 6.0, part green/yellow 17.4 of 18.0. T2 green Lc, T6 yellow bright step dL, brightGreen chroma, channel green/brightBlue, channel green/brightMagenta, channel yellow/brightCyan, text brightGreen/foreground, text yellow/brightWhite, yellow chroma',
-    'deuteranopia high-contrast fitted':
-      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 14.0 of 18.0. T2 brightRed Lc, brightGreen chroma, brightRed hue window, channel brightGreen/brightCyan, channel brightGreen/brightYellow, channel cyan/brightGreen, least cyan/brightGreen, text brightGreen/foreground, text brightGreen/white',
     'deuteranopia high-contrast published':
-      'move brightGreen 0.0 of 6.0, channel green/brightMagenta 5.5 of 6.0. T2 brightMagenta Lc, T6 magenta bright step dL, T6 magenta pair dE, brightGreen chroma, channel brightBlue/brightMagenta, channel green/cyan, green chroma, least brightBlue/brightMagenta, least brightGreen/brightCyan, least cyan/brightGreen, text brightGreen/brightWhite, text brightGreen/foreground, text green/white',
-    'protanopia high-contrast fitted':
-      'move brightGreen 0.0 of 6.0, channel brightBlue/brightMagenta 5.2 of 6.0. T2 brightMagenta Lc, T6 blue pair dE, T6 magenta pair dE, brightGreen chroma, channel green/brightBlue, least cyan/brightGreen, least green/brightBlue, text brightGreen/foreground, text brightGreen/white',
+      'move brightGreen 0.0 of 6.0, part brightRed/brightGreen 17.2 of 18.0. T2 brightRed Lc, T6 red pair dE, T7 red/brightRed dL, brightGreen chroma, brightRed hue window, channel brightGreen/brightCyan, channel red/brightRed, least brightGreen/brightCyan, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
     'protanopia high-contrast published':
-      'move brightGreen 0.0 of 6.0, channel green/brightBlue 6.0 of 6.0. T2 brightBlue Lc, T6 blue pair dE, brightGreen chroma, channel brightBlue/brightMagenta, text brightGreen/white, text green/white',
+      'move brightGreen 0.0 of 6.0. brightGreen chroma, least cyan/brightGreen, text brightGreen/brightWhite, text brightGreen/foreground, text brightGreen/white',
     'protanopia everforest-dark fitted':
       'channel yellow/brightRed 4.5 of 6.0. T2 brightRed Lc, T2 yellow Lc, T6 yellow pair dE, brightRed hue window, channel cyan/brightRed, channel yellow/cyan, kept red/yellow, least cyan/brightRed, text brightRed/white, text yellow/white',
     'tritanopia everforest-dark fitted':
@@ -1518,6 +1516,7 @@ describe('window status colors for a color vision', () => {
     'tokyo-night': 'danger/warn 12.1 to 16.4',
     'rose-pine': 'danger/warn 16.9 to 20.3',
     'solarized-light': 'danger/warn 15.9 to 19.0',
+    'high-contrast': 'danger/warn 13.3 to 14.6',
     'melange-light': 'danger/warn 8.6 to 26.3',
     'harbor-dark': 'danger/warn 3.8 to 12.7',
   };
@@ -1692,9 +1691,14 @@ describe('window status colors for a color vision', () => {
   // Each rule the window leaves short for each vision, how far it gets of
   // how far it needs, and what stops it going further: a firmer rule, or
   // one as firm, that a step in lightness or hue breaks. Where nothing
-  // stops it the search missed the step.
+  // stops it the search missed the step. High Contrast holds its status
+  // colors at 7:1 on every ground, and a blue that reads 7:1 on its black
+  // sits near its sky blue accent.
   const WINDOW_SHORT: Record<string, string> = {
+    'deuteranopia high-contrast': 'accent/success 8.2 of 12.0. success/secondary',
+    'protanopia high-contrast': 'accent/success 5.0 of 12.0. missed, success hue window',
     'protanopia rose-pine': 'success move 6.6 of 10.0. success hue window, success/secondary',
+    'tritanopia high-contrast': 'danger/warn part 14.6 of 15.6. missed, warn/secondary',
   };
 
   it('keeps every floor and target of the window, or names the rule short and what stops it', () => {
@@ -1758,8 +1762,11 @@ describe('window status colors for a color vision', () => {
   // its Typical status colors, and the rule takes the hue that stands
   // farthest, its Typical pick. A pinned accent stays as the theme drew it, and no status
   // color comes nearer to it than the Typical one stands, up to
-  // ACCENT_APART.
+  // ACCENT_APART, except where High Contrast holds success at 7:1 and
+  // the blue it turns to sits near its sky blue accent.
   const ACCENT_SHORT: Record<string, string> = {
+    'deuteranopia high-contrast accent from success': '8.2',
+    'protanopia high-contrast accent from success': '5.0',
     'tritanopia one-half-dark accent from danger': '11.1',
   };
 
@@ -1781,7 +1788,8 @@ describe('window status colors for a color vision', () => {
               deltaEOk(hex(t.accent), hex(t[key])),
               sees(t.accent, t[key], vision),
             );
-            expect(sees(v.accent, v[key], vision), at).toBeGreaterThanOrEqual(floor - 1e-9);
+            const away = sees(v.accent, v[key], vision);
+            if (away < floor - 1e-9) report[at] = away.toFixed(1);
           }
         }
       }

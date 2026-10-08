@@ -784,61 +784,63 @@ const tangoDark: AppTheme = {
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
-// Re-thought from the original WCAG-AA stab: an off-black ground (so
-// it isn't a flat black void) and pure white text. Its yellow cursor
-// sits too near the warn tone, so the window rule takes its magenta as
-// the accent.
+// White on an off black ground, rebuilt so every text color reads 7:1
+// or better (Board 14). The chrome is pinned, not derived, so the text
+// tones, the status words and the accent hold their ratios on every
+// ground, and the lines and field edges read 3:1. Black plays as
+// #9a9a9a so the game's black text still shows. Fit game colors keeps
+// out, since the palette already reads and the fit would lower body
+// text.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. White text on near black, magenta accent.',
+  description: 'White on black, every text color 7:1 or better.',
   source: 'Vosh',
   author: 'James Wright',
   license: 'GPL-3.0',
   xterm: {
-    // Slight off-black instead of pure #000000. xterm.js can't be
-    // told to override the 256-color cube; ANSI 256 codes like 022
-    // (rgb 0,95,0) emit at their standard cube position, which is
-    // invisible on pure black. A small lift means dark cube entries
-    // are still readable while contrast stays high.
-    background: '#0d0d0d',
+    background: '#0a0a0a',
     foreground: '#ffffff',
-    cursor: '#ffff00',
+    cursor: '#5cc8ff',
     cursorAccent: '#000000',
-    selectionBackground: '#666600',
+    selectionBackground: '#0b4f8a',
     selectionForeground: '#ffffff',
-    black: '#000000',
-    red: '#ff5555',
-    green: '#55ff55',
-    yellow: '#ffff55',
-    blue: '#55aaff',
-    magenta: '#ff55ff',
-    cyan: '#55ffff',
-    white: '#cccccc',
-    brightBlack: '#888888',
-    brightRed: '#ff8888',
-    brightGreen: '#88ff88',
-    brightYellow: '#ffff88',
-    brightBlue: '#88bbff',
-    brightMagenta: '#ff88ff',
-    brightCyan: '#88ffff',
+    black: '#9a9a9a',
+    red: '#ff7a7a',
+    green: '#5cf25c',
+    yellow: '#ffe94d',
+    blue: '#7fb2ff',
+    magenta: '#ff8aff',
+    cyan: '#5cf2f2',
+    white: '#d9d9d9',
+    brightBlack: '#b8b8b8',
+    brightRed: '#ffa3a3',
+    brightGreen: '#99ff99',
+    brightYellow: '#ffff99',
+    brightBlue: '#a8cbff',
+    brightMagenta: '#ffb3ff',
+    brightCyan: '#a3ffff',
     brightWhite: '#ffffff',
   },
-  // Bright white has no room above body text, so the fit lowers body
-  // text to #e4e4e4 in play (Q19).
-  fitted: {
-    foreground: '#e4e4e4',
-    black: '#242424',
-    red: '#fb5252',
-    green: '#1fdc29',
-    yellow: '#f4f447',
-    cyan: '#44f3f3',
-    brightBlack: '#969696',
-    brightRed: '#ff9291',
-    brightYellow: '#feffb5',
-    brightBlue: '#97c3ff',
-    brightMagenta: '#ff8dff',
-    brightCyan: '#b9fffe',
+  fitGameColors: false,
+  chrome: {
+    raised: '#121212',
+    text: '#ffffff',
+    secondary: '#d6d6d6',
+    tertiary: '#b0b0b0',
+    title: '#d6d6d6',
+    accent: '#5cc8ff',
+    onAccent: '#000000',
+    danger: '#ff9a90',
+    dangerText: '#ff9a90',
+    warn: '#ffd75f',
+    warnText: '#ffd75f',
+    success: '#7cf29a',
+    sep: '#8a8a8a',
+    edge: '#8a8a8a',
+    keyRing: '#8a8a8a',
+    selection: '#0b4f8a',
+    selectionText: '#ffffff',
   },
 };
 
@@ -1868,19 +1870,13 @@ const VISION_FITS: Readonly<Record<string, Readonly<Record<OtherVision, VisionRo
   },
   'high-contrast': {
     deuteranopia: {
-      fitted:
-        '#e4e4e4 #242424 #ed6300 #03bdff #f4f447 #888bf2 #f145f1 #44f3f3 . #969696 #f29e58 #9cff9a #feffb5 #c9aefb #ff8dff #b9fffe .',
-      published: '. . #d87900 #94d5ff . #a290f8 . . . . #f98c62 #b8ffb6 . #a6acfa #fb85fc . .',
+      published: '. . #ec763b #1abcff . #8d8de2 . #2acfcf . . #f09f58 #beffbd . #bcc2ff . . .',
     },
     protanopia: {
-      fitted:
-        '#e4e4e4 #242424 #fb5252 #83c9ff #f4f447 #53a8fd #fa4ffa #44f3f3 . #969696 #fb996c . #feffb5 #adaefc #f988f9 #b9fffe .',
-      published: '. . . #85c9ff . #9b97ff #f449f5 . . . #fb905e . . #b6adfc #fb84fb . .',
+      published: '. . #f07a3f #78b4ff . #988be0 #f984f9 . . . #ffa278 . . #afcfff #ffb8ff . .',
     },
     tritanopia: {
-      fitted:
-        '#e4e4e4 #242424 #fb5252 #1fdc29 #f4f447 #c878ce #ff63b1 #44f3f3 . #969696 #ff9291 . #feffb5 #cfa1f0 #ffb2d7 #b9fffe .',
-      published: '. . . . . #ce84df #ff63b1 . . . . . . #ce9fed #ffafcf . .',
+      published: '. . #f57172 . . #c381c7 #ff8cc1 . . . #f69a9b . . #cda0ef #ffb8df . .',
     },
   },
   'everforest-dark': {

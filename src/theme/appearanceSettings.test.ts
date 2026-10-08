@@ -355,9 +355,10 @@ describe('themeCaption', () => {
     expect(themeCaption(customToAppTheme(custom('blank')))).toBe('');
   });
 
+  // A contrast ratio like 7:1 is no colon in a sentence.
   it('keeps every built in caption free of colons, semicolons and dashes', () => {
     for (const theme of BUILTIN_THEMES) {
-      const caption = themeCaption(theme);
+      const caption = themeCaption(theme).replace(/\d+:\d+/g, 'ratio');
       expect(caption, theme.id).not.toMatch(/[:;\u2010-\u2015-]/);
       expect(caption, theme.id).toMatch(/\.$/);
     }

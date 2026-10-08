@@ -17,7 +17,7 @@
     { "theme": "solarized-light", "background": "#fdf6e3" },
     { "theme": "tango-dark", "background": "#2e3436" },
     { "theme": "classic-vivid", "background": "#0a0a0a" },
-    { "theme": "high-contrast", "background": "#0d0d0d" },
+    { "theme": "high-contrast", "background": "#0a0a0a" },
     { "theme": "everforest-dark", "background": "#2d353b" },
     { "theme": "green-screen", "background": "#0a0e0b" },
     { "theme": "srcery", "background": "#121110" },
