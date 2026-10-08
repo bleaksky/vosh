@@ -66,14 +66,14 @@ Each row reads on two lines. The first starts with a mark that says where the se
 - Click a row to bring its session to the front. The terminal, the command line, the title band and the panes show that session at once.
 - Press `Cmd+1` to `Cmd+9` to bring the first nine rows to the front, or `Cmd+Shift+]` and `Cmd+Shift+[` to step to the next row and the one before, round from the last to the first. Hold `Cmd` a moment and each row shows its key. On macOS the Session menu steps too, with `Next session` and `Previous session`.
 - The sessions behind keep playing. Their triggers, timers and Lua run as usual, and only the drawing waits until you look.
-- Click `Hide sessions` at the top right of the sidebar to fold it away in this window. It stays folded when you open another session. Click `Show sessions` at the left of the title band to bring it back, just after the window buttons on macOS. The button shows only while the window has room for the sidebar. `Show sessions` in the `Cmd+K` palette does the same, and on macOS so does `Show sessions` in the View menu.
+- Click the sidebar button at the top left of the window, just after the window buttons on macOS, to hide the sidebar in this window. Click it again to bring the sidebar back. The button never moves, and it reads brighter while the sidebar shows. The sidebar stays hidden when you open another session. `Ctrl+Cmd+S` does the same on macOS and `Ctrl+Shift+S` on Windows and Linux. So do `Hide sessions` and `Show sessions` in the `Cmd+K` palette, and on macOS in the View menu.
 - Right click a row for its menu, with `Rename session…`, `Edit connection…`, `Disconnect` while the session is connected, and `Close session`. Each acts on that row's session. `Rename session…` and `Edit connection…` bring it to the front first.
 
 `Sessions` heads the list with how many are open, such as `Sessions 3`. More rows than fit scroll under it, and it draws a thin line once a row has passed beneath it. Drag a row up or down to move it. The other rows make room, and an accent line marks where it lands. `Cmd+1` to `Cmd+9` follow the new order, and so does your next launch.
 
 Drag the line at the sidebar's right edge to make it wider or narrower, from 180 to 320 pixels, and double click the line to go back to 220. Vosh keeps the width for your next launch.
 
-When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. While the sidebar is folded, in a narrow window or after `Hide sessions`, the session button's menu lists every session at its top under `Sessions`. Each one reads the same two lines as its row. The session in front has a check, a session where something waits shows its count, and any other one its key, such as `Cmd+2`. Click one to bring it to the front, or point at it and click the cross to close it. The session button adds up what waits in your other sessions, such as `2` after the arrow, and the number goes once you have looked at each.
+When the window is too narrow to hold the sidebar, a terminal 320 pixels wide and the panel, the panel shrinks first, down to its narrowest, and then the sidebar folds away. Widen the window and it comes back. Until then the sidebar button slides the sidebar in over the terminal. Pick a row, click the button again or press `Escape` and it slides away, and the caret goes back to the command line. While the sidebar is folded, in a narrow window or after you hide it, the session button's menu lists every session at its top under `Sessions`. Each one reads the same two lines as its row. The session in front has a check, a session where something waits shows its count, and any other one its key, such as `Cmd+2`. Click one to bring it to the front, or point at it and click the cross to close it. The session button adds up what waits in your other sessions, such as `2` after the arrow, and the number goes once you have looked at each.
 
 To open a session, press `Cmd+T`, choose `New session…` from the session button, the `Cmd+K` palette or the Session menu on macOS, or click `New session`, the plus at the top of the sidebar. Vosh adds a row that reads `New session`, brings it to the front and opens its form under the title.
 
@@ -1067,7 +1067,7 @@ An unknown command points you at `#help`. Errors echo wrapped in square brackets
 
 ### 9.2 Keyboard shortcuts
 
-This is every built in key Vosh binds, grouped by where it works. On macOS the window shortcuts use `Cmd`, since `Ctrl` belongs to your macros there. Windows and Linux use `Ctrl`.
+This is every built in key Vosh binds, grouped by where it works. On macOS the window shortcuts use `Cmd`, since `Ctrl` belongs to your macros there. The one exception is `Ctrl+Cmd+S`, the key macOS gives a sidebar. Windows and Linux use `Ctrl`.
 
 Anywhere in the main window.
 
@@ -1088,6 +1088,7 @@ For your sessions, in the main window.
 - `Cmd+Shift+]` steps to the next session and `Cmd+Shift+[` to the one before, round from the last to the first. They use the bracket keys whatever your layout types on them.
 - `Cmd+W` closes the session in front, and asks first while it is connected. With one session it closes the window.
 - `Cmd+Shift+W` closes the window, and asks first while a session is connected.
+- `Ctrl+Cmd+S` hides or shows the sessions sidebar while two or more sessions are open. In a window too narrow for it, the sidebar slides in over the terminal. On Windows and Linux the key is `Ctrl+Shift+S`.
 
 A macro on one of these keys, or on one of the four Settings keys, keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
 
