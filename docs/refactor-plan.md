@@ -440,6 +440,21 @@ What stays outside it. The gmcp fixture note still names `docs/gmcp-spec.md`, wh
 
 Every gate passed on bef2c63a on the first run. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 4,158 tests passed and 174 skipped, cargo fmt, clippy, the workspace tests with 2,829 passed and 6 ignored, and clippy for vosh-app on x86_64-pc-windows-gnu. Nothing here needs an app check.
 
+Track FX item FX4, the six page files that grew past 800 lines after stage C, is built. Rule 7 of Part 1 caps a file near 800 lines. It is a91d1743 to 6f43488b on fix/audit-oct8 after the FX3 records, 18 commits before this record, each a pure move with no change in behavior. About 7,250 changed lines moved, and about 570 of them are tests that moved with their code or now import from the new file. No test was added or dropped.
+
+- `src/ipc/uiConfig.ts` went from 1,225 lines to 723. The vitals options and their events moved to `uiConfigVitals.ts` with their tests, and the listeners for one field to `uiConfigEvents.ts`. Neither imports `src/theme/theme.ts` (a91d1743, 4a9014cf).
+- `src/terminal/Terminal.tsx` went from 1,011 lines to 767. The pane theme helpers moved to `paneTheme.ts` and the selection and copy watch to `xterm/xtermSelection.ts`, which the setup effect calls in its old place. The live option effects moved to `useTerminalOptions.ts`, which runs them after the setup effect in the order they ran before, as the risks table asks (025f493d to 2c2b3b6c).
+- `src/settings/automation/TriggersEditor.tsx` went from 1,087 lines to 525. The preset change notes moved to `triggerChanged.tsx` and `TriggerChangeNotes.tsx`, and the Advanced and Pattern rows to `TriggerAdvanced.tsx` and `TriggerPatterns.tsx` (a5866623, 92078f03).
+- `src/prompt/PromptCard.tsx` went from 953 lines to 773. The body at rest moved to `promptRest.tsx` and the open steps to `useCardOpen.ts` (b844667c, ef2b75c5).
+- `src/writing/WritingCard.tsx` went from 1,263 lines to 792. Where the card sits and how it sizes moved to `useWritingFrame.ts`, the size grips to `WritingGrips.tsx`, a job's end to `writingJobEnd.ts` and the header menus to `writingMenus.ts`. The confirm moved to `WritingConfirm.tsx`, the foot's left and buttons to `WritingFoot.tsx`, and the card that asks you to log in first to `WritingNoCharacter.tsx` (eacced13 to 726e528c, 22aecc4a).
+- `src/shell/MainWindow.tsx` went from 952 lines to 628. The card requests moved to `useCardRequests.ts`, the click to type focus paths to `useWindowFocus.ts`, the tones, toasts and notices to `useWindowNotices.ts`, the terminal area to `terminalArea.tsx` and what the palette reaches to `paletteDeps.ts` (92c62a5b to 33d5859f). It still sits 228 lines above the 400 that 2.5 aims for.
+
+docs/architecture.md names every new file in its row, says the setup effect calls `xtermSelection.ts` in its fixed place and `useTerminalOptions.ts` runs after it, and says what each config file keeps (6f43488b). The goldens, digests, wire fixtures, HELP.md, the help content and CHANGES.md are unchanged, and nothing under fixtures, src-tauri or crates changed. Each chunk was shot in the headless shell against a build from 9776674, and the writing card shots, the no character card included, came out byte for byte the same.
+
+Where it departs, for you to check. MainWindow is under 800 but not near 400. FX4 asked for pure moves under 800, so a further cut toward 400 waits for an item of its own.
+
+Every gate passed on 6f43488b on the first run. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 4,158 tests passed and 174 skipped in 330 files, knip, the CSS usage check, cargo fmt, clippy, the workspace tests with 2,829 passed and 6 ignored, and clippy for vosh-app on x86_64-pc-windows-gnu. The counts match the FX3 run. Nothing here needs an app check beyond a look at the writing card, the prompt card and the terminal as you use them.
+
 ## Decisions taken
 
 You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day and D19, which changed on October 2.
