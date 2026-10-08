@@ -72,6 +72,18 @@ describe('From and To', () => {
     expect(withFrom(range, s, 'later')).toBeNull();
   });
 
+  it('keeps the line you ended on when From moves before it', () => {
+    const s = log(at(21, 2), at(21, 16));
+    const range = { log: 7, fromMs: at(21, 14), toMs: at(21, 15, 59) + 999, toId: 119 };
+    expect(withFrom(range, s, '21:10')).toEqual({ ...range, fromMs: at(21, 10) });
+    // From past the line you ended on moves To and lets the line go.
+    expect(withFrom(range, s, '21:16')).toEqual({
+      log: 7,
+      fromMs: at(21, 16),
+      toMs: at(21, 16, 59) + 999,
+    });
+  });
+
   it('ends To on the last moment of its minute', () => {
     const range = { log: 7, fromMs: at(21, 14), toMs: at(21, 16, 59) + 999, toId: 140 };
     expect(withTo(range, '21:15')).toEqual({

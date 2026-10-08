@@ -72,12 +72,16 @@ export function clockAfter(after: number, hours: number, minutes: number): numbe
 
 /** The range with From set to the time you typed, or null when the text
  *  is no time. From starts on that minute of the log's own clock, and To
- *  moves with it when From passes it. */
+ *  moves with it when From passes it. A To that stays keeps the line you
+ *  Shift clicked to end on. */
 export function withFrom(range: SceneRange, log: LogSession, text: string): SceneRange | null {
   const clock = parseClock(text);
   if (!clock) return null;
   const fromMs = clockAfter(log.started_at_ms, clock.hours, clock.minutes);
   const toMs = Math.max(range.toMs, fromMs + MINUTE_MS - 1);
+  if (toMs === range.toMs && range.toId != null) {
+    return { log: range.log, fromMs, toMs, toId: range.toId };
+  }
   return { log: range.log, fromMs, toMs };
 }
 
