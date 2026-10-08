@@ -56,6 +56,10 @@ describe('the Settings sidebar', () => {
     ]);
   });
 
+  it('is a landmark named Sidebar', () => {
+    expect(draw('general')).toMatch(/^<aside class="st-sidebar" aria-label="Sidebar">/);
+  });
+
   it('names the search shortcut apart, with its keycaps out of the name', () => {
     const html = draw('general');
     expect(html).toMatch(/role="combobox"[^>]*aria-keyshortcuts="Meta\+F"/);

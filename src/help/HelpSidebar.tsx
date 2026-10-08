@@ -88,7 +88,7 @@ export function HelpSidebar({
   };
 
   return (
-    <aside className="st-sidebar">
+    <aside className="st-sidebar" aria-label="Sidebar">
       <div className="st-drag" data-tauri-drag-region="" />
       <div className="st-search">
         <span className="st-search-icon" aria-hidden="true">

@@ -61,6 +61,10 @@ describe('the help sidebar', () => {
     expect(draw('zzyzx')).toContain('No help matches.');
   });
 
+  it('is a landmark named Sidebar', () => {
+    expect(draw('')).toMatch(/^<aside class="st-sidebar" aria-label="Sidebar">/);
+  });
+
   it('gives every section an icon', () => {
     for (const section of HELP_SECTIONS) expect(HELP_SECTION_ICONS[section], section).toBeDefined();
   });
