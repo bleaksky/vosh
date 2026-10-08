@@ -51,18 +51,19 @@ describe('the Get started notice', () => {
     expect(renderToStaticMarkup(<CornerNotices />)).not.toContain('Get started</span>');
   });
 
-  it('sits under a preset fix and over the update notice', async () => {
+  it('sits over a preset fix', async () => {
     folded(['connect']);
     fix.showPresetFix({
       told: [{ preset: 'disarm_buff_fade', trigger: 'disarm.secondary', row: 'send' }],
       removed: [],
     });
     const html = renderToStaticMarkup(<CornerNotices />);
-    expect(html.indexOf('Get started</span>')).toBeGreaterThan(html.indexOf('ov-update is-warn'));
+    expect(html.indexOf('Get started</span>')).toBeGreaterThan(0);
+    expect(html.indexOf('Get started</span>')).toBeLessThan(html.indexOf('ov-update is-warn'));
     const source = (await import('./CornerNotices?raw')).default;
     const order = [
-      'Notice: PresetFixNotice',
       'Notice: GetStartedNotice',
+      'Notice: PresetFixNotice',
       'Notice: UpdateNotice',
     ].map((s) => source.indexOf(s));
     expect(order).toEqual([...order].sort((a, b) => a - b));

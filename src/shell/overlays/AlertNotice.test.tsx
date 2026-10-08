@@ -116,8 +116,11 @@ describe('the alert notice', () => {
     expect(html).not.toContain('ov-update-meta');
   });
 
-  it('sits under the reconnect notice and over a preset fix', async () => {
+  it('sits under the reconnect notice and over Get started and a preset fix', async () => {
     await seed();
+    const getStarted = await import('../getStarted/getStartedStore');
+    getStarted.openList();
+    getStarted.fold();
     const { showPresetFix } = await import('../../stores/presetFixStore');
     showPresetFix({
       told: [{ preset: 'disarm_buff_fade', trigger: 'disarm.secondary', row: 'send' }],
@@ -125,9 +128,12 @@ describe('the alert notice', () => {
     });
     const { CornerNotices } = await import('./CornerNotices');
     const html = renderToStaticMarkup(<CornerNotices reconnect={<p>reconnect</p>} />);
-    const order = ['<p>reconnect</p>', 'Tell from Maren', 'ov-update is-warn'].map((s) =>
-      html.indexOf(s),
-    );
+    const order = [
+      '<p>reconnect</p>',
+      'Tell from Maren',
+      'Get started</span>',
+      'ov-update is-warn',
+    ].map((s) => html.indexOf(s));
     expect(order[0]).toBeGreaterThan(0);
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
