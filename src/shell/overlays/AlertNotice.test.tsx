@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Board 5 of the Sessions review (Q10): Orla's session (1) is selected,
 // a tell reaches Tolliver's (2) behind it, and the corner shows the
-// alert on the update notice recipe with the accent dot and Show.
+// alert on the update notice recipe with the accent dot, Close and Show.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();
@@ -52,7 +52,9 @@ const row = (id: number, character: string) => ({
 async function seed(label: string | null = 'Tolliver') {
   const { startSessionsStore } = await import('../../stores/session/sessionsStore');
   const { startAlertNoticeStore } = await import('../../stores/session/alertNoticeStore');
+  const { startSessionRowStore } = await import('../../stores/session/sessionRowStore');
   startSessionsStore();
+  startSessionRowStore();
   startAlertNoticeStore();
   await settle();
   fire('vosh://sessions-changed', [row(1, 'Orla'), row(2, 'Tolliver')]);
@@ -98,14 +100,17 @@ beforeEach(() => {
 });
 
 describe('the alert notice', () => {
-  it('names the alert and its session with Show alone, in the accent', async () => {
+  it('names the alert and its session with Close and then Show, in the accent', async () => {
     await seed();
     const html = await corner();
     expect(html).toContain('<div class="ov-update" role="status" aria-live="polite">');
     expect(html).toContain('<span class="ov-update-msg">Tell from Maren</span>');
     expect(html).toContain('<span class="ov-update-meta">to Tolliver</span>');
-    expect(html.match(/<button/g)).toHaveLength(1);
-    expect(html).toMatch(/<button type="button" class="ov-button">Show<\/button>/);
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html).toContain(
+      '<span class="ov-update-actions"><button type="button" class="ov-button">Close</button>' +
+        '<button type="button" class="ov-button">Show</button></span>',
+    );
     expect(html).not.toContain('is-primary');
   });
 
@@ -142,9 +147,29 @@ describe('the alert notice', () => {
     expect(await corner()).toBe('<div class="ov-corner"></div>');
   });
 
+  it('puts the notice away with Close and leaves the dot and count on the row', async () => {
+    await seed();
+    const rows = await import('../../stores/session/sessionRowStore');
+    const { getSessions } = await import('../../stores/session/sessionsStore');
+    const tolliver = () => {
+      const of = getSessions().find((r) => r.id === 2);
+      if (!of) throw new Error('no row for Tolliver');
+      return rows.rowLook(rows.getSessionRow(2), of, false);
+    };
+    expect(tolliver().count).toBe(1);
+    const [close] = await buttons();
+    close.props.onClick();
+    await settle();
+    expect(await corner()).toBe('<div class="ov-corner"></div>');
+    // Close selects nothing, and Tolliver's row still says a tell waits.
+    expect(calls.some((call) => (call as unknown[])[0] === 'session_select')).toBe(false);
+    expect(rows.getSessionRow(2).waiting).toEqual(['preset:alert_tells']);
+    expect(tolliver()).toMatchObject({ mark: 'live', count: 1 });
+  });
+
   it('selects the session behind with Show', async () => {
     await seed();
-    const [show] = await buttons();
+    const [, show] = await buttons();
     show.props.onClick();
     await settle();
     expect(calls).toContainEqual(['session_select', { session: 2 }]);
