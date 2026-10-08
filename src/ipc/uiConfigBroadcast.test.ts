@@ -135,6 +135,55 @@ describe('broadcastUiConfigChanges screen reader event', () => {
   });
 });
 
+describe('broadcastUiConfigChanges command line events', () => {
+  const LOOK = 'vosh://input-line-look-changed';
+  const COLORS = 'vosh://input-type-colors-changed';
+  const sends = (name: string) => vi.mocked(emit).mock.calls.filter(([event]) => event === name);
+
+  it('sends the whole look when one look field moves', async () => {
+    const base = normalizeUiConfig(raw());
+    const look = {
+      blink: true,
+      caretColor: null,
+      textColor: null,
+      background: 'theme',
+      backgroundColor: null,
+      size: 0,
+    };
+    for (const [moved, field] of [
+      [{ input_caret_blink: false }, { blink: false }],
+      [{ input_caret_color: '#c6a46a' }, { caretColor: '#c6a46a' }],
+      [{ input_line_color: '#d8dee9' }, { textColor: '#d8dee9' }],
+      [{ input_line_background: 'tint' as const }, { background: 'tint' }],
+      [{ input_line_background_color: '#1d1f21' }, { backgroundColor: '#1d1f21' }],
+      [{ input_line_size: 16 }, { size: 16 }],
+    ] as const) {
+      vi.mocked(emit).mockClear();
+      await broadcastUiConfigChanges({ ...base, ...moved }, base);
+      expect(sends(LOOK)).toEqual([[LOOK, { ...look, ...field }]]);
+      expect(sends(COLORS)).toEqual([]);
+    }
+  });
+
+  it('sends the switch and all four colors when one of them moves', async () => {
+    const base = normalizeUiConfig(raw());
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, input_type_chat_color: '#f0c674' }, base);
+    expect(sends(COLORS)).toEqual([
+      [COLORS, { on: false, alias: null, hash: null, chat: '#f0c674', unknown: null }],
+    ]);
+    expect(sends(LOOK)).toEqual([]);
+  });
+
+  it('stays quiet when nothing on the command line moved', async () => {
+    const base = normalizeUiConfig(raw({ input_type_colors: true, input_line_size: 18 }));
+    vi.mocked(emit).mockClear();
+    await broadcastUiConfigChanges({ ...base, font_size: 16 }, base);
+    expect(sends(LOOK)).toEqual([]);
+    expect(sends(COLORS)).toEqual([]);
+  });
+});
+
 describe('a replaced UI config', () => {
   const REPLACED = 'vosh://ui-config-replaced';
 

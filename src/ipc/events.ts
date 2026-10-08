@@ -117,6 +117,13 @@ export const INPUT_ECHO_MARK_CHANGED = 'vosh://input-echo-mark-changed';
 /** Carries Use the same mark in the command line, saved from Settings,
  *  to every window. */
 export const INPUT_LINE_MARK_CHANGED = 'vosh://input-line-mark-changed';
+/** Carries how the command line looks, its caret blink and color, its
+ *  text color, background and size, as one, saved from Settings, to
+ *  every window. */
+export const INPUT_LINE_LOOK_CHANGED = 'vosh://input-line-look-changed';
+/** Carries Color commands as you type and its four colors as one, saved
+ *  from Settings, to every window. */
+export const INPUT_TYPE_COLORS_CHANGED = 'vosh://input-type-colors-changed';
 export const PASTE_LINE_DELAY_CHANGED = 'vosh://paste-line-delay-changed';
 export const SPELLCHECK_PROMPT_CHANGED = 'vosh://spellcheck-prompt-changed';
 export const WRITING_OFFER_CHANGED = 'vosh://writing-offer-changed';

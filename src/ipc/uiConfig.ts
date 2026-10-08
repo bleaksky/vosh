@@ -35,7 +35,9 @@ import {
   INPUT_CURSOR_STYLE_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_LOOK_CHANGED,
   INPUT_LINE_MARK_CHANGED,
+  INPUT_TYPE_COLORS_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -296,6 +298,111 @@ export function normalizeEchoMarkOptions(raw: unknown): EchoMarkOptions {
 
 /** The echo mark options of a profile that never changed them. */
 export const DEFAULT_ECHO_MARK_OPTIONS: EchoMarkOptions = normalizeEchoMarkOptions({});
+
+/** How the command line looks, sent to every window as one. */
+export interface LineLook {
+  /** The caret blinks. Reduce motion still holds it steady. */
+  blink: boolean;
+  /** Hex color of the caret, or null for the theme accent. */
+  caretColor: string | null;
+  /** Hex color of what you type, or null for the theme text. */
+  textColor: string | null;
+  background: InputLineBackground;
+  /** Your own background color, kept while another background is
+   *  picked. */
+  backgroundColor: string | null;
+  /** Size in px of what you type, 0 for your terminal size. */
+  size: number;
+}
+
+/** The command line look as UiConfig keeps it. */
+export function lineLookOf(
+  config: Pick<
+    UiConfig,
+    | 'input_caret_blink'
+    | 'input_caret_color'
+    | 'input_line_color'
+    | 'input_line_background'
+    | 'input_line_background_color'
+    | 'input_line_size'
+  >,
+): LineLook {
+  return {
+    blink: config.input_caret_blink,
+    caretColor: config.input_caret_color,
+    textColor: config.input_line_color,
+    background: config.input_line_background,
+    backgroundColor: config.input_line_background_color,
+    size: config.input_line_size,
+  };
+}
+
+/** Read a command line look off the bus, filling anything missing or
+ *  unknown with the defaults. */
+function normalizeLineLook(raw: unknown): LineLook {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    blink: o.blink !== false,
+    caretColor: optionalColor(o.caretColor),
+    textColor: optionalColor(o.textColor),
+    background: normalizeInputLineBackground(o.background),
+    backgroundColor: optionalColor(o.backgroundColor),
+    size: normalizeInputLineSize(o.size),
+  };
+}
+
+/** The command line look of a profile that never changed it. */
+export const DEFAULT_LINE_LOOK: LineLook = normalizeLineLook({});
+
+/** Color commands as you type and its four colors, sent to every window
+ *  as one. Each color is null for the theme's own. */
+export interface TypeColors {
+  on: boolean;
+  /** A line that starts with an alias, the theme's cyan by default. */
+  alias: string | null;
+  /** A line that starts with a Vosh # command, the theme's magenta. */
+  hash: string | null;
+  /** A chat line, the whole line, the theme's yellow. */
+  chat: string | null;
+  /** A # command Vosh does not know, the theme's danger color. */
+  unknown: string | null;
+}
+
+/** The coloring as you type as UiConfig keeps it. */
+export function typeColorsOf(
+  config: Pick<
+    UiConfig,
+    | 'input_type_colors'
+    | 'input_type_alias_color'
+    | 'input_type_hash_color'
+    | 'input_type_chat_color'
+    | 'input_type_unknown_color'
+  >,
+): TypeColors {
+  return {
+    on: config.input_type_colors,
+    alias: config.input_type_alias_color,
+    hash: config.input_type_hash_color,
+    chat: config.input_type_chat_color,
+    unknown: config.input_type_unknown_color,
+  };
+}
+
+/** Read the coloring as you type off the bus, off and the theme colors
+ *  for anything missing. */
+function normalizeTypeColors(raw: unknown): TypeColors {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    on: o.on === true,
+    alias: optionalColor(o.alias),
+    hash: optionalColor(o.hash),
+    chat: optionalColor(o.chat),
+    unknown: optionalColor(o.unknown),
+  };
+}
+
+/** The coloring as you type of a profile that never changed it. */
+export const DEFAULT_TYPE_COLORS: TypeColors = normalizeTypeColors({});
 
 /** Where your vitals show, under the panel's panes or in the status
  *  line. */
@@ -1365,6 +1472,21 @@ export function subscribeInputEchoMarkChanged(
 /** Hear Wait between pasted lines change, in ms. */
 export function subscribePasteLineDelayChanged(cb: (ms: number) => void): Promise<UnlistenFn> {
   return listen<number>(PASTE_LINE_DELAY_CHANGED, (event) => cb(event.payload));
+}
+
+/** Hear Caret blinks, Caret color, Text color, Background or Size of
+ *  the command line change. */
+export function subscribeInputLineLookChanged(cb: (look: LineLook) => void): Promise<UnlistenFn> {
+  return listen<unknown>(INPUT_LINE_LOOK_CHANGED, (event) => cb(normalizeLineLook(event.payload)));
+}
+
+/** Hear Color commands as you type or one of its colors change. */
+export function subscribeInputTypeColorsChanged(
+  cb: (colors: TypeColors) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(INPUT_TYPE_COLORS_CHANGED, (event) =>
+    cb(normalizeTypeColors(event.payload)),
+  );
 }
 
 /** Hear Use the same mark in the command line change. */

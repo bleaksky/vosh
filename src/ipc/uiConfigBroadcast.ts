@@ -23,7 +23,9 @@ import {
   INPUT_CURSOR_STYLE_CHANGED,
   INPUT_ECHO_COLOR_CHANGED,
   INPUT_ECHO_MARK_CHANGED,
+  INPUT_LINE_LOOK_CHANGED,
   INPUT_LINE_MARK_CHANGED,
+  INPUT_TYPE_COLORS_CHANGED,
   KEEP_LAST_CHANGED,
   PASTE_LINE_DELAY_CHANGED,
   READABLE_HIGHLIGHTS_CHANGED,
@@ -44,7 +46,9 @@ import { screenReaderOf } from './screenReader';
 import {
   echoMarkOptionsOf,
   fetchUiConfig,
+  lineLookOf,
   subscribeUiConfigReplaced,
+  typeColorsOf,
   vitalsOptionsOf,
   vitalsTextOf,
   type FontChange,
@@ -166,6 +170,20 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
     deepEqual,
   );
   await emitChanged(INPUT_LINE_MARK_CHANGED, config.input_line_mark, before?.input_line_mark);
+  // The look and the coloring each go out as one, so the command line
+  // never draws an old caret color over a new background.
+  await emitChanged(
+    INPUT_LINE_LOOK_CHANGED,
+    lineLookOf(config),
+    before ? lineLookOf(before) : undefined,
+    deepEqual,
+  );
+  await emitChanged(
+    INPUT_TYPE_COLORS_CHANGED,
+    typeColorsOf(config),
+    before ? typeColorsOf(before) : undefined,
+    deepEqual,
+  );
   await emitChanged(
     PASTE_LINE_DELAY_CHANGED,
     config.paste_line_delay_ms,

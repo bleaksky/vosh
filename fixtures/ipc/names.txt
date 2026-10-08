@@ -232,7 +232,9 @@ event vosh://help-open app heard
 event vosh://input-cursor-style-changed page heard
 event vosh://input-echo-color-changed page heard
 event vosh://input-echo-mark-changed page heard
+event vosh://input-line-look-changed page heard
 event vosh://input-line-mark-changed page heard
+event vosh://input-type-colors-changed page heard
 event vosh://keep-last-changed page heard
 event vosh://loadouts-changed app heard
 event vosh://macro-groups-changed app heard
