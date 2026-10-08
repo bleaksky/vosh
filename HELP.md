@@ -311,6 +311,7 @@ Items with a shortcut show it on the right, and `Settings` shows an arrow. The a
 - Put a count from 1 to 99 before a direction to repeat it. Spaces between parts are fine.
 - The walk stops when a move fails, a fight starts, you stop standing, or you send the game a command. Press `Esc` or type `#walk stop` to stop it yourself. Other `#` commands leave it going.
 - An alias or a macro can run `#walk`, so `#alias bank #walk 3n2e` walks you there by name. Commands after `#walk` in the same alias wait until you arrive, and drop if the walk stops early.
+- Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.
 
 | You type     | Vosh sends                                                        |
 | ------------ | ----------------------------------------------------------------- |

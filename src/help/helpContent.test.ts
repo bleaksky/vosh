@@ -1124,8 +1124,10 @@ describe('the help on #walk', () => {
     ]);
   });
 
-  it('leaves click to walk out until the map offers it', () => {
-    expect(topic().body).not.toContain('Click a room');
+  it('teaches click to walk on the map', () => {
+    expect(topic().body).toContain(
+      '- Click a room on the map to walk to it. Vosh shows the steps as a `#walk` string first. A new click or `#walk` while you walk takes over once the step on its way lands.',
+    );
   });
 
   it('lists #walk with the slash commands, and Esc among the keys', () => {
