@@ -55,6 +55,16 @@ export interface ScrollbackSplit {
   clearQueuedSearch: () => void;
 }
 
+// Page back once more when a PageUp opened the split, after the history
+// pane sits just above the live rows. The load callback and the frame
+// poll both position the pane, and the poll comes last and positions it
+// from its bottom, so only the poll takes the page for good.
+function pageOnOpen(pending: { current: boolean }, history: TerminalHandle, take: boolean) {
+  if (!pending.current) return;
+  if (take) pending.current = false;
+  history.scrollPages(-1);
+}
+
 export function useScrollbackSplit({
   session,
   termRef,
@@ -99,6 +109,10 @@ export function useScrollbackSplit({
   // unreliable: that callback may fire before or after the live pane
   // refits, and the answer is different in each case.
   const preSplitLiveRowsRef = useRef(0);
+  // A PageUp that opened the split also pages, once the history pane
+  // sits at the live pane's top. The wheel, Mod+\ and find open it with
+  // no motion and leave this false.
+  const pendingPageRef = useRef(false);
   // A find match waiting for the history pane, by session.
   const pendingFindRef = useRef(
     new Map<number, { query: string; opts: FindOptions; direction: 'next' | 'previous' }>(),
@@ -165,6 +179,9 @@ export function useScrollbackSplit({
           const scrollBack = preSplitLiveRowsRef.current;
           h.scrollToBottom();
           if (scrollBack > 0) h.scrollLines(-scrollBack);
+          // This positions the pane from its bottom, after any load
+          // callback, so it takes the page for good.
+          pageOnOpen(pendingPageRef, h, true);
           setHistoryReady(true);
           repaintBurst();
           return;
@@ -178,7 +195,12 @@ export function useScrollbackSplit({
       }
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // The split closed or another session shows, so a page still
+      // waiting has nothing to land in.
+      pendingPageRef.current = false;
+    };
   }, [splitOpen, session, historyTermRef]);
 
   // Drain a queued search once the split has opened and the history
@@ -357,16 +379,17 @@ export function useScrollbackSplit({
     // history pane over the grid.
     if (nativeSurfaceEnabled()) return;
     // Split-scrollback gesture. The live pane (termRef) stays
-    // anchored to the tail. PageUp opens the split if closed;
-    // the history Terminal mounts on that state change and its
-    // onReady does the initial scroll, so we don't touch the
-    // ref here (it is null until the mount completes).
+    // anchored to the tail. PageUp opens the split if closed and
+    // pages too, so one press lands a page back. The history
+    // Terminal mounts on that state change and is null until then,
+    // so the page waits for its scrollback to land.
     if (pages < 0) {
       if (!splitOpen) {
         // Same pre-split row capture as the wheel path: without it
         // onScrollbackLoaded scrolls back zero rows and the history
         // pane opens showing a duplicate of the live tail.
         preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
+        pendingPageRef.current = true;
         setSplitOpen(true);
         return;
       }
@@ -412,8 +435,12 @@ export function useScrollbackSplit({
     // reveal immediately. The frame-polled effect above also
     // positions / reveals / repaints, so this is idempotent and
     // a no-op when the callback never fires.
+    const h = historyTermRef.current;
     const scrollBack = preSplitLiveRowsRef.current;
-    if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
+    if (h) {
+      if (scrollBack > 0) h.scrollLines(-scrollBack);
+      pageOnOpen(pendingPageRef, h, false);
+    }
     setHistoryReady(true);
   };
 
