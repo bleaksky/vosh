@@ -241,7 +241,8 @@ describe('searchSettingsRows', () => {
 
   it('finds the Layout and Vitals rows', () => {
     expect(labels('vitals')).toContain('Style');
-    expect(labels('one line')).toEqual(['Style']);
+    // Long bursts also reads one line, in its last one, and comes after.
+    expect(labels('one line')).toEqual(['Style', 'Long bursts']);
     expect(labels('gauges')).toEqual(['Style']);
     expect(labels('status line')).toContain('Show your vitals in');
     const style = searchSettingsRows('pips', mac)[0];
@@ -368,6 +369,20 @@ describe('searchSettingsRows', () => {
       section: 'motion',
       anchor: 'blink-text',
     });
+  });
+
+  it('finds the screen reader rows on Accessibility by what you call the reader', () => {
+    expect(labels('voiceover')).toEqual([
+      'Read new game lines',
+      'Read in the background',
+      'Read your prompt',
+      'Long bursts',
+    ]);
+    expect(labels('screen reader')).toHaveLength(4);
+    expect(
+      SETTINGS_ROWS.filter((r) => r.target.section === 'screen-reader').map((r) => r.target.anchor),
+    ).toEqual(['read-game-lines', 'read-in-background', 'read-your-prompt', 'long-bursts']);
+    expect(labels('prompt')).toContain('Read your prompt');
   });
 
   it('finds the writing card rows in their own Input section', () => {

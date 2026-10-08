@@ -588,6 +588,35 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'panes reset default',
     target: at('characters', undefined, 'layout'),
   },
+
+  // Screen reader, on top of Accessibility (board 13, Settings layout
+  // Q5). These rows came last, so they sit last and win no tie an
+  // older row won.
+  {
+    label: 'Read new game lines',
+    description: 'VoiceOver reads each line the game sends, after your gags and routes.',
+    keywords: 'screen reader voiceover narrator speech speak announce blind accessibility aria',
+    target: at('accessibility', 'screen-reader', 'read-game-lines'),
+  },
+  {
+    label: 'Read in the background',
+    description: 'Keep reading while you are in another app.',
+    keywords: 'screen reader voiceover speech unfocused other app window behind',
+    target: at('accessibility', 'screen-reader', 'read-in-background'),
+  },
+  {
+    label: 'Read your prompt',
+    description: 'Your prompt comes every pulse. Off reads it only when you press its key.',
+    keywords: 'screen reader voiceover speech prompt pulse shortcut key',
+    target: at('accessibility', 'screen-reader', 'read-your-prompt'),
+  },
+  {
+    label: 'Long bursts',
+    description:
+      'When more lines than this land at once, VoiceOver reads how many came and the last one.',
+    keywords: 'screen reader voiceover speech flood many lines count',
+    target: at('accessibility', 'screen-reader', 'long-bursts'),
+  },
 ];
 
 /** A stable key for a row, its target as a deep link string. */

@@ -1089,7 +1089,7 @@ describe('AccessibilityPage', () => {
     expect(off.checked).toBe(false);
   });
 
-  it('leads Accessibility with Color vision, Typical until you pick another', async () => {
+  it('leads Color and contrast with Color vision, Typical until you pick another', async () => {
     const visionRow = async (cfg: UiConfig, pick?: string) => {
       const container = doc.createElement('div');
       doc.body.appendChild(container);
@@ -1140,7 +1140,13 @@ describe('AccessibilityPage', () => {
     };
 
     const typical = await visionRow(config(), 'deuteranopia');
-    expect(typical.anchors.slice(0, 3)).toEqual(['color', 'color-vision', 'fit-game-colors']);
+    // Screen reader sits above it (board 13).
+    const color = typical.anchors.indexOf('color');
+    expect(typical.anchors.slice(color, color + 3)).toEqual([
+      'color',
+      'color-vision',
+      'fit-game-colors',
+    ]);
     expect(typical.label).toContain('Color vision');
     expect(typical.label).toContain(
       'Vosh swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do.',
