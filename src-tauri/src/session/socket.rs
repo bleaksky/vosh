@@ -14,6 +14,8 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
+use super::round_trip::Waits;
+
 /// Hard cap on a connect attempt. Bad hosts and silent firewalls otherwise
 /// hang the UI for the OS-level timeout (often minutes).
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -39,11 +41,9 @@ pub(crate) struct Stream {
     /// and those triggers, timers, the tick and Lua send. A telnet answer
     /// ends no line, so it never counts.
     last_line: Option<Instant>,
-    /// When the oldest line of yours the game has not answered yet left,
-    /// while the network still carries it. Any bytes from the game
-    /// answer it, and a line the game's machine acknowledged reached the
-    /// game, so a wait after that is the game's, not the link's.
-    unanswered: Option<Instant>,
+    /// How long the oldest line of yours the game has not answered has
+    /// waited, see [`Waits`].
+    waits: Waits,
 }
 
 enum Io {
@@ -56,7 +56,7 @@ impl Stream {
         Self {
             io,
             last_line: None,
-            unanswered: None,
+            waits: Waits::default(),
         }
     }
 
@@ -66,19 +66,14 @@ impl Stream {
             Io::Tls(s) => s.read(buf).await,
         };
         if matches!(read, Ok(n) if n > 0) {
-            self.unanswered = None;
+            self.waits.heard();
         }
         read
     }
 
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
         let line = buf.ends_with(b"\n");
-        // Every line before this one reached the game, so the wait
-        // starts over with it. Typing ahead while a skill lags you sends
-        // lines the game holds unanswered, and they never count.
-        if line && self.kernel().is_some_and(|k| !k.in_flight) {
-            self.unanswered = None;
-        }
+        let reached = line && self.kernel().is_some_and(|k| !k.in_flight);
         match &mut self.io {
             Io::Tcp(s) => AsyncWriteExt::write_all(s, buf).await?,
             Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
@@ -86,7 +81,7 @@ impl Stream {
         if line {
             let now = Instant::now();
             self.last_line = Some(now);
-            self.unanswered.get_or_insert(now);
+            self.waits.sent(now, reached);
         }
         Ok(())
     }
@@ -99,11 +94,7 @@ impl Stream {
     /// say. See [`super::round_trip`].
     pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Duration> {
         let kernel = self.kernel()?;
-        Some(super::round_trip::reading(
-            kernel,
-            &mut self.unanswered,
-            now,
-        ))
+        Some(self.waits.reading(kernel, now))
     }
 
     /// What the kernel says of the game socket, None where it does not.

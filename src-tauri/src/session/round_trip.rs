@@ -8,7 +8,7 @@
 //! game's machine has not acknowledged. Once it has them the game has
 //! your line, and The Forsaken Lands holds a line it read while a skill
 //! lags you (`ch->wait` in comm.c) and answers none until the lag ends,
-//! so typing ahead during a bash is no stall, see [`reading`]. Each reading goes to the status line on
+//! so typing ahead during a bash is no stall, see [`Waits`]. Each reading goes to the status line on
 //! `session://round-trip` and into the [`RoundTrip`] the connection
 //! keeps, which `#lag` reads.
 //!
@@ -38,22 +38,48 @@ const USUAL_OVER: Duration = Duration::from_secs(600);
 /// The stalls of a connection `#lag` lists, the newest.
 const KEPT_STALLS: usize = 20;
 
-/// The reading at `now` from what the kernel says of the socket and
-/// `unanswered`, when the oldest line the game has not answered left.
-/// Nothing in flight means the game's machine has every line, so the
-/// wait for its answer is the game's and starts over with your next
-/// line. Otherwise the wait counts when it is longer than the round
-/// trip.
-pub(crate) fn reading(
-    kernel: kernel::Reading,
-    unanswered: &mut Option<Instant>,
-    now: Instant,
-) -> Duration {
-    if !kernel.in_flight {
-        *unanswered = None;
+/// How long the oldest line of yours the game has not answered has
+/// waited. [`super::socket::Stream`] tells it each line you send and
+/// each read from the game, and asks it for the reading.
+#[derive(Debug, Default)]
+pub(crate) struct Waits {
+    /// When the oldest line left that the network may still carry, the
+    /// oldest since the kernel last showed nothing in flight.
+    link: Option<Instant>,
+}
+
+impl Waits {
+    /// A line of yours left at `now`. `reached` says the kernel showed
+    /// nothing in flight just before, so every earlier line reached the
+    /// game's machine and the wait starts over with this one. Typing
+    /// ahead while a skill lags you sends lines the game holds
+    /// unanswered, and they never count.
+    pub(crate) fn sent(&mut self, now: Instant, reached: bool) {
+        if reached {
+            self.link = None;
+        }
+        self.link.get_or_insert(now);
     }
-    let waited = unanswered.map_or(Duration::ZERO, |sent| now.duration_since(sent));
-    kernel.round_trip.max(waited)
+
+    /// The game sent something, so it answered every line before.
+    pub(crate) fn heard(&mut self) {
+        self.link = None;
+    }
+
+    /// The reading at `now` from what the kernel says of the socket.
+    /// Nothing in flight means the game's machine has every line, so
+    /// the wait for its answer is the game's and starts over with your
+    /// next line. Otherwise the wait counts when it is longer than the
+    /// round trip.
+    pub(crate) fn reading(&mut self, kernel: kernel::Reading, now: Instant) -> Duration {
+        if !kernel.in_flight {
+            self.link = None;
+        }
+        let waited = self
+            .link
+            .map_or(Duration::ZERO, |sent| now.duration_since(sent));
+        kernel.round_trip.max(waited)
+    }
 }
 
 /// What `session://round-trip` carries beside the session: the reading
@@ -237,18 +263,19 @@ mod tests {
 
         // The game's machine has not acknowledged the line, so the
         // network holds it and the wait is a stall.
-        let mut unanswered = Some(sent);
-        assert_eq!(reading(link(true), &mut unanswered, now), ms(1500));
-        assert_eq!(unanswered, Some(sent));
+        let mut waits = Waits::default();
+        waits.sent(sent, true);
+        assert_eq!(waits.reading(link(true), now), ms(1500));
+        assert_eq!(waits.link, Some(sent));
 
         // It has the line, and the game holds it while a skill lags you.
         // The reading is the link's, and the wait starts over.
-        assert_eq!(reading(link(false), &mut unanswered, now), ms(38));
-        assert_eq!(unanswered, None);
+        assert_eq!(waits.reading(link(false), now), ms(38));
+        assert_eq!(waits.link, None);
 
         // A wait shorter than the round trip reads the round trip.
-        let mut unanswered = Some(now - ms(10));
-        assert_eq!(reading(link(true), &mut unanswered, now), ms(38));
+        waits.sent(now - ms(10), true);
+        assert_eq!(waits.reading(link(true), now), ms(38));
     }
 
     /// A connection at 19:42 that took `readings`, one every two seconds
