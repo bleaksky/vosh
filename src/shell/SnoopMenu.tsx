@@ -1,5 +1,5 @@
 import type { SnoopTab } from '../ipc/snoop';
-import { shortcutLabel } from '../lib/shortcuts';
+import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from '../ui/MenuSurface';
 
 // The snoop split's more menu, board 02 of the Snoop review (SN2): the
@@ -59,10 +59,7 @@ export function SnoopMenu({ anchor, front, folded, onPick, onClose }: Props) {
       )}
       <MenuItem onSelect={pick('stop-all')}>Stop every snoop</MenuItem>
       <MenuSeparator />
-      <MenuItem
-        onSelect={pick('find')}
-        trailing={<kbd className="ov-menu-keys">{shortcutLabel('Mod+F')}</kbd>}
-      >
+      <MenuItem onSelect={pick('find')} keys={APP_SHORTCUTS.find}>
         Find
       </MenuItem>
       {folded !== undefined && (

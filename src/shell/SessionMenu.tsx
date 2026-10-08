@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { SessionRow } from '../ipc/session';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import type { SessionMenuRequest } from '../lib/appMenu';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { worldName } from '../lib/knownWorlds';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { returnToCommandLine } from '../panel/paneActions';
@@ -174,10 +174,7 @@ export function SessionMenu({
         </>
       )}
       {!live && (
-        <ShellMenuItem
-          shortcut={shortcutLabel(APP_SHORTCUTS.connect)}
-          onSelect={() => run(connection.connect)}
-        >
+        <ShellMenuItem shortcut={APP_SHORTCUTS.connect} onSelect={() => run(connection.connect)}>
           Connect to {worldName(target.host)}
         </ShellMenuItem>
       )}
@@ -188,10 +185,7 @@ export function SessionMenu({
       {/* Board 05 draws no line here while the list sits above, so
         five rows fit whole at 720 by 450. */}
       {!listSessions && <ShellMenuSeparator />}
-      <ShellMenuItem
-        shortcut={shortcutLabel(APP_SHORTCUTS['session-new'])}
-        onSelect={() => run(openNewSession)}
-      >
+      <ShellMenuItem shortcut={APP_SHORTCUTS['session-new']} onSelect={() => run(openNewSession)}>
         New session…
       </ShellMenuItem>
       {(live || redialing) && (
@@ -220,12 +214,17 @@ interface ItemProps {
  *  it, 44 high on the menu's recipe, with its close button beside it. */
 function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
   const look = rowLook(useSessionRow(row.id), row, current);
+  const keys = place <= 9 ? `Mod+${place}` : null;
   const end = current ? (
     <CheckIcon className="pane-menu-check" />
   ) : look.count > 0 ? (
     <WaitingCount count={look.count} />
   ) : (
-    place <= 9 && <kbd className="shell-menu-kbd">{shortcutLabel(`Mod+${place}`)}</kbd>
+    keys && (
+      <kbd className="shell-menu-kbd" aria-hidden="true">
+        {shortcutLabel(keys)}
+      </kbd>
+    )
   );
   return (
     <div className="shell-menu-session-slot">
@@ -234,6 +233,7 @@ function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: It
         role="menuitem"
         className="shell-menu-session"
         aria-current={current ? 'true' : undefined}
+        aria-keyshortcuts={keys ? ariaKeyshortcuts(keys) : undefined}
         onClick={onSelect}
       >
         <SessionRowBody row={row} rows={rows} mark={look.mark} end={end} />

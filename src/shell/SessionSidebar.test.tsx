@@ -286,7 +286,7 @@ describe('the sessions sidebar', () => {
     const numbered = buttons(draw(many, 1));
     numbered.slice(0, 9).forEach((button, i) => {
       expect(button).toContain(
-        `<span class="shell-sessions-end"><span class="shell-sessions-key">⌘${i + 1}</span></span>`,
+        `<span class="shell-sessions-end"><span class="shell-sessions-key" aria-hidden="true">⌘${i + 1}</span></span>`,
       );
     });
     // Orla's count gives way to her key, and her port stays.
@@ -294,13 +294,22 @@ describe('the sessions sidebar', () => {
     expect(numbered[1]).toContain('<span class="shell-sessions-port">1825</span>');
     // The tenth row has no key.
     expect(numbered[9]).toContain('<span class="shell-sessions-end"></span>');
+    // Held or not, the first nine rows name their keys for a screen
+    // reader, and the tenth names none.
+    for (const drawn of [quiet, numbered]) {
+      drawn.slice(0, 9).forEach((button, i) => {
+        expect(button).toContain(`aria-keyshortcuts="Meta+${i + 1}"`);
+      });
+      expect(drawn[9]).not.toContain('aria-keyshortcuts');
+    }
   });
 
   it('names the key with Ctrl on Windows and Linux', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' });
     mod.held = true;
     const [tolliver] = buttons(draw(rows, 1));
-    expect(tolliver).toContain('<span class="shell-sessions-key">Ctrl+1</span>');
+    expect(tolliver).toContain('<span class="shell-sessions-key" aria-hidden="true">Ctrl+1</span>');
+    expect(tolliver).toContain('aria-keyshortcuts="Control+1"');
   });
 });
 

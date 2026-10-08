@@ -3,7 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { ADD_PANE_MENU_EVENT, SESSION_MENU_EVENT, type SessionMenuRequest } from '../lib/appMenu';
-import { isMacPlatform, shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, isMacPlatform, shortcutLabel } from '../lib/shortcuts';
 import { paneKey, paneRef, type PaneRef, type PaneSplit } from '../panel/paneLayout';
 import {
   PANE_LABELS,
@@ -154,7 +154,8 @@ export function TitleBand({
         <button
           type="button"
           className="shell-icon-button"
-          aria-label={`Search commands (${shortcutLabel(APP_SHORTCUTS.palette)})`}
+          aria-label="Search commands"
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.palette, mac)}
           // The palette leaves presses on its own button to this toggle.
           data-palette-anchor=""
           onClick={onTogglePalette}
@@ -168,6 +169,7 @@ export function TitleBand({
           // of it ("Hide panel, pressed" reads backward).
           aria-label={panelLabel}
           title={`${panelLabel} (${shortcutLabel(APP_SHORTCUTS.panel)})`}
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.panel, mac)}
           onClick={onTogglePanel}
         >
           <PanelIcon />
@@ -177,6 +179,7 @@ export function TitleBand({
           className="shell-icon-button"
           aria-label="Settings"
           title={`Settings (${shortcutLabel(APP_SHORTCUTS.settings)})`}
+          aria-keyshortcuts={ariaKeyshortcuts(APP_SHORTCUTS.settings, mac)}
           onClick={(e) => {
             onOpenSettings();
             // WebView2 and WebKitGTK focus a button on click. Left on the

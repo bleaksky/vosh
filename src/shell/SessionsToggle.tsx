@@ -1,5 +1,5 @@
 import { appShortcut } from '../lib/appMenu';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { SidebarIcon } from './icons';
 
 // The one sessions toggle, in the window's top left corner just after
@@ -22,12 +22,14 @@ interface Props {
 
 export function SessionsToggle({ pressed, onToggle }: Props) {
   const label = pressed ? 'Hide sessions' : 'Show sessions';
+  const spec = appShortcut('sessions-sidebar');
   return (
     <button
       type="button"
       className={pressed ? 'shell-icon-button' : 'shell-icon-button is-quiet'}
       aria-label={label}
-      title={`${label} (${shortcutLabel(appShortcut('sessions-sidebar'))})`}
+      title={`${label} (${shortcutLabel(spec)})`}
+      aria-keyshortcuts={ariaKeyshortcuts(spec)}
       onClick={onToggle}
     >
       <SidebarIcon />

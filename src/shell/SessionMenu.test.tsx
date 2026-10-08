@@ -268,5 +268,15 @@ describe('the session popover while a redial waits', () => {
       'New session…⌘T',
       'Disconnect',
     ]);
+    // The keys stay out of the name, read apart in aria-keyshortcuts.
+    expect(items.map((el) => el.getAttribute('aria-keyshortcuts'))).toEqual([
+      'Meta+R',
+      null,
+      null,
+      'Meta+T',
+      null,
+    ]);
+    const [kbd] = findAll(items[0], hasClass('shell-menu-kbd'));
+    expect(kbd.getAttribute('aria-hidden')).toBe('true');
   });
 });

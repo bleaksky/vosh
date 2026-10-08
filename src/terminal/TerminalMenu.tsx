@@ -19,7 +19,7 @@ import { scrollbackClear } from '../ipc/terminal';
 import { openHelpWindow } from '../ipc/windows';
 import { openPaneSubmenu, type PaneSubmenuState } from '../panel/affects/affectsDisplay';
 import APP_SHORTCUTS from '../lib/appShortcuts.json';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 import { openSettingsTab } from '../lib/settingsLink';
 import { getUiConfig } from '../ipc/uiConfig';
 import { logsWorld } from '../settings/general/scene';
@@ -366,15 +366,7 @@ export function TerminalMenu({
             <Fragment key={group[0].id}>
               {g > 0 && <MenuSeparator />}
               {group.map((entry) => (
-                <MenuItem
-                  key={entry.id}
-                  onSelect={() => pickRow(entry)}
-                  trailing={
-                    entry.keys ? (
-                      <kbd className="ov-menu-keys">{shortcutLabel(entry.keys)}</kbd>
-                    ) : null
-                  }
-                >
+                <MenuItem key={entry.id} onSelect={() => pickRow(entry)} keys={entry.keys}>
                   {entry.label}
                 </MenuItem>
               ))}
@@ -424,6 +416,7 @@ export function TerminalMenu({
                   role="menuitem"
                   tabIndex={-1}
                   aria-disabled={item.disabled || undefined}
+                  aria-keyshortcuts={item.keys && ariaKeyshortcuts(item.keys)}
                   aria-haspopup={item.submenu ? 'menu' : undefined}
                   aria-expanded={item.submenu ? sub?.which === item.submenu : undefined}
                   aria-controls={
@@ -448,7 +441,11 @@ export function TerminalMenu({
                   onClick={() => pick(item)}
                 >
                   <span className="ov-menu-label">{item.label}</span>
-                  {item.keys && <kbd className="ov-menu-keys">{shortcutLabel(item.keys)}</kbd>}
+                  {item.keys && (
+                    <kbd className="ov-menu-keys" aria-hidden="true">
+                      {shortcutLabel(item.keys)}
+                    </kbd>
+                  )}
                   {item.submenu && <ChevronRightIcon className="pane-menu-chevron" />}
                 </button>
               );

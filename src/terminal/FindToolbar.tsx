@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { FindOptions } from './terminalHandle';
-import { shortcutLabel } from '../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutLabel } from '../lib/shortcuts';
 
 export interface FindToolbarHandle {
   /** Focus the query input. Called when the toolbar is already open
@@ -235,6 +235,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
         disabled={query.length === 0}
         aria-label="Previous match"
         title={`Previous match (${shortcutLabel('Shift+Enter')})`}
+        aria-keyshortcuts={ariaKeyshortcuts('Shift+Enter')}
       >
         <svg {...ICON}>
           <path d="M4.5 9.75L8 6.25l3.5 3.5" />
@@ -247,6 +248,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
         disabled={query.length === 0}
         aria-label="Next match"
         title={`Next match (${shortcutLabel('Enter')})`}
+        aria-keyshortcuts={ariaKeyshortcuts('Enter')}
       >
         <svg {...ICON}>
           <path d="M4.5 6.25L8 9.75l3.5-3.5" />

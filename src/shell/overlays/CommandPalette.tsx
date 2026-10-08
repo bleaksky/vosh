@@ -11,7 +11,7 @@ import {
   type PaletteEntry,
   type PaletteSectionView,
 } from './palette';
-import { shortcutKeys } from '../../lib/shortcuts';
+import { ariaKeyshortcuts, shortcutKeys } from '../../lib/shortcuts';
 import { scrollWithin } from '../../lib/scrollWithin';
 
 interface Props {
@@ -37,10 +37,12 @@ const ICON = {
   'aria-hidden': true,
 } as const;
 
-/** Keycaps for a shortcut spec, in the platform's glyphs. */
+/** Keycaps for a shortcut spec, in the platform's glyphs. The row
+ *  names the keys in aria-keyshortcuts, so the caps stay out of its
+ *  name. */
 function Keycaps({ spec }: { spec: string }) {
   return (
-    <kbd className="ov-keys">
+    <kbd className="ov-keys" aria-hidden="true">
       {shortcutKeys(spec).map((key, i) => (
         <kbd key={i} className={`ov-key${key.length > 1 ? ' is-wide' : ''}`}>
           {key}
@@ -255,6 +257,7 @@ export function CommandPalette({ deps, onClose }: Props) {
                     tabIndex={-1}
                     aria-selected={isSel}
                     aria-haspopup={entry.children ? 'true' : undefined}
+                    aria-keyshortcuts={entry.keys && ariaKeyshortcuts(entry.keys)}
                     className={`ov-pal-row${isSel ? ' is-selected' : ''}${
                       entry.destructive ? ' is-danger' : ''
                     }`}
