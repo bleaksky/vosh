@@ -1,13 +1,13 @@
 // How the status line gives way while it carries your vitals and runs
-// short (Vitals Styles Q6, board 4). First your opponent's name ends in
-// an ellipsis and goes, with a Target item on another mob, then the
-// labels go, then Values falls back to Current, then the moons, then a
-// fine round trip to the game, and then the game time go (Round Trip
-// Readout P1). The tick stays, and so does a round trip at 300 ms or
-// more. Every step measures your vitals at their max with room kept for
-// an opponent at 100 percent, and the round trip at its widest, so a
-// fight or a value that loses a digit moves nothing. Kept pure for the
-// tests, with every width in CSS px measured by the caller.
+// short. First your opponent's name ends in an ellipsis and goes, with
+// a Target item on another mob, then the labels go, then Values falls
+// back to Current, then the moons, then a fine round trip to the game,
+// and then the game time go. The tick stays, and so does a round trip
+// at 300 ms or more. Every step measures your vitals at their max with
+// room kept for an opponent at 100 percent, and the round trip at its
+// widest, so a fight or a value that loses a digit moves nothing. Kept
+// pure for the tests, with every width in CSS px measured by the
+// caller.
 
 /** The 20 px between items, the 6 px between a label and its value or a
  *  name and its health, and the 8 px between the clock's parts, as

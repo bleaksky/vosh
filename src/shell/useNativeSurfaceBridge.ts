@@ -113,12 +113,12 @@ export function useNativeSurfaceBridge({
 
   // The native grid draws a band under each lifted prompt while your
   // prompt shows lifted, and under your design while the prompt card
-  // draws it in the text (the 2026-09-30 addendum, item 2). xterm keeps
-  // its own ground while the card is open, so In the text stays as it
-  // is there and the card's marks still show. Each session's grid keeps
-  // its own, and the grid a selection brings to the front hears it. The
-  // card goes with the selection, so the grid of the session left keeps
-  // only the bands of its lifted prompts.
+  // draws it in the text. xterm keeps its own ground while the card is
+  // open, so In the text stays as it is there and the card's marks
+  // still show. Each session's grid keeps its own, and the grid a
+  // selection brings to the front hears it. The card goes with the
+  // selection, so the grid of the session left keeps only the bands of
+  // its lifted prompts.
   const bandsTold = useRef<number | null>(null);
   useEffect(() => {
     if (!nativeSurfaceEnabled()) return;

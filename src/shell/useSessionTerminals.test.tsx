@@ -3,10 +3,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { dismissToast, getToasts } from '../stores/toasts';
 import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 
-// The toasts a drop of the selected session shows (board 7 of the Alerts
-// review). Tolliver plays session 1, the selected one, and Orla plays
-// session 2 behind it. The reconnect notice takes the place of the
-// Connection lost toast, and a drop Vosh will not redial says why.
+// The toasts a drop of the selected session shows. Tolliver plays
+// session 1, the selected one, and Orla plays session 2 behind it. The
+// reconnect notice takes the place of the Connection lost toast, and a
+// drop Vosh will not redial says why.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = vi.hoisted(() => new Map<string, Handler>());

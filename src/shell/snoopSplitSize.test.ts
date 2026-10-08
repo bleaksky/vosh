@@ -9,9 +9,9 @@ import {
   snoopHeight,
 } from './snoopSplitSize';
 
-// How tall the snoop split stands (Snoop SN7, board 04): whole rows,
-// never under the strip and four rows, always six rows left to you, and
-// folded to the strip when dragged to the top.
+// How tall the snoop split stands: whole rows, never under the strip
+// and four rows, always six rows left to you, and folded to the strip
+// when dragged to the top.
 
 const ROW = 17;
 /** The column at 1280 by 800, and at the narrowest window, 640 by 480. */

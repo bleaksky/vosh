@@ -17,8 +17,8 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
 
-// Board 4 of the Vitals Styles review: Tolliver at 765 of 1020 with a
-// Blackwatch guard at 54, and low at 159 on a walk.
+// Tolliver at 765 of 1020 with a Blackwatch guard at 54, and low at 159
+// on a walk.
 const FULL: Vitals = {
   hp: 765,
   maxhp: 1020,

@@ -1,10 +1,9 @@
 // The snoop window's look: your theme and your terminal's face, size,
-// line height and colors, which the snoop terminals draw with (Snoop
-// SN3). It reads the UI config as the window opens and shows the window
-// once a frame with the theme has gone out, as Settings and Help do,
-// then follows every change Settings or a profile switch sends. The
-// main window owns the config and sends every change, so this window
-// only listens.
+// line height and colors, which the snoop terminals draw with. It reads
+// the UI config as the window opens and shows the window once a frame
+// with the theme has gone out, as Settings and Help do, then follows
+// every change Settings or a profile switch sends. The main window owns
+// the config and sends every change, so this window only listens.
 
 import { useEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';

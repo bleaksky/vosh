@@ -42,7 +42,7 @@ export function SidebarIcon() {
 }
 
 /** An eye, for the players a session snoops. At 12 px its strokes keep
- *  their 16 px weight, as the Snoop review draws it. */
+ *  their 16 px weight. */
 export function EyeIcon({ size = 16 }: { size?: 12 | 16 }) {
   return (
     <Glyph size={size}>

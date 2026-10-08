@@ -8,13 +8,13 @@ import { EyeIcon } from './icons';
 import { useSessionLine, type SessionLine } from './sessionLine';
 
 // The two lines of a session's row, which the sessions sidebar and the
-// session popover's list both draw (S1 and S7 of the Sessions Sidebar
-// review). Line one holds the status mark, the session as sessionLabel
-// names it with the port in quiet meta, and a right column with the eye
-// and the count of the session's live snoops (Snoop SN5) before what
-// its caller puts there. Line two says what the session is doing, with your health at
-// its right. The caller's grid places each part, so the parts sit as
-// siblings in it.
+// session popover's list both draw, so the two never drift apart. Line
+// one holds the status mark, the session as sessionLabel names it with
+// the port in quiet meta, and a right column with the eye and the count
+// of the session's live snoops before what its caller puts there. Line
+// two says what the session is doing, with your health at its right.
+// The caller's grid places each part, so the parts sit as siblings in
+// it.
 
 interface Props {
   row: SessionRow;

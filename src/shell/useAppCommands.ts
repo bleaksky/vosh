@@ -156,8 +156,8 @@ export function useAppCommands({
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
   // layout still reaches them by the physical key. A macro the selected
   // session's profile binds to one of the session keys or Settings keys
-  // keeps the key (Sessions Q11), as does one on the sessions toggle's
-  // key (Sessions toggle T3): nothing here or in the menu bar takes
+  // keeps the key, as does one on the sessions toggle's key, since
+  // your macros come first: nothing here or in the menu bar takes
   // it, and the command line fires the macro.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});

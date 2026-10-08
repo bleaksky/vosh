@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// When the card beside a session's row opens and closes, S6 of the
-// Sessions Sidebar review. It opens once the pointer has rested on a row
-// for half a second, and at once on the next row while it stays open,
-// as macOS tooltips do. It closes when the pointer leaves the rows, on a
-// click, on any key and while a row is in the air, and a row a click or
-// a key closed it on stays quiet until the pointer leaves that row.
+// When the card beside a session's row opens and closes. It opens once
+// the pointer has rested on a row for half a second, and at once on the
+// next row while it stays open, as macOS tooltips do. It closes when
+// the pointer leaves the rows, on a click, on any key and while a row
+// is in the air, and a row a click or a key closed it on stays quiet
+// until the pointer leaves that row.
 
 /** How long the pointer rests on a row before its card opens. */
 export const CARD_DELAY = 500;

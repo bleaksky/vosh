@@ -22,48 +22,44 @@ import { useHoverCard } from './useHoverCard';
 import { useModHeld } from './useModHeld';
 import { partShift, useRowDrag } from '../lib/useRowDrag';
 
-// The sessions sidebar on the left of the main window, board 2 of the
-// Sessions review, drawn to otty's measures (Q17), with the two line
-// rows of the Sessions Sidebar review. MainWindow shows it while two or
-// more sessions are open and you have not hidden it in this window, and
-// over the terminal in a window too narrow for its column. Its top 32
-// drags the window and holds the lights and the sessions toggle on
-// macOS, with New session at its right (Sessions toggle T1). SESSIONS
-// heads the list with how many are open (S8).
+// The sessions sidebar on the left of the main window, with two line
+// rows. MainWindow shows it while two or more sessions are open and you
+// have not hidden it in this window, and over the terminal in a window
+// too narrow for its column. Its top 32 drags the window and holds the
+// lights and the sessions toggle on macOS, with New session at its
+// right. SESSIONS heads the list with how many are open.
 //
-// Each row is two lines (S1). Line one starts with the row's status
-// mark (S2), then the session as sessionLabel names it with the port in
-// quiet meta, and ends in a right column. Line two says what the
-// session is doing, from useSessionLine, with your health at its right
-// (S3). The selected row is a filled pill, and the name takes the tone
-// the row store gives it. The right column holds the count of what
-// waits for you on a row behind (S4). While you hold ⌘ (Ctrl
-// elsewhere), the first nine rows show the key that brings each to the
-// front there instead, as otty does (board 8). Under the pointer a row
-// shows its close button in that place, which closes its session (Q13,
-// S6). Rest the pointer on a row and SessionCard opens beside it with
-// the rest of the session, which a screen reader hears as the row's
-// description. A click selects.
+// Each row is two lines. Line one starts with the row's status mark,
+// then the session as sessionLabel names it with the port in quiet
+// meta, and ends in a right column. Line two says what the session is
+// doing, from useSessionLine, with your health at its right. The
+// selected row is a filled pill, and the name takes the tone the row
+// store gives it. The right column holds the count of what waits for
+// you on a row behind. While you hold ⌘ (Ctrl elsewhere), the first
+// nine rows show the key that brings each to the front there instead.
+// Under the pointer a row shows its close button in that place, which
+// closes its session. Rest the pointer on a row and SessionCard opens
+// beside it with the rest of the session, which a screen reader hears
+// as the row's description. A click selects.
 //
-// A right click opens the row's menu at the pointer, board 9: Rename
-// session…, Edit connection…, Disconnect while the session is
-// connected, and Close session. Rename session… shows F2 beside it when
-// the row had the keyboard as the menu opened. A double click on the
-// name, Return or F2 on a row that has the keyboard, or Rename session…
-// from the row menu or anywhere else while the sidebar shows, brings
-// the session to the front and turns its name into a field in place
-// (Q7, S5 of the Sessions Sidebar review). Up and Down move the
-// keyboard between rows and stop at either end, so Return or F2 renames
-// the row they reach (board 4). They select nothing, Space still
-// selects, and F2 never reaches the command line from a row. The field
-// spans the name and the right column, the mark stays, and line two
-// says how to finish. Return or a click elsewhere keeps what you typed,
-// Escape leaves the row as it was, and a blank field clears the name,
-// so the row reads the character again.
+// A right click opens the row's menu at the pointer: Rename session…,
+// Edit connection…, Disconnect while the session is connected, and
+// Close session. Rename session… shows F2 beside it when the row had
+// the keyboard as the menu opened. A double click on the name, Return
+// or F2 on a row that has the keyboard, or Rename session… from the row
+// menu or anywhere else while the sidebar shows, brings the session to
+// the front and turns its name into a field in place. Up and Down move
+// the keyboard between rows and stop at either end, so Return or F2
+// renames the row they reach. They select nothing, Space still selects,
+// and F2 never reaches the command line from a row. The field spans the
+// name and the right column, the mark stays, and line two says how to
+// finish. Return or a click elsewhere keeps what you typed, Escape
+// leaves the row as it was, and a blank field clears the name, so the
+// row reads the character again.
 //
 // More rows than fit scroll under SESSIONS, which stays put and draws a
 // hairline once a row has passed under it, and the selected row scrolls
-// into view as ⌘1 to ⌘9 or a step reach it (board 8). Drag a row to move
+// into view as ⌘1 to ⌘9 or a step reach it. Drag a row to move
 // it, see lib/useRowDrag.
 //
 // WebView2 and WebKitGTK focus a button on click. Left on a row, the
@@ -99,11 +95,10 @@ export interface SessionSidebarHandle {
   rename: (session: number) => void;
 }
 
-/** The row menu's width, as board 9 draws it. */
+/** The row menu's width. */
 const ROW_MENU_WIDTH = 212;
 
-/** The rows' pitch, a 44 pill in a 46 slot (S1 of the Sessions Sidebar
- *  review). */
+/** The rows' pitch, a 44 pill in a 46 slot. */
 const ROW_PITCH = 46;
 
 /** Whether a click left the caret on the button it pressed. */

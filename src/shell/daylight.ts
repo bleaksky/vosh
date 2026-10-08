@@ -73,8 +73,7 @@ export function daylightTint(
 
 /** The first game hour of the day where World.Time names no sunlight.
  *  Aabahran always names it, and day begins with the hour 6 line, `The
- *  day has begun.`, so the fallback agrees with it, as tick.rs does
- *  (Alerts Q17). */
+ *  day has begun.`, so the fallback agrees with it, as tick.rs does. */
 export const DAY_FIRST_HOUR = 6;
 /** The first game hour of the night, the hour 19 line, `The night has
  *  begun.`. */

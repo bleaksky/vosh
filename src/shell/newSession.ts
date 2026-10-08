@@ -7,9 +7,9 @@ import { loadTarget } from '../stores/session/useConnection';
 import { pushToast } from '../stores/toasts';
 
 // New session…, from the session popover, the sidebar's plus, the macOS
-// menu bar and the palette (Q12 of the Sessions review). It adds a row at
-// once, on the profile the saved world picks, selects it, and opens the
-// popover on its form. The form dials it or closes it again.
+// menu bar and the palette. It adds a row at once, on the profile the
+// saved world picks, selects it, and opens the popover on its form. The
+// form dials it or closes it again.
 
 /** Open a session on the profile the saved world picks, select it, and
  *  open its New session form. */

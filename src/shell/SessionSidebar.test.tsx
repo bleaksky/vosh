@@ -8,8 +8,7 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import type { SessionLine } from './sessionLine';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 
-// The sessions sidebar of boards 2 and 3 of the Sessions review, with
-// the two line rows of the Sessions Sidebar review. Each row reads its
+// The sessions sidebar, with its two line rows. Each row reads its
 // session as sessionLabel names it, the selected one marked current, a
 // port that is not the world port in quiet meta, and a row with neither
 // a name nor a character named by its world with the port kept apart.

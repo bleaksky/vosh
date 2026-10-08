@@ -4,7 +4,7 @@ import { closePresetFix, presetFixStore, showPresetFix } from '../../stores/pres
 import { pushToast, dismissToast, getToasts } from '../../stores/toasts';
 import { CornerNotices } from './CornerNotices';
 
-// Presets board 4: the corner notice a preset fix leaves at launch, on
+// The corner notice a preset fix leaves at launch, on
 // the update notice recipe in the warn tone, in the corner's slot list.
 
 // A toast keeps its dismiss timer on window.

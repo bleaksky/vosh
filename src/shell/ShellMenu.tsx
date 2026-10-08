@@ -11,20 +11,19 @@ import { useEscape } from '../lib/escapeStack';
 import { placeMenu } from '../ui/menuPlacement';
 
 // The floating menu the title band opens: the session menu and Add a
-// pane. SPEC 7 menu recipe on the SPEC 3 floating ground. It hangs 12
+// pane, on the shared menu recipe and floating ground. It hangs 12
 // below its button (the session popover's 28 to 40), or 6 while it
-// lists the sessions (board 05 of the Sessions Sidebar review, 34),
-// so five rows fit whole at 720 by 450. It stays 8 inside
-// the window, closes on Esc through the escape stack or on a press
-// outside it, and moves focus with the arrow keys. Its role is menu, or
-// dialog while it holds a form. It renders into the body, like the pane
-// menus, because the band is a stacking context and the find bar and
-// the scroll depth chip would paint over a menu left inside it. A
-// session row's menu opens at the pointer instead, as a right click
-// menu does, and rises from the pointer near the bottom of the window.
-// It never runs past the window's foot: it stops 8 above it, and a
-// surface with a list that scrolls, as the session popover's list of
-// sessions does, gives way there.
+// lists the sessions (34), so five rows fit whole at 720 by 450. It
+// stays 8 inside the window, closes on Esc through the escape stack or
+// on a press outside it, and moves focus with the arrow keys. Its role
+// is menu, or dialog while it holds a form. It renders into the body,
+// like the pane menus, because the band is a stacking context and the
+// find bar and the scroll depth chip would paint over a menu left
+// inside it. A session row's menu opens at the pointer instead, as a
+// right click menu does, and rises from the pointer near the bottom of
+// the window. It never runs past the window's foot: it stops 8 above
+// it, and a surface with a list that scrolls, as the session popover's
+// list of sessions does, gives way there.
 
 const GAP_BELOW_ANCHOR = 12;
 const GAP_BELOW_ANCHOR_LISTED = 6;

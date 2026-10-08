@@ -4,12 +4,12 @@ import type { SessionRow } from '../ipc/session';
 import { FakeDocument, FakeElement, FakeNode } from '../test/fakeDom';
 import type { Closing } from './useClosing';
 
-// Closing a session, the main window and the app (Q12 and Q13 of the
-// Sessions review). The red light and the close button reach the
-// window's close request, which asks as Close window does. Close session
-// on the selected row brings the next row down to the front first, or
-// the one before it when it is last, and with one session it closes the
-// window. closeQuestions.test.ts holds the words.
+// Closing a session, the main window and the app. The red light and the
+// close button reach the window's close request, which asks as Close
+// window does. Close session on the selected row brings the next row
+// down to the front first, or the one before it when it is last, and
+// with one session it closes the window. closeQuestions.test.ts holds
+// the words.
 
 /** Every step the hook took, in order, the window's own among them. */
 const steps = vi.hoisted(() => [] as unknown[]);

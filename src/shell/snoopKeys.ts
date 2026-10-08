@@ -1,9 +1,8 @@
-// The window's keys and menus reach the snoop split through these
-// (Snoop SN7 and SN8). Cmd J from the command line puts the caret in the
-// snoop in front, and pressed again in a snoop it steps to the next tab.
-// Cmd F and Copy act on the snoop while its terminal holds the caret.
-// The split hears each request on the window, as the session popover
-// hears its own.
+// The window's keys and menus reach the snoop split through these. Cmd
+// J from the command line puts the caret in the snoop in front, and
+// pressed again in a snoop it steps to the next tab. Cmd F and Copy act
+// on the snoop while its terminal holds the caret. The split hears each
+// request on the window, as the session popover hears its own.
 
 /** What the window asks of the snoop split: put the caret in the tab in
  *  front, step to the next tab and put it there, open Find on the tab in

@@ -251,8 +251,8 @@ describe('the session button in the title band', () => {
     await act(async () => band.root.unmount());
   });
 
-  // Board 05 of the Sessions Sidebar review: with the sidebar folded the
-  // button totals what waits on the sessions behind.
+  // With the sidebar folded the button totals what waits on the
+  // sessions behind.
   it('totals what waits behind while the sidebar is folded, but not the session in front or a connection in trouble', async () => {
     const band = await mount(true);
     await act(async () => {

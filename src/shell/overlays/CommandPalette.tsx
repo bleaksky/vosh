@@ -50,15 +50,15 @@ function Keycaps({ spec }: { spec: string }) {
   );
 }
 
-// The ⌘K command palette (SPEC 7, Palette board): 560 wide, centered
-// on the window with its top at 15% of the window height, no scrim.
-// Sections with caps headers (Recent, View, Session), check marks on
-// toggles that are on, keycaps on the right, and a submenu row that
-// opens its list in place. Disconnect is the last row and the palette
-// never opens with a destructive row selected, so ⌘K then Enter cannot
-// drop the session. Entries rebuild on every open so checks track live
-// state. Aliases stream in from the backend and, like the pane toggles,
-// find, help, and the settings rows, show once you type.
+// The ⌘K command palette: 560 wide, centered on the window with its top
+// at 15% of the window height, no scrim. Sections with caps headers
+// (Recent, View, Session), check marks on toggles that are on, keycaps
+// on the right, and a submenu row that opens its list in place.
+// Disconnect is the last row and the palette never opens with a
+// destructive row selected, so ⌘K then Enter cannot drop the session.
+// Entries rebuild on every open so checks track live state. Aliases
+// stream in from the backend and, like the pane toggles, find, help,
+// and the settings rows, show once you type.
 export function CommandPalette({ deps, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [levels, setLevels] = useState<Level[]>([]);

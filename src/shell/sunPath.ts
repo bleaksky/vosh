@@ -1,7 +1,7 @@
 import { DAY_FIRST_HOUR, NIGHT_FIRST_HOUR } from './daylight';
 
 // The sun on its path before the game time in the Icon style, on the
-// 16 unit grid of the One Window icons. A horizon, a faint half circle
+// 16 unit grid of Vosh's icons. A horizon, a faint half circle
 // over it for the sun's path, and a dot for the sun. While the sun is
 // up the dot sits on the path for the game hour. It rises on the left
 // after 6:00, stands highest at midday, and sets on the right by 19:00.

@@ -6,7 +6,8 @@ import { themeTokens } from '../../theme/themes';
 import { useActiveTheme } from '../../theme/useActiveTheme';
 
 /** A tell you sent as the Chat pane shows it, on the panel in the tell
- *  color, with bars for the words (board 2, HELP 4.3). */
+ *  color, with bars for the words, so the sample never puts words in a
+ *  player's mouth. */
 export function TellSample() {
   const theme = useActiveTheme();
   const palette = usePlayPalette();

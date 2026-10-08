@@ -2,9 +2,9 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Board 5 of the Sessions review (Q10): Orla's session (1) is selected,
-// a tell reaches Tolliver's (2) behind it, and the corner shows the
-// alert on the update notice recipe with the accent dot, Close and Show.
+// Orla's session (1) is selected, a tell reaches Tolliver's (2) behind
+// it, and the corner shows the alert on the update notice recipe with
+// the accent dot, Close and Show.
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();

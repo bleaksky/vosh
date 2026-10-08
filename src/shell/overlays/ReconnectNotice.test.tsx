@@ -3,9 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { Reconnect } from '../../stores/session/reconnectStore';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../../test/fakeDom';
 
-// The reconnect notice of board 7 in the Alerts review, for Tolliver's
-// session (3). Each state's words and buttons as the frames draw them,
-// the countdown, and what each button reaches.
+// The reconnect notice, for Tolliver's session (3). Each state's words
+// and buttons, the countdown, and what each button reaches.
 
 const redial = vi.hoisted(() => ({ now: { kind: 'none' } as Reconnect }));
 const calls = vi.hoisted(() => [] as unknown[]);

@@ -1,9 +1,9 @@
-// How tall the snoop split stands in the terminal column (Snoop SN7,
-// board 04). It opens at the profile's share of the column, in whole
-// rows of the snoop terminal. It never goes under its strip and four
-// rows, and it always leaves your terminal six. Drag its line to the top
-// and it folds to the strip alone. When the column cannot hold both, the
-// snoop keeps its four rows and you can fold it.
+// How tall the snoop split stands in the terminal column. It opens at
+// the profile's share of the column, in whole rows of the snoop
+// terminal. It never goes under its strip and four rows, and it always
+// leaves your terminal six. Drag its line to the top and it folds to
+// the strip alone. When the column cannot hold both, the snoop keeps
+// its four rows and you can fold it.
 
 /** The strip, var(--band). */
 export const SNOOP_STRIP = 32;

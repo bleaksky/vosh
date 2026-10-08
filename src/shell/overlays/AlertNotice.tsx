@@ -8,12 +8,12 @@ import {
 // A press on Close or Show leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
 
-// The notice of an alert from a session you are not looking at, board 5
-// of the Sessions review (Q10). It sits on the update notice recipe with
-// the accent dot, names the alert and the session it rang in, and never
-// shows the words (Alerts Q3). Show selects that session, and the notice
-// goes with it. Close puts the notice away and leaves the dot and the
-// count on the session's row, which go once you look at it.
+// The notice of an alert from a session you are not looking at. It sits
+// on the update notice recipe with the accent dot, names the alert and
+// the session it rang in, and never shows the words. Show selects that
+// session, and the notice goes with it. Close puts the notice away and
+// leaves the dot and the count on the session's row, which go once you
+// look at it.
 export function AlertNotice() {
   const notice = useAlertNotice();
   if (!notice) return null;

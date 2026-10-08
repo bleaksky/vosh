@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PANEL_WIDTH_MIN, PANEL_WIDTH_MIN_FRAMELESS } from '../panel/paneLayout';
 import { clampSessionsWidth, sessionsColumn, sessionsFold } from './sessionsColumn';
 
-// When the window holds the sessions sidebar, board 8: its column, a 320
+// When the window holds the sessions sidebar: its column, a 320
 // terminal and the panel at its floor must fit, or the sidebar folds.
 
 describe('folding the sessions sidebar', () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// The toast a saved scene raises in the main window (board 5).
+// The toast a saved scene raises in the main window.
 
 const calls: { cmd: string; args: unknown }[] = [];
 vi.mock('@tauri-apps/api/core', () => ({

@@ -8,13 +8,12 @@ import { EyeIcon } from './icons';
 import { useMinuteClock } from './sessionLine';
 import { endedLine, tabTitle } from './snoopLine';
 
-// The strip of the snoop split and of the snoop window, boards 01 to 04
-// and 06 of the Snoop review (SN1, SN2 and SN5). The eye, a tab for each
-// player the session snoops, each with the sessions sidebar's mark, a
-// dot while it runs and a ring once it ended, and an accent dot on a tab
-// behind with lines you have not read. Stop sends `snoop stop` with the
-// player in front, and an ended tab says when it ended and offers Close.
-// The more button opens the menu.
+// The strip of the snoop split and of the snoop window. The eye, a tab
+// for each player the session snoops, each with the sessions sidebar's
+// mark, a dot while it runs and a ring once it ended, and an accent dot
+// on a tab behind with lines you have not read. Stop sends `snoop stop`
+// with the player in front, and an ended tab says when it ended and
+// offers Close. The more button opens the menu.
 //
 // In a narrow strip Stop leaves first, since the menu holds it too. Then
 // the names end in an ellipsis, the one in front last.

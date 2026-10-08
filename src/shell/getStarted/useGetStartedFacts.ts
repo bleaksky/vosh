@@ -11,7 +11,7 @@ import { noteFacts } from './getStartedStore';
 import type { GetStartedFacts } from './steps';
 
 // What the steps of Get started read live, the summary's metas among
-// them, so a pane you close later shows there as it is (board 5). Each
+// them, so a pane you close later shows there as it is. Each
 // fact that finishes a step marks it done as it lands.
 
 /** The presets the active profile has on, as stored, which a switch in

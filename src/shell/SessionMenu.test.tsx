@@ -7,11 +7,11 @@ import type { Connection } from '../stores/session/useConnection';
 import type { SessionLine } from './sessionLine';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 
-// The session popover while the sidebar is folded, board 8, with the
-// sidebar's two line rows of board 05 of the Sessions Sidebar review.
-// SESSIONS heads a list of every session, the selected one with the
-// check, one behind with what waits there and any other with its key,
-// and then the board 4 rows. A click brings that session to the front.
+// The session popover while the sidebar is folded, with the sidebar's
+// two line rows. SESSIONS heads a list of every session, the selected
+// one with the check, one behind with what waits there and any other
+// with its key, and then the session rows. A click brings that session
+// to the front.
 
 const store = vi.hoisted(() => ({
   rows: [] as SessionRow[],

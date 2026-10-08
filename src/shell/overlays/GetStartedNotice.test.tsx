@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// First Run board 1: Get started folded to its notice in the corner, on
-// the update notice recipe, and its slot in the stack of Q19.
+// Get started folded to its notice in the corner, on
+// the update notice recipe, and its slot in the corner's stack.
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: async () => null }));
 

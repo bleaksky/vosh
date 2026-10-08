@@ -2,11 +2,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { FakeDocument, FakeElement, findAll } from '../../test/fakeDom';
 import type { GetStartedFacts } from './steps';
 
-// Get started in the window, boards 1 and 2 of First Run: the card at
-// launch, how it folds under the prompt card, at Esc and at Connect,
-// Close with its toast, and the Chat step's switch. The card mounts over
-// a fake Tauri, so the store, the escape stack and the preset plan run
-// as the window runs them.
+// Get started in the window: the card at launch, how it folds under the
+// prompt card, at Esc and at Connect, Close with its toast, and the
+// Chat step's switch. The card mounts over a fake Tauri, so the store,
+// the escape stack and the preset plan run as the window runs them.
 
 type Handler = (event: { payload: unknown }) => void;
 const bus = vi.hoisted(() => ({

@@ -13,13 +13,13 @@ import {
   type CloseQuestion,
 } from './closeQuestions';
 
-// Closing a session, the main window and the app, by Q13 of the Sessions
-// review. Close session asks while its session is connected and closes
-// at once otherwise, Close window asks while any session is connected,
-// and Quit while two or more are. On macOS the menu bar's Quit hands the
-// question here only then, and quits at once otherwise. Each question
-// names the sessions as closeQuestions words them, and the main window
-// draws it. Closing the last session closes the window.
+// Closing a session, the main window and the app. Close session asks
+// while its session is connected and closes at once otherwise, Close
+// window asks while any session is connected, and Quit while two or
+// more are. On macOS the menu bar's Quit hands the question here only
+// then, and quits at once otherwise. Each question names the sessions
+// as closeQuestions words them, and the main window draws it. Closing
+// the last session closes the window.
 //
 // The red light on macOS and the close button on Windows and Linux reach
 // the window's close request, which the window always holds and answers

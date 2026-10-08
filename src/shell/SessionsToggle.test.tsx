@@ -5,9 +5,9 @@ import sessionsCss from '../styles/sessions.css?raw';
 import { AppShell } from './AppShell';
 import { SessionsToggle } from './SessionsToggle';
 
-// The one sessions toggle (Sessions toggle T1 to T3). It holds one spot
-// in the frame's top left corner, wears the panel toggle's recipe, and
-// says what a press does in its label and tooltip with the key.
+// The one sessions toggle. It holds one spot in the frame's top left
+// corner, wears the panel toggle's recipe, and says what a press does
+// in its label and tooltip with the key.
 
 type Platform = 'macos' | 'windows' | 'linux';
 

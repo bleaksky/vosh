@@ -1,11 +1,11 @@
 // How wide the sessions sidebar is, and when the window is too narrow
-// to hold it, board 8 of the Sessions review (Q17, Q18). You drag its
-// line from 180 to 320, 220 at first as otty draws it, and the column
-// adds the 1 px line. The window keeps a terminal at least 320 wide.
-// As it narrows, the panel gives way first, down to its floor (AppShell
-// clamps it), and once the sidebar, a 320 terminal and the panel at its
-// floor no longer fit, the sidebar folds and the session popover lists
-// the sessions instead. Widening the window brings it back.
+// to hold it. You drag its line from 180 to 320, 220 at first, and the
+// column adds the 1 px line. The window keeps a terminal at least 320
+// wide. As it narrows, the panel gives way first, down to its floor
+// (AppShell clamps it), and once the sidebar, a 320 terminal and the
+// panel at its floor no longer fit, the sidebar folds and the session
+// popover lists the sessions instead. Widening the window brings it
+// back.
 
 /** The terminal keeps at least this much width beside the sidebar and
  *  the panel. */

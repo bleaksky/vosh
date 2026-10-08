@@ -16,10 +16,10 @@ import {
 } from './snoopSplitSize';
 import { useSnoopFind } from './useSnoopFind';
 
-// The snoop split at the top of the terminal column, boards 01 to 04 of
-// the Snoop review (SN1, SN2, SN3, SN5 and SN7). The strip with a tab
-// for each player the selected session snoops (shell/SnoopStrip.tsx),
-// and under it a terminal for each tab, the one in front shown.
+// The snoop split at the top of the terminal column. The strip with a
+// tab for each player the selected session snoops
+// (shell/SnoopStrip.tsx), and under it a terminal for each tab, the one
+// in front shown.
 //
 // It opens at the profile's saved share of the column in whole rows,
 // and the line under it drags. A drag to the top folds it to the strip,
@@ -30,12 +30,11 @@ import { useSnoopFind } from './useSnoopFind';
 // their window. Nothing here takes the caret: a start leaves it on the
 // command line, and a press on the strip hands it back there.
 //
-// Cmd J is the one way in (SN7). From the command line it puts the
-// caret in the tab in front, unfolding the split first, and inside a
-// snoop it steps to the next tab. While the snoops sit in their window
-// it brings the window forward. Cmd F inside a snoop opens its Find,
-// and Copy in the menu bar copies what you selected in it
-// (shell/snoopKeys.ts).
+// Cmd J is the one way in. From the command line it puts the caret in
+// the tab in front, unfolding the split first, and inside a snoop it
+// steps to the next tab. While the snoops sit in their window it brings
+// the window forward. Cmd F inside a snoop opens its Find, and Copy in
+// the menu bar copies what you selected in it (shell/snoopKeys.ts).
 
 interface Props {
   session: number;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FIT_ALL, NAME_MIN, statusLineFit, type StatusLineWidths } from './statusLineFit';
 
-// Widths near what the 12 px panel face draws on board 4: Health, Mana
+// Widths near what the 12 px panel face draws: Health, Mana
 // and Moves with `1020 / 1020`, `800 / 800` and `930 / 930`, 54% held
 // at 100%, and the tick, the time and three moons.
 const LINE: StatusLineWidths = {

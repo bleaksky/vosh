@@ -1,5 +1,5 @@
 // The ring before the tick in the Icon style, on the 16 unit grid of
-// the One Window icons. A faint ring, and on top an arc for the tick.
+// Vosh's icons. A faint ring, and on top an arc for the tick.
 // Counting up, the arc runs clockwise from 12 o clock for the share of
 // the interval gone since the last tick. Nothing draws on top at 0
 // seconds, and the whole circle closes once the interval has passed.

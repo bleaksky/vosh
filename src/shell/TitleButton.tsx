@@ -7,16 +7,16 @@ import { ChevronDownIcon } from '../ui/icons';
 import { WaitingCount } from './SessionRowBody';
 import { useWindowTitle, windowTitle } from './windowTitle';
 
-// The session control centered in the title band (SPEC 1 and G2): a
-// status dot, the selected session in the title tone, by the name you
-// gave it or your character, where it plays in the tertiary tone, and
-// a chevron. No chrome at rest. It opens the session menu. The world
-// takes its port when the port is not the world's own, as the session's
-// row does (sessionLabel.ts), so Orla reads The Forsaken Lands 1825.
-// While the sessions sidebar is folded, the count of what waits on the
-// other sessions follows the chevron in the rows' accent pill (S7 of the
-// Sessions Sidebar review), and goes once you have looked at each. A
-// session in trouble adds nothing, since its mark says so.
+// The session control centered in the title band: a status dot, the
+// selected session in the title tone, by the name you gave it or your
+// character, where it plays in the tertiary tone, and a chevron. No
+// chrome at rest. It opens the session menu. The world takes its port
+// when the port is not the world's own, as the session's row does
+// (sessionLabel.ts), so Orla reads The Forsaken Lands 1825. While the
+// sessions sidebar is folded, the count of what waits on the other
+// sessions follows the chevron in the rows' accent pill, and goes once
+// you have looked at each. A session in trouble adds nothing, since its
+// mark says so.
 
 interface Props {
   connection: Connection;

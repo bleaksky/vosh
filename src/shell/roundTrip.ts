@@ -1,5 +1,5 @@
-// How the status line shows the round trip to the game (Round Trip
-// Readout P2). Under 300 ms you cannot feel the network on Aabahran's
+// How the status line shows the round trip to the game. Under
+// 300 ms you cannot feel the network on Aabahran's
 // 250 ms pulse, so the reading sits in tertiary. From 300 ms your
 // commands land a pulse late and it takes the warn tone. From a second
 // you are stalling, and it reads in seconds to one decimal in the

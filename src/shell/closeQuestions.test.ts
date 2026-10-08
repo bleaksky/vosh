@@ -6,9 +6,9 @@ import {
   type CloseRow,
 } from './closeQuestions';
 
-// Q13 and board 6 of the Sessions review. Close session asks while its
-// session is connected and names it as its row does, Close window asks
-// while any session is connected, and Quit while two or more are.
+// The questions Vosh asks before it closes. Close session asks while
+// its session is connected and names it as its row does, Close window
+// asks while any session is connected, and Quit while two or more are.
 
 const PLAY = 'play.theforsakenlands.com';
 

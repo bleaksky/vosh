@@ -5,11 +5,11 @@ import { progress, stepsFor } from '../getStarted/steps';
 // A press on the notice's buttons leaves the caret on the command line.
 const keepCaret = (event: MouseEvent) => event.preventDefault();
 
-// Get started folded to the corner (First Run board 1). Connect, Esc and
-// Show me fold the card here, on the update notice recipe, and it counts
-// what you finished. Open brings the card back where you left it, and
-// Close ends Get started with the toast that Help opens it again. It
-// lasts until you quit.
+// Get started folded to the corner. Connect, Esc and Show me fold the
+// card here, on the update notice recipe, and it counts what you
+// finished. Open brings the card back where you left it, and Close ends
+// Get started with the toast that Help opens it again. It lasts until
+// you quit.
 export function GetStartedNotice() {
   const view = useGetStarted();
   if (view.shows !== 'folded') return null;
