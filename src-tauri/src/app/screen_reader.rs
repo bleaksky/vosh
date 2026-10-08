@@ -27,7 +27,7 @@ pub(crate) async fn add_launch_notice(state: &SharedState, running: impl FnOnce(
         .ui
         .screen_reader;
     if !feed_on && running() {
-        state.add_launch_notices(vec![NOTICE.to_string()]);
+        state.add_launch_info(NOTICE.to_string());
     }
 }
 
@@ -80,9 +80,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::{add_launch_notice, NOTICE};
-    use crate::app::state::{AppState, SharedState};
+    use crate::app::state::{AppState, LaunchNotice, NoticeKind, SharedState};
 
-    async fn notices(feed_on: bool, reader: bool) -> Vec<String> {
+    async fn notices(feed_on: bool, reader: bool) -> Vec<LaunchNotice> {
         let state: SharedState = Arc::new(AppState::default());
         state
             .selected_session()
@@ -95,15 +95,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_reader_with_the_feed_off_adds_one_notice() {
-        assert_eq!(notices(false, true).await, vec![NOTICE.to_string()]);
+    async fn a_reader_with_the_feed_off_adds_one_notice_that_is_no_error() {
+        let notice = LaunchNotice {
+            kind: NoticeKind::Info,
+            message: NOTICE.to_string(),
+        };
+        assert_eq!(notices(false, true).await, [notice]);
     }
 
     #[tokio::test]
     async fn the_feed_on_or_no_reader_adds_none() {
-        assert_eq!(notices(true, true).await, Vec::<String>::new());
-        assert_eq!(notices(false, false).await, Vec::<String>::new());
-        assert_eq!(notices(true, false).await, Vec::<String>::new());
+        assert_eq!(notices(true, true).await, Vec::<LaunchNotice>::new());
+        assert_eq!(notices(false, false).await, Vec::<LaunchNotice>::new());
+        assert_eq!(notices(true, false).await, Vec::<LaunchNotice>::new());
     }
 
     /// The real check answers without a crash on the system that runs

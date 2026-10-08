@@ -546,14 +546,14 @@ pub(crate) mod tests {
 
         let state = launch_state(dir.path()).await;
         assert_eq!(
-            state.take_launch_notices(),
+            state.take_launch_messages(),
             [
                 "Vosh could not read the Default profile file, so it will not save over it. Fix \
               the file or switch to another profile."
             ]
         );
         // You tell once. A second take finds nothing.
-        let leftover = &state.take_launch_notices();
+        let leftover = &state.take_launch_messages();
         assert!(leftover.is_empty(), "{leftover:?}");
 
         // The app keeps running on the defaults, and an edit saves.
@@ -580,7 +580,7 @@ pub(crate) mod tests {
 
         let state = launch_state(dir.path()).await;
         assert_eq!(
-            state.take_launch_notices(),
+            state.take_launch_messages(),
             [crate::profile::file::UNREAD_GLOBAL_NOTICE]
         );
         {

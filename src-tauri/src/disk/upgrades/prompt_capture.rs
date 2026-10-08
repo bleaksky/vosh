@@ -1058,7 +1058,7 @@ mud.set_prompt_var('move', captures[4])"""
         assert!(state
             .loadout_mode
             .load(std::sync::atomic::Ordering::Acquire));
-        assert_eq!(state.take_launch_notices(), [MOVED_INTO_DEFAULT]);
+        assert_eq!(state.take_launch_messages(), [MOVED_INTO_DEFAULT]);
 
         let p = state.selected_profile().await;
         let prompt = &p.prompt;
