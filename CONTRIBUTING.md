@@ -16,7 +16,7 @@ On Linux you also need the WebKitGTK and related dev packages. On Debian and Ubu
 
 rustup installs the pinned version on your first build. Run any `cargo` command in the repo and rustup downloads that version once, then reuses it. Older versions you installed stay on disk until you run `rustup toolchain uninstall` on them.
 
-Bumping Rust is a deliberate commit of its own. Change `channel` in `rust-toolchain.toml`, then run `cargo fmt --all -- --check` and the `cargo clippy` command under Lint and Format on the new version. A newer clippy often brings new lints. Fix what it reports in the same commit so CI stays green.
+Bumping Rust is a deliberate commit of its own. Change `channel` in `rust-toolchain.toml`, then run `cargo fmt --all -- --check` and the `cargo clippy` command under Checks on the new version. A newer clippy often brings new lints. Fix what it reports in the same commit so CI stays green.
 
 ## First-Time Setup
 
@@ -41,18 +41,22 @@ Frontend only.
 npm run dev
 ```
 
-## Lint and Format
+## Checks
 
-Run all of these before pushing.
+CI runs these in this order. Run them before you push. The Rust steps need the built page, so `npm run build` comes before them.
 
 ```
 npm run format:check
 npm run lint
 npm run typecheck
+npm test
+npm run build
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 ```
+
+CI runs the page checks on Linux and the Rust checks on Linux, macOS, and Windows. The pre-commit hook runs prettier and eslint on the files you stage, and cargo fmt and clippy when you stage Rust.
 
 Auto fix what you can.
 
@@ -69,27 +73,46 @@ Use Conventional Commits. Single concern per commit. Subject under 72 characters
 ```
 feat(telnet): negotiate IAC DO TTYPE
 fix(ansi): handle truncated CSI sequence
-docs(readme): clarify Phase 0 scope
+docs(readme): list the telnet options Vosh answers
 test(gmcp): cover Char.Vitals payload
 chore(ci): cache cargo registry between runs
 refactor(parser): split state machine
 ```
 
-## Phased Delivery
+## Plans and Scope
 
-The project ships in phases. Each phase ends with a working build, a short demo, and an approval checkpoint. Do not start the next phase before approval lands in the chat. See `prompt.md` for the full phase plan.
-
-If you find yourself wanting to add a feature that is not in the agreed phase scope for the current session, stop and raise it for review. Scope creep across phase boundaries is the easiest way to lose the plot.
+`docs/requirements.md` says what 1.0 must do. `docs/refactor-plan.md` holds the milestone plan, the decisions taken, and the status of each phase. Raise a feature that neither names before you build it.
 
 ## Tests
 
-Protocol parsers (telnet, ANSI, GMCP) need unit tests against captured byte stream fixtures. Drop fixtures into `fixtures/`. Integration tests should run against a fake MUD server fixture rather than a live MUD.
+A page test sits next to the file it tests as `name.test.ts` or `name.test.tsx`, and `npm test` runs them all with vitest. A Rust unit test lives in a `tests` module or a `tests.rs` beside its code. Tests that span the app crate live in `src-tauri/src/tests/`, and the integration tests there play against the fake MUD in `src-tauri/src/tests/fake_mud/` rather than a live game. A crate keeps its integration tests in its own `tests/` folder.
+
+Protocol parsers need unit tests against byte stream fixtures. Fixtures live in `fixtures/`, and `fixtures/README.md` says what each folder holds and which test reads it. When the page and Rust share a rule, one fixture holds both halves to the same cases.
 
 Run a single test by name.
 
 ```
 cargo test --workspace <test_name>
+npx vitest run <file>
 ```
+
+## Regenerating Fixtures
+
+Some fixtures are written by the code they check. A test fails when the code no longer matches its fixture. When you meant the change, run the test with its switch set, read the diff, and commit the new fixture with the change that caused it. Leave every switch unset otherwise.
+
+| Switch                         | Fixture                             | Test                                      |
+| ------------------------------ | ----------------------------------- | ----------------------------------------- |
+| `VOSH_WRITE_CONFIG=1`          | `fixtures/config/`                  | `src-tauri/src/tests/config_golden.rs`    |
+| `VOSH_WRITE_IPC_NAMES=1`       | `fixtures/ipc/names.txt`            | `src-tauri/src/tests/ipc_contract.rs`     |
+| `VOSH_WRITE_WIRE=1`            | `fixtures/prompt/aabahran/wire/`    | `crates/prompt/tests/wire.rs`             |
+| `VOSH_WRITE_PINNED_SPLITS=1`   | `fixtures/prompt/aabahran/pinned/`  | `src-tauri/src/session/tests/show.rs`     |
+| `VOSH_WRITE_PREVIEW_SPLITS=1`  | `fixtures/prompt/aabahran/preview/` | `src-tauri/src/session/tests/preview.rs`  |
+| `VOSH_WRITE_POINTER_CASES=1`   | `fixtures/prompt/aabahran/pointer/` | `src-tauri/src/session/tests/pointer.rs`  |
+| `VOSH_WRITE_COLLAPSE_SPLITS=1` | `fixtures/collapse/`                | `src-tauri/src/session/tests/collapse.rs` |
+
+For example, `VOSH_WRITE_WIRE=1 cargo test -p vosh-prompt --test wire`.
+
+A config golden changes only in a commit tied to a numbered bug or a decision, and the files in `fixtures/config/old/` never change.
 
 ## Writing Style
 
@@ -103,7 +126,11 @@ User-visible prose follows a strict style. README, CONTRIBUTING, settings labels
 
 Code comments are for developers and follow the same style where it makes sense, but stay rare. Names should carry the meaning. Comment only when the why is non obvious.
 
-You edit the in-app help in `HELP.md`, which the Help window reads when Vosh is built. A new topic needs an `<!-- id: section.topic -->` line under its heading, and the build stops if one is missing or used twice.
+## Help and Release Notes
+
+`HELP.md` is the one copy of the in-app help, and the Help window reads it when Vosh is built. A change that alters what you see or do updates the help topic that describes it in the same commit. A new topic needs an `<!-- id: section.topic -->` line under its heading, and the build stops if one is missing or used twice. `fixtures/links/help-topics.json` lists every topic id in rail order, so a new or moved topic updates that file too.
+
+`CHANGES.md` holds the release notes, newest first. Each release adds its entry in the same commits as the version bump, and nothing else touches the file. An entry opens with one summary line, then gives one change per bullet in words a player knows, with no commit hashes, file names or internal names.
 
 ## Reporting Bugs
 
