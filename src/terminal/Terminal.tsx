@@ -7,24 +7,14 @@ import { SearchAddon, type ISearchResultChangeEvent } from '@xterm/addon-search'
 
 import '@xterm/xterm/css/xterm.css';
 import { subscribeBaseAnsi } from '../theme/baseAnsi';
-import {
-  nativeSurfaceSetFont,
-  nativeSurfaceSetTheme,
-  onNativeGridSize,
-} from '../ipc/nativeSurface';
+import { nativeSurfaceSetFont, onNativeGridSize } from '../ipc/nativeSurface';
 import { setWindowSize } from '../ipc/session';
 import { othersOnProfile } from '../stores/session/sessionsStore';
 import { loadScrollback, onOutput, terminalLocalWrite } from '../ipc/terminal';
 import { useTauriEvent } from '../ipc/useTauriEvent';
-import { findTheme, onCustomThemesChanged } from '../theme/themes';
-import {
-  getColorVision,
-  getFitGameColors,
-  subscribeColorVision,
-  subscribeFitGameColors,
-} from '../theme/fitGameColors';
-import { setHighlightGround } from './highlightGround';
-import { nativeThemeOf, xtermThemeFor } from './terminalTheme';
+import { onCustomThemesChanged } from '../theme/themes';
+import { subscribeColorVision, subscribeFitGameColors } from '../theme/fitGameColors';
+import { reportTheme, themeFor, washFieldsFor } from './paneTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../theme/theme';
 import { OutputShaper } from './outputShaper';
 import { RegionWriter } from './terminalRegion';
@@ -35,38 +25,12 @@ import { GameSizeReport, gameSize, keepTail, type WindowSize } from './terminalR
 import { noteReader } from './readerBusy';
 import { ingestRecentNames } from '../input/recentNames';
 import { underlayShows, XtermMirror } from './xterm/xtermMirror';
-import {
-  refillsWashes,
-  WashPainter,
-  washFields,
-  WashWidth,
-  type WashFields,
-} from './xterm/xtermWash';
+import { refillsWashes, WashPainter, WashWidth, type WashFields } from './xterm/xtermWash';
 import { XtermBlink } from './xterm/xtermBlink';
 import { xtermWebgl } from './xterm/xtermWebgl';
 import { forwardUnderlayPointer } from './native/underlayPointer';
 import { PaneSizer } from './paneSizer';
 import { terminalHandle, type TerminalHandle } from './terminalHandle';
-
-// Report the active theme's terminal background to the session, which
-// keeps trigger colors readable on it, on either renderer. Then report the
-// surface colors and resolved ANSI palette to the native renderer so its
-// background/foreground/selection and the 16-color palette match xterm
-// (including the themeTerminalColors tint, Fit game colors and the
-// color vision it fits for),
-// live-updating on theme or toggle change.
-function reportTheme(themeId: string, themeTerminalColors: boolean): void {
-  const theme = findTheme(themeId);
-  setHighlightGround(theme.xterm.background);
-  if (!nativeSurfaceEnabled()) return;
-  const native = nativeThemeOf(theme, themeTerminalColors, getFitGameColors(), getColorVision());
-  void nativeSurfaceSetTheme({
-    background: native.background,
-    foreground: native.foreground,
-    selection: native.selection,
-    ansi: native.ansi,
-  }).catch(() => {});
-}
 
 interface Props {
   /** The session whose terminal this is. It hears that session's output
@@ -136,31 +100,6 @@ interface Props {
   blinkText?: boolean;
   /// Scrollback size, the lines xterm keeps above the screen.
   scrollback?: number;
-}
-
-// The terminal's palette lives in src/terminal/terminalTheme.ts, which the
-// pinned prompt band reads too.
-
-/** `color`, a #rrggbb ground, fully clear. */
-function clearGround(color: string | undefined): string {
-  const m = /^#?([0-9a-f]{6})/i.exec(color ?? '');
-  return m ? `#${m[1]}00` : 'rgba(0, 0, 0, 0)';
-}
-
-/** The theme xterm draws with: the terminal palette, its ground clear
- *  while the pane lifts your prompts (`clear`), since the bands draw under
- *  xterm's text and the terminal area's ground shows through. */
-function themeFor(themeId: string, tinted: boolean, clear: boolean) {
-  const theme = xtermThemeFor(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
-  if (clear) theme.background = clearGround(theme.background);
-  return theme;
-}
-
-/** The fields xterm paints washed rows in, from the palette and the
- *  ground the native renderer draws, the ground before it goes clear. */
-function washFieldsFor(themeId: string, tinted: boolean): WashFields {
-  const native = nativeThemeOf(findTheme(themeId), tinted, getFitGameColors(), getColorVision());
-  return washFields(native.ansi, native.background);
 }
 
 export function Terminal({
