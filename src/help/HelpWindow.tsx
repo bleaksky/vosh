@@ -312,7 +312,7 @@ export function HelpWindow() {
   };
 
   return (
-    <div className="st-app hp-app">
+    <div className="st-app hp-app window-edge">
       <HelpSidebar
         topic={shown}
         openSection={openSection}

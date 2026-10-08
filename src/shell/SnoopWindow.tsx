@@ -62,7 +62,7 @@ export function SnoopWindow({ session }: Props) {
   });
 
   return (
-    <div className="snoop-window">
+    <div className="snoop-window window-edge">
       <header className="snoop-window-band" data-tauri-drag-region="">
         <SnoopStrip session={session} snoops={snoops} onFind={openFind} onCaret={() => {}} />
         {!mac && <WindowControls />}

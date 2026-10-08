@@ -34,28 +34,6 @@
   }
 }
 
-/* Window edge for the frameless window on Windows and Linux. macOS
-   draws the titled frame's own rim and corners, and WebView2 cannot
-   composite behind rounded corners, so Windows stays square. */
-.st-app::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--edge);
-  pointer-events: none;
-}
-
-[data-platform='macos'] .st-app,
-[data-platform='windows'] .st-app {
-  border-radius: 0;
-}
-
-[data-platform='macos'] .st-app::after {
-  display: none;
-}
-
 .st-visually-hidden {
   position: absolute;
   width: 1px;

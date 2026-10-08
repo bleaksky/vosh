@@ -384,7 +384,7 @@ export function SettingsWindow() {
   const subpage = settingsSubpage(nav.target);
 
   return (
-    <div className="st-app">
+    <div className="st-app window-edge">
       <Sidebar group={group} onNavigate={go} pathB={pathB} mac={mac} />
       <main className="st-main">
         <header className="st-header" data-tauri-drag-region="">
