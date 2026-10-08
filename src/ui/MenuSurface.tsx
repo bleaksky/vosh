@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../lib/escapeStack';
+import { shortcutLabel } from '../lib/shortcuts';
 import { pointAt, pointerLeft, trackMenuPointer } from './menuAim';
 import { placeMenu, type MenuPlacement } from './menuPlacement';
 
@@ -176,9 +177,17 @@ interface ItemProps {
   children: ReactNode;
   onSelect?: () => void;
   disabled?: boolean;
-  /** A row that toggles, read out as checked or not. */
+  /** A row that toggles, read out as checked or not. With `radio`,
+   *  the one row of its group that is picked. */
   checked?: boolean;
-  /** Right aligned: a check, a chevron, a shortcut. */
+  /** One of a group of rows where one is picked, read out as a radio. */
+  radio?: boolean;
+  /** A row that removes or ends something, drawn in the danger tone. */
+  danger?: boolean;
+  /** The row's shortcut, as a spec like `Mod+K`, drawn at the right in
+   *  the platform's own glyphs. */
+  keys?: string;
+  /** Right aligned after the shortcut: a check or a chevron. */
   trailing?: ReactNode;
   /** Menu attributes for a row that opens a submenu. */
   submenu?: { open: boolean; controls: string; onOpen: (focusFirst: boolean) => void };
@@ -200,6 +209,9 @@ export function MenuItem({
   onSelect,
   disabled,
   checked,
+  radio,
+  danger,
+  keys,
   trailing,
   submenu,
   onHover,
@@ -223,9 +235,9 @@ export function MenuItem({
       <button
         ref={itemRef}
         type="button"
-        role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-        aria-checked={checked}
-        className="menu-item"
+        role={radio ? 'menuitemradio' : checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+        aria-checked={radio ? checked === true : checked}
+        className={danger ? 'menu-item is-danger' : 'menu-item'}
         aria-disabled={disabled || undefined}
         aria-haspopup={submenu ? 'menu' : undefined}
         aria-expanded={submenu ? submenu.open : undefined}
@@ -251,7 +263,9 @@ export function MenuItem({
           else onSelect?.();
         }}
       >
+        {/* The label comes first, where the coach finds a row by name. */}
         <span className="menu-label">{children}</span>
+        {keys && <kbd className="menu-keys">{shortcutLabel(keys)}</kbd>}
         {trailing}
       </button>
     </li>

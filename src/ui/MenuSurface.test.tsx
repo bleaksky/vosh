@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOLD_MS, notePointer, resetMenuAim } from './menuAim';
 import { MenuItem } from './MenuSurface';
@@ -7,7 +7,11 @@ import { MenuItem } from './MenuSurface';
 // events a player sends, with no page to render into.
 
 interface ButtonProps {
+  role: string;
+  className: string;
+  'aria-checked'?: boolean;
   'aria-disabled'?: boolean;
+  children: ReactNode[];
   onKeyDown: (e: { key: string; preventDefault: () => void; stopPropagation: () => void }) => void;
   onClick: () => void;
   onPointerEnter: (e: { currentTarget: FakeRow }) => void;
@@ -25,6 +29,7 @@ interface FakeRow {
 // the menu, none unless a test opens one.
 const page = {
   activeElement: null as unknown,
+  platform: 'macos',
   submenus: [] as {
     id: string;
     box: { left: number; right: number; top: number; bottom: number };
@@ -35,7 +40,15 @@ beforeEach(() => {
   resetMenuAim();
   page.activeElement = null;
   page.submenus = [];
+  page.platform = 'macos';
   vi.stubGlobal('document', {
+    documentElement: {
+      dataset: {
+        get platform() {
+          return page.platform;
+        },
+      },
+    },
     get activeElement() {
       return page.activeElement;
     },
@@ -103,6 +116,47 @@ describe('MenuItem', () => {
     const el = fakeRow();
     button.onPointerMove({ currentTarget: el });
     expect(el.focus).toHaveBeenCalledOnce();
+  });
+});
+
+/** The button a row renders. */
+function button(props: Parameters<typeof MenuItem>[0]): ButtonProps {
+  const li = MenuItem(props) as ReactElement<{ children: ReactElement<ButtonProps> }>;
+  return li.props.children.props;
+}
+
+describe('MenuItem rows', () => {
+  it('draws its shortcut in the platform glyphs after the label', () => {
+    const mac = button({ children: 'Find', keys: 'Mod+F' });
+    const [label, keys] = mac.children as ReactElement<{
+      className: string;
+      children: string;
+    }>[];
+    expect(label.props.className).toBe('menu-label');
+    expect(keys.type).toBe('kbd');
+    expect(keys.props).toEqual({ className: 'menu-keys', children: '⌘F' });
+    page.platform = 'windows';
+    const pc = button({ children: 'Find', keys: 'Mod+F' }).children as ReactElement<{
+      children: string;
+    }>[];
+    expect(pc[1].props.children).toBe('Ctrl+F');
+    expect(button({ children: 'Find' }).children[1]).toBeFalsy();
+  });
+
+  it('draws a danger row in its own tone', () => {
+    expect(button({ children: 'Close pane', danger: true }).className).toBe('menu-item is-danger');
+    expect(button({ children: 'Close pane' }).className).toBe('menu-item');
+  });
+
+  it('reads out a radio row as picked or not, and a check row as checked', () => {
+    const on = button({ children: 'Ledger', radio: true, checked: true });
+    expect([on.role, on['aria-checked']]).toEqual(['menuitemradio', true]);
+    const off = button({ children: 'Gauges', radio: true });
+    expect([off.role, off['aria-checked']]).toEqual(['menuitemradio', false]);
+    const check = button({ children: 'Timestamps', checked: false });
+    expect([check.role, check['aria-checked']]).toEqual(['menuitemcheckbox', false]);
+    const plain = button({ children: 'Copy' });
+    expect([plain.role, plain['aria-checked']]).toEqual(['menuitem', undefined]);
   });
 });
 
