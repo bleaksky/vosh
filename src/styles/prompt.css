@@ -1733,9 +1733,6 @@
 }
 
 .gs-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
   margin-left: 12px;
 }
 

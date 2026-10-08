@@ -109,9 +109,6 @@
 }
 
 .st-search-keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
   margin-left: 6px;
 }
 
@@ -2464,7 +2461,7 @@
   line-height: 16px;
 }
 
-.st-auto-keypair.is-warn .st-keycap {
+.st-auto-keypair.is-warn .keycap {
   border-color: var(--warn);
   color: var(--warn-text);
 }

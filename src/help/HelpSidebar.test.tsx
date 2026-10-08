@@ -39,7 +39,7 @@ describe('the help sidebar', () => {
     expect(html).toMatch(/aria-current="page"[^>]*><span class="st-nav-label">Prompt design codes/);
     expect(html.match(/class="st-nav-item hp-topic"/g)).toHaveLength(3);
     // The Cmd+F keycaps sit in the empty search.
-    expect(html).toContain('<kbd class="st-keycap st-keycap-glyph">⌘</kbd>');
+    expect(html).toContain('<kbd class="keycap is-glyph">⌘</kbd>');
   });
 
   it('swaps the nav for the results while the search holds words', () => {
@@ -51,7 +51,7 @@ describe('the help sidebar', () => {
       /aria-selected="true"[^>]*>.*?<span class="st-nav-label">Choose where your prompt shows<\/span><span[^>]*>, in Shape the window<\/span>/,
     );
     // The keycaps leave while the search holds text.
-    expect(html).not.toContain('st-keycap');
+    expect(html).not.toContain('keycap');
   });
 
   it('says so when nothing matches', () => {

@@ -58,7 +58,7 @@ describe('a help topic', () => {
     expect(show).toMatch(/<ul><li>/);
     const send = draw(topic('play.send-commands'));
     expect(send).toContain(
-      '<kbd class="hp-keys"><kbd class="st-keycap">Shift</kbd><kbd class="st-keycap">Enter</kbd></kbd>',
+      '<kbd class="keys"><kbd class="keycap">Shift</kbd><kbd class="keycap">Enter</kbd></kbd>',
     );
   });
 

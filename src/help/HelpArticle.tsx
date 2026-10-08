@@ -100,7 +100,7 @@ function piece(p: InlinePiece, key: number, marker: Marker): ReactNode {
       );
     case 'key': {
       const keys = (
-        <kbd className="hp-keys">
+        <kbd className="keys">
           {(keyParts(p.text) ?? [p.text]).map((part, i) => (
             <Keycap key={i}>{keyGlyph(part)}</Keycap>
           ))}

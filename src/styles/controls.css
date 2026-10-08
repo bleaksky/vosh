@@ -439,7 +439,7 @@
   background: transparent;
 }
 
-.st-keycap {
+.keycap {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -457,16 +457,21 @@
   font-weight: 400;
 }
 
-.st-keycap-glyph {
+.keycap.is-glyph {
   width: 20px;
   padding: 0;
 }
 
-/* A row of keycaps 4 apart, and a shortcut set 12 before its toggle
-   (Show the panel on Layout). */
-.st-keys {
-  display: flex;
+/* A row of keycaps 4 apart. It works as a <kbd> wrapper and inside
+   running text. The place that sets a row sets its margin. */
+.keys {
+  display: inline-flex;
+  flex: none;
   gap: 4px;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  white-space: nowrap;
 }
 
 .st-control-group {

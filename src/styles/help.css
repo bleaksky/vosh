@@ -157,14 +157,6 @@
   white-space: nowrap;
 }
 
-/* A key you press, as Settings keycaps 4 apart. */
-.hp-keys {
-  display: inline-flex;
-  gap: 4px;
-  font: inherit;
-  white-space: nowrap;
-}
-
 /* A search match, ANSI yellow at 28% the way the find bar and the
    session logs page mark one, and a 1 px ring on the match you are on.
    HelpWindow sets both colors from the theme. */
