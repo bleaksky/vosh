@@ -3,8 +3,11 @@
 //! first, and its last 20 posts under Sent, with the game's copy of each
 //! text the game saves in place and the race and level last seen, so a
 //! werebeast keeps its Beast switch after a login that sends no
-//! Char.Status. The card's own switches, Check
-//! spelling and the guide, sit at the top of the file.
+//! Char.Status. A character also keeps the kinds of text, `description`
+//! or `history`, whose check the game holds and has not decided yet, so
+//! the card can say the check reads the text you sent back then. The
+//! card's own switches, Check spelling and the guide, sit at the top of
+//! the file.
 //!
 //! A file of its own means a keystroke never rewrites a profile. The page
 //! saves one character at a time, and each save reads the file, swaps
@@ -82,6 +85,9 @@ pub(crate) struct Character {
     pub(crate) drafts: Vec<Draft>,
     #[serde(default)]
     pub(crate) sent: Vec<Draft>,
+    /// The kinds with a check waiting, `description` or `history`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) checks: Vec<String>,
 }
 
 /// A draft, or a post under Sent.
@@ -148,7 +154,8 @@ pub(crate) fn save_character(path: &Path, mut character: Character) -> Result<()
         && character.sent.is_empty()
         && character.race.is_none()
         && character.level.is_none()
-        && character.beast.is_none();
+        && character.beast.is_none()
+        && character.checks.is_empty();
     if empty {
         file.characters.remove(&key);
     } else {
@@ -235,6 +242,41 @@ mod tests {
         let file = read(&path).expect("the file");
         assert!(!file.spelling);
         assert!(file.guide);
+    }
+
+    #[test]
+    fn keeps_a_character_with_only_a_check_waiting() {
+        let dir = tempfile::tempdir().expect("a folder");
+        let path = dir.path().join("writing.toml");
+        save_character(
+            &path,
+            Character {
+                checks: vec!["history".into()],
+                ..character("Tolliver")
+            },
+        )
+        .expect("a save");
+        let file = read(&path).expect("the file");
+        let kept = &file.characters["play.theforsakenlands.com:1848 tolliver"];
+        assert_eq!(kept.checks, ["history"]);
+        // The check decided, nothing is left and the character goes.
+        save_character(&path, character("Tolliver")).expect("a save");
+        assert!(read(&path).expect("the file").characters.is_empty());
+    }
+
+    #[test]
+    fn reads_a_file_from_before_checks() {
+        let dir = tempfile::tempdir().expect("a folder");
+        let path = dir.path().join("writing.toml");
+        std::fs::write(
+            &path,
+            "version = 1\n\n[characters.\"play.theforsakenlands.com:1848 maren\"]\nhost = \"play.theforsakenlands.com\"\nport = 1848\nname = \"Maren\"\nlevel = 12\n",
+        )
+        .expect("a write");
+        let file = read(&path).expect("the file");
+        let maren = &file.characters["play.theforsakenlands.com:1848 maren"];
+        assert_eq!(maren.checks, Vec::<String>::new());
+        assert_eq!(maren.level, Some(12));
     }
 
     #[test]

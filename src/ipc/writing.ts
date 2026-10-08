@@ -197,6 +197,8 @@ export interface WritingCharacter {
   beast?: string | null;
   drafts: Draft[];
   sent: Draft[];
+  /** The kinds whose check the game holds and has not decided. */
+  checks?: ('description' | 'history')[];
 }
 
 /** writing.toml, `WritingFile` in writing.rs. */
