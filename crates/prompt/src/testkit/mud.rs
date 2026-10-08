@@ -11,6 +11,8 @@
 //! fight, a blank line unless you play compact, the prompt that
 //! [`game::prompt`] prints for your PROMPT, and IAC GA, or IAC EOR once
 //! the client asked for it from a game that plays [`Options::eor`].
+//! [`Options::order`] moves the packets after the reply and before the
+//! prompt, as a game that writes GMCP into its output buffer sends them.
 //!
 //! Three server builds are played, as [`Build`] names them. Output that
 //! comes without a command, such as someone arriving, starts on a new line
@@ -140,6 +142,20 @@ impl Build {
     }
 }
 
+/// Where the prompt time packages come beside the text of their pulse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TickOrder {
+    /// Before the text, as Aabahran sends them: `gmcp_send` writes
+    /// straight to the socket (gmcp.c:21) and the text waits in the output
+    /// buffer until the pulse ends (comm.c:1629).
+    #[default]
+    First,
+    /// After the reply and before the prompt, as a game that writes GMCP
+    /// into its output buffer as it prints the prompt sends them. The
+    /// packets a command wrote come with them.
+    Middle,
+}
+
 /// How a connection starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Options {
@@ -175,6 +191,8 @@ pub struct Options {
     pub affects: Vec<Affect>,
     /// How long `bash` lags you, in milliseconds.
     pub bash_ms: u64,
+    /// Where the prompt time packages come.
+    pub order: TickOrder,
 }
 
 /// An affect on you, one Char.Affects row.
@@ -249,6 +267,7 @@ impl Options {
             incog: 0,
             affects: default_affects(),
             bash_ms: BASH_MS,
+            order: TickOrder::First,
         }
     }
 }
@@ -317,6 +336,8 @@ pub struct Mud {
     logged_in: bool,
     split_next: bool,
     bash_ms: u64,
+    /// Where the prompt time packages come, see [`Options::order`].
+    order: TickOrder,
     /// The lag a skill put on you, which holds your next line.
     wait_ms: Option<u64>,
     /// Client bytes not read yet, and the line they build.
@@ -358,6 +379,7 @@ impl Mud {
             logged_in: false,
             split_next: false,
             bash_ms: options.bash_ms,
+            order: options.order,
             wait_ms: None,
             input: Vec::new(),
             line: Vec::new(),
@@ -656,6 +678,21 @@ impl Mud {
         self.pulse(early, &format!("{reply}\n\r"), true).bytes
     }
 
+    /// The round that starts a fight someone else begins, such as an
+    /// aggressive guard: the guard attacks, `reply` follows on a new line,
+    /// then the prompt with the fight's first Char.Combat.
+    pub fn fight_starts_later(&mut self, reply: &str) -> Vec<u8> {
+        self.state.fighting = true;
+        self.state.hit = FIGHT_HIT;
+        self.state.position = 8;
+        self.state.tank = Some(Tank {
+            name: self.name.clone(),
+            hit: FIGHT_HIT,
+            max_hit: self.state.max_hit,
+        });
+        self.pulse(Vec::new(), &format!("{reply}\n\r"), true).bytes
+    }
+
     /// Hand over a pulse, cut in two when `split` asked for it.
     fn deliver(&mut self, pulse: Pulse) -> Vec<Write> {
         let Some(at) = pulse.prompt_at.filter(|_| self.split_next) else {
@@ -677,17 +714,21 @@ impl Mud {
     /// packages, then the text. `later` starts the text on a new line, as
     /// output that no command asked for does.
     fn pulse(&mut self, early: Vec<u8>, reply: &str, later: bool) -> Pulse {
-        let mut out = early;
+        let mut packets = early;
         let ticks = self.build == Build::New || (self.prompt_on && !self.state.afk);
         if self.gmcp && ticks {
-            out.extend(self.vitals());
-            out.extend(self.worth());
-            out.extend(self.combat());
-            out.extend(self.group());
+            packets.extend(self.vitals());
+            packets.extend(self.worth());
+            packets.extend(self.combat());
+            packets.extend(self.group());
             if self.build == Build::New {
-                out.extend(self.char_state());
-                out.extend(self.weather());
+                packets.extend(self.char_state());
+                packets.extend(self.weather());
             }
+        }
+        let mut out = Vec::new();
+        if self.order == TickOrder::First {
+            out.append(&mut packets);
         }
         let mut text = String::new();
         if later {
@@ -701,6 +742,7 @@ impl Mud {
             text.push_str("\n\r");
         }
         game::send_to_char(&mut out, &text, &self.state);
+        out.append(&mut packets);
         let mut prompt_at = None;
         if self.prompt_on {
             prompt_at = Some(out.len());

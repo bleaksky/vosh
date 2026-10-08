@@ -21,7 +21,7 @@ pub mod wire;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
 
-pub use mud::{Affect, Build, Mud, Options, Write};
+pub use mud::{Affect, Build, Mud, Options, TickOrder, Write};
 
 /// The instant every packet a test feeds arrives at.
 pub fn at() -> DateTime<FixedOffset> {
