@@ -383,7 +383,9 @@ fn render(
             let title = title(&span.lines);
             let meta = meta(&span.log, &span.lines);
             let footer = footer(filter);
+            let name = file_stem(&span.lines);
             let header = html::Header {
+                name: &name,
                 title: &title,
                 meta: &meta,
                 footer: &footer,

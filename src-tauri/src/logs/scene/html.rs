@@ -74,6 +74,9 @@ fn safe_color(color: &str) -> bool {
 
 /// What the header says.
 pub(crate) struct Header<'a> {
+    /// The page's name in the browser, the file's name without its
+    /// extension.
+    pub(crate) name: &'a str,
     /// The title, the first room name in the range.
     pub(crate) title: &'a str,
     /// The line under it, who, where and when.
@@ -239,7 +242,7 @@ footer {{ margin: 20px 0 0; color: var(--muted); font-size: 12px; line-height: 1
 <footer>{footer}</footer>
 </main>
 ",
-        title_tag = escape(header.title),
+        title_tag = escape(header.name),
         title = escape(header.title),
         meta = escape(header.meta),
         footer = escape(header.footer),
@@ -262,6 +265,7 @@ mod tests {
 
     fn header() -> Header<'static> {
         Header {
+            name: "Thickening Woods, October 3",
             title: "Thickening Woods",
             meta: "Orla in The Forsaken Lands, October 3, 2026, from 21:14 to 21:15",
             footer: "Saved from Vosh.",
@@ -283,7 +287,7 @@ mod tests {
         assert!(html.contains(".b { font-weight: 700 }"));
         assert!(!html.contains(".c1 {"), "only the classes in use");
         assert!(html.contains("--c15: #00000f;"));
-        assert!(html.contains("<title>Thickening Woods</title>"));
+        assert!(html.contains("<title>Thickening Woods, October 3</title>"));
         assert!(!html.contains("<script"));
     }
 
@@ -305,6 +309,7 @@ mod tests {
         let html = render(
             &[b"Tolliver says '<script>alert(1)</script> & more'".to_vec()],
             &Header {
+                name: "</title><script>",
                 title: "</title><script>",
                 ..header()
             },

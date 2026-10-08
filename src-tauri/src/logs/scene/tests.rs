@@ -185,7 +185,10 @@ fn the_file_holds_what_stays_with_a_header_and_a_footer() {
     .expect("saved");
     assert_eq!(name, "Thickening Woods, October 3.html");
     let html = std::fs::read_to_string(dir.path().join(&name)).expect("the file");
-    assert!(html.contains("<title>Thickening Woods</title>"), "{html}");
+    assert!(
+        html.contains("<title>Thickening Woods, October 3</title>"),
+        "{html}"
+    );
     assert!(html.contains("<h1>Thickening Woods</h1>"));
     assert!(
         html.contains("<p>Orla in The Forsaken Lands, October 3, 2026, from 21:14 to 21:15</p>")
