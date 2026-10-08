@@ -54,6 +54,7 @@ export const SESSION_IDENTITY_CHANGED = 'vosh://session-identity-changed';
 export const SESSION_SELECTED = 'vosh://session-selected';
 export const SESSIONS_CHANGED = 'vosh://sessions-changed';
 export const CUSTOM_THEMES_CHANGED = 'vosh://custom-themes-changed';
+export const SCENE_SAVED = 'vosh://scene-saved';
 export const LOADOUTS_CHANGED = 'vosh://loadouts-changed';
 export const MIGRATION_APPLIED = 'vosh://migration-applied';
 export const AFFECT_FULL_CHANGED = 'vosh://affect-full-changed';

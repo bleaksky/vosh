@@ -308,6 +308,10 @@ pub(crate) const DAYLIGHT_CHANGED: &str = "vosh://daylight-changed";
 /// [`crate::profile::ui::CustomTheme`].
 /// `subscribeCustomThemesChanged` hears it.
 pub(crate) const CUSTOM_THEMES_CHANGED: &str = "vosh://custom-themes-changed";
+/// Sent to every window once Save a scene wrote its file to Downloads.
+/// The payload is `{name}`, the file's name. `subscribeSceneSaved` hears
+/// it, and the main window says so with a button that shows the file.
+pub(crate) const SCENE_SAVED: &str = "vosh://scene-saved";
 /// Sent to every window when the active loadouts changed. The payload
 /// is null. `subscribeLoadoutsChanged` hears it.
 pub(crate) const LOADOUTS_CHANGED: &str = "vosh://loadouts-changed";

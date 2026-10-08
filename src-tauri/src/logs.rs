@@ -1,6 +1,7 @@
 //! Your logs. This module keeps the session log and the scrollback ring,
 //! [`forget_passwords`] blanks the lines in that log where you sent a
-//! password, and [`retention`] deletes the logs past Keep logs for.
+//! password, [`retention`] deletes the logs past Keep logs for, and
+//! [`scene`] saves a stretch of one log as a scene to share.
 //!
 //! The shared log store wraps `vosh_log::LogStore` in an async mutex so
 //! the session `io_loop`, the search commands, and the scrollback flush
@@ -11,6 +12,7 @@
 
 pub(crate) mod forget_passwords;
 pub(crate) mod retention;
+pub(crate) mod scene;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};

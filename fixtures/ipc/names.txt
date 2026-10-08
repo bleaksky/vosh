@@ -119,6 +119,9 @@ command prompt_state_get(session?)
 command prompt_watch(on, session?)
 command reconnect_get(profile?)
 command reconnect_set(on, profile?)
+command scene_preview(range, filter, format, session?)
+command scene_reveal(name)
+command scene_save(range, filter, format, palette?, session?)
 command scrollback_clear(session?)
 command scrollback_load(feedNative, session?)
 command session_close(session)
@@ -246,6 +249,7 @@ event vosh://profiles-changed app heard
 event vosh://prompt-card-open page heard
 event vosh://prompt-config-changed app heard
 event vosh://readable-highlights-changed page heard
+event vosh://scene-saved app heard
 event vosh://scrollback-lines-changed page heard
 event vosh://session-identity-changed app heard
 event vosh://session-selected app heard
