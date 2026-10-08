@@ -61,7 +61,7 @@ export function VitalsChoiceItems<T extends string>({
 }
 
 const openSettingsAt = () =>
-  openSettingsTab(formatSettingsTarget({ group: 'layout', section: 'customize-vitals' }));
+  openSettingsTab(formatSettingsTarget({ group: 'vitals', section: 'customize-vitals' }));
 
 interface Props {
   /** The pointer, where the menu opens. */

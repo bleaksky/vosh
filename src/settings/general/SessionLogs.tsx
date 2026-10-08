@@ -47,8 +47,8 @@ import { Button, CheckIcon, CopyIcon, Field, SaveFileIcon, SearchIcon, Select } 
 import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
 
-// The log view inside General (the approved SettingsGeneralLogs
-// board), at general:logs. One toolbar over the results: the pattern,
+// The log view inside Logs (the approved SettingsGeneralLogs board),
+// at logs:search. One toolbar over the results: the pattern,
 // a regular expression over MUD text in the terminal font, the Aa
 // match case switch, the count, and the logs to search. A log is one
 // connection, which the store calls a session (Q21). The view reads

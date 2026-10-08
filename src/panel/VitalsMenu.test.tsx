@@ -96,7 +96,7 @@ describe('vitals menu', () => {
     menuRows(DEFAULT_VITALS_OPTIONS)
       .find((row) => row.children === 'Customize vitals…')
       ?.onSelect?.();
-    expect(openSettingsTab).toHaveBeenCalledWith('layout:customize-vitals');
+    expect(openSettingsTab).toHaveBeenCalledWith('vitals:customize-vitals');
   });
 
   it('adds Edit your text under Text, and Values goes quiet', () => {

@@ -192,8 +192,10 @@ const PANE_TITLES: Record<OfferedPaneType, string> = {
 
 // Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
 // `settings-<id>`, a palette Recent id, so the old tab ids stay. The
-// vitals row is gone because Settings no longer has vitals settings.
-// Its id still resolves, to Layout.
+// Settings layout move (October 8) brought back the vitals row, now for
+// the Vitals tab, and added rows for Accessibility, Prompt and the Logs
+// tab. The logs row keeps its id and opens the search, as the bare
+// link does, so the Logs tab row names its first section.
 // The four Automation pages carry the Settings keys, Cmd+Option+1 to 4
 // on macOS and Ctrl+Shift+1 to 4 elsewhere, read for the platform as
 // the palette builds.
@@ -215,11 +217,26 @@ const SETTINGS_TABS: {
   },
   { id: 'tick', title: 'Open tick settings', keywords: 'automation timer warn' },
   { id: 'panels', title: 'Open panel layout settings', keywords: 'characters panes layout' },
-  { id: 'general', title: 'Open general settings', keywords: 'updates scope logs' },
+  { id: 'general', title: 'Open general settings', keywords: 'updates scope' },
+  {
+    id: 'accessibility',
+    title: 'Open accessibility settings',
+    keywords: 'color vision blind contrast readable highlights blinking motion',
+  },
+  {
+    id: 'vitals',
+    title: 'Open vitals settings',
+    keywords: 'health mana moves gauges meter style customize',
+  },
+  {
+    id: 'prompt',
+    title: 'Open prompt settings',
+    keywords: 'prompt codes draw pinned preview',
+  },
   {
     id: 'input',
     title: 'Open input settings',
-    keywords: 'command line caret cursor prompt spell check paste history',
+    keywords: 'command line caret cursor spell check paste history writing card',
   },
   {
     id: 'profiles',
@@ -255,7 +272,12 @@ const SETTINGS_TABS: {
     title: 'Import from another client…',
     keywords: 'automation tintin mushclient mudlet gmud cmud zmud',
   },
-  { id: 'logs', title: 'Open session logs', keywords: 'history search' },
+  { id: 'logs', title: 'Search logs', keywords: 'history search session' },
+  {
+    id: 'logs:session-logs',
+    title: 'Open log settings',
+    keywords: 'session logs keep scrollback scene',
+  },
 ];
 
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {

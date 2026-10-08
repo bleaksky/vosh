@@ -584,7 +584,7 @@ export function PromptCard({
         setConfirmForget(true);
         return;
       case 'customize-vitals':
-        openSettingsTab(formatSettingsTarget({ group: 'layout', section: 'customize-vitals' }));
+        openSettingsTab(formatSettingsTarget({ group: 'vitals', section: 'customize-vitals' }));
         return;
     }
   };

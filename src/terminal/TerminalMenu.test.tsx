@@ -537,10 +537,14 @@ describe('the Settings list in the terminal menu', () => {
       '---',
       'General',
       'Appearance',
+      'Accessibility',
       'Layout',
+      'Vitals',
+      'Prompt',
       'Input',
       'Automation',
       'Scripts',
+      'Logs',
       'Characters',
       '---',
       // Help shows its shortcut, ⌘/ on macOS.
@@ -562,10 +566,10 @@ describe('the Settings list in the terminal menu', () => {
     await act(async () => on(m.row('Save a scene…')).onClick());
     expect(calls.log).toEqual([
       'close',
-      `emit ${SETTINGS_GOTO_TAB} general:scene`,
+      `emit ${SETTINGS_GOTO_TAB} logs:scene`,
       'invoke open_settings_window',
     ]);
-    expect(store.get(SETTINGS_PENDING_KEY)).toBe('general:scene');
+    expect(store.get(SETTINGS_PENDING_KEY)).toBe('logs:scene');
   });
 
   it('closes the menu, then opens Settings on each row, or Help', async () => {
