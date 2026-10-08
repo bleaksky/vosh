@@ -14,13 +14,29 @@ export interface TypeSpan {
   kind: TypeKind | null;
 }
 
+/** The word that decides a line: where it starts and ends, and the #
+ *  command it names. A # line reads its name the way the dispatcher
+ *  does, past any space after the #, and `#walk` may end at a `;`. */
+function leadWord(line: string): { start: number; end: number; command: string | null } {
+  const start = line.length - line.trimStart().length;
+  const first = line.slice(start).split(/\s/, 1)[0];
+  if (!first.startsWith('#')) return { start, end: start + first.length, command: null };
+  const rest = line.slice(start + 1);
+  const at = start + 1 + rest.length - rest.trimStart().length;
+  const body = line.slice(at);
+  const walk = /^walk(?=$|[;\s])/.test(body);
+  const command = walk ? 'walk' : body.split(/\s/, 1)[0];
+  return { start, end: at + command.length, command };
+}
+
 /** What `line` is, judged by its first word, or null for a plain line.
- *  An alias matches its name exactly, case and all, as it expands. */
+ *  A # line is a command before anything else, as the dispatcher reads
+ *  it. An alias matches its name exactly, case and all, as it expands. */
 export function kindOf(line: string, words: KnownWords): TypeKind | null {
-  const first = line.trimStart().split(/\s/, 1)[0];
-  if (first === '') return null;
-  if (words.aliases.includes(first)) return 'alias';
-  if (first.startsWith('#')) return words.commands.includes(first.slice(1)) ? 'hash' : 'unknown';
+  const { start, end, command } = leadWord(line);
+  if (command !== null) return words.commands.includes(command) ? 'hash' : 'unknown';
+  if (start === end) return null;
+  if (words.aliases.includes(line.slice(start, end))) return 'alias';
   return looksLikeChat(line) ? 'chat' : null;
 }
 
@@ -42,8 +58,7 @@ export function typeSpans(value: string, words: KnownWords): TypeSpan[] {
       push(line, kind);
       return;
     }
-    const start = line.length - line.trimStart().length;
-    const end = start + line.slice(start).split(/\s/, 1)[0].length;
+    const { start, end } = leadWord(line);
     push(line.slice(0, start), null);
     push(line.slice(start, end), kind);
     push(line.slice(end), null);

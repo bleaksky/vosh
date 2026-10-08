@@ -23,6 +23,13 @@ describe('kindOf', () => {
     expect(kindOf('#', words)).toBe('unknown');
   });
 
+  it('reads a # command the way the dispatcher does', () => {
+    expect(kindOf('# alias kk kick', words)).toBe('hash');
+    expect(kindOf('#walk;look', words)).toBe('hash');
+    expect(kindOf('#walk 3n;look', words)).toBe('hash');
+    expect(kindOf('#walk3n', words)).toBe('unknown');
+  });
+
   it('knows a chat line by the list spell check reads', () => {
     expect(kindOf('say The day has begun.', words)).toBe('chat');
     expect(kindOf("'hello", words)).toBe('chat');
@@ -41,6 +48,14 @@ describe('typeSpans', () => {
       ['  ', null],
       ['#walkies', 'unknown'],
       [' now', null],
+    ]);
+    expect(runs('# alias kk kick')).toEqual([
+      ['# alias', 'hash'],
+      [' kk kick', null],
+    ]);
+    expect(runs('#walk;look')).toEqual([
+      ['#walk', 'hash'],
+      [';look', null],
     ]);
   });
 
