@@ -37,9 +37,9 @@ const LEDGER_LOW_EXIT = 25;
 // can show the true ones.
 //
 // The store also keeps the last 60 Char.Vitals the game showed, each
-// with the time it came, for the Traces style (More Vitals Styles
-// Q27). A hidden packet stays out of it, and a disconnect empties it,
-// so it starts over at each login and never reaches the disk.
+// with the time it came, for the Traces style. A hidden packet stays
+// out of it, and a disconnect empties it, so it starts over at each
+// login and never reaches the disk.
 
 export interface VitalValues {
   hp: number;

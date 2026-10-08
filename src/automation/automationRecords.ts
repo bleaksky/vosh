@@ -525,9 +525,9 @@ export function keysYourMacrosKeep(preset: Preset, macros: readonly Macro[]): st
 }
 
 /** What a preset's card says when your macros keep keys the preset
- *  wants, and the card of a preset macro held off by yours. No board
- *  draws more than one such key, so two or more share one plural
- *  sentence, the keys in the order given. */
+ *  wants, and the card of a preset macro held off by yours. Two or more
+ *  such keys are rare, so they share one plural sentence, the keys in
+ *  the order given. */
 export function keptKeyNote(held: readonly Omit<Macro, 'preset'>[]): string {
   const keys = listJoin(held.map((m) => m.key));
   const sends = listJoin(held.map((m) => m.command));

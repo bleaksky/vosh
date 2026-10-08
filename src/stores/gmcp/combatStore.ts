@@ -137,11 +137,11 @@ export const getCombatOf = store.stateOf;
 /** Hear each change to a session's fight, with that session. */
 export const subscribeCombatOf = store.subscribeStates;
 
-// What a fight has been so far, for the Bands and Traces styles (More
-// Vitals Styles Q27): your vitals as the fight began, where Bands
-// stands its tick, and each health your opponent showed since, which
-// Traces draws and whose first Bands ticks. A new opponent starts a new
-// fight, and the end of one or a disconnect forgets it.
+// What a fight has been so far, for the Bands and Traces styles: your
+// vitals as the fight began, where Bands stands its tick, and each
+// health your opponent showed since, which Traces draws and whose first
+// Bands ticks. A new opponent starts a new fight, and the end of one or
+// a disconnect forgets it.
 
 /** How many of your opponent's healths a fight keeps. */
 export const FIGHT_HEALTHS = 240;

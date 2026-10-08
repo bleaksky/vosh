@@ -10,14 +10,14 @@ import {
 import { getSelected, getSessions, subscribeSessions } from './sessionsStore';
 import { createSessionStore } from '../sessionStore';
 
-// The players each session snoops (Snoop SN2 and SN5), as the backend
-// keeps them, with the tab in front and the tabs with lines you have not
-// seen. The backend sends the tab list on session://snoop once per read
-// that changed it, and a window that shows a session for the first time
-// asks snoop_get for every tab with its text. A start puts its tab in
-// front, a repeat snoop of the same player too, and a tab that goes
-// hands the front to its neighbor. A disconnect keeps the tabs, as the
-// backend does, which marks them ended.
+// The players each session snoops, as the backend keeps them, with the
+// tab in front and the tabs with lines you have not seen. The backend
+// sends the tab list on session://snoop once per read that changed it,
+// and a window that shows a session for the first time asks snoop_get
+// for every tab with its text. A start puts its tab in front, a repeat
+// snoop of the same player too, and a tab that goes hands the front to
+// its neighbor. A disconnect keeps the tabs, as the backend does, which
+// marks them ended.
 //
 // The text goes to the terminals that subscribe to it, never through the
 // state, so React draws nothing for each packet. Each terminal hears its

@@ -8,14 +8,13 @@ import {
 } from 'react';
 import { useEscape } from './escapeStack';
 
-// Dragging a row of a list to another place, as board 8 of the Sessions
-// review moves a session (Q18) and board 3 of the Vitals Styles review
-// moves a vital. A press on a row that moves 4 px lifts it. The row
-// follows the pointer, the rows between its place and where it would
-// land part to make room, and an accent line marks that place. Letting
-// go moves the row there. A press that never moves stays a click. Near
-// the top or the bottom of the list the list scrolls, so a row can
-// travel the whole of it.
+// Dragging a row of a list to another place, as the sessions sidebar
+// moves a session and Customize vitals moves a vital. A press on a row
+// that moves 4 px lifts it. The row follows the pointer, the rows
+// between its place and where it would land part to make room, and an
+// accent line marks that place. Letting go moves the row there. A press
+// that never moves stays a click. Near the top or the bottom of the
+// list the list scrolls, so a row can travel the whole of it.
 //
 // From the keyboard, Space on a row's grip lifts it, the arrow keys move
 // it a place at a time, Space drops it and Escape puts it back.

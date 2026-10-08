@@ -2,14 +2,14 @@ import type { SessionRow } from '../ipc/session';
 import { hostKey, knownWorld, worldLabel, worldName } from './knownWorlds';
 
 // How Vosh names a session wherever it shows one, the sessions sidebar,
-// the title band, the window title and Settings, by Q7 of the Sessions
-// review. A session goes by the name you gave it, else its character,
-// else where it plays, else New session. Its port shows when it tells
-// the session apart: on a known world a port that is not the world's
-// own, and on any other host any port while another open session
-// shares that host. label_of in src-tauri/src/sessions.rs names it the
-// same way for a banner and the line another session prints, and both
-// run fixtures/session-labels/cases.json.
+// the title band, the window title and Settings. A session goes by the
+// name you gave it, else its character, else where it plays, else New
+// session. Its port shows when it tells the session apart: on a known
+// world a port that is not the world's own, and on any other host any
+// port while another open session shares that host. label_of in
+// src-tauri/src/sessions.rs names it the same way for a banner and the
+// line another session prints, and both run
+// fixtures/session-labels/cases.json.
 
 /** What a session's label reads from its row. */
 export type LabelSource = Pick<SessionRow, 'id' | 'name' | 'character' | 'host' | 'port'>;

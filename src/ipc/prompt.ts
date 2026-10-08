@@ -118,11 +118,10 @@ export async function hiddenGet(session: number): Promise<HiddenPayload> {
 
 // Prompt
 //
-// The prompt editor's commands and events (section 6 of the prompt
-// editor build spec). The backend owns every byte decision: the card
-// reads the [prompt] table, asks what a capture compiles to, draws
-// designs through prompt_render, and writes template text only through
-// prompt_edit.
+// The prompt editor's commands and events. The backend owns every byte
+// decision: the card reads the [prompt] table, asks what a capture
+// compiles to, draws designs through prompt_render, and writes template
+// text only through prompt_edit.
 
 /** Where a capture came from. */
 export type PromptCaptureSource = 'gmcp' | 'session' | 'log' | 'typed' | 'migrated';
@@ -473,12 +472,12 @@ export async function promptCaptureCheck(
 /** The open card chose Aabahran's code reader on a host Vosh does not
  *  know (More > Use Forsaken Lands prompt codes…), or lets it go. While
  *  it holds, the Forsaken Lands rules hold, so the game's reply to prompt
- *  fills the card's fields on an older build (D17). */
+ *  fills the card's fields on an older build. */
 export async function promptCodeReaderSet(on: boolean, session?: number): Promise<void> {
   await invoke('prompt_code_reader_set', { on, session });
 }
 
-/** A Line trigger that matched your prompt as a line (D6). `preset` says
+/** A Line trigger that matched your prompt as a line. `preset` says
  *  a highlight preset installed it. */
 export interface PromptLineTrigger {
   name: string;

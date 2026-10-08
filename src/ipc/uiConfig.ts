@@ -162,9 +162,8 @@ export type VitalsStyle = (typeof VITALS_STYLES)[number];
 
 /** The styles vitals_style saves. Rows and One line stay in
  *  vitals_density, so a build without styles still reads your look. A
- *  build reads a name it does not know as none and draws your density
- *  (More Vitals Styles Q30). Mirrors VITALS_STYLES in
- *  src-tauri/src/profile/ui.rs. */
+ *  build reads a name it does not know as none and draws your density.
+ *  Mirrors VITALS_STYLES in src-tauri/src/profile/ui.rs. */
 const SAVED_VITALS_STYLES = [
   'ledger',
   'gauges',
@@ -190,8 +189,7 @@ export function normalizeVitalsStyle(value: unknown): SavedVitalsStyle | null {
 }
 
 /** The style your vitals draw in, the one you picked or else your
- *  density, so a player who never picks sees today's look (Vitals
- *  Styles Q12). */
+ *  density, so a player who never picks sees today's look. */
 export function shownStyle(config: Pick<UiConfig, 'vitals_style' | 'vitals_density'>): VitalsStyle {
   return config.vitals_style ?? config.vitals_density;
 }

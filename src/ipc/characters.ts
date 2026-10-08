@@ -113,7 +113,7 @@ export async function profileExportFile(
 }
 
 // Import. Characters reads a Vosh profile export you pick and imports it
-// as a new profile or over one you have (Scripts Q9 and Q10).
+// as a new profile or over one you have.
 
 /** A trigger or an alias in an export that runs Lua. */
 export interface ImportLuaItem {
@@ -150,7 +150,7 @@ export interface ImportPreview {
   /** The characters the file names. Only a file with a world names any. */
   characters: ImportCharacter[];
   /** In loadout mode, whether the file holds presets, which stay out,
-   *  since the catalog's presets serve every character (Presets Q11). */
+   *  since the catalog's presets serve every character. */
   presets_stay: boolean;
 }
 

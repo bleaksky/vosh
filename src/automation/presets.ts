@@ -1,4 +1,4 @@
-// Highlight preset library — Phase 12.
+// The highlight preset library.
 //
 // Each preset is a named bundle of triggers, or of macros, a user can
 // toggle under Automation, then Presets. Toggling on installs every
@@ -11,9 +11,9 @@
 // take a HighlightStyle and wrap matched text with ANSI on the way to
 // the terminal.
 //
-// Each preset names its colors once, by what they mark (Presets Q3). A
-// template or a highlight names a color by its key, and presetTriggers
-// fills the keys, so one swatch reaches every trigger that uses it.
+// Each preset names its colors once, by what they mark. A template or a
+// highlight names a color by its key, and presetTriggers fills the
+// keys, so one swatch reaches every trigger that uses it.
 //
 // Seeded from the user's `~/tintin/highlights.tin`. Categories are
 // chosen so noise-heavy event groups (others' buff churn, others'
@@ -79,7 +79,7 @@ export interface PresetColor {
    *  #8fa7d9. */
   token: string;
   /** Where the color sits. A highlight holds only the theme's sixteen
-   *  named colors, and a template takes any color (Presets Q4). */
+   *  named colors, and a template takes any color. */
   sits: 'highlight' | 'template';
 }
 
@@ -97,8 +97,8 @@ export type PresetTrigger = Omit<TriggerRecord, 'preset' | 'actions'> & {
 export interface PresetSampleLine {
   /** The line, word for word as the game prints it, without the colors
    *  the game sends. Where the line quotes what a character says, a page
-   *  that shows the sample draws the quoted words as a bar, as the
-   *  mockups draw speech, and never as text. */
+   *  that shows the sample draws the quoted words as a bar, and never as
+   *  text, so a sample never puts words in anyone's mouth. */
   text: string;
   /** The name of the trigger of the preset the line shows. */
   shows: string;
@@ -107,8 +107,9 @@ export interface PresetSampleLine {
    *  room_target for the line of the one you target among them. A plain
    *  line leaves it out. */
   target?: Extract<TriggerTarget, 'room' | 'room_target'>;
-  /** Words of the line a page draws as bars, never as text, as the
-   *  mockups draw a number or a name the line could hold. */
+  /** Words of the line a page draws as bars, never as text: a number or
+   *  a name the line could hold, so the sample shows its shape and
+   *  claims no value. */
   bars?: readonly string[];
 }
 
@@ -648,9 +649,8 @@ export const PRESETS: Preset[] = [
     description: 'Marks the gold, experience, levels, and skills you gain.',
     // group_gain in fight.c, with the experience to the next level of
     // fixtures/gmcp/aabahran group-info.gmcp, 1250, then the line
-    // check_improve prints at skills.c:1442, as Q5 of the first run review
-    // and its board 3 ask. Dagger is a skill of skill_table in const.c,
-    // and bars stand for the number and the skill, as board 3 draws them.
+    // check_improve prints at skills.c:1442. Dagger is a skill of
+    // skill_table in const.c, and bars stand for the number and the skill.
     sample: [
       { text: 'You receive 1250 experience points.', shows: 'loot.xp', bars: ['1250'] },
       { text: 'You have become better at dagger!', shows: 'loot.skill_up', bars: ['dagger'] },
@@ -852,19 +852,17 @@ export const PRESETS: Preset[] = [
   },
 
   // ── ROOMS, TIME AND WEATHER ──────────────────────────────────────
-  // The look and the clock in four of the theme's terminal colors, as the
-  // redesign mockups draw them, so they follow every theme. In Nord these
-  // are the mockup colors exactly. The armies, things and people a room
-  // lists match through the Room target, which the session gives only the
-  // lines a look lists after its exits line, with the counts of people and
-  // objects from the Room.Chars and Room.Items packets. The line of the
-  // one you target with tar matches through the Your target match, in the
-  // theme's bright red at a priority above the room yellow, so it stands
-  // out from the rest of the room. The exits and room colors are base
-  // colors, which fill only what the game left uncolored, so an aura, a
-  // red [AFK] or a trap's red + keeps its own color. WiZNET (act_wiz.c
-  // wiznet) turns its tag bold magenta, the mockup's mauve, where the game
-  // sends it white and grey.
+  // The look and the clock in four of the theme's terminal colors, so they
+  // follow every theme. The armies, things and people a room lists match
+  // through the Room target, which the session gives only the lines a look
+  // lists after its exits line, with the counts of people and objects from
+  // the Room.Chars and Room.Items packets. The line of the one you target
+  // with tar matches through the Your target match, in the theme's bright
+  // red at a priority above the room yellow, so it stands out from the rest
+  // of the room. The exits and room colors are base colors, which fill only
+  // what the game left uncolored, so an aura, a red [AFK] or a trap's red +
+  // keeps its own color. WiZNET (act_wiz.c wiznet) turns its tag bold
+  // magenta, where the game sends it white and grey.
   // A highlight draws over the text it matches alone, so the time and the
   // message after the tag keep the colors the game sent, such as the bold
   // red of a corrupted pfile alert. A change in the weather redraws its
@@ -939,14 +937,14 @@ export const PRESETS: Preset[] = [
     ],
   },
   // The six directions the game has, on the numpad as the arrows sit
-  // there, with up on 9 and down on 3 (Scripts board 7, Q12). The game
-  // has no diagonal exits, so 7, 1 and 5 stay free. Each macro sends the
-  // one letter form, which read_from_buffer in the game's comm.c never
-  // counts toward its spam limit. The keys come from event.code, so
-  // NumLock leaves them as they are. A key one of your macros uses stays
-  // yours, and Rust holds the preset's macro on it off (hold_taken_keys
-  // in src-tauri/src/loadouts/presets.rs). Get started suggests it on no
-  // world (First Run Q18).
+  // there, with up on 9 and down on 3. The game has no diagonal exits,
+  // so 7, 1 and 5 stay free. Each macro sends the one letter form, which
+  // read_from_buffer in the game's comm.c never counts toward its spam
+  // limit. The keys come from event.code, so NumLock leaves them as they
+  // are. A key one of your macros uses stays yours, and Rust holds the
+  // preset's macro on it off (hold_taken_keys in
+  // src-tauri/src/loadouts/presets.rs). Get started suggests it on no
+  // world.
   {
     id: 'numpad_movement',
     category: 'movement',

@@ -5,10 +5,10 @@ import { hostKey, knownWorld, worldLabel } from './knownWorlds';
 import { sessionLabel } from './sessionLabel';
 import { listJoin, possessive } from './text';
 
-// What the New session form says under its Profile row, by board 4 of
-// the Sessions review. Which profile the form picks comes from Rust,
-// through profileBeforeLogin, where ProfileSet::resolve_before_login
-// sits beside the claim matcher a login runs.
+// What the New session form says under its Profile row. Which profile
+// the form picks comes from Rust, through profileBeforeLogin, where
+// ProfileSet::resolve_before_login sits beside the claim matcher a
+// login runs.
 
 /** Whether `profile`'s login claim is pinned to `host` and `port`, as
  *  the hint under the Profile row says. A claim whose login is off never
@@ -22,9 +22,8 @@ function pinnedTo(profile: ProfileEntry, host: string, port: number): boolean {
 /** What the form says under its Profile row. `hint` names a profile
  *  another session plays, else a pin to this host and port. `warn` names
  *  another session already connected to the world's own port, where you
- *  play, when the form dials that port too. A note, never a refusal
- *  (Q3). The build port keeps its own player files, so it never shows
- *  the note. */
+ *  play, when the form dials that port too. A note, never a refusal. The
+ *  build port keeps its own player files, so it never shows the note. */
 export interface ProfileLines {
   hint: string | null;
   warn: string | null;

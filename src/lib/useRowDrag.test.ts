@@ -3,7 +3,7 @@ import { dropPlace, keyedPlace, liftTravel, partShift } from './useRowDrag';
 
 // Where a dragged row lands: on the slot its middle is over, among the
 // other rows, and the rows it passed step one slot toward its place.
-// The sessions sidebar of board 8 sets its rows 46 apart.
+// The sessions sidebar sets its rows 46 apart.
 
 const ROW_PITCH = 46;
 
@@ -55,8 +55,8 @@ describe('dragging a session row', () => {
   });
 });
 
-// The vitals list of board 3 of the Vitals Styles review sets its rows
-// 40 apart and moves a vital from the keyboard a place at a time.
+// The vitals list under Customize vitals sets its rows 40 apart and
+// moves a vital from the keyboard a place at a time.
 
 describe('moving a vital', () => {
   const PITCH = 40;

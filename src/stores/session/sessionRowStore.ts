@@ -11,27 +11,24 @@ import { knownWorld } from '../../lib/knownWorlds';
 import { createSessionStore } from '../sessionStore';
 import { getSelected, subscribeSelected } from './sessionsStore';
 
-// What each session's row in the sessions sidebar says beyond its name,
-// board 3 of the Sessions review.
+// What each session's row in the sessions sidebar says beyond its name.
 //
 // Every row shows one status mark, the selected one too, the most
-// urgent first (Q8, and S2 of the Sessions Sidebar review). The
-// triangle when the first dial fails, or when the link dropped and Vosh
-// does not dial again. The hand while the game waits for your login.
-// The spinner while Vosh dials, and through every try of a redial. The
-// green dot while it plays, and the ring while it is not connected,
-// when its name dims too.
+// urgent first. The triangle when the first dial fails, or when the
+// link dropped and Vosh does not dial again. The hand while the game
+// waits for your login. The spinner while Vosh dials, and through every
+// try of a redial. The green dot while it plays, and the ring while it
+// is not connected, when its name dims too.
 //
-// A session you are not looking at earns two marks (Q9). Its name
-// brightens once the game prints a line there, and a count shows once
-// something for you happens there. The row keeps each such thing as
-// what waits for you (S4): a tell, your
-// name, a fight that starts on you and low health, the events four of
-// the alert presets watch whether or not their alerts are on. One that
-// rings comes as session://alert, and one that rings nothing as
-// session://mark, each with its source. Each tell, name and fight counts,
-// and low health counts once however often it falls, since it is a
-// state. The connection preset never counts, since a session in trouble
+// A session you are not looking at earns two marks. Its name brightens
+// once the game prints a line there, and a count shows once something for
+// you happens there. The row keeps each such thing as what waits for you:
+// a tell, your name, a fight that starts on you and low health, the
+// events four of the alert presets watch whether or not their alerts are
+// on. One that rings comes as session://alert, and one that rings nothing
+// as session://mark, each with its source. Each tell, name and fight
+// counts, and low health counts once however often it falls, since it is
+// a state. The connection preset never counts, since a session in trouble
 // shows it in its mark, and neither does an alert of a trigger or Lua.
 // Selecting the session clears both marks, and the selected row never
 // takes either.
@@ -132,7 +129,7 @@ function linked(now: SessionRowState, payload: StatePayload): SessionRowState {
 /** A redial series that ended. */
 const ENDED = { redialing: false, try: null, tries: null } as const;
 
-/** The steps of a redial (Alerts Q13 and Sessions Q8). */
+/** The steps of a redial. */
 function redialed(now: SessionRowState, payload: ReconnectPayload): SessionRowState {
   switch (payload.kind) {
     case 'waiting':

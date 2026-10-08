@@ -1,7 +1,7 @@
-// The corner notice a preset fix leaves in the main window (Presets
-// board 4). Each run of the preset plan in this window hands its rows
-// here, and the notice stays until you close it. A run that tells of
-// nothing new leaves the notice as it is.
+// The corner notice a preset fix leaves in the main window. Each run of
+// the preset plan in this window hands its rows here, and the notice
+// stays until you close it. A run that tells of nothing new leaves the
+// notice as it is.
 
 import { fixNotice, type FixNotice } from '../automation/presetEdits';
 import type { PresetNotice } from '../automation/presetPlan';

@@ -81,10 +81,9 @@ const WINDOW_SHORTCUTS: readonly AppShortcutId[] = [
   'session-previous',
 ];
 
-// The keys that act on sessions, otty's keys (Sessions Q11), and the
-// sessions sidebar's toggle (Sessions toggle T3). A macro
-// bound to one of them, or to a Settings key below, keeps the key in
-// the sessions on its profile, where every other app key wins over a
+// The keys that act on sessions and the sessions sidebar's toggle. A
+// macro bound to one of them, or to a Settings key below, keeps the key
+// in the sessions on its profile, where every other app key wins over a
 // macro. Mod with a digit from 1 to 9 goes to a session by its place in
 // the list, and is one of them.
 const SESSION_SHORTCUTS = [

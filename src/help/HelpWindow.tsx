@@ -36,12 +36,11 @@ import { HelpOutline } from './HelpOutline';
 import { WindowControls } from '../ui/WindowControls';
 import { ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, IconButton } from '../ui';
 
-// The Help window (the approved Help boards), its own window like
-// Settings and in the same frame: a 280 px sidebar with search and the
-// nine sections, and a content column with the breadcrumb in the 32 px
-// band over the article. On macOS the native traffic lights sit over
-// the sidebar. Windows and Linux draw their controls at the right of
-// the band.
+// The Help window, its own window like Settings and in the same frame:
+// a 280 px sidebar with search and the nine sections, and a content
+// column with the breadcrumb in the 32 px band over the article. On
+// macOS the native traffic lights sit over the sidebar. Windows and
+// Linux draw their controls at the right of the band.
 //
 // Every way into Help names a target (src/lib/helpLink.ts): a topic from
 // a Settings book button or the palette, or words from `#help <words>`.

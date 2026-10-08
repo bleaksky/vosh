@@ -11,7 +11,7 @@ import {
   UserIcon,
 } from '../ui';
 
-/** Each section's icon, in the SPEC 6 stroke style. */
+/** Each section's icon, in the stroke style every glyph shares. */
 export const HELP_SECTION_ICONS: Record<string, () => ReactNode> = {
   'Get connected': () => <PlugIcon />,
   Play: () => <TerminalIcon />,
