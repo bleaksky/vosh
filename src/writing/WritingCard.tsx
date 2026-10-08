@@ -100,6 +100,12 @@ interface Confirm extends Ask {
   run: () => void;
 }
 
+/** How far a send got before the link dropped. */
+interface Drop {
+  sent: number;
+  total: number;
+}
+
 const rowsOf = (text: readonly string[]): Row[] =>
   text.map((line) => ({ text: line, flows: false }));
 const linesOf = (rows: readonly Row[]): string[] => rows.map((r) => r.text);
@@ -186,7 +192,10 @@ export function WritingCard({
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [badField, setBadField] = useState<FieldName | null>(null);
   const [sentView, setSentView] = useState(false);
-  const [dropped, setDropped] = useState<{ sent: number; total: number } | null>(null);
+  const [dropped, setDropped] = useState<Drop | null>(null);
+  // A drop after the post went out, which a look at the board's list
+  // settles once the session plays again (Note Editor board 8).
+  const [find, setFind] = useState<{ drop: Drop; started: boolean } | null>(null);
 
   /** The draft of `k` to open on: the newest of a board's, or the one a
    *  text about you keeps. */
@@ -267,6 +276,7 @@ export function WritingCard({
     setBadField(null);
     setSentView(false);
     setDropped(null);
+    setFind(null);
     setPreview(false);
   }
 
@@ -317,8 +327,7 @@ export function WritingCard({
         });
         return;
       case 'posted':
-        if (world && name) keepCharacter(posted(characterOf(getWritingFile(), world, name), draft));
-        setPhase('posted');
+        markPosted();
         setEnded({ note: postedNote(k, result.forum, result.vote), actions: [] });
         return;
       case 'checked':
@@ -351,14 +360,49 @@ export function WritingCard({
         }
         setEnded({ note: resultNote(result, k)!, actions: [] });
         return;
-      case 'dropped':
-        if (!KINDS[k].board) setDropped({ sent: result.sent, total: lines.length });
+      case 'dropped': {
+        const drop = find?.drop ?? { sent: result.sent, total: lines.length };
+        setDropped(drop);
+        // Whether it posted waits for the board's list, so Post again
+        // shows once the list says.
+        if (result.posted || job.action === 'find') {
+          setFind({ drop, started: false });
+          setEnded({ note: resultNote({ ...result, posted: true }, k)!, actions: [] });
+          return;
+        }
         setEnded({
           note: resultNote(result, k)!,
           actions: KINDS[k].board ? ['again'] : ['restore', 'again'],
         });
         return;
+      }
+      case 'found':
+        setFind(null);
+        markPosted();
+        setEnded({ note: resultNote(result, k)!, actions: [] });
+        return;
+      case 'not_found':
+      case 'cant_tell': {
+        const drop = find?.drop ?? { sent: lines.length, total: lines.length };
+        setFind(null);
+        setDropped(drop);
+        const said =
+          result.kind === 'cant_tell'
+            ? resultNote(result, k)!
+            : resultNote({ kind: 'dropped', sent: drop.sent, posted: false }, k)!;
+        setEnded({ note: said, actions: ['again'] });
+        return;
+      }
       case 'stopped':
+        if (job.action === 'find') {
+          setFind(null);
+          setDropped(find?.drop ?? null);
+          setEnded({
+            note: resultNote({ kind: 'dropped', sent: 0, posted: true }, k)!,
+            actions: ['again'],
+          });
+          return;
+        }
         setEnded({
           note: resultNote(result, k)!,
           actions: KINDS[k].board ? [] : ['restore', 'again'],
@@ -370,6 +414,21 @@ export function WritingCard({
       }
     }
   }
+
+  /** The note is on its board: it moves to Sent. */
+  function markPosted() {
+    if (world && name) keepCharacter(posted(characterOf(getWritingFile(), world, name), draft));
+    setPhase('posted');
+  }
+
+  // Look for the note once the session plays again. Vosh never sends it
+  // again on its own.
+  useEffect(() => {
+    if (!find || find.started || !live || writing.job) return;
+    setFind({ ...find, started: true });
+    run({ kind, action: 'find', name, subject: draft.subject ?? '', immortal });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find, live, writing.job]);
 
   /** Keep a note the game held as a draft of its board. */
   function saveShown(
@@ -454,6 +513,7 @@ export function WritingCard({
     setEnded(null);
     setPaste(null);
     setReadNow(false);
+    setDropped(null);
     if (phase !== 'edit') setPhase('edit');
     keep({ ...draft, text: linesOf(next) });
   };
@@ -711,7 +771,11 @@ export function WritingCard({
     : null;
 
   const sending =
-    running && running.stage === 'sending' ? { sent: running.sent, current: running.sent } : null;
+    running && running.stage === 'sending'
+      ? { sent: running.sent, current: running.sent }
+      : !running && dropped
+        ? { sent: dropped.sent, current: null }
+        : null;
   const subject = draft.subject ?? '';
 
   return (

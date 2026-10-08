@@ -76,6 +76,18 @@ describe('the header line', () => {
     expect(metaLine({ ...base, done: 'sent' })).toBe('Sent for Orla');
     expect(metaLine({ ...base, fresh: true, name: 'Tolliver' })).toBe('New draft for Tolliver');
     expect(metaLine({ ...base, dropped: { sent: 8, total: 19 } })).toBe('8 of 19 sent for Orla');
+    expect(metaLine({ ...base, board: true, dropped: { sent: 8, total: 19 } })).toBe(
+      '8 of 19 sent for Orla',
+    );
+    const find = {
+      id: 1,
+      kind: 'journal',
+      action: 'find',
+      stage: 'reading',
+      sent: 0,
+      total: 0,
+    } as const;
+    expect(metaLine({ ...base, board: true, job: find })).toBe('Checking the board for Orla');
   });
 });
 
@@ -101,5 +113,30 @@ describe('what a paste and a job leave', () => {
     expect(resultNote({ kind: 'other_note', board: 'idea', note: null }, 'note')?.lead).toBe(
       'You had an idea started in the game.',
     );
+  });
+
+  it('says what a drop on a board left, and what the board’s list then showed', () => {
+    expect(resultNote({ kind: 'dropped', sent: 8, posted: false }, 'journal')).toEqual({
+      lead: 'You were disconnected after line 8.',
+      rest: ' Nothing was posted.',
+      tone: 'bad',
+    });
+    expect(resultNote({ kind: 'dropped', sent: 19, posted: true }, 'journal')).toEqual({
+      lead: 'You were disconnected as the note posted.',
+      rest: ' Check the board before you post it again.',
+      tone: 'bad',
+    });
+    expect(resultNote({ kind: 'found', number: 3 }, 'journal')).toEqual({
+      lead: '',
+      rest: 'Posted before the link dropped. It’s number 3 on the board.',
+      tone: 'ok',
+    });
+    expect(resultNote({ kind: 'cant_tell' }, 'bug')).toEqual({
+      lead: 'You were disconnected as it posted.',
+      rest: ' The game won’t show you bug reports, so Vosh can’t tell if it went.',
+      tone: 'warn',
+    });
+    // Not found, the card says the drop's own words again.
+    expect(resultNote({ kind: 'not_found' }, 'journal')).toBeNull();
   });
 });

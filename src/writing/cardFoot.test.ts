@@ -76,6 +76,24 @@ describe('the footer', () => {
     ]);
   });
 
+  it('offers Post again after a drop on a board, and Done once the list finds it', () => {
+    const ended = {
+      note: {
+        lead: 'You were disconnected after line 8.',
+        rest: ' Nothing was posted.',
+        tone: 'bad' as const,
+      },
+      actions: ['again' as const],
+    };
+    expect(footFor({ ...base, kind: 'journal', ended })).toEqual({
+      left: { note: ended.note },
+      buttons: [{ id: 'post', label: 'Post again', primary: true, disabled: false }],
+    });
+    expect(
+      ids({ ...base, kind: 'journal', ended: { ...ended, actions: [] }, phase: 'posted' }),
+    ).toEqual(['done']);
+  });
+
   it('keeps the busy note and the room past the game’s behind a job’s end', () => {
     expect(footFor({ ...base, busy: true }).left).toEqual({
       note: {

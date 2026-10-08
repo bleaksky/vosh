@@ -184,6 +184,7 @@ export function metaLine(input: {
   const { name, board, job } = input;
   if (job) {
     if (job.action === 'post') return `Posting for ${name}`;
+    if (job.action === 'find') return `Checking the board for ${name}`;
     if (job.action === 'send' || job.action === 'paste') return `Sending for ${name}`;
     return `Reading for ${name}`;
   }
@@ -293,6 +294,18 @@ export function resultNote(result: JobResult, kind: WritingKind): Note | null {
         lead: `The link dropped after line ${result.sent}.`,
         rest: ` The game holds those ${result.sent === 1 ? 'line' : `${result.sent} lines`}.`,
         tone: 'bad',
+      };
+    case 'found':
+      return {
+        lead: '',
+        rest: `Posted before the link dropped. It’s number ${result.number} on the board.`,
+        tone: 'ok',
+      };
+    case 'cant_tell':
+      return {
+        lead: 'You were disconnected as it posted.',
+        rest: ` The game won’t show you ${KINDS[kind].title.toLowerCase()}s, so Vosh can’t tell if it went.`,
+        tone: 'warn',
       };
     case 'other_note': {
       const what = result.board ? KINDS[result.board].title.toLowerCase() : 'note';
