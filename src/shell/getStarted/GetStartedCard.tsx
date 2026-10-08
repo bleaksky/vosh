@@ -65,6 +65,10 @@ interface Props {
   /** Fold the card and open what a step is about (Q3). */
   onShowMe: (step: StepId) => void;
   focusInput: () => void;
+  /** The card slides away after a fold, out of reach. */
+  folding: boolean;
+  /** The slide ended. */
+  onFolded: () => void;
 }
 
 /** Tells you send, which the Chat step suggests (Q5). */
@@ -92,6 +96,8 @@ export function GetStartedCard({
   show,
   onShowMe,
   focusInput,
+  folding,
+  onFolded,
 }: Props) {
   // The prompt card keeps the row over your prompt in view. Get started
   // points at no prompt, so it sits one row lower, its foot one row and
@@ -111,7 +117,13 @@ export function GetStartedCard({
     );
   }, []);
 
-  useEscape(true, () => {
+  // React 18 has no inert prop, so the ref sets it.
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (section.current) section.current.inert = folding;
+  }, [folding]);
+
+  useEscape(!folding, () => {
     fold();
     focusInput();
   });
@@ -147,9 +159,14 @@ export function GetStartedCard({
 
   return (
     <section
-      className="pc-card st-controls"
+      ref={section}
+      className={cx('pc-card st-controls', folding && 'is-folding')}
       role="region"
       aria-label="Get started"
+      aria-hidden={folding || undefined}
+      onAnimationEnd={(event) => {
+        if (folding && event.target === event.currentTarget) onFolded();
+      }}
       style={{
         left: anchor && 'left' in anchor ? anchor.left : 12,
         bottom: anchor ? anchor.bottom - row : 0,

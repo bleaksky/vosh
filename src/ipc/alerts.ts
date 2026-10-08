@@ -4,7 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AlertParts } from './automation';
-import { ALERT, MARK } from './events';
+import { ALERT, ALERTS_ENDED, MARK } from './events';
 import { sessionOf } from './session';
 
 /** An alert that rang, on session://alert. Mirrors AlertPayload in
@@ -52,6 +52,18 @@ export async function onAlert(cb: (alert: AlertPayload) => void): Promise<Unlist
 export async function onMark(cb: (session: number, source: string) => void): Promise<UnlistenFn> {
   return listen<{ session?: number; source: string }>(MARK, (event) => {
     cb(sessionOf(event.payload), event.payload.source);
+  });
+}
+
+/** Hear the alerts of a Lua owner end in a session, with that session
+ *  and the owner tag, such as `plugin:watch`. Mirrors AlertsEnded in
+ *  src-tauri/src/alert.rs: a plugin was turned off, stopped or reloaded,
+ *  so the page drops the notice it raised. */
+export async function onAlertsEnded(
+  cb: (session: number, owner: string) => void,
+): Promise<UnlistenFn> {
+  return listen<{ session?: number; owner: string }>(ALERTS_ENDED, (event) => {
+    cb(sessionOf(event.payload), event.payload.owner);
   });
 }
 

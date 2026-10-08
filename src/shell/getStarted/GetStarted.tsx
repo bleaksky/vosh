@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PromptShowState } from '../../ipc/prompt';
+import { systemReducesMotion } from '../../lib/blink';
 import type { PromptCardHost } from '../../prompt/PromptCard';
 import type { CellSize } from '../../prompt/pinnedDock';
 import { GetStartedCard, type GetStartedPlay } from './GetStartedCard';
@@ -23,6 +24,8 @@ interface Props {
 // the card is shut too. Connect folds the card before the game's first
 // screen arrives, so nothing covers the name prompt (board 1), and the
 // prompt card folds it as it opens, so the two never show together.
+// A fold slides the card away, out of reach while it goes (Q14). The
+// prompt card's fold and reduced motion take it at once.
 export function GetStarted({ play, covered, ...card }: Props) {
   useEffect(() => mountGetStarted(), []);
   const view = useGetStarted();
@@ -37,6 +40,23 @@ export function GetStarted({ play, covered, ...card }: Props) {
     if (covered) fold();
   }, [covered]);
 
-  if (view.shows !== 'open' || covered) return null;
-  return <GetStartedCard view={view} facts={facts} play={play} {...card} />;
+  const [was, setWas] = useState(view.shows);
+  const [folding, setFolding] = useState(false);
+  if (view.shows !== was) {
+    setWas(view.shows);
+    setFolding(was === 'open' && view.shows === 'folded' && !covered && !systemReducesMotion());
+  }
+  if (covered && folding) setFolding(false);
+
+  if (covered || (view.shows !== 'open' && !folding)) return null;
+  return (
+    <GetStartedCard
+      view={view}
+      facts={facts}
+      play={play}
+      folding={folding}
+      onFolded={() => setFolding(false)}
+      {...card}
+    />
+  );
 }

@@ -138,8 +138,24 @@
   user-select: none;
 }
 
+/* A narrow header gives way in turn. The counts shrink first,
+   sharing the cut as they always have and ending in an ellipsis,
+   until the first count is down to its first digit and a second
+   count is gone. The chat pane's channel filter gives way as a count
+   does. The label gives way last, ending in an ellipsis of its own,
+   so the first count's digit always reads whole. The counts and the
+   filter shrink a million times faster than the label, so the label
+   keeps its width to the pixel while they can still give, and a
+   header that had room for them draws exactly as it did. A label
+   alone, like a long Lua pane title, ends in its ellipsis 40 px from
+   the right edge, clear of the more button. The digit's room is the
+   zero of the count's own face rounded up to a whole px, which holds
+   any of its tabular digits. */
 .pane-label {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin: 0;
   font-size: round(10px * var(--mud-scale), 1px);
   line-height: round(12px * var(--mud-scale), 1px);
@@ -152,23 +168,6 @@
 
 .pane-header > .pane-label + * {
   margin-left: 8px;
-}
-
-/* A narrow header gives way in turn. The counts shrink first, sharing
-   the cut as they always have and ending in an ellipsis, until the
-   first count is down to its first digit and a second count is gone.
-   Only then does the label give way, ending in an ellipsis of its own,
-   so the first count's digit always reads whole. The counts shrink a
-   million times faster than the label, so the label keeps its width to
-   the pixel while a count can still give, and a header that had room
-   for the first count's digit draws exactly as it did. The digit's room
-   is the zero of the count's own face rounded up to a whole px, which
-   holds any of its tabular digits. */
-.pane-label:has(+ .pane-meta) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .pane-label + .pane-meta {
@@ -248,18 +247,9 @@
   display: block;
 }
 
-/* The chat pane's channel filter, a select set as header meta. It
-   gives way as a count does, a million times faster than the label,
-   so a narrow pane cuts its words to an ellipsis before the more
-   button. The chevron stays whole, with room for one letter or the
-   ellipsis beside it, and only then does the label give way. */
-.pane-label:has(+ .pane-select) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* The chat pane's channel filter, a select set as header meta. Its
+   words end in an ellipsis, and the chevron stays whole with room for
+   one letter or the ellipsis beside it. */
 .pane-label + .pane-select {
   min-width: calc(round(up, 1ch, 1px) + 16px);
 }

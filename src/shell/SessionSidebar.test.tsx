@@ -550,6 +550,86 @@ describe('renaming and moving a session in its row', () => {
     expect(m.field()).toBeNull();
   });
 
+  describe('Up and Down', () => {
+    const three = [...rows, row(3, { character: 'Maren' })];
+    const rowsOf = (m: Awaited<ReturnType<typeof mount>>) =>
+      findAll(m.container, hasClass('shell-sessions-row'));
+    /** Press `key` on whichever row has the keyboard, and say whether
+     *  the row kept the key from the page. */
+    const key = async (
+      m: Awaited<ReturnType<typeof mount>>,
+      key: string,
+      mods: Partial<Record<'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey', boolean>> = {},
+    ) => {
+      let prevented = false;
+      await m.run(() =>
+        on(doc.activeElement!).onKeyDown({
+          key,
+          ...mods,
+          nativeEvent: { isComposing: false },
+          preventDefault: () => (prevented = true),
+          stopPropagation() {},
+        }),
+      );
+      return prevented;
+    };
+
+    it('move the keyboard between rows and select nothing, as board 4 says', async () => {
+      const m = await mount(three);
+      await m.run(() => rowsOf(m)[0].focus());
+      expect(await key(m, 'ArrowDown')).toBe(true);
+      expect(doc.activeElement).toBe(rowsOf(m)[1]);
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[2]);
+      await key(m, 'ArrowUp');
+      expect(doc.activeElement).toBe(rowsOf(m)[1]);
+      expect(m.calls.onSelect).not.toHaveBeenCalled();
+      expect(m.calls.onCaret).not.toHaveBeenCalled();
+    });
+
+    it('stop at either end', async () => {
+      const m = await mount(three);
+      await m.run(() => rowsOf(m)[0].focus());
+      await key(m, 'ArrowUp');
+      expect(doc.activeElement).toBe(rowsOf(m)[0]);
+      await m.run(() => rowsOf(m)[2].focus());
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[2]);
+    });
+
+    it('leave Return and F2 to rename the row they reached', async () => {
+      for (const finish of ['Enter', 'F2']) {
+        const m = await mount(three);
+        await m.run(() => rowsOf(m)[0].focus());
+        await key(m, 'ArrowDown');
+        await key(m, 'ArrowDown');
+        await key(m, finish);
+        expect(m.calls.onSelect).toHaveBeenCalledWith(3);
+        expect(m.field()?.value).toBe('Maren');
+        await m.escape();
+        for (const cleanup of cleanups.splice(0)) await cleanup();
+      }
+    });
+
+    it('stay put when the next row is being renamed', async () => {
+      const m = await mount(three);
+      await m.rename(2);
+      await m.run(() => rowsOf(m)[0].focus());
+      await key(m, 'ArrowDown');
+      expect(doc.activeElement).toBe(rowsOf(m)[0]);
+    });
+
+    it('leave modified arrows alone', async () => {
+      for (const mod of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
+        const m = await mount(three);
+        await m.run(() => rowsOf(m)[0].focus());
+        expect(await key(m, 'ArrowDown', { [mod]: true })).toBe(false);
+        expect(doc.activeElement).toBe(rowsOf(m)[0]);
+        for (const cleanup of cleanups.splice(0)) await cleanup();
+      }
+    });
+  });
+
   it('says how to finish on line two while the field is open, and keeps the mark', async () => {
     const m = await mount();
     await m.rename(2);

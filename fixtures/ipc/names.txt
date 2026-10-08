@@ -166,7 +166,7 @@ command vitals_snapshot_get(session?)
 command vitals_text_watch(session?, cols?)
 command window_backdrop_set(background?, appearance?)
 event session://alert app heard
-event session://alerts-ended app unheard
+event session://alerts-ended app heard
 event session://game-prompt-seen app heard
 event session://gmcp/* app heard
 event session://hidden app heard

@@ -32,6 +32,9 @@ const THINGS: Thing[] = [
 /** The things the next mount loads. */
 let things: Thing[] = THINGS;
 
+/** What the editor last passed to onError, in order. */
+const errors: (string | null)[] = [];
+
 /** The detail card the editor shows last, to change its item. */
 let detail: DetailProps<Thing> | null = null;
 
@@ -110,6 +113,7 @@ afterEach(async () => {
   store.clear();
   things = THINGS;
   detail = null;
+  errors.length = 0;
 });
 
 async function mount(spec: KindSpec<Thing> = SPEC) {
@@ -123,7 +127,7 @@ async function mount(spec: KindSpec<Thing> = SPEC) {
         json: false,
         onJson: () => {},
         onDirty: () => {},
-        onError: () => {},
+        onError: (message: string | null) => void errors.push(message),
       }),
     );
   });
@@ -393,8 +397,45 @@ describe('the switch on a group heading', () => {
     expect(heard.length).toBeGreaterThan(0);
     await act(async () => heard[heard.length - 1]({ payload: '' }));
     expect(isOn(list.groupSwitch('combat'))).toBe(false);
-    expect(on(list.groupSwitch('combat') as FakeElement).disabled).toBe(true);
+    expect(on(list.groupSwitch('combat') as FakeElement).disabled).toBeFalsy();
     expect(list.notes()).toEqual(['The Healer loadout leaves this group off.']);
+  });
+
+  it.each(['triggers', 'aliases', 'timers'] as const)(
+    'turns a %s group the loadouts decide, and says when they turn it back',
+    async (groups) => {
+      fakeStore();
+      switches = [
+        { name: 'combat', enabled: true },
+        { name: 'idle', enabled: false, loadouts: { on: false, by: ['Healer'] } },
+      ];
+      const list = await mount({ ...SPEC, groups });
+      expect(on(list.groupSwitch('idle') as FakeElement).disabled).toBeFalsy();
+      expect(list.notes()).toEqual(['The Healer loadout leaves this group off.']);
+      await list.flip('idle');
+      expect(sets).toEqual([{ list: groups, group: 'idle', enabled: true }]);
+      expect(isOn(list.groupSwitch('idle'))).toBe(true);
+      expect(list.notes()).toEqual([
+        'The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.',
+      ]);
+    },
+  );
+
+  it('says when the switches cannot load, and shows none', async () => {
+    fakeStore();
+    const answer = vi.mocked(invoke).getMockImplementation();
+    vi.mocked(invoke).mockImplementation((cmd, args) =>
+      cmd === 'groups_list' ? Promise.reject(new Error('no profile')) : answer!(cmd, args),
+    );
+    const list = await mount(GROUPED);
+    // The switches load once as the editor mounts and again once the list
+    // loads, and each try says so.
+    expect(new Set(errors)).toEqual(
+      new Set(["Vosh couldn't load your group switches. Close Settings and open it again."]),
+    );
+    expect(list.groupSwitch('combat')).toBeNull();
+    expect(list.groupSwitch('idle')).toBeNull();
+    expect(list.rows()).toHaveLength(4);
   });
 
   it('moves with the arrow keys as its heading does', async () => {

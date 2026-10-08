@@ -365,7 +365,7 @@ export type GroupList = 'triggers' | 'aliases' | 'macros' | 'timers';
 
 /** What the loadouts decide about a group while they decide it. Every
  *  launch, profile switch and Loadouts save lays it over the group
- *  again, so the switch waits. */
+ *  again, so a turn of the switch lasts until then. */
 export interface LoadoutHold {
   /** Whether the loadouts turn the group on. */
   on: boolean;
@@ -391,7 +391,8 @@ export async function listGroupSwitches(
 }
 
 /** Turn a whole group of one list on or off. Returns every switch of the
- *  list. Fails for a group the loadouts decide. */
+ *  list. A group the loadouts decide turns too, until they lay their
+ *  state over it again. */
 export async function setGroupEnabled(
   list: GroupList,
   group: string,

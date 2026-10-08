@@ -46,7 +46,7 @@
         "name": "cure.feel_much_better",
         "patterns": [
           {
-            "pattern": "You feel much better!$",
+            "pattern": "You feel much better\\.$",
             "enabled": true
           }
         ],
@@ -87,26 +87,6 @@
         "patterns": [
           {
             "pattern": "You feel less sick\\.$",
-            "enabled": true
-          }
-        ],
-        "priority": 5,
-        "enabled": true,
-        "actions": [
-          {
-            "kind": "highlight",
-            "style": {
-              "fg": "bright_green"
-            }
-          }
-        ],
-        "preset": "healing_basics"
-      },
-      {
-        "name": "cure.no_longer_poisoned",
-        "patterns": [
-          {
-            "pattern": "You are no longer poisoned\\.$",
             "enabled": true
           }
         ],

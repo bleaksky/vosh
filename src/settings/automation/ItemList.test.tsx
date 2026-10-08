@@ -250,17 +250,16 @@ describe('the switch on a group heading', () => {
     expect(renderList({ sections })).not.toContain('data-group-switch');
   });
 
-  it('waits while the loadouts decide the group, and says which', () => {
+  it('still turns a group the loadouts decide, and says which', () => {
     const html = renderList({ sections, groupSwitches: switches });
     const idle = switchOf(html, 'idle') ?? '';
-    expect(idle).toMatch(/disabled=""/);
+    expect(idle).not.toMatch(/disabled/);
     const note = /aria-describedby="([^"]+)"/.exec(idle)?.[1];
     expect(note).toBeTruthy();
     expect(html).toContain(
       `<p id="${note}" class="st-auto-groupnote">The Healer loadout leaves this group off.</p>`,
     );
-    // The heading carries the same note, since a switch that waits takes
-    // no focus.
+    // The heading carries the same note, so you hear it on either stop.
     const heading = /<button[^>]*data-fold="g:idle"[^>]*>/.exec(html)?.[0] ?? '';
     expect(heading).toContain(`aria-describedby="${note}"`);
     expect(switchOf(html, 'combat')).not.toMatch(/disabled|aria-describedby/);
@@ -278,7 +277,8 @@ describe('the switch on a group heading', () => {
     const html = renderList({ sections, groupSwitches: turned });
     const idle = switchOf(html, 'idle') ?? '';
     expect(idle).toMatch(/checked=""/);
-    expect(idle).toMatch(/disabled=""/);
+    expect(idle).not.toMatch(/disabled/);
+    expect(idle).toMatch(/aria-describedby="[^"]+"/);
     expect(html).toContain(
       'class="st-auto-groupnote">The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.</p>',
     );
@@ -304,6 +304,17 @@ describe('the switch on a group heading', () => {
         }),
       ),
     ).toEqual(['g:combat', 'combat']);
+    // A switch the loadouts decide takes Tab from its heading the same way.
+    expect(
+      tabbable(
+        renderList({
+          sections,
+          groupSwitches: switches,
+          selected: 'c1',
+          folded: new Set(['g:idle']),
+        }),
+      ),
+    ).toEqual(['g:idle', 'idle']);
   });
 });
 

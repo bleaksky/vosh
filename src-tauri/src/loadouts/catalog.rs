@@ -161,14 +161,17 @@ pub(crate) fn lay_catalog_over(p: &mut Profile, catalog: &GlobalCatalog, set: Op
 /// comes in, so `p` keeps the edits it has yet to save and the stops Vosh
 /// put on the items that did not change. A macro is known by its key and
 /// preset, as your macro and a preset macro can share a key. The group
-/// state of `set`, the loadouts as `p` gates on them, then applies, since
-/// the change may bring a group.
+/// state of `set`, the loadouts as `p` gates on them, then applies to
+/// each group the change brings. A group `p` already had keeps its state,
+/// so a turn of its switch or `#group` lasts until the next launch,
+/// profile switch or Loadouts save, as its note says.
 pub(crate) fn lay_catalog_change_over(
     p: &mut Profile,
     before: &GlobalCatalog,
     after: &GlobalCatalog,
     set: Option<&LoadoutSet>,
 ) {
+    let had = GroupsHad::of(p);
     let (gone, came) = changes(&before.aliases, &after.aliases, |a| a.name.as_str());
     for name in gone {
         p.aliases.remove(name);
@@ -214,6 +217,50 @@ pub(crate) fn lay_catalog_change_over(
     }
     if let Some(set) = set {
         apply_effective_state(set, p);
+        had.put_back(p);
+    }
+}
+
+/// Each group a profile has in each store, with whether it is on.
+struct GroupsHad {
+    aliases: Vec<(String, bool)>,
+    triggers: Vec<(String, bool)>,
+    macros: Vec<(String, bool)>,
+}
+
+impl GroupsHad {
+    fn of(p: &Profile) -> Self {
+        let macros = p
+            .macros
+            .iter()
+            .filter_map(|m| m.group.clone())
+            .map(|g| {
+                let on = !p.disabled_macro_groups.contains(&g);
+                (g, on)
+            })
+            .collect();
+        Self {
+            aliases: p.aliases.groups(),
+            triggers: p.triggers.groups(),
+            macros,
+        }
+    }
+
+    /// Turn each group back to the state it had.
+    fn put_back(self, p: &mut Profile) {
+        for (name, on) in self.aliases {
+            p.aliases.set_group_enabled(&name, on);
+        }
+        for (name, on) in self.triggers {
+            p.triggers.set_group_enabled(&name, on);
+        }
+        for (name, on) in self.macros {
+            if on {
+                p.disabled_macro_groups.remove(&name);
+            } else {
+                p.disabled_macro_groups.insert(name);
+            }
+        }
     }
 }
 
@@ -447,6 +494,46 @@ mod tests {
         // It deletes rec again, and d takes the key back.
         lay_catalog_change_over(&mut p, &after, &before, None);
         assert_eq!(sends(&p), [("n", true), ("d", true)]);
+    }
+
+    #[test]
+    fn a_save_from_another_profile_keeps_the_groups_you_turned() {
+        let mut kick = Alias::new("kk", "kick %1");
+        kick.group = Some("combat".into());
+        let mut north = bind("Numpad8", "n", None);
+        north.group = Some("movement".into());
+        let before = GlobalCatalog {
+            aliases: vec![kick],
+            macros: vec![north],
+            ..GlobalCatalog::default()
+        };
+        let dormant = LoadoutSet {
+            dormant: true,
+            ..LoadoutSet::default()
+        };
+        let mut p = Profile::default();
+        lay_catalog_over(&mut p, &before, Some(&dormant));
+        // The loadouts hold both groups off, and you turn them on.
+        p.aliases.set_group_enabled("combat", true);
+        p.disabled_macro_groups.remove("movement");
+        // Another open profile saves a trigger in a new group.
+        let mut buff = Trigger::new(
+            "sanc",
+            "You feel righteous.",
+            vosh_automation::trigger::TriggerAction::Send {
+                template: "smile".into(),
+            },
+        );
+        buff.group = Some("buffs".into());
+        let after = GlobalCatalog {
+            triggers: vec![buff],
+            ..before.clone()
+        };
+        lay_catalog_change_over(&mut p, &before, &after, Some(&dormant));
+        assert!(p.aliases.is_group_enabled("combat"));
+        assert!(p.disabled_macro_groups.is_empty());
+        // The group it brings takes the state the loadouts give it.
+        assert!(!p.triggers.is_group_enabled("buffs"));
     }
 
     #[test]

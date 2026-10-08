@@ -1190,7 +1190,7 @@ describe('the help on group switches and timer groups', () => {
   const switches =
     'The switch after a group heading turns the whole group on and off at once, the same as `#group`, and each item keeps its own `Enabled`.';
 
-  it('says what the switch on a heading does, and when it waits', () => {
+  it('says what the switch on a heading does, and that it works while the loadouts decide', () => {
     const text = body('automate.first-alias');
     expect(text).toContain(switches);
     expect(text).toContain('It acts as you flip it, with no `Save`');
@@ -1199,12 +1199,14 @@ describe('the help on group switches and timer groups', () => {
     expect(text).toContain(
       'In loadout mode, while an active loadout lists groups or while you keep the catalog dormant, the loadouts decide each group of triggers, aliases, and macros.',
     );
+    expect(text).toContain('The switch still turns such a group, and so does `#group`.');
     expect(text).toContain(
-      'Its switch waits, and a note under the heading names the loadouts that decide it, or says every loadout is off.',
+      'A note under the heading names the loadouts that decide it, or says every loadout is off.',
     );
     expect(text).toContain(
-      '`#group` still turns such a group, and the note then says when the loadouts turn it back.',
+      'the note says they turn it back when you next launch Vosh, switch profiles or save Loadouts.',
     );
+    expect(text).not.toContain('switch waits');
     expect(text).toContain(
       'with the switch on the heading of their group or with `#group <name> on|off`',
     );

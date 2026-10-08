@@ -155,6 +155,22 @@
   color: var(--text);
 }
 
+/* Get started slides down and fades as it folds to its notice (First
+   Run Q14). GetStarted.tsx sets the class only when your system lets
+   things move, so the slide needs no media query, and the end of the
+   slide unmounts the card. */
+.pc-card.is-folding {
+  pointer-events: none;
+  animation: gs-fold 160ms ease-in forwards;
+}
+
+@keyframes gs-fold {
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
 .pc-head {
   display: flex;
   flex: none;
