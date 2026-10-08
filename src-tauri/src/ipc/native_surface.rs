@@ -408,16 +408,17 @@ pub(crate) fn native_surface_scroll(
     #[cfg(native_surface)]
     {
         use crate::native::grid::{scroll_metrics, scroll_page, scroll_to_bottom};
+        use crate::native::surface::pointer::split_ratio;
         match kind.as_str() {
-            "pageup" => scroll_page(session, true),
-            "pagedown" => scroll_page(session, false),
+            "pageup" => scroll_page(session, true, split_ratio()),
+            "pagedown" => scroll_page(session, false, split_ratio()),
             "bottom" => scroll_to_bottom(session),
             "toggle" => {
                 let (offset, _) = scroll_metrics(session);
                 if offset > 0 {
                     scroll_to_bottom(session);
                 } else {
-                    scroll_page(session, true);
+                    scroll_page(session, true, split_ratio());
                 }
             }
             _ => {}

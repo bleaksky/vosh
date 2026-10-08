@@ -1829,3 +1829,37 @@ fn scrollback_size_sets_the_history_a_grid_keeps() {
     }
     assert_eq!(grid.scrollback_len(), 1_000);
 }
+
+#[test]
+fn a_page_is_the_history_rows_the_split_shows_less_one() {
+    // 0.66 of 40 rows shows 26 whole history rows.
+    assert_eq!(page_lines(40, 0.66), 25);
+    // The divider clamps to the drag limits, so a page does too.
+    assert_eq!(page_lines(40, 0.15), 5);
+    assert_eq!(page_lines(40, 0.85), 33);
+    // Past the edges the split still keeps one row on each side.
+    assert_eq!(page_lines(6, 0.0), 1);
+    assert_eq!(page_lines(6, 1.0), 4);
+    // Too short to split, a page is the rows less one, and never 0.
+    assert_eq!(page_lines(5, 0.66), 4);
+    assert_eq!(page_lines(2, 0.66), 1);
+    assert_eq!(page_lines(1, 0.66), 1);
+    assert_eq!(page_lines(0, 0.66), 1);
+}
+
+#[test]
+fn page_up_opens_the_split_by_one_page_and_page_down_comes_back() {
+    let _shared = lock_shared_grid_for_test();
+    blank_shared_grid_for_test(40, 40);
+    for n in 0..200 {
+        feed_local(ONE, format!("{n}\r\n").as_bytes());
+    }
+    assert_eq!(current_display_offset(ONE), 0);
+    scroll_page(ONE, true, 0.66);
+    assert_eq!(current_display_offset(ONE), 25);
+    scroll_page(ONE, true, 0.66);
+    assert_eq!(current_display_offset(ONE), 50);
+    scroll_page(ONE, false, 0.66);
+    scroll_page(ONE, false, 0.66);
+    assert_eq!(current_display_offset(ONE), 0);
+}

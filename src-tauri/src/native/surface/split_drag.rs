@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use crate::native::grid::TermGrid;
+use crate::native::grid::{TermGrid, SPLIT_MIN_ROWS};
 
 /// How far past an edge, in points, the pointer reaches top speed. The
 /// same as xterm's drag scroll, so both renderers move alike.
@@ -89,7 +89,7 @@ impl Frame {
         let rows = (self.height / self.cell_h).floor() as i32;
         let divider_px = self
             .divider
-            .filter(|_| offset > 0 && rows >= 6)
+            .filter(|_| offset > 0 && usize::try_from(rows).is_ok_and(|rows| rows >= SPLIT_MIN_ROWS))
             // The renderer draws the divider on a whole pixel.
             .map(|frac| (f64::from(frac) * self.height).round());
         Some(View {

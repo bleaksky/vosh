@@ -606,11 +606,36 @@ pub(crate) fn scroll(session: SessionId, delta: i32) {
     with_grid_mut(session, |grid| grid.scroll(delta));
 }
 
-/// Page the grid of `session` up or down (PageUp/PageDown).
-pub(crate) fn scroll_page(session: SessionId, up: bool) {
+/// The fewest screen rows that open the scrollback split. A shorter
+/// grid scrolls back as one full view.
+pub(crate) const SPLIT_MIN_ROWS: usize = 6;
+
+/// How many lines one page up or down moves on a grid of `rows`
+/// screen rows with the divider at `split_ratio` of the height. That is
+/// the whole history rows the split shows above the divider less one, so
+/// the row you read last stays in view. A grid too short to split pages
+/// by its rows less one. Never 0.
+// Row counts are far inside f32 range, and the product is never negative.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+pub(crate) fn page_lines(rows: usize, split_ratio: f32) -> usize {
+    let shown = if rows >= SPLIT_MIN_ROWS {
+        ((split_ratio * rows as f32).floor() as usize).clamp(1, rows - 1)
+    } else {
+        rows
+    };
+    shown.saturating_sub(1).max(1)
+}
+
+/// Page the grid of `session` up or down by [`page_lines`], with the
+/// divider at `split_ratio`. A page up from the live tail opens the split.
+pub(crate) fn scroll_page(session: SessionId, up: bool, split_ratio: f32) {
     with_grid_mut(session, |grid| {
-        grid.term
-            .scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+        let lines = i32::try_from(page_lines(grid.screen_lines(), split_ratio)).unwrap_or(i32::MAX);
+        grid.scroll(if up { lines } else { -lines });
     });
 }
 
