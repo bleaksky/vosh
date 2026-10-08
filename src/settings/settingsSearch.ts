@@ -102,13 +102,16 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('appearance', 'theme', 'import-theme'),
   },
   {
-    label: 'Follow system appearance',
-    description: 'Vosh switches between your light and dark theme when macOS does.',
-    keywords: 'dark mode light mode automatic',
-    target: at('appearance', 'theme', 'follow-system'),
+    label: 'Switch themes',
+    description: "Turns at the game's dawn and dusk, about every 6 minutes.",
+    keywords:
+      'follow system appearance dark mode light mode automatic with the system with the game day night',
+    target: at('appearance', 'theme', 'switch-themes'),
   },
   { label: 'Light theme', target: at('appearance', 'theme', 'light-theme') },
   { label: 'Dark theme', target: at('appearance', 'theme', 'dark-theme') },
+  { label: 'Day theme', target: at('appearance', 'theme', 'day-theme') },
+  { label: 'Night theme', target: at('appearance', 'theme', 'night-theme') },
   {
     label: 'Font',
     keywords: 'typeface family terminal text monospace',

@@ -76,6 +76,22 @@ describe('searchSettingsRows', () => {
     expect(rows.every((r) => r.target.group === 'automation')).toBe(true);
   });
 
+  it('finds Switch themes and its pairs, by the old follow words too', () => {
+    const anchor = (query: string) => searchSettingsRows(query, mac)[0].target;
+    expect(labels('switch themes')[0]).toBe('Switch themes');
+    expect(anchor('switch themes')).toEqual({
+      group: 'appearance',
+      section: 'theme',
+      anchor: 'switch-themes',
+    });
+    expect(labels('follow system appearance')).toEqual(['Switch themes']);
+    expect(labels('dawn')).toEqual(['Switch themes']);
+    expect(labels('day theme')[0]).toBe('Day theme');
+    expect(anchor('day theme').anchor).toBe('day-theme');
+    expect(labels('night theme')[0]).toBe('Night theme');
+    expect(anchor('night theme').anchor).toBe('night-theme');
+  });
+
   it('finds the Theme row by the themes that left Vosh', () => {
     for (const name of ['vellum', 'one dark', 'everforest light']) {
       expect(labels(name)[0], name).toBe('Theme');

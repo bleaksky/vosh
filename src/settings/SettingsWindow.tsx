@@ -26,6 +26,7 @@ import {
   setColorVision,
   subscribeThemeChanges,
   subscribeThemePrefs,
+  themeFollowOf,
 } from '../theme/theme';
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, setCustomThemes } from '../theme/themes';
@@ -275,26 +276,26 @@ export function SettingsWindow() {
   }, []);
 
   // Another window can change the theme (the palette's Choose theme).
-  // subscribeThemeChanges repaints this window. While follow system
-  // appearance is off the id is your manual pick, so the config copy
-  // takes it and Appearance shows it. While follow is on the id is only
-  // the pair entry the OS shows, and the theme fields below carry the
-  // pick. This window's own save comes back too, so while a save holds
-  // the theme fields the copy keeps what you picked.
+  // subscribeThemeChanges repaints this window. While Switch themes is
+  // off the id is your manual pick, so the config copy takes it and
+  // Appearance shows it. While it follows the system or the game the id
+  // is only the entry the OS or the game shows, and the theme fields
+  // below carry the pick. This window's own save comes back too, so
+  // while a save holds the theme fields the copy keeps what you picked.
   useTauriEvent(subscribeThemeChanges, (themeId) => {
     const current = configRef.current;
-    if (!current || current.follow_system_appearance) return;
+    if (!current || themeFollowOf(current) !== 'off') return;
     if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     setConfig((prev) =>
-      prev && !prev.follow_system_appearance && prev.theme !== themeId
+      prev && themeFollowOf(prev) === 'off' && prev.theme !== themeId
         ? { ...prev, theme: themeId }
         : prev,
     );
   });
 
   // The seven theme fields another window saved. A palette pick while
-  // follow is on fills the light or dark entry, and the config copy
-  // takes it the same way.
+  // Switch themes follows the system or the game fills a slot of its
+  // pair, and the config copy takes it the same way.
   useTauriEvent(subscribeThemePrefs, (prefs) => {
     if (settingsSaveHolds(THEME_PREFS_FIELDS)) return;
     applyThemePrefs(prefs);

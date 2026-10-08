@@ -217,6 +217,13 @@ describe('pairChoices', () => {
     ]);
   });
 
+  it('lists every theme, light or dark, in gallery order for Day and Night', () => {
+    const every = pairChoices(themes, null, 'gruvbox').map((c) => c.value);
+    expect(every).toEqual(themes.map((t) => t.id));
+    expect(every).toContain('rubric');
+    expect(every).toContain('obsidian-ember');
+  });
+
   it('keeps a pick of the other appearance, first', () => {
     const light = pairChoices(themes, 'light', 'nord');
     expect(light[0]).toEqual({ value: 'nord', label: 'Nord' });
