@@ -119,7 +119,8 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
 // where they are now. Your prompt left Input, Advanced for its own
 // section, and the switch is the section's own row. Values, Meter
 // and the warning left Layout, Vitals for Customize vitals. Switch
-// themes took the place of Follow system appearance.
+// themes took the place of Follow system appearance. The mark, the
+// command color and macro echo left Command line for Sent commands.
 const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
   'input:advanced#prompt': { group: 'input', section: 'prompt' },
   'input:advanced#prompt-show': { group: 'input', section: 'prompt', anchor: 'prompt-show' },
@@ -131,6 +132,9 @@ const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
     section: 'theme',
     anchor: 'switch-themes',
   },
+  'input:command-line#mark-commands': { group: 'input', section: 'sent', anchor: 'mark-commands' },
+  'input:command-line#sent-color': { group: 'input', section: 'sent', anchor: 'sent-color' },
+  'input:command-line#echo-macros': { group: 'input', section: 'sent', anchor: 'echo-macros' },
 };
 
 // Sections and rows that left their group when Settings grew to eleven

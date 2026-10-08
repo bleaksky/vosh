@@ -1250,7 +1250,7 @@ export function subscribeThemeTerminalColorsChanged(
   return listen<boolean>(THEME_TERMINAL_COLORS_CHANGED, (event) => cb(event.payload));
 }
 
-/** Hear Sent command color change, null for the default. */
+/** Hear Command color change, null for the default. */
 export function subscribeInputEchoColorChanged(
   cb: (color: string | null) => void,
 ): Promise<UnlistenFn> {
@@ -1262,7 +1262,7 @@ export function subscribeEchoMacrosChanged(cb: (on: boolean) => void): Promise<U
   return listen<boolean>(ECHO_MACROS_CHANGED, (event) => cb(event.payload));
 }
 
-/** Hear Mark your commands, Mark color or Dim sent commands change. */
+/** Hear Mark before your commands, Mark color or Dim sent commands change. */
 export function subscribeInputEchoMarkChanged(
   cb: (options: EchoMarkOptions) => void,
 ): Promise<UnlistenFn> {

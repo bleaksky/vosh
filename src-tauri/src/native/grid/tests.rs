@@ -1646,7 +1646,7 @@ mod stage_into_grid {
     }
 }
 
-/// Your echo with the grey mark Mark your commands draws, as the page
+/// Your echo with the grey mark Mark before your commands draws, as the page
 /// writes it after you type `command`.
 fn send_typed(g: &mut TermGrid, command: &str) {
     let mark = crate::input::echo_mark(&crate::profile::ui::UiConfig::default());

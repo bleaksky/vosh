@@ -103,7 +103,7 @@ describe('a macro pressed at a password prompt', () => {
   });
 });
 
-describe('Mark your commands', () => {
+describe('Mark before your commands', () => {
   const marked = (patch: Partial<SubmitContext> = {}) =>
     typed({ echoMark: DEFAULT_ECHO_MARK, ...patch });
 

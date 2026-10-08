@@ -1035,7 +1035,7 @@ describe('a run of repeated lines the session collapses', () => {
   });
 });
 
-// Mark your commands draws a mark, the grey › by default, before your
+// Mark before your commands draws a mark, the grey › by default, before your
 // echo, unless the row it lands on already ends in > before the cursor,
 // as a game's own prompt does. The same rules as the native grid's, in
 // src-tauri/src/native/grid/regions.rs. The game lines are Aabahran's own,

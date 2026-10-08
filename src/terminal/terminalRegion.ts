@@ -47,8 +47,8 @@
 // rows the pinned band lends need. xterm has parsed none of what it
 // holds then, so its flush parses each write once.
 //
-// While Mark your commands is on, your echo, typed or from a quick key,
-// starts with its grey mark. Where the echo lands decides the mark, so it
+// With a mark picked, your echo, typed or from a quick key,
+// starts with that mark. Where the echo lands decides the mark, so it
 // waits for xterm to parse what came before it, held line ends and a
 // restore included. When the row it lands on already ends in `>` before
 // the cursor, as the game's own prompt does, the mark drops.

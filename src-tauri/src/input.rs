@@ -603,7 +603,7 @@ fn process_line(
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process_line(state, profile, c, &expansion, from, replaced, lua);
         // Echo the resolved line like any other typed command, with the
-        // caret and the Sent command color. The frontend suppresses its
+        // mark and the Command color. The frontend suppresses its
         // own echo for quick-keys, so this is the only echo that lands.
         inner.echo.insert(0, command_echo(&expansion, &profile.ui));
         return inner;

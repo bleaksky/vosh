@@ -262,7 +262,7 @@ pub(crate) enum UiField {
     SplitDividerColor(Option<String>),
     InputEchoColor(Option<String>),
     EchoMacros(bool),
-    /// Mark your commands keeps `input_echo_caret` in step for an older
+    /// Mark before your commands keeps `input_echo_caret` in step for an older
     /// build.
     InputEchoMark(String),
     InputEchoMarkText(String),

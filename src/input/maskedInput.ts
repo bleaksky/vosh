@@ -91,7 +91,7 @@ export interface SubmitContext {
   quickKey: boolean;
   /** The Command color from Settings, or null for the terminal default. */
   echoColor: string | null;
-  /** The mark from Mark your commands, built by echoMark, empty for
+  /** The mark from Mark before your commands, built by echoMark, empty for
    *  none. */
   echoMark: string;
   /** Dim sent commands from Settings. */

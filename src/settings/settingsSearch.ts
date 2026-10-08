@@ -426,21 +426,37 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'writing', 'writing-ask-post'),
   },
   {
-    label: 'Mark your commands',
-    description:
-      'Draws a grey › before each command you send, except after a prompt that already ends in >.',
-    keywords: 'echo caret arrow prefix typed input sent',
-    target: at('input', 'command-line', 'mark-commands'),
+    label: 'Mark before your commands',
+    description: 'Vosh leaves it out after a prompt that already ends in >.',
+    keywords: 'echo caret arrow prefix mark symbol sent input',
+    target: at('input', 'sent', 'mark-commands'),
   },
   {
-    label: 'Sent command color',
-    keywords: 'echo local command typed input',
-    target: at('input', 'command-line', 'sent-color'),
+    label: 'Mark color',
+    keywords: 'echo mark caret color grey',
+    target: at('input', 'sent', 'mark-color'),
+  },
+  {
+    label: 'Command color',
+    keywords: 'echo local command typed sent color',
+    target: at('input', 'sent', 'sent-color'),
+  },
+  {
+    label: 'Dim sent commands',
+    description: 'Your commands draw faint, so the game’s lines stand out.',
+    keywords: 'echo faint dim grey sent',
+    target: at('input', 'sent', 'sent-dim'),
+  },
+  {
+    label: 'Use the same mark in the command line',
+    description: 'The line you type in starts with your mark.',
+    keywords: 'prompt glyph mark command line',
+    target: at('input', 'sent', 'mark-line'),
   },
   {
     label: 'Show the commands your macros send',
     keywords: 'macro echo keys',
-    target: at('input', 'command-line', 'echo-macros'),
+    target: at('input', 'sent', 'echo-macros'),
   },
   {
     label: 'Wait between pasted lines',

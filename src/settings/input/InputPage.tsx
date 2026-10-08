@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { setBaseAnsi } from '../../theme/baseAnsi';
-import { INPUT_CURSOR_STYLES, type InputCursorStyle } from '../../ipc/uiConfig';
+import { INPUT_CURSOR_STYLES, type InputCursorStyle, type InputEchoMark } from '../../ipc/uiConfig';
 import type { SettingsTarget } from '../../lib/settingsNav';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme } from '../../theme/themes';
@@ -10,6 +10,7 @@ import {
   Card,
   ColorField,
   Disclosure,
+  Field,
   DisclosurePanel,
   NumberField,
   Row,
@@ -19,12 +20,14 @@ import {
   type SegmentedOption,
 } from '../../ui';
 
-// Settings, Input. The Command line card holds the caret shape,
-// keep last command, chat spell check, the sent command color, and macro
-// echo. Writing card follows with the two rows for the card that opens
-// for note edit and description edit. Advanced opens on paste pacing.
-// The Prompt section has a tab of its own (PromptPage.tsx). Every
-// change saves on its own.
+// Settings, Input. Sent commands holds how your commands echo in the
+// scrollback: the mark before them, its color, the command color, dim,
+// the mark at the start of the command line, and macro echo. Command
+// line holds the caret shape, keep last command and chat spell check.
+// Writing card follows with the two rows for the card that opens for
+// note edit and description edit. Advanced opens on paste pacing. The
+// Prompt section has a tab of its own (PromptPage.tsx). Every change
+// saves on its own.
 
 const CARET_NAMES: Record<InputCursorStyle, string> = {
   block: 'Block',
@@ -45,6 +48,16 @@ const CARETS: readonly SegmentedOption<InputCursorStyle>[] = INPUT_CURSOR_STYLES
     </span>
   ),
 }));
+
+const MARKS: readonly SegmentedOption<InputEchoMark>[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'chevron', label: '›', name: 'Chevron' },
+  { value: 'gt', label: '>', name: 'Greater than' },
+  { value: 'own', label: 'Your own' },
+];
+
+/** Your own mark keeps at most four characters, as Rust does. */
+const MARK_TEXT_MAX = 4;
 
 // Rows inside Advanced. A deep link or search hit on one opens it.
 const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay']);
@@ -77,11 +90,82 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
   if (!config) return null;
 
   // Sent commands draw in the terminal's own text color until you pick
-  // one.
-  const terminalText = findTheme(getCurrentThemeId()).xterm.foreground;
+  // one, and the mark in the theme's bright black.
+  const { foreground: terminalText, brightBlack: markGrey } = findTheme(getCurrentThemeId()).xterm;
 
   return (
     <>
+      <Section id="sent" title="Sent commands">
+        <Row
+          label="Mark before your commands"
+          description="Vosh leaves it out after a prompt that already ends in >."
+          anchor="mark-commands"
+        >
+          <Segmented
+            options={MARKS}
+            value={config.input_echo_mark}
+            onChange={(mark) => update({ input_echo_mark: mark })}
+          />
+          {config.input_echo_mark === 'own' && (
+            <Field
+              value={config.input_echo_mark_text}
+              onChange={(text) =>
+                update({ input_echo_mark_text: [...text].slice(0, MARK_TEXT_MAX).join('') })
+              }
+              width={64}
+              mono
+              aria-label="Your own mark"
+            />
+          )}
+        </Row>
+        <Row label="Mark color" anchor="mark-color">
+          <ColorField
+            value={config.input_echo_mark_color ?? ''}
+            onChange={(color) => update({ input_echo_mark_color: color || null })}
+            allowEmpty
+            // The echo reads only #rrggbb (echoRgb in maskedInput.ts).
+            hexOnly
+            placeholder="Theme default"
+            emptySwatch={markGrey}
+            pickerLabel="Choose a mark color"
+          />
+        </Row>
+        <Row label="Command color" anchor="sent-color">
+          <ColorField
+            value={config.input_echo_color ?? ''}
+            onChange={(color) => update({ input_echo_color: color || null })}
+            allowEmpty
+            hexOnly
+            placeholder="Theme default"
+            emptySwatch={terminalText}
+            pickerLabel="Choose a command color"
+          />
+        </Row>
+        <Row
+          label="Dim sent commands"
+          description="Your commands draw faint, so the game’s lines stand out."
+          anchor="sent-dim"
+        >
+          <Toggle
+            checked={config.input_echo_dim}
+            onChange={(on) => update({ input_echo_dim: on })}
+          />
+        </Row>
+        <Row
+          label="Use the same mark in the command line"
+          description="The line you type in starts with your mark."
+          anchor="mark-line"
+        >
+          <Toggle
+            checked={config.input_line_mark}
+            onChange={(on) => update({ input_line_mark: on })}
+          />
+        </Row>
+        <Row label="Show the commands your macros send" anchor="echo-macros">
+          <Toggle checked={config.echo_macros} onChange={(on) => update({ echo_macros: on })} />
+        </Row>
+      </Section>
+
       <Section id="command-line" title="Command line">
         <Row label="Caret shape" anchor="caret">
           <Segmented
@@ -109,31 +193,6 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             checked={config.spellcheck_prompt}
             onChange={(on) => update({ spellcheck_prompt: on })}
           />
-        </Row>
-        <Row
-          label="Mark your commands"
-          description="Draws a grey › before each command you send, except after a prompt that already ends in >."
-          anchor="mark-commands"
-        >
-          <Toggle
-            checked={config.input_echo_mark !== 'off'}
-            onChange={(on) => update({ input_echo_mark: on ? 'chevron' : 'off' })}
-          />
-        </Row>
-        <Row label="Sent command color" anchor="sent-color">
-          <ColorField
-            value={config.input_echo_color ?? ''}
-            onChange={(color) => update({ input_echo_color: color || null })}
-            allowEmpty
-            // The echo reads only #rrggbb (echoRgb in maskedInput.ts).
-            hexOnly
-            placeholder="Theme default"
-            emptySwatch={terminalText}
-            pickerLabel="Choose a sent command color"
-          />
-        </Row>
-        <Row label="Show the commands your macros send" anchor="echo-macros">
-          <Toggle checked={config.echo_macros} onChange={(on) => update({ echo_macros: on })} />
         </Row>
       </Section>
 

@@ -47,7 +47,7 @@ export function useInputPreferences() {
   // on). Under lag the echo shows the keybind registered before the
   // world responds. Same load + subscribe pattern as keepLast.
   const echoMacrosRef = useRef<boolean>(true);
-  // The mark each echo starts with, built from Mark your commands and
+  // The mark each echo starts with, built from Mark before your commands and
   // the Mark color, and Dim sent commands, which the echo mark store
   // keeps current.
   const echoMarkRef = useRef<string>(echoMark(getEchoMarkOptions()));

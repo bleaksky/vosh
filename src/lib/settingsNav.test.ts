@@ -116,6 +116,15 @@ describe('resolveSettingsTarget', () => {
         'input:command-line#writing-offer',
         { group: 'input', section: 'writing', anchor: 'writing-offer' },
       ],
+      [
+        'input:command-line#mark-commands',
+        { group: 'input', section: 'sent', anchor: 'mark-commands' },
+      ],
+      ['input:command-line#sent-color', { group: 'input', section: 'sent', anchor: 'sent-color' }],
+      [
+        'input:command-line#echo-macros',
+        { group: 'input', section: 'sent', anchor: 'echo-macros' },
+      ],
     ];
     for (const [raw, target] of cases) expect(resolveSettingsTarget(raw), raw).toEqual(target);
     // Rows that stayed keep their links.

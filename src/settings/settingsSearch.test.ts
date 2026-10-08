@@ -215,7 +215,8 @@ describe('searchSettingsRows', () => {
 
   it('finds the Input rows, Advanced ones included', () => {
     expect(labels('paste')).toEqual(['Wait between pasted lines']);
-    expect(labels('sent command')[0]).toBe('Sent command color');
+    expect(labels('sent command')).toContain('Command color');
+    expect(labels('mark')).toContain('Mark before your commands');
     const paste = searchSettingsRows('paste', mac)[0];
     expect(paste.target).toEqual({ group: 'input', section: 'advanced', anchor: 'paste-delay' });
   });
