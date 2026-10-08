@@ -313,21 +313,41 @@ mod tests {
 
     #[tokio::test]
     async fn a_new_search_stops_the_one_before() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("logs.sqlite");
+        let mut writer = LogStore::open(&path).unwrap();
+        let id = writer.start_session("h", 1, 0).unwrap();
+        let rows: Vec<vosh_log::LogEntry> = (0..200_000)
+            .map(|n| vosh_log::LogEntry {
+                session_id: id,
+                ts_ms: n,
+                text: format!("Orla waves {n}"),
+                raw: None,
+            })
+            .collect();
+        writer.append_batch(&rows).unwrap();
         let state: SharedState = std::sync::Arc::new(AppState::default());
-        let mut store = LogStore::in_memory().unwrap();
-        let id = store.start_session("h", 1, 0).unwrap();
-        store.append(id, 1, "Orla waves", None).unwrap();
-        *state.log_reader.lock().await = Some(store);
-        // The first search reads only while its count is the newest.
-        let ticket = state.log_searches.fetch_add(1, Ordering::AcqRel) + 1;
-        state.log_searches.fetch_add(1, Ordering::AcqRel);
-        let shared = state.clone();
-        let page = read_logs(&state, move |store| {
-            let replaced = || shared.log_searches.load(Ordering::Acquire) != ticket;
-            store.search_page_until("Orla", &SearchOptions::default(), true, &replaced)
-        })
-        .await
-        .unwrap();
-        assert!(matches!(page, Err(vosh_log::LogError::Stopped)));
+        *state.logs.lock().await = Some(writer);
+        *state.log_reader.lock().await = Some(LogStore::open(&path).unwrap());
+        // All time with a count, for a line no row holds, so the first
+        // search has every chunk to read when the second one comes.
+        let search = |pattern: &str| {
+            search_page(
+                &state,
+                pattern.to_string(),
+                false,
+                50,
+                LogScope::default(),
+                None,
+                None,
+                true,
+            )
+        };
+        let (first, second) = tokio::join!(search("Maren bows"), search("^Orla waves 199999$"));
+        let stopped = first.unwrap_err();
+        assert!(stopped.starts_with("stopped"), "{stopped}");
+        let page = second.unwrap();
+        assert_eq!(page.total, Some(1));
+        assert_eq!(page.hits[0].text, "Orla waves 199999");
     }
 }
