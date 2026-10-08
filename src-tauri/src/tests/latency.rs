@@ -467,9 +467,11 @@ async fn your_line_reaches_the_game_before_its_log_row() {
 /// A search through every log you kept leaves the game and its log
 /// alone. While the search holds the read connection, the writer stays
 /// free, your line reaches the game, the reply shows and your line's row
-/// lands. A new search then stops it.
+/// lands. A new search then stops it. The session gets one async
+/// worker, so a search that read on it would hold the reply until the
+/// search ended.
 #[allow(clippy::await_holding_lock)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn a_search_never_holds_up_the_game_or_its_log() {
     let _grid = crate::native::grid::lock_shared_grid_for_test();
     crate::native::grid::blank_shared_grid_for_test(100, 40);
@@ -507,13 +509,15 @@ async fn a_search_never_holds_up_the_game_or_its_log() {
             .await
         })
     };
-    let deadline = tokio::time::Instant::now() + WAIT;
+    // A thread sleep, as a timer would wait on the worker the search
+    // might hold.
+    let deadline = std::time::Instant::now() + WAIT;
     while h.state.log_reader.try_lock().is_ok() {
         assert!(
-            tokio::time::Instant::now() < deadline,
+            std::time::Instant::now() < deadline,
             "the search never took the reader"
         );
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        std::thread::sleep(Duration::from_millis(1));
     }
     assert!(
         h.state.logs.try_lock().is_ok(),
