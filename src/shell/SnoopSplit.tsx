@@ -1,9 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
-import { snoopClose, snoopStop } from '../ipc/snoop';
+import { snoopClose, snoopStop, snoopWindowOpen } from '../ipc/snoop';
 import { saveSnoopSize, useSnoopSize } from '../stores/config/snoopSizeStore';
 import { selectSnoop, setSnoopsFolded, useSnoops } from '../stores/session/snoopStore';
 import { pushToast } from '../stores/toasts';
-import { SnoopTerminal } from '../terminal/SnoopTerminal';
+import { FindToolbar } from '../terminal/FindToolbar';
+import type { FindOptions } from '../terminal/terminalHandle';
+import {
+  SnoopTerminal,
+  type SnoopFindResults,
+  type SnoopTerminalHandle,
+} from '../terminal/SnoopTerminal';
+import { MoreIcon } from '../ui/icons';
+import { SnoopMenu, type SnoopPick } from './SnoopMenu';
 import { EyeIcon } from './icons';
 import { useMinuteClock } from './sessionLine';
 import { endedLine, tabTitle } from './snoopLine';
@@ -15,19 +23,22 @@ import {
   type SnoopRoom,
 } from './snoopSplitSize';
 
-// The snoop split at the top of the terminal column, boards 01, 03 and
-// 04 of the Snoop review (SN1, SN2, SN3, SN5 and SN7). A strip with the
-// eye and a tab for each player the selected session snoops, each with
-// the sessions sidebar's mark, a dot while it runs and a ring once it
-// ended, and an accent dot on a tab behind with lines you have not read.
-// Stop sends `snoop stop` with the player in front, and an ended tab says
-// when it ended and offers Close. Under the strip, a terminal for each
-// tab, the one in front shown.
+// The snoop split at the top of the terminal column, boards 01 to 04 of
+// the Snoop review (SN1, SN2, SN3, SN5 and SN7). A strip with the eye and
+// a tab for each player the selected session snoops, each with the
+// sessions sidebar's mark, a dot while it runs and a ring once it ended,
+// and an accent dot on a tab behind with lines you have not read. Stop
+// sends `snoop stop` with the player in front, and an ended tab says when
+// it ended and offers Close. The more button opens the split's menu.
+// Under the strip, a terminal for each tab, the one in front shown.
 //
 // It opens at the profile's saved share of the column in whole rows,
 // and the line under it drags. A drag to the top folds it to the strip,
 // and a double click on the line folds it or opens it again. While it is
 // folded, a tab that gets lines takes the unread dot.
+//
+// In a narrow window Stop leaves the strip first, since the menu holds
+// it too. Then the names end in an ellipsis, the one in front last.
 //
 // It shows nothing with no tab or while the session's snoops sit in
 // their window. Nothing here takes the caret: a start leaves it on the
@@ -42,6 +53,15 @@ interface Props {
   /** Put the caret back on the command line. */
   onCaret: () => void;
 }
+
+/** The find bar before a search runs. */
+const NO_RESULTS: SnoopFindResults = { index: -1, count: 0 };
+
+/** The strip's widths besides the tabs and Stop: its insets, the eye,
+ *  the space before the end and the more button. */
+const STRIP_REST = 12 + 10 + 28 + 12 + 28;
+/** The space between two tabs. */
+const TAB_GAP = 2;
 
 export function SnoopSplit({
   session,
@@ -58,7 +78,18 @@ export function SnoopSplit({
   const [column, setColumn] = useState(0);
   const [row, setRow] = useState(0);
   const [drag, setDrag] = useState<SnoopDrag | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [tight, setTight] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [results, setResults] = useState<SnoopFindResults>(NO_RESULTS);
+  const handles = useRef(new Map<string, SnoopTerminalHandle>());
   const pull = useRef<{ y: number; height: number; to: SnoopDrag | null } | null>(null);
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const actRef = useRef<HTMLDivElement | null>(null);
+  const actWidth = useRef(0);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
 
   const folded = drag ? drag.folded : size.folded;
   const front = tabs.find((tab) => tab.name === selected) ?? null;
@@ -70,14 +101,54 @@ export function SnoopSplit({
     setSnoopsFolded(size.folded);
   }, [size.folded]);
 
-  // The column's height sizes the split.
+  // The find bar searches the tab in front, so it closes when another
+  // comes to the front.
+  useEffect(() => {
+    setFinding(false);
+    setResults(NO_RESULTS);
+  }, [selected, session]);
+
+  // Stop leaves the strip once the tabs at their full names and Stop no
+  // longer fit beside each other. The name in front gives way once the
+  // others are as narrow as they go.
+  const measure = () => {
+    const strip = stripRef.current;
+    const list = tabsRef.current;
+    // A strip with no width yet has nothing to measure.
+    if (!strip?.clientWidth || !list) return;
+    if (actRef.current) actWidth.current = actRef.current.offsetWidth + 4;
+    const gaps = TAB_GAP * Math.max(0, list.children.length - 1);
+    let names = gaps;
+    let least = gaps;
+    for (const tab of Array.from(list.children) as HTMLElement[]) {
+      const name = tab.querySelector<HTMLElement>('.snoop-name');
+      const full = tab.offsetWidth + (name ? name.scrollWidth - name.clientWidth : 0);
+      names += full;
+      least +=
+        tab.getAttribute('aria-selected') === 'true'
+          ? full
+          : parseFloat(getComputedStyle(tab).minWidth) || 0;
+    }
+    setNarrow(names + actWidth.current > strip.clientWidth - STRIP_REST);
+    setTight(least > list.clientWidth + 0.5);
+  };
+
+  // The column's height sizes the split, and the strip's width says
+  // whether Stop fits.
   useLayoutEffect(() => {
     const parent = section?.parentElement;
     if (!section || !parent || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => setColumn(parent.clientHeight));
+    const observer = new ResizeObserver(() => {
+      setColumn(parent.clientHeight);
+      measure();
+    });
     observer.observe(parent);
+    observer.observe(section);
     return () => observer.disconnect();
   }, [section]);
+
+  // The names and Stop change as tabs come, go and change hands.
+  useLayoutEffect(measure, [tabs, selected, unread, front?.live]);
 
   if (!shown) return null;
 
@@ -98,10 +169,36 @@ export function SnoopSplit({
   const fold = (on: boolean) => {
     void saveSnoopSize({ share: size.share, folded: on }).catch(failed);
   };
+  const openFind = () => {
+    if (size.folded) fold(false);
+    setFinding(true);
+  };
+  const closeFind = () => {
+    if (selected) handles.current.get(selected)?.clearSearch();
+    setFinding(false);
+    setResults(NO_RESULTS);
+    onCaret();
+  };
+  const find = (query: string, direction: 'next' | 'previous', options: FindOptions) => {
+    const handle = selected ? handles.current.get(selected) : undefined;
+    if (!handle) return false;
+    return direction === 'next'
+      ? handle.findNext(query, options)
+      : handle.findPrevious(query, options);
+  };
+
   const stopFront = () => {
     if (!front) return;
     act(() => (front.live ? snoopStop(session, front.name) : snoopClose(session, front.name)));
   };
+  const onPick = (pick: SnoopPick) => {
+    if (pick === 'stop') stopFront();
+    else if (pick === 'stop-all') act(() => snoopStop(session));
+    else if (pick === 'find') openFind();
+    else if (pick === 'window') act(() => snoopWindowOpen(session));
+    else fold(!size.folded);
+  };
+
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || !section) return;
     e.preventDefault();
@@ -139,11 +236,16 @@ export function SnoopSplit({
       style={{ height }}
       aria-label="Snoop"
     >
-      <div className="snoop-strip">
+      <div ref={stripRef} className="snoop-strip">
         <span className="snoop-eye" role="img" aria-label="Snoop">
           <EyeIcon />
         </span>
-        <div className="snoop-tabs" role="tablist" aria-label="Snooped players">
+        <div
+          ref={tabsRef}
+          className={'snoop-tabs' + (tight ? ' is-tight' : '')}
+          role="tablist"
+          aria-label="Snooped players"
+        >
           {tabs.map((tab) => (
             <button
               key={tab.name}
@@ -168,14 +270,27 @@ export function SnoopSplit({
             </button>
           ))}
         </div>
-        {front && (
-          <div className="snoop-end">
-            {!front.live && <span className="snoop-meta">{endedLine(front, now)}</span>}
-            <button type="button" className="snoop-btn" onClick={stopFront}>
-              {front.live ? 'Stop' : 'Close'}
-            </button>
-          </div>
-        )}
+        <div className="snoop-end">
+          {front && !narrow && (
+            <div ref={actRef} className="snoop-act">
+              {!front.live && <span className="snoop-meta">{endedLine(front, now)}</span>}
+              <button type="button" className="snoop-btn" onClick={stopFront}>
+                {front.live ? 'Stop' : 'Close'}
+              </button>
+            </div>
+          )}
+          <button
+            ref={moreRef}
+            type="button"
+            className={'shell-icon-button snoop-more' + (menuOpen ? ' is-open' : '')}
+            aria-label="Snoop options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreIcon />
+          </button>
+        </div>
       </div>
       <div className="snoop-body">
         {tabs.map((tab) => (
@@ -188,10 +303,26 @@ export function SnoopSplit({
             fontSize={fontSize}
             lineHeight={lineHeight}
             themeTerminalColors={themeTerminalColors}
+            onReady={(handle) => {
+              if (handle) handles.current.set(tab.name, handle);
+              else handles.current.delete(tab.name);
+            }}
             onRowHeight={setRow}
+            onFindResults={(found) => {
+              if (tab.name === selected) setResults(found);
+            }}
           />
         ))}
       </div>
+      {finding && !folded && (
+        <FindToolbar
+          key={selected}
+          results={results}
+          onFindNext={(query, options) => find(query, 'next', options)}
+          onFindPrevious={(query, options) => find(query, 'previous', options)}
+          onClose={closeFind}
+        />
+      )}
       <div
         className="snoop-handle resizable-handle"
         role="separator"
@@ -203,6 +334,18 @@ export function SnoopSplit({
         onPointerCancel={endDrag}
         onDoubleClick={() => fold(!size.folded)}
       />
+      {menuOpen && moreRef.current && (
+        <SnoopMenu
+          anchor={moreRef.current}
+          front={front}
+          folded={size.folded}
+          onPick={onPick}
+          onClose={(reason) => {
+            setMenuOpen(false);
+            if (reason !== 'outside') onCaret();
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { useTauriEvent } from '../ipc/useTauriEvent';
@@ -14,6 +15,7 @@ import {
 } from '../theme/fitGameColors';
 import { getCurrentThemeId, subscribeThemeChanges } from '../theme/theme';
 import { findTheme, onCustomThemesChanged } from '../theme/themes';
+import { searchDecorations, type FindOptions } from './terminalHandle';
 import { remeasureWhenLoaded } from './terminalFont';
 import { xtermThemeFor } from './terminalTheme';
 import { WordWrapper } from './wordWrap';
@@ -36,7 +38,24 @@ import { WordWrapper } from './wordWrap';
 // writes each new piece. A snapshot the store takes in place of what it
 // held writes the tab afresh.
 //
-// The split reads its row height, to size itself in whole rows.
+// The split reads its row height, to size itself in whole rows, and
+// finds in it with the search your terminal uses.
+
+/** What the snoop split asks of a snoop terminal. */
+export interface SnoopTerminalHandle {
+  /** Search forward through the scrollback. True on a match. */
+  findNext: (query: string, options: FindOptions) => boolean;
+  /** Search backward. */
+  findPrevious: (query: string, options: FindOptions) => boolean;
+  /** Clear the matches once the find bar closes. */
+  clearSearch: () => void;
+}
+
+/** The match in front and how many there are, as the find bar shows. */
+export interface SnoopFindResults {
+  index: number;
+  count: number;
+}
 
 interface Props {
   session: number;
@@ -49,8 +68,12 @@ interface Props {
   fontSize: number;
   lineHeight: number;
   themeTerminalColors: boolean;
+  /** The handle once the terminal is set up, and null as it goes. */
+  onReady?: (handle: SnoopTerminalHandle | null) => void;
   /** The row height in CSS px, each time a fit changes it. */
   onRowHeight?: (height: number) => void;
+  /** Each change to the matches of a find. */
+  onFindResults?: (results: SnoopFindResults) => void;
 }
 
 /** The cell height in CSS px, as FitAddon reads it from xterm's
@@ -74,7 +97,9 @@ export function SnoopTerminal({
   fontSize,
   lineHeight,
   themeTerminalColors,
+  onReady,
   onRowHeight,
+  onFindResults,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
@@ -83,8 +108,8 @@ export function SnoopTerminal({
   shownRef.current = shown;
   const tintedRef = useRef(themeTerminalColors);
   tintedRef.current = themeTerminalColors;
-  const calls = useRef({ onRowHeight });
-  calls.current = { onRowHeight };
+  const calls = useRef({ onReady, onRowHeight, onFindResults });
+  calls.current = { onReady, onRowHeight, onFindResults };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -107,6 +132,11 @@ export function SnoopTerminal({
     const unicode11 = new Unicode11Addon();
     term.loadAddon(unicode11);
     term.unicode.activeVersion = '11';
+    const search = new SearchAddon();
+    term.loadAddon(search);
+    const results = search.onDidChangeResults(({ resultIndex, resultCount }) =>
+      calls.current.onFindResults?.({ index: resultIndex, count: resultCount }),
+    );
     term.open(host);
     // Hide the cursor, since you never type here.
     term.write('\x1b[?25l');
@@ -162,8 +192,22 @@ export function SnoopTerminal({
     };
     window.addEventListener('keydown', onCopyKey, true);
 
+    const searchOptions = (options: FindOptions) => ({
+      regex: options.regex ?? false,
+      wholeWord: options.wholeWord ?? false,
+      caseSensitive: options.caseSensitive ?? false,
+      decorations: searchDecorations(),
+    });
+    calls.current.onReady?.({
+      findNext: (query, options) => search.findNext(query, searchOptions(options)),
+      findPrevious: (query, options) => search.findPrevious(query, searchOptions(options)),
+      clearSearch: () => search.clearDecorations(),
+    });
+
     return () => {
+      calls.current.onReady?.(null);
       window.removeEventListener('keydown', onCopyKey, true);
+      results.dispose();
       unsubscribe();
       observer.disconnect();
       resized.dispose();

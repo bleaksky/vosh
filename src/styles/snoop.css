@@ -1,7 +1,8 @@
 /* The snoop split at the top of the terminal column (Snoop SN1, SN2, SN3
-   and SN7, boards 01, 03 and 04). A 32 strip with the eye, a tab for
-   each snooped player, and Stop or Close, then the snoop's own terminal
-   in the well's insets, closed by the pane handle's 1 px line. It paints the terminal's ground, so it stays opaque while the
+   and SN7, boards 01 to 04). A 32 strip with the eye, a tab for each
+   snooped player, Stop or Close and the more button, then the snoop's
+   own terminal in the well's insets, closed by the pane handle's 1 px
+   line. It paints the terminal's ground, so it stays opaque while the
    native surface draws your terminal under the page. It sits over the
    terminal area, so the line's grab area reaches past its edge. */
 
@@ -42,6 +43,15 @@
   width: 56px;
 }
 
+/* Find floats under the strip, as yours floats under the band. */
+.snoop > .ov-find {
+  top: calc(var(--band) + 8px);
+}
+
+.snoop-menu {
+  width: 232px;
+}
+
 .snoop-strip {
   flex: none;
   display: flex;
@@ -74,7 +84,8 @@
   align-items: center;
   gap: 6px;
   flex: 0 1 auto;
-  min-width: 0;
+  /* A narrow strip ends each name in an ellipsis and keeps the mark. */
+  min-width: 48px;
   height: 24px;
   padding: 0 10px 0 6px;
   border: 0;
@@ -88,6 +99,8 @@
   cursor: default;
 }
 
+/* The name in front ends in an ellipsis last, once the others are as
+   narrow as they go. */
 .snoop-tab[aria-selected='true'] {
   flex-shrink: 0;
   background: var(--selrow);
@@ -123,7 +136,12 @@
 
 /* A tab behind with lines you have not read. */
 .snoop-tab.is-unread {
+  min-width: 60px;
   color: var(--text);
+}
+
+.snoop-tabs.is-tight .snoop-tab[aria-selected='true'] {
+  flex-shrink: 1;
 }
 
 .snoop-tab.is-unread::after {
@@ -155,6 +173,20 @@
   flex: none;
   margin-left: auto;
   padding-left: 12px;
+}
+
+.snoop-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snoop-end .snoop-more {
+  margin-left: -4px;
+}
+
+.snoop-end .snoop-more.is-open {
+  box-shadow: var(--st-selrow-ring);
 }
 
 .snoop-meta {

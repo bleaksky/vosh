@@ -148,7 +148,7 @@ export interface HandleParts {
 // theme switch picks up the new accent on the next find call.
 // Hard-coded fallbacks keep matches visible if the var lookup
 // returns empty (early-mount race in WKWebView).
-const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
+export const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
   const rootStyle = getComputedStyle(document.documentElement);
   const accent = rootStyle.getPropertyValue('--accent').trim() || '#7aa2f7';
   // The SearchAddon draws non-active matches BELOW the text and the

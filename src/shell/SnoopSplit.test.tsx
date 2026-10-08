@@ -6,13 +6,15 @@ import type { Snoops } from '../stores/session/snoopStore';
 import indexCss from '../styles/index.css?raw';
 import snoopCss from '../styles/snoop.css?raw';
 import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
+import { shortcutLabel } from '../lib/shortcuts';
 import { SnoopSplit } from './SnoopSplit';
 import { endedLine, tabTitle } from './snoopLine';
 
-// The snoop split of boards 01, 03 and 04 of the Snoop review. The snoop
+// The snoop split of boards 01 to 04 of the Snoop review. The snoop
 // store, the saved size and the minute clock are faked, and each snoop
 // terminal stands in as a plain element that names its player, so what
-// shows is what the split draws.
+// shows is what the split draws. The menu draws in place, not in a
+// portal, and the find bar stands in as a plain element.
 
 const fake = vi.hoisted(() => ({
   snoops: { tabs: [], windowed: false, selected: null, unread: new Set() } as unknown as Snoops,
@@ -22,6 +24,7 @@ const fake = vi.hoisted(() => ({
   selected: [] as string[],
   stops: [] as unknown[],
   closes: [] as unknown[],
+  windows: [] as unknown[],
 }));
 
 const NOW = 1_800_000_000_000;
@@ -36,6 +39,14 @@ vi.mock('../stores/config/snoopSizeStore', () => ({
   useSnoopSize: () => fake.size,
   saveSnoopSize: async (size: unknown) => void fake.saves.push(size),
 }));
+vi.mock('../ui/MenuSurface', async (actual) => ({
+  ...(await actual<typeof import('../ui/MenuSurface')>()),
+  MenuSurface: ({ label, children }: { label: string; children: unknown }) =>
+    createElement('menu', { role: 'menu', 'aria-label': label }, children as never),
+}));
+vi.mock('../terminal/FindToolbar', () => ({
+  FindToolbar: () => createElement('div', { 'data-find': '' }),
+}));
 vi.mock('./sessionLine', async (actual) => ({
   ...(await actual<typeof import('./sessionLine')>()),
   useMinuteClock: () => NOW,
@@ -43,6 +54,7 @@ vi.mock('./sessionLine', async (actual) => ({
 vi.mock('../ipc/snoop', () => ({
   snoopStop: async (session?: number, name?: string) => void fake.stops.push([session, name]),
   snoopClose: async (session?: number, name?: string) => void fake.closes.push([session, name]),
+  snoopWindowOpen: async (session?: number) => void fake.windows.push(session),
 }));
 vi.mock('../terminal/SnoopTerminal', () => ({
   SnoopTerminal: ({ name, shown }: { name: string; shown: boolean }) =>
@@ -100,7 +112,15 @@ beforeEach(() => {
   fake.selected.length = 0;
   fake.stops.length = 0;
   fake.closes.length = 0;
+  fake.windows.length = 0;
 });
+
+/** The Find row, with its keys as this platform writes them. */
+const FIND = `Find${shortcutLabel('Mod+F')}`;
+
+/** The more button, closed. */
+const MORE =
+  '<button type="button" class="shell-icon-button snoop-more" aria-label="Snoop options" aria-haspopup="menu" aria-expanded="false"><svg';
 
 describe('the snoop split', () => {
   it('draws nothing with no snoop, or while the snoops sit in their window', () => {
@@ -110,7 +130,7 @@ describe('the snoop split', () => {
     expect(draw()).toBe('');
   });
 
-  it('opens at the saved share with the eye, the tab and Stop (board 01)', () => {
+  it('opens at the saved share with the eye, the tab, Stop and more (board 01)', () => {
     snoops([live('Tolliver', NOW)], 'Tolliver');
     const html = draw();
     expect(html).toContain('<section class="snoop" style="height:40%" aria-label="Snoop">');
@@ -121,7 +141,8 @@ describe('the snoop split', () => {
       '<button type="button" role="tab" class="snoop-tab" aria-selected="true" title="Tolliver">',
     );
     expect(html).toContain(
-      '<div class="snoop-end"><button type="button" class="snoop-btn">Stop</button></div>',
+      '<div class="snoop-end"><div class="snoop-act"><button type="button" class="snoop-btn">Stop</button></div>' +
+        MORE,
     );
     expect(html).toContain('<div class="snoop-body"><div data-term="Tolliver"></div></div>');
     expect(html).toContain(
@@ -142,7 +163,7 @@ describe('the snoop split', () => {
         '<button type="button" role="tab" class="snoop-tab is-ended" aria-selected="true" title="Maren, ended 2 min ago">',
     });
     expect(html).toContain(
-      '<span class="snoop-meta">Ended 2 min ago</span><button type="button" class="snoop-btn">Close</button>',
+      '<div class="snoop-act"><span class="snoop-meta">Ended 2 min ago</span><button type="button" class="snoop-btn">Close</button></div>',
     );
     // Every tab keeps its terminal, and the one in front shows.
     expect(html).toContain(
@@ -203,6 +224,10 @@ describe('the strip buttons', () => {
     vi.stubGlobal('Node', FakeNode);
     vi.stubGlobal('Element', FakeElement);
     vi.stubGlobal('HTMLElement', FakeElement);
+    // The menu hangs from the more button's box.
+    Object.assign(FakeElement.prototype, {
+      getBoundingClientRect: () => ({ left: 0, right: 28, top: 4, bottom: 28 }),
+    });
     ({ createRoot } = await import('react-dom/client'));
   });
 
@@ -228,10 +253,20 @@ describe('the strip buttons', () => {
       act(() => on(button(text)).onClick());
       await Promise.resolve();
     };
+    const more = () =>
+      act(() =>
+        on(findAll(host, (el) => el.getAttribute('aria-label') === 'Snoop options')[0]).onClick(),
+      );
+    const items = () =>
+      findAll(host, (el) => el.getAttribute('role') === 'menuitem').map((el) => el.textContent);
     const handle = () => findAll(host, (el) => el.getAttribute('role') === 'separator')[0];
+    const finding = () => findAll(host, (el) => el.getAttribute('data-find') === '').length > 0;
     return {
       press,
+      more,
+      items,
       handle,
+      finding,
       carets: () => carets,
       unmount: () => act(() => root.unmount()),
     };
@@ -256,6 +291,75 @@ describe('the strip buttons', () => {
     expect(fake.closes).toEqual([[1, 'Maren']]);
     expect(fake.stops).toEqual([]);
     split.unmount();
+  });
+
+  describe('the more menu (board 02)', () => {
+    it('holds Stop, Stop every snoop, Find with its keys, Open in a window and Fold', async () => {
+      snoops([live('Tolliver'), live('Maren'), live('Orla')], 'Tolliver', ['Maren']);
+      const split = await mount();
+      split.more();
+      expect(split.items()).toEqual([
+        'Stop snooping Tolliver',
+        'Stop every snoop',
+        FIND,
+        'Open in a window',
+        'Fold',
+      ]);
+      split.unmount();
+    });
+
+    it('offers Close and Unfold for an ended tab in a folded split', async () => {
+      fake.size = { share: 0.4, folded: true };
+      snoops([live('Tolliver'), ended('Maren', NOW - 2 * MIN)], 'Maren');
+      const split = await mount();
+      split.more();
+      expect(split.items()[0]).toBe('Close Maren');
+      expect(split.items()[4]).toBe('Unfold');
+      split.unmount();
+    });
+
+    it('sends each pick on, and hands the caret back', async () => {
+      snoops([live('Tolliver'), live('Orla')], 'Tolliver');
+      const split = await mount();
+      split.more();
+      await split.press('Stop snooping Tolliver');
+      split.more();
+      await split.press('Stop every snoop');
+      split.more();
+      await split.press('Open in a window');
+      split.more();
+      await split.press('Fold');
+      expect(fake.stops).toEqual([
+        [1, 'Tolliver'],
+        [1, undefined],
+      ]);
+      expect(fake.windows).toEqual([1]);
+      expect(fake.saves).toEqual([{ share: 0.4, folded: true }]);
+      expect(split.carets()).toBeGreaterThanOrEqual(4);
+      expect(split.items()).toEqual([]);
+      split.unmount();
+    });
+
+    it('opens the find bar on the tab in front, unfolding first', async () => {
+      fake.size = { share: 0.4, folded: true };
+      snoops([live('Tolliver')], 'Tolliver');
+      const split = await mount();
+      expect(split.finding()).toBe(false);
+      split.more();
+      await split.press(FIND);
+      expect(fake.saves).toEqual([{ share: 0.4, folded: false }]);
+      split.unmount();
+    });
+
+    it('opens the find bar under the strip', async () => {
+      snoops([live('Tolliver')], 'Tolliver');
+      const split = await mount();
+      split.more();
+      await split.press(FIND);
+      expect(split.finding()).toBe(true);
+      expect(fake.saves).toEqual([]);
+      split.unmount();
+    });
   });
 
   describe('the line under the split', () => {

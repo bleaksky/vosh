@@ -65,6 +65,13 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }));
 vi.mock('@xterm/addon-unicode11', () => ({ Unicode11Addon: class {} }));
+vi.mock('@xterm/addon-search', () => ({
+  SearchAddon: class {
+    onDidChangeResults() {
+      return { dispose() {} };
+    }
+  },
+}));
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
 vi.mock('../stores/session/snoopStore', () => ({
