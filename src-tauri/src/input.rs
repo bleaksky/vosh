@@ -754,6 +754,15 @@ pub(crate) fn echo_mark(ui: &crate::profile::ui::UiConfig) -> String {
     }
 }
 
+/// Tell the native grid of `session` the `mark` [`echo_mark`] gave, so
+/// the grid leaves out exactly that mark after a prompt that ends in `>`.
+pub(crate) fn keep_echo_mark(session: crate::sessions::SessionId, mark: String) {
+    #[cfg(any(native_surface, test))]
+    crate::native::grid::set_echo_mark(session, mark.into_bytes());
+    #[cfg(not(any(native_surface, test)))]
+    let _ = (session, mark);
+}
+
 /// The red, green and blue of a Command or Mark color, the six hex digits
 /// at its start after an optional `#`, or None when it does not read.
 fn echo_rgb(color: &str) -> Option<(u8, u8, u8)> {

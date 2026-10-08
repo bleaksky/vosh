@@ -339,16 +339,23 @@ async fn set_fields(
     profile: Option<String>,
 ) -> Result<Vec<(SessionId, VitalsText)>, String> {
     let sessions = state.all_sessions();
-    let (open, drawn, resized) = {
+    let (open, drawn, resized, marked) = {
         let mut p = state.lock_named(profile).await?;
         let text = p.ui.vitals_text.clone();
         let lines = p.ui.scrollback_lines;
+        let mark = crate::input::echo_mark(&p.ui);
         apply_fields(&mut p.ui, fields);
         // A new Scrollback size reaches every session on the profile.
         let resized: Vec<_> = if p.ui.scrollback_lines == lines {
             Vec::new()
         } else {
             p.players(&sessions).cloned().collect()
+        };
+        // So does a new mark or mark color, for the native grid.
+        let mark = Some(crate::input::echo_mark(&p.ui)).filter(|now| *now != mark);
+        let marked: Vec<_> = match mark {
+            Some(mark) => p.players(&sessions).map(|s| (s.id, mark.clone())).collect(),
+            None => Vec::new(),
         };
         let mut drawn = Vec::new();
         if p.ui.vitals_text != text {
@@ -360,11 +367,19 @@ async fn set_fields(
                 }
             }
         }
-        (p.open().clone(), drawn, (resized, p.ui.scrollback_lines))
+        (
+            p.open().clone(),
+            drawn,
+            (resized, p.ui.scrollback_lines),
+            marked,
+        )
     };
     let (resized, lines) = resized;
     for session in resized {
         crate::logs::keep_scrollback_lines(&session, lines).await;
+    }
+    for (session, mark) in marked {
+        crate::input::keep_echo_mark(session, mark);
     }
     persist_profile(state, &open).await;
     Ok(drawn)
@@ -802,6 +817,57 @@ mod tests {
             super::set_fields(&state, game_time(), Some("Maren".into())).await,
             Err("Maren closed before Vosh could save this change.".to_string())
         );
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn a_new_mark_reaches_the_native_grid_of_each_session_on_the_profile() {
+        use std::sync::Arc;
+
+        use crate::app::state::{AppState, SharedState};
+        use crate::native::grid;
+        use crate::profile::live::Profile;
+        use crate::profile::set::ProfileSet;
+
+        // The grid map is shared with the other tests.
+        let _grid = grid::lock_shared_grid_for_test();
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Orla").unwrap();
+        let state: SharedState = Arc::new(AppState::default());
+        state.set_profiles(set).await;
+        let orla = state.add_open_profile("Orla", Profile::default());
+        let session = state.open_session(orla);
+        let echo = |mark: &str, command: &str| {
+            grid::feed_session_output(session.id, &text(b"Your choice> "), None);
+            grid::feed_local(session.id, format!("{mark}{command}\r\n").as_bytes());
+        };
+        let gt = "\x1b[90m> \x1b[0m";
+        // The grid leaves out the chevron until the mark changes.
+        echo(gt, "1");
+        let fields = vec![setter("input_echo_mark", &"gt".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo(gt, "2");
+        // A new mark color changes the bytes it leaves out.
+        let fields = vec![setter("input_echo_mark_color", &"#c6a46a".into())];
+        super::set_fields(&state, fields, Some("Orla".into()))
+            .await
+            .unwrap();
+        echo("\x1b[38;2;198;164;106m> \x1b[0m", "3");
+        let rows = grid::screen_rows(session.id).unwrap().rows;
+        assert_eq!(
+            rows[..3],
+            ["Your choice> > 1", "Your choice> 2", "Your choice> 3"]
+        );
+    }
+
+    /// Game output of `bytes`, as the session hands it to the grid.
+    fn text(bytes: &[u8]) -> vosh_prompt::stage::Output {
+        let mut out = vosh_prompt::stage::Output::new(false);
+        out.text(bytes);
+        out
     }
 
     #[test]

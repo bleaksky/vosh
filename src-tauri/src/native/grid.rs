@@ -140,6 +140,10 @@ pub(crate) struct TermGrid {
     /// (`Output::id`), 0 before the first. Text the webview writes lands
     /// after it, which the session reads to tell what the text follows.
     taken: u64,
+    /// The bytes of the mark your echo starts with (`crate::input::echo_mark`),
+    /// empty while it is off, which the grid leaves out after a prompt
+    /// that ends in `>`.
+    echo_mark: Vec<u8>,
 }
 
 impl TermGrid {
@@ -160,7 +164,15 @@ impl TermGrid {
             lift_tracks: Vec::new(),
             pin_row: false,
             taken: 0,
+            echo_mark: crate::input::echo_mark(&crate::profile::ui::UiConfig::default())
+                .into_bytes(),
         }
+    }
+
+    /// Leave out `mark` from your echo after a prompt that ends in `>`,
+    /// as the mark you picked draws it.
+    pub(crate) fn set_echo_mark(&mut self, mark: Vec<u8>) {
+        self.echo_mark = mark;
     }
 
     /// Keep `lines` of history above the screen, dropping the oldest
@@ -393,6 +405,9 @@ pub(crate) struct SessionGrid {
     /// The history Scrollback size keeps, None for the grid's own 10,000
     /// until the session says.
     history: Option<usize>,
+    /// The bytes of the mark your echo starts with, None for the chevron
+    /// until the session says.
+    echo_mark: Option<Vec<u8>>,
 }
 
 impl SessionGrid {
@@ -416,24 +431,30 @@ impl SessionGrid {
     fn size(&mut self, columns: usize, screen_lines: usize) {
         match self.term.as_mut() {
             Some(grid) => grid.resize(columns, screen_lines),
-            None => self.term = Some(made(self.history, columns, screen_lines)),
+            None => self.term = Some(self.made(columns, screen_lines)),
         }
     }
 
     /// The grid a write lands in, made at 80 by 24 when no size came yet.
     fn written(&mut self) -> &mut TermGrid {
-        let history = self.history;
-        self.term.get_or_insert_with(|| made(history, 80, 24))
+        if self.term.is_none() {
+            self.term = Some(self.made(80, 24));
+        }
+        self.term.as_mut().expect("made above")
     }
-}
 
-/// A new grid that keeps `history` lines when Scrollback size set them.
-fn made(history: Option<usize>, columns: usize, screen_lines: usize) -> TermGrid {
-    let mut grid = TermGrid::new(columns, screen_lines);
-    if let Some(lines) = history {
-        grid.set_history(lines);
+    /// A new grid that keeps the history Scrollback size set and the mark
+    /// the session said.
+    fn made(&self, columns: usize, screen_lines: usize) -> TermGrid {
+        let mut grid = TermGrid::new(columns, screen_lines);
+        if let Some(lines) = self.history {
+            grid.set_history(lines);
+        }
+        if let Some(mark) = &self.echo_mark {
+            grid.set_echo_mark(mark.clone());
+        }
+        grid
     }
-    grid
 }
 
 /// Every session's grid, and the session whose grid shows. One Metal
@@ -493,6 +514,17 @@ pub(crate) fn set_history(session: SessionId, lines: usize) {
         if let Some(grid) = held.term.as_mut() {
             grid.set_history(lines);
         }
+    });
+}
+
+/// Leave out `mark` from your echo after a prompt that ends in `>` in the
+/// grid of `session`, now and in a grid it makes later.
+pub(crate) fn set_echo_mark(session: SessionId, mark: Vec<u8>) {
+    with_session(session, |held| {
+        if let Some(grid) = held.term.as_mut() {
+            grid.set_echo_mark(mark.clone());
+        }
+        held.echo_mark = Some(mark);
     });
 }
 

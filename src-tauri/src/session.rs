@@ -538,15 +538,18 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
     crate::app::plugins::show_launch_lines(&app, session);
 
     // Log sessions decides whether the connection writes the log.
-    let (logged, lines) = {
+    let (logged, lines, mark) = {
         let p = session.lock_profile().await;
         (
             crate::profile::ui::logs_connection(&p.ui, &host),
             p.ui.scrollback_lines,
+            crate::input::echo_mark(&p.ui),
         )
     };
-    // Scrollback size, which the profile may have changed since.
+    // Scrollback size and the mark, which the profile may have changed
+    // since.
     crate::logs::keep_scrollback_lines(session, lines).await;
+    crate::input::keep_echo_mark(session.id, mark);
     #[cfg(test)]
     let logged = logged
         || (vosh_log::is_local_host(&host)
