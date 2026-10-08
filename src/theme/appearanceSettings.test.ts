@@ -212,9 +212,9 @@ describe('pairChoices', () => {
   it('lists the light themes', () => {
     expect(pairChoices(themes, 'light', 'rubric').map((c) => c.value)).toEqual([
       'rubric',
-      'high-contrast-light',
       'melange-light',
       'solarized-light',
+      'high-contrast-light',
     ]);
   });
 
@@ -269,12 +269,12 @@ describe('stepGalleryTheme', () => {
   });
 
   it('steps between the light themes while follow is on', () => {
-    expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('high-contrast-light');
-    expect(stepGalleryTheme(themes, 'high-contrast-light', 1, 'light')).toBe('melange-light');
+    expect(stepGalleryTheme(themes, 'rubric', 1, 'light')).toBe('melange-light');
     expect(stepGalleryTheme(themes, 'melange-light', 1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('rubric');
-    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('solarized-light');
-    expect(stepGalleryTheme(themes, 'melange-light', -1, 'light')).toBe('high-contrast-light');
+    expect(stepGalleryTheme(themes, 'solarized-light', 1, 'light')).toBe('high-contrast-light');
+    expect(stepGalleryTheme(themes, 'high-contrast-light', 1, 'light')).toBe('rubric');
+    expect(stepGalleryTheme(themes, 'rubric', -1, 'light')).toBe('high-contrast-light');
+    expect(stepGalleryTheme(themes, 'melange-light', -1, 'light')).toBe('rubric');
   });
 
   it('stays put when no other theme has that appearance', () => {

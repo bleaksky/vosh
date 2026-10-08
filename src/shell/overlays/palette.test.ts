@@ -642,7 +642,7 @@ describe('theme order', () => {
     setCustomThemes([]);
   });
 
-  it('lists the themes in the gallery order, your own themes last', async () => {
+  it('lists the themes in the gallery order, the high contrast pair then your own themes last', async () => {
     const { customToAppTheme, setCustomThemes } = await import('../../theme/themes');
     setCustomThemes([
       customToAppTheme({
@@ -663,7 +663,7 @@ describe('theme order', () => {
       'rose-pine',
       'tokyo-night',
     ]);
-    const rest = ordered.slice(7, -1).map((t) => t.theme.label);
+    const rest = ordered.slice(7, -3).map((t) => t.theme.label);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
     // The menu bar's Choose theme lists the same order.
     expect(rest).toEqual([
@@ -673,8 +673,6 @@ describe('theme order', () => {
       'Everforest Dark',
       'Green Screen',
       'Harbor Dark',
-      'High Contrast',
-      'High Contrast Light',
       'Iceberg Dark',
       'Kanso Zen',
       'Melange Dark',
@@ -687,6 +685,11 @@ describe('theme order', () => {
       'Solarized Light',
       'Srcery',
       'Tango Dark',
+    ]);
+    expect(ordered.slice(-3).map((t) => t.theme.id)).toEqual([
+      'high-contrast',
+      'high-contrast-light',
+      'mine',
     ]);
     expect(ordered.at(-1)).toMatchObject({ theme: { id: 'mine' }, custom: true });
     expect(ordered.filter((t) => t.custom)).toHaveLength(1);

@@ -1007,6 +1007,7 @@
 .st-gallery-grid {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
 }
@@ -1113,13 +1114,19 @@
   outline-offset: 2px;
 }
 
+/* A name wraps to two lines at most, centered under its tile, and ends
+   in an ellipsis past that (Q25 A of the R21 and R25 review). Every
+   built in name but High Contrast Light fits on one. */
 .st-theme-name {
-  display: block;
+  display: -webkit-box;
   max-width: 100%;
   margin-top: 8px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  text-align: center;
+  white-space: normal;
   color: var(--secondary);
   font-size: 11px;
   line-height: 15px;

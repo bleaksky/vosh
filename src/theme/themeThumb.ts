@@ -52,16 +52,22 @@ export const GALLERY_LEAD_IDS = [
   'tokyo-night',
 ] as const;
 
+/** The themes the gallery shows last among the built ins: the high
+ *  contrast pair, dark then light, as board 14 of the R21 and R25 review
+ *  draws them. */
+export const GALLERY_TAIL_IDS = ['high-contrast', 'high-contrast-light'] as const;
+
 /** Every theme in gallery order: the lead (GALLERY_LEAD_IDS) first, then
- *  the other built ins by label, then your custom themes as you added
- *  them. */
+ *  the other built ins by label, then the tail (GALLERY_TAIL_IDS), then
+ *  your custom themes as you added them. */
 export function galleryThemes(builtins: AppTheme[], custom: AppTheme[]): AppTheme[] {
-  const lead = GALLERY_LEAD_IDS.map((id) => builtins.find((t) => t.id === id)).filter(
-    (t): t is AppTheme => t !== undefined,
-  );
-  const leadIds = new Set<string>(GALLERY_LEAD_IDS);
+  const pick = (ids: readonly string[]) =>
+    ids
+      .map((id) => builtins.find((t) => t.id === id))
+      .filter((t): t is AppTheme => t !== undefined);
+  const placed = new Set<string>([...GALLERY_LEAD_IDS, ...GALLERY_TAIL_IDS]);
   const rest = builtins
-    .filter((t) => !leadIds.has(t.id))
+    .filter((t) => !placed.has(t.id))
     .sort((a, b) => a.label.localeCompare(b.label));
-  return [...lead, ...rest, ...custom];
+  return [...pick(GALLERY_LEAD_IDS), ...rest, ...pick(GALLERY_TAIL_IDS), ...custom];
 }
