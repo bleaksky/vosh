@@ -61,6 +61,10 @@ npm run tauri build
 
 This builds the release binary and the installers for your platform. Add `-- --no-bundle` to build the binary alone.
 
+## Signed Builds
+
+The Windows builds are not signed yet, so the first time you run the installer, Windows SmartScreen may warn that it does not know the app. Choose More info, then Run anyway.
+
 ## Tests
 
 The app crate embeds the built page from `dist`, so build the page before you run the Rust tests.
