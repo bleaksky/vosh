@@ -37,7 +37,7 @@ import {
 import { getUiConfig, type UiConfig } from '../../ipc/uiConfig';
 import { knownWorld } from '../../lib/knownWorlds';
 import { listJoin } from '../../lib/text';
-import { useMacroList } from '../../stores/config/macroListStore';
+import { useMacroList } from './macroListStore';
 import { loadTarget } from '../../stores/session/useConnection';
 import type { SetUiConfig } from '../pageTypes';
 import { getShownProfile } from '../shownProfile';
