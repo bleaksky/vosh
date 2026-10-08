@@ -10,6 +10,7 @@ mod latency;
 mod log_sessions;
 mod lua_panes;
 mod reconnect;
+mod scrollback_size;
 mod sessions;
 mod snoop;
 mod throughput;
