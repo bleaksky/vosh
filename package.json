@@ -17,6 +17,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
+    "css:usage": "node scripts/css-usage.mjs",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
