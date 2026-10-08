@@ -60,6 +60,10 @@
     "snoop_share": 0.4,
     "snoop_folded": false,
     "log_sessions": null,
-    "scrollback_lines": 10000
+    "scrollback_lines": 10000,
+    "writing_card_left": null,
+    "writing_card_top": null,
+    "writing_card_rows": null,
+    "writing_card_pinned": false
   }
 }

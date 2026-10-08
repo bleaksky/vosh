@@ -547,6 +547,36 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "is_default_scrollback_lines"
     )]
     pub scrollback_lines: u32,
+    /// Where you dragged the writing card, its left and top edges in CSS
+    /// pixels from the main window's corner. None until you move it,
+    /// which keeps the place over the terminal the card works out for
+    /// itself. The page keeps the card on screen as the window resizes.
+    /// A hand edit that is not a number reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_left: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_top: Option<f64>,
+    /// The rows the writing card's text box shows, from dragging its foot.
+    /// None until you drag it, which lets the box grow with the text.
+    /// From 6 to 500, and anything else in a hand edit reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_rows",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub writing_card_rows: Option<u32>,
+    /// The writing card opens in its pane in the panel. Off by default,
+    /// and written only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub writing_card_pinned: bool,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -1079,6 +1109,57 @@ where
     })
 }
 
+/// The fewest and most rows the writing card's text box keeps.
+pub(crate) const WRITING_CARD_ROWS_MIN: u32 = 6;
+pub(crate) const WRITING_CARD_ROWS_MAX: u32 = 500;
+
+/// Hold a writing card edge to a finite number of pixels, or None.
+pub(crate) fn coerce_writing_card_edge(edge: Option<f64>) -> Option<f64> {
+    edge.filter(|e| e.is_finite())
+        .map(|e| e.clamp(-100_000.0, 100_000.0))
+}
+
+/// Hold the writing card's rows to 6 to 500.
+pub(crate) fn coerce_writing_card_rows(rows: Option<u32>) -> Option<u32> {
+    rows.map(|r| r.clamp(WRITING_CARD_ROWS_MIN, WRITING_CARD_ROWS_MAX))
+}
+
+/// Read a writing card edge leniently, so a hand edit never stops a
+/// profile loading. Anything but a finite number reads as None.
+pub(crate) fn deserialize_writing_card_edge<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(f64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_edge(Some(n)),
+        Raw::Other(_) => None,
+    })
+}
+
+/// Read the writing card's rows leniently. A whole number holds to 6 to
+/// 500, and anything else reads as None.
+pub(crate) fn deserialize_writing_card_rows<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(u64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_writing_card_rows(Some(u32::try_from(n).unwrap_or(u32::MAX))),
+        Raw::Other(_) => None,
+    })
+}
+
 fn default_echo_macros() -> bool {
     true
 }
@@ -1215,6 +1296,10 @@ impl Default for UiConfig {
             snoop_folded: false,
             log_sessions: None,
             scrollback_lines: DEFAULT_SCROLLBACK_LINES,
+            writing_card_left: None,
+            writing_card_top: None,
+            writing_card_rows: None,
+            writing_card_pinned: false,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -2352,6 +2437,44 @@ name = "haste"
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!((old.ui.snoop_share - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
         assert!(!old.ui.snoop_folded);
+    }
+
+    #[test]
+    fn the_writing_card_place_is_written_only_once_you_move_it() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("writing_card"), "{first}");
+        config.ui.writing_card_left = Some(140.0);
+        config.ui.writing_card_top = Some(96.0);
+        config.ui.writing_card_rows = Some(14);
+        config.ui.writing_card_pinned = true;
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("writing_card_left = 140.0"), "{changed}");
+        assert!(changed.contains("writing_card_rows = 14"), "{changed}");
+        assert!(changed.contains("writing_card_pinned = true"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert_eq!(back.writing_card_left, Some(140.0));
+        assert_eq!(back.writing_card_top, Some(96.0));
+        assert_eq!(back.writing_card_rows, Some(14));
+        assert!(back.writing_card_pinned);
+        // A file from before the card moved reads its defaults.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert_eq!(old.ui.writing_card_left, None);
+        assert_eq!(old.ui.writing_card_rows, None);
+        assert!(!old.ui.writing_card_pinned);
+    }
+
+    #[test]
+    fn a_hand_edited_writing_card_place_never_stops_a_load() {
+        let ui = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        let odd = ui("[ui]\nwriting_card_left = \"left\"\nwriting_card_rows = 2\n");
+        assert_eq!(odd.writing_card_left, None);
+        assert_eq!(odd.writing_card_rows, Some(WRITING_CARD_ROWS_MIN));
+        let big = ui("[ui]\nwriting_card_top = 12.6\nwriting_card_rows = 9000\n");
+        assert_eq!(big.writing_card_top, Some(12.6));
+        assert_eq!(big.writing_card_rows, Some(WRITING_CARD_ROWS_MAX));
+        assert_eq!(ui("[ui]\nwriting_card_rows = -3\n").writing_card_rows, None);
+        assert_eq!(coerce_writing_card_edge(Some(f64::NAN)), None);
     }
 
     #[test]

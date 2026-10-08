@@ -86,6 +86,10 @@
     "snoop_share": 0.25,
     "snoop_folded": true,
     "log_sessions": false,
-    "scrollback_lines": 50000
+    "scrollback_lines": 50000,
+    "writing_card_left": 140.5,
+    "writing_card_top": 96.5,
+    "writing_card_rows": 14,
+    "writing_card_pinned": true
   }
 }
