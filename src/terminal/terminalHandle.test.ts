@@ -37,9 +37,18 @@ describe('searchDecorations', () => {
     }
   });
 
-  it('keeps marks when the ground does not parse', () => {
-    const marks = searchDecorations(term('transparent'));
-    expect(marks.matchBackground).toBe('#403620');
-    expect(marks.activeMatchBackground).toBe('#846e41');
+  it('lays the marks over the theme ground when the prompt is lifted', () => {
+    themeId.current = 'rubric';
+    const marks = searchDecorations(term('#f0e5cf00'));
+    expect(marks.matchBackground).toBe('#c7b795');
+    expect(marks.activeMatchBackground).toBe('#988253');
+    expect(marks.matchOverviewRuler).toBe('#5d4000');
+  });
+
+  it('takes the theme ground when the terminal ground does not parse', () => {
+    themeId.current = 'rubric';
+    const marks = searchDecorations(term('rgba(0, 0, 0, 0)'));
+    expect(marks.matchBackground).toBe('#c7b795');
+    expect(marks.activeMatchBackground).toBe('#988253');
   });
 });

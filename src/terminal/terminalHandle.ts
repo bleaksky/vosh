@@ -8,7 +8,7 @@ import {
   type RegionOnScreen,
   type ScreenCell,
 } from '../prompt/promptPointer';
-import { solidFindMarks, type FindMarks } from '../theme/findMarks';
+import { solidFindMarks } from '../theme/findMarks';
 import { getCurrentThemeId } from '../theme/theme';
 import { findTheme } from '../theme/themes';
 import type { PaneSizer } from './paneSizer';
@@ -146,9 +146,13 @@ export interface HandleParts {
   session: number;
 }
 
-// The marks when the theme's colors do not parse: Obsidian Ember's.
-const FALLBACK_YELLOW = '#d8b56a';
-const FALLBACK_MARKS: FindMarks = { match: '#403620', current: '#846e41' };
+// The ground under the text as #rrggbb. While the pane lifts your prompt
+// the terminal's ground is the theme's own color with a zero alpha byte, so
+// that byte is dropped. A ground that does not parse is the theme's.
+const solidGround = (background: string | undefined, theme: string): string => {
+  const m = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(background ?? '');
+  return m ? `#${m[1]}` : theme;
+};
 
 /** How a find marks matches in an xterm terminal. */
 export const searchDecorations = (
@@ -157,19 +161,21 @@ export const searchDecorations = (
   // Every match fills in the theme's ANSI yellow at 28% and the match you
   // are on at 60%, the way Help, the session logs page and the native grid
   // mark them. The search addon takes only #rrggbb, so the fills are laid
-  // over the terminal's own background. The addon registers the active
+  // over the terminal's own ground. The addon registers the active
   // match on the top layer, but the renderer resolves a decoration
   // backgroundColor as the cell background, so the glyphs still paint over
   // the stronger fill and stay legible. The theme is read at each find, so
   // a theme switch shows on the next one.
   const { xterm } = findTheme(getCurrentThemeId());
-  const marks = solidFindMarks(xterm, term.options.theme?.background ?? xterm.background);
-  const ruler = marks ? xterm.yellow : FALLBACK_YELLOW;
+  const ground = solidGround(term.options.theme?.background, xterm.background);
+  // Theme yellows are always #rrggbb, so the marks always build. The
+  // yellow itself stands in only to satisfy the addon's types.
+  const marks = solidFindMarks(xterm, ground) ?? { match: xterm.yellow, current: xterm.yellow };
   return {
-    matchBackground: (marks ?? FALLBACK_MARKS).match,
-    matchOverviewRuler: ruler,
-    activeMatchBackground: (marks ?? FALLBACK_MARKS).current,
-    activeMatchColorOverviewRuler: ruler,
+    matchBackground: marks.match,
+    matchOverviewRuler: xterm.yellow,
+    activeMatchBackground: marks.current,
+    activeMatchColorOverviewRuler: xterm.yellow,
   };
 };
 
