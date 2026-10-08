@@ -210,7 +210,7 @@ no longer reads or writes the file. It stays on disk untouched.
 | --------------------------------------------- | ------------------------- | ------------------------------------------ |
 | `.window-state.json` in the app config folder | JSON                      | `tauri-plugin-window-state`                |
 | `<name> profile.toml` in Downloads            | TOML with `[vosh_export]` | `src-tauri/src/ipc/characters.rs`          |
-| `<name>.txt` or `<name>.log` in Downloads     | Text, or text with SGR    | `logs_save` in `src-tauri/src/ipc/logs.rs` |
+| `<name>.txt`, `.log` or `.html` in Downloads  | Text, SGR or an HTML page | `logs_save` in `src-tauri/src/ipc/logs.rs` |
 | `<room>, <day>.txt`, `.log` or `.html`        | Text, SGR or an HTML page | `src-tauri/src/logs/scene.rs`              |
 | `<plugin>.zip` in Downloads                   | Zip of the plugin folder  | `src-tauri/src/app/plugins/archive.rs`     |
 

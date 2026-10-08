@@ -24,8 +24,8 @@ This file says what 1.0 must do. It started as the kickoff prompt, which now liv
 - Variables and lists with profile and session scope.
 - Speedwalk with `#walk`, which walks a route one step at a time and stops when the game stops you.
 - Macros bound to keys and key chords, with optional modal sets.
-- Every line logged with its colors to logs.sqlite, with a log switch for each profile. Save as file writes the logs you pick, one session or a span of days, as plain `.txt` or as ANSI `.log`.
-- A scrollback size in lines, set in General, from 1,000 to 100,000 lines with 10,000 by default. Regex search runs in the log view, and every line there shows its time.
+- Every line logged with its colors to logs.sqlite, with a log switch for each profile. Save as file writes the logs you pick, one session or a span of days, as plain `.txt`, as ANSI `.log` or as one web page `.html`, with each line's time in front when you check Include times.
+- A scrollback size in lines, set under Logs, from 1,000 to 100,000 lines with 10,000 by default. Regex search runs in the log view, and every line there shows its time.
 - Command queue with a throttle that respects server rate limits.
 
 ### Display and layout
@@ -134,11 +134,11 @@ Retiring the map store first pushed speedwalk and click to walk past 1.0. The Sc
 
 ### One log store and Save as file
 
-The kickoff asked for log files with rotation and a toggle for each session. Vosh already logs every line with its colors to logs.sqlite, and search, the prompt lookup and the password wipe all read it. A running text file would add a second write to every line on the session loop the latency work trimmed, and it would keep the password lines the wipe only cleans in the database. So logs.sqlite is the one store. Save as file writes the logs you pick, one session or a span of days, as plain `.txt` or as ANSI `.log`. A switch that also writes a running text log for a profile can come after 1.0, off by default.
+The kickoff asked for log files with rotation and a toggle for each session. Vosh already logs every line with its colors to logs.sqlite, and search, the prompt lookup and the password wipe all read it. A running text file would add a second write to every line on the session loop the latency work trimmed, and it would keep the password lines the wipe only cleans in the database. So logs.sqlite is the one store. Save as file writes the logs you pick, one session or a span of days, as plain `.txt`, as ANSI `.log` or as one web page `.html`, each line with its time when you check Include times. A password line is hidden in every format and in Copy as text. A switch that also writes a running text log for a profile can come after 1.0, off by default.
 
 ### Scrollback in lines, with times in the log view
 
-The kickoff asked for scrollback sized in lines or memory, with timestamps. Both renderers kept a fixed 10,000 lines. Now Scrollback size in General sets it, from 1,000 to 100,000 lines with 10,000 by default. Times stay in the log view, where every logged line already carries its time, because times in the terminal would need new work in both renderers.
+The kickoff asked for scrollback sized in lines or memory, with timestamps. Both renderers kept a fixed 10,000 lines. Now Scrollback size under Logs sets it, from 1,000 to 100,000 lines with 10,000 by default. Times stay in the log view, where every logged line already carries its time, because times in the terminal would need new work in both renderers.
 
 ### Plugins get a page in Settings
 
