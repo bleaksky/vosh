@@ -4,13 +4,13 @@ import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VITALS_OPTIONS_CHANGED } from '../ipc/events';
-import { DEFAULT_VITALS_OPTIONS, type VitalsOptions } from '../ipc/uiConfig';
+import { DEFAULT_VITALS_OPTIONS, VITALS_STYLES, type VitalsOptions } from '../ipc/uiConfig';
 import { openSettingsTab } from '../lib/settingsLink';
 import { VitalsChoiceItems, VitalsMenu } from './VitalsMenu';
 import {
   pickVitalsStyle,
   pickVitalsValues,
-  vitalsStyleChoices,
+  vitalsStyleFamilies,
   vitalsValuesChoices,
 } from './vitalsPicks';
 
@@ -76,7 +76,11 @@ const labels = (rows: Row[]) =>
 /** A submenu's rows for `options`, picking with `pick`. */
 const styleRows = (options: VitalsOptions, done = () => {}) =>
   rowsOf(
-    <VitalsChoiceItems choices={vitalsStyleChoices(options)} pick={pickVitalsStyle} done={done} />,
+    <VitalsChoiceItems
+      choices={vitalsStyleFamilies(options).flat()}
+      pick={pickVitalsStyle}
+      done={done}
+    />,
   );
 
 describe('vitals menu', () => {
@@ -102,6 +106,23 @@ describe('vitals menu', () => {
     // It opens the card for your text over the terminal, not Settings.
     expect(emit).toHaveBeenCalledWith('vosh://prompt-card-open', { view: null, vitals: true });
     expect(openSettingsTab).not.toHaveBeenCalled();
+  });
+
+  it('sets the styles apart by family, in the gallery order', () => {
+    const families = vitalsStyleFamilies(DEFAULT_VITALS_OPTIONS).map((family) =>
+      family.map((choice) => choice.label),
+    );
+    expect(families).toEqual([
+      ['Rows', 'One line', 'Ledger'],
+      ['Gauges', 'Pips', 'Bands', 'Ladders', 'Blocks', 'Traces'],
+      ['Dials', 'Rings', 'Vials', 'Orbs', 'Candles'],
+      ['Text'],
+    ]);
+    expect(
+      vitalsStyleFamilies(DEFAULT_VITALS_OPTIONS)
+        .flat()
+        .map((choice) => choice.value),
+    ).toEqual([...VITALS_STYLES]);
   });
 
   it('checks your style and your Values form', () => {

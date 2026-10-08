@@ -152,6 +152,16 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   text: 'Text',
 };
 
+/** The styles by family, as the vitals menu sets them apart with a
+ *  line: the lines, the rows with a mark, the instruments, then Text
+ *  (More Vitals Styles Q29). Together they are VITALS_STYLES in order. */
+export const VITALS_STYLE_FAMILIES: readonly (readonly VitalsStyle[])[] = [
+  ['rows', 'line', 'ledger'],
+  ['gauges', 'pips', 'bands', 'ladders', 'blocks', 'traces'],
+  ['dials', 'rings', 'vials', 'orbs', 'candles'],
+  ['text'],
+];
+
 /** Each Values form's name, as Customize vitals and the vitals menu
  *  write it. */
 export const VITALS_VALUES_LABELS: Readonly<Record<VitalsValues, string>> = {
