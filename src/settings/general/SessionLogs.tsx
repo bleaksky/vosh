@@ -61,9 +61,10 @@ import { menuBelow } from '../../ui/menuPlacement';
 // view reads to Downloads as plain text, with the game's colors or as
 // one web page, each line starting with its time when Include times is
 // checked, and a password line always hidden (D29). Copy as text and
-// Save a scene… show once you pick a log, and Save a scene… opens the
-// scene page on it, unless Log sessions is off for the profile, which
-// leaves nothing to save.
+// Save a scene… show once you pick a log. Copy as text hides a password
+// line the same way, and Save a scene… opens the scene page on it,
+// unless Log sessions is off for the profile, which leaves nothing to
+// save.
 
 // A picked log's value in the scope select.
 const LOG_PREFIX = 'log:';

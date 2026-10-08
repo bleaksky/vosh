@@ -331,18 +331,27 @@ pub(crate) async fn scene_reveal<R: tauri::Runtime>(
     })
 }
 
+/// One log as text for Copy as text, or with `with_ansi` with the game's
+/// colors. A line forget passwords would blank goes out blanked, as a
+/// saved file shows it.
 #[tauri::command]
 pub(crate) async fn logs_export(
     state: State<'_, SharedState>,
     session_id: i64,
     with_ansi: bool,
 ) -> Result<String, String> {
-    read_logs(&state, move |store| {
-        store.export_session(session_id, with_ansi)
-    })
-    .await
-    .ok_or_else(|| "log store not ready".to_string())?
-    .map_err(|e| e.to_string())
+    read_logs(&state, move |store| copy_text(store, session_id, with_ansi))
+        .await
+        .ok_or_else(|| "log store not ready".to_string())?
+}
+
+/// The text of log `id` that [`logs_export`] returns.
+fn copy_text(store: &LogStore, id: i64, with_ansi: bool) -> Result<String, String> {
+    let mut out = Vec::new();
+    store
+        .export_scope(&Scope::log(id), with_ansi, true, &mut out)
+        .map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
 #[cfg(test)]
@@ -467,6 +476,13 @@ mod tests {
                 assert!(!saved.contains(SECRET), "{name} holds the password");
                 std::fs::remove_file(dir.path().join(&name)).unwrap();
             }
+        }
+        // Copy as text hides it the same way, with colors or without.
+        for with_ansi in [false, true] {
+            let copied = copy_text(&store, id, with_ansi).unwrap();
+            assert!(copied.contains("> tester\n"));
+            assert!(copied.ends_with(&format!("{}\n", vosh_log::HIDDEN_SENT_TEXT)));
+            assert!(!copied.contains(SECRET), "Copy as text holds the password");
         }
     }
 

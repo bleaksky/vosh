@@ -81,6 +81,8 @@ export async function logsKeepSet(days: number | null): Promise<void> {
   return invoke('logs_keep_set', { days });
 }
 
+/** One log as text for Copy as text, or with `withAnsi` with the
+ *  game's colors. A password line comes back hidden, as `> (hidden)`. */
 export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }
