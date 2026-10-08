@@ -411,6 +411,11 @@ fn full_ui() -> UiConfig {
         input_line_background: "own".into(),
         input_line_background_color: Some("#1d1f21".into()),
         input_line_size: 16,
+        input_type_colors: true,
+        input_type_alias_color: Some("#8abeb7".into()),
+        input_type_hash_color: Some("#b294bb".into()),
+        input_type_chat_color: Some("#f0c674".into()),
+        input_type_unknown_color: Some("#cc6666".into()),
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,
         prompt_template: String::new(),

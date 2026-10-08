@@ -427,6 +427,26 @@ pub(crate) struct UiConfig {
         skip_serializing_if = "is_default_input_line_size"
     )]
     pub input_line_size: u32,
+    /// Color the command line as you type, by what Vosh knows the first
+    /// word to be. Off by default.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub input_type_colors: bool,
+    /// CSS hex color of a line that starts with one of your aliases. None
+    /// means the theme's cyan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_alias_color: Option<String>,
+    /// CSS hex color of a line that starts with a Vosh `#` command. None
+    /// means the theme's magenta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_hash_color: Option<String>,
+    /// CSS hex color of a chat line, the whole line. None means the
+    /// theme's yellow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_chat_color: Option<String>,
+    /// CSS hex color of a `#` command Vosh does not know. None means the
+    /// theme's danger color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_type_unknown_color: Option<String>,
     /// A copy of `[prompt] draw`, which holds the switch now. Every save
     /// writes it, so an older build that reads only this key still draws
     /// your prompt. A file with no `[prompt]` reads the switch from
@@ -1437,6 +1457,11 @@ impl Default for UiConfig {
             input_line_background: default_input_line_background(),
             input_line_background_color: None,
             input_line_size: default_input_line_size(),
+            input_type_colors: false,
+            input_type_alias_color: None,
+            input_type_hash_color: None,
+            input_type_chat_color: None,
+            input_type_unknown_color: None,
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
@@ -2274,6 +2299,45 @@ name = "haste"
             };
             assert_eq!(through_toml(&ui).input_line_background, pick);
         }
+    }
+
+    #[test]
+    fn coloring_as_you_type_saves_only_once_it_changes() {
+        let keys = [
+            "input_type_colors",
+            "input_type_alias_color",
+            "input_type_hash_color",
+            "input_type_chat_color",
+            "input_type_unknown_color",
+        ];
+        let text = through_text(&UiConfig::default());
+        for key in keys {
+            assert!(!text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&UiConfig::default());
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        assert_eq!(back.input_type_hash_color, None);
+        assert_eq!(back.input_type_chat_color, None);
+        assert_eq!(back.input_type_unknown_color, None);
+        let ui = UiConfig {
+            input_type_colors: true,
+            input_type_alias_color: Some("#8abeb7".into()),
+            input_type_hash_color: Some("#b294bb".into()),
+            input_type_chat_color: Some("#f0c674".into()),
+            input_type_unknown_color: Some("#cc6666".into()),
+            ..UiConfig::default()
+        };
+        let text = through_text(&ui);
+        for key in keys {
+            assert!(text.contains(&format!("{key} =")), "{key}: {text}");
+        }
+        let back = through_toml(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color.as_deref(), Some("#cc6666"));
     }
 
     #[test]

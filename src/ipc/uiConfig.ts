@@ -629,6 +629,20 @@ export interface UiConfig {
   input_line_background_color: string | null;
   /** Size in px of what you type. 0 follows your terminal size. */
   input_line_size: number;
+  /** Color the command line as you type, by what Vosh knows the first
+   *  word to be. Off by default. */
+  input_type_colors: boolean;
+  /** Hex color of a line that starts with an alias. Null means the
+   *  theme's cyan. */
+  input_type_alias_color: string | null;
+  /** Hex color of a line that starts with a Vosh # command. Null means
+   *  the theme's magenta. */
+  input_type_hash_color: string | null;
+  /** Hex color of a chat line. Null means the theme's yellow. */
+  input_type_chat_color: string | null;
+  /** Hex color of a # command Vosh does not know. Null means the theme's
+   *  danger color. */
+  input_type_unknown_color: string | null;
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
@@ -816,6 +830,11 @@ export interface RawUiConfig {
   input_line_background?: string;
   input_line_background_color?: string | null;
   input_line_size?: number;
+  input_type_colors?: boolean;
+  input_type_alias_color?: string | null;
+  input_type_hash_color?: string | null;
+  input_type_chat_color?: string | null;
+  input_type_unknown_color?: string | null;
   vitals_density?: string;
   vitals_values?: string;
   vitals_meter?: string;
@@ -969,6 +988,11 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     input_line_background: normalizeInputLineBackground(cfg.input_line_background),
     input_line_background_color: optionalColor(cfg.input_line_background_color),
     input_line_size: normalizeInputLineSize(cfg.input_line_size),
+    input_type_colors: cfg.input_type_colors === true,
+    input_type_alias_color: optionalColor(cfg.input_type_alias_color),
+    input_type_hash_color: optionalColor(cfg.input_type_hash_color),
+    input_type_chat_color: optionalColor(cfg.input_type_chat_color),
+    input_type_unknown_color: optionalColor(cfg.input_type_unknown_color),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
     vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),

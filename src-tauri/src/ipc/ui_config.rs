@@ -81,6 +81,11 @@ pub(crate) struct UiConfigPayload {
     pub input_line_background_color: Option<String>,
     /// 0 follows the terminal size.
     pub input_line_size: u32,
+    pub input_type_colors: bool,
+    pub input_type_alias_color: Option<String>,
+    pub input_type_hash_color: Option<String>,
+    pub input_type_chat_color: Option<String>,
+    pub input_type_unknown_color: Option<String>,
     pub vitals_density: String,
     pub vitals_values: String,
     pub vitals_meter: String,
@@ -186,6 +191,11 @@ impl UiConfigPayload {
             input_line_background: ui.input_line_background.clone(),
             input_line_background_color: ui.input_line_background_color.clone(),
             input_line_size: ui.input_line_size,
+            input_type_colors: ui.input_type_colors,
+            input_type_alias_color: ui.input_type_alias_color.clone(),
+            input_type_hash_color: ui.input_type_hash_color.clone(),
+            input_type_chat_color: ui.input_type_chat_color.clone(),
+            input_type_unknown_color: ui.input_type_unknown_color.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
             vitals_meter: ui.vitals_meter.clone(),
@@ -294,6 +304,11 @@ pub(crate) enum UiField {
     InputLineBackground(String),
     InputLineBackgroundColor(Option<String>),
     InputLineSize(u32),
+    InputTypeColors(bool),
+    InputTypeAliasColor(Option<String>),
+    InputTypeHashColor(Option<String>),
+    InputTypeChatColor(Option<String>),
+    InputTypeUnknownColor(Option<String>),
     VitalsDensity(String),
     VitalsValues(String),
     VitalsMeter(String),
@@ -479,6 +494,19 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
                 ui.input_line_background_color = cfg::normalize_optional_color(v);
             }
             UiField::InputLineSize(v) => ui.input_line_size = cfg::coerce_input_line_size(v),
+            UiField::InputTypeColors(v) => ui.input_type_colors = v,
+            UiField::InputTypeAliasColor(v) => {
+                ui.input_type_alias_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeHashColor(v) => {
+                ui.input_type_hash_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeChatColor(v) => {
+                ui.input_type_chat_color = cfg::normalize_optional_color(v);
+            }
+            UiField::InputTypeUnknownColor(v) => {
+                ui.input_type_unknown_color = cfg::normalize_optional_color(v);
+            }
             UiField::VitalsDensity(v) => ui.vitals_density = cfg::coerce_vitals_density(v),
             UiField::VitalsValues(v) => ui.vitals_values = cfg::coerce_vitals_values(v),
             UiField::VitalsMeter(v) => ui.vitals_meter = cfg::coerce_vitals_meter(v),
@@ -1201,6 +1229,25 @@ mod tests {
         assert_eq!(back.input_caret_color, None);
         assert_eq!(back.input_line_background, "theme");
         assert_eq!(back.input_line_size, 6);
+    }
+
+    #[test]
+    fn coloring_as_you_type_round_trips() {
+        let mut ui = UiConfig::default();
+        let back = through_payload(&ui);
+        assert!(!back.input_type_colors);
+        assert_eq!(back.input_type_alias_color, None);
+        ui.input_type_colors = true;
+        ui.input_type_alias_color = Some("#8abeb7".into());
+        ui.input_type_hash_color = Some("#b294bb".into());
+        ui.input_type_chat_color = Some(" #f0c674 ".into());
+        ui.input_type_unknown_color = Some(String::new());
+        let back = through_payload(&ui);
+        assert!(back.input_type_colors);
+        assert_eq!(back.input_type_alias_color.as_deref(), Some("#8abeb7"));
+        assert_eq!(back.input_type_hash_color.as_deref(), Some("#b294bb"));
+        assert_eq!(back.input_type_chat_color.as_deref(), Some("#f0c674"));
+        assert_eq!(back.input_type_unknown_color, None);
     }
 
     #[test]
