@@ -17,6 +17,8 @@ const bus = vi.hoisted(() => ({
   link: null as string | null,
   calls: [] as [string, unknown][],
   keydown: null as ((event: unknown) => void) | null,
+  /** Your system asks apps to reduce motion. */
+  reduce: true,
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -75,6 +77,7 @@ beforeAll(async () => {
       if (type === 'keydown') bus.keydown = cb;
     },
     removeEventListener() {},
+    matchMedia: () => ({ matches: bus.reduce }),
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
@@ -103,6 +106,7 @@ beforeEach(() => {
   bus.calls = [];
   bus.enabled = ['none'];
   bus.shared = false;
+  bus.reduce = true;
   facts.value = { ...facts.value, enabledPresets: ['none'] };
 });
 
@@ -167,6 +171,13 @@ async function mount(saved: unknown) {
     });
   return {
     card,
+    /** The fold's slide ends. */
+    slid: () =>
+      act(async () => {
+        const el = card();
+        reactProps(el).onAnimationEnd({ target: el, currentTarget: el });
+        await settle();
+      }),
     button: (text: string) => {
       const found = findAll(
         container,
@@ -240,6 +251,57 @@ describe('Get started', () => {
   it('folds the moment Connect dials', async () => {
     const view = await mount({ atLaunch: true, done: [] });
     await view.render({ play: { live: true, character: null, connect: () => undefined } });
+    expect(store.getGetStarted().shows).toBe('folded');
+  });
+
+  it('slides away at Esc, out of reach, and goes when the slide ends', async () => {
+    bus.reduce = false;
+    const view = await mount({ atLaunch: true, done: [] });
+    await view.escape();
+    expect(store.getGetStarted().shows).toBe('folded');
+    expect(view.focused()).toBe(1);
+    const card = view.card();
+    expect(card?.getAttribute('class')).toContain('is-folding');
+    expect(card?.getAttribute('aria-hidden')).toBe('true');
+    expect((card as unknown as { inert: boolean }).inert).toBe(true);
+    await view.escape();
+    expect(view.focused()).toBe(1);
+    await view.slid();
+    expect(view.card()).toBeUndefined();
+  });
+
+  it('slides away when Connect dials', async () => {
+    bus.reduce = false;
+    const view = await mount({ atLaunch: true, done: [] });
+    await view.render({ play: { live: true, character: null, connect: () => undefined } });
+    expect(view.card()?.getAttribute('class')).toContain('is-folding');
+    await view.slid();
+    expect(view.card()).toBeUndefined();
+  });
+
+  it('goes at once under the prompt card, with motion too', async () => {
+    bus.reduce = false;
+    const view = await mount({ atLaunch: true, done: [] });
+    await view.render({ covered: true });
+    expect(view.card()).toBeUndefined();
+    await view.render({ covered: false });
+    expect(view.card()).toBeUndefined();
+  });
+
+  it('comes back whole when you open it during the slide', async () => {
+    bus.reduce = false;
+    const view = await mount({ atLaunch: true, done: [] });
+    await view.escape();
+    await act(async () => {
+      store.unfold();
+      await settle();
+    });
+    const card = view.card();
+    expect(card?.getAttribute('class')).not.toContain('is-folding');
+    expect(card?.getAttribute('aria-hidden')).toBeNull();
+    expect((card as unknown as { inert: boolean }).inert).toBe(false);
+    await view.escape();
+    expect(view.focused()).toBe(2);
     expect(store.getGetStarted().shows).toBe('folded');
   });
 
