@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+import { countLine, lineNote, metaLine, pasteNote, resultNote } from './words';
+
+describe('the footer count', () => {
+  it('counts a description against ten to thirty and names the empty lines apart', () => {
+    expect(countLine('description', { lines: 18, empty: 1, past: 0, bytes: 900 })).toEqual({
+      main: '18 lines',
+      tone: 'n',
+      rest: ', 1 empty · 10 to 30',
+    });
+    expect(countLine('description', { lines: 4, empty: 0, past: 0, bytes: 200 })).toEqual({
+      main: '4 lines',
+      tone: 'warn',
+      rest: ', 6 short of 10',
+    });
+    expect(countLine('description', { lines: 31, empty: 2, past: 1, bytes: 2400 }).rest).toBe(
+      ', 2 empty, one past 30 · 1 past 75',
+    );
+  });
+
+  it('counts a note against the room the game gives, less for a report', () => {
+    expect(countLine('note', { lines: 14, empty: 2, past: 0, bytes: 1234 })).toEqual({
+      main: '14 lines',
+      tone: 'n',
+      rest: ', 2 empty · 1,234 of 4,604 characters',
+    });
+    expect(countLine('bug', { lines: 1, empty: 0, past: 0, bytes: 4600 }).tone).toBe('bad');
+    expect(countLine('note', { lines: 0, empty: 0, past: 0, bytes: 0 }).main).toBe('Empty');
+  });
+});
+
+describe('the note about the caret’s line', () => {
+  it('names a line past the width and offers to rewrap it', () => {
+    const line = `${'word '.repeat(15)}x`;
+    expect(lineNote(line, 3, 75, true, false)).toEqual({
+      note: { lead: 'Line 4 runs 76 columns', rest: ', one past 75.', tone: 'bad' },
+      rewrap: true,
+    });
+    expect(lineNote(line, 3, 75, false, false)?.note.tone).toBe('warn');
+  });
+
+  it('names a word with no space to break at', () => {
+    expect(lineNote('x'.repeat(80), 0, 75, true, false)?.note.lead).toBe('Line 1 has no space');
+  });
+
+  it('names a dot at the start, a code inside the line and a double quote', () => {
+    expect(lineNote('...the nightgaunt', 0, 75, true, false)?.note.lead).toBe(
+      'Line 1 starts with a dot',
+    );
+    expect(lineNote('`#Bold yellow``, then plain', 1, 75, true, false)?.note.rest).toContain(
+      'stays bold yellow',
+    );
+    expect(lineNote('`#Bold yellow``, then plain', 1, 75, true, true)).toBeNull();
+    expect(lineNote('he said "no"', 3, 75, true, false)?.note.lead).toBe(
+      'Line 4 holds double quotes',
+    );
+    expect(lineNote('a clean line', 0, 75, true, false)).toBeNull();
+  });
+});
+
+describe('the header line', () => {
+  const base = {
+    name: 'Orla',
+    board: false,
+    job: null,
+    read: false,
+    fresh: false,
+    done: null,
+    dropped: null,
+  } as const;
+
+  it('says whose draft it is and how it stands', () => {
+    expect(metaLine(base)).toBe('Draft for Orla, not sent');
+    expect(metaLine({ ...base, board: true })).toBe('Draft for Orla, not posted');
+    expect(metaLine({ ...base, read: true })).toBe('Read from the game for Orla');
+    expect(metaLine({ ...base, done: 'sent' })).toBe('Sent for Orla');
+    expect(metaLine({ ...base, fresh: true, name: 'Tolliver' })).toBe('New draft for Tolliver');
+    expect(metaLine({ ...base, dropped: { sent: 8, total: 19 } })).toBe('8 of 19 sent for Orla');
+  });
+});
+
+describe('what a paste and a job leave', () => {
+  it('says what a paste wrapped and folded', () => {
+    expect(pasteNote(2, 75, [{ what: 'curly apostrophe', count: 1 }], 'hasn’t').rest).toBe(
+      'Vosh wrapped 2 pasted lines at 75 and straightened 1 curly apostrophe, in hasn’t.',
+    );
+  });
+
+  it('points to the game’s own reason for a refusal', () => {
+    expect(resultNote({ kind: 'refused', field: 'post', line: 'x' }, 'application')).toEqual({
+      lead: 'The game turned your application down.',
+      rest: ' Its reason is just below, and your draft is still here.',
+      tone: 'bad',
+    });
+    expect(resultNote({ kind: 'dropped', sent: 8, posted: false }, 'description')?.lead).toBe(
+      'The link dropped after line 8.',
+    );
+    expect(resultNote({ kind: 'dropped', sent: 8, posted: false }, 'journal')?.rest).toBe(
+      ' Nothing was posted.',
+    );
+    expect(resultNote({ kind: 'other_note', board: 'idea', note: null }, 'note')?.lead).toBe(
+      'You had an idea started in the game.',
+    );
+  });
+});
