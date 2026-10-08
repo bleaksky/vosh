@@ -428,16 +428,20 @@ function cachePaint(prefs: ThemePrefs, shown: ThemePaintSide, standsFor: string)
   const more = systemPrefersMoreContrast();
   const daylight = daylightShown();
   if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark, daylight, more))) return false;
-  const side = (dark: boolean, phase: Daylight | null) =>
-    themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark, phase))));
+  const side = (dark: boolean, phase: Daylight | null, contrast = false) =>
+    themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark, phase, contrast))));
   const follow = themeFollowOf(prefs);
   let paint: ThemePaint;
   if (follow === 'system') {
+    // All four sides, the one on screen as painted.
+    const pairSide = (dark: boolean, contrast: boolean) =>
+      dark === systemDark && contrast === more ? shown : side(dark, null, contrast);
     paint = {
       v: 1,
       follow: true,
-      light: systemDark ? side(false, null) : shown,
-      dark: systemDark ? shown : side(true, null),
+      light: pairSide(false, false),
+      dark: pairSide(true, false),
+      more: { light: pairSide(false, true), dark: pairSide(true, true) },
     };
   } else if (follow === 'game' && daylight !== null) {
     paint = {

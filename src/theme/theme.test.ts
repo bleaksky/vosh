@@ -394,12 +394,31 @@ describe('the paint cache', () => {
       follow: true,
       light: theme.themePaintSide(findTheme('rubric')),
       dark: theme.themePaintSide(findTheme('tokyo-night')),
+      more: {
+        light: theme.themePaintSide(findTheme('high-contrast-light')),
+        dark: theme.themePaintSide(findTheme('high-contrast')),
+      },
     });
     // An OS flip repaints and leaves the same pair.
     flip(false);
     paint = await cached();
     expect(paint?.follow === true && paint.light.id).toBe('rubric');
     expect(paint?.follow === true && paint.dark.id).toBe('tokyo-night');
+  });
+
+  it('leaves all four sides while Increase contrast shows the pair', async () => {
+    more = true;
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }));
+    expect(rootAttrs['data-theme']).toBe('high-contrast');
+    const paint = await cached();
+    expect(paint?.follow === true && [paint.light.id, paint.dark.id]).toEqual([
+      'rubric',
+      'tokyo-night',
+    ]);
+    expect(
+      paint?.follow === true && paint.more && [paint.more.light.id, paint.more.dark.id],
+    ).toEqual(['high-contrast-light', 'high-contrast']);
   });
 
   it('leaves the successor of a retired id at once, with no catalog to wait on', async () => {
@@ -428,6 +447,10 @@ describe('the paint cache', () => {
       follow: true,
       light: theme.themePaintSide(findTheme('rubric')),
       dark: theme.themePaintSide(findTheme('one-half-dark')),
+      more: {
+        light: theme.themePaintSide(findTheme('high-contrast-light')),
+        dark: theme.themePaintSide(findTheme('high-contrast')),
+      },
     });
   });
 

@@ -12,7 +12,9 @@
 // needs no theme catalog, and a custom theme paints as early as a built
 // in one. While the theme follows the system appearance it holds both
 // sides, and the window picks the side the OS shows now, so an OS flip
-// while Vosh was closed still opens on the right side. While it follows
+// while Vosh was closed still opens on the right side. It also holds the
+// high contrast pair macOS Increase contrast shows (Q24), so turning that
+// on or off while Vosh was closed opens on the right side too. While it follows
 // the game it holds both sides and the day or night last shown, so a
 // drop or a relaunch opens on what you saw until World.Time comes again
 // (Alerts Q15).
@@ -38,12 +40,20 @@ export interface ThemePaintSide {
   vars: Record<string, string>;
 }
 
+/** The light and dark side of a pair. */
+export interface PaintPair {
+  light: ThemePaintSide;
+  dark: ThemePaintSide;
+}
+
 /** The cached paint. `manual` while the theme is your pick, the light
- *  and dark pair while it follows the system appearance, and the day
- *  and night pair with the phase last shown while it follows the game. */
+ *  and dark pair while it follows the system appearance, with the pair
+ *  Increase contrast shows as `more`, and the day and night pair with
+ *  the phase last shown while it follows the game. A cache from before
+ *  `more` has none. */
 export type ThemePaint =
   | { v: 1; follow: false; manual: ThemePaintSide }
-  | { v: 1; follow: true; light: ThemePaintSide; dark: ThemePaintSide }
+  | { v: 1; follow: true; light: ThemePaintSide; dark: ThemePaintSide; more?: PaintPair }
   | { v: 1; follow: 'game'; day: ThemePaintSide; night: ThemePaintSide; phase: Daylight };
 
 /** The slice of Storage the cache uses. */
@@ -59,11 +69,17 @@ export interface PaintRoot {
 }
 
 /** The side to paint: the manual pick, the side the OS shows, or the
- *  side of the day or night last shown. */
-export function pickPaintSide(paint: ThemePaint, systemDark: boolean): ThemePaintSide {
+ *  side of the day or night last shown. While it follows the system,
+ *  `moreContrast` is asked only when the paint holds the contrast pair. */
+export function pickPaintSide(
+  paint: ThemePaint,
+  systemDark: boolean,
+  moreContrast: () => boolean = () => false,
+): ThemePaintSide {
   if (paint.follow === 'game') return paint[paint.phase];
   if (!paint.follow) return paint.manual;
-  return systemDark ? paint.dark : paint.light;
+  const pair = paint.more && moreContrast() ? paint.more : paint;
+  return systemDark ? pair.dark : pair.light;
 }
 
 /** Write a side's attributes and custom properties on the root. */
@@ -112,7 +128,13 @@ export function parseThemePaint(raw: string | null): ThemePaint | null {
   if (v.follow === true) {
     const light = asSide(v.light);
     const dark = asSide(v.dark);
-    return light && dark ? { v: 1, follow: true, light, dark } : null;
+    if (!light || !dark) return null;
+    if (v.more === undefined) return { v: 1, follow: true, light, dark };
+    const more = v.more as Record<string, unknown> | null;
+    const moreLight = asSide(more?.light);
+    const moreDark = asSide(more?.dark);
+    if (!moreLight || !moreDark) return null;
+    return { v: 1, follow: true, light, dark, more: { light: moreLight, dark: moreDark } };
   }
   if (v.follow === 'game' && (v.phase === 'day' || v.phase === 'night')) {
     const day = asSide(v.day);
@@ -176,12 +198,15 @@ export function osPrefersMoreContrast(): boolean {
 export interface PrepaintEnv {
   storage: () => PaintStorage | null;
   systemDark: () => boolean;
+  /** Whether the OS asks for more contrast. None reads as no. */
+  moreContrast?: () => boolean;
   root: () => PaintRoot;
 }
 
 const pageEnv: PrepaintEnv = {
   storage: pageStorage,
   systemDark: osPrefersDark,
+  moreContrast: osPrefersMoreContrast,
   root: () => document.documentElement,
 };
 
@@ -198,7 +223,7 @@ export function prepaintTheme(env: PrepaintEnv = pageEnv): ThemePaintSide | null
   try {
     const paint = readThemePaint(env.storage());
     if (!paint) return null;
-    const side = pickPaintSide(paint, env.systemDark());
+    const side = pickPaintSide(paint, env.systemDark(), env.moreContrast);
     paintRoot(env.root(), side);
     bootSide = side;
     if (paint.follow === 'game') bootPhase = paint.phase;
