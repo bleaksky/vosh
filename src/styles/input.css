@@ -7,10 +7,14 @@
    and never shrinks. Its position and z-index keep it painted over the
    terminal while xterm's canvas lags a frame behind a resize. The row
    sets your terminal font and size for everything in it, so a command
-   reads the same as you type it and as it echoes. The password input
-   shows the native caret in the accent, and the textarea hides it to
-   draw .input-caret. */
+   reads the same as you type it and as it echoes, until you pick a
+   size of its own. The password input shows the native caret in
+   --caret, and the textarea hides it to draw .input-caret. --caret and
+   --line-text are the theme accent and text until you pick colors of
+   your own, which Input.tsx sets inline. */
 .input-row {
+  --caret: var(--accent);
+  --line-text: var(--text);
   position: relative;
   z-index: 1;
   flex: 1 0 auto;
@@ -21,13 +25,23 @@
   background: var(--inputband);
   font-family: var(--app-font-family);
   font-size: var(--app-font-size);
-  caret-color: var(--accent);
+  caret-color: var(--caret);
+}
+
+/* Slight tint lays 7 percent of the accent over the band. Your own
+   background comes in as --line-ground. */
+.input-row.is-tint {
+  background: color-mix(in srgb, var(--accent) 7%, var(--inputband));
+}
+
+.input-row.is-own {
+  background: var(--line-ground, var(--inputband));
 }
 
 .input-row input {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--text);
+  color: var(--line-text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -60,7 +74,7 @@
 .input-row textarea {
   flex: 1 1 auto;
   background: transparent;
-  color: var(--text);
+  color: var(--line-text);
   border: none;
   outline: none;
   font-family: inherit;
@@ -77,19 +91,24 @@
   caret-color: transparent;
 }
 
-/* Block caret. One cell of your terminal font in the accent,
+/* Block caret. One cell of your terminal font in --caret,
    absolutely positioned by Input.tsx at the measured caret spot.
    Blinks on a stepped keyframe like a hardware cursor; useCaret.ts
    restarts the animation on every value change so the caret holds
-   solid while the user types. */
+   solid while the user types. With Caret blinks off it holds steady,
+   and Reduce motion holds it steady either way. */
 .input-caret {
   position: absolute;
   box-sizing: border-box;
   width: var(--caret-w);
   height: var(--caret-h);
-  background: var(--accent);
+  background: var(--caret);
   pointer-events: none;
   animation: vosh-caret-blink 1.1s steps(1, end) infinite;
+}
+
+.input-caret.is-steady {
+  animation: none;
 }
 
 @keyframes vosh-caret-blink {
@@ -123,7 +142,7 @@
   width: var(--caret-w);
   height: var(--caret-h);
   background: transparent;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--caret);
 }
 
 .caret-shape--half_block {

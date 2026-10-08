@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -14,6 +15,7 @@ import {
   nativeSurfaceSelectAll,
 } from '../ipc/nativeSurface';
 import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
+import type { LineLook } from '../ipc/uiConfig';
 import { writingStart } from '../ipc/writing';
 import { useWriting, writingOf } from '../stores/session/writingStore';
 import { loadWriting, useWritingFile } from '../writing/draftsStore';
@@ -108,6 +110,23 @@ function writingHolds(session: number): boolean {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
+/** The row's look classes and the colors and size you picked, which
+ *  input.css reads as --caret, --line-text and --line-ground. At the
+ *  defaults the row takes no class and no inline style. */
+function rowLook(look: LineLook): { classes: string; style: CSSProperties | undefined } {
+  const ground = look.background === 'own' ? look.backgroundColor : null;
+  const own = ground !== null;
+  const vars: Record<string, string> = {};
+  if (look.caretColor) vars['--caret'] = look.caretColor;
+  if (look.textColor) vars['--line-text'] = look.textColor;
+  if (ground) vars['--line-ground'] = ground;
+  if (look.size > 0) vars.fontSize = `${look.size}px`;
+  return {
+    classes: look.background === 'tint' ? ' is-tint' : own ? ' is-own' : '',
+    style: Object.keys(vars).length > 0 ? (vars as CSSProperties) : undefined,
+  };
+}
+
 function looksLikeChat(line: string): boolean {
   const trimmed = line.trimStart();
   if (trimmed.length === 0) return false;
@@ -153,6 +172,22 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // compose grows past the visible cap.
   const gutterRef = useRef<HTMLDivElement | null>(null);
   const { mirrorRef, caretRef, caretPos, measureCaret } = useCaret(inputRef, value);
+  const {
+    spellcheckPrompt,
+    cursorStyle,
+    lineLook,
+    lineMark,
+    keepLastRef,
+    pasteDelayRef,
+    echoColorRef,
+    echoMacrosRef,
+    echoMarkRef,
+    echoDimRef,
+  } = useInputPreferences();
+  const look = rowLook(lineLook);
+  // A size of the line's own moves the metrics just as your terminal
+  // font does.
+  const metricsKey = `${fontKey ?? ''}|${lineLook.size}`;
 
   useEffect(() => {
     // Refocus on enable and whenever the element swaps between the
@@ -183,7 +218,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     } else {
       el.style.height = `${el.scrollHeight}px`;
     }
-  }, [value, passwordMode, fontKey]);
+  }, [value, passwordMode, metricsKey]);
 
   // The masked field follows the selected session: the game's echo in
   // that session, and each selection. The listener reads the newest
@@ -235,18 +270,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   }, []);
   const cell = useFieldCell(editing ? field : null);
   const editorText = value.split('\n').pop() ?? '';
-
-  const {
-    spellcheckPrompt,
-    cursorStyle,
-    lineMark,
-    keepLastRef,
-    pasteDelayRef,
-    echoColorRef,
-    echoMacrosRef,
-    echoMarkRef,
-    echoDimRef,
-  } = useInputPreferences();
 
   useImperativeHandle(
     ref,
@@ -643,7 +666,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const lineCount = passwordMode ? 1 : value.split('\n').length;
 
   return (
-    <div className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}`}>
+    <div
+      className={`input-row${lineCount > 1 ? ' input-row-multiline' : ''}${look.classes}`}
+      style={look.style}
+    >
       {lineMark && (
         <span
           className={[...lineMark].length > 1 ? 'prompt input-mark-wide' : 'prompt'}
@@ -741,7 +767,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       {!passwordMode && caretPos && (
         <span
           ref={caretRef}
-          className={`input-caret caret-shape--${cursorStyle}`}
+          className={`input-caret caret-shape--${cursorStyle}${lineLook.blink ? '' : ' is-steady'}`}
           aria-hidden="true"
           style={{ left: caretPos.left, top: caretPos.top }}
         />

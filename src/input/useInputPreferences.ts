@@ -20,6 +20,7 @@ import {
   subscribeEchoMarkOptions,
   useEchoMarkOptions,
 } from '../stores/config/echoMarkStore';
+import { useLineLook } from '../stores/config/lineLookStore';
 import { useLineMark } from '../stores/config/lineMarkStore';
 
 /** The command line settings. The ones that change what the row draws
@@ -56,6 +57,9 @@ export function useInputPreferences() {
   // mark in the command line is on.
   const markOptions = useEchoMarkOptions();
   const lineMarkOn = useLineMark();
+  // How the row looks: the caret blink and color, the text color, the
+  // background and the size.
+  const lineLook = useLineLook();
   useEffect(() => {
     let cancelled = false;
     getUiConfig()
@@ -107,6 +111,7 @@ export function useInputPreferences() {
   return {
     spellcheckPrompt,
     cursorStyle,
+    lineLook,
     lineMark: lineMarkOn ? markText(markOptions) : '',
     keepLastRef,
     pasteDelayRef,
