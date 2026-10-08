@@ -2468,3 +2468,41 @@ async fn a_disconnect_clears_your_target_the_room_list_and_both_prompt_feeds() {
     .await;
     h.finish(grid).await;
 }
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_round_trip_reads_while_you_play_and_lag_lists_it() {
+    use crate::app::events::ROUND_TRIP;
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.connect().await;
+    h.until_shown("[Exits: south]").await;
+    // Nothing shows before the first reading, which comes two seconds in.
+    assert_eq!(h.events_of(h.first, ROUND_TRIP), Vec::<Json>::new());
+    h.until("the first reading", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .iter()
+            .any(|p| p["ms"].is_u64())
+    })
+    .await;
+
+    h.type_line("#lag").await;
+    h.until_shown("round trip to the game ").await;
+    h.until_shown("no stalls since you connected at ").await;
+
+    // The reading goes with the connection, and #lag says so.
+    h.disconnect().await;
+    h.until("the reading to clear", |h| {
+        h.events_of(h.first, ROUND_TRIP)
+            .last()
+            .is_some_and(|p| p["ms"].is_null())
+    })
+    .await;
+    h.type_line("#lag").await;
+    h.until_shown("you are not connected, so there is no round trip to show")
+        .await;
+    h.finish(grid).await;
+}
