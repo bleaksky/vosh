@@ -11,6 +11,7 @@ import {
   themesInGalleryOrder,
   type PaletteDeps,
 } from './palette';
+import { appShortcut } from '../../lib/appMenu';
 import { resolveSettingsTarget } from '../../lib/settingsNav';
 import type { SessionRow } from '../../ipc/session';
 
@@ -263,7 +264,7 @@ describe('paletteSections', () => {
       ['Previous session', 'Mod+Shift+['],
       ['Rename session…', undefined],
       ['Close session', 'Mod+W'],
-      ['Hide sessions', undefined],
+      ['Hide sessions', appShortcut('sessions-sidebar')],
       ['Disconnect', undefined],
     ]);
     expect(goTo.rows.map((r) => [r.title, r.meta, r.keys, r.checked])).toEqual([
@@ -285,6 +286,9 @@ describe('paletteSections', () => {
     expect(two.toggleShown).toHaveBeenCalled();
     const hidden = buildPaletteEntries(deps({ sessions: { ...two, shown: false } }));
     expect(hidden.find((e) => e.id === 'sessions-sidebar')?.title).toBe('Show sessions');
+    // The keycap reads the platform key, Ctrl Cmd S on macOS.
+    expect(appShortcut('sessions-sidebar', true)).toBe('Ctrl+Mod+S');
+    expect(appShortcut('sessions-sidebar', false)).toBe('Mod+Shift+S');
   });
 
   it('finds a session by its name or its world', () => {

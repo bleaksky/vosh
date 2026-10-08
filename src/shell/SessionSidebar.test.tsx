@@ -95,7 +95,6 @@ function draw(rows: SessionRow[], selected: number): string {
       onSelect={() => undefined}
       onNewSession={() => undefined}
       onClose={() => undefined}
-      onHide={() => undefined}
       onCaret={() => undefined}
       onRename={() => undefined}
       onEditConnection={() => undefined}
@@ -124,12 +123,12 @@ describe('the sessions sidebar', () => {
     row(3, { port: 1825 }),
   ];
 
-  it('holds New session and Hide sessions over SESSIONS and its count', () => {
+  it('holds New session over SESSIONS and its count, and no Hide sessions of its own', () => {
     const html = draw(rows, 1);
     expect(html).toContain('<aside class="shell-sessions st-controls" aria-label="Sessions">');
     expect(html).toContain('<div class="shell-sessions-top" data-tauri-drag-region="true">');
     expect(html).toContain('aria-label="New session"');
-    expect(html).toContain('aria-label="Hide sessions" title="Hide sessions"');
+    expect(html).not.toContain('Hide sessions');
     expect(html).toContain(
       '<h2 class="shell-sessions-head">Sessions<span class="shell-sessions-total">3</span></h2>',
     );
@@ -383,7 +382,7 @@ describe('renaming and moving a session in its row', () => {
     for (const cleanup of cleanups.splice(0)) await cleanup();
   });
 
-  async function mount(shown = rows, selected = 1) {
+  async function mount(shown = rows, selected = 1, takeFocus = false) {
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     const root = createRoot(container as unknown as HTMLElement);
@@ -396,7 +395,6 @@ describe('renaming and moving a session in its row', () => {
       onEditConnection: vi.fn(),
       onDisconnect: vi.fn(),
       onMove: vi.fn(),
-      onHide: vi.fn(),
     };
     await act(async () => {
       root.render(
@@ -404,6 +402,7 @@ describe('renaming and moving a session in its row', () => {
           ref: handle,
           rows: shown,
           selected,
+          takeFocus,
           onNewSession: () => undefined,
           ...calls,
         }),
@@ -794,23 +793,26 @@ describe('renaming and moving a session in its row', () => {
     expect(findAll(m.container, hasClass('is-lifted'))).toHaveLength(0);
   });
 
-  it('hides the sidebar and hands the caret back only when the keyboard pressed Hide sessions', async () => {
+  it('has New session alone at its top, since the toggle hides it', async () => {
     const m = await mount();
-    const hide = only(
-      m.container,
-      'Hide sessions',
-      (el) => el.getAttribute('aria-label') === 'Hide sessions',
+    const top = only(m.container, 'the top', hasClass('shell-sessions-actions'));
+    const labels = findAll(top, (el) => el.nodeName === 'BUTTON').map((b) =>
+      b.getAttribute('aria-label'),
     );
-    expect(hide.getAttribute('title')).toBe('Hide sessions');
-    // A click leaves the caret where it was, as the panel toggle does.
-    await m.run(() => on(hide).onClick({ currentTarget: hide }));
-    expect(m.calls.onHide).toHaveBeenCalledTimes(1);
-    expect(m.calls.onCaret).not.toHaveBeenCalled();
-    // A press from the keyboard, with the button focused, hands it back.
-    hide.focus();
-    await m.run(() => on(hide).onClick({ currentTarget: hide }));
-    expect(m.calls.onHide).toHaveBeenCalledTimes(2);
-    expect(m.calls.onCaret).toHaveBeenCalledTimes(1);
+    expect(labels).toEqual(['New session']);
+  });
+
+  it('takes the keyboard on the selected row as it slides in over the terminal', async () => {
+    doc.activeElement = null;
+    const m = await mount(rows, 2, true);
+    const second = findAll(m.container, hasClass('shell-sessions-row'))[1];
+    expect(doc.activeElement).toBe(second);
+  });
+
+  it('leaves the keyboard where it was in its column', async () => {
+    doc.activeElement = null;
+    await mount(rows, 2);
+    expect(doc.activeElement).toBeNull();
   });
 
   it('keeps a press that never moves a click, and a row let go in its place where it was', async () => {

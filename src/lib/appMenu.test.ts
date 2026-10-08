@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import {
   APP_SHORTCUTS,
+  appShortcut,
   buildMenuState,
   commandRepeats,
   pageHasSelection,
@@ -9,8 +10,10 @@ import {
   resolveShortcut,
   appKeyOfMacro,
   setAppMenuState,
+  type AppShortcutId,
   type MenuStateInput,
 } from './appMenu';
+import { shortcutLabel } from './shortcuts';
 import { buildPaletteEntries, type PaletteDeps } from '../shell/overlays/palette';
 import { paneKey } from '../panel/paneLayout';
 
@@ -124,6 +127,39 @@ describe('resolveShortcut', () => {
     expect(bound).toHaveBeenCalledTimes(2);
   });
 
+  it('toggles the sessions sidebar on Ctrl with Cmd and S on macOS', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    const ctrl = { ...letter('s'), ctrl: true };
+    expect(resolveShortcut(ctrl, undefined, undefined, true)).toEqual(toggle);
+    // Cmd S alone, Cmd Shift S and a Ctrl with Cmd digit stay the page's.
+    expect(resolveShortcut(letter('s'), undefined, undefined, true)).toBeNull();
+    expect(resolveShortcut(letter('s', true), undefined, undefined, true)).toBeNull();
+    expect(
+      resolveShortcut({ ...press('1', 'Digit1'), ctrl: true }, undefined, undefined, true),
+    ).toBeNull();
+    // Ctrl with Cmd reaches no other app key.
+    expect(resolveShortcut({ ...letter('k'), ctrl: true }, undefined, undefined, true)).toBeNull();
+    expect(
+      resolveShortcut({ ...letter('r', true), ctrl: true }, undefined, undefined, true),
+    ).toBeNull();
+  });
+
+  it('toggles the sessions sidebar on Ctrl+Shift+S on Windows and Linux', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    expect(resolveShortcut(letter('s', true), undefined, undefined, false)).toEqual(toggle);
+    expect(resolveShortcut(letter('s'), undefined, undefined, false)).toBeNull();
+  });
+
+  it('leaves the sessions toggle key to a macro bound to it', () => {
+    const bound = () => true;
+    expect(resolveShortcut({ ...letter('s'), ctrl: true }, bound, undefined, true)).toEqual({
+      kind: 'macro',
+    });
+    expect(resolveShortcut(letter('s', true), bound, undefined, false)).toEqual({
+      kind: 'macro',
+    });
+  });
+
   it('takes Shift+R without running anything, so the page never reloads', () => {
     expect(resolveShortcut(letter('r', true))).toEqual({ kind: 'take' });
   });
@@ -164,6 +200,15 @@ describe('the snoop key', () => {
 });
 
 describe('appKeyOfMacro', () => {
+  it('finds the sessions toggle key on either platform', () => {
+    const toggle = { kind: 'run', id: 'sessions-sidebar' };
+    expect(appKeyOfMacro('Ctrl+Meta+S', true)).toEqual(toggle);
+    expect(appKeyOfMacro('Ctrl+Shift+S', false)).toEqual(toggle);
+    expect(appKeyOfMacro('Meta+S', true)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+Shift+S', true)).toBeNull();
+    expect(appKeyOfMacro('Ctrl+S', false)).toBeNull();
+  });
+
   it('finds the session key a macro key shares on macOS', () => {
     expect(appKeyOfMacro('Meta+1', true)).toEqual({ kind: 'goto', place: 1 });
     expect(appKeyOfMacro('Meta+9', true)).toEqual({ kind: 'goto', place: 9 });
@@ -251,10 +296,23 @@ describe('shared shortcut table', () => {
     }
   });
 
-  it('uses Mod for every menu shortcut, never Ctrl', () => {
-    for (const spec of Object.values(APP_SHORTCUTS)) {
-      expect(spec.startsWith('Mod+')).toBe(true);
-      expect(spec.toLowerCase()).not.toContain('ctrl');
+  it('uses Mod for every menu shortcut, and Ctrl only beside it on macOS', () => {
+    for (const id of Object.keys(APP_SHORTCUTS) as AppShortcutId[]) {
+      const other = appShortcut(id, false);
+      expect(other.startsWith('Mod+')).toBe(true);
+      expect(other.toLowerCase()).not.toContain('ctrl');
+      const mac = appShortcut(id, true);
+      expect(mac.startsWith('Mod+') || mac.startsWith('Ctrl+Mod+')).toBe(true);
+    }
+  });
+
+  it('gives no two app keys one key on either platform', () => {
+    for (const mac of [true, false]) {
+      const ids = Object.keys(APP_SHORTCUTS) as AppShortcutId[];
+      const keys = ids.map((id) => shortcutLabel(appShortcut(id, mac), mac));
+      expect(new Set(keys).size).toBe(keys.length);
+      // Mod with a digit goes to a session, so no app key may take one.
+      for (const key of keys) expect(key).not.toMatch(/^(⌘|Ctrl\+)[1-9]$/);
     }
   });
 });

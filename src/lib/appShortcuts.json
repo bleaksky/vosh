@@ -14,6 +14,7 @@
   "find": "Mod+F",
   "palette": "Mod+K",
   "panel": "Mod+Shift+L",
+  "sessions-sidebar": { "mac": "Ctrl+Mod+S", "other": "Mod+Shift+S" },
   "split": "Mod+\\",
   "snoop": "Mod+J",
   "help": "Mod+/"

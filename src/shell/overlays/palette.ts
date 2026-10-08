@@ -1,5 +1,6 @@
 import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
+import { appShortcut } from '../../lib/appMenu';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
 import type { WritingKind } from '../../ipc/writing';
@@ -81,14 +82,15 @@ export interface PaletteSessions {
   /** Every open session, in the sidebar's order. */
   rows: readonly SessionRow[];
   selected: number;
-  /** Whether you keep the sidebar showing them, though a narrow window
-   *  can fold it. */
+  /** Whether the sidebar shows them, in its column or over the
+   *  terminal in a narrow window. */
   shown: boolean;
   /** Bring a session to the front. */
   goTo: (session: number) => void;
   /** Bring the next session to the front, or the one before with -1. */
   step: (step: 1 | -1) => void;
-  /** Hide the sidebar in this window, or show it again. */
+  /** Hide the sidebar in this window, or show it again, as the sessions
+   *  toggle does. */
   toggleShown: () => void;
 }
 
@@ -486,6 +488,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'session',
       title: sessions.shown ? 'Hide sessions' : 'Show sessions',
       keywords: 'sidebar list tabs',
+      keys: appShortcut('sessions-sidebar'),
       searchOnly: true,
       run: sessions.toggleShown,
     });

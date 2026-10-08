@@ -119,6 +119,20 @@ export class FakeElement extends FakeNode {
   blur(): void {
     if (this.ownerDocument?.activeElement === this) this.ownerDocument.activeElement = null;
   }
+  /** Itself or the nearest ancestor with a class that a list like
+   *  `.a, .b` names. Class selectors alone. */
+  closest(selectors: string): FakeElement | null {
+    const wanted = selectors.split(',').map((s) => s.trim().replace(/^\./, ''));
+    const has = (el: FakeElement) => {
+      const classes = (el.getAttribute('class') ?? '').split(/\s+/);
+      return wanted.some((c) => classes.includes(c));
+    };
+    if (has(this)) return this;
+    for (let node = this.parentNode; node; node = node.parentNode) {
+      if (node instanceof FakeElement && has(node)) return node;
+    }
+    return null;
+  }
 }
 
 export class FakeDocument extends FakeNode {

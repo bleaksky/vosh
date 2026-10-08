@@ -35,6 +35,15 @@ describe('macroClashNote', () => {
     );
   });
 
+  it('says the sessions toggle key shows or hides your sessions', () => {
+    expect(macroClashNote('Ctrl+Meta+S', true)).toBe(
+      '⌃⌘S also shows or hides your sessions. In sessions on this profile it runs this macro.',
+    );
+    expect(macroClashNote('Ctrl+Shift+S', false)).toBe(
+      'Ctrl+Shift+S also shows or hides your sessions. In sessions on this profile it runs this macro.',
+    );
+  });
+
   it('names the keys with Ctrl on Windows and Linux', () => {
     expect(macroClashNote('Ctrl+2', false)).toBe(
       'Ctrl+2 also goes to your second session. In sessions on this profile it runs this macro.',

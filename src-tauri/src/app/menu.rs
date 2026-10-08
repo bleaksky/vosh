@@ -128,7 +128,8 @@ const PANE_ROWS: [(&str, &str); 5] = [
 ];
 
 /// A palette spec like `Mod+Shift+L` as a menu accelerator. Mod is Cmd,
-/// because Ctrl belongs to your macros on macOS.
+/// because Ctrl belongs to your macros on macOS. A spec that names Ctrl
+/// beside Mod, such as `Ctrl+Mod+S`, keeps it.
 #[cfg(target_os = "macos")]
 fn spec_to_accelerator(spec: &str) -> String {
     if spec == "Mod++" {
@@ -146,18 +147,43 @@ fn spec_to_accelerator(spec: &str) -> String {
         .join("+")
 }
 
+/// A shortcut spec in appShortcuts.json: one for every platform, or
+/// one for macOS and one for Windows and Linux. The menu bar is macOS
+/// only, so it reads the macOS one.
+#[cfg(target_os = "macos")]
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ShortcutSpec {
+    Every(String),
+    PerPlatform {
+        mac: String,
+        #[allow(dead_code)]
+        other: String,
+    },
+}
+
+#[cfg(target_os = "macos")]
+impl ShortcutSpec {
+    fn mac(&self) -> &str {
+        match self {
+            ShortcutSpec::Every(spec) => spec,
+            ShortcutSpec::PerPlatform { mac, .. } => mac,
+        }
+    }
+}
+
 /// Every command id with a shortcut, and its accelerator.
 #[cfg(target_os = "macos")]
 fn accelerators() -> &'static std::collections::BTreeMap<String, String> {
     static TABLE: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
         std::sync::OnceLock::new();
     TABLE.get_or_init(|| {
-        let specs: std::collections::BTreeMap<String, String> =
+        let specs: std::collections::BTreeMap<String, ShortcutSpec> =
             serde_json::from_str(SHORTCUTS_JSON).unwrap_or_default();
         specs
             .into_iter()
             .map(|(id, spec)| {
-                let accel = spec_to_accelerator(&spec);
+                let accel = spec_to_accelerator(spec.mac());
                 (id, accel)
             })
             .collect()

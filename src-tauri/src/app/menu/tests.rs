@@ -23,8 +23,10 @@ fn every_accelerator_parses() {
             mods.contains(muda::accelerator::Modifiers::SUPER),
             "{id}: {accel} needs Cmd"
         );
+        // Ctrl belongs to your macros, save beside Cmd for the sessions
+        // toggle, where a macro of yours on the key still wins.
         assert!(
-            !mods.contains(muda::accelerator::Modifiers::CONTROL),
+            id == "sessions-sidebar" || !mods.contains(muda::accelerator::Modifiers::CONTROL),
             "{id}: {accel} takes Ctrl, which belongs to your macros"
         );
     }
@@ -48,6 +50,7 @@ fn the_board_shortcuts_are_all_there() {
         ("find", "Cmd+F"),
         ("palette", "Cmd+K"),
         ("panel", "Cmd+Shift+L"),
+        ("sessions-sidebar", "Ctrl+Cmd+S"),
         ("split", "Cmd+\\"),
         ("snoop", "Cmd+J"),
         ("help", "Cmd+/"),
@@ -65,6 +68,27 @@ fn specs_map_mod_to_cmd() {
     assert_eq!(spec_to_accelerator("Mod++"), "Cmd++");
     assert_eq!(spec_to_accelerator("Mod+Shift+]"), "Cmd+Shift+]");
     assert_eq!(spec_to_accelerator("Mod+Shift+["), "Cmd+Shift+[");
+}
+
+#[test]
+fn show_sessions_binds_ctrl_cmd_s() {
+    // The key AppKit gives a standard Show Sidebar row (Sessions toggle
+    // T3). The spec names one key for macOS and one for the rest.
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    assert_eq!(spec_to_accelerator("Ctrl+Mod+S"), "Ctrl+Cmd+S");
+    let parsed = Accelerator::from_str(accelerator("sessions-sidebar").unwrap()).unwrap();
+    assert_eq!(
+        parsed,
+        Accelerator::new(Some(Modifiers::CONTROL | Modifiers::SUPER), Code::KeyS)
+    );
+}
+
+#[test]
+fn every_spec_in_the_file_reaches_the_menu() {
+    // A spec the table cannot read would drop every accelerator at once.
+    let specs: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(SHORTCUTS_JSON).unwrap();
+    assert_eq!(accelerators().len(), specs.len());
 }
 
 #[test]

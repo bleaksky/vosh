@@ -237,48 +237,6 @@ function px(selector: string, property: string, index = 0): number {
   return Number.parseFloat(parts[Math.min(index, parts.length - 1)]);
 }
 
-describe('Show sessions in the title band', () => {
-  /** The band on `platform` while you hid the sessions sidebar. */
-  function drawHidden(platform: Platform): string {
-    vi.stubGlobal('document', { documentElement: { dataset: { platform } } });
-    try {
-      return renderToStaticMarkup(
-        <TitleBand {...props} panelOpen onShowSessions={() => undefined} />,
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  }
-
-  it('comes first in the band while you hide the sidebar, with the sidebar glyph', () => {
-    for (const platform of ['macos', 'windows', 'linux'] as const) {
-      const html = drawHidden(platform);
-      expect(attr(buttons(html)[0], 'aria-label'), platform).toBe('Show sessions');
-      expect(button(html, 'Show sessions').tag).toContain('is-quiet');
-      expect(html).toContain('class="shell-band has-lead"');
-    }
-    expect(buttons(draw('macos', true)).map((b) => attr(b, 'aria-label'))).not.toContain(
-      'Show sessions',
-    );
-  });
-
-  it('clears the traffic lights on macOS and keeps the session button clear of it', () => {
-    const width = px('.shell-icon-button', 'width');
-    const left = px("[data-platform='macos'] .shell-band-lead", 'left');
-    // The lights take the first 66, as the snoop window's band clears them.
-    expect(left).toBeGreaterThanOrEqual(66);
-    const inset = px(
-      "[data-platform='macos'] .shell-band.has-lead .shell-band-title",
-      'padding',
-      1,
-    );
-    expect(inset).toBeGreaterThanOrEqual(left + width);
-    expect(px('.shell-band-lead', 'left') + width).toBeLessThanOrEqual(
-      px('.shell-band-title', 'padding', 1),
-    );
-  });
-});
-
 describe('the title band with the Settings button', () => {
   const width = px('.shell-icon-button', 'width');
   const gap = px('.shell-band-actions', 'gap');
@@ -664,45 +622,5 @@ describe('Add a pane', () => {
     const n = await open(tree());
     await n.pick('Map');
     expect(n.onAddPane).toHaveBeenCalledWith({ pane: 'map', props: {} });
-  });
-});
-
-describe('pressing Show sessions', () => {
-  const cleanups = useStandInDom();
-
-  async function mount() {
-    const onShowSessions = vi.fn();
-    const onMenuClosed = vi.fn();
-    const container = doc.createElement('div');
-    doc.body.appendChild(container);
-    const root = createRoot(container as unknown as HTMLElement);
-    await act(async () => {
-      root.render(
-        createElement(TitleBand, { ...props, panelOpen: true, onShowSessions, onMenuClosed }),
-      );
-    });
-    cleanups.push(async () => {
-      await act(async () => root.unmount());
-      doc.body.removeChild(container);
-    });
-    const [show] = findAll(container, (el) => el.getAttribute('aria-label') === 'Show sessions');
-    if (!show) throw new Error('no Show sessions button');
-    const press = () => act(async () => on(show).onClick({ currentTarget: show }));
-    return { show, press, onShowSessions, onMenuClosed };
-  }
-
-  it('shows the sidebar and leaves the caret where it was', async () => {
-    const m = await mount();
-    await m.press();
-    expect(m.onShowSessions).toHaveBeenCalledTimes(1);
-    expect(m.onMenuClosed).not.toHaveBeenCalled();
-  });
-
-  it('hands the caret back to the command line when the press left focus on it', async () => {
-    const m = await mount();
-    m.show.focus();
-    await m.press();
-    expect(m.onShowSessions).toHaveBeenCalledTimes(1);
-    expect(m.onMenuClosed).toHaveBeenCalledTimes(1);
   });
 });

@@ -14,7 +14,6 @@ import { shortcutLabel } from '../lib/shortcuts';
 import { sessionLive } from '../stores/session/connectionStore';
 import { rowLook, useSessionRow } from '../stores/session/sessionRowStore';
 import { CloseIcon, PlusIcon } from '../ui/icons';
-import { SidebarIcon } from './icons';
 import { cardWords, useCardFacts } from './cardFacts';
 import { SessionCard } from './SessionCard';
 import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
@@ -26,10 +25,11 @@ import { partShift, useRowDrag } from '../lib/useRowDrag';
 // The sessions sidebar on the left of the main window, board 2 of the
 // Sessions review, drawn to otty's measures (Q17), with the two line
 // rows of the Sessions Sidebar review. MainWindow shows it while two or
-// more sessions are open and you have not hidden it in this window. Its
-// top 32 drags the window and holds the lights on macOS, with New
-// session and Hide sessions at its right. SESSIONS heads the list with
-// how many are open (S8).
+// more sessions are open and you have not hidden it in this window, and
+// over the terminal in a window too narrow for its column. Its top 32
+// drags the window and holds the lights and the sessions toggle on
+// macOS, with New session at its right (Sessions toggle T1). SESSIONS
+// heads the list with how many are open (S8).
 //
 // Each row is two lines (S1). Line one starts with the row's status
 // mark (S2), then the session as sessionLabel names it with the port in
@@ -66,9 +66,9 @@ import { partShift, useRowDrag } from '../lib/useRowDrag';
 // into view as ⌘1 to ⌘9 or a step reach it (board 8). Drag a row to move
 // it, see lib/useRowDrag.
 //
-// WebView2 and WebKitGTK focus a button on click. Left on a row or Hide
-// sessions, the caret would take your next Space and press it again, so
-// it goes back to the command line, as it does from the gear.
+// WebView2 and WebKitGTK focus a button on click. Left on a row, the
+// caret would take your next Space and press it again, so it goes back
+// to the command line, as it does from the gear.
 
 interface Props {
   rows: SessionRow[];
@@ -77,8 +77,9 @@ interface Props {
   onNewSession: () => void;
   /** Close a session, asking first while it is connected. */
   onClose: (session: number) => void;
-  /** Fold the sidebar away in this window. */
-  onHide: () => void;
+  /** Put the keyboard on the selected row as the sidebar shows, as it
+   *  does sliding in over the terminal. */
+  takeFocus?: boolean;
   /** Hand the caret back to the command line. */
   onCaret: () => void;
   /** Keep the name typed for a session, or with null clear it. */
@@ -115,7 +116,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
     onSelect,
     onNewSession,
     onClose,
-    onHide,
+    takeFocus = false,
     onCaret,
     onRename,
     onEditConnection,
@@ -182,6 +183,17 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
       el.scrollTop = top + ROW_PITCH - el.clientHeight;
   }, [at]);
 
+  // Sliding in over the terminal, the sidebar takes the keyboard on the
+  // selected row, so Up, Down and Space pick a session at once.
+  useEffect(() => {
+    if (!takeFocus) return;
+    const first = rows[0];
+    const row = buttons.current.get(selected) ?? (first && buttons.current.get(first.id));
+    row?.focus();
+    // On mount alone, as the sidebar slides in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const closeMenu = () => {
     setMenu(null);
     onCaret();
@@ -202,19 +214,6 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             onClick={onNewSession}
           >
             <PlusIcon />
-          </button>
-          <button
-            type="button"
-            className="shell-icon-button"
-            aria-label="Hide sessions"
-            title="Hide sessions"
-            onClick={(e) => {
-              const caret = held(e);
-              onHide();
-              if (caret) onCaret();
-            }}
-          >
-            <SidebarIcon />
           </button>
         </div>
       </div>

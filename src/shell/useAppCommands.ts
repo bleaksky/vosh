@@ -126,9 +126,10 @@ export function useAppCommands({
 
   // Window shortcuts, in the capture phase so they fire before xterm's
   // own keybindings, the webview's find and reload, and the command
-  // line's macros. macOS binds Cmd only, because Ctrl belongs to your
-  // macros there. Windows and Linux bind Ctrl. The keys live in
-  // lib/appShortcuts.json, which the macOS menu bar reads too.
+  // line's macros. macOS binds Cmd, because Ctrl belongs to your macros
+  // there, and Ctrl with Cmd only for the sessions toggle. Windows and
+  // Linux bind Ctrl. The keys live in lib/appShortcuts.json, which the
+  // macOS menu bar reads too.
   //   Mod+K        command palette (toggles)
   //   Mod+F        find in scrollback (again refocuses the find field)
   //   Mod+R        connect the selected session. Ctrl+R never reloads
@@ -136,6 +137,8 @@ export function useAppCommands({
   //   Mod+,        settings
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
+  //   Ctrl+Cmd+S   show or hide the sessions sidebar, Ctrl+Shift+S on
+  //                Windows and Linux
   //   Mod+\        open or close the scrollback split
   //   Mod+J        into the snoop, and in a snoop to the next tab. With
   //                no snoop open the key stays the page's.
@@ -151,16 +154,24 @@ export function useAppCommands({
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
   // layout still reaches them by the physical key. A macro the selected
   // session's profile binds to one of the session keys or Settings keys
-  // keeps the key (Sessions Q11): nothing here or in the menu bar takes
+  // keeps the key (Sessions Q11), as does one on the sessions toggle's
+  // key (Sessions toggle T3): nothing here or in the menu bar takes
   // it, and the command line fires the macro.
   const shortcutState = useRef({ findOpen, paletteOpen, live: connection.live });
   const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
   useEffect(() => {
     const mac = isMacPlatform();
     const onKey = (e: globalThis.KeyboardEvent) => {
-      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      // Ctrl beside Cmd on macOS reaches only a key whose spec names
+      // Ctrl, the sessions toggle's.
+      const primary = mac ? e.metaKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
-      const press = { key: shortcutKey(e), code: e.code, shift: e.shiftKey };
+      const press = {
+        key: shortcutKey(e),
+        code: e.code,
+        shift: e.shiftKey,
+        ctrl: mac && e.ctrlKey,
+      };
       const hit = resolveShortcut(
         press,
         () => macroKeys.bound(canonicalKeyFromEvent(e)),

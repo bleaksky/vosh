@@ -193,25 +193,29 @@
   padding: 0 216px;
 }
 
-/* Show sessions sits at the band's left while you hide the sessions
-   sidebar, 10 in as the right buttons sit, and on macOS 8 past the 66
-   the traffic lights take, as the snoop window's eye clears them.
-   There the title's insets grow to clear it, as they do for the right
-   buttons with the panel hidden. */
-.shell-band-lead {
+/* The sessions toggle holds one spot in the frame's top left corner
+   (Sessions toggle T1), 10 in as the band's right buttons sit, and on
+   macOS 8 past the 66 the traffic lights take, as the snoop window's eye
+   clears them. Its top is the sidebar's New session top, so the two
+   share a line while the sidebar shows. It sits over the sidebar's top,
+   or the sidebar over the terminal, and over the band's left end while
+   the sidebar hides. There the title's insets grow to clear it on
+   macOS, as they do for the right buttons with the panel hidden. */
+.shell-lead {
   position: absolute;
-  top: 4.5px;
+  top: 4px;
   left: 10px;
+  z-index: 31;
   display: flex;
   align-items: center;
   height: 24px;
 }
 
-[data-platform='macos'] .shell-band-lead {
+[data-platform='macos'] .shell-lead {
   left: 74px;
 }
 
-[data-platform='macos'] .shell-band.has-lead .shell-band-title {
+[data-platform='macos'] .shell[data-lead='band'] .shell-band-title {
   padding: 0 112px;
 }
 

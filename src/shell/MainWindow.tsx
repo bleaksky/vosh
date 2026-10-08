@@ -18,6 +18,7 @@ import { showMe } from './getStarted/showMe';
 import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
+import { SessionsToggle } from './SessionsToggle';
 import { SnoopSplit } from './SnoopSplit';
 import { requestSnoop } from './snoopKeys';
 import { TitleBand } from './TitleBand';
@@ -124,15 +125,20 @@ function MainWindow() {
   // own until it closes, and only the selected session's shows.
   const opened = useOpened();
   // Every open session, which the sessions sidebar lists. It shows while
-  // two or more are open, until Hide sessions folds it for this window
-  // (Q17) or the window grows too narrow to hold it (board 8).
+  // two or more are open, until the sessions toggle hides it for this
+  // window (Q17) or the window grows too narrow to hold it (board 8),
+  // where the toggle slides it over the terminal instead (Sessions
+  // toggle T5).
   const sessions = useSessions();
   const panelOpen = panelLayout?.panel_open ?? true;
   // The status line carries your vitals with the panel hidden, or with
   // Show your vitals in on Status line.
   const vitalsPlace = useVitalsOptions().place;
   const lineShowsVitals = !panelOpen || vitalsPlace === 'status';
-  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen);
+  // The sidebar hands the caret back to the command line as it goes.
+  const sessionsSidebar = useSessionsSidebar(sessions.length, panelOpen, () =>
+    inputRef.current?.focus(),
+  );
   const sessionsShown = sessionsSidebar.shown;
   // Rename session… names the selected session in its row while the
   // sidebar shows (Q7), and in the session popover's own form while it
@@ -476,7 +482,7 @@ function MainWindow() {
     sessions: {
       rows: sessions,
       selected,
-      shown: sessionsSidebar.wanted,
+      shown: sessionsSidebar.pressed,
       goTo,
       step: (step) => goTo(sessionStep(step)),
       toggleShown: sessionsSidebar.toggle,
@@ -539,7 +545,7 @@ function MainWindow() {
     panelOpen,
     shownPanes,
     sessionCount: sessions.length,
-    sessionsShown: sessionsSidebar.wanted,
+    sessionsShown: sessionsSidebar.pressed,
     toggleSessions: sessionsSidebar.toggle,
     termRef,
     historyTermRef,
@@ -742,6 +748,34 @@ function MainWindow() {
     </div>
   );
 
+  // The sessions sidebar, in its column or over the terminal. Over the
+  // terminal it takes the keyboard as it slides in, and picking a row or
+  // opening a session puts it away.
+  const sessionSidebar = (over: boolean) => (
+    <SessionSidebar
+      ref={sidebar}
+      rows={sessions}
+      selected={selected}
+      onSelect={(session) => {
+        if (over) sessionsSidebar.closeOverlay();
+        void select(session);
+      }}
+      onNewSession={() => {
+        if (over) sessionsSidebar.closeOverlay();
+        void openNewSession();
+      }}
+      onClose={closing.closeSession}
+      takeFocus={over}
+      onCaret={focusInput}
+      onRename={(session, name) => void rename(session, name)}
+      onEditConnection={() => requestSessionMenu({ mode: 'edit' })}
+      onDisconnect={(session) =>
+        void disconnectSession(session).catch((e: unknown) => handleError(String(e), session))
+      }
+      onMove={(session, to) => void move(session, to)}
+    />
+  );
+
   // The shell gives each slot a fixed grid cell under a fixed parent,
   // and showing, hiding, or resizing the panel only rewrites the column
   // template on the shell root. terminalAreaElement and inputElement
@@ -757,24 +791,11 @@ function MainWindow() {
       onMouseUp={handleAppMouseUp}
       sessionsWidth={sessionsSidebar.width}
       onSessionsWidth={sessionsSidebar.setWidth}
-      sessions={
-        sessionsShown ? (
-          <SessionSidebar
-            ref={sidebar}
-            rows={sessions}
-            selected={selected}
-            onSelect={select}
-            onNewSession={() => void openNewSession()}
-            onClose={closing.closeSession}
-            onHide={sessionsSidebar.hide}
-            onCaret={focusInput}
-            onRename={(session, name) => void rename(session, name)}
-            onEditConnection={() => requestSessionMenu({ mode: 'edit' })}
-            onDisconnect={(session) =>
-              void disconnectSession(session).catch((e: unknown) => handleError(String(e), session))
-            }
-            onMove={(session, to) => void move(session, to)}
-          />
+      sessions={sessionsShown ? sessionSidebar(false) : null}
+      sessionsOverlay={sessionsSidebar.overlay ? sessionSidebar(true) : null}
+      sessionsToggle={
+        sessionsSidebar.toggleable ? (
+          <SessionsToggle pressed={sessionsSidebar.pressed} onToggle={sessionsSidebar.toggle} />
         ) : null
       }
       titleBand={
@@ -790,7 +811,6 @@ function MainWindow() {
           renameInRow={sessionsShown ? () => sidebar.current?.rename(getSelected()) : undefined}
           listSessions={sessionsSidebar.folded}
           onCloseSession={closing.closeSession}
-          onShowSessions={sessionsSidebar.hidden ? sessionsSidebar.toggle : undefined}
         />
       }
       snoop={
