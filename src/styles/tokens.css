@@ -50,6 +50,11 @@
   /* The terminal face and size. The windows write yours over them. */
   --app-font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
   --app-font-size: 14px;
+  /* The caret, one cell of the terminal font: 1ch wide and 1.2em tall
+     to the whole pixel. Each resolves on the element that reads it, so
+     a caret in a 14 px font is 17 px tall and in a 16 px font 19. */
+  --caret-w: 1ch;
+  --caret-h: round(1.2em, 1px);
   --font-mud: var(--app-font-family);
   /* The bundled monospace face, for the glyph map and the scroll depth
      indicator. */

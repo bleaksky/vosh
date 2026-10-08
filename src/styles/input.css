@@ -77,16 +77,16 @@
   caret-color: transparent;
 }
 
-/* Ember block caret. A 7x15 accent block, absolutely positioned
-   by Input.tsx at the measured caret spot.
+/* Ember block caret. One cell of your terminal font in the accent,
+   absolutely positioned by Input.tsx at the measured caret spot.
    Blinks on a stepped keyframe like a hardware cursor; useCaret.ts
    restarts the animation on every value change so the caret holds
    solid while the user types. */
 .input-caret {
   position: absolute;
   box-sizing: border-box;
-  width: 7px;
-  height: 15px;
+  width: var(--caret-w);
+  height: var(--caret-h);
   background: var(--accent);
   pointer-events: none;
   animation: vosh-caret-blink 1.1s steps(1, end) infinite;
@@ -110,48 +110,48 @@
 }
 
 /* Caret shapes, the Caret shape row in Settings, Input. Each modifier
-   only redraws the inside of the 7x15 anchor box the block already
-   occupies, so no shape can shift the caret's measured position or
-   the height of the input row. The Settings samples draw their own
-   shapes with st-caret-shape. */
+   only redraws the inside of the cell the block already occupies, so
+   no shape can shift the caret's measured position or the height of
+   the input row. The Settings samples draw the same shapes with
+   st-caret-shape. */
 .caret-shape--block {
-  width: 7px;
-  height: 15px;
+  width: var(--caret-w);
+  height: var(--caret-h);
 }
 
 .caret-shape--block_outline {
-  width: 7px;
-  height: 15px;
+  width: var(--caret-w);
+  height: var(--caret-h);
   background: transparent;
   border: 1px solid var(--accent);
 }
 
 .caret-shape--half_block {
-  width: 7px;
-  height: 7px;
-  transform: translateY(8px);
+  width: var(--caret-w);
+  height: round(down, var(--caret-h) / 2, 1px);
+  transform: translateY(calc(var(--caret-h) - round(down, var(--caret-h) / 2, 1px)));
 }
 
 .caret-shape--underline {
-  width: 7px;
+  width: var(--caret-w);
   height: 2px;
-  transform: translateY(13px);
+  transform: translateY(calc(var(--caret-h) - 2px));
 }
 
 .caret-shape--underline_thick {
-  width: 7px;
+  width: var(--caret-w);
   height: 4px;
-  transform: translateY(11px);
+  transform: translateY(calc(var(--caret-h) - 4px));
 }
 
 .caret-shape--pipe {
   width: 2px;
-  height: 15px;
+  height: var(--caret-h);
 }
 
 .caret-shape--pipe_thick {
   width: 3px;
-  height: 15px;
+  height: var(--caret-h);
 }
 
 /* Hidden mirror useCaret.ts measures the caret position with: the

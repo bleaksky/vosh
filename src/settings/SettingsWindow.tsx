@@ -367,14 +367,20 @@ export function SettingsWindow() {
   });
 
   // MUD text in Settings (patterns, commands, host and port) uses your
-  // terminal font through --font-mud, the way the main window does.
+  // terminal font through --font-mud, the way the main window does,
+  // and the caret samples draw one cell of it at your size.
   const fontFamily = config?.font_family;
+  const fontSize = config?.font_size;
   useEffect(() => {
     if (!fontFamily) return;
     const rendered = renderFontStack(fontFamily);
     loadFontStack(rendered);
     document.documentElement.style.setProperty('--app-font-family', rendered);
   }, [fontFamily]);
+  useEffect(() => {
+    if (!fontSize) return;
+    document.documentElement.style.setProperty('--app-font-size', `${fontSize}px`);
+  }, [fontSize]);
 
   const group = nav.target.group;
   const { Page, selfScroll: scrollsSelf } = PAGES[group];
