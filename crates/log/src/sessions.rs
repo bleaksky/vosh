@@ -2,13 +2,15 @@
 //! It also owns the `> ` rows that record what you sent and the rows
 //! of the players you snoop.
 
+use std::collections::HashSet;
+
 use rusqlite::params;
 #[cfg(any(test, feature = "testkit"))]
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 use vosh_protocol::ansi::plain_text;
 
-use crate::{LogStore, Result};
+use crate::{LogStore, Result, Scope};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionRow {
@@ -41,11 +43,10 @@ fn session_row(row: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
 const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
 
 /// True when `host` names this machine, ignoring case, spaces, and a
-/// trailing dot. Test only. The log view leaves these sessions out in
-/// SQL through [`not_local_sql`], and the tests check both fold a host
-/// alike.
-#[cfg(test)]
-pub(crate) fn is_local_host(host: &str) -> bool {
+/// trailing dot. The app logs no connection to one unless the profile
+/// says to (D34). The log view leaves these sessions out in SQL through
+/// [`not_local_sql`], and the tests check both fold a host alike.
+pub fn is_local_host(host: &str) -> bool {
     let clean = host.trim().trim_end_matches('.').to_ascii_lowercase();
     LOCAL_HOSTS.contains(&clean.as_str())
 }
@@ -201,6 +202,28 @@ impl LogStore {
         Ok(())
     }
 
+    /// End every log still open at `ended_at_ms`, for a quit while
+    /// connected. Returns how many it ended.
+    pub fn end_open_sessions(&mut self, ended_at_ms: i64) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE sessions SET ended_at_ms = ?1 WHERE ended_at_ms IS NULL",
+            params![ended_at_ms],
+        )?)
+    }
+
+    /// End each log a crash left open at the time of its last line, or
+    /// at its start when it has none, so it never reads as running. Call
+    /// before any connection opens a log. Returns how many it ended.
+    pub fn end_crashed_sessions(&mut self) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE sessions SET ended_at_ms = COALESCE(
+                 (SELECT MAX(ts_ms) FROM log_lines WHERE session_id = sessions.id),
+                 started_at_ms)
+             WHERE ended_at_ms IS NULL",
+            [],
+        )?)
+    }
+
     /// Append one line to a session. `raw` may carry ANSI codes; `text`
     /// is the plain-text form. When `raw` is None, the plain text doubles
     /// as the raw payload on export.
@@ -248,15 +271,10 @@ impl LogStore {
         self.append(session_id, ts_ms, &text, Some(raw))
     }
 
-    /// List sessions newest first, capped at `limit` rows. A zero limit
-    /// returns all sessions. `hide_local` leaves out sessions to this
-    /// machine (see `LOCAL_HOSTS`).
-    pub fn list_sessions(&self, limit: usize, hide_local: bool) -> Result<Vec<SessionRow>> {
-        let filter = if hide_local {
-            format!("WHERE {}", not_local_sql())
-        } else {
-            String::new()
-        };
+    /// List the logs in `scope` newest first, capped at `limit` rows. A
+    /// zero limit returns them all.
+    pub fn list_sessions(&self, limit: usize, scope: &Scope) -> Result<Vec<SessionRow>> {
+        let (filter, values) = scope.session_filter(1);
         let cap = if limit == 0 {
             String::new()
         } else {
@@ -271,35 +289,76 @@ impl LogStore {
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
-            .query_map([], session_row)?
+            .query_map(rusqlite::params_from_iter(values), session_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(rows)
     }
 
-    /// Export a session's log as a single string. With `with_ansi=true`
-    /// the original raw bytes are concatenated (best-effort UTF-8); with
-    /// `with_ansi=false` only the plain-text column is used.
+    /// Export a session's log as a single string, see
+    /// [`Self::export_scope`].
     pub fn export_session(&self, session_id: i64, with_ansi: bool) -> Result<String> {
+        let mut out = Vec::new();
+        self.export_scope(&Scope::log(session_id), with_ansi, false, &mut out)?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    /// Write every line in `scope` to `out`, oldest first, each ended by
+    /// `\n`. With `with_ansi` a line goes out as the bytes the game sent,
+    /// colors included, or as its plain text when it kept none, such as a
+    /// line you sent. Without it every line is its plain text. With
+    /// `hide_passwords` a line forget passwords would blank goes out as
+    /// [`HIDDEN_SENT_TEXT`], as it reads once blanked. Returns how many
+    /// lines it wrote.
+    pub fn export_scope(
+        &self,
+        scope: &Scope,
+        with_ansi: bool,
+        hide_passwords: bool,
+        out: &mut dyn std::io::Write,
+    ) -> Result<u64> {
+        let logs = self.scoped_logs(scope)?;
+        let hidden = if hide_passwords {
+            self.password_lines_in(&logs)?
+        } else {
+            HashSet::new()
+        };
+        let (Some(low), Some(high)) = (
+            logs.values().map(|l| l.first).min(),
+            logs.values().map(|l| l.last).max(),
+        ) else {
+            return Ok(0);
+        };
+        let since = scope.since_ms.unwrap_or(i64::MIN);
         let mut stmt = self.conn.prepare(
-            "SELECT ts_ms, text, raw FROM log_lines
-             WHERE session_id = ?1 ORDER BY id ASC",
+            "SELECT session_id, ts_ms, text, raw, id FROM log_lines
+             WHERE id >= ?1 AND id <= ?2 ORDER BY id",
         )?;
-        let mut rows = stmt.query(params![session_id])?;
-        let mut out = String::new();
+        let mut rows = stmt.query(params![low, high])?;
+        let mut written = 0u64;
         while let Some(row) = rows.next()? {
-            let text: String = row.get(1)?;
-            if with_ansi {
-                let raw: Option<Vec<u8>> = row.get(2)?;
-                match raw {
-                    Some(bytes) => out.push_str(&String::from_utf8_lossy(&bytes)),
-                    None => out.push_str(&text),
-                }
-            } else {
-                out.push_str(&text);
+            let session_id: i64 = row.get(0)?;
+            let ts_ms: i64 = row.get(1)?;
+            if !logs.contains_key(&session_id) || ts_ms < since {
+                continue;
             }
-            out.push('\n');
+            let raw = if with_ansi {
+                row.get::<_, Option<Vec<u8>>>(3)?
+            } else {
+                None
+            };
+            // A sent line keeps no raw bytes, so a hidden one reads the
+            // same with colors or without.
+            if hidden.contains(&row.get(4)?) {
+                out.write_all(HIDDEN_SENT_TEXT.as_bytes())?;
+            } else if let Some(bytes) = raw {
+                out.write_all(&bytes)?;
+            } else {
+                out.write_all(row.get_ref(2)?.as_bytes().unwrap_or_default())?;
+            }
+            out.write_all(b"\n")?;
+            written += 1;
         }
-        Ok(out)
+        Ok(written)
     }
 
     /// Look up a single session row. Test only. The app's tests read it
@@ -374,6 +433,27 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn open_logs_end_at_a_quit_or_after_a_crash() {
+        let mut s = store();
+        let done = s.start_session("h", 1, 0).unwrap();
+        s.end_session(done, 50).unwrap();
+        let crashed = s.start_session("h", 1, 100).unwrap();
+        s.append(crashed, 140, "Tolliver nods.", None).unwrap();
+        s.append(crashed, 170, "Tolliver leaves north.", None)
+            .unwrap();
+        let empty = s.start_session("h", 1, 200).unwrap();
+        assert_eq!(s.end_crashed_sessions().unwrap(), 2);
+        let ended = |s: &LogStore, id| s.get_session(id).unwrap().unwrap().ended_at_ms;
+        assert_eq!(ended(&s, done), Some(50));
+        assert_eq!(ended(&s, crashed), Some(170));
+        assert_eq!(ended(&s, empty), Some(200));
+        let live = s.start_session("h", 1, 300).unwrap();
+        assert_eq!(s.end_open_sessions(400).unwrap(), 1);
+        assert_eq!(ended(&s, live), Some(400));
+        assert_eq!(ended(&s, crashed), Some(170));
+    }
+
+    #[test]
     fn append_batch_empty_is_noop() {
         let mut s = store();
         let id = s.start_session("h", 1, 0).unwrap();
@@ -387,7 +467,7 @@ pub(crate) mod tests {
         let a = s.start_session("a", 1, 100).unwrap();
         let b = s.start_session("b", 2, 200).unwrap();
         let c = s.start_session("c", 3, 150).unwrap();
-        let rows = s.list_sessions(0, false).unwrap();
+        let rows = s.list_sessions(0, &Scope::default()).unwrap();
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![b, c, a]);
     }
 
@@ -411,6 +491,38 @@ pub(crate) mod tests {
         assert_eq!(plain, "red\nplain\n");
         let ansi = s.export_session(id, true).unwrap();
         assert_eq!(ansi, "\x1b[31mred\x1b[0m\nplain\n");
+    }
+
+    #[test]
+    fn export_a_span_of_time_across_logs() {
+        let mut s = store();
+        let a = s.start_session("h", 1, 0).unwrap();
+        s.append(a, 100, "old", None).unwrap();
+        s.end_session(a, 150).unwrap();
+        let b = s.start_session("h", 1, 900).unwrap();
+        let c = s.start_session("other", 1, 900).unwrap();
+        s.append_raw(b, 1_000, b"\x1b[33mOrla waves.\x1b[0m")
+            .unwrap();
+        s.append(c, 1_001, "elsewhere", None).unwrap();
+        s.append(b, 1_002, "> wave", None).unwrap();
+        let scope = Scope {
+            world: Some(("h".into(), 1)),
+            since_ms: Some(500),
+            ..Scope::default()
+        };
+        let mut plain = Vec::new();
+        assert_eq!(s.export_scope(&scope, false, false, &mut plain).unwrap(), 2);
+        assert_eq!(plain, b"Orla waves.\n> wave\n");
+        let mut ansi = Vec::new();
+        s.export_scope(&scope, true, false, &mut ansi).unwrap();
+        assert_eq!(ansi, b"\x1b[33mOrla waves.\x1b[0m\n> wave\n");
+        let mut none = Vec::new();
+        assert_eq!(
+            s.export_scope(&Scope::log(99), false, false, &mut none)
+                .unwrap(),
+            0
+        );
+        assert_eq!(none, Vec::<u8>::new());
     }
 
     #[test]
@@ -515,14 +627,18 @@ pub(crate) mod tests {
     #[test]
     fn list_sessions_can_hide_local_sessions() {
         let (s, mud, later) = store_with_local_sessions();
-        assert_eq!(s.list_sessions(0, false).unwrap().len(), 5);
-        let rows = s.list_sessions(0, true).unwrap();
+        assert_eq!(s.list_sessions(0, &Scope::default()).unwrap().len(), 5);
+        let hidden = Scope {
+            hide_local: true,
+            ..Scope::default()
+        };
+        let rows = s.list_sessions(0, &hidden).unwrap();
         assert_eq!(
             rows.iter().map(|r| r.id).collect::<Vec<_>>(),
             vec![later, mud]
         );
         assert!(rows.iter().all(|r| r.line_count == 3));
-        let capped = s.list_sessions(1, true).unwrap();
+        let capped = s.list_sessions(1, &hidden).unwrap();
         assert_eq!(capped.iter().map(|r| r.id).collect::<Vec<_>>(), vec![later]);
     }
 

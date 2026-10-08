@@ -532,6 +532,21 @@ pub(crate) struct UiConfig {
     /// only while on.
     #[serde(default, skip_serializing_if = "is_false")]
     pub snoop_folded: bool,
+    /// Log sessions: the session log keeps every line this profile's
+    /// sessions show (D34). None until you choose, which logs every
+    /// connection but one to this computer, see [`logs_connection`].
+    /// Your choice always wins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_sessions: Option<bool>,
+    /// Scrollback size: how many lines both renderers keep above the
+    /// screen and the scrollback file keeps for the next launch (D40).
+    /// From 1,000 to 100,000, and 10,000, the default, is not written.
+    #[serde(
+        default = "default_scrollback_lines",
+        deserialize_with = "deserialize_scrollback_lines",
+        skip_serializing_if = "is_default_scrollback_lines"
+    )]
+    pub scrollback_lines: u32,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -975,6 +990,51 @@ where
     lenient_affects_hours(deser, DEFAULT_AFFECTS_ALMOST_GONE_HOURS)
 }
 
+/// Whether a connection to `host` writes the session log: your Log
+/// sessions choice, or until you choose, every host but this computer,
+/// such as a test server run beside Vosh (D34).
+pub(crate) fn logs_connection(ui: &UiConfig, host: &str) -> bool {
+    ui.log_sessions
+        .unwrap_or_else(|| !vosh_log::is_local_host(host))
+}
+
+/// The lines of scrollback each terminal keeps until you pick another
+/// Scrollback size, the 10,000 both renderers kept before it (D40).
+pub(crate) const DEFAULT_SCROLLBACK_LINES: u32 = 10_000;
+
+fn default_scrollback_lines() -> u32 {
+    DEFAULT_SCROLLBACK_LINES
+}
+
+fn is_default_scrollback_lines(lines: &u32) -> bool {
+    *lines == DEFAULT_SCROLLBACK_LINES
+}
+
+/// Hold a scrollback size to 1,000 to 100,000 lines, the most the native
+/// grid keeps.
+pub(crate) fn coerce_scrollback_lines(lines: u32) -> u32 {
+    lines.clamp(1_000, 100_000)
+}
+
+/// Read the scrollback size leniently, so a hand edit never stops a
+/// profile loading. A number holds to its range, and anything else reads
+/// as the default.
+pub(crate) fn deserialize_scrollback_lines<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_scrollback_lines(u32::try_from(n.max(0)).unwrap_or(u32::MAX)),
+        Raw::Other(_) => DEFAULT_SCROLLBACK_LINES,
+    })
+}
+
 /// The share of the terminal column a snoop split takes until you
 /// drag it (SN7).
 pub(crate) const DEFAULT_SNOOP_SHARE: f64 = 0.4;
@@ -1153,6 +1213,8 @@ impl Default for UiConfig {
             affects_almost_gone_hours: DEFAULT_AFFECTS_ALMOST_GONE_HOURS,
             snoop_share: DEFAULT_SNOOP_SHARE,
             snoop_folded: false,
+            log_sessions: None,
+            scrollback_lines: DEFAULT_SCROLLBACK_LINES,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -2290,6 +2352,46 @@ name = "haste"
         let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
         assert!((old.ui.snoop_share - DEFAULT_SNOOP_SHARE).abs() < f64::EPSILON);
         assert!(!old.ui.snoop_folded);
+    }
+
+    #[test]
+    fn log_sessions_logs_every_world_but_this_computer_until_you_choose() {
+        let mut ui = UiConfig::default();
+        assert!(logs_connection(&ui, "play.theforsakenlands.com"));
+        assert!(!logs_connection(&ui, "127.0.0.1"));
+        assert!(!logs_connection(&ui, "LocalHost"));
+        ui.log_sessions = Some(true);
+        assert!(logs_connection(&ui, "localhost"));
+        ui.log_sessions = Some(false);
+        assert!(!logs_connection(&ui, "play.theforsakenlands.com"));
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("log_sessions"));
+        config.ui.log_sessions = Some(false);
+        assert!(config.to_toml().unwrap().contains("log_sessions = false"));
+        assert_eq!(through_toml(&config.ui).log_sessions, Some(false));
+    }
+
+    #[test]
+    fn scrollback_size_is_written_only_off_its_default_and_holds_to_its_range() {
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("scrollback_lines"));
+        config.ui.scrollback_lines = 50_000;
+        assert!(config
+            .to_toml()
+            .unwrap()
+            .contains("scrollback_lines = 50000"));
+        assert_eq!(through_toml(&config.ui).scrollback_lines, 50_000);
+        let read = |value: &str| {
+            ProfileConfig::from_toml(&format!("[ui]\nscrollback_lines = {value}\n"))
+                .unwrap()
+                .ui
+                .scrollback_lines
+        };
+        assert_eq!(read("25000"), 25_000);
+        assert_eq!(read("10"), 1_000);
+        assert_eq!(read("-4"), 1_000);
+        assert_eq!(read("9000000000"), 100_000);
+        assert_eq!(read("\"lots\""), DEFAULT_SCROLLBACK_LINES);
     }
 
     #[test]

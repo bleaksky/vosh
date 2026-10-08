@@ -52,6 +52,7 @@ describe('the Settings sections that link to help', () => {
       'characters-and-data.profiles',
       'characters-and-data.search-logs',
       'make-it-yours.switch-themes',
+      'play.scroll-back',
       'shape.group-affects',
       'shape.prompt-show',
       'tick.tick-timer',

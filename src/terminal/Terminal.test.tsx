@@ -393,3 +393,36 @@ describe('a theme change on a pane xterm draws', () => {
     await act(async () => root.unmount());
   });
 });
+
+describe('Scrollback size', () => {
+  it('reaches the xterm it has without building another', async () => {
+    const { Terminal } = await import('./Terminal');
+    bus.written.clear();
+    const ready: object[] = [];
+    const pane = (scrollback: number) =>
+      createElement(Terminal, {
+        session: 1,
+        fontFamily: 'monospace',
+        fontSize: 13,
+        lineHeight: 1.2,
+        themeTerminalColors: false,
+        scrollback,
+        onReady: (handle) => ready.push(handle),
+      });
+    const root = createRoot(doc.createElement('div') as unknown as HTMLElement);
+    await act(async () => root.render(pane(10_000)));
+    const [term] = [...bus.written.keys()] as { options: Record<string, unknown> }[];
+    expect(term.options.scrollback).toBe(10_000);
+    const before = loads();
+
+    await act(async () => root.render(pane(1_000)));
+    expect(term.options.scrollback).toBe(1_000);
+    await act(async () => root.render(pane(25_000)));
+    expect(term.options.scrollback).toBe(25_000);
+    // The same xterm, ready once, and its history stays as it is.
+    expect(bus.written.size).toBe(1);
+    expect(ready).toHaveLength(1);
+    expect(loads()).toBe(before);
+    await act(async () => root.unmount());
+  });
+});

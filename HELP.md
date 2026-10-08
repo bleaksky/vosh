@@ -240,6 +240,8 @@ Scrollback opens in a split above the live terminal, so old output stays readabl
 
 The live tail never scrolls away while the split is open. New output keeps landing there, and the lines you type show in the history too, so the record stays continuous.
 
+The terminal keeps 10,000 lines to scroll back through. To keep more or fewer, open Settings, choose General, and pick a size from 1,000 to 100,000 lines in `Scrollback size`. Both renderers and the scrollback Vosh restores at your next launch follow it, and a smaller size drops the oldest lines. Each character keeps its own. Times stay in the session log, under Settings, General, then `Search logs…`.
+
 Turn on `Collapse repeated lines` in Settings under Appearance, then Terminal text, and a line the game sends again and again takes one row. A line that reads exactly as the line right above it, colors included, joins it, and the row shows a gray count in front, like `(3) You are hungry.` The count climbs in place as more arrive. Any other line ends the run, a blank one too, and so do the lines you type, a reply from Vosh itself and a prompt that stays in the text. A pinned prompt leaves the text, so a run goes on past it. Type `compact` in Aabahran to drop the blank line before each prompt, and a run goes on from one round to the next. Your session log keeps every line, and your triggers fire on each one. It is off until you turn it on.
 
 Two rows under it set what collapses around a fight. `In a fight` covers every line that arrives while you are fighting, and starts on `Collapse`. Pick `Show every line` and each line of a fight keeps its own row. `Attack lines` covers each hit and miss the game shows you, yours, the ones on you and the ones you watch, in a fight or not. It starts on `Show every line`, so two blows show as two lines and never as `(2) Your slash DISMEMBERS a Blackwatch guard!`, where the count is easy to miss. While `In a fight` shows every line, attack lines show every line too, and the row says so.
@@ -945,13 +947,15 @@ Vosh logs every session automatically and searches the store with regular expres
 - Open Settings, choose General, and click `Search logs…` in the Session logs section. The row counts your saved logs and lines.
 - Type a pattern in the search field. Patterns are regular expressions, and the view searches as you type.
 - Click `Aa` for case sensitive matching.
-- Pick a log in the menu at the right to search only that one. `All logs` searches everything.
+- Pick what to search in the menu at the right. The view opens on `Last 7 days`. `This session` reads what the selected session saved since Vosh opened, and `Last 30 days` and `All time` reach further back. Each one reads the world the selected session dials. Under `One log`, pick a single connection to search only that one.
 
 The view shows the newest 500 matches under day headings, oldest first, so it reads like the terminal. The count beside the pattern reads like `Newest 500 of 2,423 lines`, and earlier matches load as you scroll up. Each line keeps its original colors, and your matches are marked the way the find bar marks them. With no pattern the view shows the newest lines. Click `General` in the breadcrumb to go back.
 
 Example. The pattern `dragon|wyvern` finds lines containing either word.
 
-With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text. Connections to `127.0.0.1` and `localhost` stay out of the view and the counts. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
+To keep a copy outside Vosh, click the save button left of the menu and choose `Plain text (.txt)` or `With colors (.log)`. Vosh saves every line the menu picks, oldest first, to your Downloads folder with a name like `Vosh log, last 7 days.txt`, and the count beside the pattern names the file. A `.log` keeps the game's colors, so `less -R` or `cat` in a terminal shows them. A file you save shows `> (hidden)` for every line `#logs forget-passwords` would clean, so it never holds a password, even one the log still keeps. With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text. The count on General leaves out connections to `127.0.0.1` and `localhost`. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup. To leave a character out, turn off `Log sessions` in the Session logs section, and its sessions save nothing from the next connect on. A connection to `127.0.0.1` or `localhost`, like a test server you run beside Vosh, saves nothing until you turn `Log sessions` on.
+
+`Keep logs for` in the same section keeps your logs `Forever` until you pick `1 year`, `90 days` or `30 days`. Then once a day Vosh deletes each log that ended longer ago than that, whole, and gives the space on disk back a little at a time. A heavy week of play takes about 85 MB. The first time Vosh deletes a log from a file an older version wrote, it rebuilds the file once, which takes a few seconds on a large log. Your game keeps going while it does, and the log writes the lines it held back once the rebuild ends. A search waits until it finishes, and so does a connect, even the reconnect after a drop. Every character shares this one, since they share one log file.
 
 The log keeps what the game sent and each line you sent, marked `> `. Each line of a snoop starts with the name of the player you snooped, like `Tolliver|`, so the pattern `^Tolliver\|` finds what Tolliver's screen showed. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a log saved before you updated can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
 
@@ -1023,7 +1027,7 @@ Inside that folder.
 - `global.toml` holds cross profile UI preferences.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
-- `scrollback.txt` keeps the last 10,000 terminal lines of the first session you opened across restarts, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.
+- `scrollback.txt` keeps the newest terminal lines of the first session you opened across restarts, as many as `Scrollback size` says, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Vosh writes each one when a connection ends, every few minutes while it runs, and as you quit, so a crash loses at most a few minutes of it. Closing a session deletes its file.
 - `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
 - `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.

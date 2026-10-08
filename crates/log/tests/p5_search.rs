@@ -29,6 +29,11 @@
 //! name as the run prints it, such as `rare name` or `common word, page
 //! 2`. The test then times that step alone.
 //!
+//! In release each first page must come in under a second, fresh, the
+//! Phase 10 demo. `p5_last_7_days_of_eight_weeks` holds the demo over
+//! eight weeks of the same play too, searching the last 7 days of the
+//! world, as the view opens (D35).
+//!
 //! The numbers alone guard nothing, so each search is also held to what
 //! a plain scan of the week finds. The newest 500 matches, oldest first,
 //! with their line ids, the count in scope, the local sessions left
@@ -39,7 +44,7 @@ use std::time::{Duration, Instant};
 
 use regex::RegexBuilder;
 use rusqlite::{Connection, OpenFlags};
-use vosh_log::{LogEntry, LogStore, SearchOptions, SearchPage};
+use vosh_log::{LogEntry, LogStore, Scope, SearchOptions, SearchPage};
 
 /// Searches of each query on the connection after the fresh one.
 const REPS: usize = 5;
@@ -326,24 +331,40 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-/// One line of the week, kept to check what each search finds. Its line
-/// id is its place in the week plus one.
+/// One line of the play, kept to check what each search finds. Its line
+/// id is its place in the kept rows plus [`Week::first`].
 struct Row {
     session: i64,
+    ts: i64,
     text: String,
 }
 
-/// The week as it went into the log, or would have.
+/// The play as it went into the log, or would have: a week, or the
+/// last week of eight.
 struct Week {
+    /// The rows at or after the time the writer kept from.
     rows: Vec<Row>,
+    /// The line id of the first kept row.
+    first: i64,
+    /// Every row written, kept or not.
+    total: i64,
     /// Each session's id and whether it went to this machine.
     sessions: Vec<(i64, bool)>,
+}
+
+impl Week {
+    /// The kept row with line id `id`.
+    fn row(&self, id: i64) -> &Row {
+        &self.rows[(id - self.first) as usize]
+    }
 }
 
 /// Where the week's rows go. With no store it only keeps them, for a
 /// log a run before wrote.
 struct Writer {
     store: Option<LogStore>,
+    /// Rows before this time go in the log but are not kept.
+    keep_from: i64,
     batch: Vec<LogEntry>,
     week: Week,
 }
@@ -373,10 +394,17 @@ impl Writer {
     }
 
     fn push(&mut self, entry: LogEntry) {
-        self.week.rows.push(Row {
-            session: entry.session_id,
-            text: entry.text.clone(),
-        });
+        self.week.total += 1;
+        if entry.ts_ms >= self.keep_from {
+            if self.week.rows.is_empty() {
+                self.week.first = self.week.total;
+            }
+            self.week.rows.push(Row {
+                session: entry.session_id,
+                ts: entry.ts_ms,
+                text: entry.text.clone(),
+            });
+        }
         if self.store.is_some() {
             self.batch.push(entry);
         }
@@ -540,18 +568,27 @@ impl Play<'_> {
     }
 }
 
-/// Play the week into `store`, or only keep it when `store` is None.
-fn generate(store: Option<LogStore>) -> Week {
+/// When the play starts.
+const START_MS: i64 = 1_790_000_000_000;
+
+const DAY_MS: i64 = 86_400_000;
+
+/// Play `days` days into `store`, or only keep them when `store` is
+/// None, keeping the rows from `keep_from` on to check against.
+fn generate(store: Option<LogStore>, days: u64, keep_from: i64) -> Week {
     let mut w = Writer {
         store,
+        keep_from,
         batch: Vec::new(),
         week: Week {
             rows: Vec::new(),
+            first: 1,
+            total: 0,
             sessions: Vec::new(),
         },
     };
-    let start_ms: i64 = 1_790_000_000_000;
-    for day in 0..DAYS {
+    let start_ms = START_MS;
+    for day in 0..days {
         for s in 0..SESSIONS_PER_DAY {
             let begin = start_ms + (day as i64) * 86_400_000 + (s as i64) * 6 * 3_600_000;
             // A short local test session now and then, which the log
@@ -664,9 +701,12 @@ fn options(case_sensitive: bool, session_id: Option<i64>, before: Option<i64>) -
     SearchOptions {
         case_sensitive,
         max_results: PAGE,
-        session_id,
+        scope: Scope {
+            logs: session_id.map(|id| vec![id]),
+            hide_local: true,
+            ..Scope::default()
+        },
         before_line_id: before,
-        hide_local: true,
     }
 }
 
@@ -687,10 +727,14 @@ fn scan(
     let mut hits = Vec::new();
     let mut matched = 0u64;
     for (at, row) in week.rows.iter().enumerate().rev() {
-        let id = at as i64 + 1;
-        if o.session_id.is_some_and(|s| s != row.session)
+        let id = at as i64 + week.first;
+        if o.scope
+            .logs
+            .as_ref()
+            .is_some_and(|l| !l.contains(&row.session))
             || o.before_line_id.is_some_and(|b| id >= b)
-            || (o.hide_local && local(row.session))
+            || o.scope.since_ms.is_some_and(|since| row.ts < since)
+            || ((o.scope.hide_local || o.scope.world.is_some()) && local(row.session))
             || !regex.is_match(&row.text)
         {
             continue;
@@ -728,7 +772,7 @@ fn check(
     }
     assert_eq!(page.total, total, "{what}: the count");
     for hit in &page.hits {
-        let row = &week.rows[(hit.line_id - 1) as usize];
+        let row = week.row(hit.line_id);
         assert_eq!(hit.session_id, row.session, "{what}: a hit's session");
         assert_ne!(hit.host, "127.0.0.1", "{what}: a local hit");
     }
@@ -795,7 +839,7 @@ fn holds(path: &Path, week: &Week) -> bool {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("the sizes");
-    sessions == week.sessions.len() as i64 && last == Some(week.rows.len() as i64)
+    sessions == week.sessions.len() as i64 && last == Some(week.total)
 }
 
 /// Removes the temporary folder when the test ends, passed or not.
@@ -837,7 +881,7 @@ fn p5_search_a_heavy_week() {
     let runs = |step: &str| only.is_none() || only.as_deref() == Some(step);
 
     let week = if path.exists() {
-        let week = generate(None);
+        let week = generate(None, DAYS, i64::MIN);
         assert!(
             holds(&path, &week),
             "{} holds another log. Remove it and run again.",
@@ -847,7 +891,7 @@ fn p5_search_a_heavy_week() {
         week
     } else {
         let store = LogStore::open(&path).expect("the log");
-        let (took, week) = timed(|| generate(Some(store)));
+        let (took, week) = timed(|| generate(Some(store), DAYS, i64::MIN));
         println!(
             "P5 wrote the week in {:.1} s, {:.0} rows/s",
             took.as_secs_f64(),
@@ -880,7 +924,17 @@ fn p5_search_a_heavy_week() {
     // each session's line count.
     if runs(SESSION_LIST) {
         let store = LogStore::open(&path).expect("the log");
-        let (took, rows) = timed(|| store.list_sessions(0, true).expect("the sessions"));
+        let (took, rows) = timed(|| {
+            store
+                .list_sessions(
+                    0,
+                    &Scope {
+                        hide_local: true,
+                        ..Scope::default()
+                    },
+                )
+                .expect("the sessions")
+        });
         let got: Vec<(i64, i64)> = rows.iter().map(|r| (r.id, r.line_count)).collect();
         let want: Vec<(i64, i64)> = week
             .sessions
@@ -902,6 +956,7 @@ fn p5_search_a_heavy_week() {
         let (times, page) = time_page(&path, q.pattern, &o, true);
         check(&week, q.name, q.pattern, &o, true, &page);
         println!("{}", times.line(q.name, &page));
+        demo(q.name, &times);
     }
 
     // The page before, as the view loads it when you scroll up, with no
@@ -915,5 +970,71 @@ fn p5_search_a_heavy_week() {
         check(&week, PAGE_2, "guard", &o, false, &page);
         assert_eq!(page.hits.len(), PAGE, "a full page before the first");
         println!("{}", times.line(PAGE_2, &page));
+        demo(PAGE_2, &times);
+    }
+}
+
+/// The Phase 10 demo: a release build finds the first page of a search,
+/// with its count, in under a second, fresh. A dev build only prints
+/// its times.
+fn demo(what: &str, times: &Times) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    assert!(
+        times.fresh < Duration::from_secs(1),
+        "{what} took {:.0} ms, over the one second the Phase 10 demo allows",
+        ms(times.fresh)
+    );
+}
+
+/// How many weeks the long log holds.
+const WEEKS: u64 = 8;
+
+/// The Phase 10 demo over a long log: eight weeks of the same heavy
+/// play, about 5.6 million lines, and the searches the view runs when it
+/// opens on Last 7 days of the world you play, each first page with its
+/// count under a second in release (D35). Skipped by default, since
+/// writing the log takes a while. Run it with
+/// `cargo test -p vosh-log --release --test p5_search p5_last_7 -- --ignored --nocapture`.
+#[allow(clippy::cast_precision_loss)]
+#[ignore = "P5 benchmark, run with --ignored"]
+#[test]
+fn p5_last_7_days_of_eight_weeks() {
+    let dir = std::env::temp_dir().join(format!("vosh-p5-weeks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temporary folder");
+    let _temp = TempDir(dir.clone());
+    let path = dir.join("logs.sqlite");
+    let days = WEEKS * DAYS;
+    // The view opens on the 7 days before now, and now is the end of
+    // the play, so the span starts an hour before the last week's first
+    // session.
+    let since = START_MS + (days - DAYS) as i64 * DAY_MS - 3_600_000;
+    let store = LogStore::open(&path).expect("the log");
+    let (took, weeks) = timed(|| generate(Some(store), days, since));
+    let size = std::fs::metadata(&path).map_or(0, |m| m.len());
+    println!(
+        "P5 wrote {WEEKS} weeks in {:.1} s: {} rows, {} in the last 7 days, {:.1} MB",
+        took.as_secs_f64(),
+        weeks.total,
+        weeks.rows.len(),
+        size as f64 / 1e6
+    );
+    for q in SUITE.iter().filter(|q| !q.scoped) {
+        let o = SearchOptions {
+            case_sensitive: q.case_sensitive,
+            max_results: PAGE,
+            scope: Scope {
+                world: Some((GAME_HOST.to_string(), GAME_PORT)),
+                since_ms: Some(since),
+                ..Scope::default()
+            },
+            before_line_id: None,
+        };
+        let (times, page) = time_page(&path, q.pattern, &o, true);
+        let what = format!("{}, last 7 days", q.name);
+        check(&weeks, &what, q.pattern, &o, true, &page);
+        println!("{}", times.line(&what, &page));
+        demo(&what, &times);
     }
 }

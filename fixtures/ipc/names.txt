@@ -22,8 +22,11 @@ command launch_notices_take()
 command loadouts_get_state(profile?)
 command loadouts_set_active(active, profile?)
 command logs_export(sessionId, withAnsi)
-command logs_list_sessions(limit, hideLocal?)
-command logs_search_page(pattern, caseSensitive, maxResults, sessionId?, beforeLineId?, hideLocal, withTotal)
+command logs_keep_get()
+command logs_keep_set(days?)
+command logs_list_sessions(limit, scope, session?)
+command logs_save(scope, session?, withAnsi, name)
+command logs_search_page(pattern, caseSensitive, maxResults, scope, session?, beforeLineId?, withTotal)
 command lua_output_clear(owner?, session?)
 command lua_output_get(session?)
 command lua_panes_get(session?)
@@ -243,6 +246,7 @@ event vosh://profiles-changed app heard
 event vosh://prompt-card-open page heard
 event vosh://prompt-config-changed app heard
 event vosh://readable-highlights-changed page heard
+event vosh://scrollback-lines-changed page heard
 event vosh://session-identity-changed app heard
 event vosh://session-selected app heard
 event vosh://sessions-changed app heard

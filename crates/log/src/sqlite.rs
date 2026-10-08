@@ -51,6 +51,13 @@ impl LogStore {
     /// already exist.
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
+        // A new file gives free pages back in steps from the start, so
+        // Keep logs for never needs to rebuild it (see `retention.rs`).
+        // The setting takes only before the first table.
+        let tables: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| r.get(0))?;
+        if tables == 0 {
+            conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL;")?;
+        }
         configure_connection(&conn)?;
         let store = Self { conn };
         store.migrate()?;

@@ -30,6 +30,9 @@ pub(crate) struct AppState {
     /// can read the whole log, so reads take their own lock and never
     /// hold up the live session. WAL lets both run at once.
     pub(crate) log_reader: SharedLogStore,
+    /// Counts the log searches the view started. A search reads on while
+    /// the count is its own, so the next keystroke's search stops it.
+    pub(crate) log_searches: AtomicU64,
     pub(crate) plugins: SharedPluginManager,
     /// Catalog of named profiles. Loaded (or migrated from the legacy
     /// single-file layout) once at startup; commands mutate it under
@@ -89,6 +92,11 @@ pub(crate) struct AppState {
     /// Where alert banners go, the system's, or in a test build a list
     /// the test reads. See [`crate::alert::banner`].
     pub(crate) banners: crate::alert::banner::Banners,
+    /// In a test build, log a connection to this computer whatever Log
+    /// sessions says, since the fake game runs here. On unless a test
+    /// turns it off to check the switch.
+    #[cfg(test)]
+    pub(crate) log_this_computer: AtomicBool,
     /// In a test build, the clock the redial waits on while a test holds
     /// one: each wait goes to the test, which ends it.
     #[cfg(test)]
@@ -428,6 +436,7 @@ impl Default for AppState {
             sessions: std::sync::Mutex::new(Sessions::default()),
             logs: SharedLogStore::default(),
             log_reader: SharedLogStore::default(),
+            log_searches: AtomicU64::new(0),
             plugins: SharedPluginManager::default(),
             profile_set: Arc::new(Mutex::new(None)),
             affect_file: crate::affects::full::FullFile::default(),
@@ -440,6 +449,8 @@ impl Default for AppState {
             app_data: OnceLock::new(),
             focus: crate::alert::focus::Focus::default(),
             banners: crate::alert::banner::Banners::default(),
+            #[cfg(test)]
+            log_this_computer: AtomicBool::new(true),
             #[cfg(test)]
             redial_clock: std::sync::Mutex::new(None),
             #[cfg(test)]

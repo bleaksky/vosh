@@ -163,6 +163,15 @@ impl TermGrid {
         }
     }
 
+    /// Keep `lines` of history above the screen, dropping the oldest
+    /// past it, as Scrollback size sets it (D40).
+    pub(crate) fn set_history(&mut self, lines: usize) {
+        self.term.set_options(Config {
+            scrolling_history: lines,
+            ..Config::default()
+        });
+    }
+
     /// Note that the grid took output `id` of the prompt stage.
     pub(crate) fn took(&mut self, id: u64) {
         self.taken = self.taken.max(id);
@@ -381,6 +390,9 @@ pub(crate) struct SessionGrid {
     /// Your prompt shows lifted in this session, so each lift draws on a
     /// band.
     prompt_bands: bool,
+    /// The history Scrollback size keeps, None for the grid's own 10,000
+    /// until the session says.
+    history: Option<usize>,
 }
 
 impl SessionGrid {
@@ -404,14 +416,24 @@ impl SessionGrid {
     fn size(&mut self, columns: usize, screen_lines: usize) {
         match self.term.as_mut() {
             Some(grid) => grid.resize(columns, screen_lines),
-            None => self.term = Some(TermGrid::new(columns, screen_lines)),
+            None => self.term = Some(made(self.history, columns, screen_lines)),
         }
     }
 
     /// The grid a write lands in, made at 80 by 24 when no size came yet.
     fn written(&mut self) -> &mut TermGrid {
-        self.term.get_or_insert_with(|| TermGrid::new(80, 24))
+        let history = self.history;
+        self.term.get_or_insert_with(|| made(history, 80, 24))
     }
+}
+
+/// A new grid that keeps `history` lines when Scrollback size set them.
+fn made(history: Option<usize>, columns: usize, screen_lines: usize) -> TermGrid {
+    let mut grid = TermGrid::new(columns, screen_lines);
+    if let Some(lines) = history {
+        grid.set_history(lines);
+    }
+    grid
 }
 
 /// Every session's grid, and the session whose grid shows. One Metal
@@ -461,6 +483,17 @@ pub(crate) fn show(session: SessionId) {
     if let Ok(mut grids) = GRIDS.lock() {
         grids.shown = session;
     }
+}
+
+/// Keep `lines` of history in the grid of `session`, now and in a grid
+/// it makes later (D40).
+pub(crate) fn set_history(session: SessionId, lines: usize) {
+    with_session(session, |held| {
+        held.history = Some(lines);
+        if let Some(grid) = held.term.as_mut() {
+            grid.set_history(lines);
+        }
+    });
 }
 
 /// Drop the grid of `session`, which closed, with its find and its bands.

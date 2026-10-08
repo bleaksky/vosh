@@ -48,7 +48,12 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
         // shared catalog and loadouts in loadout mode. See `load`.
         tauri::async_runtime::block_on(load(state, &path));
         match open_log_store(&path) {
-            Ok(store) => {
+            Ok(mut store) => {
+                // A crash left these open. They end at their last line,
+                // before any connection opens a log.
+                if let Err(e) = store.end_crashed_sessions() {
+                    tracing::warn!(error = %e, "could not end the logs a crash left open");
+                }
                 // Searches read through a second connection so
                 // they never wait on, or hold up, the session
                 // loop's appends. Without it they share the
@@ -66,12 +71,16 @@ pub(crate) fn setup(app: &tauri::App, state: &SharedState) {
                     *logs.lock().await = Some(store);
                     *log_reader.lock().await = reader;
                 });
+                // Keep logs for, now and once a day.
+                crate::logs::retention::start(state);
             }
             Err(e) => {
                 error!(error = %e, "log store failed to open; logging disabled");
             }
         }
         tauri::async_runtime::block_on(start_selected(app.handle(), state, &path));
+        // The scrollback that changed, every few minutes.
+        crate::logs::start_saving_scrollback(state);
     }
     #[cfg(target_os = "macos")]
     {
@@ -379,6 +388,10 @@ pub(crate) async fn show_selection<R: tauri::Runtime>(
 
 /// Read the lines the scrollback file of `session` kept into its ring.
 async fn read_scrollback(session: &Session, app_data: &Path) {
+    // The profile's Scrollback size first, so a ring larger than the
+    // default reads its whole file.
+    let lines = session.lock_profile().await.ui.scrollback_lines;
+    crate::logs::keep_scrollback_lines(session, lines).await;
     let path = paths::scrollback_path(app_data, session.id);
     if let Ok(bytes) = std::fs::read(&path) {
         session.scrollback.lock().await.load_from_bytes(&bytes);

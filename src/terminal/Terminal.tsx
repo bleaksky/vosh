@@ -134,6 +134,8 @@ interface Props {
   /// (src/terminal/xterm/xtermBlink.ts) while WebGL draws the pane. Off, or on the
   /// DOM renderer, it draws it steady.
   blinkText?: boolean;
+  /// Scrollback size, the lines xterm keeps above the screen (D40).
+  scrollback?: number;
 }
 
 // The terminal's palette lives in src/terminal/terminalTheme.ts, which the
@@ -178,6 +180,7 @@ export function Terminal({
   lentRows = 0,
   anchorBottom = false,
   blinkText = false,
+  scrollback = 10_000,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -286,7 +289,7 @@ export function Terminal({
       fontFamily,
       fontSize,
       lineHeight,
-      scrollback: 10000,
+      scrollback,
       allowProposedApi: true,
       convertEol: false,
       // High-precision touchpads emit many small deltaY events per
@@ -914,6 +917,13 @@ export function Terminal({
     if (typeof document === 'undefined' || !document.fonts) return;
     return remeasureWhenLoaded(document.fonts, term, () => paneSizerRef.current?.refitCell());
   }, [fontFamily, fontSize]);
+
+  // Scrollback size changes without rebuilding the terminal. A smaller
+  // size drops the oldest lines.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term && term.options.scrollback !== scrollback) term.options.scrollback = scrollback;
+  }, [scrollback]);
 
   // Apply a line height change without rebuilding the terminal. xterm
   // resizes its cells on the option change. Under the native surface the

@@ -17,6 +17,8 @@ import {
   getUiConfig,
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
+  subscribeScrollbackLinesChanged,
+  DEFAULT_SCROLLBACK_LINES,
   subscribeReadableHighlightsChanged,
   subscribeColorVisionChanged,
   subscribeFitGameColorsChanged,
@@ -89,6 +91,8 @@ interface UiConfigFollow {
   brightBold: boolean;
   /** Whether blinking text blinks now. */
   blinkText: boolean;
+  /** Scrollback size, the lines xterm keeps above the screen. */
+  scrollbackLines: number;
 }
 
 /** Read the UI config at launch and follow it. `onThemesChanged` runs
@@ -152,6 +156,7 @@ export function useUiConfigFollow({
     }
   });
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
+  const [scrollbackLines, setScrollbackLines] = useState(DEFAULT_SCROLLBACK_LINES);
   // Bright bold, which the native grid and the pinned band over it follow.
   const [brightBold, setBrightBold] = useState(false);
   // Blinking text: your choice, undefined until the config loads, and
@@ -178,6 +183,7 @@ export function useUiConfigFollow({
     setBrightBold(cfg.bright_bold);
     sendBrightBold(cfg.bright_bold);
     setBlinkChoice(cfg.blink_text);
+    setScrollbackLines(cfg.scrollback_lines);
     setFitGameColors(cfg.fit_game_colors);
     setColorVision(cfg.color_vision);
     fitThemesInPlay(cfg);
@@ -326,6 +332,9 @@ export function useUiConfigFollow({
   // Settings save broadcasts the Blinking text choice.
   useTauriEvent(subscribeBlinkTextChanged, (value) => setBlinkChoice(value));
 
+  // Settings save broadcasts Scrollback size.
+  useTauriEvent(subscribeScrollbackLinesChanged, setScrollbackLines);
+
   // Settings save broadcasts Fit game colors. The terminal, the prompt
   // band and the panes draw from it at once.
   useTauriEvent(subscribeFitGameColorsChanged, setFitGameColors);
@@ -382,5 +391,6 @@ export function useUiConfigFollow({
     themeTerminalColors,
     brightBold,
     blinkText,
+    scrollbackLines,
   };
 }

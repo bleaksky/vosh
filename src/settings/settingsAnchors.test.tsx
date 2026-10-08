@@ -214,6 +214,8 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
       return {};
     case 'logs_list_sessions':
       return [];
+    case 'logs_keep_get':
+      return null;
     case 'logs_search_page':
       return { hits: [], total: 0 };
     case 'prompt_config_get':

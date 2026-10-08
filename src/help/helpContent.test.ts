@@ -126,7 +126,7 @@ describe('the help on searching the logs', () => {
     for (const line of [
       'A log is the record of one connection, so a session that connects three times saves three.',
       'The row counts your saved logs and lines.',
-      'Pick a log in the menu at the right to search only that one. `All logs` searches everything.',
+      'Under `One log`, pick a single connection to search only that one.',
       'With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text.',
     ]) {
       expect(text).toContain(line);
@@ -1410,7 +1410,7 @@ describe('the help on what each session keeps and what its profile shares', () =
       'Which loadouts are on belongs to the profile.',
     );
     expect(body('fix-it.data-on-disk')).toContain(
-      'each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Closing a session deletes its file.',
+      'each later session keeps its own in a file with its number, such as `scrollback-2.txt`.',
     );
     expect(body('characters-and-data.profiles')).toContain(
       "`Default plays in Tolliver's session, Build in Orla's.`",

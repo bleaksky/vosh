@@ -101,6 +101,7 @@ export const KEEP_LAST_CHANGED = 'vosh://keep-last-changed';
 export const THEME_TERMINAL_COLORS_CHANGED = 'vosh://theme-terminal-colors-changed';
 export const BRIGHT_BOLD_CHANGED = 'vosh://bright-bold-changed';
 export const BLINK_TEXT_CHANGED = 'vosh://blink-text-changed';
+export const SCROLLBACK_LINES_CHANGED = 'vosh://scrollback-lines-changed';
 export const FIT_GAME_COLORS_CHANGED = 'vosh://fit-game-colors-changed';
 export const COLOR_VISION_CHANGED = 'vosh://color-vision-changed';
 export const READABLE_HIGHLIGHTS_CHANGED = 'vosh://readable-highlights-changed';

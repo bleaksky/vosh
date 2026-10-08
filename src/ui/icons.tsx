@@ -203,6 +203,19 @@ export function CopyIcon(props: IconProps) {
   );
 }
 
+/** An arrow down onto a tray, the button that saves a file. */
+export function SaveFileIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 2.75v7.5M4.75 7l3.25 3.25L11.25 7" {...scale(props.size)} />
+      <path
+        d="M2.75 10.75v1.5c0 .83.67 1.5 1.5 1.5h7.5c.83 0 1.5-.67 1.5-1.5v-1.5"
+        {...scale(props.size)}
+      />
+    </Glyph>
+  );
+}
+
 /** A stroked triangle that points right, the button that plays an
  *  alert tone. */
 export function PlayIcon(props: IconProps) {

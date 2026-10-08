@@ -129,6 +129,37 @@ pub(crate) struct ProfilesIndex {
     /// drops it on its next save.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub get_started: Option<GetStarted>,
+    /// Keep logs for, in days, once for the whole install, since every
+    /// profile shares logs.sqlite (D34). None keeps logs forever and
+    /// stays out of the file. An older build drops it on its next save.
+    /// A hand edit outside [`KEEP_DAYS`] reads as forever.
+    #[serde(
+        default,
+        deserialize_with = "lenient_keep_logs_days",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub keep_logs_days: Option<u32>,
+}
+
+/// The spans Keep logs for offers besides forever, in days.
+pub(crate) const KEEP_DAYS: [u32; 3] = [365, 90, 30];
+
+/// Read Keep logs for as one of [`KEEP_DAYS`], or forever for anything
+/// else a hand edit left, such as 0, 45 or "90", so it never deletes
+/// every log or loses the rest of profiles.toml. The next save drops it.
+fn lenient_keep_logs_days<'de, D>(deser: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = toml::Value::deserialize(deser)?;
+    let days = raw
+        .as_integer()
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|d| KEEP_DAYS.contains(d));
+    if days.is_none() {
+        tracing::warn!(value = %raw, "keep_logs_days is not a span Vosh offers, keeping logs forever");
+    }
+    Ok(days)
 }
 
 /// Get started as profiles.toml keeps it, once for the whole install.
@@ -289,6 +320,7 @@ impl ProfileSet {
                 at_launch: true,
                 done: Vec::new(),
             }),
+            keep_logs_days: None,
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -643,6 +675,22 @@ impl ProfileSet {
             .replace(GetStarted { at_launch, done });
         if let Err(e) = self.save_index() {
             self.index.get_started = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// How many days Vosh keeps a log, or None to keep it forever.
+    pub(crate) fn keep_logs_days(&self) -> Option<u32> {
+        self.index.keep_logs_days
+    }
+
+    /// Keep logs for `days`, or forever with None, and save the index.
+    /// An index that does not save keeps what it held.
+    pub(crate) fn set_keep_logs_days(&mut self, days: Option<u32>) -> Result<(), ProfileSetError> {
+        let before = std::mem::replace(&mut self.index.keep_logs_days, days);
+        if let Err(e) = self.save_index() {
+            self.index.keep_logs_days = before;
             return Err(e);
         }
         Ok(())
@@ -1267,5 +1315,27 @@ pub(crate) mod tests {
         assert!(set.create("").is_err());
         assert!(set.create("    ").is_err());
         assert!(set.create("with:colon").is_err());
+    }
+
+    #[test]
+    fn a_hand_edited_keep_logs_days_reads_as_forever() {
+        let load = |days: &str| {
+            let dir = tempdir().unwrap();
+            std::fs::write(
+                paths::profiles_index_path(dir.path()),
+                format!(
+                    "active = \"Healer\"\nkeep_logs_days = {days}\n\n[[profile]]\nname = \"default\"\n\n[[profile]]\nname = \"Healer\"\n"
+                ),
+            )
+            .unwrap();
+            ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap()
+        };
+        for days in ["0", "45", "\"90\"", "-1"] {
+            let set = load(days);
+            assert_eq!(set.keep_logs_days(), None, "{days}");
+            assert_eq!(set.active_name(), "Healer", "{days}");
+            assert_eq!(set.list().len(), 2, "{days}");
+        }
+        assert_eq!(load("30").keep_logs_days(), Some(30));
     }
 }

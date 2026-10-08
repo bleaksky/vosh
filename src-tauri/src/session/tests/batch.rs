@@ -1,4 +1,4 @@
-//! The frame and the log rows a burst of reads owes.
+//! The frame, the log rows and the name a burst of reads owes.
 
 use super::{PerfCounters, Settle, FRAME_BUDGET};
 
@@ -50,5 +50,24 @@ fn the_waiting_rows_go_in_once_in_the_order_they_came() {
     assert_eq!(
         store.export_session(id, false).expect("the rows"),
         "a room\n> east\nthe next room\n"
+    );
+}
+
+#[test]
+fn the_character_waits_with_the_rows_and_goes_in_with_them() {
+    let mut store = vosh_log::LogStore::in_memory().expect("a log");
+    let id = store.start_session("h", 1, 0).expect("a session");
+    let mut settle = Settle::default();
+    assert!(!settle.owes_log());
+    settle.queue_name((id, "Orla".to_string()));
+    assert!(settle.owes_log(), "a name alone is owed to the log");
+    assert!(!settle.log_overdue());
+    std::thread::sleep(FRAME_BUDGET);
+    assert!(settle.log_overdue(), "the name waited out the budget");
+    settle.write_log(Some(&mut store), &mut PerfCounters::default());
+    assert!(!settle.owes_log());
+    assert_eq!(
+        store.session_character(id).expect("the row").as_deref(),
+        Some("Orla")
     );
 }

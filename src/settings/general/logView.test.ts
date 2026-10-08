@@ -5,8 +5,14 @@ import {
   logColorCss,
   logCountText,
   logDay,
+  logEmptyText,
+  isLocalHost,
+  logFileName,
   logMatcher,
   logPalette,
+  logPlaceholder,
+  logRangeScope,
+  LOG_RANGES,
   logSpanCss,
   logSessionLabel,
   logTime,
@@ -28,6 +34,54 @@ describe('savedLogsText', () => {
     expect(savedLogsText(1, 1, 'PC')).toBe('1 log and 1 line on this PC.');
     expect(savedLogsText(0, 0, 'Mac')).toBe('Vosh has not saved a log on this Mac yet.');
     expect(savedLogsText(0, 0, 'computer')).toBe('Vosh has not saved a log on this computer yet.');
+  });
+});
+
+describe('isLocalHost', () => {
+  it('reads a host the way vosh-log does', () => {
+    expect(isLocalHost('127.0.0.1')).toBe(true);
+    expect(isLocalHost(' LocalHost. ')).toBe(true);
+    expect(isLocalHost('play.theforsakenlands.com')).toBe(false);
+    expect(isLocalHost('localhost.example.org')).toBe(false);
+    expect(isLocalHost('127.0.0.2')).toBe(false);
+  });
+});
+
+describe('the ranges the view reads', () => {
+  const world = { host: 'play.theforsakenlands.com', port: 9009 };
+
+  it('opens on the last 7 days and offers the four ranges in order', () => {
+    expect(LOG_RANGES.map((r) => r.label)).toEqual([
+      'This session',
+      'Last 7 days',
+      'Last 30 days',
+      'All time',
+    ]);
+  });
+
+  it('reads the world the session dials over each range', () => {
+    const day = 86_400_000;
+    expect(logRangeScope('week', world, NOW)).toEqual({ ...world, sinceMs: NOW - 7 * day });
+    expect(logRangeScope('month', world, NOW)).toEqual({ ...world, sinceMs: NOW - 30 * day });
+    expect(logRangeScope('all', world, NOW)).toEqual(world);
+    expect(logRangeScope('session', world, NOW)).toEqual({ ...world, thisSession: true });
+  });
+
+  it('names the file Save as file writes', () => {
+    expect(logFileName('week', null)).toBe('Vosh log, last 7 days');
+    expect(logFileName('session', null)).toBe('Vosh log, this session');
+    expect(logFileName('all', null)).toBe('Vosh log, all time');
+    expect(logFileName(null, at(10, 8, 7, 5))).toBe('Vosh log, 2026-10-08 07.05');
+  });
+
+  it('says what it searches and what it found nothing in', () => {
+    expect(logPlaceholder('week')).toBe('Search the last 7 days');
+    expect(logPlaceholder('session')).toBe('Search this session');
+    expect(logPlaceholder('all')).toBe('Search every log');
+    expect(logPlaceholder(null)).toBe('Search this log');
+    expect(logEmptyText('month')).toBe('Nothing saved from this world in the last 30 days.');
+    expect(logEmptyText('session')).toBe('This session has saved nothing since Vosh opened.');
+    expect(logEmptyText(null)).toBe('This log has no saved lines.');
   });
 });
 
