@@ -17,6 +17,24 @@ export interface MenuPlacement {
   preferFlip?: boolean;
 }
 
+/** A width and a height, of a menu or of the window. */
+export interface MenuSize {
+  width: number;
+  height: number;
+}
+
+/** Where a menu sits, and how tall it may grow before it scrolls. */
+export interface MenuSpot {
+  left: number;
+  top: number;
+  maxHeight?: number;
+}
+
+/** Places a menu of `size` in a window of `viewport`, for a menu whose
+ *  spot a MenuPlacement cannot say, as one hung under a title band
+ *  button. */
+export type MenuPlacer = (size: MenuSize, viewport: MenuSize) => MenuSpot;
+
 // Space kept between a menu and the window edge.
 const EDGE = 8;
 // Space between a menu and a submenu beside it.
@@ -41,6 +59,25 @@ export function menuBelow(button: MenuBox): MenuPlacement {
     y: button.bottom + BUTTON_GAP,
     flipX: button.right,
     flipY: button.top - BUTTON_GAP,
+  };
+}
+
+/** A menu hung `gap` under `anchor`, centered under it or with the
+ *  right edges lined up, kept inside the window. It never runs past the
+ *  window's foot, and stops there 8 above it. With no anchor it sits at
+ *  the window's top left. The title band's menus hang here. */
+export function menuUnder(
+  anchor: { getBoundingClientRect: () => MenuBox } | null,
+  align: 'center' | 'end',
+  gap: number,
+): MenuPlacer {
+  return (size, viewport) => {
+    if (!anchor) return { left: EDGE, top: EDGE, maxHeight: viewport.height - 2 * EDGE };
+    const r = anchor.getBoundingClientRect();
+    const ideal = align === 'center' ? (r.left + r.right - size.width) / 2 : r.right - size.width;
+    const left = Math.round(Math.max(EDGE, Math.min(ideal, viewport.width - size.width - EDGE)));
+    const top = Math.round(r.bottom + gap);
+    return { left, top, maxHeight: viewport.height - top - EDGE };
   };
 }
 

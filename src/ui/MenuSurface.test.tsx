@@ -1,7 +1,9 @@
-import type { ReactElement, ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, createElement, type ReactElement, type ReactNode } from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 import { HOLD_MS, notePointer, resetMenuAim } from './menuAim';
-import { MenuItem } from './MenuSurface';
+import type { MenuPlacement, MenuPlacer } from './menuPlacement';
+import { MenuItem, MenuSurface } from './MenuSurface';
 
 // MenuItem uses no hooks, so a test can call it and hand its button the
 // events a player sends, with no page to render into.
@@ -226,5 +228,276 @@ describe('MenuItem on the way into a submenu', () => {
     notePointer(194, 365);
     plain.onPointerEnter({ currentTarget: fakeRow() });
     expect(onHover).toHaveBeenCalledOnce();
+  });
+});
+
+// ── The surface, mounted ────────────────────────────────────────────
+// React DOM mounts the surface on a stand in DOM (src/test/fakeDom.ts).
+// The stand in learns here the few calls the surface makes beyond what
+// React DOM needs: its size, contains, a parent element, and the selectors it finds rows
+// and fields with. The window keeps its listeners, so a test can send a
+// resize or a blur, and a slot's ResizeObserver can be told its slot
+// changed size.
+
+const ROW_SELECTOR = '[role^="menuitem"]:not([aria-disabled="true"]):not(:disabled)';
+const FIELD_SELECTOR = 'input, select, button';
+
+type Handler = (e?: unknown) => void;
+const windowListeners = new Map<string, Set<Handler>>();
+const observers: { slot: unknown; changed: () => void }[] = [];
+const doc = new FakeDocument();
+const fakeWindow = {
+  document: doc,
+  innerWidth: 1280,
+  innerHeight: 800,
+  location: { protocol: 'about:' },
+  HTMLIFrameElement: class {},
+  addEventListener: (type: string, fn: Handler) => {
+    const set = windowListeners.get(type) ?? new Set<Handler>();
+    set.add(fn);
+    windowListeners.set(type, set);
+  },
+  removeEventListener: (type: string, fn: Handler) => windowListeners.get(type)?.delete(fn),
+};
+class FakeResizeObserver {
+  constructor(private readonly changed: () => void) {}
+  observe(slot: unknown) {
+    observers.push({ slot, changed: this.changed });
+  }
+  disconnect() {
+    for (let i = observers.length - 1; i >= 0; i--)
+      if (observers[i].changed === this.changed) observers.splice(i, 1);
+  }
+}
+let createRoot: typeof import('react-dom/client').createRoot;
+
+function teachTheDom() {
+  const node = FakeNode.prototype as unknown as Record<string, unknown>;
+  node.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+    for (let n = other; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  };
+  const found = (root: FakeElement, selector: string): FakeElement[] => {
+    if (selector === ROW_SELECTOR)
+      return findAll(
+        root,
+        (el) =>
+          (el.getAttribute('role') ?? '').startsWith('menuitem') &&
+          el.getAttribute('aria-disabled') !== 'true' &&
+          !el.hasAttribute('disabled'),
+      );
+    if (selector === FIELD_SELECTOR)
+      return findAll(root, (el) => ['INPUT', 'SELECT', 'BUTTON'].includes(el.nodeName));
+    throw new Error(`no selector ${selector}`);
+  };
+  const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  el.querySelectorAll = function (this: FakeElement, selector: string) {
+    return found(this, selector);
+  };
+  el.querySelector = function (this: FakeElement, selector: string) {
+    return found(this, selector)[0] ?? null;
+  };
+  Object.defineProperty(FakeElement.prototype, 'parentElement', {
+    configurable: true,
+    get(this: FakeElement) {
+      return this.parentNode instanceof FakeElement ? this.parentNode : null;
+    },
+  });
+  // A menu 240 by 200.
+  Object.defineProperty(FakeElement.prototype, 'offsetWidth', { configurable: true, value: 240 });
+  Object.defineProperty(FakeElement.prototype, 'offsetHeight', { configurable: true, value: 200 });
+}
+
+function stubTheDom() {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('document', doc);
+  vi.stubGlobal('window', fakeWindow);
+  vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
+  vi.stubGlobal('Node', FakeNode);
+  vi.stubGlobal('Element', FakeElement);
+  vi.stubGlobal('HTMLElement', FakeElement);
+  vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+}
+
+/** The handlers React keeps on an element. This DOM sends no events. */
+function on(el: FakeElement): Record<string, Handler> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, Handler>>)[key];
+}
+
+function keyEvent(key: string, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}) {
+  return {
+    key,
+    metaKey: false,
+    ctrlKey: false,
+    ...mods,
+    preventDefault: vi.fn(),
+    stopPropagation: vi.fn(),
+  };
+}
+
+const cleanups: (() => Promise<void>)[] = [];
+
+interface MountOptions {
+  at?: MenuPlacement | MenuPlacer;
+  anchor?: FakeElement;
+  anchored?: boolean;
+  focus?: 'first' | 'surface';
+  kind?: 'menu' | 'dialog';
+  keepKeys?: boolean;
+  children?: ReactNode;
+}
+
+async function mount(options: MountOptions = {}) {
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const onClose = vi.fn();
+  const { at = { x: 100, y: 100 }, children, anchor, ...rest } = options;
+  await act(async () => {
+    root.render(
+      createElement(MenuSurface, {
+        label: 'Pane',
+        at,
+        onClose,
+        ...(anchor && { anchor: anchor as unknown as HTMLElement }),
+        ...rest,
+        children: children ?? [
+          createElement(MenuItem, { key: 'a', children: 'Copy' }),
+          createElement(MenuItem, { key: 'b', children: 'Close pane' }),
+        ],
+      }),
+    );
+  });
+  cleanups.push(async () => {
+    await act(async () => root.unmount());
+    doc.body.removeChild(container);
+  });
+  const surface = findAll(doc.body, (el) => el.getAttribute('aria-label') === 'Pane').at(-1);
+  if (!surface) throw new Error('no surface');
+  const rows = findAll(surface, (el) => el.getAttribute('role') === 'menuitem');
+  const send = (type: string) =>
+    act(async () => {
+      for (const fn of windowListeners.get(type) ?? []) fn();
+    });
+  const key = async (k: string, mods?: { metaKey?: boolean; ctrlKey?: boolean }) => {
+    const e = keyEvent(k, mods);
+    await act(async () => on(surface).onKeyDown(e));
+    return e;
+  };
+  return { surface, rows, onClose, send, key };
+}
+
+describe('MenuSurface', () => {
+  beforeAll(async () => {
+    teachTheDom();
+    stubTheDom();
+    // React DOM checks for a DOM once, when it loads.
+    ({ createRoot } = await import('react-dom/client'));
+  });
+  beforeEach(() => {
+    stubTheDom();
+    doc.activeElement = null;
+  });
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+    windowListeners.clear();
+    observers.length = 0;
+  });
+
+  it('lets a placer cap its height, and scrolls past it', async () => {
+    const placer: MenuPlacer = (size, viewport) => ({
+      left: viewport.width - size.width - 8,
+      top: 40,
+      maxHeight: 120,
+    });
+    const { surface } = await mount({ at: placer });
+    expect(surface.style).toMatchObject({
+      left: '1032px',
+      top: '40px',
+      maxHeight: '120px',
+      overflowY: 'auto',
+    });
+    const plain = await mount();
+    expect(plain.surface.style.maxHeight).toBeUndefined();
+    expect(plain.surface.style.overflowY).toBeUndefined();
+  });
+
+  it('follows its button when anchored, and stays open on a resize or a blur', async () => {
+    const slot = doc.createElement('div');
+    const anchor = doc.createElement('button');
+    slot.appendChild(anchor);
+    let left = 300;
+    const { surface, send, onClose } = await mount({
+      at: () => ({ left, top: 44 }),
+      anchor,
+      anchored: true,
+    });
+    expect(surface.style.left).toBe('300px');
+    left = 420;
+    await send('resize');
+    expect(surface.style.left).toBe('420px');
+    left = 380;
+    const watching = observers.find((o) => o.slot === slot);
+    expect(watching).toBeDefined();
+    await act(async () => watching?.changed());
+    expect(surface.style.left).toBe('380px');
+    await send('blur');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes on a resize or a blur when not anchored', async () => {
+    for (const type of ['resize', 'blur']) {
+      const { send, onClose } = await mount();
+      await send(type);
+      expect(onClose, type).toHaveBeenCalledWith('outside');
+      for (const cleanup of cleanups.splice(0)) await cleanup();
+      windowListeners.clear();
+    }
+  });
+
+  it('focuses its first row, or itself with no row lit', async () => {
+    const first = await mount();
+    expect(doc.activeElement).toBe(first.rows[0]);
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+    doc.activeElement = null;
+
+    const { surface, rows, key } = await mount({ focus: 'surface' });
+    expect(surface.getAttribute('tabindex')).toBe('-1');
+    expect(doc.activeElement).toBe(surface);
+    await key('ArrowDown');
+    expect(doc.activeElement).toBe(rows[0]);
+  });
+
+  it('as a dialog focuses its first field and leaves the arrows to it', async () => {
+    const { surface, key } = await mount({
+      kind: 'dialog',
+      children: [
+        createElement('p', { key: 'p' }, 'Name the session'),
+        createElement('input', { key: 'i', 'aria-label': 'Name' }),
+        createElement('button', { key: 'b', type: 'button' }, 'Create'),
+      ],
+    });
+    expect(surface.nodeName).toBe('DIV');
+    expect(surface.getAttribute('role')).toBe('dialog');
+    const field = findAll(surface, (el) => el.nodeName === 'INPUT')[0];
+    expect(doc.activeElement).toBe(field);
+    for (const k of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Tab']) {
+      const e = await key(k);
+      expect(e.preventDefault, k).not.toHaveBeenCalled();
+      expect(doc.activeElement, k).toBe(field);
+    }
+  });
+
+  it('keeps its keys from what renders it, all but Esc and the shortcuts', async () => {
+    const { key } = await mount({ keepKeys: true });
+    expect((await key('Delete')).stopPropagation).toHaveBeenCalled();
+    expect((await key('Escape')).stopPropagation).not.toHaveBeenCalled();
+    expect((await key('k', { metaKey: true })).stopPropagation).not.toHaveBeenCalled();
+    expect((await key('k', { ctrlKey: true })).stopPropagation).not.toHaveBeenCalled();
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+    const loose = await mount();
+    expect((await loose.key('Delete')).stopPropagation).not.toHaveBeenCalled();
   });
 });

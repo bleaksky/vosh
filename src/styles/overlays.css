@@ -307,6 +307,8 @@
   border-radius: var(--r-float);
   background: var(--raised);
   box-shadow: var(--shadow-float);
+  /* A menu that takes focus itself lights no row and draws no ring. */
+  outline: none;
   color: var(--text);
   font-family: var(--font-ui);
   font-size: 13px;

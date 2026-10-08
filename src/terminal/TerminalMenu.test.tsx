@@ -95,7 +95,7 @@ describe('the terminal menu', () => {
 // for the menu surface mark, and the selector the surface finds its
 // rows with.
 
-const ITEM_SELECTOR = ':scope > li > [role^="menuitem"]:not([aria-disabled="true"])';
+const ITEM_SELECTOR = '[role^="menuitem"]:not([aria-disabled="true"]):not(:disabled)';
 
 // A 1280 by 800 window. The terminal menu is 232 by 274 and the
 // Settings list 160 by 398.
@@ -123,15 +123,13 @@ function surfaceAround(start: FakeNode | null): FakeElement | null {
 /** The rows of a menu surface you can move to, as ITEM_SELECTOR finds
  *  them. */
 function menuRows(menu: FakeElement): FakeElement[] {
-  return menu.childNodes
-    .filter((li): li is FakeElement => li instanceof FakeElement && li.nodeName === 'LI')
-    .flatMap((li) => li.childNodes)
-    .filter(
-      (b): b is FakeElement =>
-        b instanceof FakeElement &&
-        b.getAttribute('role') === 'menuitem' &&
-        b.getAttribute('aria-disabled') !== 'true',
-    );
+  return findAll(
+    menu,
+    (b) =>
+      (b.getAttribute('role') ?? '').startsWith('menuitem') &&
+      b.getAttribute('aria-disabled') !== 'true' &&
+      !b.hasAttribute('disabled'),
+  );
 }
 
 function teachTheDom() {
