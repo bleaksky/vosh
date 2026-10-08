@@ -124,4 +124,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Current State
 
-Vosh 0.9.0 is out. The refactor before 1.0 follows `docs/refactor-plan.md`, which holds the status of every item and track. R23, docs, help and guards, is under way. Items 1 to 3 are built, with help from one source, docs that match the code, and plain reasons in place of spec tags in the comments. The CI guards of item 4 and the close of item 5 come next. The last commit of each item updates this section.
+Vosh 0.9.0 is out. The refactor before 1.0 follows `docs/refactor-plan.md`, which holds the status of every item and track. R23, docs, help and guards, is built except item 5, which marks the refactor done once the last item lands. R24, release groundwork, is built except the draft release build in CI, which waits for you to push. R25, accessibility and a high contrast theme, comes next. The last commit of each item updates this section.
