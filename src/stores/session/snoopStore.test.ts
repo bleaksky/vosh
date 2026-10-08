@@ -209,4 +209,45 @@ describe('the snoop store', () => {
     });
     expect(heard).toEqual([[BUILDER, 'Orla', 'The Central Square of Val Miran\n\r', true]]);
   });
+
+  it('keeps the text of each tab for a terminal that mounts later', async () => {
+    const store = await load();
+    list(STAFF, [live('Tolliver'), live('Orla')]);
+    output(STAFF, 'Tolliver', 'A rocky mountain path\n\r');
+    output(STAFF, 'Tolliver', '<788hp 315m 540mv> ');
+    output(STAFF, 'Orla', 'The day has begun.\n\r');
+    expect(store.snoopText(STAFF, 'Tolliver')).toBe('A rocky mountain path\n\r<788hp 315m 540mv> ');
+    expect(store.snoopText(STAFF, 'Orla')).toBe('The day has begun.\n\r');
+    expect(store.snoopText(BUILDER, 'Tolliver')).toBe('');
+
+    // A tab that goes takes its text along.
+    list(STAFF, [live('Tolliver')]);
+    expect(store.snoopText(STAFF, 'Orla')).toBe('');
+    expect(store.snoopText(STAFF, 'Tolliver')).not.toBe('');
+  });
+
+  it('keeps the newest 5,000 lines of a tab, as the backend does', async () => {
+    const store = await load();
+    list(STAFF, [live('Tolliver')]);
+    const lines = (from: number, to: number) =>
+      Array.from({ length: to - from }, (_, i) => `${from + i}\n\r`).join('');
+    output(STAFF, 'Tolliver', lines(0, store.SNOOP_LINES));
+    output(STAFF, 'Tolliver', lines(store.SNOOP_LINES, store.SNOOP_LINES + 600));
+    const kept = store.snoopText(STAFF, 'Tolliver');
+    expect(kept.match(/\n/g)?.length).toBe(store.SNOOP_LINES);
+    expect(kept.startsWith('600\n\r')).toBe(true);
+    expect(kept.endsWith(`${store.SNOOP_LINES + 599}\n\r`)).toBe(true);
+  });
+
+  it('takes a snapshot in place of the text it kept', async () => {
+    commands.set('snoop_get', ({ session }) =>
+      session === BUILDER
+        ? { tabs: [{ ...live('Orla', 9), text: 'A rocky mountain path\n\r' }], windowed: false }
+        : EMPTY,
+    );
+    const store = await load();
+    select(BUILDER);
+    await settle();
+    expect(store.snoopText(BUILDER, 'Orla')).toBe('A rocky mountain path\n\r');
+  });
 });

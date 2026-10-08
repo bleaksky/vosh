@@ -7,7 +7,7 @@ import {
   type SnoopSnapshot,
   type SnoopTab,
 } from '../../ipc/snoop';
-import { getSelected } from './sessionsStore';
+import { getSelected, getSessions, subscribeSessions } from './sessionsStore';
 import { createSessionStore } from '../sessionStore';
 
 // The players each session snoops (Snoop SN2 and SN5), as the backend
@@ -22,6 +22,9 @@ import { createSessionStore } from '../sessionStore';
 // The text goes to the terminals that subscribe to it, never through the
 // state, so React draws nothing for each packet. Each terminal hears its
 // player's text once from the snapshot, whole, and then each new piece.
+// The store keeps each tab's newest 5,000 lines too, as the backend
+// does, so a terminal that mounts later, when you pick a tab or a
+// session, starts from everything the tab holds.
 
 export interface Snoops {
   /** Every tab, in the order they started. */
@@ -84,10 +87,59 @@ function select(now: Snoops, name: string): Snoops {
   return { ...now, selected: name, unread };
 }
 
+/** The lines a tab keeps, as src-tauri/src/session/snoop.rs keeps
+ *  them, and its terminal's scrollback. */
+export const SNOOP_LINES = 5_000;
+
+/** The lines a tab may hold past SNOOP_LINES before it drops the oldest,
+ *  so a trim runs once in a while and not for each packet. */
+const SLACK = 500;
+
+/** One tab's text and how many line ends it holds. */
+interface Kept {
+  text: string;
+  lines: number;
+}
+
+/** The text of each tab, by session and then by player. */
+const texts = new Map<number, Map<string, Kept>>();
+
+/** `text` from the line after its `drop`th line end on. The game ends
+ *  its lines with `\n\r`, so the `\r` goes with its `\n`. */
+function dropLines(text: string, drop: number): string {
+  let at = -1;
+  for (let i = 0; i < drop; i++) at = text.indexOf('\n', at + 1);
+  return text.slice(text[at + 1] === '\r' ? at + 2 : at + 1);
+}
+
+function keep(session: number, name: string, text: string, whole: boolean): void {
+  let tabs = texts.get(session);
+  if (!tabs) texts.set(session, (tabs = new Map()));
+  const was = whole ? undefined : tabs.get(name);
+  let kept: Kept = {
+    text: (was?.text ?? '') + text,
+    lines: (was?.lines ?? 0) + (text.match(/\n/g)?.length ?? 0),
+  };
+  if (kept.lines > SNOOP_LINES + (whole ? 0 : SLACK)) {
+    kept = { text: dropLines(kept.text, kept.lines - SNOOP_LINES), lines: SNOOP_LINES };
+  }
+  tabs.set(name, kept);
+}
+
+/** Drop the text of every tab `session` no longer has. */
+function forget(session: number, tabs: readonly SnoopTab[]): void {
+  const kept = texts.get(session);
+  if (!kept) return;
+  for (const name of kept.keys()) {
+    if (!tabs.some((tab) => tab.name === name)) kept.delete(name);
+  }
+}
+
 type Listener = (session: number, name: string, text: string, whole: boolean) => void;
 const listeners = new Set<Listener>();
 
 function hand(session: number, name: string, text: string, whole: boolean): void {
+  keep(session, name, text, whole);
   for (const cb of listeners) cb(session, name, text, whole);
 }
 
@@ -108,13 +160,24 @@ function fromSnapshot(now: Snoops, { session, snapshot }: Asked): Snoops {
     ended_at,
     last_output_at,
   }));
+  forget(session, tabs);
   return foldSnoopList(now, { tabs, windowed: snapshot.windowed });
 }
 
 const store = createSessionStore<Snoops>({
   state: NONE,
   events: [
-    (apply) => onSnoop((list, session) => apply(session, (now) => foldSnoopList(now, list))),
+    (apply) =>
+      onSnoop((list, session) => {
+        forget(session, list.tabs);
+        apply(session, (now) => foldSnoopList(now, list));
+      }),
+    // A session that closes takes its tabs' text along.
+    () =>
+      subscribeSessions(() => {
+        const open = new Set(getSessions().map((row) => row.id));
+        for (const session of texts.keys()) if (!open.has(session)) texts.delete(session);
+      }),
     (apply) =>
       onSnoopOutput(({ name, text }, session) => {
         apply(session, (now) => heard(now, name));
@@ -162,6 +225,12 @@ export function setSnoopsFolded(on: boolean): void {
   if (folded === on) return;
   folded = on;
   if (!on) store.apply(getSelected(), (now) => (now.selected ? select(now, now.selected) : now));
+}
+
+/** Every line the tab of `name` in `session` holds, as the game sent
+ *  them. */
+export function snoopText(session: number, name: string): string {
+  return texts.get(session)?.get(name)?.text ?? '';
 }
 
 /** Hear the text of every snooped player, with its session and name.
