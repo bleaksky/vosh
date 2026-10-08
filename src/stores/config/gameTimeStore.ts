@@ -1,4 +1,5 @@
-import { getUiConfig, subscribeGameTimeChanged, type GameTime } from '../../ipc/uiConfig';
+import { getUiConfig, type GameTime } from '../../ipc/uiConfig';
+import { subscribeGameTimeChanged } from '../../ipc/uiConfigEvents';
 import { createConfigStore } from './configStore';
 
 // The clock the status line reads the game time on, from UiConfig

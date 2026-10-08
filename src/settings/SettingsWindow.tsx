@@ -12,13 +12,15 @@ import { subscribeProfilesChanged } from '../ipc/profiles';
 import { THEME_PREFS_FIELDS } from '../ipc/theme';
 import {
   fetchUiConfig,
-  shownStyle,
   subscribeUiConfigReplaced,
-  subscribeVitalsOptionsChanged,
-  subscribeVitalsTextChanged,
   type UiConfig,
   type UiFields,
 } from '../ipc/uiConfig';
+import {
+  shownStyle,
+  subscribeVitalsOptionsChanged,
+  subscribeVitalsTextChanged,
+} from '../ipc/uiConfigVitals';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { subscribeSettingsGotoTab } from '../ipc/windows';
 import {

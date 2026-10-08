@@ -1,4 +1,5 @@
-import { getUiConfig, subscribeChipStyleChanged, type ChipStyle } from '../../ipc/uiConfig';
+import { getUiConfig, type ChipStyle } from '../../ipc/uiConfig';
+import { subscribeChipStyleChanged } from '../../ipc/uiConfigEvents';
 import { createConfigStore } from './configStore';
 
 // How the status line draws the tick, the game time, and the moons,

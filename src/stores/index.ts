@@ -35,6 +35,7 @@ import { startVitalsTextStore } from './session/vitalsTextStore';
 import { startWalkStore } from './session/walkStore';
 import { startWritingStore } from './session/writingStore';
 import { startWorldStore } from './gmcp/worldStore';
+import { startCheckWatch } from '../writing/checkWatch';
 
 // Start every pane and status line store once, at launch, so packages
 // that arrive before a pane first renders still land. Several arrive
@@ -82,6 +83,7 @@ export function startStores(): void {
   startWalkStore();
   startCharStatusStore();
   startWritingStore();
+  startCheckWatch();
   startScreenReaderStore();
   startReaderStore();
 }

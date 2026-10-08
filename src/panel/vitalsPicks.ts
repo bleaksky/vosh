@@ -1,11 +1,10 @@
+import { setUiFields, type UiFields } from '../ipc/uiConfig';
 import {
-  setUiFields,
   VITALS_VALUES,
-  type UiFields,
   type VitalsOptions,
   type VitalsStyle,
   type VitalsValues,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigVitals';
 import { broadcastVitalsOptions } from '../ipc/uiConfigBroadcast';
 import { getVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import type { MenuChoice } from './affects/affectsDisplay';

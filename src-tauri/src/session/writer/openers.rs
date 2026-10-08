@@ -16,9 +16,12 @@ use super::kinds::Kind;
 /// (`interp.c:88`), `tell` and `time` take `t`, `hit`, `hide` and
 /// `high` take `hi` (`interp.c:97`), `down` takes `d`, `beastcall` and
 /// `beastial` take `beast` (`interp.c:685`), `newbiechat` takes `new`
-/// (`interp.c:114`), `channels` takes `chan` (`interp.c:89`), and
-/// `permban`, `perkset` and `peace` take `pe` for an immortal. No
-/// command that waits for a level takes more letters than these.
+/// (`interp.c:114`), `channels` takes `chan` (`interp.c:89`), `scroll`
+/// and `score` take `scr` and `sc` (`interp.c:236`, `170`), `vosh`,
+/// `volarae`, `voodoo` and `vomit` take `vo` (`interp.c:275`), `west`
+/// and `who` take `w`, and `permban`, `perkset` and `peace` take `pe`
+/// and `pet` takes `pet` for an immortal (`interp.c:966`). No command
+/// that waits for a level takes more letters than these.
 const COMMANDS: &[(&str, usize)] = &[
     ("note", 3),
     ("journal", 2),
@@ -32,6 +35,10 @@ const COMMANDS: &[(&str, usize)] = &[
     ("news", 4),
     ("changes", 5),
     ("penalty", 3),
+    ("scribe", 4),
+    ("write", 2),
+    ("vote", 3),
+    ("petedit", 4),
 ];
 
 /// The command `word` runs, among those that open an editor, or None.
@@ -48,13 +55,19 @@ fn command(word: &str) -> Option<&'static str> {
 /// alone after them (`act_info.c:7550`), a board takes `edit` as its
 /// first word (`recycle.c:4335`), and `history` takes `edit`,
 /// `personality` or `purpose` (`act_comm.c:5109` to `5123`), each word
-/// in full.
+/// in full. `scribe` takes any start of `text` but `t`, which is
+/// `title`'s (`tome.c:913`, `931`), `vote` any start of `edit`
+/// (`vote.c:1427`), `write` takes `edit` and then a language
+/// (`languages.c:2427`) and `petedit` takes `desc` (`magic5.c:857`). The
+/// game reads each first word without case.
 pub(crate) fn opens(line: &str) -> Option<Kind> {
     let line = line.trim();
     let (word, rest) = line.split_once(' ').unwrap_or((line, ""));
     let rest = rest.trim();
     let first = rest.split_whitespace().next().unwrap_or("");
     let is = |want: &str| first.eq_ignore_ascii_case(want);
+    let starts =
+        |of: &str| !first.is_empty() && of.starts_with(first.to_ascii_lowercase().as_str());
     let board = |kind: Kind| is("edit").then_some(kind);
     match command(word)? {
         "description" => rest
@@ -73,6 +86,10 @@ pub(crate) fn opens(line: &str) -> Option<Kind> {
         "news" => board(Kind::News),
         "changes" => board(Kind::Changes),
         "penalty" => board(Kind::Penalty),
+        "scribe" => (first.len() > 1 && starts("text")).then_some(Kind::Tome),
+        "vote" => starts("edit").then_some(Kind::Vote),
+        "write" => is("edit").then_some(Kind::Paper),
+        "petedit" => is("desc").then_some(Kind::Pet),
         _ => None,
     }
 }
@@ -124,5 +141,40 @@ mod tests {
         assert_eq!(opens("history pers"), None);
         // A board reads only its first word.
         assert_eq!(opens("note edit please"), Some(Kind::Note));
+    }
+
+    #[test]
+    fn reads_the_tome_vote_paper_and_pet_openers() {
+        assert_eq!(opens("scri te"), Some(Kind::Tome));
+        assert_eq!(opens("scribe text"), Some(Kind::Tome));
+        assert_eq!(opens("scribe TEX and more"), Some(Kind::Tome));
+        assert_eq!(opens("vot e"), Some(Kind::Vote));
+        assert_eq!(opens("vote edit"), Some(Kind::Vote));
+        assert_eq!(opens("wr edit elvish"), Some(Kind::Paper));
+        assert_eq!(opens("write edit"), Some(Kind::Paper));
+        // one_argument lowers the word (interp.c:1735).
+        assert_eq!(opens("write EDIT"), Some(Kind::Paper));
+        assert_eq!(opens("pete desc"), Some(Kind::Pet));
+        assert_eq!(opens("petedit DESC"), Some(Kind::Pet));
+        assert_eq!(opens("petedit desc now"), Some(Kind::Pet));
+    }
+
+    #[test]
+    fn leaves_the_tome_vote_paper_and_pet_words_others_take() {
+        // scroll, the vo words, west and pet come first.
+        assert_eq!(opens("scr text"), None);
+        assert_eq!(opens("vo edit"), None);
+        assert_eq!(opens("w edit"), None);
+        assert_eq!(opens("pet desc"), None);
+        // t is title, and the rest want their word.
+        assert_eq!(opens("scribe t"), None);
+        assert_eq!(opens("scribe"), None);
+        assert_eq!(opens("scribe title"), None);
+        assert_eq!(opens("vote"), None);
+        assert_eq!(opens("vote list"), None);
+        assert_eq!(opens("write ed"), None);
+        assert_eq!(opens("write draft"), None);
+        assert_eq!(opens("petedit des"), None);
+        assert_eq!(opens("petedit"), None);
     }
 }

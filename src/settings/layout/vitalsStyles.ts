@@ -1,5 +1,6 @@
-import type { UiConfig, Vital, VitalsStyle } from '../../ipc/uiConfig';
-import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfig';
+import type { UiConfig } from '../../ipc/uiConfig';
+import type { Vital, VitalsStyle } from '../../ipc/uiConfigVitals';
+import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfigVitals';
 import { startVitalsText, type VitalsSnapshot } from '../../ipc/vitals';
 import { VITAL_LABELS } from '../../panel/vitalsView';
 import {

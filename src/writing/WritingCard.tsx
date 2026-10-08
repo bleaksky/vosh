@@ -1,17 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type HTMLAttributes,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { Draft, JobResult, WriteJob, WritingKind } from '../ipc/writing';
 import { sendInput } from '../ipc/session';
-import { stopAskingToPost } from '../ipc/uiConfig';
 import { useEscape } from '../lib/escapeStack';
 import type { PromptCardHost } from '../prompt/PromptCard';
 import type { CellSize } from '../prompt/pinnedDock';
@@ -24,14 +14,10 @@ import { useRoom } from '../stores/gmcp/roomStore';
 import { useSessionConnection } from '../stores/session/connectionStore';
 import { useSelectedRow } from '../stores/session/sessionsStore';
 import { useWriting } from '../stores/session/writingStore';
-import { saveWritingCardPrefs, useWritingCardPrefs } from '../stores/config/writingCardStore';
 import { pushToast } from '../stores/toasts';
-import { Button } from '../ui';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { applicationGuide } from './applications';
 import { boxInks } from './boxInks';
-import { stopsAsking, useAskPost } from './askPost';
-import { DontAskAgain } from './DontAskAgain';
+import { useAskPost } from './askPost';
 import {
   characterOf,
   getWritingFile,
@@ -43,68 +29,38 @@ import {
   posted,
   useWritingFile,
   withDraft,
-  withoutDraft,
   type World,
 } from './draftsStore';
-import { BEAST_LOOKS, hasBeast, keepsCodes, KINDS, switchOf, widthOf, writable } from './kinds';
-import { cutLine, count, rewrapAll, rewrapParagraph, spamRun, storedBytes, type Row } from './text';
+import { BEAST_LOOKS, hasBeast, keepsCodes, KINDS, switchOf, widthOf } from './kinds';
+import {
+  cutLine,
+  count,
+  rewrapAll,
+  rewrapParagraph,
+  sameLines,
+  spamRun,
+  storedBytes,
+  type Row,
+} from './text';
+import { endJob } from './writingJobEnd';
+import { kindsMenuFor, moreItemsFor, type MenuCard } from './writingMenus';
 import { WritingBox, type BoxText, type PasteNote } from './WritingBox';
 import { WritingFields, type FieldName } from './WritingFields';
-import { FootCount, FootNote, WritingFoot } from './WritingFoot';
+import { FootButtons, FootLeftSide, WritingFoot } from './WritingFoot';
 import { WritingGuide } from './WritingGuide';
 import { WritingPreview } from './WritingPreview';
-import { WritingHead, type KindsMenu, type MoreItem } from './WritingHead';
-import { afterDrop, findToStart, type Drop, type Find } from './cardDrop';
+import { WritingConfirm, type Confirm } from './WritingConfirm';
+import { WritingNoCharacter } from './WritingNoCharacter';
+import { WritingHead, type MoreItem } from './WritingHead';
+import { findToStart, type Drop, type Find } from './cardDrop';
 import { footFor, type Ended, type FootAction } from './cardFoot';
-import {
-  changedAsk,
-  checkAsk,
-  checkedNote,
-  CLEAR_ASK,
-  clearOtherAsk,
-  DELETE_ASK,
-  postAsk,
-  postStillAsks,
-  postedNote,
-  readAgainAsk,
-  sameNoteAsk,
-  sentNote,
-  type Ask,
-} from './cardDialogs';
-import { draftRows, moreRows, otherRows, sentRows, type MoreAction } from './cardMenus';
+import { checkAsk, clearOtherAsk, postAsk, postStillAsks, readAgainAsk } from './cardDialogs';
+import { checkable } from './cardMenus';
 import { useWritingJob, type JobSpec } from './useWritingJob';
-import { useBoxSize, useWritingPlace } from './useWritingPlace';
-import {
-  BOX_COLS,
-  BOX_ROWS_MIN,
-  CARD_MARGIN,
-  DRAG_SLOP,
-  boxColsFor,
-  boxRowsFor,
-  boxWidthFor,
-  clampPlace,
-  dragCols,
-  dragRows,
-  fitCols,
-  fitRows,
-  fitsMoved,
-  movedFit,
-  savedPlace,
-  startsMove,
-  type Point,
-} from './cardPlace';
-import { pinWritingPane, useWritingSlot } from './pinnedPane';
-import { usePanelLayout } from '../panel/panelLayoutStore';
-import {
-  countLine,
-  lineNote,
-  metaLine,
-  pasteNote,
-  previewLine,
-  resultNote,
-  roomFor,
-  type Note,
-} from './words';
+import { useWritingFrame } from './useWritingFrame';
+import { CARD_MARGIN } from './cardPlace';
+import { BoxGrip, RowGrip } from './WritingGrips';
+import { countLine, lineNote, metaLine, pasteNote, previewLine, roomFor, type Note } from './words';
 
 // The writing card. One card for every text the game's line editor
 // takes, your description, a note on any board, your history, with the
@@ -141,28 +97,9 @@ interface Props {
   onClose: () => void;
 }
 
-interface Confirm extends Ask {
-  run: () => void;
-  /** The confirm offers Don't ask again, which turns Ask before you
-   *  post off. */
-  skip?: boolean;
-}
-
 const rowsOf = (text: readonly string[]): Row[] =>
   text.map((line) => ({ text: line, flows: false }));
 const linesOf = (rows: readonly Row[]): string[] => rows.map((r) => r.text);
-const sameLines = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length &&
-  a.every((line, k) => line.replace(/ +$/, '') === b[k].replace(/ +$/, ''));
-
-/** The width of one column of the terminal face at `px`. */
-function columnWidth(family: string, px: number): number {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return px * 0.6;
-  ctx.font = `${px}px ${family}`;
-  return ctx.measureText('0'.repeat(10)).width / 10 || px * 0.6;
-}
 
 export function WritingCard({
   session,
@@ -289,7 +226,31 @@ export function WritingCard({
   const cut = storedBytes(lines) > roomLeft ? cutLine(lines, roomLeft) : null;
   const spam = info.board ? spamRun(lines) : null;
 
-  const done = (result: JobResult, job: WriteJob) => onDone(result, job);
+  // ── A job's end ───────────────────────────────────────────────────
+  const done = (result: JobResult, job: WriteJob) =>
+    endJob(result, job, {
+      find,
+      lines,
+      kind,
+      draft,
+      world,
+      name,
+      openDraft,
+      switchTo,
+      show,
+      keep,
+      markPosted,
+      run,
+      saveShown,
+      setBadField,
+      setDropped,
+      setFind,
+      setEnded,
+      setReadNow,
+      setAdopt,
+      setConfirm,
+      setPhase,
+    });
   const jobs = useWritingJob(session, writing, done);
   const running = jobs.running;
 
@@ -330,110 +291,6 @@ export function WritingCard({
     setDropped(null);
     setFind(null);
     setPreview(false);
-  }
-
-  // ── A job's end ───────────────────────────────────────────────────
-  function onDone(result: JobResult, job: WriteJob) {
-    setBadField(null);
-    setDropped(null);
-    const k = job.kind;
-    const drop = afterDrop(find, result, job, k, lines.length);
-    if (drop) {
-      setDropped(drop.dropped);
-      setFind(drop.find);
-      setEnded(drop.ended);
-      if (drop.posted) markPosted();
-      return;
-    }
-    switch (result.kind) {
-      case 'read': {
-        const note = result.note;
-        const text = note ? note.lines : result.lines;
-        const next: Draft = {
-          ...(k === kind ? draft : openDraft(k)),
-          kind: k,
-          text,
-          game: KINDS[k].board ? null : text,
-          ...(note ? { to: note.to, subject: note.subject, language: note.language } : {}),
-        };
-        if (k !== kind) switchTo(k, next);
-        else show(text);
-        keep(next);
-        if (result.beast && world && name) {
-          const c = characterOf(getWritingFile(), world, name);
-          if (c.beast !== result.beast) keepCharacter({ ...c, beast: result.beast });
-        }
-        setReadNow(true);
-        setAdopt(note !== null);
-        setEnded(null);
-        return;
-      }
-      case 'changed':
-        keep({ ...draft, game: result.lines });
-        setConfirm({ ...changedAsk(k), run: () => run({ ...job, base: null }) });
-        return;
-      case 'sent':
-        keep({ ...draft, game: result.lines });
-        setPhase('sent');
-        setEnded({
-          note: sentNote(
-            result.lines.length,
-            sameLines(
-              result.lines,
-              lines.map((l) => l.replace(/"/g, "'")),
-            ),
-          ),
-          actions: [],
-        });
-        return;
-      case 'posted':
-        markPosted();
-        setEnded({ note: postedNote(k, result.forum, result.vote), actions: [] });
-        return;
-      case 'checked':
-        setPhase('checked');
-        setEnded({ note: checkedNote(k, result.lines), actions: [] });
-        return;
-      case 'same_note':
-        setConfirm({
-          ...sameNoteAsk(k, result.note.subject),
-          run: () => {
-            saveShown(k, result.note);
-            run({ ...job, clear_first: true });
-          },
-        });
-        return;
-      case 'other_note':
-        if (result.board && result.note) saveShown(result.board, result.note);
-        setEnded({
-          note: resultNote(result, k) ?? { lead: '', rest: '', tone: 'warn' },
-          actions: result.board ? ['clear-other'] : [],
-          other: result.board,
-        });
-        return;
-      case 'cleared':
-        setEnded(null);
-        return;
-      case 'refused':
-        if (result.field === 'to' || result.field === 'subject' || result.field === 'language') {
-          setBadField(result.field);
-        }
-        setEnded({
-          note: resultNote(result, k)!,
-          actions: result.field === 'post' ? ['done'] : [],
-        });
-        return;
-      case 'stopped':
-        setEnded({
-          note: resultNote(result, k)!,
-          actions: KINDS[k].board ? [] : ['restore', 'again'],
-        });
-        return;
-      default: {
-        const note = resultNote(result, k);
-        if (note) setEnded({ note, actions: [] });
-      }
-    }
   }
 
   /** The note is on its board: it moves to Sent. */
@@ -507,11 +364,13 @@ export function WritingCard({
     });
   };
 
-  const check = () =>
+  const check = () => {
+    if (!canCheck) return;
     setConfirm({
       ...checkAsk(kind, counted),
       run: () => run({ kind: kind === 'description' ? kind : 'history', action: 'check', name }),
     });
+  };
 
   const readAgain = () => {
     const go = () => run({ kind, action: 'read', name });
@@ -559,82 +418,49 @@ export function WritingCard({
   };
 
   // ── Where it sits and how big ─────────────────────────────────────
-  // The card is as wide as 80 columns of your terminal face. In a window
-  // too narrow for that it spans the window and sets its text at 11 px
-  // to keep 80 columns.
   const guideOn = file.guide && !preview;
-  const naturalColumn = useMemo(() => columnWidth(fontFamily, fontSize), [fontFamily, fontSize]);
-  const naturalWidth = 32 + 82 * naturalColumn + 32 + (guideOn ? 248 : 0);
-  const place = useWritingPlace(host, cell, naturalWidth);
-  // Where you moved the card, how tall you made its box, and whether it
-  // lives in its pane in the panel. A pinned card floats while the
-  // panel is hidden, and goes back into its pane when the panel shows.
-  const prefs = useWritingCardPrefs();
-  const slot = useWritingSlot();
-  const docked = prefs.pinned && slot !== null;
-  // While the pane a pinned card opens into is on its way, the card waits
-  // unseen rather than flash over the terminal first.
-  const panel = usePanelLayout();
-  const awaitingPane = prefs.pinned && slot === null && (panel === null || panel.panel_open);
-  const [moving, setMoving] = useState<Point | null>(null);
-  const [sizing, setSizing] = useState<number | null>(null);
-  const [sizingCols, setSizingCols] = useState<number | null>(null);
-  const viewW = place?.viewW ?? window.innerWidth;
-  const viewH = place?.viewH ?? window.innerHeight;
-  const view = { w: viewW, h: viewH };
-  const at = moving ?? savedPlace(prefs.left, prefs.top);
-  const roomy = fitsMoved(naturalWidth, viewW);
-  const moved = !docked && at !== null && roomy;
-  const narrow = !docked && !moved && place !== null && place.right !== null;
-  const px = narrow ? 11 : fontSize;
-  const lineH = Math.round(px * 1.3);
-  const colW = useMemo(() => columnWidth(fontFamily, px), [fontFamily, px]);
-  // The fields over the text: To and Subject, and a third row for the
-  // language or the room when the card shows one. The rows count only
-  // the fields the card draws, so a note with no language keeps the two
-  // rows' height and its box the rows the window has room for.
-  const fieldLanguage = info.language && draft.language !== undefined ? draft.language : null;
-  const fieldRoom = info.room ? (draft.room ?? room.info?.name ?? null) : null;
-  const fieldsH = info.board ? (fieldLanguage !== null || fieldRoom !== null ? 102 : 68) : 0;
-  const chrome = 46 + 1 + 1 + 52 + 12 + 16 + 10 + fieldsH;
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
-  const cardRefOf = useCallback((el: HTMLDivElement | null) => {
-    cardRef.current = el;
-    setCardEl(el);
-  }, []);
-  const cardSize = useBoxSize(cardEl);
-  const slotSize = useBoxSize(docked ? slot : null);
-  // A pinned header can wrap, so the rows take what it grows by.
-  const headSize = useBoxSize(
-    docked ? (cardEl?.querySelector<HTMLElement>('.pc-head') ?? null) : null,
-  );
-  const headGrew = Math.max(0, (headSize?.h ?? 46) - 46);
-  // The columns the box may take: what the window or the pane leaves
-  // beside the card's own 16 px each side and the guide. A narrow window
-  // keeps 80 in a smaller face.
-  const besideBox = 32 + (guideOn ? 248 : 0);
-  const colsRoom = docked
-    ? (slotSize?.w ?? 0)
-    : moved
-      ? viewW - 2 * CARD_MARGIN
-      : viewW - (place?.left ?? 12) - 12;
-  const colsFit = fitCols(colsRoom - besideBox, colW);
-  const boxCols = narrow ? BOX_COLS : boxColsFor(sizingCols ?? prefs.cols, colsFit);
-  const boxWidth = boxWidthFor(boxCols, colW);
-  const fit = docked
-    ? fitRows((slotSize?.h ?? 0) - headGrew, chrome, lineH)
-    : moved
-      ? movedFit(viewH, chrome, lineH)
-      : place
-        ? fitRows(place.maxHeight, chrome, lineH)
-        : 12;
-  // A pinned box fills its pane. Rows you set hold the box at that
-  // height, and without them it grows with the text.
-  const rowsSet = sizing ?? prefs.rows;
-  const boxRows = docked ? Math.max(BOX_ROWS_MIN, fit) : boxRowsFor(rowsSet, lines.length, fit);
-  const boxMinRows = docked || rowsSet !== null ? boxRows : BOX_ROWS_MIN;
-  const movedAt = moved && at ? clampPlace(at, cardSize ?? { w: naturalWidth, h: 0 }, view) : null;
+  const {
+    place,
+    prefs,
+    docked,
+    awaitingPane,
+    moving,
+    setSizing,
+    setSizingCols,
+    viewH,
+    narrow,
+    px,
+    lineH,
+    colW,
+    fieldLanguage,
+    fieldRoom,
+    cardRef,
+    cardRefOf,
+    colsFit,
+    boxCols,
+    boxWidth,
+    fit,
+    boxRows,
+    boxMinRows,
+    movedAt,
+    putBack,
+    togglePin,
+    drag,
+    gripEdge,
+    hostEl,
+  } = useWritingFrame({
+    host,
+    cell,
+    fontFamily,
+    fontSize,
+    guideOn,
+    info,
+    draft,
+    roomName: room.info?.name ?? null,
+    lineCount: lines.length,
+    folded,
+    preview,
+  });
 
   // ── Footer ────────────────────────────────────────────────────────
   const busy = writing.game === 'editor' && !running;
@@ -649,6 +475,7 @@ export function WritingCard({
       ? null
       : lineNote(rows[caretRow]?.text ?? '', caretRow, width, helpWidth, immortal);
   const matches = readNow && !empty && !!draft.game && sameLines(lines, draft.game);
+  const canCheck = checkable({ live, running: running !== null, matches, phase, game: draft.game });
   const foot = footFor({
     kind,
     running,
@@ -686,24 +513,8 @@ export function WritingCard({
     post,
     send: () => sendToGame(),
   };
-  const left =
-    'progress' in foot.left ? (
-      <span className="pc-foot-note">{foot.left.progress}</span>
-    ) : 'note' in foot.left ? (
-      <FootNote note={foot.left.note} />
-    ) : (
-      <FootCount {...foot.left.count} />
-    );
-  const buttons = foot.buttons.map((b) => (
-    <Button
-      key={b.id}
-      variant={b.primary ? 'primary' : 'secondary'}
-      disabled={b.disabled === true}
-      onClick={footActions[b.id]}
-    >
-      {b.label}
-    </Button>
-  ));
+  const left = <FootLeftSide left={foot.left} />;
+  const buttons = <FootButtons buttons={foot.buttons} actions={footActions} />;
 
   // ── Header ────────────────────────────────────────────────────────
   // Description and Beast for a werebeast past level 15, and History,
@@ -721,283 +532,58 @@ export function WritingCard({
     dropped,
   });
 
-  const kindsMenu: KindsMenu = {
-    drafts: draftRows(character?.drafts ?? [], draft.id),
-    boards: writable(level),
-    aboutYou: ['description', 'history'],
-    sent: sentRows(character?.sent ?? []),
-    others: otherRows(file, character),
-    onDraft: (id) => {
-      const d = character?.drafts.find((x) => x.id === id);
-      if (d) switchTo(d.kind, d);
-    },
-    onNew: (k) => {
-      const d = KINDS[k].board
-        ? newDraft(k, KINDS[k].room ? (room.info?.name ?? null) : null)
-        : openDraft(k);
-      switchTo(k, d);
-      readIfNoDraft(k, d);
-    },
-    onSent: (id) => {
-      const d = character?.sent.find((x) => x.id === id);
-      if (!d) return;
-      switchTo(d.kind, d);
-      setSentView(true);
-    },
-    onOther: (key) => {
-      const them = file.characters[key];
-      if (!them) return;
-      setOther({ world: { host: them.host, port: them.port }, name: them.name });
-      const d = them.drafts.find((x) => KINDS[x.kind].board) ?? them.drafts[0];
-      if (d) switchTo(d.kind, d);
-    },
-  };
-
-  const hasLanguage = draft.language !== null && draft.language !== undefined;
-  const moreActions: Record<MoreAction, () => void> = {
-    language: () => keep({ ...draft, language: hasLanguage ? null : '' }),
-    race: () => keep({ ...draft, custom_race: !draft.custom_race }),
-    rewrap: rewrapEvery,
-    preview: () => setPreview(true),
-    spelling: () => keepSwitches(!file.spelling, file.guide),
-    copy: () => void navigator.clipboard.writeText(lines.join('\n')).catch(() => {}),
-    'copy-draft': () =>
-      switchTo(kind, {
-        ...draft,
-        ...newDraft(kind),
-        to: draft.to ?? '',
-        subject: draft.subject ?? '',
-        text: lines,
-      }),
-    delete: () =>
-      setConfirm({
-        ...DELETE_ASK,
-        run: () => {
-          if (world && name)
-            keepCharacter(withoutDraft(characterOf(getWritingFile(), world, name), draft.id));
-          switchTo(kind, newDraft(kind));
-        },
-      }),
-    read: readAgain,
-    check,
-    restore: () => {
-      if (!draft.game) return;
-      show(draft.game);
-      keep({ ...draft, text: draft.game });
-    },
-    clear: () =>
-      setConfirm({
-        ...CLEAR_ASK,
-        run: () => {
-          show([]);
-          keep({ ...draft, text: [] });
-        },
-      }),
-  };
-  const moreItems: MoreItem[] = moreRows({
+  const menuCard: MenuCard = {
+    character,
+    draft,
+    level,
+    file,
+    roomName: room.info?.name ?? null,
     kind,
-    language: hasLanguage,
-    customRace: draft.custom_race === true,
-    spelling: file.spelling,
+    lines,
+    world,
+    name,
     sentView,
-    canRead: live && running === null,
-    canRestore: !!draft.game && !sameLines(lines, draft.game),
-    canCheck: live && running === null && (matches || phase === 'sent'),
-  }).map((row) => (row === 'separator' ? row : { ...row, run: moreActions[row.id] }));
+    live,
+    running,
+    canCheck,
+    openDraft,
+    switchTo,
+    readIfNoDraft,
+    keep,
+    show,
+    rewrapEvery,
+    readAgain,
+    check,
+    setSentView,
+    setOther,
+    setPreview,
+    setConfirm,
+  };
+  const kindsMenu = kindsMenuFor(menuCard);
+  const moreItems = moreItemsFor(menuCard);
 
-  // ── Moving, sizing and pinning ────────────────────────────────────
-  /** Back to the place over the terminal the card works out itself. */
-  const putBack = () => void saveWritingCardPrefs({ left: null, top: null }).catch(() => {});
   const more: MoreItem[] =
     !docked && prefs.left !== null && prefs.top !== null
       ? [...moreItems, 'separator', { id: 'put-back', label: 'Put the card back', run: putBack }]
       : moreItems;
 
-  const togglePin = () => {
-    void saveWritingCardPrefs({ pinned: !prefs.pinned }).catch(() => {});
-    if (!prefs.pinned) pinWritingPane();
-  };
-
-  // A press on the header that travels a few pixels moves the card. It
-  // stays whole in the window, and lands where you let go.
-  const moveRef = useRef<{ x: number; y: number; from: Point; to: Point | null } | null>(null);
-  const endMove = () => {
-    const d = moveRef.current;
-    moveRef.current = null;
-    if (d?.to) void saveWritingCardPrefs({ left: d.to.left, top: d.to.top }).catch(() => {});
-    setMoving(null);
-  };
-  const canMove = !docked && !folded && roomy && place !== null;
-  const drag: Pick<
-    HTMLAttributes<HTMLDivElement>,
-    'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'
-  > | null = canMove
-    ? {
-        onPointerDown: (e) => {
-          if (e.button !== 0 || !startsMove(e.target)) return;
-          const box = cardRef.current?.getBoundingClientRect();
-          if (!box) return;
-          moveRef.current = {
-            x: e.clientX,
-            y: e.clientY,
-            from: { left: box.left, top: box.top },
-            to: null,
-          };
-          e.currentTarget.setPointerCapture(e.pointerId);
-        },
-        onPointerMove: (e) => {
-          const d = moveRef.current;
-          if (!d) return;
-          const dx = e.clientX - d.x;
-          const dy = e.clientY - d.y;
-          if (d.to === null && Math.hypot(dx, dy) < DRAG_SLOP) return;
-          const size = cardSize ?? { w: naturalWidth, h: 0 };
-          d.to = clampPlace({ left: d.from.left + dx, top: d.from.top + dy }, size, view);
-          setMoving(d.to);
-        },
-        onPointerUp: endMove,
-        onPointerCancel: endMove,
-        onDoubleClick: (e) => {
-          if (startsMove(e.target) && prefs.left !== null) putBack();
-        },
-      }
-    : null;
-
-  // The grip sits on the edge that moves: the foot of a card you moved,
-  // which hangs from its top, and the top of a card in its own place,
-  // whose foot stays over the six rows above your prompt. A pinned box
-  // fills its pane and takes no grip.
-  const gripEdge: 'foot' | 'top' | null =
-    docked || folded || preview ? null : moved ? 'foot' : 'top';
-  const sizeRef = useRef<{ y: number; rows: number; to: number | null } | null>(null);
-  const endSize = () => {
-    const d = sizeRef.current;
-    sizeRef.current = null;
-    document.body.style.cursor = '';
-    if (d?.to !== null && d?.to !== undefined) {
-      void saveWritingCardPrefs({ rows: d.to }).catch(() => {});
-    }
-    setSizing(null);
-  };
+  // ── Sizing ────────────────────────────────────────────────────────
   const grip = gripEdge && (
-    <div
-      className={`wr-grip is-${gripEdge}`}
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize the text box"
-      aria-valuemin={BOX_ROWS_MIN}
-      aria-valuemax={Math.max(BOX_ROWS_MIN, fit)}
-      aria-valuenow={boxRows}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        sizeRef.current = { y: e.clientY, rows: boxRows, to: null };
-        document.body.style.cursor = 'ns-resize';
-      }}
-      onPointerMove={(e) => {
-        const d = sizeRef.current;
-        if (!d) return;
-        d.to = dragRows(d.rows, e.clientY - d.y, lineH, fit, gripEdge === 'foot' ? 1 : -1);
-        setSizing(d.to);
-      }}
-      onPointerUp={endSize}
-      onPointerCancel={endSize}
-      // A double click lets the box grow with the text again.
-      onDoubleClick={() => void saveWritingCardPrefs({ rows: null }).catch(() => {})}
+    <RowGrip edge={gripEdge} boxRows={boxRows} fit={fit} lineH={lineH} setSizing={setSizing} />
+  );
+  const boxGrip = gripEdge && (
+    <BoxGrip
+      boxRows={boxRows}
+      boxCols={boxCols}
+      fit={fit}
+      colsFit={colsFit}
+      lineH={lineH}
+      colW={colW}
+      narrow={narrow}
+      setSizing={setSizing}
+      setSizingCols={setSizingCols}
     />
   );
-
-  // The grip in the text box's corner sizes the box both ways, as a text
-  // area's does: down for more rows and right for more columns, from 6
-  // rows and 75 columns up to what the window allows, and the card grows
-  // with it. A narrow window keeps 80 columns in a smaller face, so there
-  // the grip sizes the rows alone. A double click lets the box grow with
-  // the text again at 80 columns.
-  const boxSizeRef = useRef<{
-    x: number;
-    y: number;
-    rows: number;
-    cols: number;
-    toRows: number;
-    toCols: number;
-  } | null>(null);
-  const endBoxSize = () => {
-    const d = boxSizeRef.current;
-    boxSizeRef.current = null;
-    document.body.style.cursor = '';
-    if (d) {
-      const patch = {
-        ...(d.toRows !== d.rows ? { rows: d.toRows } : {}),
-        ...(d.toCols !== d.cols ? { cols: d.toCols } : {}),
-      };
-      if (Object.keys(patch).length > 0) void saveWritingCardPrefs(patch).catch(() => {});
-    }
-    setSizing(null);
-    setSizingCols(null);
-  };
-  const boxGrip = gripEdge && (
-    <div
-      className="wr-box-grip"
-      role="button"
-      aria-label="Resize the text box"
-      title="Drag to resize the text box. Double click to reset it."
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        boxSizeRef.current = {
-          x: e.clientX,
-          y: e.clientY,
-          rows: boxRows,
-          cols: boxCols,
-          toRows: boxRows,
-          toCols: boxCols,
-        };
-        document.body.style.cursor = narrow ? 'ns-resize' : 'nwse-resize';
-      }}
-      onPointerMove={(e) => {
-        const d = boxSizeRef.current;
-        if (!d) return;
-        d.toRows = dragRows(d.rows, e.clientY - d.y, lineH, fit, 1);
-        d.toCols = narrow ? d.cols : dragCols(d.cols, e.clientX - d.x, colW, colsFit);
-        setSizing(d.toRows);
-        setSizingCols(d.toCols);
-      }}
-      onPointerUp={endBoxSize}
-      onPointerCancel={endBoxSize}
-      onDoubleClick={() => void saveWritingCardPrefs({ rows: null, cols: null }).catch(() => {})}
-    >
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-        <path
-          d="M11.5 4.5l-7 7M11.5 8.5l-3 3"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
-  );
-
-  // The card's own box, which moves between the window and the pane.
-  // Focus inside it stays where it was across the move.
-  const [hostEl] = useState(() => {
-    const el = document.createElement('div');
-    el.className = 'wr-host';
-    document.body.appendChild(el);
-    return el;
-  });
-  useLayoutEffect(() => {
-    const parent = docked && slot ? slot : document.body;
-    if (hostEl.parentElement === parent) return;
-    const active = document.activeElement;
-    const inside = active instanceof HTMLElement && hostEl.contains(active);
-    parent.appendChild(hostEl);
-    if (inside) active.focus({ preventScroll: true });
-  }, [docked, slot, hostEl]);
-  useLayoutEffect(() => () => hostEl.remove(), [hostEl]);
 
   const guide =
     kind === 'application'
@@ -1013,28 +599,7 @@ export function WritingCard({
     setFolded(true);
   };
 
-  if (!world || !name) {
-    return (
-      <div
-        className="pc-card st-controls wr-card"
-        role="dialog"
-        aria-label="Write"
-        style={{ left: 12, bottom: 120 }}
-      >
-        <div className="pc-head">
-          <h2 className="pc-title">Write</h2>
-          <span className="pc-spacer" />
-          <Button onClick={onClose}>Close</Button>
-        </div>
-        <div className="pc-rule" />
-        <div className="pc-body">
-          <p className="pc-copy">
-            Log in with a character first. Vosh keeps your writing separate for each one.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!world || !name) return <WritingNoCharacter onClose={onClose} />;
 
   const placed: CSSProperties = docked
     ? {}
@@ -1058,15 +623,6 @@ export function WritingCard({
     ['--wr-fg' as string]: env.fg,
     ['--wr-ground' as string]: env.bg,
   };
-
-  // A confirm sits over the card's foot, 12 in from its right.
-  const cardBox = confirm ? cardRef.current?.getBoundingClientRect() : null;
-  const confirmAt = cardBox
-    ? {
-        right: window.innerWidth - cardBox.right + 12,
-        bottom: window.innerHeight - cardBox.bottom + 60,
-      }
-    : null;
 
   const sending =
     running && running.stage === 'sending'
@@ -1223,23 +779,13 @@ export function WritingCard({
         hostEl,
       )}
       {confirm && (
-        <ConfirmDialog
-          title={confirm.title}
-          body={confirm.body}
-          confirmLabel={confirm.label}
-          {...(confirm.cancel ? { cancelLabel: confirm.cancel } : {})}
-          tone={confirm.tone ?? 'danger'}
-          onConfirm={() => {
-            const go = confirm.run;
-            if (stopsAsking(confirm.skip, skipAsk)) void stopAskingToPost().catch(() => {});
-            setConfirm(null);
-            go();
-          }}
-          onCancel={() => setConfirm(null)}
-          {...(confirmAt ? { at: confirmAt } : {})}
-        >
-          {confirm.skip && <DontAskAgain checked={skipAsk} onChange={setSkipAsk} />}
-        </ConfirmDialog>
+        <WritingConfirm
+          confirm={confirm}
+          skipAsk={skipAsk}
+          setSkipAsk={setSkipAsk}
+          setConfirm={setConfirm}
+          cardRef={cardRef}
+        />
       )}
     </>
   );

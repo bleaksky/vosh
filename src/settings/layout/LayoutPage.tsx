@@ -18,7 +18,8 @@ import {
   subscribeProfileSwitched,
   subscribeProfilesChanged,
 } from '../../ipc/profiles';
-import { shownStyle, type UiConfig, type VitalsPlace } from '../../ipc/uiConfig';
+import { type UiConfig } from '../../ipc/uiConfig';
+import { shownStyle, type VitalsPlace } from '../../ipc/uiConfigVitals';
 import { useTauriEvent } from '../../ipc/useTauriEvent';
 import {
   panelWidthOf,

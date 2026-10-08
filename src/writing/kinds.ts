@@ -1,4 +1,4 @@
-import type { WritingKind } from '../ipc/writing';
+import type { EditorKind, WritingKind } from '../ipc/writing';
 
 // The kinds of text the writing card takes, one row each.
 // A kind sets the card's title, its fields, its
@@ -275,6 +275,12 @@ export const KINDS: Record<WritingKind, KindInfo> = {
     guide: HISTORY_GUIDE,
   },
 };
+
+/** The card takes the text, which a tome, a cabal vote, paper and a
+ *  pet's description wait for (Note Editor Q4). */
+export function cardTakes(kind: EditorKind): kind is WritingKind {
+  return kind in KINDS;
+}
 
 /** The boards in the order the menus list them, the staff boards last. */
 export const BOARD_KINDS: WritingKind[] = [

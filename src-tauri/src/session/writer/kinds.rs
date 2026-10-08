@@ -1,9 +1,11 @@
-//! The kinds of text the writing card takes, one row each. Every kind
-//! goes through the game's one line editor
+//! The kinds of text the game's editor holds that Vosh names, one row
+//! each. Every kind goes through the game's one line editor
 //! (`string_append`, `olc.c:3383`), and a row says how the card opens
 //! it, which line the game prints before its banner, the fields it sets
 //! at the game's prompt first, how it reads the text back and how it
-//! ends.
+//! ends. The card takes every kind but a tome, a cabal vote, paper and a
+//! pet's description, which get only the count on the command line
+//! until the card takes them too (Note Editor Q4).
 
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +35,15 @@ pub(crate) enum Kind {
     News,
     Changes,
     Penalty,
+    /// The text of the tome you scribe, `scribe text` (`tome.c:931`).
+    Tome,
+    /// The text of the cabal vote you draft, `vote edit` (`vote.c:1427`).
+    Vote,
+    /// What you write on the notepaper you hold, `write edit` and a
+    /// language (`languages.c:2427`).
+    Paper,
+    /// Your pet's description, `petedit desc` (`magic5.c:857`).
+    Pet,
 }
 
 /// Every board in the order the card asks them for a note in progress.
@@ -49,6 +60,12 @@ pub(crate) const BOARDS: [Kind; 9] = [
 ];
 
 impl Kind {
+    /// The card takes the text. The rest get only the command line's
+    /// count.
+    pub(crate) fn card(self) -> bool {
+        !matches!(self, Kind::Tome | Kind::Vote | Kind::Paper | Kind::Pet)
+    }
+
     /// The board's command, for a kind `parse_note` holds.
     pub(crate) fn board(self) -> Option<&'static str> {
         match self {
@@ -74,20 +91,33 @@ impl Kind {
             Kind::History => "history edit".to_string(),
             Kind::Personality => "history personality".to_string(),
             Kind::Purpose => "history purpose".to_string(),
+            Kind::Tome => "scribe text".to_string(),
+            Kind::Vote => "vote edit".to_string(),
+            Kind::Paper => "write edit".to_string(),
+            Kind::Pet => "petedit desc".to_string(),
             board => format!("{} edit", board.board().unwrap_or("note")),
         }
     }
 
-    /// The line the game prints before the banner, which names the text
-    /// (`act_comm.c:5111` to `5123`), or the start of it for a beast,
-    /// whose line names your beast (`act_info.c:7659`).
-    pub(crate) fn names_itself(self) -> Option<&'static str> {
+    /// The lines the game prints before the banner, one of which names
+    /// the text (`act_comm.c:5111` to `5123`, `tome.c:937`), or the start
+    /// of them for a beast, whose line names your beast
+    /// (`act_info.c:7659`), and for paper, whose line names the language
+    /// and the paper (`languages.c:2472`, `2482`, `2485`). Empty for a
+    /// kind the game opens on its banner alone.
+    pub(crate) fn names_itself(self) -> &'static [&'static str] {
         match self {
-            Kind::Beast => Some("Remember, your beast is "),
-            Kind::History => Some("Editing your HISTORY.."),
-            Kind::Personality => Some("Editing your PERSONALITY.."),
-            Kind::Purpose => Some("Editing your PURPOSE.."),
-            _ => None,
+            Kind::Beast => &["Remember, your beast is "],
+            Kind::History => &["Editing your HISTORY.."],
+            Kind::Personality => &["Editing your PERSONALITY.."],
+            Kind::Purpose => &["Editing your PURPOSE.."],
+            Kind::Tome => &["Enter the contents of the tome."],
+            Kind::Paper => &[
+                "You begin writing in ",
+                "You continue writing in ",
+                "You decide to write in ",
+            ],
+            _ => &[],
         }
     }
 

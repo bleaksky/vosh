@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { vitalsTextWatch } from '../ipc/vitals';
-import type { ChipStyle, VitalsOptions } from '../ipc/uiConfig';
+import type { ChipStyle } from '../ipc/uiConfig';
+import type { VitalsOptions } from '../ipc/uiConfigVitals';
 import { useBandEnv } from '../prompt/useBandEnv';
 import { usePlayPalette } from '../theme/fitGameColors';
 import { useChipStyle } from '../stores/config/chipStyleStore';

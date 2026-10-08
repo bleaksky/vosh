@@ -47,7 +47,7 @@ A room view reads Room.Info as the prompt engine reads it on the new build, with
 
 ## Chat packets
 
-The `chat` folder holds Comm.Channel packets, written by hand from `gmcp_send_channel_ext` in `gmcp.c` and its callers in `act_comm.c` and `languages.c`. Only the chat store in the webview reads them, in `src/lib/chatStore.test.ts`, so they sit apart from the packets the prompt engine keeps a view of. The messages are made up.
+The `chat` folder holds Comm.Channel packets, written by hand from `gmcp_send_channel_ext` in `gmcp.c` and its callers in `act_comm.c` and `languages.c`. Only the chat store in the webview reads them, in `src/stores/gmcp/chatStore.test.ts`, so they sit apart from the packets the prompt engine keeps a view of. The messages are made up.
 
 | File | What the server sends it for |
 | --- | --- |

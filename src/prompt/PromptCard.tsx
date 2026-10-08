@@ -7,26 +7,19 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { moveTriggerToPrompts } from '../automation/automationTriggers';
 import { vitalsLegacyText, type CardBinding } from './cardBinding';
 import type { CellSize } from './pinnedDock';
 import {
   type CardRequest,
-  cardShowState,
   headerButtons,
   moreItems,
-  openingStep,
   savedForName,
   cardNames,
   vitalsStartRows,
   VITALS_MORE,
-  withDesign,
-  withShow,
-  withStart,
   type CardStep,
   type MoreItemId,
 } from './cardRules';
-import { followCardProfile } from './promptCardSync';
 import { warnedPieces } from './promptWarn';
 import { LAYOUT_TOKENS, type LayoutId } from './pickerRows';
 import {
@@ -39,17 +32,12 @@ import {
   step as stepPick,
   type Pointing,
 } from './promptPieces';
-import { notMatchingLine, shownPreview } from './promptSettings';
-import { sessionIdentityGet, type SessionIdentity } from '../ipc/characters';
-import { profilesList } from '../ipc/profiles';
+import { shownPreview } from './promptSettings';
+import type { SessionIdentity } from '../ipc/characters';
 import {
-  onPromptState,
-  onPromptStatus,
   promptCodeReaderSet,
   promptCompile,
   promptDesignsList,
-  promptStateGet,
-  promptWatch,
   type PromptDesign,
   type PromptPreset,
   type PromptState,
@@ -74,23 +62,17 @@ import { formatSettingsTarget } from '../lib/settingsNav';
 import { pushToast } from '../stores/toasts';
 import { useBandEnv } from './useBandEnv';
 import { useCaptureSteps } from './useCaptureSteps';
+import { useCardOpen } from './useCardOpen';
 import { useCardPlace } from './useCardPlace';
 import { useDesignEdits } from './useDesignEdits';
-import { getSessions } from '../stores/session/sessionsStore';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
-import { knownWorld } from '../lib/knownWorlds';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
 import { MenuItem, MenuSeparator } from '../ui/MenuSurface';
 import { CardMenu } from './CardMenu';
-import { LineTriggers } from './PromptCodes';
 import { PromptMarks } from './PromptMarks';
-import { PromptPicker } from './PromptPicker';
-import { PromptPieceBody } from './PromptPiece';
-import { DesignFoot, TextFoot } from './PromptFoot';
-import { DrawOff, Starts } from './PromptStarts';
-import { PromptText } from './PromptText';
+import { restBody } from './promptRest';
 
 // The prompt card. It opens from the terminal menu on any row, the
 // palette, or Customize… in Settings, over your prompt: 4 px above the
@@ -171,10 +153,6 @@ interface PromptCardProps {
   onPromptDone?: () => void;
   onClose: () => void;
 }
-
-/** What the Lament preview hides, under the card at rest. */
-const LAMENT_NOTE =
-  "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
 
 export function PromptCard({
   session,
@@ -270,98 +248,27 @@ export function PromptCard({
   const drawn = shownPreview(preview, forsaken);
   previewRef.current = drawn;
 
-  // The step the card was asked to open on, read once as it opens.
-  const opensOn = useRef(opening.view === 'point' ? ('point' as const) : undefined);
-
-  // Open: keep the design among the earlier ones, read the state, and
-  // name who the card saves for. When another profile becomes active the
-  // card opens again for it, from its first step, with nothing to take
-  // back, and saves nothing until it has read that profile's table.
-  useEffect(() => {
-    let alive = true;
-    const open = (first: boolean) => {
-      const at = ++opens.current;
-      if (!first) {
-        forgetEdits();
-        setStep(null);
-        setPointing(NOWHERE);
-        setView('design');
-        resetSteps();
-        setMoreAt(null);
-        setConfirmForget(false);
-      }
-      void Promise.all([
-        binding.open(session),
-        promptStateGet(session),
-        sessionIdentityGet(session).catch(() => null),
-        profilesList().catch(() => null),
-      ])
-        .then(([opened, now, who, list]) => {
-          if (!alive || at !== opens.current) return;
-          // The profile the session's row names, which the app may not
-          // have made active yet when you just selected the session.
-          const played = getSessions().find((row) => row.id === session)?.profile;
-          const name = played ?? list?.active ?? who?.profile ?? 'default';
-          const entry = list?.profiles.find((p) => p.name === name);
-          const host = who?.host ?? entry?.auto_match?.host ?? '';
-          const known = knownWorld(host) !== undefined;
-          take(opened);
-          setState(now);
-          setIdentity(who);
-          setActive(name);
-          setKnownHost(known);
-          // A vitals text reads no prompt, so it rests at once.
-          setStep(
-            vitals
-              ? 'rest'
-              : ((first ? opensOn.current : undefined) ??
-                  openingStep({
-                    capture: opened.capture,
-                    forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
-                    gameSent: now.new_build,
-                  })),
-          );
-        })
-        .catch((e: unknown) => console.error('[prompt card] opening failed', e));
-    };
-    open(true);
-    void promptWatch(true, session).catch(() => {});
-    const unlisteners: (() => void)[] = [];
-    const keep = (p: Promise<() => void>) =>
-      void p.then((fn) => (alive ? unlisteners.push(fn) : fn())).catch(() => {});
-    keep(
-      followCardProfile({
-        reopen: () => open(false),
-        identity: (who) => setIdentity(who),
-      }),
-    );
-    keep(
-      onPromptState((next, from) => {
-        if (from !== session) return;
-        setState(next);
-        setRefresh((n) => n + 1);
-      }),
-    );
-    // Whether Vosh reads your prompt changes between prompts too, such as
-    // when three in a row did not match.
-    keep(
-      onPromptStatus((status, from) => {
-        if (from === session) setState((now) => (now ? { ...now, status } : now));
-      }),
-    );
-    keep(
-      binding.follow(session, (next) => {
-        if (alive) take(next);
-      }),
-    );
-    return () => {
-      alive = false;
-      for (const fn of unlisteners) fn();
-      void promptWatch(false, session).catch(() => {});
-      // Your live prompt comes back as the card closes.
-      void promptPreviewSet(null, session).catch(() => {});
-    };
-  }, [session, binding, vitals, forgetEdits, opens, resetSteps, take]);
+  // Open, and open again for another profile.
+  useCardOpen({
+    session,
+    binding,
+    vitals,
+    opening,
+    opens,
+    take,
+    forgetEdits,
+    resetSteps,
+    setStep,
+    setPointing,
+    setView,
+    setMoreAt,
+    setConfirmForget,
+    setState,
+    setIdentity,
+    setActive,
+    setKnownHost,
+    setRefresh,
+  });
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
@@ -700,134 +607,47 @@ export function PromptCard({
         body = stepBody;
         break;
       case 'start':
-      case 'rest': {
-        // With drawing off the card says so at rest, and Edit as text
-        // still works on the design you keep.
-        const drawOff = !config.draw && step === 'rest' && view === 'design';
-        let content: ReactNode;
-        if (drawOff) {
-          content = (
-            <DrawOff
-              name={owner}
-              other={!forsaken}
-              confirming={confirmForget}
-              onForget={() => setConfirmForget(true)}
-            />
-          );
-        } else if (view === 'picker' && state) {
-          content = (
-            <PromptPicker
-              session={session}
-              state={state}
-              preview={drawn}
-              env={env}
-              cellW={cellW}
-              refresh={refresh}
-              onInsert={insertValue}
-              onInsertLayout={insertLayout}
-              focusSearch={pickerKeys}
-            />
-          );
-        } else if (view === 'text') {
-          content = (
-            <PromptText
-              template={config.template}
-              tokens={described?.data.tokens ?? []}
-              describedFor={described?.template ?? ''}
-              onChange={(next) => save(withDesign(config, next))}
-              onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
-              onInsertValue={() => openPicker('text')}
-              insertRef={insertRef}
-              caretRef={textCaret}
-              focusRequest={textFocus}
-              onFocusTaken={() => setTextFocus(0)}
-              fieldLabel={vitals ? 'Vitals text' : undefined}
-            />
-          );
-        } else if (pickedPiece) {
-          content = (
-            <PromptPieceBody
-              key={pickedPiece.piece}
-              piece={pickedPiece}
-              env={env}
-              onEdit={(op) => edit([op])}
-              onInsertValue={() => openPicker('design')}
-            />
-          );
-        } else {
-          content = (
-            <Starts
-              session={session}
-              mode={step}
-              config={config}
-              presets={presets}
-              designs={designs}
-              own={vitalsStarts}
-              values={(state?.packages.length ?? 0) > 0 ? 'live' : 'sample'}
-              refresh={refresh}
-              env={env}
-              cellW={cellW}
-              restHint={vitals ? 'Click any part of your vitals to change it.' : undefined}
-              note={step === 'rest' && drawn === 'lament' ? LAMENT_NOTE : null}
-              promptsOff={
-                !vitals && (state?.status.status === 'prompts_off' || (show?.promptsOff ?? false))
-              }
-              notMatching={
-                !vitals && state?.status.status === 'not_matching'
-                  ? notMatchingLine(state.status.last_match_at)
-                  : null
-              }
-              onPick={(row) => {
-                setPointing(NOWHERE);
-                // Picking a start is how you ask Vosh to draw it, so
-                // drawing turns on. Same as the game follows the game,
-                // and Start empty keeps its empty design.
-                save(withStart(config, row), true, row.template === '');
-              }}
-              onInsertValue={() => openPicker('design')}
-            >
-              <LineTriggers
-                triggers={lineTriggers}
-                onMove={async (name) => {
-                  await moveTriggerToPrompts(name);
-                  setLineTriggers((list) => list.filter((t) => t.name !== name));
-                }}
-              />
-            </Starts>
-          );
-        }
-        body = (
-          <>
-            {content}
-            <div className="pc-rule" aria-hidden="true" />
-            {vitals ? (
-              <TextFoot
-                note={shownIn === 'status' ? 'Draws in your status line' : 'Draws in your panel'}
-                preview={drawn}
-                forsaken={forsaken}
-                onPreview={setPreview}
-                onDone={onClose}
-              />
-            ) : (
-              <DesignFoot
-                draw={config.draw}
-                onDraw={(draw) => save({ ...config, draw })}
-                show={config.show}
-                showState={cardShowState(show, config.capture)}
-                onShow={(place) => save(withShow(config, place))}
-                preview={drawn}
-                forsaken={forsaken}
-                onPreview={setPreview}
-                onDone={() => {
-                  onPromptDone?.();
-                  onClose();
-                }}
-              />
-            )}
-          </>
-        );
+      case 'rest':
+        body = restBody({
+          step,
+          config,
+          view,
+          session,
+          state,
+          show,
+          vitals,
+          forsaken,
+          drawn,
+          env,
+          cellW,
+          refresh,
+          owner,
+          confirmForget,
+          setConfirmForget,
+          pickerKeys,
+          insertValue,
+          insertLayout,
+          openPicker,
+          described,
+          insertRef,
+          textCaret,
+          textFocus,
+          setTextFocus,
+          pickedPiece,
+          setPointing,
+          presets,
+          designs,
+          vitalsStarts,
+          lineTriggers,
+          setLineTriggers,
+          shownIn,
+          save,
+          edit,
+          setPreview,
+          onPromptDone,
+          onClose,
+        });
         break;
-      }
     }
   }
 

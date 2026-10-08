@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getUiConfig, subscribeWritingAskPostChanged } from '../ipc/uiConfig';
+import { getUiConfig } from '../ipc/uiConfig';
+import { subscribeWritingAskPostChanged } from '../ipc/uiConfigEvents';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 
 // Settings › Input › Ask before you post, and the card's own Don't ask

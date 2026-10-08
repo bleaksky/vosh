@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { CheckIcon } from '../ui';
+import { Button, CheckIcon } from '../ui';
+import type { FootAction, FootButton, FootLeft } from './cardFoot';
 import type { Note } from './words';
 
 /** The dot for each tone of a note that is not a plain ok. */
@@ -57,4 +58,35 @@ export function WritingFoot({ left, right }: { left: ReactNode; right: ReactNode
       <div className="pc-foot-end">{right}</div>
     </div>
   );
+}
+
+/** The left of the footer: a job's progress, a note or the count. */
+export function FootLeftSide({ left }: { left: FootLeft }) {
+  return 'progress' in left ? (
+    <span className="pc-foot-note">{left.progress}</span>
+  ) : 'note' in left ? (
+    <FootNote note={left.note} />
+  ) : (
+    <FootCount {...left.count} />
+  );
+}
+
+/** The footer's buttons, each running its action. */
+export function FootButtons({
+  buttons,
+  actions,
+}: {
+  buttons: readonly FootButton[];
+  actions: Record<FootAction, () => void>;
+}) {
+  return buttons.map((b) => (
+    <Button
+      key={b.id}
+      variant={b.primary ? 'primary' : 'secondary'}
+      disabled={b.disabled === true}
+      onClick={actions[b.id]}
+    >
+      {b.label}
+    </Button>
+  ));
 }

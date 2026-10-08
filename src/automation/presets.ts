@@ -52,7 +52,7 @@ export interface Preset {
    *  The presets step lists the suggestions outside Chat, and the Chat
    *  step lists the ones in it. */
   suggest: readonly string[];
-  /** One to three lines the game prints that show what the preset does,
+  /** One to five lines the game prints that show what the preset does,
    *  each in the game's own words, with the place in the game's source it
    *  comes from beside it. A character or a number the game fills in comes
    *  from the repo fixtures. presets.test.ts runs each line through the
@@ -570,7 +570,13 @@ export const PRESETS: Preset[] = [
       'and the rest of the line keeps its color.',
     // The top hit in dam_message in fight.c, on a villager, mob 5287 in
     // area/fortblac.are.
-    sample: [{ text: 'You do UNSPEAKABLE things to a villager!', shows: 'combat.outgoing' }],
+    sample: [
+      {
+        text: 'You do UNSPEAKABLE things to a villager!',
+        shows: 'combat.outgoing',
+        bars: ['a villager'],
+      },
+    ],
     suggest: [FORSAKEN_LANDS],
     colors: {
       line: inTemplate('The rest of the line', 'fg:253'),
@@ -611,10 +617,19 @@ export const PRESETS: Preset[] = [
       'Dims lines where something hits you to grey, with the damage verb in red and ' +
       'misses in pale cyan.',
     // A hit and a miss on you in dam_message in fight.c, from a villager,
-    // mob 5287 in area/fortblac.are, whose attack is a punch.
+    // mob 5287 in area/fortblac.are, whose attack is a punch. Bars stand
+    // for the attacker and the attack.
     sample: [
-      { text: "A villager's punch grazes you.", shows: 'combat.incoming' },
-      { text: "A villager's punch misses you.", shows: 'combat.incoming_miss' },
+      {
+        text: "A villager's punch decimates you!",
+        shows: 'combat.incoming',
+        bars: ["A villager's", 'punch'],
+      },
+      {
+        text: "A villager's punch misses you.",
+        shows: 'combat.incoming_miss',
+        bars: ["A villager's", 'punch'],
+      },
     ],
     suggest: [FORSAKEN_LANDS],
     colors: {
@@ -878,17 +893,25 @@ export const PRESETS: Preset[] = [
       'Colors the exits green, what is in the room yellow, your target in the room bright ' +
       'red, the time of day blue, a change in the weather pale blue, and the WiZNET tag ' +
       'magenta.',
-    // The first look in fixtures/room-colors/looks.json, the Bank of
-    // Aabahran. Its exits line, the villager it lists after them, and the
-    // time of day message that follows the look in the same pulse.
+    // The look in fixtures/room-colors/looks.json where your target, a
+    // villager, fights a player who names it in their own line. Its exits
+    // line, the villager and Maren as char_to_char in act_info.c prints
+    // them, the time of day message, and a change in the weather from
+    // sky_event_text in update.c.
     sample: [
       { text: '[Exits: south]', shows: 'room.exits' },
       {
-        text: 'A Blackwatch villager scurries about, taking care of business.',
+        text: 'A villager is here, fighting Maren.',
+        shows: 'room.target',
+        target: 'room_target',
+      },
+      {
+        text: 'Maren is here, fighting a villager.',
         shows: 'room.contents',
         target: 'room',
       },
       { text: 'The day has begun.', shows: 'time.of_day' },
+      { text: 'It starts to rain.', shows: 'weather.change' },
     ],
     suggest: [FORSAKEN_LANDS],
     colors: {

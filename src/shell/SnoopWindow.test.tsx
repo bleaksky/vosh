@@ -81,7 +81,7 @@ const live = (name: string): SnoopTab => ({
 });
 
 function snoops(tabs: SnoopTab[], selected: string | null, unread: string[] = []) {
-  fake.snoops = { tabs, windowed: true, selected, unread: new Set(unread) };
+  fake.snoops = { tabs, windowed: true, selected, folded: false, unread: new Set(unread) };
 }
 
 /** The Find row, with its keys as macOS writes them. */

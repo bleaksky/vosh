@@ -1,13 +1,14 @@
 import { useLayoutEffect, useState, type CSSProperties } from 'react';
 import type { WritingState } from '../ipc/writing';
-import { KINDS } from '../writing/kinds';
+import { cardTakes, KINDS } from '../writing/kinds';
 import { columns, startsAsCommand } from '../writing/text';
 
 // The command line while the game's own line editor holds a text Vosh
 // names, after you typed description edit or note edit and kept typing
-// there. Each line goes raw, a paste goes on the game's > as the card's
-// lines do, and the line shows a tick at the right edge of column 75
-// with its count.
+// there, or opened one the card does not take yet with scribe text,
+// vote edit, write edit or petedit desc. Each line goes raw, a paste
+// goes on the game's > as the card's lines do, and the line shows a
+// tick at the right edge of column 75 with its count.
 
 /** What the command line shows of the editor, or null while it holds no
  *  text Vosh names, or the card drives it. */
@@ -20,7 +21,8 @@ export interface EditorLine {
 
 export function editorLineOf(writing: WritingState): EditorLine | null {
   if (writing.editor === null || writing.job !== null) return null;
-  return { kind: writing.editor, width: 75, helpWidth: KINDS[writing.editor].helpWidth };
+  const kind = writing.editor;
+  return { kind, width: 75, helpWidth: cardTakes(kind) && KINDS[kind].helpWidth };
 }
 
 /** The count at the line's right and its tone: past the width it reads

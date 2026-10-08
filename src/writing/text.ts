@@ -363,6 +363,11 @@ export function marks(line: string, width: number, helpWidth: boolean, immortal:
   return out;
 }
 
+/** Whether `a` and `b` hold the same lines, spaces at their ends aside. */
+export const sameLines = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length &&
+  a.every((line, k) => line.replace(/ +$/, '') === b[k].replace(/ +$/, ''));
+
 // ── The footer's count ───────────────────────────────────────────────
 
 /** What the footer counts: lines with text, empty lines between them,

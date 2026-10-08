@@ -435,8 +435,8 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
   combat_incoming: [
     [
       ["A villager's punch ", '244'],
-      ['grazes', '210'],
-      [' you.', '244'],
+      ['decimates', '210'],
+      [' you!', '244'],
     ],
     [
       ["A villager's punch ", '244'],
@@ -478,8 +478,10 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
   sent_tells: [[["You tell Tolliver 'The day has begun.'", null]]],
   room_and_time: [
     [['[Exits: south]', 'green']],
-    [['A Blackwatch villager scurries about, taking care of business.', 'yellow']],
+    [['A villager is here, fighting Maren.', 'bright_red']],
+    [['Maren is here, fighting a villager.', 'yellow']],
     [['The day has begun.', 'blue']],
+    [['It starts to rain.', '#8fa7d9']],
   ],
 };
 
@@ -491,10 +493,10 @@ const SAMPLES_DRAW: Record<string, SampleRun[][]> = {
 const TRIGGER_PRESETS = PRESETS.filter((p) => p.triggers.length > 0);
 
 describe('the sample of every preset', () => {
-  it('holds one to three lines as the game prints them, each naming a trigger of its preset', () => {
+  it('holds one to five lines as the game prints them, each naming a trigger of its preset', () => {
     for (const preset of TRIGGER_PRESETS) {
       expect(preset.sample.length, preset.id).toBeGreaterThanOrEqual(1);
-      expect(preset.sample.length, preset.id).toBeLessThanOrEqual(3);
+      expect(preset.sample.length, preset.id).toBeLessThanOrEqual(5);
       const names = preset.triggers.map((t) => t.name);
       for (const line of preset.sample) {
         expect(line.text.trim(), preset.id).toBe(line.text);
@@ -815,7 +817,7 @@ describe('the colors a sample draws in', () => {
     const tell = presetById('sent_tells')!.sample[0].text;
     const at = quotedWords(tell);
     expect(at && tell.slice(...at)).toBe('The day has begun.');
-    expect(quotedWords("A villager's punch grazes you.")).toBeNull();
+    expect(quotedWords("A villager's punch decimates you!")).toBeNull();
   });
 
   it('finds the bars a line names beside the words a tell quotes, in order', () => {
@@ -824,6 +826,11 @@ describe('the colors a sample draws in', () => {
       sampleBars(text, bars).map((at) => text.slice(...at));
     expect(words(xp.text, xp.bars)).toEqual(['1250']);
     expect(words(skill.text, skill.bars)).toEqual(['dagger']);
+    const [hit] = presetById('combat_outgoing')!.sample;
+    expect(words(hit.text, hit.bars)).toEqual(['a villager']);
+    for (const line of presetById('combat_incoming')!.sample) {
+      expect(words(line.text, line.bars)).toEqual(["A villager's", 'punch']);
+    }
     expect(words("You tell Tolliver 'The day has begun.'", ['Tolliver'])).toEqual([
       'Tolliver',
       'The day has begun.',

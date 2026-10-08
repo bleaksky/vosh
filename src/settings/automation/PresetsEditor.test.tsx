@@ -660,7 +660,7 @@ describe('the Presets page of First Run board 4', () => {
       'Suggested',
       'Adds',
     ]);
-    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to a villager!']);
+    expect(editor.sample()).toEqual(['You do UNSPEAKABLE things to !|']);
     expect(editor.value('Suggested')).toBe('For The Forsaken Lands');
     expect(editor.value('Adds')).toBe('2 triggers');
 
@@ -674,6 +674,12 @@ describe('the Presets page of First Run board 4', () => {
     const editor = await mountEditor(['none'], [], {});
     await editor.pick('Tells you send');
     expect(editor.sample()).toEqual(["You tell Tolliver ''|"]);
+  });
+
+  it('draws the attacker and the attack that hit you as bars', async () => {
+    const editor = await mountEditor(['none'], [], {});
+    await editor.pick('Damage to you');
+    expect(editor.sample()).toEqual(['  decimates you!||', '  misses you.||']);
   });
 
   it('draws the number and the skill a gain names as bars', async () => {

@@ -10,15 +10,14 @@ import {
   type ReactNode,
 } from 'react';
 import { promptRenderMany, type PromptRendered } from '../../ipc/promptDesign';
+import { type UiConfig, type UiFields } from '../../ipc/uiConfig';
 import {
   shownStyle,
   VITALS_STYLES,
   vitalsOptionsOf,
-  type UiConfig,
-  type UiFields,
   type VitalsOptions,
   type VitalsStyle,
-} from '../../ipc/uiConfig';
+} from '../../ipc/uiConfigVitals';
 import { drawnVitalsText } from '../../ipc/vitals';
 import { isMacPlatform } from '../../lib/shortcuts';
 import { panelWidthFloor } from '../../panel/paneLayout';

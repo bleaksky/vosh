@@ -16,6 +16,7 @@ export const WRITING_IDLE: WritingState = {
   job: null,
   held: 0,
   done: null,
+  decided: null,
 };
 
 const store = createSessionStore<WritingState>({
@@ -28,3 +29,4 @@ export const getWriting = store.get;
 export const subscribeWriting = store.subscribe;
 export const useWriting = store.use;
 export const writingOf = store.stateOf;
+export const subscribeWritingOf = store.subscribeStates;

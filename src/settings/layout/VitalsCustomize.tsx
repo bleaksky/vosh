@@ -1,18 +1,17 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { type UiConfig, type UiFields } from '../../ipc/uiConfig';
 import {
   DEFAULT_VITALS_CUSTOM,
   normalizeVitalsOff,
   VITALS_VALUES,
   shownStyle,
-  type UiConfig,
-  type UiFields,
   type Vital,
   type VitalsMeter,
   type VitalsOpponent,
   type VitalsStyle,
   type VitalsColors,
   type VitalsValues,
-} from '../../ipc/uiConfig';
+} from '../../ipc/uiConfigVitals';
 import { partShift, useRowDrag } from '../../lib/useRowDrag';
 import { VITAL_LABELS, VITALS_VALUES_LABELS } from '../../panel/vitalsView';
 import type { AnsiSlot } from '../../theme/baseAnsi';

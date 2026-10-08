@@ -40,16 +40,14 @@ import {
   VITALS_TEXT_CHANGED,
 } from './events';
 import { screenReaderOf } from './screenReader';
+import { fetchUiConfig, subscribeUiConfigReplaced, type UiConfig } from './uiConfig';
+import { type FontChange } from './uiConfigEvents';
 import {
-  fetchUiConfig,
-  subscribeUiConfigReplaced,
   vitalsOptionsOf,
   vitalsTextOf,
-  type FontChange,
-  type UiConfig,
   type VitalsOptions,
   type VitalsTextChange,
-} from './uiConfig';
+} from './uiConfigVitals';
 
 function fontChangeOf(config: UiConfig): FontChange {
   return {

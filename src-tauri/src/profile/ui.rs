@@ -612,6 +612,36 @@ pub(crate) struct UiConfig {
     /// and written only while on.
     #[serde(default, skip_serializing_if = "is_false")]
     pub writing_card_pinned: bool,
+    /// Where the snoop window sat when you last moved or sized it, its
+    /// outer left and top edges and its inner width and height in logical
+    /// pixels. Only Rust writes these, as the window moves, and the page
+    /// never reads them. None until the window moves, which opens it at
+    /// 760 by 480 where the system puts it. A hand edit that is not a
+    /// number, or a width under 480 or a height under 240, reads as None.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_left: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_writing_card_edge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_top: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_snoop_window_width",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_width: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_snoop_window_height",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub snoop_window_height: Option<f64>,
     /// The chat pane's channel colors, picked from its own menu. Each
     /// key is a channel name in lowercase and each value one of the
     /// theme's 16 ANSI slots, like `brightBlue`. A channel left out takes
@@ -1264,6 +1294,36 @@ where
     })
 }
 
+/// The smallest snoop window a saved place may ask for, in logical pixels.
+pub(crate) const SNOOP_WINDOW_MIN_WIDTH: f64 = 480.0;
+pub(crate) const SNOOP_WINDOW_MIN_HEIGHT: f64 = 240.0;
+
+/// Hold a snoop window side to the writing card edge rule, and read one
+/// under `min` as None.
+pub(crate) fn coerce_snoop_window_side(side: Option<f64>, min: f64) -> Option<f64> {
+    coerce_writing_card_edge(side).filter(|s| *s >= min)
+}
+
+/// Read the snoop window's saved width leniently. A number under 480
+/// or anything but a number reads as None.
+pub(crate) fn deserialize_snoop_window_width<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let edge = deserialize_writing_card_edge(deser)?;
+    Ok(coerce_snoop_window_side(edge, SNOOP_WINDOW_MIN_WIDTH))
+}
+
+/// Read the snoop window's saved height leniently. A number under 240
+/// or anything but a number reads as None.
+pub(crate) fn deserialize_snoop_window_height<'de, D>(deser: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let edge = deserialize_writing_card_edge(deser)?;
+    Ok(coerce_snoop_window_side(edge, SNOOP_WINDOW_MIN_HEIGHT))
+}
+
 fn default_echo_macros() -> bool {
     true
 }
@@ -1409,6 +1469,10 @@ impl Default for UiConfig {
             writing_card_rows: None,
             writing_card_cols: None,
             writing_card_pinned: false,
+            snoop_window_left: None,
+            snoop_window_top: None,
+            snoop_window_width: None,
+            snoop_window_height: None,
             chat_colors: BTreeMap::new(),
         }
     }
@@ -2653,6 +2717,42 @@ name = "haste"
             None
         );
         assert_eq!(coerce_writing_card_edge(Some(f64::NAN)), None);
+    }
+
+    #[test]
+    fn the_snoop_window_place_is_written_only_once_it_moves() {
+        let mut config = ProfileConfig::default();
+        let first = config.to_toml().unwrap();
+        assert!(!first.contains("snoop_window"), "{first}");
+        config.ui.snoop_window_left = Some(-1200.0);
+        config.ui.snoop_window_top = Some(64.5);
+        config.ui.snoop_window_width = Some(900.0);
+        config.ui.snoop_window_height = Some(520.0);
+        let changed = config.to_toml().unwrap();
+        assert!(changed.contains("snoop_window_left = -1200.0"), "{changed}");
+        assert!(changed.contains("snoop_window_width = 900.0"), "{changed}");
+        let back = through_toml(&config.ui);
+        assert_eq!(back.snoop_window_left, Some(-1200.0));
+        assert_eq!(back.snoop_window_top, Some(64.5));
+        assert_eq!(back.snoop_window_width, Some(900.0));
+        assert_eq!(back.snoop_window_height, Some(520.0));
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert_eq!(old.ui.snoop_window_left, None);
+        assert_eq!(old.ui.snoop_window_width, None);
+    }
+
+    #[test]
+    fn a_hand_edited_snoop_window_place_never_stops_a_load() {
+        let ui = |text: &str| ProfileConfig::from_toml(text).unwrap().ui;
+        let odd = ui("[ui]\nsnoop_window_left = \"left\"\nsnoop_window_width = 300\n");
+        assert_eq!(odd.snoop_window_left, None);
+        assert_eq!(odd.snoop_window_width, None);
+        let short = ui("[ui]\nsnoop_window_height = 200.0\nsnoop_window_width = 480\n");
+        assert_eq!(short.snoop_window_height, None);
+        assert_eq!(short.snoop_window_width, Some(480.0));
+        let far = ui("[ui]\nsnoop_window_top = 1e9\nsnoop_window_height = \"tall\"\n");
+        assert_eq!(far.snoop_window_top, Some(100_000.0));
+        assert_eq!(far.snoop_window_height, None);
     }
 
     #[test]

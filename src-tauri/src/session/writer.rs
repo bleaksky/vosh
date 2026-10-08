@@ -5,8 +5,9 @@
 //!
 //! It also notices when a line you typed opened the game's editor on a
 //! text it can name, and offers the card while nothing else went out
-//! after that line. Until the game's prompt returns, the page sends
-//! what you type there raw and counts it against the text's width.
+//! after that line, for a text the card takes. Until the game's prompt
+//! returns, the page sends what you type there raw and counts it against
+//! the text's width.
 //!
 //! While a job runs, every other send of the session waits: what
 //! triggers, timers, Lua and `#walk` send stays in the stream's hold and
@@ -24,6 +25,10 @@
 //! once the link stayed quiet for [`GRACE`] after text. A tick with no
 //! text before or after it fires after [`SILENT`]. A job the tick finds
 //! still waiting for its answer keeps a tick armed for the next text.
+//!
+//! It hears every line the game sends, watching or not, for the game
+//! deciding a check of your description or history, which can come long
+//! after the check went out.
 //!
 //! The writer only decides. Each event hands back the lines to send and
 //! the session does the IO, as the walker does.
@@ -43,12 +48,15 @@ mod openers;
 pub(crate) mod payloads;
 mod plan;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
 use tokio::time::Instant;
 
-use game_text::{editor_waits, lone_prompts, opened_listing, pager_waits, GameLine, BANNER};
+use game_text::{
+    decided, editor_waits, lone_prompts, opened_listing, pager_waits, GameLine, BANNER,
+};
 use job::Job;
 use kinds::Kind;
 use payloads::{JobProgress, JobResult, WriteJob};
@@ -60,6 +68,11 @@ pub(crate) use payloads::Action;
 /// back with Nagle off (`comm.c:1134`), and its next pulse comes 250 ms
 /// later (`merc.h:407`), so the pulse ends well inside this.
 const GRACE: Duration = Duration::from_millis(100);
+
+/// The number the next decided check takes, across every connection.
+/// Each connection builds its own writer, so a count in the writer would
+/// start again at 1 after a reconnect.
+static NEXT_DECIDED: AtomicU64 = AtomicU64::new(1);
 
 /// How long a prompt tick with no text before or after it waits for some
 /// before it fires, four pulses. With the prompt off and compact on, a
@@ -107,6 +120,15 @@ pub(crate) struct Done {
     pub(crate) result: JobResult,
 }
 
+/// The game decided a check of a text, with a number no other decision
+/// in this run of Vosh shares, so the page tells a new connection's first
+/// decision from the last one it heard in the same session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Decided {
+    pub(crate) id: u64,
+    pub(crate) kind: Kind,
+}
+
 /// What the page hears on [`crate::app::events::WRITING`].
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub(crate) struct WritingState {
@@ -118,6 +140,8 @@ pub(crate) struct WritingState {
     /// How many lines of the session's other sends wait for the job.
     pub(crate) held: usize,
     pub(crate) done: Option<Done>,
+    /// The last check the game decided.
+    pub(crate) decided: Option<Decided>,
 }
 
 /// What the page asks the writer.
@@ -167,6 +191,7 @@ pub(crate) struct Writer {
     waiting: Option<WriteJob>,
     done: Option<Done>,
     next_offer: u64,
+    decided: Option<Decided>,
     /// The game's prompt tick, until the text of its pulse is in.
     armed: Option<Armed>,
     /// Text came since the writer last sent.
@@ -206,6 +231,7 @@ impl Writer {
             job: self.job.as_ref().map(Job::progress),
             held,
             done: self.done.clone(),
+            decided: self.decided.clone(),
         }
     }
 
@@ -228,7 +254,7 @@ impl Writer {
             .map(|kind| Opener {
                 kind,
                 out,
-                named: kind.names_itself().is_none(),
+                named: kind.names_itself().is_empty(),
                 beast: None,
             });
         if !self.job.as_ref().is_some_and(Job::in_editor) {
@@ -243,6 +269,17 @@ impl Writer {
         wired
     }
 
+    /// Any line the game sent, watched or not, for the game deciding a
+    /// check.
+    pub(crate) fn heard(&mut self, plain: &str) {
+        if let Some(kind) = decided(plain) {
+            self.decided = Some(Decided {
+                id: NEXT_DECIDED.fetch_add(1, Ordering::Relaxed),
+                kind,
+            });
+        }
+    }
+
     /// A line the game sent. `out` is the count of lines the session has
     /// sent.
     pub(crate) fn line(&mut self, line: &GameLine, out: u64) {
@@ -250,9 +287,10 @@ impl Writer {
             job.line(line);
         }
         if let Some(opener) = &mut self.opener {
-            if let Some(names) = opener.kind.names_itself() {
-                if let Some(rest) = line.plain.strip_prefix(names) {
-                    opener.named = true;
+            let names = opener.kind.names_itself();
+            if let Some(rest) = names.iter().find_map(|n| line.plain.strip_prefix(n)) {
+                opener.named = true;
+                if opener.kind == Kind::Beast {
                     opener.beast = rest
                         .strip_suffix('.')
                         .map(str::to_string)
@@ -312,7 +350,7 @@ impl Writer {
             if !open.listed && (waits || paged) {
                 open.listed = true;
                 open.pager = paged;
-                if out == open.out && self.job.is_none() {
+                if out == open.out && self.job.is_none() && open.kind.card() {
                     self.next_offer += 1;
                     open.offer = Some(self.next_offer);
                 }
@@ -416,6 +454,12 @@ impl Writer {
                         self.begin(spec, now, &mut send);
                     }
                     self.went(&send);
+                    return send;
+                }
+                // The card drives only the texts it takes, and the page
+                // asks nothing else of the rest.
+                if !spec.kind.card() {
+                    self.finish(spec.id, JobResult::Busy);
                     return send;
                 }
                 match self.game {

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { VitalsOpponent } from '../ipc/uiConfig';
+import type { VitalsOpponent } from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import {
   opponentHealth,

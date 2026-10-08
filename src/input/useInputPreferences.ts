@@ -2,9 +2,8 @@
 // broadcast each Settings save sends.
 
 import { useEffect, useRef, useState } from 'react';
+import { getUiConfig, normalizeInputCursorStyle, type InputCursorStyle } from '../ipc/uiConfig';
 import {
-  getUiConfig,
-  normalizeInputCursorStyle,
   subscribeEchoMacrosChanged,
   subscribeInputCursorStyleChanged,
   subscribeInputEchoCaretChanged,
@@ -12,8 +11,7 @@ import {
   subscribeKeepLastChanged,
   subscribePasteLineDelayChanged,
   subscribeSpellcheckPromptChanged,
-  type InputCursorStyle,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigEvents';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 
 /** The command line settings. The two that change what the row draws

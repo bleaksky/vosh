@@ -352,7 +352,7 @@ Vosh's writing card helps you write the description others see when they look at
 - `Guide` shows the help's reminders beside your text, and `Read help description` asks the game for the help itself while the card folds to its header.
 - `Send to game` sends your text through the game's own editor, one line at a time, and checks off each line the game takes. Vosh then checks what the game holds, mends any line that differs, leaves the editor and reads your description back.
 - While Vosh sends, your triggers, timers, Lua and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
-- Your description doesn't need approval to change. Send it to the game as often as you like, and when you're ready, pick `Send for approval…` in the card's `⋯` menu. It sends `dcheck` after you confirm, and the game takes one check at a time.
+- Your description doesn't need approval to change. Send it to the game as often as you like, and when you're ready, pick `Send for approval…` in the card's `⋯` menu. It sends `dcheck` after you confirm, and the game takes one check at a time. A check that's waiting keeps the text you sent with it, so when you send again, the footer reminds you. The game doesn't always say when the immortals decide, so the footer says it with an if.
 - A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
 - Drag the card by its header to put it anywhere in the window. Double click the header, or pick `Put the card back` in the `⋯` menu, and it goes back over the terminal.
 - Drag the grip on the card's edge to make the box taller or shorter. It runs along the top while the card sits over the terminal and along the bottom once you've moved it. Double click it and the box grows with your text again.
@@ -380,13 +380,15 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 - The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
 - If you're disconnected mid send, the card shows how far it got once you're back, and `Post again` starts over. When the drop came as it posted, Vosh checks the board's list first, and it never posts again on its own.
 - Just before it posts, Vosh lists your own notes on that board, so you'll see the list in the terminal. If your connection drops right then, Vosh compares the board with that list, so an older note with the same subject never passes for the new one.
-- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` in the `⋯` menu sends your history to the immortals, once.
+- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` in the `⋯` menu sends your history to the immortals, once. Send your history again later and the footer reminds you that a check still waiting reads the one you sent back then.
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
 
 You can move the card, resize its box and pin it to the panel for any kind, as Write your description shows.
 
 Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
+
+The card doesn't take tomes, cabal votes, paper or your pet's description yet. When you open one with `scribe text`, `vote edit`, `write edit` or `petedit desc`, no notice comes, and the command line counts each line you type to 75 all the same.
 
 ### 2.11 Walk to a place
 
@@ -832,7 +834,7 @@ When you snoop a player in the game, a split opens at the top of the terminal co
 - Your triggers, highlights, gags and sounds never act on snoop text, since you wrote them for your own screen. Your Lua still hears `Snoop.Start`, `Snoop.Stop` and `Snoop.Output` like any other GMCP.
 - Drag the line under the split to resize it. It starts at 40 percent of the column, and your profile keeps the size you pick. It keeps four rows and always leaves you six. Drag it to the top, choose `Fold` in the more menu, or double click the line to fold it to its strip, and double click again to open it.
 - Press `Cmd+J` on macOS or `Ctrl+J` elsewhere to move into the snoop, and again to step to the next tab. Press `Escape`, or just start typing, and you're back on the command line, so what you type always goes to your own character.
-- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Close it and the tabs come back to the split.
+- Choose `Open in a window` in the more menu to move the tabs to a window of their own, say on a second screen. `Cmd+J` brings that window forward. Your profile remembers where you put the window and its size. Close it and the tabs come back to the split.
 
 Each session keeps its own snoops, and its row in the sessions sidebar shows an eye and how many run. A disconnect ends every snoop on that session.
 

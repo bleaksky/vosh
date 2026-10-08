@@ -4,6 +4,8 @@
 
 use vosh_prompt::aabahran::colors::rebuild;
 
+use super::kinds::Kind;
+
 /// The banner `string_append` prints as the editor opens
 /// (`olc.c:3385` to `3388`).
 pub(crate) const BANNER: [&str; 4] = [
@@ -62,6 +64,37 @@ pub(crate) const STAFF_ONLY: [&str; 2] = [
     "Only immortals may read ideas.",
     "Only immortals may read bug reports.",
 ];
+
+/// What the game tells you when the immortals approve your description,
+/// after the name of your god, The One God when you follow none
+/// (`act_wiz.c:14806`, `14837`, `comm.c:7453`). It ends there or goes on
+/// to the blessing.
+pub(crate) const JUDGED: [&str; 2] = [
+    " has judged your look worthy.",
+    " has judged your look worthy and grants you a blessing.",
+];
+
+/// What the game tells you when the immortals turn your description down
+/// with a penalty (`act_wiz.c:14823`).
+pub(crate) const ANGERED: &str = "Your poor description has angrered ";
+
+/// What the game tells you when the immortals award your history
+/// (`rppoints.c:908`, `act_wiz.c:15021`).
+pub(crate) const BLESSED: &str = "As the gods view your past, they grant you a small blessing.";
+
+/// The check `plain` says the game decided, for a line that does.
+pub(crate) fn decided(plain: &str) -> Option<Kind> {
+    let plain = uncoded(plain);
+    if plain == BLESSED {
+        return Some(Kind::History);
+    }
+    let judged = JUDGED.iter().any(|end| {
+        plain
+            .strip_suffix(end)
+            .is_some_and(|god| !god.is_empty() && !god.contains('\''))
+    });
+    (judged || plain.starts_with(ANGERED)).then_some(Kind::Description)
+}
 
 /// What a text the game holds none of prints (`act_info.c:7623`).
 pub(crate) const NONE: &str = "(None).";
@@ -512,5 +545,37 @@ mod tests {
         assert_eq!(listed_notes(&rows, "Orla", "About the gate"), vec![1]);
         assert_eq!(listed_notes(&rows, "Orla", "About"), Vec::<usize>::new());
         assert_eq!(uncoded("`!Red`` then plain"), "Red then plain");
+    }
+
+    #[test]
+    fn knows_when_the_game_decides_a_check() {
+        assert_eq!(
+            decided("Orla has judged your look worthy."),
+            Some(Kind::Description)
+        );
+        assert_eq!(
+            decided("The One God has judged your look worthy."),
+            Some(Kind::Description)
+        );
+        assert_eq!(
+            decided("Orla has judged your look worthy and grants you a blessing."),
+            Some(Kind::Description)
+        );
+        assert_eq!(
+            decided("Your poor description has angrered Orla!"),
+            Some(Kind::Description)
+        );
+        assert_eq!(decided(BLESSED), Some(Kind::History));
+        assert_eq!(
+            decided("`^As the gods view your past, they grant you a small blessing.``"),
+            Some(Kind::History)
+        );
+        assert_eq!(decided("Maren says 'your look worthy'"), None);
+        assert_eq!(
+            decided("Maren says 'Orla has judged your look worthy.'"),
+            None
+        );
+        assert_eq!(decided(" has judged your look worthy."), None);
+        assert_eq!(decided("You earn 3 rp points!"), None);
     }
 }

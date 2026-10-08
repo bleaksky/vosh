@@ -37,7 +37,9 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const STAFF = 1;
 const BUILDER = 2;
 
-const select = (selected: number) =>
+/** List both sessions with `selected` in front, Builder on `builder`'s
+ *  profile, Staff's unless it names another. */
+const select = (selected: number, builder = 'Staff') =>
   fire(
     'vosh://sessions-changed',
     [STAFF, BUILDER].map((id) => ({
@@ -47,7 +49,7 @@ const select = (selected: number) =>
       host: 'play.theforsakenlands.com',
       port: id === STAFF ? 1848 : 4000,
       tls: false,
-      profile: 'Staff',
+      profile: id === STAFF ? 'Staff' : builder,
       connected: true,
       selected: id === selected,
     })),
@@ -160,6 +162,54 @@ describe('the snoop store', () => {
     output(STAFF, 'Maren', '<1020hp 800m 930mv> ');
     list(STAFF, [live('Tolliver')]);
     expect([...store.getSnoops().unread]).toEqual([]);
+  });
+
+  it('keeps a fold to the sessions on its profile', async () => {
+    const store = await load();
+    select(STAFF, 'Builder');
+    list(STAFF, [live('Tolliver')]);
+    list(BUILDER, [live('Maren')]);
+    store.setSnoopsFolded(true, STAFF);
+    output(BUILDER, 'Maren', 'The day has begun.\n\r');
+    output(STAFF, 'Tolliver', 'The day has begun.\n\r');
+    expect([...store.getSnoops().unread]).toEqual(['Tolliver']);
+    select(BUILDER, 'Builder');
+    expect([...store.getSnoops().unread]).toEqual([]);
+    expect(store.getSnoops().folded).toBe(false);
+  });
+
+  it('shares a fold among the sessions on one profile', async () => {
+    const store = await load();
+    list(STAFF, [live('Tolliver')]);
+    list(BUILDER, [live('Maren')]);
+    store.setSnoopsFolded(true, STAFF);
+    output(BUILDER, 'Maren', '<1020hp 800m 930mv> ');
+    select(BUILDER);
+    expect([...store.getSnoops().unread]).toEqual(['Maren']);
+  });
+
+  it('keeps the front tab of the window read while the split is folded', async () => {
+    const store = await load();
+    list(STAFF, [live('Tolliver'), live('Maren')], true);
+    store.setSnoopsFolded(true);
+    output(STAFF, 'Maren', 'The day has begun.\n\r');
+    expect([...store.getSnoops().unread]).toEqual([]);
+    output(STAFF, 'Tolliver', 'The day has begun.\n\r');
+    expect([...store.getSnoops().unread]).toEqual(['Tolliver']);
+  });
+
+  it('clears only the front tab of the session it unfolds', async () => {
+    const store = await load();
+    list(STAFF, [live('Tolliver')]);
+    list(BUILDER, [live('Maren')]);
+    store.setSnoopsFolded(true, STAFF);
+    output(STAFF, 'Tolliver', 'The day has begun.\n\r');
+    output(BUILDER, 'Maren', 'The day has begun.\n\r');
+    store.setSnoopsFolded(false, STAFF);
+    expect([...store.getSnoops().unread]).toEqual([]);
+    select(BUILDER);
+    expect([...store.getSnoops().unread]).toEqual(['Maren']);
+    expect(store.getSnoops().folded).toBe(false);
   });
 
   it('hands the text to its subscribers and keeps it out of the state', async () => {

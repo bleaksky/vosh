@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { PromptShowState } from '../ipc/prompt';
+import type { UiFields } from '../ipc/uiConfig';
 import type {
-  UiFields,
   Vital,
   VitalOff,
   VitalsColors,
@@ -9,7 +9,7 @@ import type {
   VitalsOptions,
   VitalsStyle,
   VitalsValues,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import { vitalPercent, type Vitals } from '../stores/gmcp/vitalsStore';
 import { ANSI_SLOTS } from '../theme/baseAnsi';

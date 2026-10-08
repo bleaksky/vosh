@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { snoopWindowOpen } from '../ipc/snoop';
 import { saveSnoopSize, useSnoopSize } from '../stores/config/snoopSizeStore';
+import { useProfileOf } from '../stores/session/sessionsStore';
 import { selectSnoop, setSnoopsFolded, useSnoops } from '../stores/session/snoopStore';
 import { pushToast } from '../stores/toasts';
 import { FindToolbar } from '../terminal/FindToolbar';
@@ -57,6 +58,7 @@ export function SnoopSplit({
   const snoops = useSnoops();
   const { tabs, windowed, selected } = snoops;
   const size = useSnoopSize();
+  const profile = useProfileOf(session);
   const finder = useSnoopFind(session, selected);
   const [section, setSection] = useState<HTMLElement | null>(null);
   const [column, setColumn] = useState(0);
@@ -72,10 +74,13 @@ export function SnoopSplit({
   const shown = tabs.length > 0 && !windowed;
 
   // Lines that reach the front tab while the split is folded leave the
-  // unread dot.
+  // unread dot. The fold is the profile's, which the session shown plays,
+  // so it passes on only once the size read is that profile's. Until then
+  // it is the last session's, and an open fold would clear its marks.
+  const own = profile !== undefined && size.profile === profile;
   useEffect(() => {
-    setSnoopsFolded(size.folded);
-  }, [size.folded]);
+    if (own) setSnoopsFolded(size.folded, session);
+  }, [own, size.folded, session]);
 
   // The column's height sizes the split.
   useLayoutEffect(() => {

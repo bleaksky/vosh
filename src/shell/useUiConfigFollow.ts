@@ -15,10 +15,15 @@ import { subscribeProfileSwitched } from '../ipc/profiles';
 import { subscribeCustomThemesChanged } from '../ipc/theme';
 import {
   getUiConfig,
+  DEFAULT_SCROLLBACK_LINES,
+  normalizeTerminalLineHeight,
+  type TerminalLineHeight,
+  type UiConfig,
+} from '../ipc/uiConfig';
+import {
   subscribeBrightBoldChanged,
   subscribeBlinkTextChanged,
   subscribeScrollbackLinesChanged,
-  DEFAULT_SCROLLBACK_LINES,
   subscribeReadableHighlightsChanged,
   subscribeColorVisionChanged,
   subscribeFitGameColorsChanged,
@@ -27,10 +32,7 @@ import {
   subscribeTerminalLineHeightChanged,
   subscribeFontChanged,
   subscribeThemeTerminalColorsChanged,
-  normalizeTerminalLineHeight,
-  type TerminalLineHeight,
-  type UiConfig,
-} from '../ipc/uiConfig';
+} from '../ipc/uiConfigEvents';
 import { followReplacedUiConfig } from '../ipc/uiConfigBroadcast';
 import { useTauriEvent } from '../ipc/useTauriEvent';
 import { resolveBlinkText, useReduceMotion } from '../lib/blink';

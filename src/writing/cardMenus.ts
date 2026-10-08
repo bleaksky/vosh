@@ -51,7 +51,7 @@ export function moreRows(m: {
   canRead: boolean;
   /** The draft differs from the game's copy the card knows. */
   canRestore: boolean;
-  /** The game holds the text as the card shows it, so a check reads it. */
+  /** `checkable` says yes, so a check reads your text. */
   canCheck: boolean;
 }): MoreRow[] {
   const info = KINDS[m.kind];
@@ -99,6 +99,24 @@ export function moreRows(m: {
     { id: 'copy', label: 'Copy all' },
     { id: 'clear', label: 'Clear the draft…' },
   ];
+}
+
+/** Whether the ⋯ menu offers the check: you play the character, no job
+ *  runs, and the game holds your text, either as a fresh read shows it
+ *  or as your send left it. The check reads what the game holds, so a
+ *  copy with no line that is not blank never offers it, since the game
+ *  would spend your one check on nothing. */
+export function checkable(m: {
+  live: boolean;
+  running: boolean;
+  /** A fresh read found the game holding the text the card shows. */
+  matches: boolean;
+  phase: 'edit' | 'sent' | 'posted' | 'checked';
+  /** The game's copy the card knows, which a send's read back sets. */
+  game: readonly string[] | null | undefined;
+}): boolean {
+  const holds = !!m.game && m.game.some((l) => l.trim().length > 0);
+  return m.live && !m.running && holds && (m.matches || m.phase === 'sent');
 }
 
 /** What a draft's row names it by: a note's subject, or its first line. */

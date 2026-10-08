@@ -1,17 +1,6 @@
+import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { withAlertPart } from '../../automation/alertParts';
 import {
-  createContext,
-  Fragment,
-  useContext,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { alertOrNone, withAlertPart, withAlertParts } from '../../automation/alertParts';
-import {
-  countPhrase,
   draftChanges,
   isDraftDirty,
   type Draft,
@@ -20,64 +9,40 @@ import {
 import { groupKeyOf, searchText } from '../../automation/automationList';
 import { jsonListText, parseJsonList } from '../../automation/automationRecords';
 import {
-  blankPattern,
   blankTrigger,
   effectOf,
-  extraEffects,
-  HIGHLIGHT_COLORS,
-  highlightOf,
   loadTriggers,
-  mainPattern,
-  MATCH_MODE_DESCRIPTIONS,
-  MATCH_MODE_OPTIONS,
   normalizeTrigger,
   patternSource,
   replaceTemplateOf,
   saveTriggerDraft,
   TRIGGER_STYLE_OPTIONS,
   triggerKey,
-  triggerMode,
   triggerStore,
   triggerStyle,
   validateTriggers,
   withEffect,
-  withEffectAt,
   withGroup,
-  withHighlight,
-  withMainPattern,
-  withMainPatternSource,
-  withPatternSource,
   withReplaceTemplate,
-  withTriggerMode,
   withTriggerStyle,
-  type HighlightPatch,
   type TriggerStyle,
 } from '../../automation/automationTriggers';
 import {
   subscribeTriggersChanged,
   type AlertParts,
-  type HighlightStyle,
-  type NamedColor,
   type TriggerAction,
-  type TriggerPattern,
   type TriggerRecord,
 } from '../../ipc/automation';
 import {
   Button,
   Card,
   CardNote,
-  ChipButton,
-  CloseIcon,
   Disclosure,
   Field,
   FieldArea,
-  PencilIcon,
-  PlusIcon,
   Row,
-  Segmented,
   Select,
   Toggle,
-  type SelectOption,
 } from '../../ui';
 import {
   cardEdits,
@@ -86,7 +51,6 @@ import {
   editColors,
   libraryTrigger,
   NO_ROW,
-  patternKey,
   presetCard,
   shippedCard,
   withRow,
@@ -94,7 +58,7 @@ import {
   type TriggerCard,
 } from '../../automation/presetEdits';
 import { runPresetPlan } from '../../automation/presetPlan';
-import { presetById, type Preset } from '../../automation/presets';
+import { presetById } from '../../automation/presets';
 import {
   presetEditsGet,
   presetEditsSet,
@@ -104,10 +68,25 @@ import {
 } from '../../ipc/presetEdits';
 import { listJoin } from '../../lib/text';
 import { usePromptGags } from '../../stores/session/promptGagStore';
-import { AlertDetailRows, AlertPartsOn, AlertRow } from './AlertRows';
+import { AlertPartsOn, AlertRow } from './AlertRows';
 import { useBannerPermission } from './useBannerPermission';
-import { CodeRow, FixChoice, GroupField, NumberField } from './fields';
+import { FixChoice, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';
+import {
+  colorKeys,
+  joinNodes,
+  mainKeyOf,
+  OpenPresetContext,
+  opensAdvanced,
+  presetSwitch,
+  presetText,
+  withAlert,
+  type Flag,
+  type FromPreset,
+} from './triggerChanged';
+import { AdvancedCount, Changed, UnderField } from './TriggerChangeNotes';
+import { TriggerAdvanced } from './TriggerAdvanced';
+import { PatternRow } from './TriggerPatterns';
 import type { DetailProps, EditorProps, KindSpec, TriggersLink } from './types';
 
 /** What the list loaded beside the triggers: your preset edits, and each
@@ -277,10 +256,6 @@ const ROW_LABELS: Readonly<Record<string, string>> = {
   alert: 'Alert',
 };
 
-/** The key of the main pattern of `ship`, the trigger as its preset
- *  ships it. */
-const mainKeyOf = (ship: TriggerRecord) => patternKey(patternSource(mainPattern(ship)));
-
 /** The rows `flags` names, as a fix note lists them, each once. */
 function flagLabels(ship: TriggerRecord, flags: Rows): string[] {
   const main = mainKeyOf(ship);
@@ -305,127 +280,6 @@ function fixWarn(
   return {
     warn: `A fix to ${from.preset.name} ${fixTail(flagLabels(shippedCard(t), flags))}`,
   };
-}
-
-const COLOR_OPTIONS: readonly SelectOption[] = [
-  { value: '', label: 'Default' },
-  ...HIGHLIGHT_COLORS,
-];
-
-const MATCH_OPTIONS = [
-  { value: 'line', label: 'Lines' },
-  { value: 'prompt', label: 'Prompts' },
-  { value: 'room', label: 'Room' },
-  { value: 'room_target', label: 'Your target' },
-] as const;
-
-const EFFECT_LABELS = {
-  send: 'Also send',
-  route: 'Also send to pane',
-  script: 'Also run Lua',
-} as const;
-
-/** `v` with its alert table set by `fn`, or with none while the table
- *  is the default, so a trigger that rings nothing saves no alert. */
-function withAlert(
-  v: TriggerRecord,
-  fn: (alert: AlertParts | undefined) => AlertParts,
-): TriggerRecord {
-  const next = { ...v };
-  const alert = alertOrNone(fn(v.alert));
-  if (alert) next.alert = alert;
-  else delete next.alert;
-  return next;
-}
-
-/** The color options, plus the stored one when it is not a named
- *  color, so a select never shows a value it does not hold. */
-function colorOptions(current: string | undefined): readonly SelectOption[] {
-  if (!current || COLOR_OPTIONS.some((o) => o.value === current)) return COLOR_OPTIONS;
-  return [...COLOR_OPTIONS, { value: current, label: current }];
-}
-
-/** Opens a preset's card in Presets, by id, from the note at the head
- *  of a preset trigger's card. */
-const OpenPresetContext = createContext<(id: string) => void>(() => {});
-
-const PATTERN_NOUN = { one: 'pattern', many: 'patterns' };
-const CHANGE_NOUN = { one: 'change', many: 'changes' };
-
-/** The rows under Advanced, by the key their edits keep. */
-const ADVANCED_ROWS = [
-  'priority',
-  'target',
-  'fg',
-  'bg',
-  'bold',
-  'underline',
-  'inverse',
-  'route',
-  'script',
-] as const;
-
-/** The rows under Advanced past ADVANCED_ROWS whose fix opens it. */
-const opensAdvanced = (key: string, main: string) =>
-  (ADVANCED_ROWS as readonly string[]).includes(key) ||
-  (key.startsWith('pattern:') && key !== main);
-
-/** What a flagged row shows, or null for a row no fix flags: `say` puts
- *  the preset's value now in words. */
-type Flag = (key: string, say: (value: EditValue) => ReactNode) => ReactNode;
-
-/** How a changed row says what the preset has. */
-function Changed({ children }: { children: ReactNode }) {
-  return <span className="st-auto-changed">Changed. The preset has {children}.</span>;
-}
-
-/** The preset's text, in the MUD font, or that it leaves it empty. */
-function presetText(value: EditValue | undefined): ReactNode {
-  const text = typeof value === 'string' ? value : '';
-  return text ? <span className="st-auto-mono">{text}</span> : 'it empty';
-}
-
-const presetSwitch = (value: EditValue | undefined) => (value === true ? 'it on' : 'it off');
-
-/** Whether a pattern row's value has the pattern on. */
-const patternOn = (value: EditValue) =>
-  typeof value === 'object' && !Array.isArray(value) && value.enabled !== false;
-
-const modeLabel = (value: EditValue) =>
-  MATCH_MODE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
-
-/** A text row's field with the line under it that says what the preset
- *  has, once you changed it. */
-function UnderField({ changed, children }: { changed: ReactNode; children: ReactNode }) {
-  if (changed === null) return children;
-  return (
-    <div className="st-auto-stack">
-      {children}
-      <p className="st-auto-under">{changed}</p>
-    </div>
-  );
-}
-
-/** `description` with the line of a changed row after it, or either one
- *  alone. */
-function withChanged(description: ReactNode, changed: ReactNode): ReactNode {
-  if (changed === null) return description;
-  return (
-    <>
-      {description}
-      {changed}
-    </>
-  );
-}
-
-/** What a preset trigger's card knows of its preset: the trigger as
- *  the preset ships it, each row you changed with the preset's value,
- *  and the color your swatch or the preset gives each key. */
-interface FromPreset {
-  preset: Preset;
-  ship: TriggerRecord;
-  changed: Rows;
-  colorOf: (key: string) => string;
 }
 
 /** The card for the selected trigger. A preset trigger edits as yours
@@ -662,22 +516,6 @@ export function TriggerDetail({
   );
 }
 
-/** The color keys of `preset` that `template` names, in its order. */
-function colorKeys(preset: Preset, template: string): string[] {
-  const keys = [...template.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
-  return [...new Set(keys)].filter((key) => Object.hasOwn(preset.colors, key));
-}
-
-/** `parts` joined as a sentence joins them, `a and b`, `a, b, and c`. */
-function joinNodes(parts: readonly ReactNode[]): ReactNode {
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {i === 0 ? '' : i === parts.length - 1 ? (parts.length > 2 ? ', and ' : ' and ') : ', '}
-      {part}
-    </Fragment>
-  ));
-}
-
 const styleLabel = (value: EditValue) =>
   TRIGGER_STYLE_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
 
@@ -685,403 +523,3 @@ const styleLabel = (value: EditValue) =>
  *  changed. */
 const partsOn = (alert: AlertParts | undefined) =>
   [Boolean(alert?.banner), alert?.sound !== undefined, alert?.attention !== undefined].join();
-
-/** The rows under Advanced that differ from the preset, the count a
- *  closed Advanced shows beside the pencil so no edit hides there. */
-function AdvancedCount({ t, from }: { t: TriggerRecord; from: FromPreset | null }) {
-  if (!from) return null;
-  const rows = ADVANCED_ROWS.filter((key) => Object.hasOwn(from.changed, key)).length;
-  const count = rows + (morePatternsDiffer(t, from.ship) ? 1 : 0) + alsoChanges(t, from.ship);
-  if (count === 0) return null;
-  return (
-    <span className="st-auto-count">
-      <PencilIcon size={12} />
-      {countPhrase(count, CHANGE_NOUN)}
-    </span>
-  );
-}
-
-/** Each pattern past the main one, and whether the main one is on. */
-function morePatterns(t: TriggerRecord): string {
-  return JSON.stringify([
-    mainPattern(t).enabled,
-    ...t.patterns.slice(1).map((p) => [patternSource(p), p.enabled]),
-  ]);
-}
-
-const morePatternsDiffer = (t: TriggerRecord, ship: TriggerRecord) =>
-  morePatterns(t) !== morePatterns(ship);
-
-/** The commands of each Also send. */
-const alsoSends = (t: TriggerRecord) =>
-  extraEffects(t.actions)
-    .filter((e) => e.kind === 'send')
-    .map((e) => e.value);
-
-/** How many Also send rows differ from the preset's: the ones you
- *  changed or added, or the ones you took out where those are more. */
-function alsoChanges(t: TriggerRecord, ship: TriggerRecord): number {
-  const mine = alsoSends(t);
-  const theirs = alsoSends(ship);
-  const added = mine.filter((c) => !theirs.includes(c)).length;
-  const gone = theirs.filter((c) => !mine.includes(c)).length;
-  return Math.max(added, gone);
-}
-
-/** The Pattern row: the label and what the mode does on the left with
- *  the mode beside them, and the main pattern at full width under both.
- *  Built by hand like CodeRow, since a Row keeps its control on the
- *  right of the label. */
-function PatternRow({
-  t,
-  update,
-  locked,
-  ship,
-  flag,
-}: {
-  t: TriggerCard;
-  update: DetailProps<TriggerCard>['update'];
-  locked: boolean;
-  ship: TriggerRecord | null;
-  flag: Flag;
-}) {
-  const labelId = useId();
-  const descId = useId();
-  const mode = triggerMode(t);
-  const source = patternSource(mainPattern(t));
-  // A fix to the main pattern or its mode shows its choices in place of
-  // the line that says what the preset has.
-  let changed: ReactNode =
-    (ship && flag(mainKeyOf(ship), (v) => presetSwitch(patternOn(v)))) ?? flag('mode', modeLabel);
-  if (changed === null && ship && patternSource(mainPattern(ship)) !== source) {
-    changed = <Changed>{presetText(patternSource(mainPattern(ship)))}</Changed>;
-  } else if (changed === null && ship && triggerMode(ship) !== mode) {
-    changed = <Changed>{modeLabel(triggerMode(ship))}</Changed>;
-  }
-  return (
-    <div className="st-row st-auto-block">
-      <div className="st-auto-block-head">
-        <div className="st-row-text">
-          <span id={labelId} className="st-row-label">
-            Pattern
-          </span>
-          <span id={descId} className="st-row-desc">
-            {MATCH_MODE_DESCRIPTIONS[mode]}
-          </span>
-        </div>
-        <div className="st-row-control">
-          <Segmented
-            label="Match the pattern as"
-            options={MATCH_MODE_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
-            value={mode}
-            onChange={(next) => update((v) => withTriggerMode(v, next))}
-          />
-        </div>
-      </div>
-      <Field
-        mono
-        width="100%"
-        aria-labelledby={labelId}
-        aria-describedby={descId}
-        value={source}
-        disabled={locked}
-        onChange={(pattern) => update((v) => withMainPatternSource(v, pattern))}
-      />
-      {changed && <p className="st-auto-under">{changed}</p>}
-    </div>
-  );
-}
-
-function TriggerAdvanced({
-  t,
-  update,
-  locked,
-  style,
-  from,
-  changed,
-  flag,
-}: {
-  t: TriggerCard;
-  update: DetailProps<TriggerCard>['update'];
-  locked: boolean;
-  style: TriggerStyle;
-  from: FromPreset | null;
-  changed: (key: string, say: (value: EditValue) => ReactNode) => ReactNode;
-  flag: Flag;
-}) {
-  const setActions = (fn: (actions: TriggerAction[]) => TriggerAction[]) =>
-    update((v) => ({ ...v, actions: fn(v.actions) }));
-  const setHighlight = <K extends keyof HighlightStyle>(key: K, value: HighlightStyle[K]) =>
-    setActions((a) => withHighlight(a, { [key]: value } as HighlightPatch));
-  const highlight = highlightOf(t.actions);
-  const extras = extraEffects(t.actions);
-  const shipSends = from ? alsoSends(from.ship) : [];
-  // A text color the preset names by key shows as the color it paints,
-  // and picking that color again puts the key back, so the swatch on
-  // the preset's card still reaches it.
-  const shipFg = from ? highlightOf(from.ship.actions)?.fg : undefined;
-  const isKey = (c: string | undefined): c is string =>
-    c !== undefined && from !== null && Object.hasOwn(from.preset.colors, c);
-  const shown = (c: string | undefined) => (isKey(c) ? from!.colorOf(c) : c);
-  const colorWords = (value: EditValue) => {
-    const c = typeof value === 'string' ? (/^\{(.+)\}$/.exec(value)?.[1] ?? value) : '';
-    const named = shown(c) ?? '';
-    return COLOR_OPTIONS.find((o) => o.value === named)?.label ?? named;
-  };
-  const shownFg = shown(highlight?.fg);
-
-  return (
-    <>
-      <Row
-        label="Priority"
-        description={withChanged(
-          'Vosh runs triggers with higher numbers first.',
-          changed('priority', String),
-        )}
-      >
-        <NumberField
-          value={t.priority}
-          min={0}
-          max={99}
-          disabled={locked}
-          onChange={(priority) => update((v) => ({ ...v, priority }))}
-        />
-      </Row>
-      <Row
-        label="Match"
-        description={withChanged(
-          'Prompts match what your MUD sends before you type. Room matches the armies, things and people a room lists after its exits. Your target matches the line of the one you target with tar when a room lists them.',
-          changed('target', (v) => MATCH_OPTIONS.find((o) => o.value === v)?.label ?? String(v)),
-        )}
-      >
-        <Segmented
-          options={MATCH_OPTIONS.map((o) => ({ ...o, disabled: locked }))}
-          value={t.target ?? 'line'}
-          onChange={(target) =>
-            update((v) => {
-              const next = { ...v };
-              if (target === 'line') delete next.target;
-              else next.target = target;
-              return next;
-            })
-          }
-        />
-      </Row>
-      <PatternsBlock t={t} update={update} locked={locked} ship={from?.ship ?? null} flag={flag} />
-      {highlight && (style === 'highlight' || style === 'wash') && (
-        <>
-          <Row label="Text color" description={changed('fg', colorWords)}>
-            <Select
-              width={160}
-              value={shownFg ?? ''}
-              options={colorOptions(shownFg)}
-              disabled={locked}
-              onChange={(fg) =>
-                setHighlight(
-                  'fg',
-                  (isKey(shipFg) && fg === shown(shipFg) ? shipFg : fg || undefined) as
-                    | NamedColor
-                    | undefined,
-                )
-              }
-            />
-          </Row>
-          <Row label="Background" description={changed('bg', colorWords)}>
-            <Select
-              width={160}
-              value={highlight.bg ?? ''}
-              options={colorOptions(highlight.bg)}
-              disabled={locked}
-              onChange={(bg) => setHighlight('bg', (bg || undefined) as NamedColor | undefined)}
-            />
-          </Row>
-          <Row label="Bold" description={changed('bold', presetSwitch)}>
-            <Toggle
-              checked={Boolean(highlight.bold)}
-              disabled={locked}
-              onChange={(on) => setHighlight('bold', on)}
-            />
-          </Row>
-          <Row label="Underline" description={changed('underline', presetSwitch)}>
-            <Toggle
-              checked={Boolean(highlight.underline)}
-              disabled={locked}
-              onChange={(on) => setHighlight('underline', on)}
-            />
-          </Row>
-          <Row label="Inverse" description={changed('inverse', presetSwitch)}>
-            <Toggle
-              checked={Boolean(highlight.inverse)}
-              disabled={locked}
-              onChange={(on) => setHighlight('inverse', on)}
-            />
-          </Row>
-        </>
-      )}
-      <Row label="Send to pane" description="The pane that also gets the matching line, like chat.">
-        <UnderField changed={changed('route', presetText)}>
-          <Field
-            width="100%"
-            value={effectOf(t.actions, 'route')}
-            placeholder="No pane"
-            disabled={locked}
-            onChange={(pane) => setActions((a) => withEffect(a, 'route', pane))}
-          />
-        </UnderField>
-      </Row>
-      <CodeRow
-        label="Lua script"
-        description={withChanged(
-          'Runs on each match. The captures table holds what the pattern caught.',
-          changed('script', (v) => (v ? 'a script of its own' : 'it empty')),
-        )}
-        value={effectOf(t.actions, 'script')}
-        readOnly={locked}
-        onChange={(body) => setActions((a) => withEffect(a, 'script', body))}
-      />
-      {extras.map((extra, i) => {
-        const theirs = shipSends[extras.slice(0, i).filter((e) => e.kind === 'send').length];
-        const mine = extra.kind === 'send' && from !== null && !shipSends.includes(extra.value);
-        return (
-          <Row key={extra.index} label={EFFECT_LABELS[extra.kind]}>
-            <UnderField changed={mine ? <Changed>{presetText(theirs)}</Changed> : null}>
-              <FieldArea
-                className="st-auto-grow"
-                mono={extra.kind !== 'route'}
-                width="100%"
-                value={extra.value}
-                disabled={locked}
-                onChange={(next) => setActions((a) => withEffectAt(a, extra.index, next))}
-              />
-            </UnderField>
-            {!locked && (
-              <button
-                type="button"
-                className="st-auto-iconbutton"
-                aria-label={`Remove ${EFFECT_LABELS[extra.kind].toLowerCase()}`}
-                onClick={() => setActions((a) => withEffectAt(a, extra.index, null))}
-              >
-                <CloseIcon size={12} />
-              </button>
-            )}
-          </Row>
-        );
-      })}
-      <AlertDetailRows
-        alert={t.alert}
-        disabled={locked}
-        onChange={(patch) => update((v) => withAlert(v, (a) => withAlertParts(a, patch)))}
-      />
-    </>
-  );
-}
-
-/** The patterns past the main one. Each has its own switch, and the
- *  trigger fires when any pattern that is on matches. */
-function PatternsBlock({
-  t,
-  update,
-  locked,
-  ship,
-  flag,
-}: {
-  t: TriggerCard;
-  update: DetailProps<TriggerCard>['update'];
-  locked: boolean;
-  ship: TriggerRecord | null;
-  flag: Flag;
-}) {
-  const headingId = useId();
-  const main = mainPattern(t);
-  const extra = t.patterns.slice(1);
-  // A fix that turned one of the preset's patterns past the main one on
-  // or off under your edit.
-  const fixes = (ship?.patterns.slice(1) ?? []).map((p) => {
-    const text = patternSource(p);
-    return flag(patternKey(text), (v) => (
-      <>
-        <span className="st-auto-mono">{text}</span> {patternOn(v) ? 'on' : 'off'}
-      </>
-    ));
-  });
-  const changed = fixes.some((f) => f !== null) ? (
-    fixes.map((f, i) => <Fragment key={i}>{f}</Fragment>)
-  ) : ship && morePatternsDiffer(t, ship) ? (
-    <Changed>{countPhrase(ship.patterns.length, PATTERN_NOUN)}</Changed>
-  ) : null;
-  const setPatterns = (fn: (rest: TriggerPattern[], v: TriggerCard) => TriggerPattern[]) =>
-    update((v) => {
-      const first = v.patterns[0] ?? mainPattern(v);
-      return { ...v, patterns: [first, ...fn(v.patterns.slice(1), v)] };
-    });
-
-  return (
-    <div className="st-row st-auto-block" role="group" aria-labelledby={headingId}>
-      <div className="st-row-text">
-        <span id={headingId} className="st-row-label">
-          More patterns
-        </span>
-        <span className="st-row-desc">
-          {withChanged('The trigger fires when any pattern that is on matches.', changed)}
-        </span>
-      </div>
-      <ul className="st-auto-patterns">
-        <li className="st-auto-pattern">
-          <Toggle
-            aria-label="Use the main pattern"
-            checked={main.enabled}
-            disabled={locked}
-            onChange={(enabled) => update((v) => withMainPattern(v, { enabled }))}
-          />
-          <span className="st-auto-pattern-main st-auto-mono">
-            {patternSource(main) || 'Main pattern'}
-          </span>
-        </li>
-        {extra.map((p, i) => (
-          <li key={i} className="st-auto-pattern">
-            <Toggle
-              aria-label={`Use pattern ${i + 2}`}
-              checked={p.enabled}
-              disabled={locked}
-              onChange={(enabled) =>
-                setPatterns((rest) => rest.map((r, j) => (j === i ? { ...r, enabled } : r)))
-              }
-            />
-            <Field
-              mono
-              width="100%"
-              aria-label={`Pattern ${i + 2}`}
-              value={patternSource(p)}
-              disabled={locked}
-              onChange={(pattern) =>
-                setPatterns((rest) =>
-                  rest.map((r, j) => (j === i ? withPatternSource(r, pattern) : r)),
-                )
-              }
-            />
-            {!locked && (
-              <button
-                type="button"
-                className="st-auto-iconbutton"
-                aria-label={`Remove pattern ${i + 2}`}
-                onClick={() => setPatterns((rest) => rest.filter((_, j) => j !== i))}
-              >
-                <CloseIcon size={12} />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {!locked && (
-        <div>
-          <ChipButton
-            icon={<PlusIcon size={12} />}
-            onClick={() => setPatterns((rest, v) => [...rest, blankPattern(triggerMode(v))])}
-          >
-            Add pattern
-          </ChipButton>
-        </div>
-      )}
-    </div>
-  );
-}

@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_VITALS_OPTIONS, type VitalsDensity, type VitalsOptions } from '../ipc/uiConfig';
+import {
+  DEFAULT_VITALS_OPTIONS,
+  type VitalsDensity,
+  type VitalsOptions,
+} from '../ipc/uiConfigVitals';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
 import type { Vitals } from '../stores/gmcp/vitalsStore';
 import panelCss from '../styles/panel.css?raw';

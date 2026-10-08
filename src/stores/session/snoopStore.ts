@@ -7,7 +7,7 @@ import {
   type SnoopSnapshot,
   type SnoopTab,
 } from '../../ipc/snoop';
-import { getSelected, getSessions, subscribeSessions } from './sessionsStore';
+import { getSelected, getSessions, othersOnProfile, subscribeSessions } from './sessionsStore';
 import { createSessionStore } from '../sessionStore';
 
 // The players each session snoops, as the backend keeps them, with the
@@ -33,17 +33,29 @@ export interface Snoops {
   windowed: boolean;
   /** The name of the tab in front, null with no tab. */
   selected: string | null;
+  /** The split is folded to its strip, so no tab shows its lines. The
+   *  fold is the profile's, so every session on it holds the same. */
+  folded: boolean;
   /** The tabs that got lines you have not seen, those behind and every
-   *  tab while the split is folded. */
+   *  tab while the split is folded. A tab in front in the window shows
+   *  its lines whatever the fold. */
   unread: ReadonlySet<string>;
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
-const NONE: Snoops = { tabs: [], windowed: false, selected: null, unread: NOTHING };
+const NONE: Snoops = {
+  tabs: [],
+  windowed: false,
+  selected: null,
+  folded: false,
+  unread: NOTHING,
+};
 
-/** The split is folded to its strip, so no tab shows its lines. The fold
- *  is the profile's, so it holds for every session. */
-let folded = false;
+/** Whether the tab in front hides its lines: the split is folded and the
+ *  tabs sit in it, not in the window. */
+function hidden(now: Snoops): boolean {
+  return now.folded && !now.windowed;
+}
 
 /** The tab in front once `tabs` replaces `before`: a tab that started or
  *  came back live since, else the one in front if it stayed, else the one
@@ -65,15 +77,15 @@ function front(before: Snoops, tabs: readonly SnoopTab[]): string | null {
 function foldSnoopList(now: Snoops, list: SnoopList): Snoops {
   const selected = front(now, list.tabs);
   const names = new Set(list.tabs.map((tab) => tab.name));
-  const keep = (name: string) => names.has(name) && (folded || name !== selected);
-  let unread = now.unread;
-  if (![...unread].every(keep)) unread = new Set([...unread].filter(keep));
-  return { tabs: list.tabs, windowed: list.windowed, selected, unread };
+  const next = { ...now, tabs: list.tabs, windowed: list.windowed, selected };
+  const keep = (name: string) => names.has(name) && (hidden(next) || name !== selected);
+  if ([...now.unread].every(keep)) return next;
+  return { ...next, unread: new Set([...now.unread].filter(keep)) };
 }
 
 /** The state once `name` gets lines. */
 function heard(now: Snoops, name: string): Snoops {
-  if (now.unread.has(name) || (name === now.selected && !folded)) return now;
+  if (now.unread.has(name) || (name === now.selected && !hidden(now))) return now;
   return { ...now, unread: new Set([...now.unread, name]) };
 }
 
@@ -81,7 +93,7 @@ function heard(now: Snoops, name: string): Snoops {
  *  folded. */
 function select(now: Snoops, name: string): Snoops {
   if (!now.tabs.some((tab) => tab.name === name)) return now;
-  const seen = !folded && now.unread.has(name);
+  const seen = !hidden(now) && now.unread.has(name);
   if (now.selected === name && !seen) return now;
   const unread = seen ? new Set([...now.unread].filter((n) => n !== name)) : now.unread;
   return { ...now, selected: name, unread };
@@ -232,12 +244,19 @@ export function selectSnoop(name: string, session: number = getSelected()): void
   store.apply(session, (now) => select(now, name));
 }
 
-/** The split folded to its strip, or opened again, which shows the tab
- *  in front once more. */
-export function setSnoopsFolded(on: boolean): void {
-  if (folded === on) return;
-  folded = on;
-  if (!on) store.apply(getSelected(), (now) => (now.selected ? select(now, now.selected) : now));
+/** The split of `session`, the session in front unless it names
+ *  another, folded to its strip or opened again. The fold is the
+ *  profile's, so every session on it takes it. Opening shows the tab in
+ *  front of `session` once more. */
+export function setSnoopsFolded(on: boolean, session: number = getSelected()): void {
+  for (const other of othersOnProfile(session)) {
+    store.apply(other, (now) => (now.folded === on ? now : { ...now, folded: on }));
+  }
+  store.apply(session, (now) => {
+    if (now.folded === on) return now;
+    const next = { ...now, folded: on };
+    return !on && next.selected ? select(next, next.selected) : next;
+  });
 }
 
 /** Every line the tab of `name` in `session` holds, as the game sent
