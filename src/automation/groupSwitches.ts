@@ -1,8 +1,8 @@
 // The on and off switch on each group heading in Settings, Automation.
 // It turns the whole group at once, the way #group does, and keeps the
 // items' own switches as they are. While the loadouts decide a group,
-// its switch shows the group as it is and waits, with a note that names
-// them and says when they turn back a group #group turned.
+// its switch still turns it, with a note that names them and says when
+// they turn back a group the switch or #group turned.
 
 import type { GroupSwitch, LoadoutHold } from '../ipc/automation';
 import { listJoin } from '../lib/text';
@@ -47,8 +47,8 @@ export function withSwitch(
 const UNTIL = 'when you next launch Vosh, switch profiles, or save Loadouts';
 
 /** The note under a heading whose group the loadouts decide. `enabled`
- *  is the group's switch. `#group` and Lua still turn a group the
- *  loadouts decide, so the switch can differ from the loadouts until
+ *  is the group's switch. The switch, `#group` and Lua all turn a group
+ *  the loadouts decide, so the switch can differ from the loadouts until
  *  they lay their state over the group again, and the note says when. */
 export function loadoutHoldNote(hold: LoadoutHold, enabled: boolean): string {
   const turned = enabled !== hold.on;

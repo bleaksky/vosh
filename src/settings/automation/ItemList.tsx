@@ -383,7 +383,6 @@ export function ItemList({
                       aria-label={`${group} group`}
                       aria-describedby={noteId}
                       checked={groupSwitch.enabled}
-                      disabled={hold !== undefined}
                       tabIndex={tabId === id ? 0 : -1}
                       data-group-switch={group}
                       onFocus={() => setCursor({ id, selected })}

@@ -1921,7 +1921,7 @@
   margin: 0 11px 0 4px;
 }
 
-/* Why a group's switch waits: the loadouts decide it. 12/400 tertiary,
+/* Which loadouts decide a group and when they turn it back. 12/400 tertiary,
    under the heading's name and above its rows. */
 .st-auto-groupnote {
   margin: 0;

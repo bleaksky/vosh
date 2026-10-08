@@ -393,9 +393,29 @@ describe('the switch on a group heading', () => {
     expect(heard.length).toBeGreaterThan(0);
     await act(async () => heard[heard.length - 1]({ payload: '' }));
     expect(isOn(list.groupSwitch('combat'))).toBe(false);
-    expect(on(list.groupSwitch('combat') as FakeElement).disabled).toBe(true);
+    expect(on(list.groupSwitch('combat') as FakeElement).disabled).toBeFalsy();
     expect(list.notes()).toEqual(['The Healer loadout leaves this group off.']);
   });
+
+  it.each(['triggers', 'aliases', 'timers'] as const)(
+    'turns a %s group the loadouts decide, and says when they turn it back',
+    async (groups) => {
+      fakeStore();
+      switches = [
+        { name: 'combat', enabled: true },
+        { name: 'idle', enabled: false, loadouts: { on: false, by: ['Healer'] } },
+      ];
+      const list = await mount({ ...SPEC, groups });
+      expect(on(list.groupSwitch('idle') as FakeElement).disabled).toBeFalsy();
+      expect(list.notes()).toEqual(['The Healer loadout leaves this group off.']);
+      await list.flip('idle');
+      expect(sets).toEqual([{ list: groups, group: 'idle', enabled: true }]);
+      expect(isOn(list.groupSwitch('idle'))).toBe(true);
+      expect(list.notes()).toEqual([
+        'The Healer loadout turns this group off again when you next launch Vosh, switch profiles, or save Loadouts.',
+      ]);
+    },
+  );
 
   it('moves with the arrow keys as its heading does', async () => {
     fakeStore();
