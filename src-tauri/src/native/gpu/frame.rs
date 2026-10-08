@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
+use vosh_automation::trigger::color::wash_field;
 
 use super::bands::{
     band_instances, band_rects, band_viewport, ground_tint, lift_boxes, widen_newest, LiftBox,
@@ -263,11 +264,8 @@ pub(super) fn build_frame(
     //
     // Each entry maps the canonical tint to the field this renderer
     // draws: the theme's color for that mark mixed down into the
-    // terminal ground. There is no edge bar, so a washed row reads
+    // terminal ground (wash_field in the trigger crate). There is no edge bar, so a washed row reads
     // as one quiet band, the way the rest of the window marks rows.
-    // How far the field carries toward the mark color. Low enough
-    // that a washed row reads as marked rather than painted.
-    let wash_field_mix = 0.18_f32;
     let wash_paint: HashMap<[u8; 3], Rgba> = vosh_automation::trigger::NamedColor::ALL
         .iter()
         .enumerate()
@@ -275,15 +273,8 @@ pub(super) fn build_frame(
             let (tr, tg, tb) = c.wash_tint();
             let mark = inputs.wash_palette[idx];
             let ground = inputs.wash_ground;
-            let mix = |m: u8, g: u8| {
-                (f32::from(g) + (f32::from(m) - f32::from(g)) * wash_field_mix).round() as u8
-            };
-            let field = Rgb {
-                r: mix(mark.r, ground.r),
-                g: mix(mark.g, ground.g),
-                b: mix(mark.b, ground.b),
-            };
-            ([tr, tg, tb], rgb_to_rgba(field))
+            let (r, g, b) = wash_field((mark.r, mark.g, mark.b), (ground.r, ground.g, ground.b));
+            ([tr, tg, tb], rgb_to_rgba(Rgb { r, g, b }))
         })
         .collect();
 

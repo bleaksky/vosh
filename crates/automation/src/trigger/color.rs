@@ -4,6 +4,25 @@
 
 use serde::{Deserialize, Serialize};
 
+/// How far a washed row's field carries from the terminal ground toward
+/// its mark color. Low enough that the row reads as marked rather than
+/// painted.
+pub const WASH_FIELD_MIX: f32 = 0.18;
+
+/// The field a renderer paints behind a washed row, the ground moved
+/// `WASH_FIELD_MIX` of the way toward the theme's color for the mark,
+/// rounded per channel. The wash tint only signals which mark it is.
+pub fn wash_field(mark: (u8, u8, u8), ground: (u8, u8, u8)) -> (u8, u8, u8) {
+    let mix = |m: u8, g: u8| {
+        (f32::from(g) + (f32::from(m) - f32::from(g)) * WASH_FIELD_MIX).round() as u8
+    };
+    (
+        mix(mark.0, ground.0),
+        mix(mark.1, ground.1),
+        mix(mark.2, ground.2),
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NamedColor {
