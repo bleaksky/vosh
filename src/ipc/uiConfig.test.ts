@@ -360,6 +360,7 @@ describe('vitals style', () => {
       'dials',
       'rings',
       'vials',
+      'orbs',
       'text',
     ]);
   });

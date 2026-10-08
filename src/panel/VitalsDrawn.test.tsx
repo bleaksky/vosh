@@ -278,6 +278,21 @@ describe('Vials', () => {
   });
 });
 
+describe('Orbs', () => {
+  it('fills each orb from the foot, the value and its max under it', () => {
+    const html = draw({ style: 'orbs', fit: 'full' });
+    expect(all(html, /<svg class="vitals-orb" width="(\d+)"/g)).toEqual(['14', '44', '44', '44']);
+    expect(all(html, /vitals-orb-value">(\d+)/g)).toEqual(['744', '590', '402']);
+    expect(all(html, /vitals-orb-max"> ([^<]+)/g)).toEqual(['/ 1038', '/ 870', '/ 521']);
+  });
+
+  it('drops the max, then draws at 40', () => {
+    expect(draw({ style: 'orbs', fit: 'bare' })).not.toContain('vitals-orb-max');
+    const narrow = draw({ style: 'orbs', fit: 'narrow' });
+    expect(all(narrow, /<svg class="vitals-orb" width="(\d+)"/g)).toEqual(['14', '40', '40', '40']);
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

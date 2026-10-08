@@ -89,6 +89,7 @@ describe('the Style gallery', () => {
       'Dials',
       'Rings',
       'Vials',
+      'Orbs',
       'Text',
     ]);
     expect(html).toContain('data-st-anchor="style"');
@@ -111,6 +112,7 @@ describe('the Style gallery', () => {
       'dials',
       'rings',
       'vials',
+      'orbs',
       'text',
     ]);
   });
@@ -130,6 +132,7 @@ describe('the Style gallery', () => {
       'Dials',
       'Rings',
       'Vials',
+      'Orbs',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');

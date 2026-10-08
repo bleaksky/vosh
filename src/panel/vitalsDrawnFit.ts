@@ -146,6 +146,43 @@ export function vialsHeight(size: number, fit: ColumnFit): number {
   return 1 + textPx(10, size) + cell + textPx(12, size);
 }
 
+/** An orb's size in full, on a narrow panel, and before your
+ *  opponent's name. */
+export const ORB = 44;
+export const ORB_NARROW = 40;
+export const ORB_FOE = 14;
+
+/** Orbs writes each value with its max under its orb while the widest
+ *  fits its column, then drops the max, then draws the orbs at 40 where
+ *  a column has no room round a 44 (Q24). */
+export function orbsFit(
+  width: number,
+  size: number,
+  widest: readonly { figure: LedgerFigure }[],
+  measure: MeasureText,
+): ColumnFit {
+  if (widest.length === 0) return 'full';
+  const column = columnWidth(width, widest.length);
+  const fits = widest.every(
+    ({ figure }) =>
+      measure(
+        figure.max === null ? figure.current : `${figure.current} ${figure.max}`,
+        size,
+        500,
+      ) <= column,
+  );
+  if (fits && column >= ORB) return 'full';
+  return column >= ORB + 4 ? 'bare' : 'narrow';
+}
+
+/** The footer's height for Orbs, the 1 px line on top included: the
+ *  caps, the orb and the value under it, between the column pads. */
+export function orbsHeight(size: number, fit: ColumnFit): number {
+  const orb = fit === 'narrow' ? ORB_NARROW : ORB;
+  const cell = textPx(12, size) + textPx(5, size) + orb + textPx(5, size) + textPx(16, size);
+  return 1 + textPx(10, size) + cell + textPx(12, size);
+}
+
 /** The Rings glyph's size, and the radius of each ring, outer to inner
  *  in your order. */
 export const RINGS = 56;

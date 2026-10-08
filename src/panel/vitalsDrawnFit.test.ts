@@ -4,6 +4,7 @@ import {
   blockRun,
   columnWidth,
   dialsFit,
+  orbsFit,
   ringsFit,
   vialsFit,
   FOE_LADDER,
@@ -89,6 +90,13 @@ describe('the column styles', () => {
     }));
     expect(vialsFit(300, 12, widest, MEASURE)).toBe('full');
     expect(vialsFit(200, 12, widest, MEASURE)).toBe('narrow');
+  });
+
+  it('drop the Orbs max, then draw the orbs at 40', () => {
+    const widest = [{ figure: { current: '1038', max: '/ 1038' } }];
+    expect(orbsFit(300, 12, [...widest, ...widest, ...widest], MEASURE)).toBe('full');
+    expect(orbsFit(220, 12, [...widest, ...widest, ...widest], MEASURE)).toBe('bare');
+    expect(orbsFit(200, 12, [...widest, ...widest, ...widest], MEASURE)).toBe('narrow');
   });
 
   it('draw Dials at 60 while a column holds one, else at 44', () => {

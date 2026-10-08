@@ -1,18 +1,26 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
+import type { VitalsValues } from '../ipc/uiConfig';
 import type { Fight } from '../stores/gmcp/combatStore';
+import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { VitalsBands } from './VitalsBands';
 import { VitalsBlocks } from './VitalsBlocks';
-import type { DrawnVitalsProps } from './VitalsDrawn';
-import { bandsHeight, dialsHeight, ringsHeight, tracesHeight, vialsHeight } from './vitalsDrawnFit';
-import { VitalsVials } from './VitalsVials';
-import { VitalsRings } from './VitalsRings';
 import { VitalsDials } from './VitalsDials';
-import type { VitalsValues } from '../ipc/uiConfig';
-import { VitalsTraces } from './VitalsTraces';
-import type { VitalSample } from '../stores/gmcp/vitalsStore';
+import type { DrawnVitalsProps } from './VitalsDrawn';
+import {
+  bandsHeight,
+  dialsHeight,
+  orbsHeight,
+  ringsHeight,
+  tracesHeight,
+  vialsHeight,
+} from './vitalsDrawnFit';
 import type { DrawnFit } from './vitalsFit';
 import { VitalsLadders } from './VitalsLadders';
 import { marksHeight } from './vitalsMarksFit';
+import { VitalsOrbs } from './VitalsOrbs';
+import { VitalsRings } from './VitalsRings';
+import { VitalsTraces } from './VitalsTraces';
+import { VitalsVials } from './VitalsVials';
 
 // The footer of each style of the More Vitals Styles review, the
 // section VitalsBlock draws for it: the row styles on the Gauges pads,
@@ -74,6 +82,11 @@ export function DrawnSection({
     case 'vials':
       body = <VitalsVials {...props} values={values} fit={fit.fit} />;
       height = vialsHeight(size, fit.fit);
+      cols = true;
+      break;
+    case 'orbs':
+      body = <VitalsOrbs {...props} values={values} fit={fit.fit} />;
+      height = orbsHeight(size, fit.fit);
       cols = true;
       break;
     case 'rings':

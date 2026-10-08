@@ -244,6 +244,8 @@ const SCALED: [string, string, string, string][] = [
   ['.vitals-vial-figure', 'line-height', '20px', '27px'],
   ['.vitals-vial-max', 'font-size', '10px', '13px'],
   ['.vitals-vial-max', 'line-height', '12px', '16px'],
+  ['.vitals-orb', 'margin-top', '5px', '7px'],
+  ['.vitals-orb-value', 'margin-top', '5px', '7px'],
 ];
 
 const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);

@@ -80,6 +80,7 @@ const OWN_MARKS: Partial<Record<VitalsStyle, string>> = {
   dials: 'Dials draw their own arc, so they take no meter.',
   rings: 'Rings draw their own arcs, so they take no meter.',
   vials: 'Vials draw their own glass, so they take no meter.',
+  orbs: 'Orbs draw their own glass, so they take no meter.',
 };
 
 /** What Show each hit does. */

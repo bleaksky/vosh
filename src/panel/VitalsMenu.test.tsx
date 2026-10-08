@@ -124,6 +124,7 @@ describe('vitals menu', () => {
       'Dials',
       'Rings',
       'Vials',
+      'Orbs',
       'Text',
     ]);
     expect(rows.filter((row) => isValidElement(row.trailing)).map((row) => row.children)).toEqual([

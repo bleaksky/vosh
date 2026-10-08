@@ -1686,6 +1686,35 @@
   background: var(--vital-ghost);
 }
 
+/* Orbs. A 44 pt circle under the caps with the value under it, or 40
+   on a narrow panel, and a 14 pt orb before your opponent's name. */
+.vitals-orb {
+  display: block;
+  margin-top: round(5px * var(--mud-scale), 1px);
+  overflow: visible;
+}
+
+.vitals-orb-value {
+  margin-top: round(5px * var(--mud-scale), 1px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--vital-value);
+}
+
+.vitals-orb-max {
+  color: var(--tertiary);
+}
+
+.vitals-foe-before {
+  flex: none;
+  display: flex;
+  margin-right: 8px;
+}
+
+.vitals-foe-before .vitals-orb {
+  margin: 0;
+}
+
 /* Show each hit. The part a hit took holds pale beside the fill, then
    drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
    every fill jumps and the pale part just goes. */
