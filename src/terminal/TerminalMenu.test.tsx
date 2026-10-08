@@ -186,6 +186,9 @@ function on(el: FakeElement): Record<string, Handler> {
   return (el as unknown as Record<string, Record<string, Handler>>)[key];
 }
 
+/** The pointer moving over `el`. */
+const point = (el: FakeElement) => on(el).onPointerMove({ currentTarget: el });
+
 const keyEvent = (key: string) => ({
   key,
   isComposing: false,
@@ -290,6 +293,13 @@ describe('the Settings list in the terminal menu', () => {
         documentListeners.set(type, set);
       },
       removeEventListener: (type: string, fn: Handler) => documentListeners.get(type)?.delete(fn),
+      // The submenus open beside the menu, which a row the pointer
+      // crosses on its way into one leaves open (menuAim.ts).
+      querySelectorAll: (selector: string) => {
+        if (selector !== '[data-menu-surface][data-menu-nested]')
+          throw new Error(`no querySelectorAll for ${selector}`);
+        return findAll(doc.body, (el) => el.hasAttribute('data-menu-nested'));
+      },
     });
     doc.documentElement.dataset.platform = 'macos';
     vi.stubGlobal('document', doc);
@@ -370,7 +380,7 @@ describe('the Settings list in the terminal menu', () => {
     }
     // Opened by pointing, the list leaves focus in the menu, where
     // ArrowLeft shuts it.
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     expect(m.list()).not.toBeNull();
     await m.key('ArrowLeft');
     expect(m.list()).toBeNull();
@@ -402,7 +412,7 @@ describe('the Settings list in the terminal menu', () => {
 
   it('closes one level per Esc pressed in the menu itself', async () => {
     const m = await mount();
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     await m.key('Escape');
     expect(m.list()).toBeNull();
     expect(m.onClose).not.toHaveBeenCalled();
@@ -412,27 +422,53 @@ describe('the Settings list in the terminal menu', () => {
 
   it('opens when you point at Settings, leaving focus in the menu', async () => {
     const m = await mount();
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     expect(m.list()).not.toBeNull();
     expect(doc.activeElement).toBe(m.menu);
     // ArrowRight then moves focus into the list already open.
     await m.key('ArrowRight');
     expect(doc.activeElement).toBe(m.listRow('Triggers'));
     // Pointing at another row shuts it and gives the menu focus back.
-    await act(async () => on(m.row('Find in scrollback…')).onPointerMove());
+    await act(async () => point(m.row('Find in scrollback…')));
     expect(m.list()).toBeNull();
     expect(doc.activeElement).toBe(m.menu);
     expect(lit(m.row('Find in scrollback…'))).toBe(true);
     // So do the arrow keys leaving Settings.
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     await m.key('ArrowDown');
     expect(m.list()).toBeNull();
     expect(lit(m.row('Clear scrollback'))).toBe(true);
   });
 
+  it('stays open while the pointer crosses Clear scrollback on its way into the list', async () => {
+    vi.useFakeTimers();
+    try {
+      const m = await mount();
+      await act(async () => point(m.row('Settings')));
+      const list = m.list();
+      expect(list).not.toBeNull();
+      boxes.set(list as FakeElement, { left: 340, top: 100, right: 500, bottom: 498 });
+      // Down and right from Settings toward the list's lower rows.
+      const move = (clientX: number, clientY: number) => {
+        for (const fn of documentListeners.get('pointermove') ?? []) fn({ clientX, clientY });
+      };
+      move(200, 250);
+      move(216, 262);
+      await act(async () => point(m.row('Clear scrollback')));
+      expect(m.list()).not.toBeNull();
+      expect(lit(m.row('Settings'))).toBe(true);
+      // The pointer rests on Clear scrollback, which then takes over.
+      await act(async () => void vi.advanceTimersByTime(300));
+      expect(m.list()).toBeNull();
+      expect(lit(m.row('Clear scrollback'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps Settings lit while the pointer is in its list', async () => {
     const m = await mount();
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     await act(async () => on(m.menu).onPointerLeave());
     expect(lit(m.row('Settings'))).toBe(true);
   });
@@ -442,7 +478,7 @@ describe('the Settings list in the terminal menu', () => {
     // The pointer opens the list, then stops in the gap or the list
     // padding, or moves past the list, without landing on a list row.
     const pointAndLeave = async () => {
-      await act(async () => on(m.row('Settings')).onPointerMove());
+      await act(async () => point(m.row('Settings')));
       await act(async () => on(m.menu).onPointerLeave());
       expect(m.list()).not.toBeNull();
       expect(lit(m.row('Settings'))).toBe(true);
@@ -473,7 +509,7 @@ describe('the Settings list in the terminal menu', () => {
 
   it('counts a press in the list as inside the menu', async () => {
     const m = await mount();
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     const press = (target: FakeNode) =>
       act(async () => {
         for (const fn of documentListeners.get('pointerdown') ?? []) fn({ target });
@@ -487,7 +523,7 @@ describe('the Settings list in the terminal menu', () => {
 
   it('draws each row of the list, split in three', async () => {
     const m = await mount();
-    await act(async () => on(m.row('Settings')).onPointerMove());
+    await act(async () => point(m.row('Settings')));
     const list = m.list() as FakeElement;
     const shown = list.childNodes
       .filter((li): li is FakeElement => li instanceof FakeElement)
@@ -521,7 +557,7 @@ describe('the Settings list in the terminal menu', () => {
   it('closes the menu, then opens Settings on each row, or Help', async () => {
     for (const row of SETTINGS_MENU.flat()) {
       const m = await mount();
-      await act(async () => on(m.row('Settings')).onPointerMove());
+      await act(async () => point(m.row('Settings')));
       store.delete(SETTINGS_PENDING_KEY);
       calls.log.length = 0;
       await act(async () => on(m.listRow(row.label)).onClick());

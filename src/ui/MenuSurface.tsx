@@ -4,10 +4,12 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscape } from '../lib/escapeStack';
+import { pointAt, pointerLeft, trackMenuPointer } from './menuAim';
 import { placeMenu, type MenuPlacement } from './menuPlacement';
 
 export type { MenuPlacement } from './menuPlacement';
@@ -89,6 +91,10 @@ export function MenuSurface({
     el.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus();
   }, [pos, autoFocus]);
 
+  // Follow the pointer, so a row it crosses on its way into a submenu
+  // waits (menuAim.ts).
+  useEffect(() => trackMenuPointer(), []);
+
   useEffect(() => {
     if (nested) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -153,6 +159,7 @@ export function MenuSurface({
       role="menu"
       aria-label={label}
       data-menu-surface=""
+      data-menu-nested={nested ? '' : undefined}
       className={`pane-menu${className ? ` ${className}` : ''}`}
       style={
         pos ? { left: pos.left, top: pos.top } : { left: at.x, top: at.y, visibility: 'hidden' }
@@ -186,7 +193,8 @@ interface ItemProps {
 }
 
 /** One 30 px row. Hovering focuses it, so the pointer and the arrow
- *  keys share one highlight. */
+ *  keys share one highlight. A row the pointer crosses on its way into
+ *  an open submenu waits until the pointer turns away or rests. */
 export function MenuItem({
   children,
   onSelect,
@@ -198,6 +206,18 @@ export function MenuItem({
   onFocus,
   itemRef,
 }: ItemProps) {
+  // The pointer on the row gives it the highlight and opens its submenu,
+  // or closes a sibling's, unless it is passing through on its way into
+  // an open submenu.
+  const point = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    const el = e.currentTarget;
+    pointAt(el, () => {
+      if (document.activeElement !== el) el.focus();
+      if (submenu) submenu.onOpen(false);
+      else onHover?.();
+    });
+  };
   return (
     <li role="none">
       <button
@@ -212,15 +232,9 @@ export function MenuItem({
         aria-controls={submenu?.open ? submenu.controls : undefined}
         tabIndex={-1}
         onFocus={onFocus}
-        onPointerMove={(e) => {
-          if (disabled) return;
-          if (document.activeElement !== e.currentTarget) e.currentTarget.focus();
-        }}
-        onPointerEnter={() => {
-          if (disabled) return;
-          if (submenu) submenu.onOpen(false);
-          else onHover?.();
-        }}
+        onPointerEnter={point}
+        onPointerMove={point}
+        onPointerLeave={(e) => pointerLeft(e.currentTarget)}
         onKeyDown={(e) => {
           // A click focuses a button on Windows and Linux, disabled or
           // not, so the keys must check too.

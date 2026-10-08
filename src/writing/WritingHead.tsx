@@ -14,7 +14,8 @@ import {
 import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
 import { menuBelow, submenuAt } from '../ui/menuPlacement';
 import type { DraftRow } from './cardMenus';
-import { KINDS, SWITCH_LABELS } from './kinds';
+import { draftItem, newKindRows } from './kindsMenuRows';
+import { SWITCH_LABELS } from './kinds';
 
 // The writing card's header (Note Editor board 1): the kind you write
 // as a button that opens what else you can write and your drafts, the
@@ -97,30 +98,6 @@ export function WritingHead({
     run();
   };
 
-  const kindRows = (rows: WritingKind[], select: (k: WritingKind) => void) =>
-    rows.map((k) => (
-      <MenuItem key={k} onSelect={() => select(k)} onHover={() => setSub(null)}>
-        {KINDS[k].title}
-      </MenuItem>
-    ));
-
-  const draftRow = (row: DraftRow, select: (id: string) => void) => (
-    <MenuItem
-      key={row.id}
-      onSelect={() => select(row.id)}
-      onHover={() => setSub(null)}
-      trailing={
-        <span className="wr-mend">
-          <span className="wr-mmeta">{row.meta}</span>
-          {row.open && <CheckIcon className="wr-mcheck" />}
-        </span>
-      }
-    >
-      <span className="wr-mkind">{KINDS[row.kind].title}</span>
-      <span className="wr-mtitle">{row.title}</span>
-    </MenuItem>
-  );
-
   const subRow = (which: Sub, label: string, meta?: string) => (
     <MenuItem
       key={which}
@@ -143,16 +120,12 @@ export function WritingHead({
     </MenuItem>
   );
 
-  const newRows = (
-    <>
-      {kindRows(kinds.boards, (k) => pick(() => kinds.onNew(k)))}
-      <MenuSeparator />
-      <li role="presentation" className="wr-mhead">
-        About you
-      </li>
-      {kindRows(kinds.aboutYou, (k) => pick(() => kinds.onNew(k)))}
-    </>
-  );
+  // A row of the title menu closes the submenu another row opened. A
+  // row inside a submenu leaves it open.
+  const closeSub = () => setSub(null);
+  const onNew = (k: WritingKind) => pick(() => kinds.onNew(k));
+  const draftRow = (row: DraftRow, select: (id: string) => void, inSub: boolean) =>
+    draftItem(row, select, inSub ? null : closeSub);
 
   let submenu = null;
   const subRowEl = sub ? rowRefs.current[sub.which] : null;
@@ -169,9 +142,9 @@ export function WritingHead({
         at={at}
         onClose={() => setSub(null)}
       >
-        {sub.which === 'new' && newRows}
+        {sub.which === 'new' && newKindRows(kinds, onNew, null)}
         {sub.which === 'sent' &&
-          kinds.sent.map((row) => draftRow(row, (id) => pick(() => kinds.onSent(id))))}
+          kinds.sent.map((row) => draftRow(row, (id) => pick(() => kinds.onSent(id)), true))}
         {sub.which === 'others' &&
           kinds.others.map((o) => (
             <MenuItem
@@ -260,12 +233,14 @@ export function WritingHead({
               <li role="presentation" className="wr-mhead">
                 Drafts
               </li>
-              {kinds.drafts.map((row) => draftRow(row, (id) => pick(() => kinds.onDraft(id))))}
+              {kinds.drafts.map((row) =>
+                draftRow(row, (id) => pick(() => kinds.onDraft(id)), false),
+              )}
               <MenuSeparator />
               {subRow('new', 'New')}
             </>
           ) : (
-            newRows
+            newKindRows(kinds, onNew, closeSub)
           )}
           {(kinds.sent.length > 0 || kinds.others.length > 0) && !hasDrafts && <MenuSeparator />}
           {kinds.sent.length > 0 && subRow('sent', 'Sent', String(kinds.sent.length))}
