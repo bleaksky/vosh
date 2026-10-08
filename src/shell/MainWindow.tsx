@@ -12,7 +12,8 @@ import { TerminalMenu } from '../terminal/TerminalMenu';
 import { ScrollDepth } from '../terminal/ScrollDepth';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
-import { fold as foldGetStarted, openList as openGetStarted } from './getStarted/getStartedStore';
+import { openList as openGetStarted } from './getStarted/getStartedStore';
+import { showMe } from './getStarted/showMe';
 import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
@@ -48,17 +49,15 @@ import { CommandPalette } from './overlays/CommandPalette';
 import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CoachRing } from '../ui/CoachRing';
-import { menuRows, showCoach } from '../ui/coach';
 import { openSettingsTab } from '../lib/settingsLink';
-import { ADD_PANE_MENU_EVENT, requestSessionMenu } from '../lib/appMenu';
+import { requestSessionMenu } from '../lib/appMenu';
 import { getNativeScroll } from '../terminal/native/nativeScroll';
 import { allPanes, PANE_TYPES } from '../panel/paneLayout';
-import { offeredPaneTypes, PANE_LABELS } from '../panel/paneTypes';
+import { offeredPaneTypes } from '../panel/paneTypes';
 import {
   getSelected,
   goTo,
   move,
-  profileInFront,
   rename,
   select,
   sessionStep,
@@ -459,34 +458,18 @@ function MainWindow() {
     },
   });
 
-  // Show me on a step of Get started folds the card, opens what the
-  // step is about as a click would, and rings what to pick (First Run
-  // Q3). Tracked affects ring in the Settings window, which reads the
-  // ring off the Add affect anchor.
-  const showMe = (step: StepId) => {
-    foldGetStarted();
-    if (step === 'panes') {
-      setPanelOpen(true);
-      requestAnimationFrame(() => window.dispatchEvent(new Event(ADD_PANE_MENU_EVENT)));
-      showCoach({
-        find: () => menuRows('Add a pane', [PANE_LABELS.chat, PANE_LABELS.group]),
-        line: 'Pick Chat or Group.',
-      });
-    } else if (step === 'affects') {
-      const profile = profileInFront();
-      openSettingsTab(profile ? `characters:${profile}#add-affect` : 'characters#add-affect');
-    } else if (step === 'prompt') {
-      const area = terminalAreaRef.current?.getBoundingClientRect();
-      const term = termRef.current;
-      if (!area) return;
-      const last = term ? term.rowTop(term.getSize().rows - 1) : null;
-      setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
-      showCoach({
-        find: () => menuRows('Terminal', ['Customize prompt…']),
-        line: 'Pick Customize prompt…',
-      });
-    }
-  };
+  // Show me opens the panel or the terminal menu here (showMe.ts).
+  const showMeHere = (step: StepId) =>
+    showMe(step, {
+      openPanel: () => setPanelOpen(true),
+      openTerminalMenu: () => {
+        const area = terminalAreaRef.current?.getBoundingClientRect();
+        const term = termRef.current;
+        if (!area) return;
+        const last = term ? term.rowTop(term.getSize().rows - 1) : null;
+        setTerminalMenu({ x: area.left + 12, y: last ?? area.bottom - 24 });
+      },
+    });
 
   // The window shortcuts, the macOS menu bar and #help.
   const { runCommand, themesChanged } = useAppCommands({
@@ -782,7 +765,7 @@ function MainWindow() {
         host={promptCardHost}
         cell={cellSize}
         show={promptShow}
-        onShowMe={showMe}
+        onShowMe={showMeHere}
         focusInput={focusInput}
       />
       {terminalMenu && (

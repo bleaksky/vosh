@@ -1,4 +1,4 @@
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import tauriConf from '../../src-tauri/tauri.conf.json';
@@ -8,6 +8,7 @@ import { PANEL_WIDTH_MIN, panelWidthFloor } from '../panel/paneLayout';
 import type { Connection } from '../stores/session/useConnection';
 import frameCss from '../styles/frame.css?raw';
 import { FakeDocument, FakeElement, findAll } from '../test/fakeDom';
+import { ADD_PANE_MENU_EVENT } from '../lib/appMenu';
 import { TitleBand } from './TitleBand';
 
 // The title band's buttons at the right end: Add a pane while the panel
@@ -19,6 +20,17 @@ import { TitleBand } from './TitleBand';
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async () => () => undefined,
   emit: async () => undefined,
+}));
+
+// A menu stands in for the band's own, which places itself by the
+// layout the stand in DOM below has none of.
+vi.mock('./ShellMenu', async (actual) => ({
+  ...(await actual<typeof import('./ShellMenu')>()),
+  ShellMenu: ({ label, children }: { label: string; children: ReactNode }) => (
+    <div role="menu" aria-label={label}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -252,6 +264,8 @@ describe('the title band with the Settings button', () => {
 
 type Handler = (e?: unknown) => void;
 const doc = new FakeDocument();
+/** What the band listens for on the window. */
+const heard = new Map<string, Set<(e: Event) => void>>();
 let createRoot: typeof import('react-dom/client').createRoot;
 
 /** The handlers React keeps on an element. */
@@ -261,7 +275,7 @@ function on(el: FakeElement): Record<string, Handler> {
   return (el as unknown as Record<string, Record<string, Handler>>)[key];
 }
 
-describe('pressing the Settings button', () => {
+describe('the band in a window', () => {
   const cleanups: (() => Promise<void>)[] = [];
 
   beforeAll(async () => {
@@ -272,8 +286,13 @@ describe('pressing the Settings button', () => {
       document: doc,
       location: { protocol: 'about:' },
       HTMLIFrameElement: class {},
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener(type: string, fn: (e: Event) => void) {
+        if (!heard.has(type)) heard.set(type, new Set());
+        heard.get(type)?.add(fn);
+      },
+      removeEventListener(type: string, fn: (e: Event) => void) {
+        heard.get(type)?.delete(fn);
+      },
     });
     vi.stubGlobal('navigator', { userAgent: 'node', platform: '' });
     vi.stubGlobal('Element', FakeElement);
@@ -338,5 +357,22 @@ describe('pressing the Settings button', () => {
     expect(m.onOpenSettings).toHaveBeenCalledTimes(1);
     expect(m.onMenuClosed).not.toHaveBeenCalled();
     expect(doc.activeElement).toBe(field);
+  });
+
+  it('opens Add a pane when Show me asks for it', async () => {
+    await mount();
+    const add = () => {
+      const [button] = findAll(doc.body, (el) => el.getAttribute('aria-label') === 'Add a pane');
+      if (!button) throw new Error('no Add a pane button');
+      return button;
+    };
+    expect(add().getAttribute('aria-expanded')).toBe('false');
+    expect(heard.get(ADD_PANE_MENU_EVENT)?.size).toBe(1);
+    await act(async () => {
+      for (const fn of heard.get(ADD_PANE_MENU_EVENT) ?? []) fn(new Event(ADD_PANE_MENU_EVENT));
+    });
+    expect(add().getAttribute('aria-expanded')).toBe('true');
+    const menus = findAll(doc.body, (el) => el.getAttribute('role') === 'menu');
+    expect(menus.map((el) => el.getAttribute('aria-label'))).toEqual(['Add a pane']);
   });
 });
