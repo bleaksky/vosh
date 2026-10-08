@@ -11,6 +11,7 @@ import { type TerminalHandle } from './terminalHandle';
 import { nativeSurfaceEnabled } from './terminalRenderer';
 import { type InputHandle } from '../input/Input';
 import { submenuAt } from '../ui/menuPlacement';
+import { pointAt, pointerLeft } from '../ui/menuAim';
 import { MenuItem, MenuSeparator, MenuSurface } from '../ui/MenuSurface';
 import { ChevronRightIcon } from '../ui/icons';
 import { nativeSurfaceCopy, nativeSurfaceSelectAll } from '../ipc/nativeSurface';
@@ -398,10 +399,16 @@ export function TerminalMenu({
                   className={`ov-menu-item${lit ? ' is-active' : ''}${
                     item.danger ? ' is-danger' : ''
                   }`}
-                  onPointerMove={() => {
-                    if (item.submenu) openSub(item.submenu, false);
-                    else if (i !== active || sub) highlight(i);
+                  // A row the pointer crosses on its way into the open
+                  // list waits until it turns away or rests (menuAim.ts).
+                  onPointerMove={(e) => {
+                    const which = item.submenu;
+                    pointAt(e.currentTarget, () => {
+                      if (which) openSub(which, false);
+                      else if (i !== active || sub) highlight(i);
+                    });
                   }}
+                  onPointerLeave={(e) => pointerLeft(e.currentTarget)}
                   // A row that takes focus, as Show me's ring gives it,
                   // is the row the keys act on.
                   onFocus={() => setActive(i)}
