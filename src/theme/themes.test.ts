@@ -3,6 +3,7 @@ import {
   ACCENT_APART,
   CHROME_COLOR_KEYS,
   ON_ACCENT_CONTRAST,
+  PINNED_STATUS_CONTRAST,
   SECONDARY_CONTRAST,
   STATUS_CONTRAST,
   STATUS_MOVE_MIN,
@@ -20,6 +21,7 @@ import {
   deltaE2000,
   deltaEOk,
   oklchToRgbInGamut,
+  paintOver,
   parseHex,
   rgbToOklab,
   rgbToOklch,
@@ -1565,9 +1567,10 @@ describe('window status colors for a color vision', () => {
   });
 
   // The floors and targets of the window's swap (chrome statusSeenBy),
-  // firmest first: the 3:1 floor, the text tiers, each turned color's
-  // window and chroma, a pinned accent, danger from warn and warn from
-  // success, success's move, and danger from success.
+  // firmest first: the 3:1 floor, the 7:1 floor of a status color the
+  // theme pins at 7:1, the text tiers, each turned color's window and
+  // chroma, a pinned accent, danger from warn and warn from success,
+  // success's move, and danger from success.
   interface Rule {
     id: string;
     tier: number;
@@ -1588,6 +1591,25 @@ describe('window status colors for a color vision', () => {
           value: (s) => contrast(hex(s[key]), hex(ground)),
           need: Math.min(STATUS_CONTRAST, contrast(hex(t[key]), hex(ground))),
         });
+      }
+      // A status color the theme pins at 7:1 on every ground text sits on
+      // keeps 7:1 there, the hovered row of a menu among them.
+      const textGrounds = [v.panel, v.raised, v.inputband, v.selrow].map(hex);
+      const hi = paintOver(v.menuHi, hex(v.raised));
+      if (hi) textGrounds.push(hi);
+      const pinsAaa =
+        theme.chrome?.[key] !== undefined &&
+        textGrounds.every((g) => contrast(hex(t[key]), g) >= PINNED_STATUS_CONTRAST);
+      if (pinsAaa) {
+        for (const ground of textGrounds) {
+          out.push({
+            id: `${key} 7:1 floor`,
+            tier: 0,
+            keys: [key],
+            value: (s) => contrast(hex(s[key]), ground),
+            need: PINNED_STATUS_CONTRAST,
+          });
+        }
       }
       for (const tier of ['text', 'secondary'] as const) {
         out.push({
@@ -1698,13 +1720,14 @@ describe('window status colors for a color vision', () => {
   // how far it needs, and what stops it going further: a firmer rule, or
   // one as firm, that a step in lightness or hue breaks. Where nothing
   // stops it the search missed the step. High Contrast holds its status
-  // colors at 7:1 on every ground, and a blue that reads 7:1 on its black
-  // sits near its sky blue accent.
+  // colors at 7:1 on every ground, the hovered menu row the nearest, and
+  // a blue that reads 7:1 there and stays in the success window sits near
+  // its sky blue accent.
   const WINDOW_SHORT: Record<string, string> = {
     'deuteranopia high-contrast': 'accent/success 8.2 of 12.0. success/secondary',
-    'protanopia high-contrast': 'accent/success 5.0 of 12.0. missed, success hue window',
+    'protanopia high-contrast': 'accent/success 5.0 of 12.0. success 7:1 floor, success hue window',
     'protanopia rose-pine': 'success move 6.6 of 10.0. success hue window, success/secondary',
-    'tritanopia high-contrast': 'danger/warn part 14.6 of 15.6. missed, warn/secondary',
+    'tritanopia high-contrast': 'danger/warn part 14.6 of 15.6. danger 7:1 floor, warn/secondary',
   };
 
   it('keeps every floor and target of the window, or names the rule short and what stops it', () => {
