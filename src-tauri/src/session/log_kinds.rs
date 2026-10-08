@@ -27,6 +27,9 @@
 //!   the same shape to `your group`, and its gtell packet names it.
 //! - `replay` pages the tells you got while away (`act_comm.c`
 //!   `do_replay`), so its reply is a tell up to the next prompt.
+//!   `replay tells`, `replay says` and the others page the last lines of
+//!   a channel (`db_sqlite.c` `playerdb_read_comm`), and their reply
+//!   takes that channel the same way.
 
 use vosh_log::{LineKind, LogEntry};
 
@@ -74,8 +77,9 @@ pub(crate) struct LogKinds {
     /// Comm.Channel packets since the last prompt that found no line yet,
     /// oldest first.
     waiting: Vec<Heard>,
-    /// You sent `replay`, so its reply is a tell until the next prompt.
-    replay: bool,
+    /// You sent `replay`, so its reply takes this channel until the next
+    /// prompt.
+    replay: Option<&'static str>,
 }
 
 impl LogKinds {
@@ -85,7 +89,10 @@ impl LogKinds {
         if !playing {
             return LineKind::Login;
         }
-        if self.replay || sent_tell(plain) {
+        if let Some(channel) = self.replay {
+            return LineKind::Channel(channel.to_string());
+        }
+        if sent_tell(plain) {
             return LineKind::Channel("tell".to_string());
         }
         match self.waiting.iter().position(|heard| heard.holds(plain)) {
@@ -134,26 +141,51 @@ impl LogKinds {
     /// a packet still waiting found no line, and a `replay` reply ends.
     pub(crate) fn prompt(&mut self) {
         self.waiting.clear();
-        self.replay = false;
+        self.replay = None;
     }
 
     /// You sent `bytes`, a line or more. Returns the kind of their rows,
-    /// sent in play and login outside it. A bare `replay` in play makes
-    /// its reply a tell. The game reads `rep` and `repl` as `reply`, so
-    /// `repla` is the shortest.
+    /// sent in play and login outside it. A `replay` in play makes its
+    /// reply the channel it pages.
     pub(crate) fn sent(&mut self, bytes: &[u8], playing: bool) -> LineKind {
         if !playing {
             return LineKind::Login;
         }
         let text = String::from_utf8_lossy(bytes);
-        if text.split(['\r', '\n']).any(|line| {
-            let word = line.trim().to_ascii_lowercase();
-            word.len() >= 5 && "replay".starts_with(&word)
-        }) {
-            self.replay = true;
+        if let Some(channel) = text.split(['\r', '\n']).filter_map(replayed).next_back() {
+            self.replay = Some(channel);
         }
         LineKind::Sent
     }
+}
+
+/// The channel whose lines `line`, a command you sent, pages, when it is
+/// a `replay` that shows lines (`act_comm.c` `do_replay`). A bare
+/// `replay` pages the tells you got while away, and `replay tells` and
+/// the others the last lines of their channel, with a name after them
+/// for an immortal. The game reads `rep` and `repl` as `reply`, so
+/// `repla` is the shortest, and it reads the channel word whole.
+fn replayed(line: &str) -> Option<&'static str> {
+    let mut words = line.split_whitespace();
+    let word = words.next()?.to_ascii_lowercase();
+    if word.len() < 5 || !"replay".starts_with(&word) {
+        return None;
+    }
+    let what = words.next().map(str::to_ascii_lowercase);
+    Some(match what.as_deref() {
+        None | Some("tells") => "tell",
+        Some("group") => "gtell",
+        Some("says") => "say",
+        Some("cabal") => "cabal",
+        Some("clan") => "clan",
+        Some("faction") => "faction",
+        Some("new" | "newbie") => "newbie",
+        Some("imm") => "immortal",
+        Some("imp") => "imp",
+        // `replay clear` and a word the game does not know print one
+        // line of their own.
+        Some(_) => return None,
+    })
 }
 
 /// True when `plain` is the line the game prints for a tell you send,

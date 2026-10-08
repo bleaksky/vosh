@@ -145,3 +145,29 @@ fn a_packet_after_its_line_names_the_newest_row_that_holds_it() {
     assert_eq!(rows[0].kind, LineKind::Text);
     assert_eq!(rows[1].kind, channel("say"));
 }
+
+#[test]
+fn a_replay_of_a_channel_takes_that_channel_until_the_next_prompt() {
+    let mut kinds = LogKinds::default();
+    for (sent, name) in [
+        ("replay tells", "tell"),
+        ("repla says", "say"),
+        ("replay group", "gtell"),
+        ("replay cabal", "cabal"),
+        ("replay clan", "clan"),
+        ("replay faction", "faction"),
+        ("replay new", "newbie"),
+        ("REPLAY newbie", "newbie"),
+        ("replay imm", "immortal"),
+        ("replay imp Tolliver", "imp"),
+    ] {
+        kinds.sent(format!("{sent}\r\n").as_bytes(), true);
+        assert_eq!(kinds.line(TELL, true), channel(name), "{sent}");
+        assert_eq!(kinds.line(MAREN, true), channel(name), "{sent}");
+        kinds.prompt();
+        assert_eq!(kinds.line(MAREN, true), LineKind::Text, "{sent}");
+    }
+    // Clearing a buffer pages nothing.
+    kinds.sent(b"replay clear tells\r\n", true);
+    assert_eq!(kinds.line(MAREN, true), LineKind::Text);
+}
