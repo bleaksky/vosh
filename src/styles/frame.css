@@ -433,6 +433,13 @@
   color: var(--warn);
 }
 
+/* The round trip to the game reads in tertiary while fine, the warn
+   tone above from 300 ms, and the danger text tone from a second. The
+   text color alone changes, so the tick keeps the only ground. */
+.shell-status-rtt.is-danger {
+  color: var(--danger-text);
+}
+
 /* A vital the game hides (lamented tears) reads a quiet `?`. */
 .shell-status-value.is-hidden {
   color: var(--tertiary);

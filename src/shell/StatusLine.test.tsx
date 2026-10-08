@@ -6,7 +6,7 @@ import type { Vitals } from '../stores/gmcp/vitalsStore';
 import type { BandEnv } from '../terminal/bandCells';
 import { parseSgrCells } from '../terminal/sgrCells';
 import frameCss from '../styles/frame.css?raw';
-import { StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
+import { RoundTripItem, StatusVitals, type LineText, type StatusVitalsProps } from './StatusLine';
 import { FIT_ALL, type StatusLineFit } from './statusLineFit';
 
 // The stores behind StatusLine reach the Tauri bridge. StatusVitals,
@@ -317,5 +317,29 @@ describe('the status line in frame.css', () => {
   it('sets the warn and hidden tones', () => {
     expect(rule('.shell-statusline .is-warn')).toContain('color: var(--warn)');
     expect(rule('.shell-status-value.is-hidden')).toContain('color: var(--tertiary)');
+  });
+});
+
+describe('the round trip on the status line', () => {
+  const html = (ms: number) => renderToStaticMarkup(<RoundTripItem ms={ms} />);
+  const rule = (selector: string) => {
+    const at = frameCss.indexOf(`${selector} {`);
+    return at < 0 ? '' : frameCss.slice(at, frameCss.indexOf('}', at));
+  };
+
+  it('reads fine in tertiary, slow in warn and a stall in danger, titled', () => {
+    expect(html(38)).toBe(
+      '<span class="shell-status-rtt" title="Round trip to the game">38ms</span>',
+    );
+    expect(html(412)).toContain('class="shell-status-rtt is-warn"');
+    expect(html(412)).toContain('>412ms<');
+    expect(html(1400)).toContain('class="shell-status-rtt is-danger"');
+    expect(html(1400)).toContain('>1.4s<');
+  });
+
+  it('changes the text color alone', () => {
+    expect(rule('.shell-status-rtt.is-danger')).toContain('color: var(--danger-text)');
+    expect(rule('.shell-status-rtt.is-danger')).not.toContain('background');
+    expect(rule('.shell-statusline .is-warn')).not.toContain('background');
   });
 });
