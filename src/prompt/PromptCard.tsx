@@ -13,7 +13,6 @@ import {
   type CardRequest,
   headerButtons,
   moreItems,
-  openingStep,
   savedForName,
   cardNames,
   vitalsStartRows,
@@ -21,7 +20,6 @@ import {
   type CardStep,
   type MoreItemId,
 } from './cardRules';
-import { followCardProfile } from './promptCardSync';
 import { warnedPieces } from './promptWarn';
 import { LAYOUT_TOKENS, type LayoutId } from './pickerRows';
 import {
@@ -35,16 +33,11 @@ import {
   type Pointing,
 } from './promptPieces';
 import { shownPreview } from './promptSettings';
-import { sessionIdentityGet, type SessionIdentity } from '../ipc/characters';
-import { profilesList } from '../ipc/profiles';
+import type { SessionIdentity } from '../ipc/characters';
 import {
-  onPromptState,
-  onPromptStatus,
   promptCodeReaderSet,
   promptCompile,
   promptDesignsList,
-  promptStateGet,
-  promptWatch,
   type PromptDesign,
   type PromptPreset,
   type PromptState,
@@ -69,11 +62,10 @@ import { formatSettingsTarget } from '../lib/settingsNav';
 import { pushToast } from '../stores/toasts';
 import { useBandEnv } from './useBandEnv';
 import { useCaptureSteps } from './useCaptureSteps';
+import { useCardOpen } from './useCardOpen';
 import { useCardPlace } from './useCardPlace';
 import { useDesignEdits } from './useDesignEdits';
-import { getSessions } from '../stores/session/sessionsStore';
 import { useCellWidth, useLabelMeasure } from '../lib/useCellWidth';
-import { knownWorld } from '../lib/knownWorlds';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { TerminalHandle } from '../terminal/terminalHandle';
 import { Button, CloseIcon, IconButton, MoreIcon } from '../ui';
@@ -256,98 +248,27 @@ export function PromptCard({
   const drawn = shownPreview(preview, forsaken);
   previewRef.current = drawn;
 
-  // The step the card was asked to open on, read once as it opens.
-  const opensOn = useRef(opening.view === 'point' ? ('point' as const) : undefined);
-
-  // Open: keep the design among the earlier ones, read the state, and
-  // name who the card saves for. When another profile becomes active the
-  // card opens again for it, from its first step, with nothing to take
-  // back, and saves nothing until it has read that profile's table.
-  useEffect(() => {
-    let alive = true;
-    const open = (first: boolean) => {
-      const at = ++opens.current;
-      if (!first) {
-        forgetEdits();
-        setStep(null);
-        setPointing(NOWHERE);
-        setView('design');
-        resetSteps();
-        setMoreAt(null);
-        setConfirmForget(false);
-      }
-      void Promise.all([
-        binding.open(session),
-        promptStateGet(session),
-        sessionIdentityGet(session).catch(() => null),
-        profilesList().catch(() => null),
-      ])
-        .then(([opened, now, who, list]) => {
-          if (!alive || at !== opens.current) return;
-          // The profile the session's row names, which the app may not
-          // have made active yet when you just selected the session.
-          const played = getSessions().find((row) => row.id === session)?.profile;
-          const name = played ?? list?.active ?? who?.profile ?? 'default';
-          const entry = list?.profiles.find((p) => p.name === name);
-          const host = who?.host ?? entry?.auto_match?.host ?? '';
-          const known = knownWorld(host) !== undefined;
-          take(opened);
-          setState(now);
-          setIdentity(who);
-          setActive(name);
-          setKnownHost(known);
-          // A vitals text reads no prompt, so it rests at once.
-          setStep(
-            vitals
-              ? 'rest'
-              : ((first ? opensOn.current : undefined) ??
-                  openingStep({
-                    capture: opened.capture,
-                    forsaken: now.forsaken || known || opened.capture.kind === 'aabahran',
-                    gameSent: now.new_build,
-                  })),
-          );
-        })
-        .catch((e: unknown) => console.error('[prompt card] opening failed', e));
-    };
-    open(true);
-    void promptWatch(true, session).catch(() => {});
-    const unlisteners: (() => void)[] = [];
-    const keep = (p: Promise<() => void>) =>
-      void p.then((fn) => (alive ? unlisteners.push(fn) : fn())).catch(() => {});
-    keep(
-      followCardProfile({
-        reopen: () => open(false),
-        identity: (who) => setIdentity(who),
-      }),
-    );
-    keep(
-      onPromptState((next, from) => {
-        if (from !== session) return;
-        setState(next);
-        setRefresh((n) => n + 1);
-      }),
-    );
-    // Whether Vosh reads your prompt changes between prompts too, such as
-    // when three in a row did not match.
-    keep(
-      onPromptStatus((status, from) => {
-        if (from === session) setState((now) => (now ? { ...now, status } : now));
-      }),
-    );
-    keep(
-      binding.follow(session, (next) => {
-        if (alive) take(next);
-      }),
-    );
-    return () => {
-      alive = false;
-      for (const fn of unlisteners) fn();
-      void promptWatch(false, session).catch(() => {});
-      // Your live prompt comes back as the card closes.
-      void promptPreviewSet(null, session).catch(() => {});
-    };
-  }, [session, binding, vitals, forgetEdits, opens, resetSteps, take]);
+  // Open, and open again for another profile.
+  useCardOpen({
+    session,
+    binding,
+    vitals,
+    opening,
+    opens,
+    take,
+    forgetEdits,
+    resetSteps,
+    setStep,
+    setPointing,
+    setView,
+    setMoreAt,
+    setConfirmForget,
+    setState,
+    setIdentity,
+    setActive,
+    setKnownHost,
+    setRefresh,
+  });
 
   // A request while the card is open: Point at it again… in Settings,
   // Edit prompt as text… in the palette, or Customize prompt… again.
