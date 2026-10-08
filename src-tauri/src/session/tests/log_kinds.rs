@@ -171,3 +171,18 @@ fn a_replay_of_a_channel_takes_that_channel_until_the_next_prompt() {
     kinds.sent(b"replay clear tells\r\n", true);
     assert_eq!(kinds.line(MAREN, true), LineKind::Text);
 }
+
+#[test]
+fn a_game_without_gmcp_never_says_you_play_so_every_row_is_in_play() {
+    let mut kinds = LogKinds::default();
+    let playing = kinds.in_play(false);
+    assert!(playing);
+    assert_eq!(kinds.line(MAREN, playing), LineKind::Text);
+    assert_eq!(kinds.sent(b"look\r\n", playing), LineKind::Sent);
+    assert_eq!(LogKinds::prompt_line(playing), LineKind::Prompt);
+    // Once the game speaks GMCP, its rows wait for Char.Status.
+    kinds.gmcp_on();
+    assert!(!kinds.in_play(false));
+    assert!(kinds.in_play(true));
+    assert_eq!(kinds.line(MAREN, kinds.in_play(false)), LineKind::Login);
+}

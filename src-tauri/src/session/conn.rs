@@ -700,7 +700,7 @@ async fn send_typed<R: tauri::Runtime>(
     let (pulse, kind) = {
         let mut c = conn.session.connection.lock();
         let pulse = send_step(&mut c, &conn.accumulator, bytes, now_ms());
-        let playing = c.link.playing();
+        let playing = c.log_kinds.in_play(c.link.playing());
         (pulse, c.log_kinds.sent(bytes, playing))
     };
     // The frontend already echoed the typed line inline with the

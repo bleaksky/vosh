@@ -256,7 +256,8 @@ pub(super) fn end_held(
     let mut log = Vec::new();
     let mut kept = Vec::new();
     for line in c.prompt.stage.release() {
-        let kind = c.log_kinds.line(&line.plain, c.link.playing());
+        let playing = c.log_kinds.in_play(c.link.playing());
+        let kind = c.log_kinds.line(&line.plain, playing);
         if let Some(sid) = log_session_id {
             log.push(vosh_log::LogEntry {
                 session_id: sid,
@@ -318,7 +319,8 @@ fn text_line_step(
     let scope = room_scope(c, &plain, &bytes);
     // A line takes its kind whether it shows or not, so a channel packet
     // waiting for a line a trigger hides never lands on a later one.
-    let kind = c.log_kinds.line(&plain, c.link.playing());
+    let playing = c.log_kinds.in_play(c.link.playing());
+    let kind = c.log_kinds.line(&plain, playing);
     let LinePass {
         result,
         tick_step,
@@ -517,7 +519,8 @@ fn prompt_block(
     let mut scrollback = Vec::new();
     // Each line of your prompt that shows is logged as a prompt, or as
     // login outside play.
-    let prompt_kind = super::log_kinds::LogKinds::prompt_line(c.link.playing());
+    let prompt_kind =
+        super::log_kinds::LogKinds::prompt_line(c.log_kinds.in_play(c.link.playing()));
     let log = log_session_id.map(|sid| (sid, &prompt_kind));
     // Pinned, the prompt leaves the text for the band above the command
     // line. It is logged and kept exactly as it is in the text.

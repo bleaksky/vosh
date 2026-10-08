@@ -170,7 +170,7 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
     let plain = vosh_protocol::ansi::plain_text(&bytes);
     let kind = {
         let mut c = session.connection.lock();
-        let playing = c.link.playing();
+        let playing = c.log_kinds.in_play(c.link.playing());
         c.log_kinds.line(&plain, playing)
     };
     // Terminate the line on screen. Write only what the end of its read

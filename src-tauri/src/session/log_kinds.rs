@@ -6,7 +6,9 @@
 //!   Char.Status or the vitals, and after you step away to the account
 //!   menu, as [`LinkWatch`](super::reconnect::LinkWatch) follows it. The
 //!   lines you send there are login too, so the name you typed and the
-//!   characters the menu lists stay out of every scene.
+//!   characters the menu lists stay out of every scene. Only a game that
+//!   speaks GMCP says when you play, and Aabahran offers it before its
+//!   first line, so on a game that never does every line is in play.
 //! - Your prompt is a prompt as the prompt stage reads it, and a line you
 //!   send is sent.
 //! - A Comm.Channel packet names the channel of one line, the first
@@ -80,9 +82,23 @@ pub(crate) struct LogKinds {
     /// You sent `replay`, so its reply takes this channel until the next
     /// prompt.
     replay: Option<&'static str>,
+    /// The game speaks GMCP on this link, so it says when you play.
+    gmcp: bool,
 }
 
 impl LogKinds {
+    /// The game turned GMCP on for this link.
+    pub(crate) fn gmcp_on(&mut self) {
+        self.gmcp = true;
+    }
+
+    /// Whether a row counts as in play, with `playing` whether the game
+    /// said you play. A game that does not speak GMCP never says so, so
+    /// each of its rows is in play.
+    pub(crate) fn in_play(&self, playing: bool) -> bool {
+        playing || !self.gmcp
+    }
+
     /// The kind of a game line that is not your prompt. `plain` is its
     /// text with colors stripped, and `playing` whether you play.
     pub(crate) fn line(&mut self, plain: &str, playing: bool) -> LineKind {
