@@ -217,6 +217,19 @@ export async function stopWalk(session?: number): Promise<void> {
   await invoke('session_walk_stop', { session });
 }
 
+/// Walk the path you clicked on the map in a session, the selected one
+/// when it names none. `steps` is the path as a `#walk` string, planned
+/// from room `start`, and `rooms` holds the room each step should reach.
+/// A walk under way gives way once its step in flight lands.
+export async function walkRoute(
+  steps: string,
+  start: number,
+  rooms: number[],
+  session?: number,
+): Promise<void> {
+  await invoke('session_walk_route', { steps, start, rooms, session });
+}
+
 /** Where a walk stands, `WalkProgress` in src-tauri/src/session/walk.rs.
  *  `left` is the steps still to go as a `#walk` string, and `route` is
  *  true for a walk a click on the map started. */

@@ -409,6 +409,8 @@ struct Harness {
     app: App<MockRuntime>,
     state: SharedState,
     shown: Arc<StdMutex<Vec<Shown>>>,
+    /// Every `session://walk` payload the page heard.
+    walks: Arc<StdMutex<Vec<Value>>>,
     world: Arc<StdMutex<World>>,
     port: u16,
     /// The folder the session log lives in.
@@ -460,10 +462,17 @@ impl Harness {
                 .expect("the outputs")
                 .push(Shown::Output(event.payload().to_string()));
         });
+        let walks = Arc::new(StdMutex::new(Vec::new()));
+        let heard = walks.clone();
+        app.listen_any("session://walk", move |event| {
+            let payload = serde_json::from_str(event.payload()).expect("a walk payload");
+            heard.lock().expect("the walks").push(payload);
+        });
         Self {
             app,
             state,
             shown,
+            walks,
             world,
             port,
             _dir: dir,
@@ -549,6 +558,27 @@ impl Harness {
         )
         .await
         .expect("the line goes out");
+    }
+
+    /// Click a room on the map, the path to it planned from `start`.
+    async fn click(&self, steps: &str, start: i64, rooms: &[i64]) {
+        crate::ipc::session::session_walk_route(
+            self.app.state(),
+            steps.to_string(),
+            start,
+            rooms.to_vec(),
+            None,
+        )
+        .await
+        .expect("the path reads");
+    }
+
+    /// Wait until the page heard `walks` on `session://walk`.
+    async fn until_walks(&self, walks: &[Value]) {
+        self.until(&format!("the page hearing {walks:?}"), |h| {
+            *h.walks.lock().expect("the walks") == walks
+        })
+        .await;
     }
 
     /// Press Esc in the command line.
@@ -1133,5 +1163,36 @@ async fn ten_seconds_with_no_room_lose_track_of_the_walk() {
         "[walk] Stopped. Vosh lost track of the walk.",
     ])
     .await;
+    h.finish().await;
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_click_walks_its_path_and_the_page_hears_how_it_goes() {
+    let _grid = grid();
+    let h = Harness::new().await;
+    h.connect().await;
+    let walking = |done: usize, left: &str| json!({"session": 1, "kind": "walking", "done": done, "total": 2, "left": left, "route": true});
+    let idle = json!({"session": 1, "kind": "idle"});
+    h.click("2w", FOUNTAIN, &[ROAD, ROAD_WEST]).await;
+    h.until_heard(&["w", "w"]).await;
+    h.until_walks(&[walking(0, "2w"), walking(1, "w"), idle.clone()])
+        .await;
+    assert_eq!(h.here(), ROAD_WEST);
+    assert!(h.walk_lines().is_empty(), "{:?}", h.walk_lines());
+
+    // The game refuses the first step back, so the walk stops there.
+    h.script([Answer::Fail("You are too exhausted.")]);
+    h.click("2e", ROAD_WEST, &[ROAD, FOUNTAIN]).await;
+    h.until_said(&["[walk] Stopped after 0 of 2 steps."]).await;
+    h.until_walks(&[
+        walking(0, "2w"),
+        walking(1, "w"),
+        idle,
+        walking(0, "2e"),
+        json!({"session": 1, "kind": "stopped", "done": 0, "total": 2, "why": "plain"}),
+    ])
+    .await;
+    assert_eq!(h.heard(), ["w", "w", "e"]);
     h.finish().await;
 }

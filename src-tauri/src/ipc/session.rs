@@ -1,7 +1,8 @@
 //! The commands for your sessions and their connections to the game.
 //! The page lists, opens, selects, renames, moves and closes sessions,
 //! keeps where each one dials, connects and disconnects through them,
-//! sends the lines you type, plain or masked, stops a walk on Esc, tells
+//! sends the lines you type, plain or masked, walks the path you click on
+//! the map, stops a walk on Esc, tells
 //! the game the size of the terminal, and reads the target you track.
 //! Each acts on the session it names, or on the selected session when it
 //! names none. Every window hears the rows again after a step that
@@ -244,6 +245,41 @@ pub(crate) async fn session_send_masked<R: tauri::Runtime>(
     };
     if !handle.send_masked(crate::session::echo::masked_line_bytes(&line)) {
         return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+/// Walk the path you clicked on the map: `steps` as a `#walk` string,
+/// planned from room `start`, with the room each step should reach in
+/// `rooms`. A walk under way gives way once its step in flight lands,
+/// and the walker drops a path planned from a room you have since left.
+/// It says nothing when you are not connected.
+#[tauri::command]
+pub(crate) async fn session_walk_route(
+    state: State<'_, SharedState>,
+    steps: String,
+    start: i64,
+    rooms: Vec<i64>,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    use crate::input::walk::{parse_steps, Route, WalkCommand, WalkPlan};
+    let steps = parse_steps(&steps).map_err(|e| e.to_string())?;
+    if rooms.len() != steps.len() {
+        return Err(format!(
+            "The path has {} steps but names {} rooms.",
+            steps.len(),
+            rooms.len()
+        ));
+    }
+    let session = state.session(session)?;
+    if let Some(handle) = session.slot.lock().await.as_ref() {
+        let _ = handle.walk(WalkCommand::Start {
+            plan: WalkPlan {
+                steps,
+                route: Some(Route { start, rooms }),
+            },
+            rest: Vec::new(),
+        });
     }
     Ok(())
 }
