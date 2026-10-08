@@ -1968,8 +1968,12 @@ fn each_mark_echoes_the_bytes_the_shared_cases_give() {
         serde_json::from_str(include_str!("../../../fixtures/input/echo-marks.json")).unwrap();
     assert!(!file.cases.is_empty());
     for case in file.cases {
+        // Your own text as a file read or a Settings save keeps it.
+        let mut ui = case.ui;
+        ui.input_echo_mark_text =
+            crate::profile::ui::coerce_input_echo_mark_text(ui.input_echo_mark_text);
         assert_eq!(
-            command_echo(&case.command, &case.ui),
+            command_echo(&case.command, &ui),
             case.echo,
             "{}",
             case.about

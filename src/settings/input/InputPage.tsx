@@ -1,6 +1,11 @@
 import { useEffect, useId, useState } from 'react';
 import { setBaseAnsi } from '../../theme/baseAnsi';
-import { INPUT_CURSOR_STYLES, type InputCursorStyle, type InputEchoMark } from '../../ipc/uiConfig';
+import {
+  ECHO_MARK_TEXT_MAX,
+  INPUT_CURSOR_STYLES,
+  type InputCursorStyle,
+  type InputEchoMark,
+} from '../../ipc/uiConfig';
 import type { SettingsTarget } from '../../lib/settingsNav';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme } from '../../theme/themes';
@@ -56,9 +61,6 @@ const MARKS: readonly SegmentedOption<InputEchoMark>[] = [
   { value: 'own', label: 'Your own' },
 ];
 
-/** Your own mark keeps at most four characters, as Rust does. */
-const MARK_TEXT_MAX = 4;
-
 // Rows inside Advanced. A deep link or search hit on one opens it.
 const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay']);
 
@@ -110,7 +112,7 @@ export function InputPage({ target, navSeq, config, setConfig, onError }: Settin
             <Field
               value={config.input_echo_mark_text}
               onChange={(text) =>
-                update({ input_echo_mark_text: [...text].slice(0, MARK_TEXT_MAX).join('') })
+                update({ input_echo_mark_text: [...text].slice(0, ECHO_MARK_TEXT_MAX).join('') })
               }
               width={64}
               mono

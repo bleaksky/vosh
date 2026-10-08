@@ -228,6 +228,17 @@ export interface EchoMarkOptions {
   dim: boolean;
 }
 
+/** Your own mark keeps at most four characters, as Rust does. */
+export const ECHO_MARK_TEXT_MAX = 4;
+
+/** Your own mark as Rust saves it, so every window and the native grid
+ *  draw the same bytes. Control characters drop, the ends trim, and it
+ *  keeps at most four characters. */
+export function coerceEchoMarkText(text: string): string {
+  const clean = [...text].filter((ch) => !/\p{Cc}/u.test(ch)).join('');
+  return [...clean.trim()].slice(0, ECHO_MARK_TEXT_MAX).join('').trimEnd();
+}
+
 /** The echo mark options as UiConfig keeps them. */
 export function echoMarkOptionsOf(
   config: Pick<
@@ -237,7 +248,7 @@ export function echoMarkOptionsOf(
 ): EchoMarkOptions {
   return {
     mark: config.input_echo_mark,
-    text: config.input_echo_mark_text,
+    text: coerceEchoMarkText(config.input_echo_mark_text),
     color: config.input_echo_mark_color,
     dim: config.input_echo_dim,
   };
@@ -249,7 +260,7 @@ export function normalizeEchoMarkOptions(raw: unknown): EchoMarkOptions {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   return {
     mark: normalizeInputEchoMark(o.mark),
-    text: typeof o.text === 'string' ? o.text : '',
+    text: typeof o.text === 'string' ? coerceEchoMarkText(o.text) : '',
     color: typeof o.color === 'string' && o.color.length > 0 ? o.color : null,
     dim: o.dim === true,
   };
@@ -887,7 +898,9 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     echo_macros: cfg.echo_macros !== false,
     input_echo_mark: normalizeInputEchoMark(cfg.input_echo_mark),
     input_echo_mark_text:
-      typeof cfg.input_echo_mark_text === 'string' ? cfg.input_echo_mark_text : '',
+      typeof cfg.input_echo_mark_text === 'string'
+        ? coerceEchoMarkText(cfg.input_echo_mark_text)
+        : '',
     input_echo_mark_color:
       typeof cfg.input_echo_mark_color === 'string' && cfg.input_echo_mark_color.length > 0
         ? cfg.input_echo_mark_color

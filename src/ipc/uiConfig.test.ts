@@ -5,6 +5,7 @@ import uiDefaults from '../../fixtures/ui-config/defaults.json';
 import uiFields from '../../fixtures/ui-config/fields.json';
 import type { CustomTheme } from './theme';
 import {
+  coerceEchoMarkText,
   DEFAULT_VITALS_CUSTOM,
   DEFAULT_VITALS_OPTIONS,
   GAME_TIMES,
@@ -938,5 +939,20 @@ describe('normalizeSnoopShare', () => {
     expect(normalizeSnoopShare(Number.NaN)).toBe(0.4);
     expect(normalizeSnoopShare('wide')).toBe(0.4);
     expect(normalizeSnoopShare(undefined)).toBe(0.4);
+  });
+});
+
+describe('your own mark', () => {
+  it('keeps four characters and no control ones, as Rust saves it', () => {
+    const cases: [string, string][] = [
+      ['T>', 'T>'],
+      ['  ab  ', 'ab'],
+      ['\x1b[1m>>', '[1m>'],
+      ['a\tb\nc', 'abc'],
+      ['abc def', 'abc'],
+      ['ᚠᚢᚦᚨᚱ', 'ᚠᚢᚦᚨ'],
+      ['\x07', ''],
+    ];
+    for (const [typed, kept] of cases) expect(coerceEchoMarkText(typed), typed).toBe(kept);
   });
 });
