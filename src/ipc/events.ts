@@ -27,6 +27,8 @@ export const RECONNECT = 'session://reconnect';
 
 export const LUA_OUTPUT = 'session://lua-output';
 export const LUA_PANES = 'session://lua-panes';
+export const SNOOP = 'session://snoop';
+export const SNOOP_OUTPUT = 'session://snoop-output';
 export const VITALS_TEXT = 'session://vitals-text';
 
 export const TRIGGERS_CHANGED = 'vosh://triggers-changed';

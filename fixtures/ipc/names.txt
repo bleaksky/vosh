@@ -174,8 +174,8 @@ event session://prompt-status app heard
 event session://prompt-vars app heard
 event session://reconnect app heard
 event session://routed app heard
-event session://snoop app unheard
-event session://snoop-output app unheard
+event session://snoop app heard
+event session://snoop-output app heard
 event session://state app heard
 event session://target app heard
 event session://tick app heard

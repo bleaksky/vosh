@@ -158,14 +158,6 @@ const UNHEARD: &[Unheard] = &[
               R18 (Alerts Q19).",
     },
     Unheard {
-        name: "session://snoop",
-        why: "The page hears it in the next chunk.",
-    },
-    Unheard {
-        name: "session://snoop-output",
-        why: "The page hears it in the next chunk.",
-    },
-    Unheard {
         name: "vosh://daylight-changed",
         why: "The game turned to day or night. Switch themes With the game \
               reads it in the page half, after R18 (Alerts Q16).",

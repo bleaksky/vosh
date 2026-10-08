@@ -19,6 +19,7 @@ import { startReconnectStore } from './session/reconnectStore';
 import { startRoomStore } from './gmcp/roomStore';
 import { startSessionRowStore } from './session/sessionRowStore';
 import { startSessionsStore } from './session/sessionsStore';
+import { startSnoopStore } from './session/snoopStore';
 import { startTargetStore } from './session/targetStore';
 import { startTickCountStore } from './config/tickCountStore';
 import { startTickStore } from './session/tickStore';
@@ -68,4 +69,5 @@ export function startStores(): void {
   startInputModeStore();
   startLuaPanesStore();
   startPluginRowsStore();
+  startSnoopStore();
 }
