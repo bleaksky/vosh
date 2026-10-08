@@ -63,7 +63,7 @@ const SECTION_KEEPS_CASE: ReadonlySet<SettingsGroup> = new Set(['scripts', 'char
 const SETTINGS_SUBPAGES: Readonly<
   Partial<Record<SettingsGroup, Readonly<Record<string, string>>>>
 > = {
-  general: { logs: 'Session logs' },
+  general: { logs: 'Session logs', scene: 'Save a scene' },
 };
 
 /** The title of the page inside a group that `target` opens, like

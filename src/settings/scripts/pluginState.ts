@@ -61,10 +61,3 @@ export interface PluginSave {
 export function saveStatus(save: PluginSave): string {
   return `${save.reloaded ? 'Reloaded' : 'Saved'} at ${saveTime(save.at)}`;
 }
-
-/** The Folder button for the platform the page runs on (Scripts Q27). */
-export function revealLabel(platform: string | undefined): string {
-  if (platform === 'macos') return 'Show in Finder';
-  if (platform === 'windows') return 'Show in Explorer';
-  return 'Show the folder';
-}

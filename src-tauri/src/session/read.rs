@@ -231,6 +231,9 @@ async fn handle_event<R: tauri::Runtime>(
             let response = conn.negotiator.handle(&TelnetEvent::Will(opt));
             conn.stream.write_all(&response).await?;
             if !was_on && conn.negotiator.server_does(opt) {
+                // The game can now say when you play, so the rows before
+                // that are outside it.
+                conn.session.connection.lock().log_kinds.gmcp_on();
                 conn.stream.write_all(&hello_subnegotiation()).await?;
                 conn.stream.write_all(&supports_subnegotiation()).await?;
             }
@@ -415,6 +418,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         character,
         hold: _,
         gmcp,
+        since_prompt: _,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);

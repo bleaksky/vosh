@@ -256,12 +256,15 @@ pub(super) fn end_held(
     let mut log = Vec::new();
     let mut kept = Vec::new();
     for line in c.prompt.stage.release() {
+        let playing = c.log_kinds.in_play(c.link.playing());
+        let kind = c.log_kinds.line(&line.plain, playing);
         if let Some(sid) = log_session_id {
             log.push(vosh_log::LogEntry {
                 session_id: sid,
                 ts_ms: now_ms(),
                 text: line.plain,
                 raw: Some(line.raw.clone()),
+                kind,
             });
         }
         kept.push(line.raw);
@@ -314,6 +317,10 @@ fn text_line_step(
     // tracker in the order the game sent it, so it knows the lines that
     // list a room's armies, things and people.
     let scope = room_scope(c, &plain, &bytes);
+    // A line takes its kind whether it shows or not, so a channel packet
+    // waiting for a line a trigger hides never lands on a later one.
+    let playing = c.log_kinds.in_play(c.link.playing());
+    let kind = c.log_kinds.line(&plain, playing);
     let LinePass {
         result,
         tick_step,
@@ -422,6 +429,7 @@ fn text_line_step(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind,
             });
         }
         if ring {
@@ -509,6 +517,11 @@ fn prompt_block(
 
     let mut before = Vec::new();
     let mut scrollback = Vec::new();
+    // Each line of your prompt that shows is logged as a prompt, or as
+    // login outside play.
+    let prompt_kind =
+        super::log_kinds::LogKinds::prompt_line(c.log_kinds.in_play(c.link.playing()));
+    let log = log_session_id.map(|sid| (sid, &prompt_kind));
     // Pinned, the prompt leaves the text for the band above the command
     // line. It is logged and kept exactly as it is in the text.
     let pinned = c.prompt.show() == vosh_prompt::PromptShow::Pinned;
@@ -541,7 +554,7 @@ fn prompt_block(
                 .draw_view(&mut batch.out, block, painted, &before, view.stage());
         }
         for head in &heads_shown {
-            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+            keep_shown(batch, &mut scrollback, head, &head.raw, log);
         }
     } else {
         if result.display.is_none() {
@@ -564,18 +577,13 @@ fn prompt_block(
                 .show_as_sent(&mut batch.out, block, painted, &before, display);
         }
         for head in &heads {
-            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+            keep_shown(batch, &mut scrollback, head, &head.raw, log);
         }
         if let Some(text) = &result.display {
-            keep_shown(
-                batch,
-                &mut scrollback,
-                &last,
-                text.as_bytes(),
-                log_session_id,
-            );
+            keep_shown(batch, &mut scrollback, &last, text.as_bytes(), log);
         }
     }
+    end_pulse(c, batch);
     LineStep {
         result,
         apply,
@@ -593,14 +601,15 @@ fn keep_shown(
     scrollback: &mut Vec<Vec<u8>>,
     line: &BlockLine,
     shown: &[u8],
-    log_session_id: Option<i64>,
+    log: Option<(i64, &vosh_log::LineKind)>,
 ) {
-    if let Some(sid) = log_session_id {
+    if let Some((sid, kind)) = log {
         batch.log.push(vosh_log::LogEntry {
             session_id: sid,
             ts_ms: now_ms(),
             text: line.plain.clone(),
             raw: Some(line.raw.clone()),
+            kind: kind.clone(),
         });
     }
     scrollback.push(shown.to_vec());
@@ -690,6 +699,7 @@ pub(super) fn marker_step(
         let released = c.prompt.stage.release();
         let steps = released_steps(p, c, batch, released, now, log_session_id);
         c.prompt.record(None, now_ms());
+        end_pulse(c, batch);
         // The marker ends any room look before it, and the round that
         // ended a fight.
         c.room_block.end();
@@ -732,10 +742,19 @@ pub(super) fn marker_step(
             c.prompt.record(Some((&partial.bytes, &plain)), now_ms());
         }
     }
+    end_pulse(c, batch);
     c.room_block.end();
     c.fight_tail = false;
     c.fight_head = false;
     steps
+}
+
+/// Your prompt, or a GA or EOR, ended the pulse's text, so a channel
+/// packet still waiting for its line found none, and the rows a later
+/// packet can name start after this.
+fn end_pulse(c: &mut Connection, batch: &mut ReadBatch) {
+    c.log_kinds.prompt();
+    batch.since_prompt = batch.log.len();
 }
 
 /// The end of a read. A partial the capture settles on, alone or after

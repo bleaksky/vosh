@@ -92,6 +92,7 @@ pub(super) fn log_session(store: &mut LogStore, rows: &[Row<'_>], filler: usize)
                 format!("\x1b[1;37mThe Temple Square hums with voices, line {n}.\x1b[0m")
                     .into_bytes(),
             ),
+            kind: crate::LineKind::Text,
         })
         .collect();
     store.append_batch(&entries).unwrap();
@@ -318,6 +319,7 @@ fn the_live_log_keeps_working_after_forgetting() {
             ts_ms: 90_001,
             text: "You slay the rat.".into(),
             raw: Some(b"\x1b[31mYou slay the rat.\x1b[0m".to_vec()),
+            kind: crate::LineKind::Text,
         }])
         .unwrap();
     store.end_session(sid, 90_002).unwrap();

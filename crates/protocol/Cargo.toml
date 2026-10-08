@@ -17,10 +17,5 @@ thiserror = { workspace = true }
 # vte::ansi::Processor (it needs the std variant with a default type param).
 vte = { version = "0.13", default-features = false }
 
-[features]
-# The test kit holds the SGR model in the ansi module, whose span colors
-# the readable highlight tests read.
-testkit = []
-
 [lints]
 workspace = true

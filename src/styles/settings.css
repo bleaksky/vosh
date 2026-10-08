@@ -694,8 +694,10 @@
   min-width: 120px;
 }
 
+/* The count gives way to the buttons once a picked log adds Copy as
+   text and Save a scene…, and ends in an ellipsis. */
 .st-logs-count {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
   margin-left: 12px;
   overflow: hidden;
@@ -723,7 +725,17 @@
 }
 
 .st-logs-save + .st-logs-scope,
-.st-logs-copy + .st-logs-scope {
+.st-logs-copy + .st-logs-scope,
+.st-logs-scene + .st-logs-scope {
+  margin-left: 8px;
+}
+
+/* Save a scene… joins the copy button once you pick a log (board 5). */
+.st-logs-scene {
+  margin-left: 12px;
+}
+
+.st-logs-copy + .st-logs-scene {
   margin-left: 8px;
 }
 
@@ -822,6 +834,137 @@
   vertical-align: top;
   background: transparent;
   color: inherit;
+}
+
+/* ── Save a scene ─────────────────────────────────────────────────── */
+
+/* The page of board 5 in the Alerts and Scenes review. The toolbar holds
+   the log, From and To, and the format. The options card sits above the
+   preview, so an 80 column line fits on one row. */
+.sc-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sc-time {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-to {
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.sc-body {
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Prompts and Your commands side by side with a 1 px line between, and
+   the channels on a row of their own under both. */
+.sc-opts {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.sc-opts > .sc-opt-right::before {
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  right: auto;
+  width: 1px;
+  height: auto;
+}
+
+.sc-opts > .sc-opt-wide {
+  grid-column: 1 / -1;
+}
+
+/* The chips sit on the row, right aligned, and wrap when the window
+   narrows. */
+.sc-opt-wide .st-row-control {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sc-opt-wide .st-chips {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+/* The preview: the log view's rows, with what the scene leaves out drawn
+   quiet and named on the right. */
+.sc-prev {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sc-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sc-prev .st-logs-line {
+  min-height: 0;
+  padding: 0;
+}
+
+.sc-prev .st-logs-text {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.sc-prev .st-logs-time {
+  line-height: 16px;
+}
+
+.sc-prev .st-logs-line.is-out .st-logs-text {
+  opacity: 0.32;
+}
+
+/* A time starts the scene on its line, and a Shift click ends it there. */
+.sc-time-pick {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.sc-time-pick:hover {
+  color: var(--secondary);
+}
+
+.sc-time-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.sc-why {
+  flex: none;
+  margin-left: 8px;
+  color: var(--tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.sc-note {
+  margin: 0 0 8px;
+  color: var(--tertiary);
+  font-size: 11px;
+  line-height: 15px;
 }
 
 /* ── Appearance ────────────────────────────────────────────────────── */

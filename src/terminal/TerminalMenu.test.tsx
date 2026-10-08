@@ -71,6 +71,7 @@ describe('the terminal menu', () => {
       'Paste',
       'Select all',
       'Find in scrollback…',
+      'Save a scene…',
       'Settings',
       'Clear scrollback',
     ]);
@@ -275,9 +276,9 @@ async function mount(x = 100, y = 100): Promise<Mounted> {
   };
 }
 
-/** Arrow down from nothing lit to the Settings row, the seventh. */
+/** Arrow down from nothing lit to the Settings row, the eighth. */
 async function downToSettings(m: Mounted) {
-  for (let i = 0; i < 7; i++) await m.key('ArrowDown');
+  for (let i = 0; i < 8; i++) await m.key('ArrowDown');
 }
 
 const lit = (el: FakeElement) => (el.getAttribute('class') ?? '').split(' ').includes('is-active');
@@ -389,7 +390,7 @@ describe('the Settings list in the terminal menu', () => {
 
   it('opens on no other row', async () => {
     const m = await mount();
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 9; i++) {
       await m.key('ArrowDown');
       if (lit(m.row('Settings'))) continue;
       await m.key('ArrowRight');
@@ -552,6 +553,19 @@ describe('the Settings list in the terminal menu', () => {
     calls.log.length = 0;
     await act(async () => on(m.row('Clear scrollback')).onClick());
     expect(calls.log).toEqual(['close', 'invoke scrollback_clear']);
+  });
+
+  it('opens Save a scene in Settings, under Find in scrollback', async () => {
+    const m = await mount();
+    store.delete(SETTINGS_PENDING_KEY);
+    calls.log.length = 0;
+    await act(async () => on(m.row('Save a scene…')).onClick());
+    expect(calls.log).toEqual([
+      'close',
+      `emit ${SETTINGS_GOTO_TAB} general:scene`,
+      'invoke open_settings_window',
+    ]);
+    expect(store.get(SETTINGS_PENDING_KEY)).toBe('general:scene');
   });
 
   it('closes the menu, then opens Settings on each row, or Help', async () => {

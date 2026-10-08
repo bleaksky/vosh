@@ -438,6 +438,7 @@ impl Play<'_> {
             ts_ms: self.ts,
             text: plain,
             raw: Some(raw),
+            kind: vosh_log::LineKind::Text,
         });
     }
     fn plain(&mut self, s: &str) {
@@ -453,6 +454,7 @@ impl Play<'_> {
             ts_ms: self.ts,
             text: s.to_string(),
             raw: None,
+            kind: vosh_log::LineKind::Text,
         });
     }
     fn prompt(&mut self) {

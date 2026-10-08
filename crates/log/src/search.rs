@@ -541,6 +541,7 @@ mod tests {
                     format!("filler {n}")
                 },
                 raw: None,
+                kind: crate::LineKind::Text,
             })
             .collect();
         s.append_batch(&rows).unwrap();

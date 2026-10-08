@@ -40,6 +40,7 @@
 //!   read on.
 //! - `log_sink` holds the session log's row and the scrollback ring of a
 //!   connection, and the lines the session captures as it ends.
+//!   `log_kinds` says what each row it logs is, for Save a scene.
 //! - `perf` counts the work on the hot path.
 //! - `reconnect` decides whether a drop dials again, and runs the series
 //!   of redials.
@@ -63,6 +64,7 @@ pub(crate) mod highlight_ground;
 pub(crate) mod identity;
 pub(crate) mod last_packages;
 mod lines;
+pub(crate) mod log_kinds;
 mod log_sink;
 mod lua_timers;
 mod perf;

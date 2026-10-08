@@ -338,6 +338,10 @@
   background: var(--menu-hi);
 }
 
+.ov-menu-item[aria-disabled='true'] {
+  color: var(--tertiary);
+}
+
 .ov-menu-item.is-danger {
   color: var(--danger-text);
 }
@@ -609,7 +613,14 @@
    sits 8 inside the card, its radius 8 concentric with the card's 16,
    and 8 after the message. */
 .ov-toast.has-action {
+  max-width: 520px;
   padding: 8px 8px 8px 12px;
+}
+
+/* A long meta, like the file a saved scene went to, ends in an ellipsis
+   before the message wraps. */
+.ov-toast.has-action > .ov-toast-meta {
+  flex: 0 1 auto;
 }
 
 .ov-toast.has-action > .ov-button {

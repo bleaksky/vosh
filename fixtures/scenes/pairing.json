@@ -1,0 +1,13 @@
+{
+  "notes": "Hand written and synthetic, never captured. Two lines of a look, then a say and a tell, each with the Comm.Channel packet the game sends its listener. The lines are verbatim from room-colors/looks.json and room-colors/lines.json, and README.md says where each comes from. ahead plays them as the game did before d50e4a24, every packet of the pulse first and the text after it. after plays them as the game does since, each packet right after its own line. Either way the say and the tell take their channel and the two lines before them stay plain. Read by src-tauri/src/tests/log_kinds.rs.",
+  "lines": [
+    { "line": "A large murder of crows nearly turns the trees black here.", "kind": "text" },
+    { "line": "Maren walks in.", "kind": "text" },
+    { "line": "Tolliver says '\u001b[0;1;33mThe day has begun.\u001b[0;0m'", "kind": "say" },
+    { "line": "Tolliver tells you '\u001b[0;32m[Exits: north east south west]\u001b[0;0m'", "kind": "tell" }
+  ],
+  "packets": {
+    "say": "Comm.Channel {\"channel\":\"say\",\"speaker\":\"Tolliver\",\"text\":\"The day has begun.\",\"language\":\"common\",\"understood\":true}",
+    "tell": "Comm.Channel {\"channel\":\"tell\",\"speaker\":\"Tolliver\",\"text\":\"[Exits: north east south west]\",\"language\":\"common\",\"understood\":true,\"direction\":\"received\"}"
+  }
+}

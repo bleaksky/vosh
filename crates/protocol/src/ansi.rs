@@ -8,20 +8,15 @@
 //!   sent. A highlight draws over those bytes, and the rest of the line
 //!   keeps the game's colors.
 //!
-//! The `testkit` feature adds the SGR model in `sgr.rs` and `color.rs`.
-//! Its `AnsiParser` splits a line into spans that each carry their SGR
-//! attributes, and the readable highlight tests in vosh-automation read
-//! the color of each span. Nothing in the app reads attributes, so the
-//! release build leaves the model out.
+//! - The SGR model in `sgr.rs` and `color.rs`. Its `AnsiParser` splits a
+//!   line into spans that each carry their SGR attributes. Save a scene
+//!   reads them to write a line's colors as HTML, and the readable
+//!   highlight tests in vosh-automation read the color of each span.
 
-#[cfg(any(test, feature = "testkit"))]
 pub mod color;
 pub mod parser;
-#[cfg(any(test, feature = "testkit"))]
 pub mod sgr;
 
-#[cfg(any(test, feature = "testkit"))]
 pub use color::Color;
 pub use parser::{pieces, plain_text, Piece, PieceKind};
-#[cfg(any(test, feature = "testkit"))]
 pub use sgr::{AnsiParser, Attributes, Sgr, Span};

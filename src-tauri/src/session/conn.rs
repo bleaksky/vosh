@@ -162,6 +162,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         // alerts and the redial.
         c.preset_watch.reset();
         c.link = super::reconnect::LinkWatch::default();
+        c.log_kinds = super::log_kinds::LogKinds::default();
         c.round_trip.connect(chrono::Local::now().time());
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
@@ -694,12 +695,14 @@ async fn send_typed<R: tauri::Runtime>(
     // The send records a prompt candidate and closes the open row. On a
     // server that sends no Char.Vitals it also starts the next pulse,
     // after which the values the last prompt set go stale.
-    let pulse = send_step(
-        &mut conn.session.connection.lock(),
-        &conn.accumulator,
-        bytes,
-        now_ms(),
-    );
+    // Its rows are login outside play, so a name you type at the
+    // account menu stays out of every scene.
+    let (pulse, kind) = {
+        let mut c = conn.session.connection.lock();
+        let pulse = send_step(&mut c, &conn.accumulator, bytes, now_ms());
+        let playing = c.log_kinds.in_play(c.link.playing());
+        (pulse, c.log_kinds.sent(bytes, playing))
+    };
     // The frontend already echoed the typed line inline with the
     // on-screen prompt. Drop the buffered partial so the next chunk from
     // the server starts fresh on a new row instead of merging with the
@@ -727,7 +730,7 @@ async fn send_typed<R: tauri::Runtime>(
     };
     if let Some((sid, at, rows)) = sent {
         conn.settle
-            .queue_rows(vosh_log::sent_entries(sid, at, rows));
+            .queue_rows(vosh_log::sent_entries(sid, at, rows, kind));
     }
     if let Err((what, e)) = wrote {
         error!(error = %e, "{what}");

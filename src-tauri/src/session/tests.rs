@@ -38,6 +38,7 @@ mod clock;
 mod collapse;
 mod effects;
 mod gmcp;
+mod log_kinds;
 mod log_sink;
 mod pointer;
 mod preview;

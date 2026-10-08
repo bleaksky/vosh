@@ -1,6 +1,9 @@
-// The session logs, searching them, and exporting one.
+// The session logs, searching them, exporting one, and saving a stretch
+// of one as a scene.
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { SCENE_SAVED } from './events';
 
 export interface LogSession {
   id: number;
@@ -88,4 +91,90 @@ export async function exportLogSession(sessionId: number, withAnsi: boolean): Pr
  *  name is taken. */
 export async function saveLog(scope: LogScope, withAnsi: boolean, name: string): Promise<string> {
   return invoke('logs_save', { scope, withAnsi, name });
+}
+
+// ── Save a scene ────────────────────────────────────────────────────
+
+/** The stretch of play a scene takes: one log from one time to another,
+ *  both ends kept, and from and to a line you clicked. */
+export interface SceneRange {
+  log: number;
+  fromMs: number;
+  toMs: number;
+  fromId?: number | null;
+  toId?: number | null;
+}
+
+/** What a scene leaves out. Lines outside play always stay out. */
+export interface SceneFilter {
+  /** Keep your prompt. */
+  prompts: boolean;
+  /** Keep the lines you sent. */
+  commands: boolean;
+  /** The channels left out, as Comm.Channel names them. */
+  leftOut: string[];
+}
+
+export type SceneFormat = 'text' | 'ansi' | 'html';
+
+/** The theme showing as you save, for the HTML file. */
+export interface ScenePalette {
+  background: string;
+  foreground: string;
+  muted: string;
+  ansi: string[];
+}
+
+export interface ScenePreviewLine {
+  id: number;
+  ts_ms: number;
+  text: string;
+  raw: number[] | null;
+  /** Null for a line the scene keeps, else the word shown beside it,
+   *  like `prompt` or `tell`, or empty for a blank line that folds. */
+  out: string | null;
+}
+
+export interface ScenePreview {
+  /** The lines of the range, at most the first 5,000. */
+  lines: ScenePreviewLine[];
+  total: number;
+  kept: number;
+  /** The range holds more lines than the preview draws. */
+  capped: boolean;
+  /** Some lines came from a build that did not tag them, so Vosh read
+   *  prompts and channels from their text. */
+  older: boolean;
+  /** The file's name before Downloads adds a number to one it holds. */
+  file_name: string;
+}
+
+/** The lines of `range` and why the scene leaves each out. */
+export async function previewScene(
+  range: SceneRange,
+  filter: SceneFilter,
+  format: SceneFormat,
+): Promise<ScenePreview> {
+  return invoke('scene_preview', { range, filter, format });
+}
+
+/** Save the scene to Downloads. Resolves to the file's name. Every
+ *  window hears `vosh://scene-saved` with it. */
+export async function saveScene(
+  range: SceneRange,
+  filter: SceneFilter,
+  format: SceneFormat,
+  palette: ScenePalette | null,
+): Promise<string> {
+  return invoke('scene_save', { range, filter, format, palette });
+}
+
+/** Show a saved scene in Finder or Explorer, or its folder on Linux. */
+export async function revealScene(name: string): Promise<void> {
+  return invoke('scene_reveal', { name });
+}
+
+/** Hear each scene Save a scene writes, by its file's name. */
+export async function subscribeSceneSaved(cb: (name: string) => void): Promise<UnlistenFn> {
+  return listen<{ name: string }>(SCENE_SAVED, (event) => cb(event.payload.name));
 }

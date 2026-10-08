@@ -48,6 +48,7 @@ import { subscribeMigrationApplied } from '../ipc/wizard';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
 import { pushToast } from '../stores/toasts';
+import { useSceneSaved } from './useSceneSaved';
 import { showMigrationApplied } from './launchNotices';
 import { startGamePromptToasts } from '../prompt/gamePromptToast';
 import { CommandPalette } from './overlays/CommandPalette';
@@ -601,6 +602,9 @@ function MainWindow() {
 
   // Play the tone of each alert a session rings.
   useAlertTones();
+
+  // Say when Settings saved a scene, with a button that shows the file.
+  useSceneSaved();
 
   useEffect(() => {
     // The game sent a new prompt setting and your capture follows it.

@@ -485,6 +485,7 @@ async fn a_search_never_holds_up_the_game_or_its_log() {
                 ts_ms: n,
                 text: format!("  Line {n} of the description of Market Street."),
                 raw: None,
+                kind: vosh_log::LineKind::Text,
             })
             .collect();
         writer.append_batch(&rows).expect("the rows");

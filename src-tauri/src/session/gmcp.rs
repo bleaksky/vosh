@@ -90,6 +90,12 @@ pub(super) async fn handle_gmcp<R: tauri::Runtime>(
         let mut c = conn.session.connection.lock();
         let now = Instant::now();
         let picked = c.link.gmcp(&msg.package);
+        // A channel's packet names the channel of its line, which came
+        // in this read or waits to come.
+        if msg.package == "Comm.Channel" {
+            let since = batch.since_prompt.min(batch.log.len());
+            c.log_kinds.packet(&msg.data, &mut batch.log[since..]);
+        }
         // A snoop's text goes to its tab and never to the line pipeline.
         // Lua still hears the packet below. Its whole lines go in the log
         // with this read's rows.

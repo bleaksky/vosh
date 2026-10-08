@@ -5,7 +5,7 @@ import {
   type MenuCloseReason,
   type MenuPlacement,
 } from '../../ui/MenuSurface';
-import { revealLabel } from './pluginState';
+import { revealLabel } from '../../lib/revealLabel';
 
 // The more menu of a plugin row (board 4), opened as the profile menu
 // opens in Characters. A press on the row opens the plugin, so the menu

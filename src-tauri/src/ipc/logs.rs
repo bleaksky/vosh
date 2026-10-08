@@ -1,8 +1,8 @@
 //! The commands for the log view in Settings. It lists your saved
-//! sessions, searches them a page at a time and exports one. Each reads
-//! on its own connection to the log when that opened, on the blocking
-//! pool, so a long search never holds up the live session or the async
-//! workers.
+//! sessions, searches them a page at a time and exports one, and Save a
+//! scene previews, saves and shows a stretch of one. Each reads on its
+//! own connection to the log when that opened, on the blocking pool, so a
+//! long search never holds up the live session or the async workers.
 
 use std::sync::atomic::Ordering;
 
@@ -11,6 +11,7 @@ use tauri::State;
 use vosh_log::{LogStore, Scope, SearchOptions, SearchPage, SessionRow};
 
 use crate::app::state::{AppState, SharedState};
+use crate::logs::scene::{self, SceneFilter, SceneFormat, ScenePalette, ScenePreview, SceneRange};
 use crate::sessions::SessionId;
 
 /// Which logs the view reads, as the page sends it.
@@ -232,6 +233,103 @@ pub(crate) async fn logs_keep_set(
     Ok(())
 }
 
+/// What reads your prompt in a row an older build wrote, the capture of
+/// the profile `session` plays, or none when it has no capture.
+async fn prompt_reader(
+    state: &AppState,
+    session: Option<SessionId>,
+) -> Result<Option<vosh_prompt::capture::Recognizer>, String> {
+    let session = state.session(session)?;
+    let capture = session.lock_profile().await.prompt.capture.clone();
+    let who = session.connection.lock().prompt.who();
+    Ok(vosh_prompt::capture::Recognizer::compile_for(&capture, who))
+}
+
+/// The rows of `range` and why the scene leaves each out under `filter`,
+/// at most the first 5,000, with the name the file would take.
+#[tauri::command]
+pub(crate) async fn scene_preview(
+    state: State<'_, SharedState>,
+    range: SceneRange,
+    filter: SceneFilter,
+    format: SceneFormat,
+    session: Option<SessionId>,
+) -> Result<ScenePreview, String> {
+    let prompt = prompt_reader(&state, session).await?;
+    read_logs(&state, move |store| {
+        let span = scene::read(store, &range, scene::PREVIEW_CAP)?;
+        Ok(scene::preview(span, &filter, format, prompt.as_ref()))
+    })
+    .await
+    .ok_or_else(|| "Vosh has not opened your logs yet.".to_string())?
+}
+
+/// Save the scene of `range` under `filter` to your Downloads folder in
+/// `format`, the HTML file in `palette`, the theme showing as you save.
+/// Every window hears `vosh://scene-saved` with the file's name, which
+/// it returns.
+#[tauri::command]
+pub(crate) async fn scene_save<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, SharedState>,
+    range: SceneRange,
+    filter: SceneFilter,
+    format: SceneFormat,
+    palette: Option<ScenePalette>,
+    session: Option<SessionId>,
+) -> Result<String, String> {
+    let prompt = prompt_reader(&state, session).await?;
+    let downloads = crate::ipc::downloads_dir(&app)?;
+    let name = read_logs(&state, move |store| {
+        let span = scene::read(store, &range, usize::MAX)?;
+        scene::save(
+            &span,
+            &filter,
+            format,
+            palette.as_ref(),
+            prompt.as_ref(),
+            &downloads,
+        )
+    })
+    .await
+    .ok_or_else(|| "Vosh has not opened your logs yet.".to_string())??;
+    crate::app::events::broadcast(
+        &app,
+        crate::app::events::SCENE_SAVED,
+        &serde_json::json!({ "name": name }),
+    );
+    Ok(name)
+}
+
+/// Show the scene `name` in your Downloads folder in the file manager:
+/// Finder or Explorer with the file selected, or the folder on Linux.
+#[tauri::command]
+pub(crate) async fn scene_reveal<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    name: String,
+) -> Result<(), String> {
+    let downloads = crate::ipc::downloads_dir(&app)?;
+    let file = std::path::Path::new(&name);
+    let plain = file.components().count() == 1
+        && matches!(
+            file.components().next(),
+            Some(std::path::Component::Normal(_))
+        );
+    let path = downloads.join(file);
+    if !plain || !path.is_file() {
+        return Err(format!("{name} is no longer in your Downloads folder."));
+    }
+    let shown = if cfg!(all(unix, not(target_os = "macos"))) {
+        downloads
+    } else {
+        path
+    };
+    crate::app::plugins::reveal::reveal(&shown).map_err(|e| {
+        tracing::warn!(error = %e, "could not open the file manager");
+        "Vosh could not show your Downloads folder.".to_string()
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn logs_export(
     state: State<'_, SharedState>,
@@ -355,6 +453,7 @@ mod tests {
                 ts_ms: n,
                 text: format!("Orla waves {n}"),
                 raw: None,
+                kind: vosh_log::LineKind::Text,
             })
             .collect();
         writer.append_batch(&rows).unwrap();

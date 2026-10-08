@@ -168,6 +168,11 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
         return;
     };
     let plain = vosh_protocol::ansi::plain_text(&bytes);
+    let kind = {
+        let mut c = session.connection.lock();
+        let playing = c.log_kinds.in_play(c.link.playing());
+        c.log_kinds.line(&plain, playing)
+    };
     // Terminate the line on screen. Write only what the end of its read
     // did not paint, to avoid printing the goodbye twice.
     let shown = painted.map_or(0, |(_, len)| len.min(bytes.len()));
@@ -184,6 +189,7 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind,
             }]) {
                 warn!(error = %e, "disconnect partial log append failed");
             }

@@ -13,6 +13,7 @@
     "general:session-logs#keep-logs",
     "general:scrollback#scrollback-size",
     "general:logs",
+    "general:scene",
     "general:advanced#gpu",
     "appearance:theme",
     "appearance:theme#import-theme",

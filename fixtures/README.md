@@ -122,6 +122,11 @@ fixtures/
                Rust tests install. Hand written and synthetic, from the
                server's own format strings and area files. Its README says
                where each line comes from.
+  scenes/    pairing.json, two lines of a look ahead of a say and a tell
+               with their Comm.Channel packets, played with the packets
+               ahead of the text as the game sent them before d50e4a24 and
+               after each line as it sends them since, for the log kinds
+               test in src-tauri. Hand written from room-colors.
   session-labels/ cases.json, what a session goes by, its name, its
                character or the world where it dials with or without its
                port, shared by sessionLabel on the page and label_of in
