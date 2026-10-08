@@ -198,6 +198,7 @@ export const SessionSidebar = forwardRef<SessionSidebarHandle, Props>(function S
             type="button"
             className="shell-icon-button"
             aria-label="Hide sessions"
+            title="Hide sessions"
             onClick={(e) => {
               const caret = held(e);
               onHide();
