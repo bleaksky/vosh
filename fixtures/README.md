@@ -51,7 +51,7 @@ fixtures/
              Automation tests read it as the reply.
   links/     Golden lists of the ids that links name, taken from the code.
              help-topics.json holds every help topic id with its number,
-             in rail order, for src/lib/helpTopicIds.test.ts.
+             in rail order, for src/help/helpTopicIds.test.ts.
              settings-anchors.json holds every Settings link that search,
              the palette, the pane menu and other pages open, where each
              lands, the anchors each page draws and the help topics the

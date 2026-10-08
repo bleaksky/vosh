@@ -1,5 +1,5 @@
 {
-  "notes": "Taken from HELP_TOPICS at 7dced45. Every help topic id with its number, in the order the Help sidebar lists them. A link into Help names a topic by either one. The Settings book buttons, #help with an id or a number, and the topic Help opens on again all use them. src/lib/helpTopicIds.test.ts holds the help catalog to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
+  "notes": "Taken from HELP_TOPICS at 7dced45. Every help topic id with its number, in the order the Help sidebar lists them. A link into Help names a topic by either one. The Settings book buttons, #help with an id or a number, and the topic Help opens on again all use them. The ids now come from the id comment under each heading in HELP.md, and src/help/helpTopicIds.test.ts holds them to this file. Change it only in a commit tied to a numbered bug or a lettered decision, so the diff shows every link that moves.",
   "topics": {
     "get-connected.connect": "1.1",
     "get-connected.reconnect": "1.2",

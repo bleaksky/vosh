@@ -103,6 +103,8 @@ User-visible prose follows a strict style. README, CONTRIBUTING, settings labels
 
 Code comments are for developers and follow the same style where it makes sense, but stay rare. Names should carry the meaning. Comment only when the why is non obvious.
 
+You edit the in-app help in `HELP.md`, which the Help window reads when Vosh is built. A new topic needs an `<!-- id: section.topic -->` line under its heading, and the build stops if one is missing or used twice.
+
 ## Reporting Bugs
 
 Open an issue with the smallest reproducer you can manage. Attach the captured byte stream when the bug touches a parser. Note the OS, the Tauri version, and the MUD you connected to.
