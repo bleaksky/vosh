@@ -106,15 +106,40 @@ pub(crate) async fn logs_search_page(
     before_line_id: Option<i64>,
     with_total: bool,
 ) -> Result<SearchPage, String> {
+    search_page(
+        &state,
+        pattern,
+        case_sensitive,
+        max_results,
+        scope,
+        session,
+        before_line_id,
+        with_total,
+    )
+    .await
+}
+
+/// The search behind [`logs_search_page`], which the tests call too.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn search_page(
+    state: &SharedState,
+    pattern: String,
+    case_sensitive: bool,
+    max_results: usize,
+    scope: LogScope,
+    session: Option<SessionId>,
+    before_line_id: Option<i64>,
+    with_total: bool,
+) -> Result<SearchPage, String> {
     let ticket = state.log_searches.fetch_add(1, Ordering::AcqRel) + 1;
     let opts = SearchOptions {
         case_sensitive,
         max_results,
-        scope: scope.resolve(&state, session)?,
+        scope: scope.resolve(state, session)?,
         before_line_id,
     };
-    let shared: SharedState = state.inner().clone();
-    read_logs(&state, move |store| {
+    let shared = state.clone();
+    read_logs(state, move |store| {
         let replaced = || shared.log_searches.load(Ordering::Acquire) != ticket;
         store.search_page_until(&pattern, &opts, with_total, &replaced)
     })
