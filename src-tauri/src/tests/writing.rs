@@ -86,6 +86,12 @@ struct World {
     welcome_after: Duration,
     links: usize,
     heard: Vec<String>,
+    /// What `show` puts before the sender, such as an immortal's rank
+    /// (`recycle.c:4535`).
+    rank: &'static str,
+    /// The line your prompt prints above its last, which a `%c` in it
+    /// makes (`comm.c:1930`).
+    above: Option<&'static str>,
 }
 
 /// What the game writes for one line it read.
@@ -143,20 +149,24 @@ impl World {
     fn prompt(&self, wrote: &str) -> Answer {
         let reply = format!("{wrote}\n\r");
         let tick = prompt_tick();
+        let prompt = match self.above {
+            Some(above) => format!("{above}\n\r{PROMPT}"),
+            None => PROMPT.to_string(),
+        };
         Answer::Writes(match self.order {
             Order::First => {
                 let mut writes = tick;
-                writes.push(format!("{reply}{PROMPT}").into_bytes());
+                writes.push(format!("{reply}{prompt}").into_bytes());
                 writes
             }
             Order::Middle => {
                 let mut out = reply.into_bytes();
                 out.extend(tick.concat());
-                out.extend_from_slice(PROMPT.as_bytes());
+                out.extend_from_slice(prompt.as_bytes());
                 vec![out]
             }
             Order::Last => {
-                let mut out = format!("{reply}{PROMPT}").into_bytes();
+                let mut out = format!("{reply}{prompt}").into_bytes();
                 out.extend(tick.concat());
                 vec![out]
             }
@@ -215,7 +225,8 @@ impl World {
                 None => self.prompt("You have no note in progress."),
                 Some(note) => {
                     let shown = format!(
-                        "Orla: {}\n\rTo: {}\n\r{}",
+                        "{}Orla: {}\n\rTo: {}\n\r{}",
+                        self.rank,
                         note.subject,
                         note.to,
                         kept(&note.text)
@@ -253,9 +264,19 @@ impl World {
                 if self.board.is_empty() {
                     return self.prompt("There are no notes for you.");
                 }
+                // `list from` a name prints only that sender's rows, each
+                // with its number on the board, and nothing when none
+                // match (`recycle.c:4013`, `4089`).
+                let from = argument.strip_prefix("from ");
                 let mut rows = String::new();
                 for (n, (sender, subject)) in self.board.iter().enumerate() {
+                    if from.is_some_and(|from| !sender.eq_ignore_ascii_case(from)) {
+                        continue;
+                    }
                     let _ = write!(rows, " [ {n:>3}N] {sender}: {subject}\n\r");
+                }
+                if rows.is_empty() {
+                    return self.prompt("");
                 }
                 rows.truncate(rows.len() - 2);
                 self.prompt(&rows)
@@ -684,6 +705,7 @@ async fn a_note_posts_in_every_order_of_the_prompt_tick() {
                 ".s",
                 "@",
                 "note show",
+                "note list from Orla",
                 "note post"
             ],
             "{order:?}"
@@ -695,6 +717,30 @@ async fn a_note_posts_in_every_order_of_the_prompt_tick() {
         );
         h.finish().await;
     }
+}
+
+/// An immortal's note read back under a prompt of two lines, in the
+/// order the game sends them: the reply, its tick, then the prompt, whose
+/// first line is no line of the note.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_note_reads_back_under_a_prompt_of_two_lines() {
+    let _grid = grid();
+    let h = Harness::with(World {
+        order: Order::Middle,
+        rank: "IMP ",
+        above: Some("3001"),
+        ..World::default()
+    })
+    .await;
+    let mut job = post(6);
+    job["immortal"] = json!(true);
+    job["lines"] = json!([NOTE[0], "", NOTE[1]]);
+    h.start(job).await;
+    let done = h.done().await;
+    assert_eq!(done["kind"], "posted", "{done}");
+    assert_eq!(h.heard().last().map(String::as_str), Some("note post"));
+    h.finish().await;
 }
 
 /// A post whose link drops once `post` went out, then the find on the
@@ -722,7 +768,10 @@ async fn the_find_after_a_drop_reads_the_list_in_every_order_of_the_prompt_tick(
         let found = h.done_of(5).await;
         assert_eq!(found["kind"], "found", "{order:?} {found}");
         assert_eq!(found["number"], 0, "{order:?} {found}");
-        assert_eq!(h.heard().last().map(String::as_str), Some("note list"));
+        assert_eq!(
+            h.heard().last().map(String::as_str),
+            Some("note list from Orla")
+        );
         assert_eq!(h.world.lock().expect("the world").links, 2);
         h.finish().await;
     }

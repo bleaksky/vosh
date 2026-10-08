@@ -112,6 +112,7 @@ export const INPUT_ECHO_CARET_CHANGED = 'vosh://input-echo-caret-changed';
 export const PASTE_LINE_DELAY_CHANGED = 'vosh://paste-line-delay-changed';
 export const SPELLCHECK_PROMPT_CHANGED = 'vosh://spellcheck-prompt-changed';
 export const WRITING_OFFER_CHANGED = 'vosh://writing-offer-changed';
+export const WRITING_ASK_POST_CHANGED = 'vosh://writing-ask-post-changed';
 export const INPUT_CURSOR_STYLE_CHANGED = 'vosh://input-cursor-style-changed';
 export const VITALS_OPTIONS_CHANGED = 'vosh://vitals-options-changed';
 /** Carries your vitals text and the earlier ones, saved from Settings

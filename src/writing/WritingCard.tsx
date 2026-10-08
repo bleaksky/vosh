@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Draft, JobResult, WriteJob, WritingKind } from '../ipc/writing';
 import { sendInput } from '../ipc/session';
+import { stopAskingToPost } from '../ipc/uiConfig';
 import { useEscape } from '../lib/escapeStack';
 import type { PromptCardHost } from '../prompt/PromptCard';
 import type { CellSize } from '../prompt/pinnedDock';
@@ -14,6 +15,8 @@ import { pushToast } from '../stores/toasts';
 import { Button } from '../ui';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { applicationGuide } from './applications';
+import { stopsAsking, useAskPost } from './askPost';
+import { DontAskAgain } from './DontAskAgain';
 import {
   characterOf,
   getWritingFile,
@@ -46,6 +49,7 @@ import {
   clearOtherAsk,
   DELETE_ASK,
   postAsk,
+  postStillAsks,
   postedNote,
   readAgainAsk,
   sameNoteAsk,
@@ -99,6 +103,9 @@ interface Props {
 
 interface Confirm extends Ask {
   run: () => void;
+  /** The confirm offers Don't ask again, which turns Ask before you
+   *  post off. */
+  skip?: boolean;
 }
 
 const rowsOf = (text: readonly string[]): Row[] =>
@@ -185,6 +192,9 @@ export function WritingCard({
   const [preview, setPreview] = useState(false);
   const [folded, setFolded] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  // Don't ask again under Post…'s confirm.
+  const [skipAsk, setSkipAsk] = useState(false);
+  const askPost = useAskPost();
   const [badField, setBadField] = useState<FieldName | null>(null);
   const [sentView, setSentView] = useState(false);
   const [dropped, setDropped] = useState<Drop | null>(null);
@@ -391,7 +401,7 @@ export function WritingCard({
     const now = findToStart(find, live, writing.job !== null);
     if (!now) return;
     setFind({ ...now, started: true });
-    run({ kind, action: 'find', name, subject: now.subject, immortal });
+    run({ kind, action: 'find', name, subject: now.subject, immortal, baseline: now.baseline });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [find, live, writing.job]);
 
@@ -422,22 +432,33 @@ export function WritingCard({
   const sendToGame = (text: string[] = lines) =>
     run({ ...baseJob(), lines: text, base: draft.game ?? null });
 
-  const post = () =>
+  // Post asks first, unless Ask before you post is off and the post
+  // loses nothing you could want back.
+  const postAsks = askPost || postStillAsks(kind, draft.room ?? null, room.info?.name ?? null);
+  const post = () => {
+    const go = () =>
+      run({
+        ...baseJob(),
+        action: 'post',
+        to: info.toImmortal ? 'immortal' : (draft.to ?? ''),
+        subject: draft.subject ?? '',
+        language: info.language ? (draft.language ?? null) : null,
+        adopt,
+        // After a drop the game holds the note the card put there,
+        // which Post again clears with no question (Note Editor board 8).
+        clear_first: ended?.actions.includes('again') ?? false,
+      });
+    if (!postAsks) {
+      go();
+      return;
+    }
+    setSkipAsk(false);
     setConfirm({
       ...postAsk(kind, draft.to ?? '', draft.room ?? null, room.info?.name ?? null),
-      run: () =>
-        run({
-          ...baseJob(),
-          action: 'post',
-          to: info.toImmortal ? 'immortal' : (draft.to ?? ''),
-          subject: draft.subject ?? '',
-          language: info.language ? (draft.language ?? null) : null,
-          adopt,
-          // After a drop the game holds the note the card put there,
-          // which Post again clears with no question (Note Editor board 8).
-          clear_first: ended?.actions.includes('again') ?? false,
-        }),
+      run: go,
+      skip: askPost,
     });
+  };
 
   const check = () =>
     setConfirm({
@@ -464,8 +485,8 @@ export function WritingCard({
         kind: 'info',
         message: info.board
           ? `Saved ${name}’s ${info.title.toLowerCase()}`
-          : `Draft kept for ${name}`,
-        meta: `${counted.lines} ${counted.lines === 1 ? 'line' : 'lines'}, not ${info.board ? 'posted' : 'sent'}`,
+          : `Saved ${name}’s draft`,
+        meta: `${counted.lines} ${counted.lines === 1 ? 'line' : 'lines'}, not ${info.board ? 'posted' : 'sent'} yet`,
       });
     }
     onClose();
@@ -537,6 +558,7 @@ export function WritingCard({
     finding: find !== null,
     matches: readNow && !empty && !!draft.game && sameLines(lines, draft.game),
     hasGame: !!draft.game,
+    asksPost: postAsks,
   });
   const footActions: Record<FootAction, () => void> = {
     stop: jobs.stop,
@@ -704,7 +726,7 @@ export function WritingCard({
         <div className="pc-rule" />
         <div className="pc-body">
           <p className="pc-copy">
-            Play a character first. The card keeps your writing for each one.
+            Log in with a character first. Vosh keeps your writing separate for each one.
           </p>
         </div>
       </div>
@@ -887,12 +909,15 @@ export function WritingCard({
           tone={confirm.tone ?? 'danger'}
           onConfirm={() => {
             const go = confirm.run;
+            if (stopsAsking(confirm.skip, skipAsk)) void stopAskingToPost().catch(() => {});
             setConfirm(null);
             go();
           }}
           onCancel={() => setConfirm(null)}
           {...(confirmAt ? { at: confirmAt } : {})}
-        />
+        >
+          {confirm.skip && <DontAskAgain checked={skipAsk} onChange={setSkipAsk} />}
+        </ConfirmDialog>
       )}
     </>
   );

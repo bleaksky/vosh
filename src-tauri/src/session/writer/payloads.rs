@@ -64,6 +64,11 @@ pub(crate) struct WriteJob {
     /// line (`comm.c:1499`).
     #[serde(default)]
     pub(crate) immortal: bool,
+    /// For a find, how many notes of yours with this subject the board
+    /// listed just before the post went out. Only more than that is the
+    /// note you posted, since an older one can have the same subject.
+    #[serde(default)]
+    pub(crate) baseline: Option<usize>,
 }
 
 /// A field of a note, or the editor, where the game refused.
@@ -163,19 +168,23 @@ pub(crate) enum JobResult {
         sent: usize,
     },
     /// The link dropped after `sent` lines. `posted` says the post went
-    /// out first, so only the board can say whether it took.
+    /// out first, so only the board can say whether it took. `baseline`
+    /// is how many notes of yours with this subject the board listed
+    /// just before the post, when the card could read the list.
     Dropped {
         sent: usize,
         posted: bool,
+        baseline: Option<usize>,
     },
     /// The offer went before you took it.
     OfferGone,
-    /// The board lists a note of yours with the draft's subject, as
-    /// `number`, the last one when it lists more.
+    /// The board lists more notes of yours with the draft's subject than
+    /// it did before the post, the last as `number`.
     Found {
         number: usize,
     },
-    /// The board lists no note of yours with the draft's subject.
+    /// The board lists no more notes of yours with the draft's subject
+    /// than it did before the post.
     NotFound,
     /// The board's list is not one you can read, so only the game can
     /// say whether the note posted.

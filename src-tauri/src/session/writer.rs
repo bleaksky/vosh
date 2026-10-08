@@ -340,6 +340,9 @@ impl Writer {
     /// The game's prompt tick: the editor and the pager closed. What the
     /// tick does to a job waits for the text of its pulse (module notes).
     pub(crate) fn tick(&mut self, now: Instant) {
+        if let Some(job) = &mut self.job {
+            job.seal();
+        }
         self.game = Game::Prompt;
         self.opener = None;
         self.open = None;
@@ -470,6 +473,7 @@ impl Writer {
                 JobResult::Dropped {
                     sent: 0,
                     posted: false,
+                    baseline: spec.baseline,
                 },
             );
         }

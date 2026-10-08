@@ -19,6 +19,7 @@ const base: FootInput = {
   finding: false,
   matches: false,
   hasGame: true,
+  asksPost: true,
 };
 
 const ids = (f: FootInput) => footFor(f).buttons.map((b) => b.id);
@@ -34,7 +35,11 @@ describe('the footer', () => {
 
   it('puts the fix for the caret’s line beside Send', () => {
     const flagged = {
-      note: { lead: 'Line 4 runs 76 columns', rest: ', one past 75.', tone: 'bad' as const },
+      note: {
+        lead: 'Line 4 is one character too long.',
+        rest: ' Lines stop at 75.',
+        tone: 'bad' as const,
+      },
       rewrap: true,
     };
     expect(ids({ ...base, flagged })).toEqual(['rewrap', 'send']);
@@ -47,6 +52,12 @@ describe('the footer', () => {
     expect(ids({ ...base, kind: 'beast', matches: true })).toEqual(['send']);
     expect(ids({ ...base, phase: 'sent' })).toEqual(['check', 'done']);
     expect(ids({ ...base, kind: 'beast', phase: 'sent' })).toEqual(['done']);
+  });
+
+  it('reads Post with no ellipsis when it posts without asking', () => {
+    const label = (f: FootInput) => footFor(f).buttons.find((b) => b.id === 'post')?.label;
+    expect(label({ ...base, kind: 'note' })).toBe('Post…');
+    expect(label({ ...base, kind: 'note', asksPost: false })).toBe('Post');
   });
 
   it('posts a note and stops a job until its post goes', () => {
@@ -70,11 +81,11 @@ describe('the footer', () => {
 
   it('offers Restore and Send again after a drop', () => {
     const ended = {
-      note: { lead: 'The link dropped after line 8.', rest: '', tone: 'bad' as const },
+      note: { lead: 'Your connection dropped after line 8.', rest: '', tone: 'bad' as const },
       actions: ['restore' as const, 'again' as const],
     };
     expect(footFor({ ...base, ended }).buttons.map((b) => b.label)).toEqual([
-      'Restore the game’s copy',
+      'Put back what the game had',
       'Send again',
     ]);
   });
@@ -82,7 +93,7 @@ describe('the footer', () => {
   it('offers Post again after a drop on a board, and Done once the list finds it', () => {
     const ended = {
       note: {
-        lead: 'You were disconnected after line 8.',
+        lead: 'Your connection dropped after line 8.',
         rest: ' Nothing was posted.',
         tone: 'bad' as const,
       },
@@ -100,7 +111,7 @@ describe('the footer', () => {
   it('keeps Post… off while the board’s list after a drop is not read yet', () => {
     const ended = {
       note: {
-        lead: 'You were disconnected as the note posted.',
+        lead: 'Your connection dropped while this was posting.',
         rest: ' Check the board before you post it again.',
         tone: 'bad' as const,
       },
@@ -122,7 +133,7 @@ describe('the footer', () => {
 
   it('keeps Post… off while another board’s note waits in the game', () => {
     const ended = {
-      note: { lead: 'You had an idea started in the game.', rest: '', tone: 'warn' as const },
+      note: { lead: 'You’d already started an idea in the game.', rest: '', tone: 'warn' as const },
       actions: ['clear-other' as const],
       other: 'idea' as const,
     };
@@ -135,15 +146,15 @@ describe('the footer', () => {
   it('keeps the busy note and the room past the game’s behind a job’s end', () => {
     expect(footFor({ ...base, busy: true }).left).toEqual({
       note: {
-        lead: 'The game is waiting in a line editor.',
-        rest: ' End it with @, then send.',
+        lead: 'The game’s editor is still open.',
+        rest: ' Type @ to close it, then send.',
         tone: 'warn',
       },
     });
     expect(footFor({ ...base, kind: 'journal', over: 1300 }).left).toEqual({
       note: {
         lead: 'This is 1,300 characters too long for the game.',
-        rest: ' Cut it down or split it in two.',
+        rest: ' Shorten it or split it in two.',
         tone: 'bad',
       },
     });

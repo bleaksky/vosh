@@ -7,6 +7,7 @@ const look: WriteJob = { id: 2, kind: 'journal', action: 'find', subject: 'The G
 const waiting: Find = {
   drop: { sent: 19, total: 19 },
   subject: 'The Great Milieu',
+  baseline: 1,
   started: true,
 };
 
@@ -17,7 +18,7 @@ describe('the card after a drop', () => {
       dropped: { sent: 8, total: 19 },
       find: null,
       ended: {
-        note: expect.objectContaining({ lead: 'You were disconnected after line 8.' }),
+        note: expect.objectContaining({ lead: 'Your connection dropped after line 8.' }),
         actions: ['again'],
       },
       posted: false,
@@ -37,16 +38,38 @@ describe('the card after a drop', () => {
   });
 
   it('waits for the board’s list after a drop that came as it posted', () => {
-    const next = afterDrop(null, { kind: 'dropped', sent: 19, posted: true }, post, 'journal', 19);
+    const next = afterDrop(
+      null,
+      { kind: 'dropped', sent: 19, posted: true, baseline: 1 },
+      post,
+      'journal',
+      19,
+    );
     expect(next).toEqual({
       dropped: { sent: 19, total: 19 },
-      find: { drop: { sent: 19, total: 19 }, subject: 'The Great Milieu', started: false },
+      find: {
+        drop: { sent: 19, total: 19 },
+        subject: 'The Great Milieu',
+        baseline: 1,
+        started: false,
+      },
       ended: {
-        note: expect.objectContaining({ lead: 'You were disconnected as the note posted.' }),
+        note: expect.objectContaining({ lead: 'Your connection dropped while this was posting.' }),
         actions: [],
       },
       posted: false,
     });
+  });
+
+  it('keeps the count from before the post when a find drops too', () => {
+    const next = afterDrop(
+      waiting,
+      { kind: 'dropped', sent: 0, posted: false, baseline: null },
+      look,
+      'journal',
+      19,
+    );
+    expect(next?.find?.baseline).toBe(1);
   });
 
   it('looks for the subject the post went out with', () => {
@@ -84,7 +107,7 @@ describe('the card after a drop', () => {
       find: null,
       ended: {
         note: expect.objectContaining({
-          rest: 'Posted before the link dropped. It’s number 3 on the board.',
+          rest: 'It went through before your connection dropped. It’s note 3 on the board.',
         }),
         actions: [],
       },
@@ -98,7 +121,7 @@ describe('the card after a drop', () => {
       dropped: waiting.drop,
       find: null,
       ended: {
-        note: expect.objectContaining({ lead: 'You were disconnected after line 19.' }),
+        note: expect.objectContaining({ lead: 'Your connection dropped after line 19.' }),
         actions: ['again'],
       },
       posted: false,
@@ -107,7 +130,7 @@ describe('the card after a drop', () => {
 
   it('offers Post again when only immortals read the board', () => {
     const next = afterDrop(waiting, { kind: 'cant_tell' }, { ...look, kind: 'idea' }, 'idea', 19);
-    expect(next?.ended.note.rest).toContain('can’t tell if it went');
+    expect(next?.ended.note.rest).toContain('there’s no telling if it went through');
     expect(next?.ended.actions).toEqual(['again']);
     expect(next?.posted).toBe(false);
   });
@@ -118,7 +141,7 @@ describe('the card after a drop', () => {
       dropped: waiting.drop,
       find: null,
       ended: {
-        note: expect.objectContaining({ lead: 'You were disconnected as the note posted.' }),
+        note: expect.objectContaining({ lead: 'Your connection dropped while this was posting.' }),
         actions: ['again'],
       },
       posted: false,

@@ -42,6 +42,9 @@ struct Table {
     /// Lines the session sent.
     out: u64,
     sent: Vec<String>,
+    /// The lines your prompt prints above its last, as `%c` makes them
+    /// (`comm.c:1930`).
+    above: Vec<&'static str>,
 }
 
 const LISTED: [&str; 2] = [
@@ -57,6 +60,7 @@ impl Table {
             now: Instant::now(),
             out: 0,
             sent: Vec::new(),
+            above: Vec::new(),
         };
         table.tick();
         table
@@ -106,19 +110,22 @@ impl Table {
     /// One pulse at the game's prompt: `lines`, the prompt and its tick in
     /// the table's order, then the quiet after it.
     fn pulse(&mut self, lines: &[&str]) -> Vec<String> {
+        let above = self.above.clone();
+        let mut all: Vec<&str> = lines.to_vec();
+        all.extend(above.iter().copied());
         let early = match self.order {
             Order::First => {
                 self.vitals();
-                self.game(lines, PROMPT)
+                self.game(&all, PROMPT)
             }
             Order::Middle => {
                 let mut early = self.game(lines, "");
                 self.vitals();
-                early.extend(self.game(&[], PROMPT));
+                early.extend(self.game(&above, PROMPT));
                 early
             }
             Order::Last => {
-                let early = self.game(lines, PROMPT);
+                let early = self.game(&all, PROMPT);
                 self.vitals();
                 early
             }
@@ -193,6 +200,7 @@ fn job(id: u64, kind: Kind, action: Action, lines: &[&str]) -> WriteJob {
         clear_first: false,
         name: Some("Orla".into()),
         immortal: false,
+        baseline: None,
     }
 }
 
@@ -476,8 +484,10 @@ fn posts_a_note_once_the_game_holds_it_as_written() {
     assert_eq!(t.tick(), vec!["note show"]);
     assert_eq!(
         t.answer(&["Orla: The Great Milieu", "To: all", TEXT[0], " ", TEXT[2]]),
-        vec!["note post"]
+        vec!["note list from Orla"]
     );
+    // A board with notes to you and none from you lists nothing.
+    assert_eq!(t.answer(&[]), vec!["note post"]);
     t.answer(&["Ok."]);
     assert_eq!(
         t.done(),
@@ -571,6 +581,10 @@ fn clears_its_copy_when_the_game_turns_a_post_down() {
             " ",
             TEXT[2]
         ]),
+        vec!["application list from Orla"]
+    );
+    assert_eq!(
+        t.answer(&["There are no applications for you."]),
         vec!["application post"]
     );
     let refusal = "You may only make this application between ranks of 50 and 50.";
@@ -697,7 +711,8 @@ fn a_drop_ends_the_job_with_what_the_game_took() {
         t.done(),
         Some(JobResult::Dropped {
             sent: 1,
-            posted: false
+            posted: false,
+            baseline: None
         })
     );
     assert_eq!(t.writer.state(0).game, Game::Unknown);
@@ -734,18 +749,24 @@ fn find(kind: Kind) -> (Table, WriteJob) {
 
 fn finds_your_note_on_the_boards_list_and_sends_nothing_else() {
     let (mut t, spec) = find(Kind::Journal);
-    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["journal list"]);
+    assert_eq!(
+        t.run(WriterCommand::Start(spec)),
+        vec!["journal list from Orla"]
+    );
     t.answer(&[
         " [  2 ] Maren: The Great Milieu",
         "[  3N] Orla: The Great Milieu",
     ]);
     assert_eq!(t.done(), Some(JobResult::Found { number: 3 }));
-    assert_eq!(t.sent, vec!["journal list"]);
+    assert_eq!(t.sent, vec!["journal list from Orla"]);
 }
 
 fn finds_your_note_after_a_cabal_and_before_its_language() {
     let (mut t, spec) = find(Kind::Note);
-    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["note list"]);
+    assert_eq!(
+        t.run(WriterCommand::Start(spec)),
+        vec!["note list from Orla"]
+    );
     t.answer(&[" [  5N] [Knight] Orla: The Great Milieu (dwarvish)"]);
     assert_eq!(t.done(), Some(JobResult::Found { number: 5 }));
 }
@@ -763,7 +784,7 @@ fn turns_the_pager_for_a_long_list() {
     assert_eq!(t.done(), None);
     t.answer(&["[Hit Return to continue] [ 41 ] Orla: The Great Milieu"]);
     assert_eq!(t.done(), Some(JobResult::Found { number: 41 }));
-    assert_eq!(t.sent, vec!["note list", ""]);
+    assert_eq!(t.sent, vec!["note list from Orla", ""]);
 }
 
 fn says_when_the_list_holds_no_such_note() {
@@ -779,13 +800,74 @@ fn says_when_the_list_holds_no_such_note() {
 
 fn cannot_tell_on_a_board_only_immortals_read() {
     let (mut t, spec) = find(Kind::Idea);
-    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["idea list"]);
+    assert_eq!(
+        t.run(WriterCommand::Start(spec)),
+        vec!["idea list from Orla"]
+    );
     t.answer(&["Only immortals may read ideas."]);
     assert_eq!(t.done(), Some(JobResult::CantTell));
 }
 
 /// The note `note show` prints once TEXT went in.
 const SHOWN: [&str; 5] = ["Orla: The Great Milieu", "To: all", TEXT[0], " ", TEXT[2]];
+
+/// A post up to its read back, the game's editor closed on `TEXT`.
+fn post_to_read_back(t: &mut Table, spec: WriteJob) {
+    t.run(WriterCommand::Start(spec));
+    t.answer(&["You have no note in progress."]);
+    t.answer(&["Ok."]);
+    t.answer(&["Ok."]);
+    t.opens(&[], &[""]);
+    t.game(&["String cleared."], "> ");
+    t.took();
+    t.took();
+    t.took();
+    t.lists(&TEXT);
+    assert_eq!(t.tick(), vec!["note show"]);
+}
+
+#[test]
+fn reads_a_note_back_under_a_prompt_of_two_lines() {
+    // The game writes its tick between the reply and the prompt
+    // (`comm.c:1632`), and a prompt with `%c` in it prints a line of its
+    // own after the tick, which is no line of the note.
+    let mut t = Table::new();
+    t.order = Order::Middle;
+    t.above = vec!["3001"];
+    t.tick();
+    let mut spec = note(1, Action::Post);
+    spec.immortal = true;
+    post_to_read_back(&mut t, spec);
+    assert_eq!(
+        t.answer(&[
+            "IMP Orla: The Great Milieu",
+            "To: all",
+            TEXT[0],
+            " ",
+            TEXT[2]
+        ]),
+        vec!["note list from Orla"]
+    );
+    assert_eq!(t.answer(&[]), vec!["note post"]);
+}
+
+#[test]
+fn a_note_that_differs_names_its_first_line_that_does() {
+    let mut t = Table::new();
+    post_to_read_back(&mut t, note(1, Action::Post));
+    assert_eq!(
+        t.answer(&["Orla: The Great Milieu", "To: all", TEXT[0], "", "Other"]),
+        vec!["note clear"]
+    );
+    t.answer(&["Ok."]);
+    assert_eq!(
+        t.done(),
+        Some(JobResult::Failed {
+            why: Why::Differs,
+            line: Some(3)
+        })
+    );
+}
 
 #[test]
 fn a_tick_before_its_text_waits_for_the_rest_of_the_pulse() {
@@ -883,6 +965,28 @@ fn the_editor_opening_drops_a_tick_from_before_it() {
 /// next link, which waits for the game's first prompt.
 fn find_after_a_drop() {
     let mut t = Table::new();
+    post_then_drop(&mut t);
+    // The board lists the older note and the one that posted.
+    t.answer(&[OLDER, "[  3N] Orla: The Great Milieu"]);
+    assert_eq!(t.done(), Some(JobResult::Found { number: 3 }));
+}
+
+/// An older note of yours with the same subject, and the one the post
+/// sent missing, is no find.
+fn an_older_note_with_the_subject_is_no_find() {
+    let mut t = Table::new();
+    post_then_drop(&mut t);
+    t.answer(&[OLDER]);
+    assert_eq!(t.done(), Some(JobResult::NotFound));
+}
+
+/// An older note of yours on the board with the draft's subject.
+const OLDER: &str = "[  1 ] Orla: The Great Milieu";
+
+/// A post whose link drops once `post` went out, after the list before it
+/// found one older note of yours with its subject, then the find on the
+/// next link, which waits for the game's first prompt.
+fn post_then_drop(t: &mut Table) {
     t.run(WriterCommand::Start(note(1, Action::Post)));
     t.answer(&["You have no note in progress."]);
     t.answer(&["Ok."]);
@@ -894,26 +998,27 @@ fn find_after_a_drop() {
     t.took();
     t.lists(&TEXT);
     t.tick();
-    assert_eq!(t.answer(&SHOWN), vec!["note post"]);
+    assert_eq!(t.answer(&SHOWN), vec!["note list from Orla"]);
+    assert_eq!(t.answer(&[OLDER]), vec!["note post"]);
     t.writer.dropped();
     t.writer.settle();
     assert_eq!(
         t.done(),
         Some(JobResult::Dropped {
             sent: 3,
-            posted: true
+            posted: true,
+            baseline: Some(1)
         })
     );
     let mut spec = note(2, Action::Find);
     spec.lines.clear();
+    spec.baseline = Some(1);
     assert_eq!(t.run(WriterCommand::Start(spec)), Vec::<String>::new());
     // The login's own text comes with the first tick and is no answer.
     assert_eq!(
         t.answer(&["Reconnecting. Type replay to see missed tells."]),
-        vec!["note list"]
+        vec!["note list from Orla"]
     );
-    t.answer(&["[  3N] Orla: The Great Milieu"]);
-    assert_eq!(t.done(), Some(JobResult::Found { number: 3 }));
 }
 
 /// Each test once in each [`Order`].
@@ -945,6 +1050,7 @@ macro_rules! in_every_order {
 
 in_every_order!(
     find_after_a_drop,
+    an_older_note_with_the_subject_is_no_find,
     sends_a_description_and_reads_it_back,
     counts_a_line_taken_after_three_pulses_with_no_prompt_alone,
     stops_to_ask_when_the_game_holds_another_text,

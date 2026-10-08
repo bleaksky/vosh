@@ -394,6 +394,7 @@ fn full_ui() -> UiConfig {
         paste_line_delay_ms: 250,
         spellcheck_prompt: true,
         writing_offer: false,
+        writing_ask_post: false,
         input_cursor_style: "underline_thick".into(),
         // set_prompt fills both from the [prompt] table.
         prompt_template_enabled: false,

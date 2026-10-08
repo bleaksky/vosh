@@ -26,6 +26,7 @@ import {
   READABLE_HIGHLIGHTS_CHANGED,
   SPELLCHECK_PROMPT_CHANGED,
   WRITING_OFFER_CHANGED,
+  WRITING_ASK_POST_CHANGED,
   SPLIT_DIVIDER_CHANGED,
   TERMINAL_LINE_HEIGHT_CHANGED,
   THEME_CHANGED,
@@ -150,6 +151,7 @@ export async function broadcastUiConfigChanges(config: UiConfig, before?: UiConf
   );
   await emitChanged(SPELLCHECK_PROMPT_CHANGED, config.spellcheck_prompt, before?.spellcheck_prompt);
   await emitChanged(WRITING_OFFER_CHANGED, config.writing_offer, before?.writing_offer);
+  await emitChanged(WRITING_ASK_POST_CHANGED, config.writing_ask_post, before?.writing_ask_post);
   await emitChanged(
     INPUT_CURSOR_STYLE_CHANGED,
     config.input_cursor_style,

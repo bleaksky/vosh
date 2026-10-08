@@ -70,6 +70,8 @@ export interface FootInput {
   matches: boolean;
   /** The card knows the game's copy, which Restore sends back. */
   hasGame: boolean;
+  /** Post asks before it posts, so its label ends in an ellipsis. */
+  asksPost: boolean;
 }
 
 export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] } {
@@ -84,15 +86,15 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
     left = {
       note: {
         lead: `This is ${f.over.toLocaleString('en-US')} characters too long for the game.`,
-        rest: info.board ? ' Cut it down or split it in two.' : ' Cut it down to send it.',
+        rest: info.board ? ' Shorten it or split it in two.' : ' Shorten it to send it.',
         tone: 'bad',
       },
     };
   else if (f.spam !== null)
     left = {
       note: {
-        lead: `Lines ${f.spam + 1} to ${f.spam + 26} are the same line.`,
-        rest: ' The game takes that as spam, so change one of them.',
+        lead: `Lines ${f.spam + 1} to ${f.spam + 26} are all the same.`,
+        rest: ' The game treats that as spam, so change one of them.',
         tone: 'warn',
       },
     };
@@ -101,13 +103,13 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
     left = {
       note: info.board
         ? {
-            lead: 'You’re in another editor in the game.',
-            rest: ' Type @ to finish it, then post.',
+            lead: 'You’re still in another editor in the game.',
+            rest: ' Type @ to close it, then post.',
             tone: 'warn',
           }
         : {
-            lead: 'The game is waiting in a line editor.',
-            rest: ' End it with @, then send.',
+            lead: 'The game’s editor is still open.',
+            rest: ' Type @ to close it, then send.',
             tone: 'warn',
           },
     };
@@ -125,7 +127,7 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
   if (f.ended?.actions.includes('clear-other') && f.ended.other)
     buttons.push({ id: 'clear-other', label: 'Clear it…' });
   if (f.ended?.actions.includes('restore') && f.hasGame)
-    buttons.push({ id: 'restore', label: 'Restore the game’s copy' });
+    buttons.push({ id: 'restore', label: 'Put back what the game had' });
   const again = f.ended?.actions.includes('again') ?? false;
   const checkLabel = f.kind === 'description' ? 'Send for approval…' : 'Send for review…';
   if (
@@ -138,7 +140,7 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
   } else if (info.board) {
     buttons.push({
       id: 'post',
-      label: again ? 'Post again' : 'Post…',
+      label: again ? 'Post again' : f.asksPost ? 'Post…' : 'Post',
       primary: true,
       // The game holds one note, so Post… waits while another board's
       // note is there (Note Editor board 7), and after a drop it waits

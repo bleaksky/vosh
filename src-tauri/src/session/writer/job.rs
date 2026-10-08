@@ -21,7 +21,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::game_text::{
-    after_header, editor_waits, listed_note, listing, opened_listing, pager_waits, shown_note,
+    after_header, editor_waits, listed_notes, listing, opened_listing, pager_waits, shown_note,
     stored, uncoded, GameLine, ACCEPTED, BAD_DOT, BANNER, CLEARED, LANGUAGE_SET, NO_FORUM, NO_NOTE,
     OK, OTHER_BOARD, STAFF_ONLY, TOO_LONG,
 };
@@ -50,11 +50,19 @@ const PAGES: u8 = 40;
 enum Phase {
     /// Between stages.
     Idle,
-    /// A command at the game's prompt, its answer gathering.
+    /// A command at the game's prompt, its answer gathering. The tick
+    /// after an answer seals it: the game writes its tick between the
+    /// text of a pulse and the prompt (`comm.c:1632`), so a line after it
+    /// is the prompt's own, which `%c` puts on a line of its own
+    /// (`comm.c:1930`). `turned` is where the page after the last turn
+    /// of the pager starts, since only the text of the pulse the tick
+    /// ends counts.
     Tick {
         ask: Option<Ask>,
         lines: Vec<GameLine>,
         since: Instant,
+        sealed: bool,
+        turned: usize,
     },
     /// A command in the editor, waiting for its `> `.
     Editor {
@@ -90,6 +98,9 @@ pub(crate) struct Job {
     in_editor: bool,
     started_note: bool,
     post_sent: bool,
+    /// How many notes of yours with the draft's subject the board listed
+    /// just before the post, which a drop carries to the find.
+    baseline: Option<usize>,
     /// What the job ends with once its last stage, such as a clear,
     /// is done.
     pending: Option<JobResult>,
@@ -118,6 +129,7 @@ impl Job {
             in_editor,
             started_note: false,
             post_sent: false,
+            baseline: None,
             pending: None,
             result: None,
         }
@@ -147,6 +159,7 @@ impl Job {
             clear_first: false,
             name: None,
             immortal: false,
+            baseline: None,
         };
         let mut job = Self::new(spec);
         let mut stages = VecDeque::from([Stage::Close]);
@@ -226,8 +239,9 @@ impl Job {
     /// A line the game sent.
     pub(crate) fn line(&mut self, line: &GameLine) {
         match &mut self.phase {
+            // A line after the tick that sealed an answer is the prompt.
+            Phase::Tick { sealed: true, .. } | Phase::Sending { .. } | Phase::Idle => {}
             Phase::Tick { lines, .. } | Phase::Editor { lines, .. } => lines.push(line.clone()),
-            Phase::Sending { .. } | Phase::Idle => {}
         }
         match line.plain.as_str() {
             TOO_LONG if self.in_editor => {
@@ -299,14 +313,32 @@ impl Job {
             }
             // A long list waits on the pager, and the rest of it follows.
             Phase::Tick {
-                ask: Some(Ask::List),
+                ask: Some(Ask::List | Ask::Baseline),
                 since,
+                lines,
+                turned,
                 ..
             } if pager_waits(partial) => {
                 *since = now;
+                *turned = lines.len();
                 out.push(String::new());
             }
             _ => {}
+        }
+    }
+
+    /// The game's prompt tick came in the stream. Once a command has its
+    /// answer, what follows the tick is the prompt, no part of it.
+    pub(crate) fn seal(&mut self) {
+        if let Phase::Tick {
+            ask: Some(_),
+            lines,
+            sealed,
+            turned,
+            ..
+        } = &mut self.phase
+        {
+            *sealed |= lines[*turned..].iter().any(|l| !l.plain.trim().is_empty());
         }
     }
 
@@ -315,10 +347,26 @@ impl Job {
     /// waits for its answer, which the next text brings.
     pub(crate) fn tick(&mut self, now: Instant, out: &mut Vec<String>) -> bool {
         match std::mem::replace(&mut self.phase, Phase::Idle) {
-            Phase::Tick { ask, lines, since } => {
-                let answered = ask.is_none() || lines.iter().any(|l| !l.plain.trim().is_empty());
+            Phase::Tick {
+                ask,
+                lines,
+                since,
+                sealed,
+                turned,
+            } => {
+                // `list from` you prints nothing when the board holds
+                // notes to you and none from you (`recycle.c:4089`), so its
+                // tick is its answer.
+                let answered = matches!(ask, None | Some(Ask::List | Ask::Baseline))
+                    || lines.iter().any(|l| !l.plain.trim().is_empty());
                 if !answered {
-                    self.phase = Phase::Tick { ask, lines, since };
+                    self.phase = Phase::Tick {
+                        ask,
+                        lines,
+                        since,
+                        sealed,
+                        turned,
+                    };
                     return true;
                 }
                 self.in_editor = false;
@@ -416,6 +464,7 @@ impl Job {
             self.end(JobResult::Dropped {
                 sent: self.sent,
                 posted: self.post_sent,
+                baseline: self.baseline,
             });
         }
     }
@@ -451,6 +500,8 @@ impl Job {
                     ask: Some(ask),
                     lines: Vec::new(),
                     since: now,
+                    sealed: false,
+                    turned: 0,
                 };
             }
             Stage::Open => {
@@ -499,6 +550,8 @@ impl Job {
                     ask: None,
                     lines: Vec::new(),
                     since: now,
+                    sealed: false,
+                    turned: 0,
                 };
             }
         }
@@ -533,7 +586,13 @@ impl Job {
             },
             Ask::Post => on("post"),
             Ask::Check => self.spec.kind.check().map(str::to_string),
-            Ask::List => on("list"),
+            Ask::List | Ask::Baseline => match self.spec.name.as_deref() {
+                // `list from` you prints only your own rows, each with its
+                // number on the board (`recycle.c:4013`).
+                Some(name) => on(&format!("list from {name}")),
+                None if ask == Ask::List => on("list"),
+                None => None,
+            },
         }
     }
 
@@ -698,12 +757,26 @@ impl Job {
                 let result = match name {
                     _ if STAFF_ONLY.iter().any(|line| has(line)) => JobResult::CantTell,
                     None => JobResult::CantTell,
-                    Some(name) => match listed_note(lines, &name, &subject) {
-                        Some(number) => JobResult::Found { number },
-                        None => JobResult::NotFound,
-                    },
+                    Some(name) => {
+                        let listed = listed_notes(lines, &name, &subject);
+                        match listed.last() {
+                            Some(&number) if listed.len() > self.spec.baseline.unwrap_or(0) => {
+                                JobResult::Found { number }
+                            }
+                            _ => JobResult::NotFound,
+                        }
+                    }
                 };
                 self.end(result);
+            }
+            Ask::Baseline => {
+                let subject = uncoded(&stored(self.spec.subject.trim(), self.spec.immortal));
+                self.baseline = match name {
+                    _ if STAFF_ONLY.iter().any(|line| has(line)) => None,
+                    None => None,
+                    Some(name) => Some(listed_notes(lines, &name, &subject).len()),
+                };
+                self.advance(now, out);
             }
         }
     }
@@ -863,23 +936,26 @@ impl Job {
         }
         let meant: Vec<String> = self.planned.iter().map(|p| p.held.clone()).collect();
         let note = shown_note(lines, self.spec.name.as_deref());
-        let matches = note.as_ref().is_some_and(|note| {
+        let fields = note.as_ref().is_some_and(|note| {
             let to = if self.spec.kind.to_immortal() {
                 "Immortal".to_string()
             } else {
                 stored(self.spec.to.trim(), self.spec.immortal)
             };
-            same_text(&note.lines, &meant)
-                && note.subject == stored(self.spec.subject.trim(), self.spec.immortal)
-                && note.to == to
+            note.subject == stored(self.spec.subject.trim(), self.spec.immortal) && note.to == to
         });
-        if matches {
+        // The first line of the text that differs, counted from 1.
+        let line = note
+            .as_ref()
+            .and_then(|note| first_difference(&note.lines, &meant))
+            .map(|at| at + 1);
+        if note.is_some() && fields && line.is_none() {
             self.advance(now, out);
         } else {
             self.clear_then(
                 JobResult::Failed {
                     why: Why::Differs,
-                    line: None,
+                    line,
                 },
                 now,
                 out,

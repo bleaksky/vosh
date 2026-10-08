@@ -397,6 +397,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('input', 'command-line', 'writing-offer'),
   },
   {
+    label: 'Ask before you post',
+    description:
+      'Turn this off and Post posts your note at once, unless a report would record a room other than the one you began it in.',
+    keywords: 'writing card note post confirm ask sure',
+    target: at('input', 'command-line', 'writing-ask-post'),
+  },
+  {
     label: 'Mark your commands',
     description:
       'Draws a grey › before each command you send, except after a prompt that already ends in >.',

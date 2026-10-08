@@ -328,7 +328,7 @@ Vosh never writes, rewrites or suggests a word. The red underlines come from you
 
 Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
 
-When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Edit in Vosh`. `Open editor` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Write this in Vosh?`. `Open in Vosh` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
 
 ### 2.10 Write in the game
 
@@ -339,14 +339,15 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 - `Write in a language` in the `⋯` menu adds a `Language` row to a note. The game decides whether you know the tongue well enough.
 - The game never rewraps a note, so readers see your lines as you break them. The card keeps them to 75 columns, and to 70 for a custom race application, as help qrace asks.
 - An application's guide reads your subject the way the game does and shows the help for it, such as help psi requirements. Pick `Custom race application` in the `⋯` menu for a custom race.
-- `Post…` asks first, since you can't change a note once it's posted. Vosh sets `To` and `Subject`, sends your text through the game's editor, reads it back, and posts only when the game holds it as you wrote it. When the game says no, its reason prints under the card and your draft stays.
+- `Post…` asks first, since you can't change a note once it's posted. Turn on `Don't ask again` there, or turn off `Ask before you post` in Settings, Input, and the button reads `Post` and posts at once. A bug or typo report you began in another room still asks, since the game records the room you stand in now. Vosh sets `To` and `Subject`, sends your text through the game's editor, reads it back, and posts only when the game holds it as you wrote it. When the game says no, its reason prints under the card and your draft stays.
 - The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
 - If you're disconnected mid send, the card shows how far it got once you're back, and `Post again` starts over. When the drop came as it posted, Vosh checks the board's list first, and it never posts again on its own.
+- Just before it posts, Vosh lists your own notes on that board, so you'll see the list in the terminal. If your connection drops right then, Vosh compares the board with that list, so an older note with the same subject never passes for the new one.
 - Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` sends your history to the immortals, once.
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
 
-Typing `note edit`, `history edit` or another opener yourself brings the same `Edit in Vosh` notice as your description does.
+Typing `note edit`, `history edit` or another opener yourself brings the same `Write this in Vosh?` notice as your description does.
 
 ### 2.11 Walk to a place
 
