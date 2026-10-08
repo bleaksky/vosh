@@ -22,6 +22,10 @@ import { planWalk, speedwalk, type GridSpot } from './mapWalk';
 import { GlyphsOverlay } from './GlyphsOverlay';
 import { subscribeThemeChanges } from '../../theme/theme';
 import { pushToast } from '../../stores/toasts';
+import { walkRoute } from '../../ipc/session';
+import { getRoomOf } from '../../stores/gmcp/roomStore';
+import { getSelected } from '../../stores/session/sessionsStore';
+import { noteWalkRoute } from '../../stores/session/walkStore';
 import {
   getMapTiles,
   startMapTiles,
@@ -176,6 +180,20 @@ export function MapView({ emptyText }: MapViewProps = {}) {
     view: is3d ? view3d : null,
     setView: setView3d,
     onPoint: setPointer,
+    onPick: (at) => {
+      // A click walks the plan for the room it lands on, from the room
+      // the game last said you stand in, and the map keeps the route to
+      // light it as the walk goes on. Rust drops a click planned from a
+      // room you have since left, and the game has the final word on
+      // every step.
+      const target = spotAt(at);
+      const plan = tiles && target && planWalk(tiles, target.row, target.col);
+      const session = getSelected();
+      const start = getRoomOf(session)?.vnum;
+      if (!target || !plan || plan.steps.length === 0 || start == null) return;
+      noteWalkRoute(session, { cells: plan.cells, target });
+      void walkRoute(speedwalk(plan.steps), start, plan.rooms, session).catch(() => {});
+    },
   });
 
   useEffect(() => {

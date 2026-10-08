@@ -402,6 +402,48 @@ describe('a walk on the map', () => {
     expect(view.tip()).toEqual({ msg: 'Walk to the door', meta: '4n5e' });
   });
 
+  /** Each walk the map sent the session. */
+  async function routes() {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return vi
+      .mocked(invoke)
+      .mock.calls.filter(([cmd]) => cmd === 'session_walk_route')
+      .map(([, args]) => args);
+  }
+
+  it('walks a click from the room you stand in, through the rooms ex names', async () => {
+    const view = await map();
+    const before = (await routes()).length;
+    await view.click(6, 12);
+    expect((await routes()).slice(before)).toEqual([
+      {
+        steps: '4n2e',
+        start: 20605,
+        rooms: [20604, 20603, 20602, 20601, 20653, 20652],
+        session: 1,
+      },
+    ]);
+    const { getWalk } = await import('../../stores/session/walkStore');
+    expect(getWalk().route?.target).toEqual({ row: 6, col: 12 });
+  });
+
+  it('walks a click past a locked door as far as the door', async () => {
+    const view = await map();
+    const before = (await routes()).length;
+    await view.click(7, 15);
+    expect((await routes()).slice(before).map((r) => (r as { steps: string }).steps)).toEqual([
+      '4n5e',
+    ]);
+  });
+
+  it('sends nothing for a click on your own room or a room on another floor', async () => {
+    const view = await map();
+    const before = (await routes()).length;
+    await view.click(10, 10);
+    await view.click(...otherFloor());
+    expect((await routes()).length).toBe(before);
+  });
+
   it('offers nothing over your own room or a room on another floor', async () => {
     const view = await map();
     await view.hover(10, 10);

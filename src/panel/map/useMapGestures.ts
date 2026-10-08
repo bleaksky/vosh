@@ -9,7 +9,7 @@ import { NO_WHEEL_RUN, ZOOM_STEP, clampZoom, pinchZoom, wheelZoomSteps } from '.
 // the same. In 3D a drag turns and tilts the map, a double click puts
 // north back at the top, and the arrow keys turn and tilt it while the
 // drawing has focus. In the flat styles the map hears where the pointer
-// is.
+// is, and a press and release is a click, which walks.
 
 /** WebKit's gesture event, which the DOM types leave out. */
 interface GestureLike extends Event {
@@ -34,6 +34,8 @@ interface Options {
   /** Where the pointer is over a flat style, or null once it leaves the
    *  drawing or rests on the map's button. */
   onPoint: (at: MapPoint | null) => void;
+  /** A click on a flat style, where it was. */
+  onPick: (at: MapPoint) => void;
 }
 
 export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Options): void {
@@ -50,6 +52,8 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
     let wheel = NO_WHEEL_RUN;
     let pinchFrom: number | null = null;
     let drag: { id: number; x: number; y: number } | null = null;
+    /** The pointer pressed on a flat style, which a release makes a click. */
+    let press: number | null = null;
     const pointAt = (e: PointerEvent): MapPoint => {
       const box = el.getBoundingClientRect();
       return {
@@ -92,7 +96,11 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       if (latest.current.view && !onButton(e)) e.preventDefault();
     };
     const onPointerDown = (e: PointerEvent) => {
-      if (!latest.current.view || e.button !== 0 || onButton(e)) return;
+      if (e.button !== 0 || onButton(e)) return;
+      if (!latest.current.view) {
+        press = e.pointerId;
+        return;
+      }
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
       el.setPointerCapture?.(e.pointerId);
     };
@@ -108,6 +116,12 @@ export function useMapGestures(ref: RefObject<HTMLElement | null>, options: Opti
       if (dx !== 0 || dy !== 0) latest.current.setView((v) => dragView(v, dx, dy));
     };
     const onPointerUp = (e: PointerEvent) => {
+      if (press !== null && e.pointerId === press && e.type === 'pointerup') {
+        press = null;
+        if (!latest.current.view && !onButton(e)) latest.current.onPick(pointAt(e));
+        return;
+      }
+      press = null;
       if (!drag || e.pointerId !== drag.id) return;
       drag = null;
       if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
