@@ -19,7 +19,8 @@ import { endedLine, tabTitle } from './snoopLine';
 
 const fake = vi.hoisted(() => ({
   snoops: { tabs: [], windowed: false, selected: null, unread: new Set() } as unknown as Snoops,
-  size: { share: 0.4, folded: false },
+  size: { share: 0.4, folded: false, profile: 'Staff' as string | null | undefined },
+  profile: 'Staff' as string | null | undefined,
   saves: [] as unknown[],
   folds: [] as boolean[],
   selected: [] as string[],
@@ -40,6 +41,10 @@ vi.mock('../stores/session/snoopStore', () => ({
     fake.snoops = { ...fake.snoops, selected: name };
   },
   setSnoopsFolded: (on: boolean) => fake.folds.push(on),
+}));
+vi.mock('../stores/session/sessionsStore', async (actual) => ({
+  ...(await actual<typeof import('../stores/session/sessionsStore')>()),
+  useProfileOf: () => fake.profile,
 }));
 vi.mock('../stores/config/snoopSizeStore', () => ({
   useSnoopSize: () => fake.size,
@@ -135,7 +140,8 @@ function tabs(html: string): Record<string, string> {
 }
 
 beforeEach(() => {
-  fake.size = { share: 0.4, folded: false };
+  fake.size = { share: 0.4, folded: false, profile: 'Staff' };
+  fake.profile = 'Staff';
   fake.saves.length = 0;
   fake.folds.length = 0;
   fake.selected.length = 0;
@@ -180,7 +186,7 @@ describe('the snoop split', () => {
       '<div class="snoop-handle resizable-handle" role="separator" aria-orientation="horizontal" aria-label="Snoop height"></div>',
     );
 
-    fake.size = { share: 0.25, folded: false };
+    fake.size = { ...fake.size, share: 0.25 };
     expect(draw()).toContain('style="height:25%"');
   });
 
@@ -215,7 +221,7 @@ describe('the snoop split', () => {
   });
 
   it('folds to the strip, every tab kept with its mark and unread dot', () => {
-    fake.size = { share: 0.4, folded: true };
+    fake.size = { ...fake.size, folded: true };
     snoops([live('Tolliver'), live('Maren'), live('Orla')], 'Tolliver', ['Maren']);
     const html = draw();
     expect(html).toContain(
@@ -313,8 +319,10 @@ describe('the strip buttons', () => {
       act(() => {
         for (const cb of heard.get(SNOOP_REQUEST_EVENT) ?? []) cb({ detail: request });
       });
-    const rerender = () =>
-      act(() => root.render(createElement(SnoopSplit, { ...props, onCaret: () => (carets += 1) })));
+    const rerender = (session = props.session) =>
+      act(() =>
+        root.render(createElement(SnoopSplit, { ...props, session, onCaret: () => (carets += 1) })),
+      );
     return {
       press,
       ask,
@@ -365,7 +373,7 @@ describe('the strip buttons', () => {
     });
 
     it('offers Close and Unfold for an ended tab in a folded split', async () => {
-      fake.size = { share: 0.4, folded: true };
+      fake.size = { ...fake.size, folded: true };
       snoops([live('Tolliver'), ended('Maren', NOW - 2 * MIN)], 'Maren');
       const split = await mount();
       split.more();
@@ -397,7 +405,7 @@ describe('the strip buttons', () => {
     });
 
     it('opens the find bar on the tab in front, unfolding first', async () => {
-      fake.size = { share: 0.4, folded: true };
+      fake.size = { ...fake.size, folded: true };
       snoops([live('Tolliver')], 'Tolliver');
       const split = await mount();
       expect(split.finding()).toBe(false);
@@ -439,13 +447,13 @@ describe('the strip buttons', () => {
     });
 
     it('unfolds a folded split and puts the caret in once it shows', async () => {
-      fake.size = { share: 0.4, folded: true };
+      fake.size = { ...fake.size, folded: true };
       snoops([live('Tolliver')], 'Tolliver');
       const split = await mount();
       split.ask('enter');
       expect(fake.saves).toEqual([{ share: 0.4, folded: false }]);
       expect(fake.carets).toEqual([]);
-      fake.size = { share: 0.4, folded: false };
+      fake.size = { ...fake.size, folded: false };
       split.rerender();
       expect(fake.carets).toEqual(['Tolliver']);
       split.unmount();
@@ -490,6 +498,22 @@ describe('the strip buttons', () => {
       expect(fake.folds).toEqual([false]);
       act(() => on(split.handle()).onDoubleClick());
       expect(fake.saves).toEqual([{ share: 0.4, folded: true }]);
+      split.unmount();
+    });
+
+    it('holds the fold back until the size read is the new profile', async () => {
+      // Staff is open and Builder folded. The switch to a Builder
+      // session lands before the read of Builder, and an open fold then
+      // would clear the unread dot on its front tab.
+      snoops([live('Tolliver')], 'Tolliver', ['Tolliver']);
+      const split = await mount();
+      fake.folds.length = 0;
+      fake.profile = 'Builder';
+      split.rerender(2);
+      expect(fake.folds).toEqual([]);
+      fake.size = { share: 0.5, folded: true, profile: 'Builder' };
+      split.rerender(2);
+      expect(fake.folds).toEqual([true]);
       split.unmount();
     });
   });
