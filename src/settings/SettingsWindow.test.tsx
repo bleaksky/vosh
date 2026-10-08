@@ -68,7 +68,8 @@ describe('the Settings breadcrumb', () => {
   });
 });
 
-// The Settings keys, Mod and Shift with 1 to 4, open their page in this
+// The Settings keys, Cmd and Option on macOS or Ctrl and Shift elsewhere
+// with 1 to 4, open their page in this
 // window too. The window is mounted on a stand-in DOM and the key is
 // pressed on its document.
 describe('the Settings keys', () => {
@@ -135,15 +136,22 @@ describe('the Settings keys', () => {
     act(() => root.unmount());
   });
 
-  it('opens Timers on Cmd+Shift+4 on macOS, and leaves other keys alone', async () => {
+  it('opens Macros on Cmd+Option+4 on macOS, and leaves other keys alone', async () => {
     const { root, shown, press } = await mount({ userAgent: 'Macintosh', platform: 'MacIntel' });
-    // Ctrl belongs to your macros on macOS, and Shift with 5 is no key.
-    const ctrl = await press({ key: '$', code: 'Digit4', ctrlKey: true, shiftKey: true });
-    const five = await press({ key: '%', code: 'Digit5', metaKey: true, shiftKey: true });
+    // Ctrl belongs to your macros on macOS, Cmd Shift 4 takes a
+    // screenshot there, and Option with 5 is no key.
+    const ctrl = await press({ key: '¢', code: 'Digit4', ctrlKey: true, altKey: true });
+    const shift = await press({ key: '$', code: 'Digit4', metaKey: true, shiftKey: true });
+    const five = await press({ key: '∞', code: 'Digit5', metaKey: true, altKey: true });
     expect(ctrl.defaultPrevented).toBe(false);
+    expect(shift.defaultPrevented).toBe(false);
     expect(five.defaultPrevented).toBe(false);
     expect(shown()).toBe('general:');
-    await press({ key: '$', code: 'Digit4', metaKey: true, shiftKey: true });
+    // Option with 4 types ¢, and the physical key decides.
+    const option = await press({ key: '¢', code: 'Digit4', metaKey: true, altKey: true });
+    expect(option.defaultPrevented).toBe(true);
+    expect(shown()).toBe('automation:macros');
+    await press({ key: '¡', code: 'Digit1', metaKey: true, altKey: true });
     expect(shown()).toBe('automation:timers');
     act(() => root.unmount());
   });

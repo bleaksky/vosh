@@ -147,8 +147,10 @@ export function useAppCommands({
   //   Mod+Shift+W  close the window
   //   Mod+Shift+]  the next session, and Mod+Shift+[ the previous one
   //   Mod+1 to 9   the session at that place in the list
-  //   Mod+Shift+1 to 4  Triggers, Aliases, Macros and Timers in Settings,
-  //                by the physical digit key, since Shift with 1 types !
+  //   Cmd+Option+1 to 4 on macOS and Ctrl+Shift+1 to 4 elsewhere
+  //                Timers, Aliases, Triggers and Macros in Settings, by
+  //                the physical digit key, since Option or Shift with 1
+  //                types another character
   // A key this handler takes never reaches the menu bar, and the menu
   // bar sends its commands through runCommand below too, so each press
   // runs once. Keys match through shortcutKey, so a Cyrillic or Greek
@@ -165,12 +167,13 @@ export function useAppCommands({
       // Ctrl beside Cmd on macOS reaches only a key whose spec names
       // Ctrl, the sessions toggle's.
       const primary = mac ? e.metaKey : e.ctrlKey && !e.metaKey;
-      if (!primary || e.altKey) return;
+      if (!primary) return;
       const press = {
         key: shortcutKey(e),
         code: e.code,
         shift: e.shiftKey,
         ctrl: mac && e.ctrlKey,
+        alt: e.altKey,
       };
       const hit = resolveShortcut(
         press,

@@ -1079,7 +1079,7 @@ Anywhere in the main window.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
 - `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
-- `Cmd+Shift+1` opens Settings on Triggers, `Cmd+Shift+2` on Aliases, `Cmd+Shift+3` on Macros and `Cmd+Shift+4` on Timers. They work in Settings too.
+- `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers and `Cmd+Option+4` on Macros. They work in Settings too. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
 
 For your sessions, in the main window.
 

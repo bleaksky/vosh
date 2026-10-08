@@ -36,10 +36,10 @@ fn every_accelerator_parses() {
 fn the_board_shortcuts_are_all_there() {
     let expect = [
         ("settings", "Cmd+,"),
-        ("settings-triggers", "Cmd+Shift+1"),
-        ("settings-aliases", "Cmd+Shift+2"),
-        ("settings-macros", "Cmd+Shift+3"),
-        ("settings-timers", "Cmd+Shift+4"),
+        ("settings-timers", "Cmd+Alt+1"),
+        ("settings-aliases", "Cmd+Alt+2"),
+        ("settings-triggers", "Cmd+Alt+3"),
+        ("settings-macros", "Cmd+Alt+4"),
         ("connect", "Cmd+R"),
         ("session-new", "Cmd+T"),
         ("session-close", "Cmd+W"),
@@ -81,6 +81,27 @@ fn show_sessions_binds_ctrl_cmd_s() {
         parsed,
         Accelerator::new(Some(Modifiers::CONTROL | Modifiers::SUPER), Code::KeyS)
     );
+}
+
+#[test]
+fn the_settings_keys_bind_cmd_option_and_the_digit_keys() {
+    // Cmd Shift 3 and 4 are the macOS screenshot keys, which never
+    // reach Vosh, so the Settings keys take Option. Option changes
+    // what a digit types, and the menu binds the physical digit key.
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    for (id, code) in [
+        ("settings-timers", Code::Digit1),
+        ("settings-aliases", Code::Digit2),
+        ("settings-triggers", Code::Digit3),
+        ("settings-macros", Code::Digit4),
+    ] {
+        let parsed = Accelerator::from_str(accelerator(id).unwrap()).unwrap();
+        assert_eq!(
+            parsed,
+            Accelerator::new(Some(Modifiers::SUPER | Modifiers::ALT), code),
+            "{id}"
+        );
+    }
 }
 
 #[test]
@@ -190,10 +211,10 @@ fn routes_follow_the_board() {
     // A Settings page opens in Settings, so a press from Settings or
     // Help leaves Settings in front.
     for id in [
-        "settings-triggers",
-        "settings-aliases",
-        "settings-macros",
         "settings-timers",
+        "settings-aliases",
+        "settings-triggers",
+        "settings-macros",
     ] {
         assert_eq!(route(id), Route::Main { raise: false }, "{id}");
     }
