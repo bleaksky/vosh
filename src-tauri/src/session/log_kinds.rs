@@ -18,7 +18,8 @@
 //!   and of any line already waiting. Since d50e4a24 it queues both in
 //!   order, so a packet follows its line. Either way the pair is the same
 //!   one: a packet first waits for the line, and a packet after its line
-//!   finds it among the rows of the read since the last prompt. A packet
+//!   finds it among the rows of the read since the last prompt, the
+//!   newest that holds it. A packet
 //!   that finds none stays unpaired, and a prompt forgets it.
 //! - The game sends no packet to the one who sends a tell
 //!   (`languages.c`), so a line shaped like `You tell Tolliver '…'` or
@@ -110,8 +111,13 @@ impl LogKinds {
         let Some(heard) = Heard::of_packet(data) else {
             return;
         };
+        // The newest such row, since the game queues a packet right after
+        // its own line, and an earlier line of the pulse can hold a short
+        // text and the speaker's name too, as `Tolliver nods yes.` holds
+        // the say `yes`.
         let found = since_prompt
             .iter_mut()
+            .rev()
             .find(|row| row.kind == LineKind::Text && heard.holds(&row.text));
         match found {
             Some(row) => row.kind = LineKind::Channel(heard.channel),

@@ -126,3 +126,22 @@ fn every_line_outside_play_is_login() {
     // The packet waits for its line in play.
     assert_eq!(kinds.line(SAY, true), channel("say"));
 }
+
+#[test]
+fn a_packet_after_its_line_names_the_newest_row_that_holds_it() {
+    // An earlier line of the pulse holds the speaker and the short text
+    // too, and the say is the line right before its packet.
+    let yell = "Tolliver yells 'WiZNET 08:20:01: TICK!'";
+    let say = "Tolliver says 'TICK!'";
+    let mut kinds = LogKinds::default();
+    let mut rows = vec![
+        row(yell, kinds.line(yell, true)),
+        row(say, kinds.line(say, true)),
+    ];
+    kinds.packet(
+        &json!({"channel": "say", "speaker": "Tolliver", "text": "TICK!"}),
+        &mut rows,
+    );
+    assert_eq!(rows[0].kind, LineKind::Text);
+    assert_eq!(rows[1].kind, channel("say"));
+}
