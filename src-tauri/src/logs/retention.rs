@@ -12,9 +12,6 @@ use tracing::{info, warn};
 use crate::app::state::SharedState;
 use crate::logs::SharedLogStore;
 
-/// The spans Keep logs for offers besides forever, in days.
-pub(crate) const KEEP_DAYS: [u32; 3] = [365, 90, 30];
-
 /// Free pages one step gives back, 1 MB of 4 KB pages.
 const STEP_PAGES: u32 = 256;
 
