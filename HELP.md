@@ -193,13 +193,13 @@ The command input sends lines to the server. It handles single commands, chained
 - Type a command and press `Enter` to send it.
 - Chain commands on one line with `;`. Each piece goes out as its own command. Type `\;` for a literal semicolon.
 - Press `Shift+Enter` to add a line without sending. The box grows and a line number gutter appears once it holds two or more lines. Press `Enter` and every line submits separately, in order, with blank lines dropped.
-- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as a grey `›` on its own line, or as a blank line with `Mark your commands` off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
+- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that. It echoes as your mark on its own line, or as a blank line with the mark Off, so you see each one go out. After a prompt that ends in `>`, it ends that row and adds nothing.
 - Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter in the command line.
 - Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.
 
 With `Keep last command` on under Input, then Command line, in Settings, a sent command stays in the box fully selected. Press `Enter` again to resend it, or start typing to replace it.
 
-Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Turn off `Mark your commands` under Input, then Command line, in Settings, to echo them bare. A quick key and a macro echo the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without the `›`, since the prompt marks it already.
+Each command you send echoes in the text after a grey `›`, so your commands stand apart from the lines the game sends. Pick another mark in `Mark before your commands` under Input, then Sent commands, in Settings. Choose `>`, your own text of up to four characters such as `you:`, or Off to echo your commands bare. With `Use the same mark in the command line` on, as it starts, the line you type in starts with the same mark, and with the mark Off it starts with your text. Turn on `Dim sent commands` and your commands draw faint, so the game's lines stand out, while the mark keeps its color. A quick key and a macro echo the same way. Right after a prompt that ends in `>`, such as `Account name>` at login, a command echoes without its mark, whichever mark you picked, since the prompt marks it already.
 
 Set the delay in `Wait between pasted lines` under Input, then Advanced, in Settings, anywhere from 0 to 10000 ms.
 
@@ -546,7 +546,7 @@ Macros bind a key to a command that fires while the command line has focus. They
 
 A macro fires only while the command line has focus. On macOS the `Cmd` shortcuts belong to Vosh and `Ctrl` belongs to your macros.
 
-Turn on `Show the commands your macros send` under Input, then Command line, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
+Turn on `Show the commands your macros send` under Input, then Sent commands, to make each press show what it sent. `#group <name> on|off` turns a whole group of macros on and off from the command line, along with matching alias, trigger, and timer groups.
 
 To walk with the numpad, turn on `Numpad movement` in Settings under Automation, then Presets. It adds six macros under `From presets` in Macros, where only their group changes. `Numpad8` sends `n`, `Numpad6` sends `e`, `Numpad2` sends `s`, `Numpad4` sends `w`, `Numpad9` sends `u`, and `Numpad3` sends `d`. The game has six directions, so `Numpad7`, `Numpad1` and `Numpad5` stay free. Vosh reads the key itself, so NumLock does not matter and the digit row still types.
 
@@ -935,7 +935,7 @@ The colors MUD text draws in live in Settings under Appearance, and the rows tha
 
 Keep highlight colors readable covers the exact colors a trigger or a preset paints text in, such as `{#8fa7d9}` or `{fg:244}` in `Replace with`. Vosh measures each one against the terminal background. When one reads too faint, Vosh keeps its hue and moves it darker on a light theme or lighter on a dark one until it reads. A color that already reads stays as you picked it, and your trigger keeps the color you saved. This switch never changes the game's own colors or the theme's sixteen colors. Fit game colors covers those. A theme switch reaches the lines that arrive after it, and earlier lines keep the color they were drawn in.
 
-Two more colors sit with the rows they belong to. `Sent command color` under Input, then Command line, recolors the local echo of every command you send, and the `›` before it stays grey. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
+Three more colors sit with the rows they belong to. `Command color` under Input, then Sent commands, recolors the local echo of every command you send. `Mark color` above it recolors the mark before each one, which stays the grey of your theme's bright black until you pick a color. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
 
 ### 6.4 Set the fonts
 
