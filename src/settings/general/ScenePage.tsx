@@ -6,7 +6,6 @@ import {
   type LogSession,
   type SceneFilter,
   type SceneFormat,
-  type ScenePalette,
   type ScenePreview,
   type SceneRange,
 } from '../../ipc/logs';
@@ -28,7 +27,14 @@ import {
 } from '../../ui';
 import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
-import { logPalette, logSessionLabel, logSpanCss, logTime, parseLogLine } from './logView';
+import {
+  logPalette,
+  logSessionLabel,
+  logSpanCss,
+  logTime,
+  parseLogLine,
+  savedPalette,
+} from './logView';
 import {
   addable,
   clockText,
@@ -68,19 +74,6 @@ interface Props extends SettingsPageProps {
 }
 
 type Status = { kind: 'ready' } | { kind: 'saving' } | { kind: 'saved'; name: string };
-
-/** The theme in front, for the HTML file: the terminal's ground and text,
- *  Settings' quiet text and the 16 colors the log view reads with. */
-function palette(sixteen: string[], themeId: string, root: HTMLElement | null): ScenePalette {
-  const xterm = findTheme(themeId).xterm;
-  const muted = root ? getComputedStyle(root).getPropertyValue('--tertiary').trim() : '';
-  return {
-    background: xterm.background,
-    foreground: xterm.foreground,
-    muted,
-    ansi: sixteen,
-  };
-}
 
 export function ScenePage({ config, onError, navigate, log: picked }: Props) {
   const [target] = useSessionTarget();
@@ -187,7 +180,7 @@ export function ScenePage({ config, onError, navigate, log: picked }: Props) {
         range,
         filter,
         format,
-        format === 'html' ? palette(sixteen, themeId, pageRef.current) : null,
+        format === 'html' ? savedPalette(sixteen, findTheme(themeId).xterm, pageRef.current) : null,
       );
       setStatus({ kind: 'saved', name });
     } catch (e) {

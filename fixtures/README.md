@@ -122,6 +122,14 @@ fixtures/
                Rust tests install. Hand written and synthetic, from the
                server's own format strings and area files. Its README says
                where each line comes from.
+  saved-logs/ one-day.txt, two-days.txt, two-days.ansi, two-days.html
+               and no-times.html, what Save as file in the log view writes
+               for two logs of Orla's, a login with its password hidden
+               and a look on one evening and a say after midnight, as
+               plain text, with colors and as one HTML page, with times
+               and without. The Rust tests in src-tauri/src/logs/file hold
+               each file to its golden, and VOSH_WRITE_SAVED_LOGS=1 writes
+               them again. Generated from lines of room-colors.
   scenes/    pairing.json, two lines of a look ahead of a say and a tell
                with their Comm.Channel packets, played with the packets
                ahead of the text as the game sent them before d50e4a24 and
