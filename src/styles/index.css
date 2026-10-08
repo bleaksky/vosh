@@ -8,7 +8,7 @@
 @import './fonts.css'; /* the bundled mono faces, no classes */
 @import './base.css'; /* the reset, html and body, the scrollbars, window-edge and visually-hidden */
 @import './tokens.css'; /* the One Window tokens, no classes */
-@import './terminal.css'; /* terminal-, scrollback-, resizable- */
+@import './terminal.css'; /* terminal-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */
 @import './migration.css'; /* settings-app, settings-btn, migration- */
 @import './overlays.css'; /* ov-, menu */

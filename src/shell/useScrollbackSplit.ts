@@ -33,7 +33,7 @@ export interface ScrollbackSplit {
   splitOpen: boolean;
   /** The history pane has its scrollback and shows. */
   historyReady: boolean;
-  /** How far back the history pane shows, for its depth indicator. */
+  /** How far back the history pane shows, for the depth chip. */
   historyScrollPos: { back: number; max: number } | null;
   toggleSplit: () => void;
   /** A middle click over the terminal. */
@@ -104,14 +104,13 @@ export function useScrollbackSplit({
     new Map<number, { query: string; opts: FindOptions; direction: 'next' | 'previous' }>(),
   );
   // History pane scroll depth, driven by the Terminal's onScrollPosition
-  // callback. Drives the "↑ N / max" indicator in the top-right of the
-  // history pane.
+  // callback. Drives the depth chip at the terminal's top right.
   const [historyScrollPos, setHistoryScrollPos] = useState<{
     back: number;
     max: number;
   } | null>(null);
 
-  // Reset the history-pane scroll-depth indicator whenever the split
+  // Reset the history pane's scroll depth whenever the split
   // closes or another session's shows. The history Terminal unmounts and
   // the next mount will fire its own onScrollPosition; keeping the prior
   // value here would flash stale numbers for one paint before being
@@ -404,8 +403,8 @@ export function useScrollbackSplit({
     // while the history overlay covers part of it. If
     // history's bottom landed inside live's row range the
     // same lines would render in both panes — opaque
-    // overlay hides that visually, but the scroll-depth
-    // indicator still makes more sense when the panes
+    // overlay hides that visually, but the depth
+    // chip still makes more sense when the panes
     // describe disjoint buffer regions. Pre-split live
     // rows captured in the wheel handler because reading
     // the live pane's size here is racey.
