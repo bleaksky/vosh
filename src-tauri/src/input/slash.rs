@@ -23,7 +23,7 @@ use crate::session::connection::Connection;
 
 /// Every `#` command Vosh runs, so the page can color what you type
 /// without guessing. `#walk` runs before the match below, so it goes
-/// in by hand. A test keeps this list and the match in step.
+/// in by hand. Two tests keep this list and the match in step.
 pub(crate) const SLASH_COMMANDS: &[&str] = &[
     "alias",
     "unalias",

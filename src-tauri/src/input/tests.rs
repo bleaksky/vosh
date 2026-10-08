@@ -2190,6 +2190,35 @@ fn slash_a_word_outside_the_list_is_unknown() {
 }
 
 #[test]
+fn slash_commands_list_every_arm_of_the_dispatcher() {
+    // Each `"name" =>` arm of the match, plus `#walk`, which runs first.
+    let source = include_str!("slash.rs");
+    let start = source.find("match cmd {").expect("the dispatcher match");
+    let end = start + source[start..].find("other =>").expect("the unknown arm");
+    let mut arms: Vec<&str> = vec!["walk"];
+    for line in source[start..end].lines() {
+        let Some((names, _)) = line.trim().split_once("=>") else {
+            continue;
+        };
+        for name in names.split('|') {
+            if let Some(name) = name
+                .trim()
+                .strip_prefix('"')
+                .and_then(|n| n.strip_suffix('"'))
+            {
+                if !name.is_empty() {
+                    arms.push(name);
+                }
+            }
+        }
+    }
+    let mut listed = SLASH_COMMANDS.to_vec();
+    arms.sort_unstable();
+    listed.sort_unstable();
+    assert_eq!(arms, listed);
+}
+
+#[test]
 fn alias_recursion_returns_error_echo_not_panic() {
     let mut p = Profile::default();
     p.aliases.set(Alias::new("loop", "loop"));
