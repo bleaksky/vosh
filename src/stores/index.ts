@@ -17,6 +17,7 @@ import { startPinnedPromptStore } from './session/pinnedPromptStore';
 import { startPluginRowsStore } from './session/pluginRowsStore';
 import { startReconnectStore } from './session/reconnectStore';
 import { startRoomStore } from './gmcp/roomStore';
+import { startRoundTripStore } from './session/roundTripStore';
 import { startSessionRowStore } from './session/sessionRowStore';
 import { startSessionsStore } from './session/sessionsStore';
 import { startTargetStore } from './session/targetStore';
@@ -61,6 +62,7 @@ export function startStores(): void {
   startRoomStore();
   startTargetStore();
   startTickStore();
+  startRoundTripStore();
   startTickCountStore();
   startGameTimeStore();
   startChipStyleStore();

@@ -104,6 +104,11 @@ pub(crate) const TARGET: &str = "session://target";
 /// sends. The payload is a [`crate::tick::TickPayload`]. `onTick` hears
 /// it.
 pub(crate) const TICK: &str = "session://tick";
+/// The round trip to the game, every two seconds while it moves, and
+/// null as the connection ends. The payload is a
+/// [`crate::session::round_trip::RoundTripPayload`]. `onRoundTrip`
+/// hears it.
+pub(crate) const ROUND_TRIP: &str = "session://round-trip";
 /// A line a trigger routes to a pane, once for each pane. The payload
 /// is a [`crate::session::RoutedPayload`]. `onRouted` hears it.
 pub(crate) const ROUTED: &str = "session://routed";

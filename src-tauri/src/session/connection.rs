@@ -120,6 +120,10 @@ pub(crate) struct Connection {
     /// aliases they make. A disconnect keeps them, since only the plugin
     /// that draws a pane changes or removes it.
     pub(crate) lua_panes: crate::script::panes::LuaPanes,
+    /// The round trip to the game and the stalls since you connected,
+    /// which the loop records every two seconds and `#lag` prints. See
+    /// [`crate::session::round_trip`].
+    pub(crate) round_trip: super::round_trip::RoundTrip,
 }
 
 impl Connection {

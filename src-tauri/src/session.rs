@@ -13,6 +13,8 @@
 //!   room list and look, the tick's count, the prompt engine, the session
 //!   variables and the Lua engine.
 //! - `socket` opens the plain or TLS socket.
+//! - `round_trip` reads the round trip to the game and keeps the stalls
+//!   `#lag` lists.
 //! - `read` is the socket read path, from each telnet event to what the
 //!   end of a read sends.
 //! - `lines` cuts what the game sends into lines and the partial after
@@ -65,6 +67,7 @@ pub(crate) mod prompt_view;
 mod read;
 pub(crate) mod reconnect;
 pub(crate) mod room_block;
+pub(crate) mod round_trip;
 mod socket;
 mod steps;
 pub(crate) mod vitals_text;

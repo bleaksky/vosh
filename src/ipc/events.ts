@@ -14,6 +14,7 @@ export const STATE = 'session://state';
 export const INPUT_MODE = 'session://input-mode';
 export const TARGET = 'session://target';
 export const TICK = 'session://tick';
+export const ROUND_TRIP = 'session://round-trip';
 export const ROUTED = 'session://routed';
 export const HIDDEN = 'session://hidden';
 export const PROMPT_VARS = 'session://prompt-vars';

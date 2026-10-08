@@ -169,6 +169,7 @@ event session://prompt-state app heard
 event session://prompt-status app heard
 event session://prompt-vars app heard
 event session://reconnect app heard
+event session://round-trip app heard
 event session://routed app heard
 event session://state app heard
 event session://target app heard

@@ -1,8 +1,9 @@
 //! The session loop and the [`Conn`] it owns for a connection. The loop
 //! sends your lines to the game, takes each socket read through the read
 //! path, hands the walker your `#walk` lines and gives up on a step that
-//! waited too long, repaints your prompt when a deadline passes, and
-//! polls the tick, the Lua timers and the Settings timers. When the
+//! waited too long, repaints your prompt when a deadline passes, polls
+//! the tick, the Lua timers and the Settings timers, and reads the round
+//! trip to the game every two seconds. When the
 //! connection ends, it captures what the game sent last, saves the
 //! scrollback and clears what lasts only as long as the session.
 
@@ -37,6 +38,7 @@ use super::prompt_view::{
     watched_state, watching_prompt,
 };
 use super::read::{finish_read, flush_hold, let_go_held_lines, READ_BUFFER_BYTES};
+use super::round_trip::{RoundTripPayload, READ_EVERY};
 use super::socket::Stream;
 use super::steps::{
     clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
@@ -124,6 +126,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         // alerts and the redial.
         c.preset_watch.reset();
         c.link = super::reconnect::LinkWatch::default();
+        c.round_trip.connect(chrono::Local::now().time());
         start_prompt(&mut p, &mut c, known_host);
         // A push to the right edge reaches to the width the game is told.
         c.prompt.set_cols(usize::from(negotiator.window_size.0));
@@ -171,6 +174,12 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
 
     let mut perf_report_interval = tokio::time::interval(PERF_REPORT_INTERVAL);
     perf_report_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // The round trip to the game, read first one interval in and sent
+    // whenever it moves.
+    let mut round_trip_interval = tokio::time::interval_at(Instant::now() + READ_EVERY, READ_EVERY);
+    round_trip_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut round_trip_sent = RoundTripPayload::of(None);
 
     let disconnect_reason = loop {
         // When the step on its way gives up waiting for its room.
@@ -434,6 +443,19 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             _ = perf_report_interval.tick() => {
                 conn.perf.report_and_reset();
             }
+            _ = round_trip_interval.tick() => {
+                let now = Instant::now();
+                let reading = conn.stream.round_trip(now);
+                if let Some(reading) = reading {
+                    let at = chrono::Local::now().time();
+                    conn.session.connection.lock().round_trip.record(reading, now, at);
+                }
+                let payload = RoundTripPayload::of(reading);
+                if payload != round_trip_sent {
+                    round_trip_sent = payload;
+                    conn.session.emit(&conn.app, events::ROUND_TRIP, &payload);
+                }
+            }
             // Nothing else is ready, so the socket has nothing more for
             // now and the burst of reads that just ended shows in one
             // frame.
@@ -492,6 +514,7 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
         let mut p = conn.session.lock_profile().await;
         let mut c = conn.session.connection.lock();
         let had = c.clear_on_disconnect();
+        c.round_trip.disconnect();
         link = std::mem::take(&mut c.link);
         line_triggers = c.prompt.stage.line_trigger_notice();
         end_prompt(&mut p, &mut c);
@@ -509,6 +532,11 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     }
     if let Some(payload) = target_after {
         conn.session.emit(&conn.app, events::TARGET, &payload);
+    }
+    // The reading goes with the connection.
+    if round_trip_sent.ms.is_some() {
+        conn.session
+            .emit(&conn.app, events::ROUND_TRIP, &RoundTripPayload::of(None));
     }
     let _ = conn.stream.shutdown().await;
     // The affects, vitals and combat go stale with the session, as the

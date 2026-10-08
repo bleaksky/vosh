@@ -1,0 +1,360 @@
+//! The round trip to the game (Round Trip Readout, approved October 7).
+//! Every [`READ_EVERY`] the session loop reads the kernel's smoothed
+//! round trip time for the game socket, see [`kernel`]. The kernel only
+//! updates it as the game acknowledges your bytes, so in a hard stall it
+//! stays low. The loop also times your oldest send the game has not
+//! answered yet and takes that wait when it is longer, so a stall counts
+//! up live. Each reading goes to the status line on
+//! `session://round-trip` and into the [`RoundTrip`] the connection
+//! keeps, which `#lag` reads.
+//!
+//! A stall is any stretch of readings at [`SLOW`] or more. The session
+//! keeps the last [`KEPT_STALLS`] of the connection, and the readings
+//! of the last [`USUAL_OVER`] for the usual round trip, their median.
+
+pub(crate) mod kernel;
+
+use std::collections::VecDeque;
+use std::time::Duration;
+
+use chrono::NaiveTime;
+use serde::Serialize;
+use tokio::time::Instant;
+
+/// How often the session reads the round trip.
+pub(crate) const READ_EVERY: Duration = Duration::from_secs(2);
+
+/// From here your commands land a pulse late on Aabahran's 250 ms
+/// pulse, so a reading this long or longer is slow and part of a stall.
+pub(crate) const SLOW: Duration = Duration::from_millis(300);
+
+/// The readings the usual round trip is the median of.
+const USUAL_OVER: Duration = Duration::from_secs(600);
+
+/// The stalls of a connection `#lag` lists, the newest.
+const KEPT_STALLS: usize = 20;
+
+/// What `session://round-trip` carries beside the session: the reading
+/// in whole milliseconds, or null once the connection ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub(crate) struct RoundTripPayload {
+    pub(crate) ms: Option<u32>,
+}
+
+impl RoundTripPayload {
+    pub(crate) fn of(reading: Option<Duration>) -> Self {
+        Self {
+            ms: reading.map(|d| u32::try_from(d.as_millis()).unwrap_or(u32::MAX)),
+        }
+    }
+}
+
+/// One stretch of readings at [`SLOW`] or more.
+#[derive(Debug, Clone)]
+struct Stall {
+    /// When it began on your local clock.
+    at: NaiveTime,
+    began: Instant,
+    worst: Duration,
+    /// The first reading under [`SLOW`] after it, None while it runs.
+    ended: Option<Instant>,
+}
+
+/// The round trip of one connection: the latest reading, those of the
+/// last ten minutes and the stalls since you connected. The connection
+/// keeps it, so `#lag` reads it under the connection lock.
+#[derive(Debug, Default)]
+pub(crate) struct RoundTrip {
+    /// When you connected on your local clock, None while not connected.
+    connected_at: Option<NaiveTime>,
+    latest: Option<Duration>,
+    recent: VecDeque<(Instant, Duration)>,
+    stalls: VecDeque<Stall>,
+    /// Every stall since you connected, kept or not.
+    stall_count: usize,
+}
+
+impl RoundTrip {
+    /// A connection starts at `at` on your local clock, with nothing read.
+    pub(crate) fn connect(&mut self, at: NaiveTime) {
+        *self = Self {
+            connected_at: Some(at),
+            ..Self::default()
+        };
+    }
+
+    /// The connection ended, and its readings and stalls with it.
+    pub(crate) fn disconnect(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Take `reading` at `now`, `at` on your local clock.
+    pub(crate) fn record(&mut self, reading: Duration, now: Instant, at: NaiveTime) {
+        self.latest = Some(reading);
+        self.recent.push_back((now, reading));
+        while self
+            .recent
+            .front()
+            .is_some_and(|(then, _)| now.duration_since(*then) > USUAL_OVER)
+        {
+            self.recent.pop_front();
+        }
+        let running = self.stalls.back_mut().filter(|s| s.ended.is_none());
+        match running {
+            Some(stall) if reading >= SLOW => stall.worst = stall.worst.max(reading),
+            Some(stall) => stall.ended = Some(now),
+            None if reading >= SLOW => {
+                self.stall_count += 1;
+                self.stalls.push_back(Stall {
+                    at,
+                    began: now,
+                    worst: reading,
+                    ended: None,
+                });
+                if self.stalls.len() > KEPT_STALLS {
+                    self.stalls.pop_front();
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// The median of the readings of the last ten minutes.
+    fn usual(&self) -> Option<Duration> {
+        let mut readings: Vec<Duration> = self.recent.iter().map(|(_, d)| *d).collect();
+        readings.sort_unstable();
+        readings.get(readings.len() / 2).copied()
+    }
+
+    /// What `#lag` prints at `now`, plain lines like `#tick`.
+    pub(crate) fn report(&self, now: Instant) -> Vec<String> {
+        let Some(connected_at) = self.connected_at else {
+            return vec!["you are not connected, so there is no round trip to show".into()];
+        };
+        let mut lines = vec![match (self.latest, self.usual()) {
+            (Some(latest), Some(usual)) => format!(
+                "round trip to the game {}, usually {} over the last 10 minutes",
+                shown(latest),
+                shown(usual)
+            ),
+            _ => format!(
+                "no round trip yet, Vosh reads it every {} seconds",
+                READ_EVERY.as_secs()
+            ),
+        }];
+        let since = format!("since you connected at {}", connected_at.format("%H:%M"));
+        lines.push(match self.stall_count {
+            0 => format!("no stalls {since}"),
+            1 => format!("1 stall {since}"),
+            n if n > self.stalls.len() => {
+                format!("{n} stalls {since}, the last {} here", self.stalls.len())
+            }
+            n => format!("{n} stalls {since}"),
+        });
+        for stall in &self.stalls {
+            let at = stall.at.format("%H:%M:%S");
+            lines.push(match stall.ended {
+                Some(ended) => format!(
+                    "  {at}  worst {}, lasted {}",
+                    shown(stall.worst),
+                    span(ended.duration_since(stall.began))
+                ),
+                None => format!(
+                    "  {at}  {} now, {} so far",
+                    shown(self.latest.unwrap_or(stall.worst)),
+                    span(now.duration_since(stall.began))
+                ),
+            });
+        }
+        lines
+    }
+}
+
+/// A reading as the status line and `#lag` show it: whole milliseconds
+/// under a second, then seconds to one decimal, `38ms` or `1.4s`.
+pub(crate) fn shown(reading: Duration) -> String {
+    let ms = reading.as_millis();
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else {
+        format!("{:.1}s", reading.as_secs_f64())
+    }
+}
+
+/// How long a stall lasted, in whole seconds, then minutes and seconds,
+/// then hours and minutes.
+fn span(d: Duration) -> String {
+    let secs = (d.as_millis() + 500) / 1000;
+    match secs {
+        0..60 => format!("{secs}s"),
+        60..3600 => format!("{}m {}s", secs / 60, secs % 60),
+        _ => format!("{}h {}m", secs / 3600, secs % 3600 / 60),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    fn clock(h: u32, m: u32, s: u32) -> NaiveTime {
+        NaiveTime::from_hms_opt(h, m, s).expect("a time")
+    }
+
+    /// A connection at 19:42 that took `readings`, one every two seconds
+    /// from `start`, the first at 21:14:01. Returns the time of the last.
+    fn run(trip: &mut RoundTrip, start: Instant, readings: &[u64]) -> Instant {
+        let mut now = start;
+        for (i, r) in readings.iter().enumerate() {
+            now = start + READ_EVERY * i as u32;
+            let secs = 1 + 2 * i as u32;
+            trip.record(ms(*r), now, clock(21, 14 + secs / 60, secs % 60));
+        }
+        now
+    }
+
+    #[test]
+    fn a_reading_shows_milliseconds_then_seconds_to_one_decimal() {
+        assert_eq!(shown(ms(38)), "38ms");
+        assert_eq!(shown(ms(999)), "999ms");
+        assert_eq!(shown(ms(1000)), "1.0s");
+        assert_eq!(shown(ms(1400)), "1.4s");
+        assert_eq!(shown(ms(12_340)), "12.3s");
+    }
+
+    #[test]
+    fn a_span_reads_seconds_then_minutes_then_hours() {
+        assert_eq!(span(ms(6000)), "6s");
+        assert_eq!(span(ms(5600)), "6s");
+        assert_eq!(span(ms(125_000)), "2m 5s");
+        assert_eq!(span(ms(3_720_000)), "1h 2m");
+    }
+
+    #[test]
+    fn not_connected_says_so_in_one_line() {
+        let trip = RoundTrip::default();
+        assert_eq!(
+            trip.report(Instant::now()),
+            ["you are not connected, so there is no round trip to show"]
+        );
+    }
+
+    #[test]
+    fn before_the_first_reading_it_says_none_yet() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 5));
+        assert_eq!(
+            trip.report(Instant::now()),
+            [
+                "no round trip yet, Vosh reads it every 2 seconds",
+                "no stalls since you connected at 19:42",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_fine_connection_has_no_stalls_and_the_usual_is_the_median() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        let now = run(&mut trip, Instant::now(), &[41, 40, 44, 41, 38]);
+        assert_eq!(
+            trip.report(now),
+            [
+                "round trip to the game 38ms, usually 41ms over the last 10 minutes",
+                "no stalls since you connected at 19:42",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_stall_keeps_its_worst_and_how_long_it_lasted() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        // Slow from the third reading for three readings, so six seconds.
+        let now = run(&mut trip, Instant::now(), &[40, 41, 900, 1400, 320, 44]);
+        assert_eq!(
+            trip.report(now),
+            [
+                "round trip to the game 44ms, usually 320ms over the last 10 minutes",
+                "1 stall since you connected at 19:42",
+                "  21:14:05  worst 1.4s, lasted 6s",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_running_stall_shows_the_reading_now_and_how_long_so_far() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        let now = run(
+            &mut trip,
+            Instant::now(),
+            &[40, 612, 40, 41, 1400, 1200, 42, 44, 900, 1200],
+        );
+        assert_eq!(
+            trip.report(now),
+            [
+                "round trip to the game 1.2s, usually 612ms over the last 10 minutes",
+                "3 stalls since you connected at 19:42",
+                "  21:14:03  worst 612ms, lasted 2s",
+                "  21:14:09  worst 1.4s, lasted 4s",
+                "  21:14:17  1.2s now, 2s so far",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_keeps_the_last_twenty_stalls_and_counts_them_all() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        let readings: Vec<u64> = (0..25).flat_map(|_| [500, 40]).collect();
+        let now = run(&mut trip, Instant::now(), &readings);
+        let report = trip.report(now);
+        assert_eq!(
+            report[1],
+            "25 stalls since you connected at 19:42, the last 20 here"
+        );
+        assert_eq!(report.len(), 22);
+        // The oldest kept is the sixth, which began at the 11th reading.
+        assert_eq!(report[2], "  21:14:21  worst 500ms, lasted 2s");
+    }
+
+    #[test]
+    fn the_usual_round_trip_forgets_readings_older_than_ten_minutes() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        let start = Instant::now();
+        trip.record(ms(900), start, clock(19, 43, 0));
+        trip.record(ms(900), start + ms(1000), clock(19, 43, 1));
+        let later = start + USUAL_OVER + ms(1500);
+        trip.record(ms(40), later, clock(19, 53, 2));
+        assert_eq!(
+            trip.report(later)[0],
+            "round trip to the game 40ms, usually 40ms over the last 10 minutes"
+        );
+    }
+
+    #[test]
+    fn a_new_connection_starts_afresh_and_a_disconnect_forgets() {
+        let mut trip = RoundTrip::default();
+        trip.connect(clock(19, 42, 0));
+        run(&mut trip, Instant::now(), &[900, 40]);
+        trip.connect(clock(20, 5, 0));
+        assert_eq!(
+            trip.report(Instant::now())[1],
+            "no stalls since you connected at 20:05"
+        );
+        trip.disconnect();
+        assert_eq!(trip.report(Instant::now()).len(), 1);
+    }
+
+    #[test]
+    fn the_payload_carries_whole_milliseconds_or_null() {
+        let json = |p: RoundTripPayload| serde_json::to_string(&p).expect("json");
+        assert_eq!(json(RoundTripPayload::of(Some(ms(38)))), r#"{"ms":38}"#);
+        assert_eq!(json(RoundTripPayload::of(None)), r#"{"ms":null}"#);
+    }
+}

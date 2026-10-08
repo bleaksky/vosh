@@ -104,6 +104,7 @@ async function load() {
   return {
     target: await import('./targetStore'),
     tick: await import('./tickStore'),
+    roundTrip: await import('./roundTripStore'),
     pinned: await import('./pinnedPromptStore'),
     inputMode: await import('./inputModeStore'),
   };
@@ -210,6 +211,30 @@ describe('the tick store with two sessions', () => {
     expect(s.tick.getTick()).toBe(shown);
     select(ORLA);
     expect(s.tick.getTick().active).toBe(false);
+  });
+});
+
+describe('the round trip store with two sessions', () => {
+  it('shows nothing before the first reading, then the selected session', async () => {
+    const s = await load();
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
+    fire('session://round-trip', { session: TOLLIVER, ms: 38 });
+    fire('session://round-trip', { session: ORLA, ms: 1400 });
+    expect(s.roundTrip.getRoundTrip()).toBe(38);
+    select(ORLA);
+    expect(s.roundTrip.getRoundTrip()).toBe(1400);
+  });
+
+  it('clears the reading of the session that disconnects', async () => {
+    const s = await load();
+    fire('session://round-trip', { session: TOLLIVER, ms: 38 });
+    fire('session://round-trip', { session: ORLA, ms: 412 });
+    state(ORLA, 'disconnected');
+    expect(s.roundTrip.getRoundTrip()).toBe(38);
+    fire('session://round-trip', { session: TOLLIVER, ms: null });
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
+    select(ORLA);
+    expect(s.roundTrip.getRoundTrip()).toBeNull();
   });
 });
 

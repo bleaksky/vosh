@@ -66,6 +66,16 @@ tauri-plugin-single-instance = "2"
 # toasts, since the plugin says it always does. The toast crate the
 # plugin uses brings this version and feature already.
 windows = { version = "0.62", features = ["UI_Notifications"] }
+# The round trip to the game reads the kernel's TCP numbers through
+# SIO_TCP_INFO (Round Trip Readout P3). mio brings this version with
+# these features already, so it adds no new crate.
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock", "Win32_System_IO"] }
+
+# The round trip to the game reads the kernel's TCP numbers through
+# getsockopt on macOS and Linux (Round Trip Readout P3). tokio brings
+# libc already, so it adds no new crate.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Alert banners on macOS through UNUserNotificationCenter (Alerts Q1),

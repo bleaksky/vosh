@@ -39,6 +39,9 @@ pub(crate) struct Stream {
     /// and those triggers, timers, the tick and Lua send. A telnet answer
     /// ends no line, so it never counts.
     last_line: Option<Instant>,
+    /// When the oldest line of yours the game has not answered yet left.
+    /// Any bytes from the game answer it.
+    unanswered: Option<Instant>,
 }
 
 enum Io {
@@ -51,14 +54,19 @@ impl Stream {
         Self {
             io,
             last_line: None,
+            unanswered: None,
         }
     }
 
     pub(crate) async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match &mut self.io {
+        let read = match &mut self.io {
             Io::Tcp(s) => s.read(buf).await,
             Io::Tls(s) => s.read(buf).await,
+        };
+        if matches!(read, Ok(n) if n > 0) {
+            self.unanswered = None;
         }
+        read
     }
 
     pub(crate) async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
@@ -67,9 +75,26 @@ impl Stream {
             Io::Tls(s) => AsyncWriteExt::write_all(s.as_mut(), buf).await?,
         }
         if buf.ends_with(b"\n") {
-            self.last_line = Some(Instant::now());
+            let now = Instant::now();
+            self.last_line = Some(now);
+            self.unanswered.get_or_insert(now);
         }
         Ok(())
+    }
+
+    /// The round trip to the game at `now`: the kernel's smoothed round
+    /// trip time for the socket, or how long the oldest line the game has
+    /// not answered has waited when that is longer. None where the system
+    /// does not say. See [`super::round_trip`].
+    pub(crate) fn round_trip(&self, now: Instant) -> Option<Duration> {
+        let tcp = match &self.io {
+            Io::Tcp(s) => s,
+            Io::Tls(s) => s.get_ref().0,
+        };
+        let waited = self
+            .unanswered
+            .map_or(Duration::ZERO, |sent| now.duration_since(sent));
+        super::round_trip::kernel::read(tcp).map(|kernel| kernel.max(waited))
     }
 
     /// When a line of yours last left for the game, None before the first.
@@ -146,4 +171,46 @@ fn build_tls_config() -> ClientConfig {
     ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::time::Instant;
+
+    use super::connect;
+
+    /// The kernel reads the round trip on the systems Vosh ships for, and
+    /// a line the game has not answered counts up past it until the game
+    /// writes back.
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[tokio::test]
+    async fn the_round_trip_counts_up_while_the_game_has_not_answered() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a port");
+        let port = listener.local_addr().expect("an address").port();
+        let game = tokio::spawn(async move { listener.accept().await.expect("a client").0 });
+        let mut stream = connect("127.0.0.1", port, false).await.expect("the game");
+        let mut game = game.await.expect("the game task");
+
+        let fine = stream.round_trip(Instant::now()).expect("a reading");
+        assert!(fine < Duration::from_millis(300), "{fine:?}");
+
+        stream.write_all(b"look\r\n").await.expect("the line");
+        let mut line = [0u8; 6];
+        game.read_exact(&mut line).await.expect("the game hears it");
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let waiting = stream.round_trip(Instant::now()).expect("a reading");
+        assert!(waiting >= Duration::from_millis(400), "{waiting:?}");
+
+        game.write_all(b"You see Tolliver here.\r\n")
+            .await
+            .expect("the answer");
+        let mut buf = [0u8; 64];
+        assert!(stream.read(&mut buf).await.expect("the answer") > 0);
+        let answered = stream.round_trip(Instant::now()).expect("a reading");
+        assert!(answered < Duration::from_millis(300), "{answered:?}");
+    }
 }
