@@ -181,6 +181,24 @@ impl Scrollback {
         self.start_run(line, gen);
     }
 
+    /// Keep the line the screen colored again in place, as it shows now.
+    /// The ring finds it `row.after` lines from its end, and leaves it as
+    /// it is unless it still reads as it showed before. A line that shows
+    /// now where a trigger hid it before, or the other way round, stays
+    /// as the ring has it.
+    pub(crate) fn recolor(&mut self, row: &vosh_prompt::stage::Recolored) {
+        let (Some(was), Some(now)) = (&row.was, &row.now) else {
+            return;
+        };
+        let Some(at) = self.lines.len().checked_sub(row.after + 1) else {
+            return;
+        };
+        if self.lines.get(at) == Some(was) {
+            self.lines[at].clone_from(now);
+            self.changed = true;
+        }
+    }
+
     /// The kept lines, oldest first, colors included.
     pub(crate) fn lines(&self) -> impl Iterator<Item = &[u8]> {
         self.lines.iter().map(Vec::as_slice)

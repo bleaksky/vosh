@@ -24,7 +24,7 @@ use crate::sessions::Session;
 use super::batch::{emit_session_output, ReadBatch};
 use super::conn::Conn;
 use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, OutputSink, ScriptIo};
-use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
+use super::gmcp::{handle_gmcp, hello_subnegotiation, room_chars_ahead, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
 use super::reader::ReaderFeed;
@@ -57,7 +57,12 @@ impl<R: tauri::Runtime> Conn<R> {
         // Whether the read brought any text, which the writer's prompt
         // tick waits for.
         let mut data_seen = false;
-        for event in events {
+        // The Room.Chars each event finds ahead in the read, so the people
+        // of a look whose packets follow it read their places before they
+        // show.
+        let ahead = room_chars_ahead(&events);
+        for (i, event) in events.into_iter().enumerate() {
+            batch.room_ahead = ahead.get(i).cloned().flatten();
             if let TelnetEvent::Data(data) = &event {
                 data_seen |= !data.is_empty();
                 if self.writer.watching() {
@@ -444,6 +449,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         gmcp,
         since_prompt: _,
         reader,
+        room_ahead: _,
     } = batch;
     let (app, session) = (&conn.app, &conn.session);
     let watched = prompt && watching_prompt(session);

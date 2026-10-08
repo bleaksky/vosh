@@ -1,5 +1,6 @@
 //! The frame and the log rows a burst of reads owes, and the batch each read fills.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::AppHandle;
@@ -10,6 +11,7 @@ use vosh_prompt::stage::Output;
 use crate::output::{emit_counted, request_frame};
 use crate::sessions::Session;
 
+use super::connection::RoomChar;
 use super::log_sink::LogSink;
 use super::perf::PerfCounters;
 use super::reader::ReaderFeed;
@@ -58,6 +60,10 @@ pub(super) struct ReadBatch {
     /// What a screen reader reads of the read, filled only while Read new
     /// game lines is on.
     pub(super) reader: ReaderFeed,
+    /// The people of the next Room.Chars in this read, with no GA or EOR
+    /// before it, as the event the session is on finds them ahead (see
+    /// [`super::gmcp::room_chars_ahead`]).
+    pub(super) room_ahead: Option<Arc<[RoomChar]>>,
 }
 
 impl ReadBatch {
@@ -78,6 +84,7 @@ impl ReadBatch {
             reader_wait: false,
             gmcp: false,
             reader: ReaderFeed::default(),
+            room_ahead: None,
         }
     }
 }

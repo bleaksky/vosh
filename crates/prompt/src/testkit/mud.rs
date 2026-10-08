@@ -33,6 +33,9 @@
 //! - `blind` makes you blind or lets you see again, so the game withholds
 //!   your opponent's health.
 //! - `split` cuts the next prompt into two writes [`SPLIT_MS`] apart.
+//! - `splitroom` cuts the next look whose room packets follow its people
+//!   into two writes [`SPLIT_MS`] apart, the packets first in the second,
+//!   as a read that ends right after the people brings them.
 //! - `cast N name` puts an affect on you for N hours, or recasts it, and
 //!   `tick` runs one hour of `affect_update`: each timed affect loses an
 //!   hour and one at 0 wears off. Each sends Char.Affects at once.
@@ -311,6 +314,9 @@ impl Write {
 struct Pulse {
     bytes: Vec<u8>,
     prompt_at: Option<usize>,
+    /// Where the packets a command wrote after its text start, when they
+    /// follow it.
+    packets_at: Option<usize>,
 }
 
 /// One connection to the fake game.
@@ -344,6 +350,8 @@ pub struct Mud {
     gmcp: bool,
     logged_in: bool,
     split_next: bool,
+    /// `splitroom` asked to cut the next look before its room packets.
+    split_room: bool,
     bash_ms: u64,
     /// Where the prompt time packages come, see [`Options::order`].
     order: TickOrder,
@@ -390,6 +398,7 @@ impl Mud {
             gmcp: false,
             logged_in: false,
             split_next: false,
+            split_room: false,
             bash_ms: options.bash_ms,
             order: options.order,
             wait_ms: None,
@@ -652,6 +661,10 @@ impl Mud {
                 self.split_next = true;
                 return vec![Write::now(pulse.bytes)];
             }
+            "splitroom" => {
+                self.split_room = true;
+                self.pulse(Vec::new(), "The next look comes in two writes.\n\r", false)
+            }
             "spam" => {
                 let count = count(rest, 1000);
                 let mut lines = String::new();
@@ -709,8 +722,20 @@ impl Mud {
         self.pulse(Vec::new(), &format!("{reply}\n\r"), true).bytes
     }
 
-    /// Hand over a pulse, cut in two when `split` asked for it.
+    /// Hand over a pulse, cut in two when `split` or `splitroom` asked
+    /// for it.
     fn deliver(&mut self, pulse: Pulse) -> Vec<Write> {
+        if let Some(at) = pulse.packets_at.filter(|_| self.split_room) {
+            self.split_room = false;
+            return vec![
+                Write::now(pulse.bytes[..at].to_vec()),
+                Write {
+                    after_ms: SPLIT_MS,
+                    bytes: pulse.bytes[at..].to_vec(),
+                    close: false,
+                },
+            ];
+        }
         let Some(at) = pulse.prompt_at.filter(|_| self.split_next) else {
             return vec![Write::now(pulse.bytes)];
         };
@@ -757,11 +782,13 @@ impl Mud {
             text.push_str("\n\r");
         }
         text.push_str(head);
+        let mut packets_at = None;
         if self.order == TickOrder::First {
             out.extend(early);
             out.append(&mut packets);
         } else {
             game::send_to_char(&mut out, &text, &self.state);
+            packets_at = (!early.is_empty()).then_some(out.len());
             out.extend(early);
             text.clear();
         }
@@ -787,6 +814,7 @@ impl Mud {
         Pulse {
             bytes: out,
             prompt_at,
+            packets_at,
         }
     }
 

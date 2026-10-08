@@ -23,10 +23,12 @@ use crate::tick::TickStep;
 
 use super::batch::ReadBatch;
 use super::connection::Connection;
+use super::connection::RoomChar;
 use super::lines::{Line, LineAccumulator, Partial};
 use super::prompt_view::prompt_view;
 use super::reader::{self, ReaderFeed};
 use super::{highlight_ground, now_ms, room_block};
+use crate::input::target::target_place;
 
 /// What the Line pass decided for one line that is not your prompt.
 struct LinePass {
@@ -301,18 +303,64 @@ enum Shows {
 /// The scope a complete line that is not your prompt runs in, from the
 /// room look tracker, which reads every such line in the order the game
 /// sent it. [`MatchScope::RoomTarget`] for the person at the place your
-/// target holds in Room.Chars, [`MatchScope::Room`] for any other army,
-/// thing or person the look lists, and [`MatchScope::Line`] for any other
-/// line. The place is one in the Room.Chars the session holds, the one
-/// `tar` marks with `>`, and the tracker gives none when that list is
-/// another room's.
-fn room_scope(c: &mut Connection, plain: &str, bytes: &[u8]) -> MatchScope {
-    use room_block::RoomLine;
+/// target holds in the Room.Chars of the look, [`MatchScope::Room`] for
+/// any other army, thing or person the look lists, and
+/// [`MatchScope::Line`] for any other line. Where the packets follow the
+/// look, that Room.Chars is the one `ahead` holds, still to come in the
+/// read. With none ahead and a target set, the person's place comes back
+/// too, so the line shows as a row the packet can color again in a later
+/// read (see [`recolor_target`]).
+fn room_scope(
+    c: &mut Connection,
+    plain: &str,
+    bytes: &[u8],
+    ahead: Option<&[RoomChar]>,
+) -> (MatchScope, Option<usize>) {
+    use room_block::{Place, RoomLine};
+    let target = |place: usize, chars: &[RoomChar]| {
+        if target_place(c.target.name.as_deref(), chars) == Some(place) {
+            MatchScope::RoomTarget
+        } else {
+            MatchScope::Room
+        }
+    };
     match c.room_block.line(plain, bytes) {
-        RoomLine::Other => MatchScope::Line,
-        RoomLine::Person(Some(place)) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
-        RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
+        RoomLine::Other => (MatchScope::Line, None),
+        RoomLine::Person(Place::Held(place)) => (target(place, &c.room_chars), None),
+        RoomLine::Person(Place::Coming(place)) => match ahead {
+            Some(chars) => (target(place, chars), None),
+            None => (MatchScope::Room, c.target.name.is_some().then_some(place)),
+        },
+        RoomLine::Army | RoomLine::Thing => (MatchScope::Room, None),
     }
+}
+
+/// A Room.Chars that follows a look an earlier read showed, while the
+/// people of that look are still the last thing written. The line of the
+/// person at the place your target holds in it runs the triggers again in
+/// [`MatchScope::RoomTarget`], and when it shows another way, the rows
+/// are written again in place, in the read's batch. Only how the line
+/// shows changes. What the triggers send, run or ring went with the line.
+/// Returns the row for the scrollback ring.
+pub(super) fn recolor_target(
+    p: &Profile,
+    c: &mut Connection,
+    out: &mut vosh_prompt::stage::Output,
+) -> Option<vosh_prompt::stage::Recolored> {
+    let place = c.target.room_idx?;
+    let (raw, plain) = c.prompt.stage.recolorable(out, place)?;
+    let shown = vosh_automation::trigger::process_on_ground(
+        &p.triggers,
+        raw,
+        plain,
+        MatchScope::RoomTarget,
+        highlight_ground::get(),
+        highlight_ground::game(),
+        c.stop_key,
+    )
+    .display
+    .map(String::into_bytes);
+    c.prompt.stage.recolor(out, place, shown)
 }
 
 /// A complete line that is not your prompt. It runs the Line pass and
@@ -332,7 +380,7 @@ fn text_line_step(
     // Every complete line that is not your prompt passes the room look
     // tracker in the order the game sent it, so it knows the lines that
     // list a room's armies, things and people.
-    let scope = room_scope(c, &plain, &bytes);
+    let (scope, late) = room_scope(c, &plain, &bytes, batch.room_ahead.as_deref());
     // A line takes its kind whether it shows or not, so a channel packet
     // waiting for a line a trigger hides never lands on a later one.
     let playing = c.log_kinds.in_play(c.link.playing());
@@ -430,6 +478,20 @@ fn text_line_step(
                 .unwrap_or_else(|| (text.to_vec(), 0));
             repeat = Some(crate::logs::KeptRun { repeat: made, gen });
             Some(shows)
+        }
+        // A person whose place the packet after the look gives, in a
+        // later read, shows as a row it can color again.
+        Shows::Now(None) if late.is_some() => {
+            let display = result.display.as_ref().map(|text| text.as_bytes().to_vec());
+            c.prompt.stage.recolorable_line(
+                &mut batch.out,
+                &bytes,
+                &plain,
+                late.unwrap_or_default(),
+                shown,
+                display.clone(),
+            );
+            display
         }
         Shows::Now(painted) => {
             if let Some(text) = &result.display {

@@ -118,6 +118,44 @@ describe('RegionWriter', () => {
     expect(screen(term)).toEqual(['You are hungry.', '<1020hp 800m> ', 'look']);
   });
 
+  it('colors your target again in the people of a look when their packet comes a read later', async () => {
+    const { term, writer } = setup(60);
+    const villager = 'A Blackwatch villager scurries about.';
+    const resting = 'Tolliver is resting here.';
+    writer.output({ text: `[Exits: south]\r\n${mark(1)}${villager}\r\n${resting}\r\n` });
+    writer.output(replace(1, `${villager}\r\n\x1b[91m${resting}\x1b[0m\r\n`));
+    writer.output({ text: 'Maren arrives from the south.\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      '[Exits: south]',
+      villager,
+      resting,
+      'Maren arrives from the south.',
+    ]);
+    const buffer = term.buffer.active;
+    expect(
+      buffer
+        .getLine(buffer.baseY + 1)
+        ?.getCell(0)
+        ?.isFgDefault(),
+    ).toBeTruthy();
+    expect(
+      buffer
+        .getLine(buffer.baseY + 2)
+        ?.getCell(0)
+        ?.getFgColor(),
+    ).toBe(9);
+    // Once anything landed after the people, they stay as they show.
+    writer.output(replace(1, `\x1b[91m${villager}\x1b[0m\r\n${resting}\r\n`));
+    await parsed(writer);
+    expect(
+      buffer
+        .getLine(buffer.baseY + 1)
+        ?.getCell(0)
+        ?.isFgDefault(),
+    ).toBeTruthy();
+  });
+
   it('counts the rows xterm wrapped the region into', async () => {
     const { term, writer } = setup(12);
     writer.output({ text: `before\r\n${mark(1)}[1020/1020hp 800/800mn 930/930mv]` });
