@@ -303,13 +303,14 @@ enum Shows {
 /// sent it. [`MatchScope::RoomTarget`] for the person at the place your
 /// target holds in Room.Chars, [`MatchScope::Room`] for any other army,
 /// thing or person the look lists, and [`MatchScope::Line`] for any other
-/// line. The look's Room.Chars packet comes before its text, so the
-/// place is one in this look, the one `tar` marks with `>`.
+/// line. The place is one in the Room.Chars the session holds, the one
+/// `tar` marks with `>`, and the tracker gives none when that list is
+/// another room's.
 fn room_scope(c: &mut Connection, plain: &str, bytes: &[u8]) -> MatchScope {
     use room_block::RoomLine;
     match c.room_block.line(plain, bytes) {
         RoomLine::Other => MatchScope::Line,
-        RoomLine::Person(place) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
+        RoomLine::Person(Some(place)) if c.target.room_idx == Some(place) => MatchScope::RoomTarget,
         RoomLine::Army | RoomLine::Thing | RoomLine::Person(_) => MatchScope::Room,
     }
 }

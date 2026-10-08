@@ -298,6 +298,13 @@ pub(super) fn gmcp_step(
             input::target::set_room_chars(c, chars);
         }
     }
+    // A look in the room this names gives each person a place in the
+    // Room.Chars that came with it.
+    if msg.package == "Room.Info" {
+        if let Some(name) = msg.data.get("name").and_then(|n| n.as_str()) {
+            c.room_block.room_info(name);
+        }
+    }
     // The look this packet goes with lists a line for each long text its
     // objects share, five spaces or their count before it.
     if msg.package == "Room.Items" {
