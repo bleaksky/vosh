@@ -8,6 +8,7 @@ fn row(session_id: i64, text: &str) -> vosh_log::LogEntry {
         ts_ms: 0,
         text: text.to_string(),
         raw: None,
+        kind: vosh_log::LineKind::Text,
     }
 }
 

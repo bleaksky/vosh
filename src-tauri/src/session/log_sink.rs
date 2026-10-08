@@ -184,6 +184,7 @@ pub(super) async fn capture_pending_line<R: tauri::Runtime>(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind: vosh_log::LineKind::Text,
             }]) {
                 warn!(error = %e, "disconnect partial log append failed");
             }

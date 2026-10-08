@@ -262,6 +262,7 @@ pub(super) fn end_held(
                 ts_ms: now_ms(),
                 text: line.plain,
                 raw: Some(line.raw.clone()),
+                kind: vosh_log::LineKind::Text,
             });
         }
         kept.push(line.raw);
@@ -422,6 +423,7 @@ fn text_line_step(
                 ts_ms: now_ms(),
                 text: plain,
                 raw: Some(bytes),
+                kind: vosh_log::LineKind::Text,
             });
         }
         if ring {
@@ -601,6 +603,7 @@ fn keep_shown(
             ts_ms: now_ms(),
             text: line.plain.clone(),
             raw: Some(line.raw.clone()),
+            kind: vosh_log::LineKind::Text,
         });
     }
     scrollback.push(shown.to_vec());

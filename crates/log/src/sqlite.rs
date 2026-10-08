@@ -89,7 +89,9 @@ impl LogStore {
                  session_id INTEGER NOT NULL REFERENCES sessions(id),
                  ts_ms INTEGER NOT NULL,
                  text TEXT NOT NULL,
-                 raw BLOB
+                 raw BLOB,
+                 kind INTEGER,
+                 channel TEXT
              );
              CREATE INDEX IF NOT EXISTS idx_log_lines_session
                  ON log_lines(session_id, ts_ms);",
@@ -100,6 +102,16 @@ impl LogStore {
         if !self.has_column("sessions", "character")? {
             self.conn
                 .execute_batch("ALTER TABLE sessions ADD COLUMN character TEXT")?;
+        }
+        // What each row is came with Save a scene. The rows an older log
+        // holds keep neither column, and a scene reads them by their text
+        // (`kind.rs`). Adding a column rewrites no row, so a big log
+        // opens as fast as before.
+        if !self.has_column("log_lines", "kind")? {
+            self.conn.execute_batch(
+                "ALTER TABLE log_lines ADD COLUMN kind INTEGER;
+                 ALTER TABLE log_lines ADD COLUMN channel TEXT;",
+            )?;
         }
         Ok(())
     }
@@ -159,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn an_older_log_gains_the_character_column_and_keeps_its_rows() {
+    fn an_older_log_gains_the_new_columns_and_keeps_its_rows() {
         let dir = temp_dir("older");
         let path = dir.join("logs.sqlite");
         {
@@ -189,6 +201,8 @@ mod tests {
         }
         let mut s = LogStore::open(&path).unwrap();
         assert!(s.has_column("sessions", "character").unwrap());
+        assert!(s.has_column("log_lines", "kind").unwrap());
+        assert!(s.has_column("log_lines", "channel").unwrap());
         let old = s.get_session(1).unwrap().expect("the old session");
         assert_eq!((old.host.as_str(), old.line_count), ("h", 1));
         assert_eq!(s.session_character(1).unwrap(), None);

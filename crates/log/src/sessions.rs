@@ -10,7 +10,7 @@ use rusqlite::OptionalExtension;
 use serde::Serialize;
 use vosh_protocol::ansi::plain_text;
 
-use crate::{LogStore, Result, Scope};
+use crate::{LineKind, LogStore, Result, Scope};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionRow {
@@ -71,6 +71,8 @@ pub struct LogEntry {
     pub ts_ms: i64,
     pub text: String,
     pub raw: Option<Vec<u8>>,
+    /// What the row is, as the session tells it apart.
+    pub kind: LineKind,
 }
 
 /// The row the session log keeps for a line you send while your input
@@ -109,17 +111,20 @@ pub fn sent_rows(bytes: &[u8], hidden: bool) -> Vec<String> {
 }
 
 /// The log entries for one send to a session, its rows as plain text
-/// with no raw bytes, all at the time the send left.
+/// with no raw bytes, all at the time the send left. `kind` is
+/// [`LineKind::Sent`] in play and [`LineKind::Login`] outside it.
 pub fn sent_entries(
     session_id: i64,
     ts_ms: i64,
     rows: Vec<String>,
+    kind: LineKind,
 ) -> impl Iterator<Item = LogEntry> {
     rows.into_iter().map(move |text| LogEntry {
         session_id,
         ts_ms,
         text,
         raw: None,
+        kind: kind.clone(),
     })
 }
 
@@ -155,8 +160,8 @@ pub fn snoop_rows(name: &str, text: &str) -> Vec<(String, Vec<u8>)> {
 /// The statement that writes one log line, shared by
 /// [`LogStore::append`] and [`LogStore::append_batch`] so both hit the
 /// same entry in the statement cache.
-const INSERT_LINE: &str =
-    "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)";
+const INSERT_LINE: &str = "INSERT INTO log_lines (session_id, ts_ms, text, raw, kind, channel)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
 impl LogStore {
     /// Name the character a session belongs to, the first time the game
@@ -224,9 +229,9 @@ impl LogStore {
         )?)
     }
 
-    /// Append one line to a session. `raw` may carry ANSI codes; `text`
-    /// is the plain-text form. When `raw` is None, the plain text doubles
-    /// as the raw payload on export.
+    /// Append one line of plain game text to a session. `raw` may carry
+    /// ANSI codes; `text` is the plain-text form. When `raw` is None, the
+    /// plain text doubles as the raw payload on export.
     pub fn append(
         &mut self,
         session_id: i64,
@@ -236,9 +241,10 @@ impl LogStore {
     ) -> Result<i64> {
         // `prepare_cached` keeps the parsed statement in the connection's
         // statement cache, so repeated appends skip the SQL parse.
+        let (kind, channel) = LineKind::Text.columns();
         self.conn
             .prepare_cached(INSERT_LINE)?
-            .execute(params![session_id, ts_ms, text, raw])?;
+            .execute(params![session_id, ts_ms, text, raw, kind, channel])?;
         Ok(self.conn.last_insert_rowid())
     }
 
@@ -254,7 +260,8 @@ impl LogStore {
         {
             let mut stmt = tx.prepare_cached(INSERT_LINE)?;
             for e in entries {
-                stmt.execute(params![e.session_id, e.ts_ms, e.text, e.raw])?;
+                let (kind, channel) = e.kind.columns();
+                stmt.execute(params![e.session_id, e.ts_ms, e.text, e.raw, kind, channel])?;
             }
         }
         tx.commit()?;
@@ -411,18 +418,21 @@ pub(crate) mod tests {
                 ts_ms: 1,
                 text: "alpha".into(),
                 raw: None,
+                kind: LineKind::Text,
             },
             LogEntry {
                 session_id: id,
                 ts_ms: 2,
                 text: "beta".into(),
                 raw: Some(b"\x1b[31mbeta".to_vec()),
+                kind: LineKind::Text,
             },
             LogEntry {
                 session_id: id,
                 ts_ms: 3,
                 text: "gamma".into(),
                 raw: None,
+                kind: LineKind::Text,
             },
         ])
         .unwrap();
@@ -576,6 +586,7 @@ pub(crate) mod tests {
                 ts_ms: 2,
                 text,
                 raw: Some(raw),
+                kind: LineKind::Text,
             })
             .collect();
         s.append_batch(&rows).unwrap();

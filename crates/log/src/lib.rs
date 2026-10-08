@@ -7,6 +7,10 @@
 //! `sessions` starts, ends and lists sessions, writes each game line with
 //! its plain text and its raw bytes, and exports the lines of a scope.
 //! It also owns the `> ` rows that record what you sent.
+//! `kind` names what each row is, your prompt, a line you sent, a line
+//! outside play or a channel's line, as the session tags it.
+//! `scene` reads the rows of one log over a span of time for Save a
+//! scene, each with its kind.
 //! `search` runs the regex search the log view pages through, over the
 //! logs a `Scope` names.
 //! `lookup` reads the sessions that belong to a profile's characters.
@@ -19,14 +23,18 @@ use rusqlite::Connection;
 use thiserror::Error;
 
 mod forget;
+mod kind;
 mod lookup;
 mod retention;
+mod scene;
 mod search;
 mod sessions;
 mod sqlite;
 
 pub use forget::{Forgotten, PasswordLines};
+pub use kind::LineKind;
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
+pub use scene::{SceneLine, SceneLog};
 pub use search::{Scope, SearchHit, SearchOptions, SearchPage};
 pub use sessions::{
     is_local_host, sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT,

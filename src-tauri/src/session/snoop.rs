@@ -342,6 +342,7 @@ impl Snoops {
                 ts_ms,
                 text,
                 raw: Some(raw),
+                kind: vosh_log::LineKind::Text,
             })
             .collect()
     }

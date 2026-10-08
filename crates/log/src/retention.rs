@@ -121,6 +121,7 @@ mod tests {
                 ts_ms: n,
                 text: format!("Maren says, 'line {n} of a long and wordy evening.'"),
                 raw: None,
+                kind: crate::LineKind::Text,
             })
             .collect();
         s.append_batch(&rows).unwrap();

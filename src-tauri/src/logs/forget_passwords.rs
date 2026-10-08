@@ -424,6 +424,7 @@ mod tests {
                     ts_ms: 7,
                     text: "A dusty road.".into(),
                     raw: Some(b"A dusty road.".to_vec()),
+                    kind: vosh_log::LineKind::Text,
                 }])
                 .unwrap();
         }

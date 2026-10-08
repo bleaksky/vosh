@@ -726,8 +726,12 @@ async fn send_typed<R: tauri::Runtime>(
         Ok(()) => conn.stream.flush().await.map_err(|e| ("flush failed", e)),
     };
     if let Some((sid, at, rows)) = sent {
-        conn.settle
-            .queue_rows(vosh_log::sent_entries(sid, at, rows));
+        conn.settle.queue_rows(vosh_log::sent_entries(
+            sid,
+            at,
+            rows,
+            vosh_log::LineKind::Sent,
+        ));
     }
     if let Err((what, e)) = wrote {
         error!(error = %e, "{what}");

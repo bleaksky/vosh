@@ -355,6 +355,7 @@ mod tests {
                 ts_ms: n,
                 text: format!("Orla waves {n}"),
                 raw: None,
+                kind: vosh_log::LineKind::Text,
             })
             .collect();
         writer.append_batch(&rows).unwrap();
