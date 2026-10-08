@@ -1,6 +1,8 @@
 //! The rows of one log over a span of time, for Save a scene, each with
 //! what the session said it is. A line you sent with a password reads as
-//! [`HIDDEN_SENT_TEXT`], as a saved file shows it.
+//! [`HIDDEN_SENT_TEXT`], as a saved file shows it. It also says which logs
+//! a scope holds and when their lines start and end, for the header of a
+//! saved file.
 
 use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
@@ -15,6 +17,15 @@ pub struct SceneLog {
     pub port: u16,
     pub character: Option<String>,
     pub started_at_ms: i64,
+}
+
+/// A log a scope holds, with the times of its first and last line in
+/// that scope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedLogSpan {
+    pub log: SceneLog,
+    pub first_ms: i64,
+    pub last_ms: i64,
 }
 
 /// One row of a scene's span.
@@ -51,6 +62,31 @@ impl LogStore {
                 },
             )
             .optional()?)
+    }
+
+    /// Each log in `scope` that holds a line in it, oldest first, with the
+    /// times its lines in scope start and end. It reads one entry of the
+    /// `(session_id, ts_ms)` index and two rows by id for each log.
+    pub fn scope_spans(&self, scope: &Scope) -> Result<Vec<ScopedLogSpan>> {
+        let logs = self.scoped_logs(scope)?;
+        let mut at = self
+            .conn
+            .prepare_cached("SELECT ts_ms FROM log_lines WHERE id = ?1")?;
+        let mut spans = Vec::with_capacity(logs.len());
+        for (id, scoped) in &logs {
+            let Some(log) = self.scene_log(*id)? else {
+                continue;
+            };
+            let first_ms: i64 = at.query_row([scoped.first], |r| r.get(0))?;
+            let last_ms: i64 = at.query_row([scoped.last], |r| r.get(0))?;
+            spans.push(ScopedLogSpan {
+                log,
+                first_ms,
+                last_ms: last_ms.max(first_ms),
+            });
+        }
+        spans.sort_by_key(|span| (span.log.started_at_ms, span.log.id));
+        Ok(spans)
     }
 
     /// The rows of `log` from `from_ms` to `to_ms`, both ends kept, oldest
@@ -106,6 +142,54 @@ mod tests {
     use super::*;
     use crate::sessions::tests::store;
     use crate::LogEntry;
+
+    #[test]
+    fn a_scope_says_which_logs_it_holds_and_when() {
+        let mut s = store();
+        let early = s
+            .start_session("play.theforsakenlands.com", 1848, 0)
+            .unwrap();
+        s.set_session_character(early, "Orla").unwrap();
+        s.append(early, 1_000, "Maren walks in.", None).unwrap();
+        s.append(early, 5_000, "Maren leaves north.", None).unwrap();
+        let late = s
+            .start_session("play.theforsakenlands.com", 1848, 9_000)
+            .unwrap();
+        s.append(late, 9_500, "Tolliver waves.", None).unwrap();
+        // A log with no line holds nothing in scope.
+        s.start_session("play.theforsakenlands.com", 1848, 10_000)
+            .unwrap();
+        let spans = s.scope_spans(&Scope::default()).unwrap();
+        let got: Vec<_> = spans
+            .iter()
+            .map(|span| {
+                (
+                    span.log.id,
+                    span.log.character.clone(),
+                    span.first_ms,
+                    span.last_ms,
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (early, Some("Orla".to_string()), 1_000, 5_000),
+                (late, None, 9_500, 9_500),
+            ]
+        );
+        let since = Scope {
+            since_ms: Some(2_000),
+            ..Scope::default()
+        };
+        let got: Vec<_> = s
+            .scope_spans(&since)
+            .unwrap()
+            .iter()
+            .map(|span| (span.first_ms, span.last_ms))
+            .collect();
+        assert_eq!(got, vec![(5_000, 5_000), (9_500, 9_500)]);
+    }
 
     #[test]
     fn a_span_reads_its_rows_with_their_kinds() {

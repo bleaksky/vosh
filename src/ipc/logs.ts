@@ -81,16 +81,30 @@ export async function logsKeepSet(days: number | null): Promise<void> {
   return invoke('logs_keep_set', { days });
 }
 
+/** One log as text for Copy as text, or with `withAnsi` with the
+ *  game's colors. A password line comes back hidden, as `> (hidden)`. */
 export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }
 
+/** How Save as file writes the lines: the kind of file, whether each
+ *  line starts with its time, and for an HTML page the theme showing. */
+export interface SaveLogOptions {
+  format: SceneFormat;
+  times: boolean;
+  palette: ScenePalette | null;
+}
+
 /** Save the lines in `scope` to the Downloads folder as `<name>.txt`,
- *  or with `withAnsi` as `<name>.log` with the game's colors. Resolves
- *  to the name of the file it wrote, which gains ` (2)` and on when the
- *  name is taken. */
-export async function saveLog(scope: LogScope, withAnsi: boolean, name: string): Promise<string> {
-  return invoke('logs_save', { scope, withAnsi, name });
+ *  `<name>.log` with the game's colors or `<name>.html` as one page.
+ *  Resolves to the name of the file it wrote, which gains ` (2)` and on
+ *  when the name is taken. A password line is always saved hidden. */
+export async function saveLog(
+  scope: LogScope,
+  options: SaveLogOptions,
+  name: string,
+): Promise<string> {
+  return invoke('logs_save', { scope, options, name });
 }
 
 // ── Save a scene ────────────────────────────────────────────────────

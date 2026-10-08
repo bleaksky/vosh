@@ -1,6 +1,6 @@
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from '../../theme/baseAnsi';
 import { indexedRgb } from '../../theme/color';
-import type { LogScope } from '../../ipc/logs';
+import type { LogScope, ScenePalette } from '../../ipc/logs';
 import type { XtermPalette } from '../../theme/themes';
 
 // The Settings log view (the SettingsGeneralLogs board) and the
@@ -311,6 +311,23 @@ export function logPalette(
   return ANSI_SLOTS.map((slot, i) =>
     themeColors ? theme[slot] : (base?.[i] ?? CANONICAL_ANSI_16[slot]),
   );
+}
+
+/** The theme in front, for a saved HTML page: the terminal's ground and
+ *  text, Settings' quiet text read off `root`, and the 16 colors the log
+ *  view reads with. */
+export function savedPalette(
+  sixteen: string[],
+  theme: XtermPalette,
+  root: HTMLElement | null,
+): ScenePalette {
+  const muted = root ? getComputedStyle(root).getPropertyValue('--tertiary').trim() : '';
+  return {
+    background: theme.background,
+    foreground: theme.foreground,
+    muted,
+    ansi: sixteen,
+  };
 }
 
 /** A span color as CSS. 0 to 15 read from the palette, 16 to 231 are

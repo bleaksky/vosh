@@ -14,6 +14,7 @@ import {
   saveLog,
   searchLogPage,
   type LogScope,
+  type SceneFormat,
   type LogSearchHit,
   type LogSession,
 } from '../../ipc/logs';
@@ -35,14 +36,15 @@ import {
   logTime,
   markMatches,
   parseLogLine,
+  savedPalette,
 } from './logView';
 import { logsWorld } from './scene';
 import { useSessionTarget } from '../../stores/session/useConnection';
 import { getCurrentThemeId } from '../../theme/theme';
 import { findTheme, resolveThemeTerminalColors } from '../../theme/themes';
 import type { SettingsPageProps } from '../pageTypes';
-import { Button, CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../../ui';
-import { MenuItem, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
+import { Button, CheckIcon, CopyIcon, Field, SaveFileIcon, SearchIcon, Select } from '../../ui';
+import { MenuItem, MenuSeparator, MenuSurface, type MenuPlacement } from '../../ui/MenuSurface';
 import { menuBelow } from '../../ui/menuPlacement';
 
 // The log view inside General (the approved SettingsGeneralLogs
@@ -56,10 +58,13 @@ import { menuBelow } from '../../ui/menuPlacement';
 // newest line, under day headings. Each line keeps its own SGR colors
 // with your matches marked the way the find bar marks them, and
 // earlier matches load as you scroll up. Save as file writes what the
-// view reads to Downloads as plain text or with the game's colors
-// (D29). Copy as text and Save a scene… show once you pick a log, and
-// Save a scene… opens the scene page on it, unless Log sessions is off
-// for the profile, which leaves nothing to save.
+// view reads to Downloads as plain text, with the game's colors or as
+// one web page, each line starting with its time when Include times is
+// checked, and a password line always hidden (D29). Copy as text and
+// Save a scene… show once you pick a log. Copy as text hides a password
+// line the same way, and Save a scene… opens the scene page on it,
+// unless Log sessions is off for the profile, which leaves nothing to
+// save.
 
 // A picked log's value in the scope select.
 const LOG_PREFIX = 'log:';
@@ -68,6 +73,13 @@ const TYPE_DELAY_MS = 250;
 // Load earlier lines once you scroll this close to the top.
 const LOAD_EARLIER_PX = 600;
 const COPIED_MS = 2000;
+
+// The kinds of file Save as file writes, as its menu names them.
+const SAVE_FORMATS: readonly { format: SceneFormat; label: string }[] = [
+  { format: 'text', label: 'Plain text (.txt)' },
+  { format: 'ansi', label: 'With colors (.log)' },
+  { format: 'html', label: 'Web page (.html)' },
+];
 
 interface Query {
   pattern: string;
@@ -112,6 +124,9 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [pinSeq, setPinSeq] = useState(0);
   const [saveMenu, setSaveMenu] = useState<{ at: MenuPlacement; anchor: HTMLElement } | null>(null);
+  // Start each saved line with its time. Off each time the view opens.
+  const [saveTimes, setSaveTimes] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const seq = useRef(0);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   // Where the view sat before earlier lines went in above it.
@@ -238,28 +253,6 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
     }
   };
 
-  // Save what the view reads now: its scope as the last search took it,
-  // so the file holds the lines you see and the ones above them.
-  const saveFile = async (withAnsi: boolean) => {
-    setSaveMenu(null);
-    const log = pickedLog(pick);
-    const started = sessions.find((s) => s.id === log)?.started_at_ms ?? null;
-    const scope: LogScope =
-      shown?.scope ?? (log === null ? logRangeScope(pick as LogRange, { host, port }) : { log });
-    try {
-      const name = await saveLog(scope, withAnsi, logFileName(range, started));
-      setStatus({ kind: 'saved', name });
-    } catch (e) {
-      onError(String(e));
-    }
-  };
-
-  useEffect(() => {
-    if (status.kind !== 'copied' && status.kind !== 'saved') return;
-    const timer = window.setTimeout(() => setStatus({ kind: 'ready' }), COPIED_MS);
-    return () => window.clearTimeout(timer);
-  }, [status]);
-
   // Colors for the lines: the terminal palette the main window uses,
   // and the find bar's mark, ANSI yellow at 28%.
   const themeId = getCurrentThemeId();
@@ -274,6 +267,34 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
       mark: yellow ? toRgba(yellow, 0.28) : undefined,
     };
   }, [themeId, themeColors, baseAnsi]);
+
+  // Save what the view reads now: its scope as the last search took it,
+  // so the file holds the lines you see and the ones above them.
+  const saveFile = async (format: SceneFormat) => {
+    setSaveMenu(null);
+    const log = pickedLog(pick);
+    const started = sessions.find((s) => s.id === log)?.started_at_ms ?? null;
+    const scope: LogScope =
+      shown?.scope ?? (log === null ? logRangeScope(pick as LogRange, { host, port }) : { log });
+    const filePalette =
+      format === 'html' ? savedPalette(palette, findTheme(themeId).xterm, rootRef.current) : null;
+    try {
+      const name = await saveLog(
+        scope,
+        { format, times: saveTimes, palette: filePalette },
+        logFileName(range, started),
+      );
+      setStatus({ kind: 'saved', name });
+    } catch (e) {
+      onError(String(e));
+    }
+  };
+
+  useEffect(() => {
+    if (status.kind !== 'copied' && status.kind !== 'saved') return;
+    const timer = window.setTimeout(() => setStatus({ kind: 'ready' }), COPIED_MS);
+    return () => window.clearTimeout(timer);
+  }, [status]);
 
   const matcher = useMemo(
     () => (shown ? logMatcher(shown.pattern, shown.caseSensitive) : null),
@@ -322,7 +343,7 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
   })();
 
   return (
-    <div className="st-logs">
+    <div className="st-logs" ref={rootRef}>
       <div className="st-logs-bar">
         <Field
           type="search"
@@ -418,8 +439,19 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
           anchor={saveMenu.anchor}
           onClose={() => setSaveMenu(null)}
         >
-          <MenuItem onSelect={() => void saveFile(false)}>Plain text (.txt)</MenuItem>
-          <MenuItem onSelect={() => void saveFile(true)}>With colors (.log)</MenuItem>
+          <MenuItem
+            checked={saveTimes}
+            onSelect={() => setSaveTimes((on) => !on)}
+            trailing={saveTimes ? <CheckIcon className="pane-menu-check" /> : null}
+          >
+            Include times
+          </MenuItem>
+          <MenuSeparator />
+          {SAVE_FORMATS.map(({ format, label }) => (
+            <MenuItem key={format} onSelect={() => void saveFile(format)}>
+              {label}
+            </MenuItem>
+          ))}
         </MenuSurface>
       )}
       <div

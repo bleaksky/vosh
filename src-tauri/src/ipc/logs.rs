@@ -11,6 +11,7 @@ use tauri::State;
 use vosh_log::{LogStore, Scope, SearchOptions, SearchPage, SessionRow};
 
 use crate::app::state::{AppState, SharedState};
+use crate::logs::file::FileOptions;
 use crate::logs::scene::{self, SceneFilter, SceneFormat, ScenePalette, ScenePreview, SceneRange};
 use crate::sessions::SessionId;
 
@@ -154,23 +155,25 @@ pub(crate) async fn search_page(
     .map_err(|e| e.to_string())
 }
 
-/// Save the lines in `scope` to your Downloads folder as `<name>.txt`,
-/// or with `with_ansi` as `<name>.log` with the game's colors, adding
-/// ` (2)` and on when that file is there. A line forget passwords would
-/// blank is saved blanked. Returns the file's name.
+/// Save the lines in `scope` to your Downloads folder as `options` asks,
+/// `<name>.txt` as plain text, `<name>.log` with the game's colors or
+/// `<name>.html` as one page in the theme showing, each line starting with
+/// its time when `options.times` is on, adding ` (2)` and on when that
+/// file is there. A line forget passwords would blank is saved blanked.
+/// Returns the file's name.
 #[tauri::command]
 pub(crate) async fn logs_save<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, SharedState>,
     scope: LogScope,
     session: Option<SessionId>,
-    with_ansi: bool,
+    options: FileOptions,
     name: String,
 ) -> Result<String, String> {
     let scope = scope.resolve(&state, session)?;
     let downloads = crate::ipc::downloads_dir(&app)?;
     read_logs(&state, move |store| {
-        save(store, &scope, with_ansi, &name, &downloads)
+        save(store, &scope, &options, &name, &downloads)
     })
     .await
     .ok_or_else(|| "Vosh has not opened your logs yet.".to_string())?
@@ -180,12 +183,11 @@ pub(crate) async fn logs_save<R: tauri::Runtime>(
 fn save(
     store: &LogStore,
     scope: &Scope,
-    with_ansi: bool,
+    options: &FileOptions,
     name: &str,
     dir: &std::path::Path,
 ) -> Result<String, String> {
-    let ext = if with_ansi { "log" } else { "txt" };
-    let path = crate::disk::paths::export_path(dir, name, ext);
+    let path = crate::disk::paths::export_path(dir, name, options.format.extension());
     let could_not = |e: &dyn std::fmt::Display| {
         tracing::warn!(path = %path.display(), error = %e, "could not save a log");
         "Vosh could not save the log in your Downloads folder.".to_string()
@@ -193,8 +195,7 @@ fn save(
     // Made new, so a file that came since the look stays as it is.
     let file = std::fs::File::create_new(&path).map_err(|e| could_not(&e))?;
     let mut out = std::io::BufWriter::new(file);
-    let written = store
-        .export_scope(scope, with_ansi, true, &mut out)
+    let written = crate::logs::file::write(store, scope, options, name, &mut out)
         .and_then(|_| std::io::Write::flush(&mut out).map_err(Into::into));
     if let Err(e) = written {
         drop(out);
@@ -330,18 +331,27 @@ pub(crate) async fn scene_reveal<R: tauri::Runtime>(
     })
 }
 
+/// One log as text for Copy as text, or with `with_ansi` with the game's
+/// colors. A line forget passwords would blank goes out blanked, as a
+/// saved file shows it.
 #[tauri::command]
 pub(crate) async fn logs_export(
     state: State<'_, SharedState>,
     session_id: i64,
     with_ansi: bool,
 ) -> Result<String, String> {
-    read_logs(&state, move |store| {
-        store.export_session(session_id, with_ansi)
-    })
-    .await
-    .ok_or_else(|| "log store not ready".to_string())?
-    .map_err(|e| e.to_string())
+    read_logs(&state, move |store| copy_text(store, session_id, with_ansi))
+        .await
+        .ok_or_else(|| "log store not ready".to_string())?
+}
+
+/// The text of log `id` that [`logs_export`] returns.
+fn copy_text(store: &LogStore, id: i64, with_ansi: bool) -> Result<String, String> {
+    let mut out = Vec::new();
+    store
+        .export_scope(&Scope::log(id), with_ansi, true, &mut out)
+        .map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
 #[cfg(test)]
@@ -393,20 +403,37 @@ mod tests {
             .append_raw(id, 1, b"\x1b[33mMaren walks in.\x1b[0m")
             .unwrap();
         let scope = Scope::log(id);
-        let first = save(&store, &scope, false, "Vosh log, last 7 days", &dir).unwrap();
+        let plain = FileOptions {
+            format: SceneFormat::Text,
+            times: false,
+            palette: None,
+        };
+        let colors = FileOptions {
+            format: SceneFormat::Ansi,
+            ..plain.clone()
+        };
+        let first = save(&store, &scope, &plain, "Vosh log, last 7 days", &dir).unwrap();
         assert_eq!(first, "Vosh log, last 7 days.txt");
         assert_eq!(
             std::fs::read(dir.join(&first)).unwrap(),
             b"Maren walks in.\n"
         );
-        let colored = save(&store, &scope, true, "Vosh log, last 7 days", &dir).unwrap();
+        let colored = save(&store, &scope, &colors, "Vosh log, last 7 days", &dir).unwrap();
         assert_eq!(colored, "Vosh log, last 7 days.log");
         assert_eq!(
             std::fs::read(dir.join(&colored)).unwrap(),
             b"\x1b[33mMaren walks in.\x1b[0m\n"
         );
-        let again = save(&store, &scope, false, "Vosh log, last 7 days", &dir).unwrap();
+        let again = save(&store, &scope, &plain, "Vosh log, last 7 days", &dir).unwrap();
         assert_eq!(again, "Vosh log, last 7 days (2).txt");
+        let page = FileOptions {
+            format: SceneFormat::Html,
+            ..plain.clone()
+        };
+        let html = save(&store, &scope, &page, "Vosh log, last 7 days", &dir).unwrap();
+        assert_eq!(html, "Vosh log, last 7 days.html");
+        let html = std::fs::read_to_string(dir.join(&html)).unwrap();
+        assert!(html.contains("<span class=\"c3\">Maren walks in.</span>"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -429,15 +456,42 @@ mod tests {
         store.append_raw(id, 4, b"\x1b[0m").unwrap();
         store.append(id, 5, &format!("> {SECRET}"), None).unwrap();
         let scope = Scope::log(id);
+        for format in [SceneFormat::Text, SceneFormat::Ansi, SceneFormat::Html] {
+            for times in [false, true] {
+                let options = FileOptions {
+                    format,
+                    times,
+                    palette: None,
+                };
+                let name = save(&store, &scope, &options, "Vosh log", dir.path()).unwrap();
+                let saved = std::fs::read_to_string(dir.path().join(&name)).unwrap();
+                assert!(
+                    saved.contains(&html_or_text(format, "> tester")),
+                    "{name} lost the login"
+                );
+                assert!(
+                    saved.contains(&html_or_text(format, vosh_log::HIDDEN_SENT_TEXT)),
+                    "{name} does not hide the password line"
+                );
+                assert!(!saved.contains(SECRET), "{name} holds the password");
+                std::fs::remove_file(dir.path().join(&name)).unwrap();
+            }
+        }
+        // Copy as text hides it the same way, with colors or without.
         for with_ansi in [false, true] {
-            let name = save(&store, &scope, with_ansi, "Vosh log", dir.path()).unwrap();
-            let saved = std::fs::read_to_string(dir.path().join(&name)).unwrap();
-            assert!(saved.contains("> tester\n"), "{name} lost the login");
-            assert!(
-                saved.ends_with(&format!("{}\n", vosh_log::HIDDEN_SENT_TEXT)),
-                "{name} does not hide the password line"
-            );
-            assert!(!saved.contains(SECRET), "{name} holds the password");
+            let copied = copy_text(&store, id, with_ansi).unwrap();
+            assert!(copied.contains("> tester\n"));
+            assert!(copied.ends_with(&format!("{}\n", vosh_log::HIDDEN_SENT_TEXT)));
+            assert!(!copied.contains(SECRET), "Copy as text holds the password");
+        }
+    }
+
+    /// `text` as a saved file of `format` holds it.
+    fn html_or_text(format: SceneFormat, text: &str) -> String {
+        if format == SceneFormat::Html {
+            crate::logs::scene::html::escape(text)
+        } else {
+            text.to_string()
         }
     }
 

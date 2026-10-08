@@ -9,6 +9,10 @@
 //! goes inline. No script, no font file and no request, so the file reads
 //! the same offline and in a mail preview. Every piece of text is escaped,
 //! so a line of the game can never add markup.
+//!
+//! Save as file writes a log the same way, a line at a time through
+//! [`head`], [`push_line`] and [`tail`], since a log can be far bigger
+//! than a scene.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -86,7 +90,7 @@ pub(crate) struct Header<'a> {
 }
 
 /// `text` with `&`, `<`, `>` and `"` escaped.
-fn escape(text: &str) -> String {
+pub(crate) fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
@@ -175,12 +179,14 @@ fn open_span(attrs: &Attributes, used: &mut BTreeSet<String>) -> Option<String> 
     Some(open)
 }
 
-/// The rule for one class a span uses.
+/// The rule for one class a span uses. `t` is the quiet text of a time
+/// or a day a saved log starts its lines with.
 fn class_rule(class: &str) -> String {
     match class {
         "b" => ".b { font-weight: 700 }".to_string(),
         "i" => ".i { font-style: italic }".to_string(),
         "u" => ".u { text-decoration: underline }".to_string(),
+        "t" => ".t { color: var(--muted) }".to_string(),
         _ => match class.split_at(1) {
             ("c", n) => format!(".c{n} {{ color: var(--c{n}) }}"),
             (_, n) => format!(".g{n} {{ background: var(--c{n}) }}"),
@@ -188,26 +194,42 @@ fn class_rule(class: &str) -> String {
     }
 }
 
-/// The file for `lines`, each the bytes the game sent, colors included.
-pub(crate) fn render(lines: &[Vec<u8>], header: &Header, palette: &ScenePalette) -> String {
-    let palette = palette.checked();
-    let mut used = BTreeSet::new();
-    let mut body = String::new();
-    for (index, line) in lines.iter().enumerate() {
-        if index > 0 {
-            body.push('\n');
-        }
-        // Each line starts plain, as the log keeps it.
-        for span in AnsiParser::new().feed(line) {
-            let text = escape(&span.text);
-            match open_span(&span.attrs, &mut used) {
-                Some(open) => {
-                    let _ = write!(body, "{open}{text}</span>");
-                }
-                None => body.push_str(&text),
+/// Every class a page can use, for a page written line by line, whose
+/// style block goes out before its lines are read.
+pub(crate) fn every_class() -> BTreeSet<String> {
+    let mut all: BTreeSet<String> = (0..16)
+        .flat_map(|n| [format!("c{n}"), format!("g{n}")])
+        .collect();
+    all.extend(["b", "i", "u", "t"].map(String::from));
+    all
+}
+
+/// Add the markup of `line`, the bytes the game sent, colors included, to
+/// `body`, noting each class it uses in `used`.
+pub(crate) fn push_line(body: &mut String, line: &[u8], used: &mut BTreeSet<String>) {
+    // Each line starts plain, as the log keeps it.
+    for span in AnsiParser::new().feed(line) {
+        let text = escape(&span.text);
+        match open_span(&span.attrs, used) {
+            Some(open) => {
+                let _ = write!(body, "{open}{text}</span>");
             }
+            None => body.push_str(&text),
         }
     }
+}
+
+/// Add `text` to `body` in the quiet color, such as the time a saved log
+/// starts a line with.
+pub(crate) fn push_quiet(body: &mut String, text: &str, used: &mut BTreeSet<String>) {
+    used.insert("t".to_string());
+    let _ = write!(body, "<span class=\"t\">{}</span>", escape(text));
+}
+
+/// The page up to the first line: the style block with the rules of the
+/// classes in `used`, the header and the opening of the `pre`.
+pub(crate) fn head(header: &Header, palette: &ScenePalette, used: &BTreeSet<String>) -> String {
+    let palette = palette.checked();
     let mut vars = format!(
         "--bg: {}; --fg: {}; --muted: {};",
         palette.background, palette.foreground, palette.muted
@@ -238,16 +260,36 @@ footer {{ margin: 20px 0 0; color: var(--muted); font-size: 12px; line-height: 1
 <header><h1>{title}</h1>
 <p>{meta}</p></header>
 <hr>
-<pre>{body}</pre>
-<footer>{footer}</footer>
-</main>
-",
+<pre>",
         title_tag = escape(header.name),
         title = escape(header.title),
         meta = escape(header.meta),
-        footer = escape(header.footer),
         rules = rules.join("\n"),
     )
+}
+
+/// The page after the last line: the end of the `pre` and the footer.
+pub(crate) fn tail(header: &Header) -> String {
+    format!(
+        "</pre>
+<footer>{footer}</footer>
+</main>
+",
+        footer = escape(header.footer),
+    )
+}
+
+/// The file for `lines`, each the bytes the game sent, colors included.
+pub(crate) fn render(lines: &[Vec<u8>], header: &Header, palette: &ScenePalette) -> String {
+    let mut used = BTreeSet::new();
+    let mut body = String::new();
+    for (index, line) in lines.iter().enumerate() {
+        if index > 0 {
+            body.push('\n');
+        }
+        push_line(&mut body, line, &mut used);
+    }
+    format!("{}{body}{}", head(header, palette, &used), tail(header))
 }
 
 #[cfg(test)]

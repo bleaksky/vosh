@@ -127,7 +127,7 @@ describe('the help on searching the logs', () => {
       'A log is the record of one connection, so a session that connects three times saves three.',
       'The row counts your saved logs and lines.',
       'Under `One log`, pick a single connection to search only that one.',
-      'With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text.',
+      'With one log picked, the copy button beside the menu copies that whole log to your clipboard as plain text, with those lines hidden the same way.',
     ]) {
       expect(text).toContain(line);
       expect(helpMd).toContain(line);

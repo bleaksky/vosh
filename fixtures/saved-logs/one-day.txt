@@ -1,0 +1,10 @@
+21:12 Abandon hope, all ye who enter here...
+21:12 > e
+21:12 
+21:12 > tester
+21:12 
+21:12 > (hidden)
+21:14 > look
+21:14 Thickening Woods
+21:14 [Exits: east west]
+21:14 Maren walks in.

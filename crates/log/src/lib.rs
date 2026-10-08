@@ -34,7 +34,7 @@ mod sqlite;
 pub use forget::{Forgotten, PasswordLines};
 pub use kind::LineKind;
 pub use lookup::{CharacterScope, ScopedLine, ScopedSession};
-pub use scene::{SceneLine, SceneLog};
+pub use scene::{SceneLine, SceneLog, ScopedLogSpan};
 pub use search::{Scope, SearchHit, SearchOptions, SearchPage};
 pub use sessions::{
     is_local_host, sent_entries, sent_rows, snoop_rows, LogEntry, SessionRow, HIDDEN_SENT_TEXT,
