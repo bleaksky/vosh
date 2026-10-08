@@ -2,7 +2,13 @@ import type { UiConfig, Vital, VitalsStyle } from '../../ipc/uiConfig';
 import { DEFAULT_VITALS_CUSTOM, VITALS, VITALS_STYLES } from '../../ipc/uiConfig';
 import { startVitalsText, type VitalsSnapshot } from '../../ipc/vitals';
 import { VITAL_LABELS } from '../../panel/vitalsView';
-import { nextVitals, parseVitalsPacket, type Vitals } from '../../stores/gmcp/vitalsStore';
+import {
+  nextVitals,
+  parseHistory,
+  parseVitalsPacket,
+  type VitalSample,
+  type Vitals,
+} from '../../stores/gmcp/vitalsStore';
 
 // What the Style gallery under Settings, Layout, Vitals and the
 // Customize vitals section under it work out, kept apart from their
@@ -23,20 +29,22 @@ export const SAMPLE_VITALS: Vitals = nextVitals(null, {
   maxmove: 930,
 }) as Vitals;
 
-/** The vitals the tiles draw, and whether they are your live ones. */
+/** The vitals the tiles draw, the last of them the Traces tile draws,
+ *  and whether they are your live ones. */
 export interface GalleryVitals {
   vitals: Vitals;
+  history: readonly VitalSample[];
   live: boolean;
 }
 
-export const OFFLINE: GalleryVitals = { vitals: SAMPLE_VITALS, live: false };
+export const OFFLINE: GalleryVitals = { vitals: SAMPLE_VITALS, history: [], live: false };
 
 /** The vitals a snapshot holds, or the samples when it holds none. */
 export function galleryVitals(snapshot: VitalsSnapshot | null): GalleryVitals {
   if (snapshot?.vitals == null) return OFFLINE;
   const packet = parseVitalsPacket(snapshot.vitals);
   const vitals = nextVitals(null, packet.values, packet.hidden);
-  return vitals ? { vitals, live: true } : OFFLINE;
+  return vitals ? { vitals, history: parseHistory(snapshot.history), live: true } : OFFLINE;
 }
 
 const STEPS: Readonly<Record<string, 1 | -1>> = {
@@ -63,6 +71,18 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   gauges:
     'Gauges. Each vital fills a pill between its label and its value, as the Group pane shows your group.',
   pips: 'Pips. Ten discs beside each value light up a tenth at a time, the way the moons light up the status line.',
+  bands:
+    'Bands. Each vital fills a bar over quiet bands that mark low and worn, with a tick where a fight began.',
+  ladders: 'Ladders. Each vital lights a row of segments, the way a level meter does.',
+  blocks:
+    'Blocks. Each vital is a bar of block characters in your game font, the way a terminal tool draws one.',
+  traces: 'Traces. Each vital shows its last minute as a line, filled to where it stands now.',
+  dials: 'Dials. Each vital fills an open dial with its figure in the middle.',
+  rings: 'Rings. Your vitals fill rings nested in one glyph, with the figures beside it.',
+  vials:
+    "Vials. Each vital fills a small vial beside its figure, the way a flask shows what's left.",
+  orbs: 'Orbs. Each vital fills a round orb from the bottom up, the way old action games show health.',
+  candles: 'Candles. Each vital burns down like a candle, and the flame dims when you run low.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 
@@ -89,7 +109,8 @@ type CustomFields = keyof typeof DEFAULT_VITALS_CUSTOM;
 
 /** Whether anything under Customize vitals differs from what Reset to
  *  default puts back, every vital on in today's order on Default, your
- *  opponent on top, Current and max, Line and the warning off. */
+ *  opponent on top, Current and max, Line, and the warning and Show
+ *  each hit off. */
 export function customDiffers(config: Pick<UiConfig, CustomFields>): boolean {
   const d = DEFAULT_VITALS_CUSTOM;
   return (
@@ -99,7 +120,8 @@ export function customDiffers(config: Pick<UiConfig, CustomFields>): boolean {
     config.vitals_opponent !== d.vitals_opponent ||
     config.vitals_values !== d.vitals_values ||
     config.vitals_meter !== d.vitals_meter ||
-    config.vitals_warn_thirds !== d.vitals_warn_thirds
+    config.vitals_warn_thirds !== d.vitals_warn_thirds ||
+    config.vitals_hit !== d.vitals_hit
   );
 }
 

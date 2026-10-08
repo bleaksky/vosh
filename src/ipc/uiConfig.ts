@@ -135,15 +135,48 @@ export function normalizeVitalsMeter(value: unknown): VitalsMeter {
   return value === 'bar' || value === 'none' ? value : 'line';
 }
 
-/** The six styles of the gallery, in its order. Rows and One line are
- *  the two densities, and vitals_style holds the other four. */
-export const VITALS_STYLES = ['rows', 'line', 'ledger', 'gauges', 'pips', 'text'] as const;
+/** The styles of the gallery, in its order. Rows and One line are the
+ *  two densities, and vitals_style holds the others. */
+export const VITALS_STYLES = [
+  'rows',
+  'line',
+  'ledger',
+  'gauges',
+  'pips',
+  'bands',
+  'ladders',
+  'blocks',
+  'traces',
+  'dials',
+  'rings',
+  'vials',
+  'orbs',
+  'candles',
+  'text',
+] as const;
 
 export type VitalsStyle = (typeof VITALS_STYLES)[number];
 
 /** The styles vitals_style saves. Rows and One line stay in
- *  vitals_density, so a build without styles still reads your look. */
-const SAVED_VITALS_STYLES = ['ledger', 'gauges', 'pips', 'text'] as const;
+ *  vitals_density, so a build without styles still reads your look. A
+ *  build reads a name it does not know as none and draws your density
+ *  (More Vitals Styles Q30). Mirrors VITALS_STYLES in
+ *  src-tauri/src/profile/ui.rs. */
+const SAVED_VITALS_STYLES = [
+  'ledger',
+  'gauges',
+  'pips',
+  'bands',
+  'ladders',
+  'blocks',
+  'traces',
+  'dials',
+  'rings',
+  'vials',
+  'orbs',
+  'candles',
+  'text',
+] as const;
 
 export type SavedVitalsStyle = (typeof SAVED_VITALS_STYLES)[number];
 
@@ -259,11 +292,13 @@ export interface VitalsOptions {
   warn_thirds: boolean;
   /** Hide the panel's vitals while your prompt is pinned. */
   hide_when_pinned: boolean;
+  /** Show each hit: the part a hit took stays pale for a moment. */
+  hit: boolean;
 }
 
 /** What Reset to default under Customize vitals puts back. Every vital
  *  on in today's order with Default colors, your opponent on top,
- *  Current and max, Line, and the warning off. Your style, where your
+ *  Current and max, Line, and the warning and Show each hit off. Your style, where your
  *  vitals show and Hide vitals while your prompt is pinned stay as they
  *  are. */
 export const DEFAULT_VITALS_CUSTOM: Pick<
@@ -275,6 +310,7 @@ export const DEFAULT_VITALS_CUSTOM: Pick<
   | 'vitals_values'
   | 'vitals_meter'
   | 'vitals_warn_thirds'
+  | 'vitals_hit'
 > = {
   vitals_order: [...VITALS],
   vitals_off: [],
@@ -283,6 +319,7 @@ export const DEFAULT_VITALS_CUSTOM: Pick<
   vitals_values: 'current-max',
   vitals_meter: 'line',
   vitals_warn_thirds: false,
+  vitals_hit: false,
 };
 
 /** The fields of the config VitalsOptions reads. */
@@ -297,7 +334,8 @@ type VitalsFields =
   | 'vitals_values'
   | 'vitals_meter'
   | 'vitals_warn_thirds'
-  | 'vitals_hide_when_pinned';
+  | 'vitals_hide_when_pinned'
+  | 'vitals_hit';
 
 /** The vitals options a config holds. */
 export function vitalsOptionsOf(config: Pick<UiConfig, VitalsFields>): VitalsOptions {
@@ -312,6 +350,7 @@ export function vitalsOptionsOf(config: Pick<UiConfig, VitalsFields>): VitalsOpt
     meter: config.vitals_meter,
     warn_thirds: config.vitals_warn_thirds,
     hide_when_pinned: config.vitals_hide_when_pinned,
+    hit: config.vitals_hit,
   };
 }
 
@@ -338,6 +377,7 @@ export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
     meter: normalizeVitalsMeter(o.meter),
     warn_thirds: o.warn_thirds === true,
     hide_when_pinned: o.hide_when_pinned !== false,
+    hit: o.hit === true,
   };
 }
 
@@ -463,6 +503,8 @@ export interface UiConfig {
   /** At most two earlier texts, newest first. Saving vitals_text puts
    *  the one it replaces here. */
   vitals_text_previous: string[];
+  /** Show each hit, on every style with a fill. */
+  vitals_hit: boolean;
   /** The style your 0.7 vitals grew into, which the gallery marks
    *  Yours in 0.7, or null when they give no clue. Read only, nothing
    *  saves it. */
@@ -588,6 +630,7 @@ export interface RawUiConfig {
   vitals_colors?: unknown;
   vitals_text?: string;
   vitals_text_previous?: unknown;
+  vitals_hit?: boolean;
   vitals_legacy_style?: string | null;
   vitals_legacy_text?: unknown;
   chip_style?: string;
@@ -706,6 +749,7 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     vitals_colors: normalizeVitalsColors(cfg.vitals_colors),
     vitals_text: typeof cfg.vitals_text === 'string' ? cfg.vitals_text : '',
     vitals_text_previous: normalizeVitalsTextPrevious(cfg.vitals_text_previous),
+    vitals_hit: cfg.vitals_hit === true,
     vitals_legacy_style: VITALS_STYLES.find((style) => style === cfg.vitals_legacy_style) ?? null,
     vitals_legacy_text:
       typeof cfg.vitals_legacy_text === 'string' && cfg.vitals_legacy_text !== ''

@@ -247,7 +247,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     label: 'Style',
     description: 'Each tile draws your vitals in one style. Pick the one your panel shows.',
     keywords:
-      'vitals style gallery rows one line ledger gauges pips text look density compact health mana moves',
+      'vitals style gallery rows one line ledger gauges pips bands ladders blocks traces dials rings vials orbs candles text look density compact health mana moves',
     target: at('layout', 'vitals', 'style'),
   },
   {
@@ -296,6 +296,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
       "Vitals turn yellow under two thirds and red under one third, like your group's health.",
     keywords: 'vitals low warning danger thirds yellow red color health mana moves',
     target: at('layout', 'customize-vitals', 'warn-low'),
+  },
+  {
+    label: 'Show each hit',
+    description:
+      'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.',
+    keywords: 'vitals hit trail pale drain heal peak health mana moves',
+    target: at('layout', 'customize-vitals', 'show-each-hit'),
   },
   {
     label: 'Divider color',

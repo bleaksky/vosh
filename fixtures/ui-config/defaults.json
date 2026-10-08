@@ -43,6 +43,7 @@
     "vitals_colors": {},
     "vitals_text": "",
     "vitals_text_previous": [],
+    "vitals_hit": false,
     "chip_style": "value_only",
     "tick_count": "up",
     "game_time": "24h",

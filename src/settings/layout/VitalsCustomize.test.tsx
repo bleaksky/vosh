@@ -118,7 +118,7 @@ const segments = (html: string) =>
 const resting = (html: string) => /<button[^>]*disabled=""[^>]*>Reset to default</.test(html);
 
 describe('CustomizeVitalsSection', () => {
-  it('draws the list, then your opponent, Values, Meter and the warning, as board 3 At rest', () => {
+  it('draws the list, then your opponent, Values, Meter, the warning and Show each hit, as board 3 At rest', () => {
     const html = draw();
     expect(html).toContain('>Customize vitals</h2>');
     expect(html).toContain('Vitals and their order');
@@ -132,7 +132,11 @@ describe('CustomizeVitalsSection', () => {
       'Values',
       'Meter',
       'Warn before you run low',
+      'Show each hit',
     ]);
+    expect(html).toContain(
+      'A hit leaves the part it took pale for a moment, then it drains away. Works in every style with a fill.',
+    );
     expect(html).toContain('In a fight, its name and its health in warn, in every style.');
     expect(html).toContain('aria-label="Show your opponent"');
     expect(segments(html)).toEqual([
@@ -154,6 +158,7 @@ describe('CustomizeVitalsSection', () => {
     expect(resting(draw({ vitals_order: ['move', 'hp', 'mana'] }))).toBe(false);
     expect(resting(draw({ vitals_off: ['opponent'] }))).toBe(false);
     expect(resting(draw({ vitals_warn_thirds: true }))).toBe(false);
+    expect(resting(draw({ vitals_hit: true }))).toBe(false);
     // Your style and where your vitals show sit above, so they never wake it.
     expect(resting(draw({ vitals_style: 'gauges', vitals_place: 'status' }))).toBe(true);
   });
@@ -185,6 +190,13 @@ describe('CustomizeVitalsSection', () => {
     ]);
   });
 
+  it('quiets Show each hit for Traces, whose line already draws each hit', () => {
+    const traces = draw({ vitals_style: 'traces' });
+    expect(traces).toContain('Traces already draw each hit in their line.');
+    expect(traces).toContain('Traces draw their own line, so they take no meter.');
+    expect(draw()).not.toContain('Traces already draw');
+  });
+
   it('quiets the swatches and Meter under Status line, as board 4 draws it', () => {
     const html = draw({ vitals_place: 'status', vitals_colors: { mana: 12 } });
     expect(html).toContain(
@@ -192,6 +204,7 @@ describe('CustomizeVitalsSection', () => {
     );
     expect(vitals(html)).toEqual(['Health on quiet', 'Mana on color quiet', 'Moves on quiet']);
     expect(html).toContain('The status line draws no meter.');
+    expect(html).toContain('show hits, so this waits for the panel.');
     expect(segments(html).slice(5)).toEqual([
       'Line pressed disabled',
       'Bar disabled',

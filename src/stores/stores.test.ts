@@ -819,6 +819,7 @@ describe('stores on the event bus', () => {
       meter: 'bar',
       warn_thirds: false,
       hide_when_pinned: true,
+      hit: false,
     });
     const sent = {
       style: 'gauges',
@@ -831,6 +832,7 @@ describe('stores on the event bus', () => {
       meter: 'none',
       warn_thirds: true,
       hide_when_pinned: false,
+      hit: true,
     };
     fire('vosh://vitals-options-changed', sent);
     const heard = s.vitalsOptions.getVitalsOptions();
@@ -859,6 +861,7 @@ describe('stores on the event bus', () => {
       meter: 'line',
       warn_thirds: true,
       hide_when_pinned: true,
+      hit: false,
     });
   });
 });

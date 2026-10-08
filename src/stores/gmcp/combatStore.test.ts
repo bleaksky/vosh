@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aabahranPacket } from '../../test/aabahranGmcp';
-import { parseCombat } from './combatStore';
+import { nextFight, parseCombat, type CombatOpponent } from './combatStore';
 
 const fixture = (name: string) => parseCombat(aabahranPacket(name).data);
 
@@ -80,5 +80,32 @@ describe('parseCombat', () => {
       name: 'Tester',
       hp_pct: 0,
     });
+  });
+});
+
+describe('nextFight', () => {
+  const guard = (hp_pct: number | null, hidden = false): CombatOpponent => ({
+    name: 'a Blackwatch guard',
+    hp_pct,
+    condition: null,
+    hidden,
+    tank: null,
+  });
+  const yours = { hp: 905, maxhp: 1038, mana: 870, maxmana: 870, move: 402, maxmove: 521 };
+
+  it('starts with your vitals and the first health, and adds each change', () => {
+    const begun = nextFight(null, guard(100), yours);
+    expect(begun).toEqual({ name: 'a Blackwatch guard', start: yours, healths: [100] });
+    const same = nextFight(begun, guard(100), null);
+    expect(same).toBe(begun);
+    const hit = nextFight(nextFight(same, guard(61), null), guard(null, true), null);
+    expect(hit).toEqual({ name: 'a Blackwatch guard', start: yours, healths: [100, 61] });
+  });
+
+  it('starts over for a new opponent and forgets the fight as it ends', () => {
+    const begun = nextFight(null, guard(54), yours);
+    const next = nextFight(begun, { ...guard(90), name: 'Orla' }, null);
+    expect(next).toEqual({ name: 'Orla', start: null, healths: [90] });
+    expect(nextFight(next, null, yours)).toBeNull();
   });
 });

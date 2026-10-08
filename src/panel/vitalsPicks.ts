@@ -1,6 +1,5 @@
 import {
   setUiFields,
-  VITALS_STYLES,
   VITALS_VALUES,
   type UiFields,
   type VitalsOptions,
@@ -10,16 +9,24 @@ import {
 import { broadcastVitalsOptions } from '../ipc/uiConfigBroadcast';
 import { getVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import type { MenuChoice } from './affects/affectsDisplay';
-import { VITALS_STYLE_LABELS, VITALS_VALUES_LABELS, vitalsStylePick } from './vitalsView';
+import {
+  VITALS_STYLE_FAMILIES,
+  VITALS_STYLE_LABELS,
+  VITALS_VALUES_LABELS,
+  vitalsStylePick,
+} from './vitalsView';
 
 // The choices of the vitals menu (VitalsMenu.tsx) and what a pick does.
 
-export function vitalsStyleChoices(options: VitalsOptions): MenuChoice<VitalsStyle>[] {
-  return VITALS_STYLES.map((value) => ({
-    value,
-    label: VITALS_STYLE_LABELS[value],
-    checked: options.style === value,
-  }));
+/** The Style submenu's choices, a list for each family of styles. */
+export function vitalsStyleFamilies(options: VitalsOptions): MenuChoice<VitalsStyle>[][] {
+  return VITALS_STYLE_FAMILIES.map((family) =>
+    family.map((value) => ({
+      value,
+      label: VITALS_STYLE_LABELS[value],
+      checked: options.style === value,
+    })),
+  );
 }
 
 export function vitalsValuesChoices(options: VitalsOptions): MenuChoice<VitalsValues>[] {

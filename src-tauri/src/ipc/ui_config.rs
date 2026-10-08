@@ -62,8 +62,8 @@ pub(crate) struct UiConfigPayload {
     pub vitals_meter: String,
     pub vitals_warn_thirds: bool,
     pub vitals_hide_when_pinned: bool,
-    /// `ledger`, `gauges`, `pips` or `text`, or None for Rows and One
-    /// line, which `vitals_density` holds.
+    /// One of the twelve styles in `VITALS_STYLES`, or None for Rows and
+    /// One line, which `vitals_density` holds.
     pub vitals_style: Option<String>,
     /// `panel` or `status`.
     pub vitals_place: String,
@@ -78,6 +78,8 @@ pub(crate) struct UiConfigPayload {
     pub vitals_text: String,
     /// At most two earlier texts, newest first.
     pub vitals_text_previous: Vec<String>,
+    /// Show each hit.
+    pub vitals_hit: bool,
     /// The style your 0.7 vitals grew into, `text`, `gauges`, `pips`,
     /// `line` or `rows`, which the gallery marks Yours in 0.7. Left out
     /// when they give no clue. Read only, nothing saves it.
@@ -144,6 +146,7 @@ impl UiConfigPayload {
             vitals_colors: ui.vitals_colors.clone(),
             vitals_text: ui.vitals_text.clone(),
             vitals_text_previous: ui.vitals_text_previous.clone(),
+            vitals_hit: ui.vitals_hit,
             vitals_legacy_style: ui.vitals.legacy_style(),
             vitals_legacy_text: ui.vitals.legacy_text(),
             chip_style: ui.chip_style.clone(),
@@ -222,6 +225,7 @@ pub(crate) enum UiField {
     /// The text it replaces goes first among the earlier texts.
     VitalsText(String),
     VitalsTextPrevious(Vec<String>),
+    VitalsHit(bool),
     ChipStyle(String),
     TickCount(String),
     GameTime(String),
@@ -342,6 +346,7 @@ fn apply_fields(ui: &mut crate::profile::ui::UiConfig, fields: Vec<UiField>) {
             UiField::VitalsTextPrevious(v) => {
                 ui.vitals_text_previous = cfg::normalize_vitals_text_previous(v);
             }
+            UiField::VitalsHit(v) => ui.vitals_hit = v,
             UiField::ChipStyle(v) => ui.chip_style = cfg::coerce_chip_style(v),
             UiField::TickCount(v) => ui.tick_count = cfg::coerce_tick_count(v),
             UiField::GameTime(v) => ui.game_time = cfg::coerce_game_time(v),
@@ -982,6 +987,8 @@ mod tests {
         assert_eq!(back.vitals_order, fresh.vitals_order);
         assert_eq!(back.vitals_text_previous, Vec::<String>::new());
 
+        assert!(!back.vitals_hit);
+
         let ui = UiConfig {
             vitals_style: Some("text".into()),
             vitals_place: "status".into(),
@@ -991,9 +998,11 @@ mod tests {
             vitals_colors: BTreeMap::from([("move".into(), 10)]),
             vitals_text: "%hp/%maxhp %mn/%maxmn %mv/%maxmv".into(),
             vitals_text_previous: vec!["%hp(%pct_hp)h".into(), "%mv(%pct_mv)v".into()],
+            vitals_hit: true,
             ..UiConfig::default()
         };
         let back = through_payload(&ui);
+        assert!(back.vitals_hit);
         assert_eq!(back.vitals_style, ui.vitals_style);
         assert_eq!(back.vitals_place, ui.vitals_place);
         assert_eq!(back.vitals_order, ui.vitals_order);

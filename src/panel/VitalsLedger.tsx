@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react';
 import type { VitalsOpponent, VitalsValues } from '../ipc/uiConfig';
 import type { CombatOpponent } from '../stores/gmcp/combatStore';
+import { HitGhost } from './HitGhost';
+import { hitFill, type HitView, type HitViews } from './vitalsHit';
 import { ledgerFigure, ledgerFigurePx, type LedgerFigure, type LedgerFit } from './vitalsLedgerFit';
 import {
   opponentHealth,
@@ -27,6 +29,7 @@ export function VitalsLedger({
   size,
   meter,
   inks,
+  hits,
 }: {
   rows: readonly ShownVital[];
   /** Your vitals are on but have not come yet, so a line says so. */
@@ -39,11 +42,14 @@ export function VitalsLedger({
   /** Draw the line under each column, as Meter asks. */
   meter: boolean;
   inks: VitalInks;
+  /** What Show each hit leaves on each line now. */
+  hits: HitViews;
 }) {
   const foe = combat && (
     <LedgerOpponent
       combat={combat}
       meter={meter}
+      hit={hits.foe}
       place={rows.length === 0 && !waiting ? 'alone' : place}
     />
   );
@@ -66,6 +72,7 @@ export function VitalsLedger({
               tone={row.tone}
               ink={inks[row.key]}
               meter={meter}
+              hit={hits[row.key]}
             />
           ))}
         </div>
@@ -83,6 +90,7 @@ function LedgerColumn({
   tone,
   ink,
   meter,
+  hit,
 }: {
   label: string;
   figure: LedgerFigure;
@@ -91,6 +99,7 @@ function LedgerColumn({
   tone: VitalTone;
   ink: string | undefined;
   meter: boolean;
+  hit: HitView | undefined;
 }) {
   return (
     <div {...toneProps(tone, ink, 'vitals-ledger-column')}>
@@ -99,7 +108,7 @@ function LedgerColumn({
         <span className="vitals-ledger-current">{figure.current}</span>
         {showMax && figure.max !== null && <span className="vitals-ledger-max">{figure.max}</span>}
       </span>
-      {meter && <LedgerLine pct={pct} />}
+      {meter && <LedgerLine pct={pct} hit={hit} />}
     </div>
   );
 }
@@ -109,10 +118,12 @@ function LedgerColumn({
 function LedgerOpponent({
   combat,
   meter,
+  hit,
   place,
 }: {
   combat: CombatOpponent;
   meter: boolean;
+  hit: HitView | undefined;
   place: 'top' | 'bottom' | 'alone';
 }) {
   const health = opponentHealth(combat);
@@ -124,15 +135,20 @@ function LedgerOpponent({
       <span className="vitals-ledger-figure">
         <span className="vitals-ledger-current">{health.value}</span>
       </span>
-      {meter && <LedgerLine pct={health.pct} />}
+      {meter && <LedgerLine pct={health.pct} hit={hit} />}
     </div>
   );
 }
 
-function LedgerLine({ pct }: { pct: number | null }) {
+/** The line at `pct`, with the part Show each hit leaves pale. */
+function LedgerLine({ pct, hit }: { pct: number | null; hit: HitView | undefined }) {
+  const { fill, ghost, draining } = hitFill(pct, hit);
   return (
     <div className="vitals-ledger-line" aria-hidden="true">
-      {pct !== null && <div className="vitals-ledger-fill" style={{ width: `${pct}%` }} />}
+      {fill !== null && ghost !== null && (
+        <HitGhost className="vitals-ledger-gone" fill={fill} ghost={ghost} draining={draining} />
+      )}
+      {fill !== null && <div className="vitals-ledger-fill" style={{ width: `${fill}%` }} />}
     </div>
   );
 }

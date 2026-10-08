@@ -132,6 +132,21 @@ describe('a GMCP store with two sessions', () => {
     expect(s.room.getRoom().info).toBeNull();
   });
 
+  it('keeps each session its own vitals history and forgets it at a disconnect', async () => {
+    const s = await load();
+    vitals(TOLLIVER, 905, 1038);
+    gmcp(TOLLIVER, 'Char.Vitals', { hp: 0, maxhp: 0, hidden: true });
+    vitals(TOLLIVER, 744, 1038);
+    vitals(ORLA, 1020, 1020);
+    expect(s.vitals.getVitalsHistoryOf(TOLLIVER).map((sample) => sample.values.hp)).toEqual([
+      905, 744,
+    ]);
+    expect(s.vitals.getVitalsHistoryOf(ORLA)).toHaveLength(1);
+    disconnect(TOLLIVER);
+    expect(s.vitals.getVitalsHistoryOf(TOLLIVER)).toEqual([]);
+    expect(s.vitals.getVitalsHistoryOf(ORLA)).toHaveLength(1);
+  });
+
   it('gives each session its own chat, room and game time', async () => {
     const s = await load();
     const tell = aabahranChatPacket('tell.gmcp');

@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { openVitalsTextCard } from '../ipc/prompt';
 import { openSettingsTab } from '../lib/settingsLink';
 import { formatSettingsTarget } from '../lib/settingsNav';
@@ -11,14 +11,15 @@ import { returnToCommandLine } from './paneActions';
 import {
   pickVitalsStyle,
   pickVitalsValues,
-  vitalsStyleChoices,
+  vitalsStyleFamilies,
   vitalsValuesChoices,
 } from './vitalsPicks';
 
 // The menu a right click on your vitals opens, on the panel footer or
 // on the status line's vitals (board 4 of the Vitals Styles review,
 // Q16). It opens at the pointer, as the terminal's menu does, with
-// Style and Values, each a submenu with a check on your pick, then
+// Style and Values, each a submenu with a check on your pick, Style's
+// with a line between families of styles (More Vitals Styles Q29), then
 // Customize vitals…, which opens Settings there. Under Text it adds Edit
 // your text…, which opens the card for your text, and Values goes quiet, since your text writes its own
 // values. Colors stay in Customize vitals. A pick saves alone for the
@@ -87,13 +88,14 @@ export function VitalsMenu({ x, y, onClose }: Props) {
   const submenus: Record<VitalsSubmenu, { label: string; items: () => ReactNode }> = {
     style: {
       label: 'Style',
-      items: () => (
-        <VitalsChoiceItems
-          choices={vitalsStyleChoices(options)}
-          pick={pickVitalsStyle}
-          done={done}
-        />
-      ),
+      // A line sets each family of styles apart.
+      items: () =>
+        vitalsStyleFamilies(options).map((family, i) => (
+          <Fragment key={family[0]?.value}>
+            {i > 0 && <MenuSeparator />}
+            <VitalsChoiceItems choices={family} pick={pickVitalsStyle} done={done} />
+          </Fragment>
+        )),
     },
     values: {
       label: 'Values',

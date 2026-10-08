@@ -1,5 +1,6 @@
 import { createSessionStore } from '../sessionStore';
 import { getHiddenOf, subscribeHiddenOf, type HiddenState } from './hiddenStore';
+import { getVitalsOf, type VitalValues } from './vitalsStore';
 import { asNumber, asText, isHiddenFlag } from '../store';
 
 // The opponent you are fighting, from Char.Combat. Aabahran sends
@@ -135,3 +136,65 @@ export const useCombat = store.use;
 export const getCombatOf = store.stateOf;
 /** Hear each change to a session's fight, with that session. */
 export const subscribeCombatOf = store.subscribeStates;
+
+// What a fight has been so far, for the Bands and Traces styles (More
+// Vitals Styles Q27): your vitals as the fight began, where Bands
+// stands its tick, and each health your opponent showed since, which
+// Traces draws and whose first Bands ticks. A new opponent starts a new
+// fight, and the end of one or a disconnect forgets it.
+
+/** How many of your opponent's healths a fight keeps. */
+export const FIGHT_HEALTHS = 240;
+
+export interface Fight {
+  /** The opponent the fight is with. */
+  name: string;
+  /** Your vitals as it began, or null when none had come yet. */
+  start: VitalValues | null;
+  /** Each health in whole percent your opponent showed, in order. A
+   *  repeat or a health the game hides adds nothing. */
+  healths: readonly number[];
+}
+
+/** The fight after a Char.Combat with `sent`, where `yours` are your
+ *  vitals now. */
+export function nextFight(
+  fight: Fight | null,
+  sent: CombatOpponent | null,
+  yours: VitalValues | null,
+): Fight | null {
+  if (sent === null) return null;
+  const pct = sent.hidden ? null : sent.hp_pct;
+  if (fight === null || fight.name !== sent.name) {
+    return { name: sent.name, start: yours, healths: pct === null ? [] : [pct] };
+  }
+  if (pct === null || fight.healths[fight.healths.length - 1] === pct) return fight;
+  return { ...fight, healths: [...fight.healths, pct].slice(-FIGHT_HEALTHS) };
+}
+
+/** The values of a vitals snapshot, without its latch and flag. */
+function valuesOf(session: number): VitalValues | null {
+  const vitals = getVitalsOf(session);
+  if (vitals === null || vitals.hidden) return null;
+  const { hp, maxhp, mana, maxmana, move, maxmove } = vitals;
+  return { hp, maxhp, mana, maxmana, move, maxmove };
+}
+
+const fights = createSessionStore<Fight | null>({
+  state: null,
+  events: [
+    (apply) =>
+      subscribeCombatOf((session) =>
+        apply(session, (fight) =>
+          nextFight(
+            fight,
+            withHidden(getCombatOf(session), getHiddenOf(session)),
+            valuesOf(session),
+          ),
+        ),
+      ),
+  ],
+});
+
+/** The selected session's fight so far, or null out of one. */
+export const useFight = fights.use;

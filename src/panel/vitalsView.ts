@@ -140,8 +140,27 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   ledger: 'Ledger',
   gauges: 'Gauges',
   pips: 'Pips',
+  bands: 'Bands',
+  ladders: 'Ladders',
+  blocks: 'Blocks',
+  traces: 'Traces',
+  dials: 'Dials',
+  rings: 'Rings',
+  vials: 'Vials',
+  orbs: 'Orbs',
+  candles: 'Candles',
   text: 'Text',
 };
+
+/** The styles by family, as the vitals menu sets them apart with a
+ *  line: the lines, the rows with a mark, the instruments, then Text
+ *  (More Vitals Styles Q29). Together they are VITALS_STYLES in order. */
+export const VITALS_STYLE_FAMILIES: readonly (readonly VitalsStyle[])[] = [
+  ['rows', 'line', 'ledger'],
+  ['gauges', 'pips', 'bands', 'ladders', 'blocks', 'traces'],
+  ['dials', 'rings', 'vials', 'orbs', 'candles'],
+  ['text'],
+];
 
 /** Each Values form's name, as Customize vitals and the vitals menu
  *  write it. */
@@ -278,6 +297,18 @@ export function vitalInks(
     inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
   }
   return inks;
+}
+
+/** The color the Candles flame burns in: the palette's yellow on a dark
+ *  theme, and a yellow leaning red on a light one, where the yellow
+ *  alone reads brown (More Vitals Styles, board 2). */
+export function vitalsFlame(
+  palette: XtermPalette,
+  ground: Pick<VitalsGround, 'appearance'>,
+): string {
+  return ground.appearance === 'dark'
+    ? palette.yellow
+    : `color-mix(in oklab, ${palette.yellow} 45%, ${palette.red})`;
 }
 
 /** A vital's tone and color as the classes and the custom property

@@ -43,15 +43,18 @@ function draw(patch: Partial<UiConfig> = {}, vitals: Vitals = SAMPLE_VITALS): st
     <VitalsTiles
       config={config(patch)}
       vitals={vitals}
+      history={[]}
       text={null}
       env={ENV}
       inks={{}}
+      flame="#eeca71"
       panel={300}
       width={300}
       scale={0.98}
       size={12}
       family={null}
       measure={(text) => text.length * 7}
+      measureGame={(text) => text.length * 7}
       onPick={() => undefined}
     />,
   );
@@ -71,10 +74,26 @@ const names = (html: string) =>
   );
 
 describe('the Style gallery', () => {
-  it('draws six tiles in the board order, named under each', () => {
+  it('draws a tile for each style in the board order, named under each', () => {
     const html = draw();
     expect(radios(html).map((r) => r.split(' ')[0])).toEqual([...VITALS_STYLES]);
-    expect(names(html)).toEqual(['Rows', 'One line', 'Ledger', 'Gauges', 'Pips', 'Text']);
+    expect(names(html)).toEqual([
+      'Rows',
+      'One line',
+      'Ledger',
+      'Gauges',
+      'Pips',
+      'Bands',
+      'Ladders',
+      'Blocks',
+      'Traces',
+      'Dials',
+      'Rings',
+      'Vials',
+      'Orbs',
+      'Candles',
+      'Text',
+    ]);
     expect(html).toContain('data-st-anchor="style"');
     expect(html).toContain('<legend class="st-visually-hidden">Style</legend>');
   });
@@ -88,6 +107,15 @@ describe('the Style gallery', () => {
       'ledger',
       'gauges checked',
       'pips',
+      'bands',
+      'ladders',
+      'blocks',
+      'traces',
+      'dials',
+      'rings',
+      'vials',
+      'orbs',
+      'candles',
       'text',
     ]);
   });
@@ -100,6 +128,15 @@ describe('the Style gallery', () => {
       'Ledger',
       'Gauges',
       'Pips',
+      'Bands',
+      'Ladders',
+      'Blocks',
+      'Traces',
+      'Dials',
+      'Rings',
+      'Vials',
+      'Orbs',
+      'Candles',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');
@@ -163,7 +200,7 @@ describe('the arrow keys', () => {
 
 describe('the numbers the tiles draw', () => {
   it('are the catalog samples while no session has your vitals', () => {
-    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, live: false });
+    expect(galleryVitals(null)).toEqual({ vitals: SAMPLE_VITALS, history: [], live: false });
     expect(galleryVitals({ vitals: null, combat: null }).live).toBe(false);
     expect(SAMPLE_VITALS).toMatchObject({
       hp: 1020,
