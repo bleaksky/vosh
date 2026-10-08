@@ -27,6 +27,7 @@ use super::effects::{apply_script_result, deliver_tick_step, framed_echoes, Outp
 use super::gmcp::{handle_gmcp, hello_subnegotiation, supports_subnegotiation};
 use super::log_sink::LogSink;
 use super::prompt_view::{emit_prompt_state, send_prompt_vars, watching_prompt};
+use super::round_trip::ends_on_prompt;
 use super::socket::Stream;
 use super::steps::{
     clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
@@ -147,6 +148,12 @@ async fn handle_event<R: tauri::Runtime>(
                     walked(conn, out, batch).await?;
                 }
             }
+            // Text after the last line end is the game's prompt, waiting
+            // for your next command. The note editor ends on a line end
+            // and answers no line of the note, so what you write there
+            // never reads as a stall.
+            let prompted = ends_on_prompt(conn.accumulator.partial());
+            conn.stream.game_prompted(prompted);
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
@@ -179,6 +186,7 @@ async fn handle_event<R: tauri::Runtime>(
             for step in steps {
                 deliver_line_step(conn, log_sink, batch, &open, step).await?;
             }
+            conn.stream.game_prompted(true);
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {

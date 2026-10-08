@@ -92,12 +92,20 @@ impl Stream {
     /// not answered has waited when that is longer and the link or the
     /// game is not answering. The network still carrying the line is the
     /// link not answering. The game sending nothing at all past the
-    /// longest lag it puts on you is the game not answering. None where
+    /// lags it puts on you, after a line sent at its prompt, is the game
+    /// not answering. None where
     /// the system does not say. The sample says when the wait began
     /// when the wait is the reading. See [`super::round_trip`].
     pub(crate) fn round_trip(&mut self, now: Instant) -> Option<Sample> {
         let kernel = self.kernel()?;
         Some(self.waits.reading(kernel, now))
+    }
+
+    /// The game's text ended on its prompt, or on something else, so a
+    /// line you send next is one it owes an answer or not. See
+    /// [`Waits::prompted`].
+    pub(crate) fn game_prompted(&mut self, prompted: bool) {
+        self.waits.prompted(prompted);
     }
 
     /// What the kernel says of the game socket, None where it does not.
@@ -243,10 +251,10 @@ mod tests {
         assert!(answered < SLOW, "{answered:?}");
     }
 
-    /// A game that reads your line and sends nothing back for longer
-    /// than any lag it puts on you is not answering, so the wait counts
-    /// even though its machine acknowledged the line. Anything it sends
-    /// ends the wait, a GMCP packet alone too.
+    /// A game that reads a line you sent at its prompt and sends nothing
+    /// back for longer than the lags it puts on you is not answering, so
+    /// the wait counts even though its machine acknowledged the line.
+    /// Anything it sends ends the wait, a GMCP packet alone too.
     #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[tokio::test]
     async fn a_game_that_says_nothing_past_the_longest_lag_is_a_stall() {
@@ -256,6 +264,8 @@ mod tests {
         let mut stream = connect("127.0.0.1", port, false).await.expect("the game");
         let mut game = game.await.expect("the game task");
 
+        // The session reads the game's prompt and says so.
+        stream.game_prompted(true);
         stream.write_all(b"look\r\n").await.expect("the line");
         let mut line = [0u8; 6];
         game.read_exact(&mut line).await.expect("the game hears it");

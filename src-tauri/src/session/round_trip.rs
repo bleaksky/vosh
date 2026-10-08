@@ -14,10 +14,13 @@
 //! counts in two halves. The link half counts while the kernel still
 //! holds bytes the game's machine has not acknowledged. The game half
 //! counts once the game has sent nothing at all since your line for
-//! longer than [`HELD_AT_MOST`], the longest lag it puts on you. Any
-//! bytes from the game, text or GMCP alone, end both. A line you type
-//! while an earlier one waits starts no wait of its own, so typing
-//! ahead during a bash never counts. Each reading goes to the status
+//! longer than [`HELD_AT_MOST`], the longest lag it puts on you. It times
+//! only a line the game owes an answer, one sent while its prompt
+//! showed. The note editor shows none and answers no line of the note
+//! (board.c), so writing a note never counts. Any bytes from the game,
+//! text or GMCP alone, end both. A line you type while an earlier one
+//! waits starts no wait of its own, so typing ahead during a bash never
+//! counts. Each reading goes to the status
 //! line on `session://round-trip` and into the [`RoundTrip`] the
 //! connection keeps, which `#lag` reads.
 //!
@@ -66,8 +69,12 @@ pub(crate) struct Waits {
     /// When the oldest line left that the network may still carry, the
     /// oldest since the kernel last showed nothing in flight.
     link: Option<Instant>,
-    /// When the oldest line left since the game last sent anything.
+    /// When the oldest line left since the game last sent anything, of
+    /// those it owes an answer.
     game: Option<Instant>,
+    /// The game's text last ended on its prompt, so it waits for a
+    /// command and answers the next line, see [`Waits::prompted`].
+    prompted: bool,
 }
 
 impl Waits {
@@ -75,13 +82,25 @@ impl Waits {
     /// nothing in flight just before, so every earlier line reached the
     /// game's machine and the wait starts over with this one. Typing
     /// ahead while a skill lags you sends lines the game holds
-    /// unanswered, and they never count.
+    /// unanswered, and they never count. Only a line sent while the
+    /// game's prompt showed starts the game half.
     pub(crate) fn sent(&mut self, now: Instant, reached: bool) {
         if reached {
             self.link = None;
         }
         self.link.get_or_insert(now);
-        self.game.get_or_insert(now);
+        if self.prompted {
+            self.game.get_or_insert(now);
+        }
+    }
+
+    /// The game's text ended on its prompt, or on something else. The
+    /// game shows its prompt, or a GA or EOR, when it waits for your next
+    /// command. An editor that takes lines with no answer, like the note
+    /// editor, shows none, so the lines you write there start no game
+    /// half.
+    pub(crate) fn prompted(&mut self, prompted: bool) {
+        self.prompted = prompted;
     }
 
     /// The game sent something, so the link and the game both answer.
@@ -118,6 +137,13 @@ impl Waits {
             },
         )
     }
+}
+
+/// Whether the game's text ends on its prompt, given the `partial` after
+/// its last line end. Text there is a prompt waiting for your next
+/// command, and escapes alone are no text. See [`Waits::prompted`].
+pub(crate) fn ends_on_prompt(partial: Option<&[u8]>) -> bool {
+    partial.is_some_and(|p| !vosh_protocol::ansi::plain_text(p).is_empty())
 }
 
 /// One reading of the round trip, and when its wait began when the
@@ -348,10 +374,18 @@ mod tests {
         }
     }
 
+    /// The waits of a session whose game shows its prompt, waiting for
+    /// your next command.
+    fn at_prompt() -> Waits {
+        let mut waits = Waits::default();
+        waits.prompted(true);
+        waits
+    }
+
     #[test]
     fn a_bash_with_lines_typed_ahead_reads_the_round_trip() {
         let start = Instant::now();
-        let mut waits = Waits::default();
+        let mut waits = at_prompt();
         // The game answers the bash at once and lags you six seconds.
         waits.sent(start, true);
         waits.heard();
@@ -381,7 +415,7 @@ mod tests {
 
         // The game's machine took the first, so the link half starts
         // over with the second. The game half keeps the first.
-        let mut waits = Waits::default();
+        let mut waits = at_prompt();
         waits.sent(start, true);
         waits.sent(start + ms(5000), true);
         let later = start + HELD_AT_MOST + ms(1000);
@@ -443,7 +477,7 @@ mod tests {
     #[test]
     fn a_game_that_says_nothing_past_the_longest_lag_is_a_stall() {
         let start = Instant::now();
-        let mut waits = Waits::default();
+        let mut waits = at_prompt();
         let mut trip = RoundTrip::default();
         trip.connect(clock(19, 42, 0));
         waits.sent(start, true);
@@ -474,7 +508,7 @@ mod tests {
     #[test]
     fn a_line_the_game_answers_in_a_pulse_or_after_a_lag_is_no_stall() {
         let start = Instant::now();
-        let mut waits = Waits::default();
+        let mut waits = at_prompt();
         // A trigger sends a line, and the game answers in the pulse.
         waits.sent(start, true);
         waits.heard();
@@ -502,9 +536,58 @@ mod tests {
     }
 
     #[test]
+    fn the_note_editor_ends_on_no_prompt_and_play_does() {
+        use super::super::lines::LineAccumulator;
+        let ends = |bytes: &[u8]| {
+            let mut lines = LineAccumulator::new();
+            lines.feed(bytes);
+            ends_on_prompt(lines.partial())
+        };
+        // `note write` once you set the subject, as board.c sends it,
+        // with the reset the game makes of its color code.
+        assert!(!ends(
+            b"\n\rEnter text. Type ~\x1b[0m or END\x1b[0m on an empty line to end note.\n\r\
+            =======================================================\n\r\x1b[0m"
+        ));
+        assert!(ends(b"You see Maren here.\n\r\n\r<120hp 98m 210mv> "));
+        assert!(ends(b"> "));
+    }
+
+    #[test]
+    fn a_note_you_write_is_no_stall() {
+        let start = Instant::now();
+        let mut waits = at_prompt();
+        // `note write` opens the editor, which ends on a line of equals
+        // signs and shows no prompt (board.c), so the session says the
+        // game's text ended on something else.
+        waits.sent(start, true);
+        waits.heard();
+        waits.prompted(false);
+        // You write three lines over a minute in a quiet room. The game
+        // answers none of them and sends nothing else.
+        for at in [2_000, 25_000, 50_000] {
+            waits.sent(start + ms(at), true);
+        }
+        for i in 1..=40 {
+            assert_eq!(
+                waits.reading(link(false), start + READ_EVERY * i).reading,
+                ms(38)
+            );
+        }
+        // The `~` that ends the note gets an answer and the prompt.
+        waits.sent(start + ms(80_000), true);
+        waits.heard();
+        waits.prompted(true);
+        assert_eq!(
+            waits.reading(link(false), start + ms(80_250)).reading,
+            ms(38)
+        );
+    }
+
+    #[test]
     fn anything_from_the_game_ends_the_wait() {
         let start = Instant::now();
-        let mut waits = Waits::default();
+        let mut waits = at_prompt();
         waits.sent(start, true);
         let later = start + HELD_AT_MOST + ms(4000);
         assert_eq!(
