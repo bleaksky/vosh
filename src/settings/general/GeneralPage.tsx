@@ -468,7 +468,7 @@ function SessionLogsSection({
       </Row>
       <Row
         label="Keep logs for"
-        description="Vosh deletes logs older than this once a day. The first time it also tidies the file, and new game text waits until that's done."
+        description="Vosh deletes logs older than this once a day. The first time one goes, it rebuilds the log file, which takes a few seconds on a big one. Your game keeps going, and the log catches up when it's done."
         anchor="keep-logs"
       >
         <Select
