@@ -252,6 +252,12 @@ describe('the tile width', () => {
     );
   });
 
+  it('says Ladders leaves the last peak lit after a hit', () => {
+    expect(galleryCaption('ladders', 300, 300)).toMatch(
+      /^Ladders\. Each vital lights a row of segments, and a hit leaves its last peak lit for a moment\. /,
+    );
+  });
+
   it('draws at the panel width before the tile is measured', () => {
     expect(tileFit(300, 0)).toEqual({ width: 300, scale: 1 });
   });

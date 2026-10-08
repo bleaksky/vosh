@@ -73,7 +73,8 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   pips: 'Pips. Ten discs beside each value light up a tenth at a time, the way the moons light up the status line.',
   bands:
     'Bands. Each vital fills a bar over quiet bands that mark low and worn, with a tick where a fight began.',
-  ladders: 'Ladders. Each vital lights a row of segments, the way a level meter does.',
+  ladders:
+    'Ladders. Each vital lights a row of segments, and a hit leaves its last peak lit for a moment.',
   blocks:
     'Blocks. Each vital is a bar of block characters in your game font, the way a terminal tool draws one.',
   traces: 'Traces. Each vital shows its last minute as a line, filled to where it stands now.',
