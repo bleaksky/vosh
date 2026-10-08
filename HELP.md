@@ -288,7 +288,7 @@ The command palette runs Vosh commands from the keyboard. It covers the View and
 
 The palette sorts what it finds into five sections.
 
-- Input. `Customize prompt…`, `Draw your prompt`, and `Edit prompt as text…`.
+- Input. `Customize prompt…`, `Draw your prompt`, `Edit prompt as text…`, and a row for each text the writing card takes, like `Write a note…`, `Report a bug…` and `Edit your description…`.
 - View. `Show panel`, `Split terminal`, `Choose theme`, a row for each pane like `Show map`, the rows that pick where your prompt shows, `Reset panel layout`, `Find in scrollback…`, `Open help`, `Get started`, `Open settings`, and a row for each Settings page, like `Open trigger settings`.
 - Aliases. Every alias that is on. One that takes no arguments runs the moment you pick it. One that takes arguments puts its name in the command line instead, so you finish the line and press `Enter`.
 - Session. `New session…`, then `Next session` and `Previous session` while two or more sessions are open, `Close session`, `Hide sessions` or `Show sessions` with two or more, `Save profile`, and the `Connect to` row or `Disconnect`. Disconnect sits last, and the palette never opens with it selected.
@@ -300,6 +300,7 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 
 - Right click anywhere on the terminal to open it.
 - `Customize prompt…` opens Customize prompt over your prompt, where you design how Vosh draws it.
+- `Write` opens a list of what you can write, a note, a journal entry, an application, an idea, a bug or typo report, your description or your history. Each opens the writing card, as Write your description at 2.9 and Write in the game at 2.10 show.
 - `Copy` copies the current selection, and `Paste` inserts the clipboard into the command line. Nothing sends until you press `Enter` yourself.
 - `Select all` selects the whole terminal, scrollback included.
 - `Find in scrollback…` opens the find bar.
@@ -308,7 +309,45 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 
 Items with a shortcut show it on the right, and `Settings` shows an arrow. The arrow keys move through the menu and `Enter` picks an item. `ArrowRight` or `Enter` on `Settings` opens its list on the first row, and `ArrowLeft` steps back out. Pointing at `Settings` opens the list too. `Esc` closes the list first, then the menu. The menu also closes on a click anywhere outside it, or the instant you pick an item. It keeps itself inside the window, so a right click near a corner never opens it half off screen. Near the right edge the Settings list opens on the left of the menu, and near the bottom it rises from its row.
 
-### 2.9 Walk to a place
+### 2.9 Write your description
+
+Vosh's writing card helps you write the description others see when they look at you, and sends it to the game for you.
+
+- Right click the terminal and choose `Write`, then `Your description…`, or type `desc` in the `Cmd+K` palette and pick `Edit your description…`.
+- With no draft, the card reads your description from the game once the game's prompt shows. The game's answer prints in the terminal under the card.
+- The box keeps every line to 75 columns, as help description asks. A paragraph flows as you type, and a break you make with `Return` stays. Whatever runs past 75 shows in red, and the footer offers `Rewrap paragraph` while the caret sits on that line.
+- The footer counts your lines with text against the help's ten to thirty, and names the empty ones apart.
+- A paste wraps each long line at 75, and turns curly quotes, long dashes and the ellipsis into the plain ones the game keeps. The footer says what changed, and `Undo` puts it back.
+- `Guide` shows the help's reminders beside your text, and `Read help description` asks the game for the help itself while the card folds to its header.
+- `Send to game` sends your text through the game's own editor, one line at a time, and checks off each line the game takes. Vosh then checks what the game holds, mends any line that differs, leaves the editor and reads your description back.
+- While Vosh sends, your triggers, timers, Lua and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
+- Once the game holds your text as the card shows it, `Send for approval…` sends `dcheck` after you confirm. The game takes one check at a time.
+- A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
+
+Vosh never writes, rewrites or suggests a word. The red underlines come from your system's own spell check, and `Check spelling` in the card's `⋯` menu turns them off.
+
+Your drafts stay in writing.toml in your data folder, one for each character on each world, and save as you type. Close the card at any time and your draft waits for you. With no connection the card still opens, and `Send to game` waits for a session that plays the character.
+
+When you type `description edit` yourself, the game opens its own editor as always, and a notice offers `Edit in Vosh`. `Open editor` leaves the game's editor without a change and opens the card on your text. `Keep typing` leaves you in the game's editor, where each line you type goes as typed and the command line counts it to 75. Turn the notice off in Settings, Input, with `Offer the card when the game's editor opens`.
+
+### 2.10 Write in the game
+
+The writing card writes on the game's boards too. Notes, journal entries, applications, ideas, bug and typo reports, and your history, personality and purpose all open in it.
+
+- Right click the terminal and choose `Write`, then the kind you want, or find it in the palette, such as `Write a note…` or `Report a bug…`. The card's title opens your drafts and every other kind.
+- A note takes `To` and `Subject` over its text. A journal entry, idea, bug or typo goes to the immortals, so `To` reads `Immortal`. A bug or typo report names the room you stand in, which the game records when you post, so post it from where the bug happened.
+- `Write in a language` in the `⋯` menu adds a `Language` row to a note. The game decides whether you know the tongue well enough.
+- The game never rewraps a note, so readers see your lines as you break them. The card keeps them to 75 columns, and to 70 for a custom race application, as help qrace asks.
+- An application's guide reads your subject the way the game does and shows the help for it, such as help psi requirements. Pick `Custom race application` in the `⋯` menu for a custom race.
+- `Post…` asks first, since you can't change a note once it's posted. Vosh sets `To` and `Subject`, sends your text through the game's editor, reads it back, and posts only when the game holds it as you wrote it. When the game says no, its reason prints under the card and your draft stays.
+- The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
+- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` sends your history to the immortals, once.
+
+You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
+
+Typing `note edit`, `history edit` or another opener yourself brings the same `Edit in Vosh` notice as your description does.
+
+### 2.11 Walk to a place
 
 `#walk` moves you along a string of directions, one step at a time. Vosh waits for the game to show each new room before it sends the next step, so a move that fails stops the walk where you stand.
 

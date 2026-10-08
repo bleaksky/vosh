@@ -1135,9 +1135,9 @@ describe('the help on #walk', () => {
     return found;
   };
 
-  it('is Walk to a place, topic 2.9 under Play', () => {
+  it('is Walk to a place, topic 2.11 under Play', () => {
     const { number, title, section } = topic();
-    expect([number, title, section]).toEqual(['2.9', 'Walk to a place', 'Play']);
+    expect([number, title, section]).toEqual(['2.11', 'Walk to a place', 'Play']);
   });
 
   it('teaches the steps, the stops and walking from an alias', () => {
@@ -1581,5 +1581,41 @@ describe('the help on preset edits', () => {
     expect(text).toContain('`New profile` copies both from the profile you play.');
     expect(text).toContain('`#profile reset` turns every preset off and clears your changes');
     expect(text).toContain('An older version, such as 0.8.1, runs the presets as they ship');
+  });
+});
+
+describe('the help on the writing card', () => {
+  const topic = (id: string) => {
+    const found = HELP_TOPICS.find((t) => t.id === id);
+    if (!found) throw new Error(`no ${id} topic`);
+    return found;
+  };
+
+  it('follows the right click menu with Write your description, then Write in the game', () => {
+    const ids = HELP_TOPICS.map((t) => t.id);
+    const at = ids.indexOf('play.right-click-menu');
+    expect(ids.slice(at, at + 4)).toEqual([
+      'play.right-click-menu',
+      'play.write-description',
+      'play.write-in-the-game',
+      'play.walk',
+    ]);
+    expect(topic('play.write-description').number).toBe('2.9');
+    expect(topic('play.write-in-the-game').number).toBe('2.10');
+  });
+
+  it('teaches the card, the send and the offer', () => {
+    const text = topic('play.write-description').body;
+    expect(text).toContain(
+      '`Send to game` sends your text through the game’s own editor'.replace('’', "'"),
+    );
+    expect(text).toContain('Vosh never writes, rewrites or suggests a word.');
+    expect(text).toContain("`Offer the card when the game's editor opens`");
+  });
+
+  it('teaches the boards, the post and Sent', () => {
+    const text = topic('play.write-in-the-game').body;
+    expect(text).toContain('`Post…` asks first');
+    expect(text).toContain('Vosh keeps your last 20 for each character');
   });
 });
