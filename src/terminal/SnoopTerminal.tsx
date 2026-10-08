@@ -218,7 +218,7 @@ export function SnoopTerminal({
       regex: options.regex ?? false,
       wholeWord: options.wholeWord ?? false,
       caseSensitive: options.caseSensitive ?? false,
-      decorations: searchDecorations(),
+      decorations: searchDecorations(term),
     });
     calls.current.onReady?.({
       findNext: (query, options) => search.findNext(query, searchOptions(options)),

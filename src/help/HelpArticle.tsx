@@ -23,8 +23,9 @@ interface Props {
   current: number;
   /** The rows of On this page, whose items take ids to scroll to. */
   outline: OutlineEntry[] | null;
-  /** The mark fill and its ring, from the theme's ANSI yellow. */
-  markColors: { fill: string; ring: string } | null;
+  /** The mark fills for every match and the current one, from the
+   *  theme's ANSI yellow. */
+  markColors: { fill: string; current: string } | null;
 }
 
 /** What each help button runs. */
@@ -139,7 +140,7 @@ export const HelpArticle = forwardRef<HTMLHeadingElement, Props>(function HelpAr
   const marker = new Marker(query, current);
   const outlined = new Set((outline ?? []).map((e) => helpItemId(e.block, e.item)));
   const style = markColors
-    ? ({ '--hp-mark': markColors.fill, '--hp-mark-ring': markColors.ring } as CSSProperties)
+    ? ({ '--hp-mark': markColors.fill, '--hp-mark-current': markColors.current } as CSSProperties)
     : undefined;
   // The title first, then each block in order, so the match numbers run
   // in reading order, the order countMatches counts them in.

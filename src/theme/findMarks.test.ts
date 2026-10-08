@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findMarks } from './findMarks';
+import { findMarks, solidFindMarks } from './findMarks';
 import { findTheme } from './themes';
 
 describe('findMarks', () => {
@@ -22,5 +22,20 @@ describe('findMarks', () => {
   it('gives no marks for a yellow that is not a color', () => {
     expect(findMarks({ yellow: 'not a color' })).toBeNull();
     expect(findMarks({ yellow: '' })).toBeNull();
+  });
+
+  it('lays the marks over a ground as solid colors for xterm', () => {
+    const ember = findTheme('obsidian-ember').xterm;
+    expect(solidFindMarks(ember, ember.background)).toEqual({
+      match: '#403620',
+      current: '#846e41',
+    });
+    const rubric = findTheme('rubric').xterm;
+    expect(solidFindMarks(rubric, rubric.background)).toEqual({
+      match: '#c7b795',
+      current: '#988253',
+    });
+    expect(solidFindMarks({ yellow: 'nope' }, '#000000')).toBeNull();
+    expect(solidFindMarks(ember, 'nope')).toBeNull();
   });
 });

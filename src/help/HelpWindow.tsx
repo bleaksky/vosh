@@ -14,7 +14,6 @@ import {
 import { showAfterThemePaint } from '../lib/reveal';
 import { customToAppTheme, findTheme, setCustomThemes } from '../theme/themes';
 import { loadFontStack, renderFontStack } from '../lib/fontLoader';
-import { parseHex, toRgba } from '../theme/color';
 import { findMarks } from '../theme/findMarks';
 import { isMacPlatform, shortcutKey } from '../lib/shortcuts';
 import { HELP_TOPICS, type HelpTopic } from './helpContent';
@@ -101,13 +100,11 @@ function scrollArticle(scroller: HTMLElement, move: HelpScroll) {
   }
 }
 
-/** The mark fill and its ring: the theme's ANSI yellow at 28%, the way
- *  the find bar and the session logs page mark a match. */
-function markColors(themeId: string): { fill: string; ring: string } | null {
-  const xterm = findTheme(themeId).xterm;
-  const marks = findMarks(xterm);
-  const yellow = parseHex(xterm.yellow);
-  return marks && yellow ? { fill: marks.match, ring: toRgba(yellow, 1) } : null;
+/** The mark fills: the theme's ANSI yellow at 28% for every match and
+ *  60% for the one you are on, the way the terminal find marks them. */
+function markColors(themeId: string): { fill: string; current: string } | null {
+  const marks = findMarks(findTheme(themeId).xterm);
+  return marks ? { fill: marks.match, current: marks.current } : null;
 }
 
 export function HelpWindow() {

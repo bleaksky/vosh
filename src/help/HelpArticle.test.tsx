@@ -22,7 +22,7 @@ function draw(shown: HelpTopic, query = '', current = 0): string {
       query={query}
       current={current}
       outline={outlineFor(shown)}
-      markColors={{ fill: 'rgba(196, 178, 138, 0.28)', ring: '#c4b28a' }}
+      markColors={{ fill: 'rgba(196, 178, 138, 0.28)', current: 'rgba(196, 178, 138, 0.6)' }}
     />,
   );
 }
@@ -77,7 +77,7 @@ describe('a help topic', () => {
     expect(countMatches(luaTopic, 'weather')).toBe(4);
   });
 
-  it('marks every match, and rings the one you are on', () => {
+  it('marks every match, and fills the one you are on stronger', () => {
     const shown = topic('shape.prompt-show');
     const html = draw(shown, 'prompt');
     const marks = html.match(/<mark class="hp-mark"/g) ?? [];
@@ -90,6 +90,16 @@ describe('a help topic', () => {
     expect(html.match(/data-current=""/g)).toHaveLength(1);
     const third = draw(shown, 'prompt', 2);
     expect(third).toMatch(/data-match="2" data-current=""/);
+  });
+
+  it('fills the match you are on in yellow at 60 with no ring', () => {
+    const html = draw(topic('shape.prompt-show'), 'prompt');
+    expect(html).toContain('--hp-mark:rgba(196, 178, 138, 0.28)');
+    expect(html).toContain('--hp-mark-current:rgba(196, 178, 138, 0.6)');
+    expect(html).not.toContain('--hp-mark-ring');
+    const rule = /\.hp-mark\[data-current\]\s*\{([^}]*)\}/.exec(helpCss)?.[1] ?? '';
+    expect(rule).toContain('background: var(--hp-mark-current');
+    expect(rule).not.toContain('box-shadow');
   });
 
   it('marks nothing without words', () => {

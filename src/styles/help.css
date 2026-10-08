@@ -158,8 +158,8 @@
 }
 
 /* A search match, ANSI yellow at 28% the way the find bar and the
-   session logs page mark one, and a 1 px ring on the match you are on.
-   HelpWindow sets both colors from the theme. */
+   session logs page mark one, and the match you are on at 60%.
+   HelpWindow sets both fills from the theme. */
 .hp-mark {
   padding: 0;
   background: var(--hp-mark, transparent);
@@ -167,7 +167,7 @@
 }
 
 .hp-mark[data-current] {
-  box-shadow: 0 0 0 1px var(--hp-mark-ring, currentColor);
+  background: var(--hp-mark-current, transparent);
 }
 
 /* A table is a Settings card: radius 12 on the input band, a 12/600
