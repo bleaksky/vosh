@@ -6,18 +6,16 @@ import { useMacroKeys } from '../input/useMacroKeys';
 import { ReconnectNotice } from './overlays/ReconnectNotice';
 import { CornerNotices } from './overlays/CornerNotices';
 import { TerminalMenu } from '../terminal/TerminalMenu';
-import { readPrompt } from '../terminal/readerVoice';
 import { ScreenReaderFeed } from '../terminal/ScreenReaderFeed';
 import { AppShell } from './AppShell';
 import { GetStarted } from './getStarted/GetStarted';
-import { markDone, openList as openGetStarted } from './getStarted/getStartedStore';
+import { markDone } from './getStarted/getStartedStore';
 import { showMe } from './getStarted/showMe';
 import type { StepId } from './getStarted/steps';
 import { openNewSession } from './newSession';
 import { SessionSidebar, type SessionSidebarHandle } from './SessionSidebar';
 import { SessionsToggle } from './SessionsToggle';
 import { SnoopSplit } from './SnoopSplit';
-import { requestSnoop } from './snoopKeys';
 import { TitleBand } from './TitleBand';
 import { StatusLine } from './StatusLine';
 import { PanelHost } from '../panel/PanelHost';
@@ -28,36 +26,25 @@ import {
   togglePanelOpen,
   usePanelLayout,
 } from '../panel/panelLayoutStore';
-import { addPaneAtBottom, togglePane } from '../panel/paneActions';
-import { promptConfigGet, promptConfigSet } from '../ipc/prompt';
+import { addPaneAtBottom } from '../panel/paneActions';
 import { disconnectSession } from '../ipc/session';
-import { snoopClose, snoopStop, snoopWindowOpen } from '../ipc/snoop';
 import { TERMINAL_LINE_HEIGHTS } from '../ipc/uiConfig';
-import { openHelpWindow, openSettingsWindow } from '../ipc/windows';
 import { listenForQuitFlush } from '../lib/pendingWrites';
 import { startStores } from '../stores';
-import { pushToast } from '../stores/toasts';
 import { CommandPalette } from './overlays/CommandPalette';
-import type { PaletteDeps } from './overlays/palette';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CoachRing } from '../ui/CoachRing';
-import { openSettingsTab } from '../lib/settingsLink';
 import { requestSessionMenu } from '../lib/appMenu';
-import { getNativeScroll } from '../terminal/native/nativeScroll';
-import { allPanes, isOfferedPaneType, PANE_TYPES } from '../panel/paneLayout';
-import { offeredPaneTypes } from '../panel/paneTypes';
+import { allPanes } from '../panel/paneLayout';
 import {
   getSelected,
-  goTo,
   move,
   rename,
   select,
-  sessionStep,
   useOpened,
   useSelected,
   useSessions,
 } from '../stores/session/sessionsStore';
-import { getSnoops } from '../stores/session/snoopStore';
 import { useConnection } from '../stores/session/useConnection';
 import { useVitalsOptions } from '../stores/config/vitalsOptionsStore';
 import { useScreenReader } from '../stores/config/screenReaderStore';
@@ -68,10 +55,10 @@ import { usePinnedDockRows } from '../stores/session/pinnedPromptStore';
 import { lentRows, type CellSize } from '../prompt/pinnedDock';
 import { WritingCard } from '../writing/WritingCard';
 import { WritingOffer } from '../writing/WritingOffer';
-import { hasBeast } from '../writing/kinds';
 import { terminalArea } from './terminalArea';
 import { useAppCommands } from './useAppCommands';
 import { useCardRequests } from './useCardRequests';
+import { paletteDepsFor } from './paletteDeps';
 import { useClosing } from './useClosing';
 import { useFind } from './useFind';
 import { useNativeSurfaceBridge } from './useNativeSurfaceBridge';
@@ -301,71 +288,31 @@ function MainWindow() {
   // asks while sessions are connected.
   const closing = useClosing();
 
-  // A snoop row's call to the game, which says in a toast when it fails.
-  const snoopCall = (call: Promise<void>) =>
-    void call.catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
-
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
-  const paletteDeps = (): PaletteDeps => ({
-    connected,
-    redialing: connection.redialing,
-    host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
-    worldName: connection.world,
-    panelOpen,
-    togglePanel: togglePanelOpen,
-    splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
-    toggleSplit,
-    // The staff queues row waits for Imm.Queues, like Add a pane, but a
-    // pane the tree already shows stays listed so you can hide it.
-    paneTypes: PANE_TYPES.filter(isOfferedPaneType).filter(
-      (t) => offeredPaneTypes().includes(t) || shownPanes.includes(t),
-    ),
-    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
-    togglePane,
-    openHelp: openHelpWindow,
-    openGetStarted,
-    openFind,
-    openSettings: openSettingsWindow,
-    openSettingsTab,
-    connect: () => void connection.connect(),
-    newSession: () => void openNewSession(),
-    renameSession,
-    closeSession: () => closing.closeSession(),
-    sessions: {
-      rows: sessions,
+  const paletteDeps = () =>
+    paletteDepsFor({
+      connected,
+      status,
+      connection,
+      panelOpen,
+      splitOpen,
+      toggleSplit,
+      shownPanes,
+      openFind,
+      renameSession,
+      closing,
+      sessions,
       selected,
-      shown: sessionsSidebar.pressed,
-      goTo,
-      step: (step) => goTo(sessionStep(step)),
-      toggleShown: sessionsSidebar.toggle,
-    },
-    snoops: {
-      tabs: getSnoops().tabs,
-      goTo: () => requestSnoop('enter'),
-      next: () => requestSnoop('next'),
-      stop: (name) => snoopCall(snoopStop(getSelected(), name)),
-      openWindow: () => snoopCall(snoopWindowOpen(getSelected())),
-      closeEnded: () => snoopCall(snoopClose(getSelected())),
-    },
-    disconnect: () => void disconnectSession(getSelected()),
-    insertInput: (text) => inputRef.current?.insert(text),
-    promptShow: promptShow?.capture ? promptShow.show : null,
-    openPromptCard: (view) => openPromptCard(view === 'text' ? 'text' : 'design'),
-    writing: {
-      kinds: writeKinds,
-      beast: hasBeast(charStatus.race, charStatus.level),
-      open: (kind) => openWriting(kind),
-    },
-    readPrompt: readerOn ? readPrompt : undefined,
-    promptDraw: promptShow?.capture ? promptShow.draw : null,
-    setPromptDraw: (on) => {
-      const session = getSelected();
-      void promptConfigGet(session)
-        .then((config) => promptConfigSet({ ...config, draw: on }, { session }))
-        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
-    },
-  });
+      sessionsSidebar,
+      inputRef,
+      promptShow,
+      openPromptCard,
+      writeKinds,
+      charStatus,
+      openWriting,
+      readerOn,
+    });
 
   // Show me opens the panel or the terminal menu here (showMe.ts).
   const showMeHere = (step: StepId) =>
