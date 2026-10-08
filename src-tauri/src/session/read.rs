@@ -31,7 +31,8 @@ use super::reader::ReaderFeed;
 use super::round_trip::ends_on_prompt;
 use super::socket::Stream;
 use super::steps::{
-    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, LineStep,
+    clock_after, hold_step, let_go_held, line_step, marker_step, partial_step, reader_wait_step,
+    LineStep,
 };
 use super::walk::{self, WalkOut};
 use super::writer::game_text::GameLine;
@@ -252,28 +253,38 @@ async fn handle_event<R: tauri::Runtime>(
     }
 }
 
-/// Paint a partial that waited and send it out, with what a screen
-/// reader reads of it. `seen_output` becomes the output count after it.
+/// Paint a partial that waited and send it out. `seen_output` becomes
+/// the output count after it.
 pub(super) async fn flush_hold<R: tauri::Runtime>(conn: &mut Conn<R>) {
-    let mut out = Output::new(conn.others_wrote());
-    let mut reader = ReaderFeed::default();
-    paint_hold(conn, &mut out, &mut reader).await;
+    let out = {
+        let mut c = conn.session.connection.lock();
+        let mut out = Output::new(conn.others_wrote());
+        hold_step(&mut c, &mut conn.accumulator, &mut out);
+        out
+    };
     if !out.is_empty() {
         conn.seen_output = emit_session_output(&conn.app, &conn.session, &out, &mut conn.settle);
     }
+}
+
+/// Send what a screen reader reads of a partial that waited
+/// [`super::reader::PARTIAL_WAIT`].
+pub(super) async fn flush_reader_wait<R: tauri::Runtime>(conn: &mut Conn<R>) {
+    let mut reader = ReaderFeed::default();
+    hear_reader_wait(conn, &mut reader).await;
     super::reader::emit(&conn.app, &conn.session, reader);
 }
 
-/// Paint a partial that waited into `out`, through [`hold_step`], under
-/// the profile lock, which says whether a screen reader reads it.
-pub(super) async fn paint_hold<R: tauri::Runtime>(
+/// Read a partial that waited into `reader`, through
+/// [`reader_wait_step`], under the profile lock, which says whether a
+/// screen reader reads it.
+pub(super) async fn hear_reader_wait<R: tauri::Runtime>(
     conn: &mut Conn<R>,
-    out: &mut Output,
     reader: &mut ReaderFeed,
 ) {
     let p = conn.session.lock_profile().await;
     let mut c = conn.session.connection.lock();
-    hold_step(&p, &mut c, &mut conn.accumulator, out, reader);
+    reader_wait_step(&p, &mut c, &conn.accumulator, reader);
 }
 
 /// Let go of the lines the stage holds for the rest of a prompt, through
@@ -429,6 +440,7 @@ pub(super) async fn finish_read<R: tauri::Runtime>(
         gag_without_reader,
         character,
         hold: _,
+        reader_wait: _,
         gmcp,
         since_prompt: _,
         reader,

@@ -1737,8 +1737,7 @@ fn a_partial_that_waited_paints_at_the_deadline() {
     let batch = wire.read_holding(b"<10hp 2");
     assert!(batch.hold);
     let mut out = vosh_prompt::stage::Output::new(false);
-    let mut reader = crate::session::reader::ReaderFeed::default();
-    super::hold_step(&wire.p, &mut wire.c, &mut wire.acc, &mut out, &mut reader);
+    super::hold_step(&mut wire.c, &mut wire.acc, &mut out);
     assert_eq!(out.bytes, with(&[&wire.mark(1), b"<10hp 2"]));
     // The rest of it replaces what painted.
     let out = wire.read(b"0m 30mv> ");

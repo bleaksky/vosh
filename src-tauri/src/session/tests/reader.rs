@@ -1,7 +1,8 @@
 //! What a screen reader reads of each read, played through the session's
 //! own steps (R21 and R25 review, Q19 to Q21). It reads the plain text of
 //! what shows, after gags, routes and replaces, keeps your prompt apart
-//! for when you ask, and reads a partial the end of a read paints once.
+//! for when you ask, and reads a partial the end of a read paints once
+//! it waits.
 //!
 //! The lines are the game's own, from `update.c`, `fight.c` and `comm.c`
 //! in the server source, with an invented name.
@@ -149,34 +150,49 @@ fn a_partial_a_ga_ends_reads_as_a_line() {
 }
 
 #[test]
-fn a_painted_partial_reads_once_and_the_line_that_ends_it_reads_the_rest() {
+fn a_line_the_reads_split_reads_whole() {
     let (mut session, _) = session_with(true, |_| {});
-    // The login asks with no GA, so the end of the read paints it.
+    let read = session.read(b"You are hun");
+    assert!(read.reader.lines.is_empty(), "{:?}", read.reader);
+    let read = session.read(b"gry.\n\r");
+    assert_eq!(lines(&read), [HUNGRY]);
+    // Nothing waits after it, so the wait reads nothing.
+    assert!(session.reader_wait().lines.is_empty());
+}
+
+#[test]
+fn a_painted_partial_that_waits_reads_once_and_the_line_that_ends_it_reads_the_rest() {
+    let (mut session, _) = session_with(true, |_| {});
+    // The login asks with no GA, so the end of the read paints it, and
+    // the reader reads it once nothing came to end it.
     let read = session.read(b"Password: ");
-    assert_eq!(lines(&read), ["Password:"]);
+    assert!(read.reader.lines.is_empty(), "{:?}", read.reader);
+    assert_eq!(Vec::from(session.reader_wait().lines), ["Password:"]);
     let read = session.read(b"\n\rPassword must be at least five characters long.\n\r");
     assert_eq!(
         lines(&read),
         ["Password must be at least five characters long."]
     );
-
-    // A line the reads split reads its start, then only the rest.
-    let read = session.read(b"You are hun");
-    assert_eq!(lines(&read), ["You are hun"]);
-    let read = session.read(b"gry.\n\r");
-    assert_eq!(lines(&read), ["gry."]);
 }
 
 #[test]
-fn a_partial_that_waited_reads_as_it_paints_at_the_deadline() {
+fn the_reader_off_reads_no_partial_that_waits() {
+    let (mut session, _) = session_with(false, |_| {});
+    session.read(b"Password: ");
+    assert!(session.reader_wait().lines.is_empty());
+}
+
+#[test]
+fn a_held_partial_that_waits_reads_once_it_painted() {
     let mut wire = Wire::new(super::steps::codes_profile("<%hhp %mm %vmv> ", HP));
     wire.p.ui.screen_reader = true;
     let batch = wire.read_holding(b"<10hp 2");
-    assert!(batch.hold);
+    assert!(batch.hold && batch.reader_wait);
     assert!(batch.reader.lines.is_empty(), "{:?}", batch.reader);
     let mut out = vosh_prompt::stage::Output::new(false);
+    hold_step(&mut wire.c, &mut wire.acc, &mut out);
     let mut reader = crate::session::reader::ReaderFeed::default();
-    hold_step(&wire.p, &mut wire.c, &mut wire.acc, &mut out, &mut reader);
+    reader_wait_step(&wire.p, &mut wire.c, &wire.acc, &mut reader);
     assert_eq!(Vec::from(reader.lines), ["<10hp 2"]);
     // The rest makes it your prompt, which joins no lines.
     let batch = wire.read_with(b"0m 30mv> ", false, false);

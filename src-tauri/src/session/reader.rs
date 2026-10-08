@@ -7,6 +7,7 @@
 //! locks drop.
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
@@ -18,6 +19,12 @@ use crate::sessions::Session;
 /// The most lines one read hands on. The page keeps no more than this
 /// either, so a flood never grows a send past it.
 const READ_LINES: usize = 500;
+
+/// How long a partial the end of a read painted raw waits before a
+/// screen reader reads it. A line the game's write split across reads
+/// ends well inside it and reads whole, and a question that waits for
+/// you reads before the game's next 250 ms pulse.
+pub(super) const PARTIAL_WAIT: Duration = Duration::from_millis(200);
 
 /// The text one read hands a screen reader.
 #[derive(Debug, Default)]
@@ -77,8 +84,8 @@ impl ReaderFeed {
     }
 }
 
-/// A partial the end of a read paints raw, as plain text: the reader
-/// reads what it adds to the start it read before, and keeps it all as
+/// A partial that waits, painted raw, as plain text: the reader reads
+/// what it adds to the start it read before, and keeps it all as
 /// `heard`, the start the line that completes it does not read again.
 pub(super) fn painted_partial(feed: &mut ReaderFeed, heard: &mut Option<String>, plain: String) {
     let before = heard.take();

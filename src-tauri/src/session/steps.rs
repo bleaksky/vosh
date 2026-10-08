@@ -824,9 +824,10 @@ fn end_pulse(c: &mut Connection, batch: &mut ReadBatch) {
 /// The end of a read. A partial the capture settles on, alone or after
 /// held lines, is your prompt now, so it draws in this read and never
 /// flashes. Any other partial paints as a region a later read replaces,
-/// with the held lines before it. Held lines with no partial after them
-/// paint the same way. Then the stage catches up with everything the read
-/// wrote.
+/// with the held lines before it. A screen reader reads either only once
+/// it waits, see [`reader_wait_step`]. Held lines with no partial after
+/// them paint the same way. Then the stage catches up with everything the
+/// read wrote.
 pub(super) fn partial_step(
     p: &mut Profile,
     c: &mut Connection,
@@ -860,6 +861,7 @@ pub(super) fn partial_step(
             // yet, so it waits a moment for the next read.
             None if accumulator.painted().is_none() && c.prompt.stage.live(&plain) => {
                 batch.hold = true;
+                batch.reader_wait = p.ui.screen_reader;
             }
             None => {
                 let painted =
@@ -867,9 +869,7 @@ pub(super) fn partial_step(
                         .stage
                         .paint_partial(&mut batch.out, &bytes, accumulator.painted());
                 accumulator.set_painted(painted);
-                if p.ui.screen_reader {
-                    reader::painted_partial(&mut batch.reader, &mut c.reader_heard, plain);
-                }
+                batch.reader_wait = p.ui.screen_reader;
             }
         }
     } else {
@@ -881,27 +881,37 @@ pub(super) fn partial_step(
 
 /// A partial that waited for the next read stops waiting: it paints
 /// raw, with any held lines before it, as a region a later read
-/// replaces. A screen reader reads it then, into `reader`, such as a
-/// login question the game sends with no GA.
-pub(super) fn hold_step(
-    p: &Profile,
-    c: &mut Connection,
-    accumulator: &mut LineAccumulator,
-    out: &mut Output,
-    reader: &mut ReaderFeed,
-) {
+/// replaces.
+pub(super) fn hold_step(c: &mut Connection, accumulator: &mut LineAccumulator, out: &mut Output) {
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
         let painted = c
             .prompt
             .stage
             .paint_partial(out, &bytes, accumulator.painted());
         accumulator.set_painted(painted);
-        if p.ui.screen_reader {
-            let plain = vosh_protocol::ansi::plain_text(&bytes);
-            reader::painted_partial(reader, &mut c.reader_heard, plain);
-        }
     }
     c.prompt.stage.finish(out);
+}
+
+/// A partial the end of a read left, painted raw or held, is still there
+/// [`reader::PARTIAL_WAIT`] later and painted by then, so it waits for
+/// you, such as a login question the game sends with no GA. A screen
+/// reader reads it then, into `reader`, and the line that completes it
+/// reads only the rest. A line the reads split ends before that and
+/// reads whole.
+pub(super) fn reader_wait_step(
+    p: &Profile,
+    c: &mut Connection,
+    accumulator: &LineAccumulator,
+    reader: &mut ReaderFeed,
+) {
+    if !p.ui.screen_reader || accumulator.painted().is_none() {
+        return;
+    }
+    if let Some(bytes) = accumulator.partial() {
+        let plain = vosh_protocol::ansi::plain_text(bytes);
+        reader::painted_partial(reader, &mut c.reader_heard, plain);
+    }
 }
 
 /// How long a GMCP packet that changes your prompt waits for text before

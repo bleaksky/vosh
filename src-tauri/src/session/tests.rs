@@ -298,13 +298,7 @@ impl Session {
             take(step, &mut kept, &mut repeats);
         }
         if batch.hold {
-            hold_step(
-                &self.p,
-                &mut self.c,
-                &mut self.acc,
-                &mut batch.out,
-                &mut batch.reader,
-            );
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         self.c.prompt.stage.finish(&mut batch.out);
         Read {
@@ -317,6 +311,14 @@ impl Session {
             prompt: batch.prompt,
             reader: batch.reader,
         }
+    }
+
+    /// The screen reader's wait runs out after a read that painted a
+    /// partial raw, and this is what it reads.
+    fn reader_wait(&mut self) -> crate::session::reader::ReaderFeed {
+        let mut reader = crate::session::reader::ReaderFeed::default();
+        reader_wait_step(&self.p, &mut self.c, &self.acc, &mut reader);
+        reader
     }
 
     /// You send `line`: held lines let go first, then the send step.
@@ -416,13 +418,7 @@ impl Wire {
         );
         // The hold's deadline passes before the next read.
         if batch.hold {
-            hold_step(
-                &self.p,
-                &mut self.c,
-                &mut self.acc,
-                &mut batch.out,
-                &mut batch.reader,
-            );
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch
     }
@@ -527,13 +523,7 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(
-                &self.p,
-                &mut self.c,
-                &mut self.acc,
-                &mut batch.out,
-                &mut batch.reader,
-            );
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch.out
     }
@@ -573,13 +563,7 @@ impl Wire {
             None,
         );
         if batch.hold {
-            hold_step(
-                &self.p,
-                &mut self.c,
-                &mut self.acc,
-                &mut batch.out,
-                &mut batch.reader,
-            );
+            hold_step(&mut self.c, &mut self.acc, &mut batch.out);
         }
         batch.out
     }

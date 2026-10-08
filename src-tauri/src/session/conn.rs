@@ -39,12 +39,15 @@ use super::prompt_view::{
     emit_hidden_change, emit_prompt_state, emit_prompt_vars, end_prompt, start_prompt,
     watched_state, watching_prompt,
 };
-use super::read::{finish_read, flush_hold, let_go_held_lines, paint_hold, READ_BUFFER_BYTES};
+use super::read::{
+    finish_read, flush_hold, flush_reader_wait, hear_reader_wait, let_go_held_lines,
+    READ_BUFFER_BYTES,
+};
 use super::round_trip::{RoundTripPayload, READ_EVERY};
 use super::socket::Stream;
 use super::steps::{
-    clock_after, clock_step, end_preview_step, late_repaint_after, late_repaint_step, repaint_step,
-    send_step, window_size_step,
+    clock_after, clock_step, end_preview_step, hold_step, late_repaint_after, late_repaint_step,
+    repaint_step, send_step, window_size_step,
 };
 use super::walk::{self, WalkProgress, Walker};
 use super::writer::{Writer, WritingState};
@@ -201,6 +204,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // When a partial that can still become your prompt stops waiting for
     // the next read and paints raw.
     let mut hold_until: Option<Instant> = None;
+    // When a screen reader reads the partial a read ended on, if it is
+    // still there, since nothing came to end its line.
+    let mut reader_until: Option<Instant> = None;
     // When a GMCP packet that changed your prompt, with no text after it,
     // repaints it.
     let mut late_until: Option<Instant> = None;
@@ -351,6 +357,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                             Instant::now() + Duration::from_millis(vosh_prompt::stage::HOLD_MS)
                         })
                     });
+                    reader_until = batch
+                        .reader_wait
+                        .then(|| Instant::now() + super::reader::PARTIAL_WAIT);
                     let (gmcp, prompt, wrote) = (batch.gmcp, batch.prompt, batch.out.writes_text());
                     clock_until = finish_read(&mut conn, &mut log_sink, batch).await;
                     if let Err(reason) = send_writer(&mut conn, &mut log_sink, &mut hold_until).await {
@@ -386,9 +395,14 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
                                 let mut batch = conn.handle_read(&buf[..n], &log_sink).await;
                                 // The connection is going, so nothing waits.
                                 if batch.hold {
-                                    paint_hold(&mut conn, &mut batch.out, &mut batch.reader).await;
+                                    let mut c = conn.session.connection.lock();
+                                    hold_step(&mut c, &mut conn.accumulator, &mut batch.out);
+                                }
+                                if batch.reader_wait {
+                                    hear_reader_wait(&mut conn, &mut batch.reader).await;
                                 }
                                 hold_until = None;
+                                reader_until = None;
                                 // The connection is going, so no clock
                                 // repaints after it.
                                 let _ = finish_read(&mut conn, &mut log_sink, batch).await;
@@ -410,6 +424,10 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
             () = sleep_until_hold(hold_until), if hold_until.is_some() => {
                 hold_until = None;
                 flush_hold(&mut conn).await;
+            }
+            () = sleep_until_hold(reader_until), if reader_until.is_some() => {
+                reader_until = None;
+                flush_reader_wait(&mut conn).await;
             }
             () = sleep_until_hold(late_until), if late_until.is_some() => {
                 late_until = None;
@@ -558,6 +576,9 @@ pub(super) async fn io_loop<R: tauri::Runtime>(
     // the goodbye is captured like every other client captures it.
     if hold_until.is_some() {
         flush_hold(&mut conn).await;
+    }
+    if reader_until.is_some() {
+        flush_reader_wait(&mut conn).await;
     }
     // Every snoop ends with the link, and each tab stays as ended. The
     // partial each one ended on joins the burst's rows.
