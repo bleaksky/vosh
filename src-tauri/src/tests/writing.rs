@@ -708,6 +708,30 @@ async fn a_note_posts_in_every_order_of_the_prompt_tick() {
     }
 }
 
+/// An immortal's note read back under a prompt of two lines, in the
+/// order the game sends them: the reply, its tick, then the prompt, whose
+/// first line is no line of the note.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_note_reads_back_under_a_prompt_of_two_lines() {
+    let _grid = grid();
+    let h = Harness::with(World {
+        order: Order::Middle,
+        rank: "IMP ",
+        above: Some("3001"),
+        ..World::default()
+    })
+    .await;
+    let mut job = post(6);
+    job["immortal"] = json!(true);
+    job["lines"] = json!([NOTE[0], "", NOTE[1]]);
+    h.start(job).await;
+    let done = h.done().await;
+    assert_eq!(done["kind"], "posted", "{done}");
+    assert_eq!(h.heard().last().map(String::as_str), Some("note post"));
+    h.finish().await;
+}
+
 /// A post whose link drops once `post` went out, then the find on the
 /// next link, asked for before the game's first prompt, in each order.
 #[allow(clippy::await_holding_lock)]

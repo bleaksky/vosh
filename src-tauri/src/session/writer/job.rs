@@ -50,11 +50,19 @@ const PAGES: u8 = 40;
 enum Phase {
     /// Between stages.
     Idle,
-    /// A command at the game's prompt, its answer gathering.
+    /// A command at the game's prompt, its answer gathering. The tick
+    /// after an answer seals it: the game writes its tick between the
+    /// text of a pulse and the prompt (`comm.c:1632`), so a line after it
+    /// is the prompt's own, which `%c` puts on a line of its own
+    /// (`comm.c:1930`). `turned` is where the page after the last turn
+    /// of the pager starts, since only the text of the pulse the tick
+    /// ends counts.
     Tick {
         ask: Option<Ask>,
         lines: Vec<GameLine>,
         since: Instant,
+        sealed: bool,
+        turned: usize,
     },
     /// A command in the editor, waiting for its `> `.
     Editor {
@@ -226,8 +234,9 @@ impl Job {
     /// A line the game sent.
     pub(crate) fn line(&mut self, line: &GameLine) {
         match &mut self.phase {
+            // A line after the tick that sealed an answer is the prompt.
+            Phase::Tick { sealed: true, .. } | Phase::Sending { .. } | Phase::Idle => {}
             Phase::Tick { lines, .. } | Phase::Editor { lines, .. } => lines.push(line.clone()),
-            Phase::Sending { .. } | Phase::Idle => {}
         }
         match line.plain.as_str() {
             TOO_LONG if self.in_editor => {
@@ -301,12 +310,30 @@ impl Job {
             Phase::Tick {
                 ask: Some(Ask::List),
                 since,
+                lines,
+                turned,
                 ..
             } if pager_waits(partial) => {
                 *since = now;
+                *turned = lines.len();
                 out.push(String::new());
             }
             _ => {}
+        }
+    }
+
+    /// The game's prompt tick came in the stream. Once a command has its
+    /// answer, what follows the tick is the prompt, no part of it.
+    pub(crate) fn seal(&mut self) {
+        if let Phase::Tick {
+            ask: Some(_),
+            lines,
+            sealed,
+            turned,
+            ..
+        } = &mut self.phase
+        {
+            *sealed |= lines[*turned..].iter().any(|l| !l.plain.trim().is_empty());
         }
     }
 
@@ -315,10 +342,22 @@ impl Job {
     /// waits for its answer, which the next text brings.
     pub(crate) fn tick(&mut self, now: Instant, out: &mut Vec<String>) -> bool {
         match std::mem::replace(&mut self.phase, Phase::Idle) {
-            Phase::Tick { ask, lines, since } => {
+            Phase::Tick {
+                ask,
+                lines,
+                since,
+                sealed,
+                turned,
+            } => {
                 let answered = ask.is_none() || lines.iter().any(|l| !l.plain.trim().is_empty());
                 if !answered {
-                    self.phase = Phase::Tick { ask, lines, since };
+                    self.phase = Phase::Tick {
+                        ask,
+                        lines,
+                        since,
+                        sealed,
+                        turned,
+                    };
                     return true;
                 }
                 self.in_editor = false;
@@ -451,6 +490,8 @@ impl Job {
                     ask: Some(ask),
                     lines: Vec::new(),
                     since: now,
+                    sealed: false,
+                    turned: 0,
                 };
             }
             Stage::Open => {
@@ -499,6 +540,8 @@ impl Job {
                     ask: None,
                     lines: Vec::new(),
                     since: now,
+                    sealed: false,
+                    turned: 0,
                 };
             }
         }

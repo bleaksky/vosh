@@ -794,6 +794,45 @@ fn cannot_tell_on_a_board_only_immortals_read() {
 /// The note `note show` prints once TEXT went in.
 const SHOWN: [&str; 5] = ["Orla: The Great Milieu", "To: all", TEXT[0], " ", TEXT[2]];
 
+/// A post up to its read back, the game's editor closed on `TEXT`.
+fn post_to_read_back(t: &mut Table, spec: WriteJob) {
+    t.run(WriterCommand::Start(spec));
+    t.answer(&["You have no note in progress."]);
+    t.answer(&["Ok."]);
+    t.answer(&["Ok."]);
+    t.opens(&[], &[""]);
+    t.game(&["String cleared."], "> ");
+    t.took();
+    t.took();
+    t.took();
+    t.lists(&TEXT);
+    assert_eq!(t.tick(), vec!["note show"]);
+}
+
+#[test]
+fn reads_a_note_back_under_a_prompt_of_two_lines() {
+    // The game writes its tick between the reply and the prompt
+    // (`comm.c:1632`), and a prompt with `%c` in it prints a line of its
+    // own after the tick, which is no line of the note.
+    let mut t = Table::new();
+    t.order = Order::Middle;
+    t.above = vec!["3001"];
+    t.tick();
+    let mut spec = note(1, Action::Post);
+    spec.immortal = true;
+    post_to_read_back(&mut t, spec);
+    assert_eq!(
+        t.answer(&[
+            "IMP Orla: The Great Milieu",
+            "To: all",
+            TEXT[0],
+            " ",
+            TEXT[2]
+        ]),
+        vec!["note post"]
+    );
+}
+
 #[test]
 fn a_tick_before_its_text_waits_for_the_rest_of_the_pulse() {
     let mut t = Table::new();
