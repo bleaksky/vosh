@@ -906,23 +906,26 @@ impl Job {
         }
         let meant: Vec<String> = self.planned.iter().map(|p| p.held.clone()).collect();
         let note = shown_note(lines, self.spec.name.as_deref());
-        let matches = note.as_ref().is_some_and(|note| {
+        let fields = note.as_ref().is_some_and(|note| {
             let to = if self.spec.kind.to_immortal() {
                 "Immortal".to_string()
             } else {
                 stored(self.spec.to.trim(), self.spec.immortal)
             };
-            same_text(&note.lines, &meant)
-                && note.subject == stored(self.spec.subject.trim(), self.spec.immortal)
-                && note.to == to
+            note.subject == stored(self.spec.subject.trim(), self.spec.immortal) && note.to == to
         });
-        if matches {
+        // The first line of the text that differs, counted from 1.
+        let line = note
+            .as_ref()
+            .and_then(|note| first_difference(&note.lines, &meant))
+            .map(|at| at + 1);
+        if note.is_some() && fields && line.is_none() {
             self.advance(now, out);
         } else {
             self.clear_then(
                 JobResult::Failed {
                     why: Why::Differs,
-                    line: None,
+                    line,
                 },
                 now,
                 out,

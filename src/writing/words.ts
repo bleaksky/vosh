@@ -354,7 +354,10 @@ function failedNote(why: string, line: number | null): Note {
       };
     case 'differs':
       return {
-        lead: 'The note in the game differs from yours,',
+        lead:
+          line === null
+            ? 'The note in the game differs from yours,'
+            : `Line ${line} of the note in the game differs from yours,`,
         rest: ' so Vosh cleared it and posted nothing.',
         tone: 'bad',
       };

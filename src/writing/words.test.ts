@@ -115,6 +115,17 @@ describe('what a paste and a job leave', () => {
     );
   });
 
+  it('names the first line of a note that differs in the game', () => {
+    expect(resultNote({ kind: 'failed', why: 'differs', line: 3 }, 'note')).toEqual({
+      lead: 'Line 3 of the note in the game differs from yours,',
+      rest: ' so Vosh cleared it and posted nothing.',
+      tone: 'bad',
+    });
+    expect(resultNote({ kind: 'failed', why: 'differs', line: null }, 'note')?.lead).toBe(
+      'The note in the game differs from yours,',
+    );
+  });
+
   it('says what a drop on a board left, and what the board’s list then showed', () => {
     expect(resultNote({ kind: 'dropped', sent: 8, posted: false }, 'journal')).toEqual({
       lead: 'You were disconnected after line 8.',

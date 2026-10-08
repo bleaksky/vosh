@@ -834,6 +834,24 @@ fn reads_a_note_back_under_a_prompt_of_two_lines() {
 }
 
 #[test]
+fn a_note_that_differs_names_its_first_line_that_does() {
+    let mut t = Table::new();
+    post_to_read_back(&mut t, note(1, Action::Post));
+    assert_eq!(
+        t.answer(&["Orla: The Great Milieu", "To: all", TEXT[0], "", "Other"]),
+        vec!["note clear"]
+    );
+    t.answer(&["Ok."]);
+    assert_eq!(
+        t.done(),
+        Some(JobResult::Failed {
+            why: Why::Differs,
+            line: Some(3)
+        })
+    );
+}
+
+#[test]
 fn a_tick_before_its_text_waits_for_the_rest_of_the_pulse() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(note(1, Action::Post)));
