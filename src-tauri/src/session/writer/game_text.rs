@@ -55,6 +55,14 @@ pub(crate) const LANGUAGE_SET: [&str; 2] = [
     "Your note will be readable in Common.",
 ];
 
+/// What `list` tells a mortal on a board only immortals read
+/// (`recycle.c:3963`, `3969`). The typo board lists your own reports to
+/// you (`recycle.c:2516`).
+pub(crate) const STAFF_ONLY: [&str; 2] = [
+    "Only immortals may read ideas.",
+    "Only immortals may read bug reports.",
+];
+
 /// What a text the game holds none of prints (`act_info.c:7623`).
 pub(crate) const NONE: &str = "(None).";
 
@@ -300,6 +308,70 @@ pub(crate) fn shown_note(lines: &[GameLine], name: Option<&str>) -> Option<Shown
     })
 }
 
+/// A row of a board's `list` (`recycle.c:4067`), its colors gone: a mark
+/// for a note that waits too long, `[`, an `a` for an awarded note, the
+/// number three wide, an `N` for one you have not read, `]`, then a rank
+/// or a cabal, the sender, a colon and the subject, with the note's
+/// language in brackets after it when it has one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ListRow<'a> {
+    pub(crate) number: usize,
+    pub(crate) sender: &'a str,
+    /// The subject, the language after it included.
+    pub(crate) subject: &'a str,
+}
+
+/// The row in `plain`, or None when it is no row of a list. The pager's
+/// prompt can come before the first row of a page.
+pub(crate) fn list_row(plain: &str) -> Option<ListRow<'_>> {
+    let row = plain.strip_prefix(PAGER).unwrap_or(plain);
+    let row = row.strip_prefix(['!', ' ']).unwrap_or(row);
+    let (inside, rest) = row.strip_prefix('[')?.split_once("] ")?;
+    let number = inside.get(1..inside.len().checked_sub(1)?)?;
+    let number = number.trim_start().parse().ok()?;
+    let (head, subject) = rest.split_once(": ")?;
+    let sender = head.rsplit(' ').next()?;
+    Some(ListRow {
+        number,
+        sender,
+        subject: subject.trim_end(),
+    })
+}
+
+/// The number of the last note `name` sent with `subject` in a reply to
+/// `list`, the note's language after the subject aside.
+pub(crate) fn listed_note(lines: &[GameLine], name: &str, subject: &str) -> Option<usize> {
+    let titled = |listed: &str| {
+        listed == subject
+            || listed
+                .strip_prefix(subject)
+                .and_then(|tag| tag.strip_prefix(" ("))
+                .and_then(|tag| tag.strip_suffix(')'))
+                .is_some_and(|tag| !tag.is_empty() && !tag.contains(['(', ')']))
+    };
+    lines
+        .iter()
+        .filter_map(|l| list_row(&l.plain))
+        .filter(|row| row.sender == name && titled(row.subject))
+        .map(|row| row.number)
+        .next_back()
+}
+
+/// `text` as the game shows it, without its backtick codes, each of
+/// which takes the character after it.
+pub(crate) fn uncoded(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '`' {
+            chars.next();
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,5 +483,34 @@ mod tests {
         assert_eq!(note.subject, "Plans: a list");
         assert_eq!(note.language.as_deref(), Some("Elvish"));
         assert_eq!(note.lines, Vec::<String>::new());
+    }
+
+    #[test]
+    fn reads_the_rows_of_a_list() {
+        assert_eq!(
+            list_row("[  3N] Orla: About the gate"),
+            Some(ListRow {
+                number: 3,
+                sender: "Orla",
+                subject: "About the gate",
+            })
+        );
+        let ranked = list_row("![a 12 ] IMM Tolliver: Plans: a list (drenish)").expect("a row");
+        assert_eq!(ranked.number, 12);
+        assert_eq!(ranked.sender, "Tolliver");
+        assert_eq!(ranked.subject, "Plans: a list (drenish)");
+        assert_eq!(
+            list_row("[Hit Return to continue] [ 1000N] Maren: Late").map(|r| r.number),
+            Some(1000)
+        );
+        assert_eq!(list_row("There are no notes for you."), None);
+        let rows = [
+            line(" [  0 ] Maren: About the gate"),
+            line(" [  1N] Orla: About the gate (foreign)"),
+            line(" [  2 ] Orla: About the gate now"),
+        ];
+        assert_eq!(listed_note(&rows, "Orla", "About the gate"), Some(1));
+        assert_eq!(listed_note(&rows, "Orla", "About"), None);
+        assert_eq!(uncoded("`!Red`` then plain"), "Red then plain");
     }
 }

@@ -1,6 +1,7 @@
 //! One thing the card asks of the game: read a text, send one through
 //! the game's editor, post a note, send a text for its review, clear the
-//! note the game holds, or pace a paste into the editor you opened. A
+//! note the game holds, look for your note on a board's list, or pace a
+//! paste into the editor you opened. A
 //! job runs as a list of stages, each a command and what it waits for,
 //! and stops at the first answer it does not expect, so it never leaves
 //! a line where the game would take it as something else.
@@ -20,8 +21,9 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::game_text::{
-    after_header, editor_waits, listing, opened_listing, pager_waits, shown_note, stored, GameLine,
-    ACCEPTED, BAD_DOT, BANNER, CLEARED, LANGUAGE_SET, NO_FORUM, NO_NOTE, OK, OTHER_BOARD, TOO_LONG,
+    after_header, editor_waits, listed_note, listing, opened_listing, pager_waits, shown_note,
+    stored, uncoded, GameLine, ACCEPTED, BAD_DOT, BANNER, CLEARED, LANGUAGE_SET, NO_FORUM, NO_NOTE,
+    OK, OTHER_BOARD, STAFF_ONLY, TOO_LONG,
 };
 use super::kinds::{Kind, BOARDS};
 use super::payloads::{Action, Field, JobProgress, JobResult, Shown, Why, WriteJob};
@@ -184,7 +186,8 @@ impl Job {
         let stage = match &self.stage {
             None => Shown::Waiting,
             Some(
-                Stage::Ask(Ask::Read | Ask::Board | Ask::Other(_)) | Stage::Show(ShowFor::Read),
+                Stage::Ask(Ask::Read | Ask::Board | Ask::Other(_) | Ask::List)
+                | Stage::Show(ShowFor::Read),
             ) => Shown::Reading,
             Some(Stage::Ask(Ask::To | Ask::Subject | Ask::Language | Ask::ClearNote)) => {
                 Shown::Fields
@@ -293,6 +296,15 @@ impl Job {
             }
             Phase::Editor { .. } if editor_waits(partial) => {
                 self.editor_answered(partial, now, out);
+            }
+            // A long list waits on the pager, and the rest of it follows.
+            Phase::Tick {
+                ask: Some(Ask::List),
+                since,
+                ..
+            } if pager_waits(partial) => {
+                *since = now;
+                out.push(String::new());
             }
             _ => {}
         }
@@ -516,6 +528,7 @@ impl Job {
             },
             Ask::Post => on("post"),
             Ask::Check => self.spec.kind.check().map(str::to_string),
+            Ask::List => on("list"),
         }
     }
 
@@ -675,6 +688,18 @@ impl Job {
                     .collect(),
             }),
             Ask::ClearAfter => self.finish(),
+            Ask::List => {
+                let subject = uncoded(&stored(self.spec.subject.trim(), self.spec.immortal));
+                let result = match name {
+                    _ if STAFF_ONLY.iter().any(|line| has(line)) => JobResult::CantTell,
+                    None => JobResult::CantTell,
+                    Some(name) => match listed_note(lines, &name, &subject) {
+                        Some(number) => JobResult::Found { number },
+                        None => JobResult::NotFound,
+                    },
+                };
+                self.end(result);
+            }
         }
     }
 
@@ -924,6 +949,8 @@ impl Job {
                     restore: self.restore.clone(),
                 },
                 Action::Paste => JobResult::Pasted,
+                // A find on a text no board holds sent nothing.
+                Action::Find => JobResult::CantTell,
                 // A post ends at its answer and a check at its lines, so
                 // only a clear ends here.
                 Action::Clear | Action::Post | Action::Check => JobResult::Cleared,

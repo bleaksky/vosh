@@ -691,3 +691,68 @@ fn checks_your_description_once() {
         other => panic!("{other:?}"),
     }
 }
+
+/// A find on `kind` for TEXT's note, which asks the board's list.
+fn find(kind: Kind) -> (Table, WriteJob) {
+    let mut spec = note(1, Action::Find);
+    spec.kind = kind;
+    spec.lines.clear();
+    (Table::new(), spec)
+}
+
+#[test]
+fn finds_your_note_on_the_boards_list_and_sends_nothing_else() {
+    let (mut t, spec) = find(Kind::Journal);
+    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["journal list"]);
+    t.answer(&[
+        " [  2 ] Maren: The Great Milieu",
+        "[  3N] Orla: The Great Milieu",
+    ]);
+    assert_eq!(t.done(), Some(JobResult::Found { number: 3 }));
+    assert_eq!(t.sent, vec!["journal list"]);
+}
+
+#[test]
+fn finds_your_note_after_a_cabal_and_before_its_language() {
+    let (mut t, spec) = find(Kind::Note);
+    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["note list"]);
+    t.answer(&[" [  5N] [Knight] Orla: The Great Milieu (dwarvish)"]);
+    assert_eq!(t.done(), Some(JobResult::Found { number: 5 }));
+}
+
+#[test]
+fn turns_the_pager_for_a_long_list() {
+    let (mut t, spec) = find(Kind::Note);
+    t.run(WriterCommand::Start(spec));
+    assert_eq!(
+        t.game(
+            &[" [  0 ] Maren: About the gate"],
+            "\r[Hit Return to continue]\r"
+        ),
+        vec![""]
+    );
+    assert_eq!(t.done(), None);
+    t.answer(&["[Hit Return to continue] [ 41 ] Orla: The Great Milieu"]);
+    assert_eq!(t.done(), Some(JobResult::Found { number: 41 }));
+    assert_eq!(t.sent, vec!["note list", ""]);
+}
+
+#[test]
+fn says_when_the_list_holds_no_such_note() {
+    let (mut t, spec) = find(Kind::Note);
+    t.run(WriterCommand::Start(spec));
+    t.answer(&[" [  0 ] Orla: About the gate"]);
+    assert_eq!(t.done(), Some(JobResult::NotFound));
+    let (mut t, spec) = find(Kind::Note);
+    t.run(WriterCommand::Start(spec));
+    t.answer(&["There are no notes for you."]);
+    assert_eq!(t.done(), Some(JobResult::NotFound));
+}
+
+#[test]
+fn cannot_tell_on_a_board_only_immortals_read() {
+    let (mut t, spec) = find(Kind::Idea);
+    assert_eq!(t.run(WriterCommand::Start(spec)), vec!["idea list"]);
+    t.answer(&["Only immortals may read ideas."]);
+    assert_eq!(t.done(), Some(JobResult::CantTell));
+}

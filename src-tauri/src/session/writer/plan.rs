@@ -29,6 +29,9 @@ pub(super) enum Ask {
     /// The board's `clear` after a refusal or a stop, which ends the job
     /// with what it already holds.
     ClearAfter,
+    /// The board's `list`, which reads to the game's prompt, since it
+    /// ends on no line of its own (`recycle.c:3953`).
+    List,
 }
 
 /// What `.s` reads for.
@@ -134,6 +137,7 @@ pub(super) fn stages(spec: &WriteJob) -> VecDeque<Stage> {
         Action::Check => s.push_back(Stage::Ask(Ask::Check)),
         Action::Clear => s.push_back(Stage::Ask(Ask::ClearNote)),
         Action::Paste => s.push_back(Stage::Send),
+        Action::Find => s.push_back(Stage::Ask(Ask::List)),
     }
     s
 }

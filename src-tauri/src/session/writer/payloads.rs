@@ -25,6 +25,9 @@ pub(crate) enum Action {
     /// Send lines into the editor you opened yourself, each on the
     /// game's `> `.
     Paste,
+    /// Look for your note on the board's `list`, after a drop that came
+    /// once the post went out.
+    Find,
 }
 
 /// What the page asks for, on `writing_start`.
@@ -167,6 +170,16 @@ pub(crate) enum JobResult {
     },
     /// The offer went before you took it.
     OfferGone,
+    /// The board lists a note of yours with the draft's subject, as
+    /// `number`, the last one when it lists more.
+    Found {
+        number: usize,
+    },
+    /// The board lists no note of yours with the draft's subject.
+    NotFound,
+    /// The board's list is not one you can read, so only the game can
+    /// say whether the note posted.
+    CantTell,
 }
 
 /// Where a job stands, for the page's progress.
