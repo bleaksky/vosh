@@ -1,7 +1,8 @@
 //! What the bundle ships. The fonts in `public/fonts` reach every build,
 //! so their license has to sit beside them and in the package, and no
 //! font we hold no license for may ride along. D10 removed Berkeley Mono,
-//! and these tests keep it out.
+//! and these tests keep it out. The store text has to describe the app
+//! as it ships, too.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -100,5 +101,18 @@ fn public_fonts_hold_jetbrains_mono_and_its_license() {
         names,
         ["JetBrainsMonoNerdFont-Bold.ttf", "JetBrainsMonoNerdFont-Regular.ttf", "OFL.txt"],
         "public/fonts should hold only the two JetBrains Mono files and their license. Each font needs a license before it ships."
+    );
+}
+
+#[test]
+fn long_description_matches_the_app() {
+    let doc = conf();
+    let text = doc
+        .pointer("/bundle/longDescription")
+        .and_then(Value::as_str)
+        .expect("tauri.conf.json has no bundle.longDescription");
+    assert!(
+        !text.to_lowercase().contains("map window"),
+        "bundle.longDescription promises a map window, but the map is a pane in the main window. Describe it as a map pane."
     );
 }
