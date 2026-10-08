@@ -28,6 +28,7 @@ export type MoreAction =
   | 'delete'
   | 'read'
   | 'restore'
+  | 'check'
   | 'clear';
 
 export type MoreRow =
@@ -37,7 +38,8 @@ export type MoreRow =
 /** The ⋯ menu. A note's keeps the description card's Rewrap all, Check
  *  spelling and Copy all, and adds a language, Copy to a new draft and
  *  Delete the draft…. Read again and Restore are a text about you's,
- *  since the game holds no copy of a note to go back to (board 1). */
+ *  since the game holds no copy of a note to go back to (board 1), and
+ *  so is the check, which you send whenever you like. */
 export function moreRows(m: {
   kind: WritingKind;
   /** The note carries a Language row now. */
@@ -49,6 +51,8 @@ export function moreRows(m: {
   canRead: boolean;
   /** The draft differs from the game's copy the card knows. */
   canRestore: boolean;
+  /** The game holds the text as the card shows it, so a check reads it. */
+  canCheck: boolean;
 }): MoreRow[] {
   const info = KINDS[m.kind];
   const spelling: MoreRow = { id: 'spelling', label: 'Check spelling', checked: m.spelling };
@@ -80,6 +84,15 @@ export function moreRows(m: {
     { id: 'rewrap', label: 'Rewrap all' },
     { id: 'preview', label: 'Preview as a looker sees it' },
     { id: 'restore', label: 'Put back what the game had', disabled: !m.canRestore },
+    ...(info.check
+      ? [
+          {
+            id: 'check' as const,
+            label: m.kind === 'description' ? 'Send for approval…' : 'Send for review…',
+            disabled: !m.canCheck,
+          },
+        ]
+      : []),
     'separator',
     spelling,
     'separator',

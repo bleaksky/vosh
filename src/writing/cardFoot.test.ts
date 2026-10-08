@@ -46,11 +46,11 @@ describe('the footer', () => {
     expect(footFor({ ...base, flagged }).left).toEqual({ note: flagged.note });
   });
 
-  it('offers the check beside Done once the game holds the text, and after a send', () => {
-    expect(ids({ ...base, matches: true })).toEqual(['check', 'done']);
-    expect(ids({ ...base, kind: 'history', matches: true })).toEqual(['check', 'done']);
+  it('offers Done once the game holds the text, and after a send, with the check left to the menu', () => {
+    expect(ids({ ...base, matches: true })).toEqual(['done']);
+    expect(ids({ ...base, kind: 'history', matches: true })).toEqual(['done']);
     expect(ids({ ...base, kind: 'beast', matches: true })).toEqual(['send']);
-    expect(ids({ ...base, phase: 'sent' })).toEqual(['check', 'done']);
+    expect(ids({ ...base, phase: 'sent' })).toEqual(['done']);
     expect(ids({ ...base, kind: 'beast', phase: 'sent' })).toEqual(['done']);
   });
 

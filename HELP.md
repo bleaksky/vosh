@@ -323,7 +323,7 @@ Vosh's writing card helps you write the description others see when they look at
 - `Guide` shows the help's reminders beside your text, and `Read help description` asks the game for the help itself while the card folds to its header.
 - `Send to game` sends your text through the game's own editor, one line at a time, and checks off each line the game takes. Vosh then checks what the game holds, mends any line that differs, leaves the editor and reads your description back.
 - While Vosh sends, your triggers, timers, Lua and `#walk` wait, and a chip at the command line counts them. A line you type still goes at once, so you can act in a fight.
-- Once the game holds your text as the card shows it, `Send for approval…` sends `dcheck` after you confirm. The game takes one check at a time.
+- Your description doesn't need approval to change. Send it to the game as often as you like, and when you're ready, pick `Send for approval…` in the card's `⋯` menu. It sends `dcheck` after you confirm, and the game takes one check at a time.
 - A werebeast of level 15 and up gets a `Beast` switch beside the title for the beast description.
 
 Vosh never writes, rewrites or suggests a word. The red underlines come from your system's own spell check, and `Check spelling` in the card's `⋯` menu turns them off.
@@ -345,7 +345,7 @@ The writing card writes on the game's boards too. Notes, journal entries, applic
 - The game holds one note at a time. When you started one in the game yourself, Vosh keeps it in your drafts and asks before it clears it.
 - If you're disconnected mid send, the card shows how far it got once you're back, and `Post again` starts over. When the drop came as it posted, Vosh checks the board's list first, and it never posts again on its own.
 - Just before it posts, Vosh lists your own notes on that board, so you'll see the list in the terminal. If your connection drops right then, Vosh compares the board with that list, so an older note with the same subject never passes for the new one.
-- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` sends your history to the immortals, once.
+- Your history, personality and purpose share one card through a switch beside its title. `Send to game` saves each one in the game, and `Send for review…` in the `⋯` menu sends your history to the immortals, once.
 
 You can keep as many notes going as you like, each saved as you type. Each post moves to `Sent`, where Vosh keeps your last 20 for each character, so you can still read a bug report the game won't show you again.
 

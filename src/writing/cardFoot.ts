@@ -33,7 +33,6 @@ export type FootAction =
   | 'restore'
   | 'done'
   | 'post'
-  | 'check'
   | 'send';
 
 export interface FootButton {
@@ -129,7 +128,6 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
   if (f.ended?.actions.includes('restore') && f.hasGame)
     buttons.push({ id: 'restore', label: 'Put back what the game had' });
   const again = f.ended?.actions.includes('again') ?? false;
-  const checkLabel = f.kind === 'description' ? 'Send for approval…' : 'Send for review…';
   if (
     f.phase === 'posted' ||
     f.phase === 'checked' ||
@@ -148,14 +146,13 @@ export function footFor(f: FootInput): { left: FootLeft; buttons: FootButton[] }
       disabled: !f.canPost || f.finding || f.ended?.actions.includes('clear-other') === true,
     });
   } else if (f.phase === 'sent') {
-    if (info.check) buttons.push({ id: 'check', label: checkLabel, disabled: !f.live });
     buttons.push({ id: 'done', label: 'Done', primary: true });
   } else {
-    // The game holds the text as the card shows it, so the check sits
-    // beside Done, and Send to game takes Done's place once it differs
-    // (Note Editor board 6). After a drop Send again stays.
+    // The game holds the text as the card shows it, so Done shows, and
+    // Send to game takes its place once it differs (Note Editor board 6).
+    // After a drop Send again stays. The check waits in the ⋯ menu, since
+    // the game keeps a text unchecked as long as you like.
     if (f.matches && info.check) {
-      buttons.push({ id: 'check', label: checkLabel, disabled: !f.live });
       if (!again) {
         buttons.push({ id: 'done', label: 'Done', primary: true });
         return { left, buttons };

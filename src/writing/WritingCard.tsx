@@ -540,6 +540,7 @@ export function WritingCard({
     running || sentView
       ? null
       : lineNote(rows[caretRow]?.text ?? '', caretRow, width, helpWidth, immortal);
+  const matches = readNow && !empty && !!draft.game && sameLines(lines, draft.game);
   const foot = footFor({
     kind,
     running,
@@ -556,7 +557,7 @@ export function WritingCard({
     canSend,
     canPost: canSend && fieldsSet && spam === null,
     finding: find !== null,
-    matches: readNow && !empty && !!draft.game && sameLines(lines, draft.game),
+    matches,
     hasGame: !!draft.game,
     asksPost: postAsks,
   });
@@ -575,7 +576,6 @@ export function WritingCard({
     restore,
     done: close,
     post,
-    check,
     send: () => sendToGame(),
   };
   const left =
@@ -671,6 +671,7 @@ export function WritingCard({
         },
       }),
     read: readAgain,
+    check,
     restore: () => {
       if (!draft.game) return;
       show(draft.game);
@@ -693,6 +694,7 @@ export function WritingCard({
     sentView,
     canRead: live && running === null,
     canRestore: !!draft.game && !sameLines(lines, draft.game),
+    canCheck: live && running === null && (matches || phase === 'sent'),
   }).map((row) => (row === 'separator' ? row : { ...row, run: moreActions[row.id] }));
 
   const guide =
