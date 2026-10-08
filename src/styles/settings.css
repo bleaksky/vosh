@@ -1331,14 +1331,14 @@
   opacity: 0.45;
 }
 
-/* The color list: the pane menu 232 wide, Default on a dashed ring, and
+/* The color list: the menu 232 wide, Default on a dashed ring, and
    after a color its mark in the tertiary tone and the check on your
    pick. */
-.pane-menu.st-vital-colors {
+.menu.st-vital-colors {
   width: 232px;
 }
 
-.pane-menu-swatch.is-default {
+.menu-swatch.is-default {
   box-shadow: none;
   outline: 1.25px dashed var(--tertiary);
   outline-offset: -1.25px;
@@ -1357,7 +1357,7 @@
   line-height: 16px;
 }
 
-.pane-menu-item:focus .st-vital-color-mark {
+.menu-item:focus .st-vital-color-mark {
   color: var(--secondary);
 }
 

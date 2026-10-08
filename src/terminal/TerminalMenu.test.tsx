@@ -82,7 +82,7 @@ describe('the terminal menu', () => {
     expect(labels(settings)).toEqual(['Settings']);
     expect(settings).toContain('aria-haspopup="menu"');
     expect(settings).toContain('aria-expanded="false"');
-    expect(settings).toContain('pane-menu-chevron');
+    expect(settings).toContain('menu-chevron');
     expect(settings).not.toContain('ov-menu-keys');
   });
 });

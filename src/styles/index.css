@@ -11,7 +11,7 @@
 @import './terminal.css'; /* terminal-, scrollback-, resizable- */
 @import './input.css'; /* input-, caret-, paste- */
 @import './migration.css'; /* settings-app, settings-btn, migration- */
-@import './overlays.css'; /* ov- */
+@import './overlays.css'; /* ov-, menu */
 @import './panel.css'; /* pane-, panel- */
 @import './affects.css'; /* pane-affect, pane-countdown, pane-chip, pane-sr */
 @import './map.css'; /* server-view, map-, pane-map- */

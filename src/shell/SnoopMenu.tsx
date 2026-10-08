@@ -61,7 +61,7 @@ export function SnoopMenu({ anchor, front, folded, onPick, onClose }: Props) {
       <MenuSeparator />
       <MenuItem
         onSelect={pick('find')}
-        trailing={<kbd className="ov-menu-keys">{shortcutLabel('Mod+F')}</kbd>}
+        trailing={<kbd className="menu-keys">{shortcutLabel('Mod+F')}</kbd>}
       >
         Find
       </MenuItem>

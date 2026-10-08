@@ -205,7 +205,7 @@ describe('the session popover with the sidebar folded', () => {
       .map((el) => findAll(el, hasClass('shell-sessions-mark'))[0]?.getAttribute('aria-label'));
     expect(marks).toEqual(['Playing', 'Playing', 'Not connected']);
     expect(items[0].getAttribute('aria-current')).toBe('true');
-    expect(findAll(items[0], hasClass('pane-menu-check'))).toHaveLength(1);
+    expect(findAll(items[0], hasClass('menu-check'))).toHaveLength(1);
     expect(findAll(items[1], hasClass('shell-sessions-port'))[0]?.textContent).toBe('1825');
     const count = findAll(items[1], hasClass('shell-sessions-count'))[0];
     expect(count?.getAttribute('aria-label')).toBe('2 waiting');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import frameCss from '../styles/frame.css?raw';
+import overlaysCss from '../styles/overlays.css?raw';
 import panelCss from '../styles/panel.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import {
@@ -83,10 +84,9 @@ const SHEETS: Readonly<Record<string, string>> = Object.fromEntries(
 );
 
 /** A rule that draws inside a pane or the status line: a pane, the
- *  panel, the vitals, the map's drawing, or the status line. The pane
- *  menus float over the window and keep the system face. */
+ *  panel, the vitals, the map's drawing, or the status line. The menus
+ *  float over the window in overlays.css and keep the system face. */
 function drawsPaneText(selector: string): boolean {
-  if (/\.pane-menu/.test(selector)) return false;
   return /\.panel?\b|\.shell-status|\.map-|\.server-view/.test(selector);
 }
 
@@ -185,6 +185,6 @@ describe('the panel faces in the stylesheets', () => {
   });
 
   it('keeps the pane menus in the system face, like every other menu', () => {
-    expect(declared(panelCss, '.pane-menu', 'font-family')).toBe('var(--font-ui)');
+    expect(declared(overlaysCss, '.menu', 'font-family')).toBe('var(--font-ui)');
   });
 });

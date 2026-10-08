@@ -113,7 +113,7 @@ export function MenuButton<T extends string>({
                   onClick={() => choose(choice.value)}
                 >
                   <span className="ov-menu-label">{choice.label}</span>
-                  {checked && <CheckIcon className="pane-menu-check" />}
+                  {checked && <CheckIcon className="menu-check" />}
                 </button>
               </li>
             );

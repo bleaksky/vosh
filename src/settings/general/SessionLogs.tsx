@@ -442,7 +442,7 @@ export function SessionLogs({ config, onError, onSaveScene }: Props) {
           <MenuItem
             checked={saveTimes}
             onSelect={() => setSaveTimes((on) => !on)}
-            trailing={saveTimes ? <CheckIcon className="pane-menu-check" /> : null}
+            trailing={saveTimes ? <CheckIcon className="menu-check" /> : null}
           >
             Include times
           </MenuItem>

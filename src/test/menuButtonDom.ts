@@ -31,7 +31,7 @@ export const menuHeight = (rows: number) => rows * 30 + 12;
 /** How many check marks an item of the menu draws, 1 for the current
  *  choice and 0 for the rest. */
 export function checkMarks(item: FakeElement): number {
-  return findAll(item, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'pane-menu-check')
+  return findAll(item, (e) => e.nodeName === 'SVG' && e.getAttribute('class') === 'menu-check')
     .length;
 }
 

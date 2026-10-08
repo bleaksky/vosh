@@ -221,7 +221,7 @@ interface ItemProps {
 function SessionItem({ row, rows, place, current, onSelect, onCloseSession }: ItemProps) {
   const look = rowLook(useSessionRow(row.id), row, current);
   const end = current ? (
-    <CheckIcon className="pane-menu-check" />
+    <CheckIcon className="menu-check" />
   ) : look.count > 0 ? (
     <WaitingCount count={look.count} />
   ) : (

@@ -339,7 +339,7 @@ export function TerminalMenu({
           label="Write"
           nested
           autoFocus={sub.focus}
-          className="pane-menu-sub"
+          className="menu-sub"
           at={at}
           onClose={back}
         >
@@ -358,7 +358,7 @@ export function TerminalMenu({
           label="Settings"
           nested
           autoFocus={sub.focus}
-          className="pane-menu-sub"
+          className="menu-sub"
           at={at}
           onClose={back}
         >
@@ -370,9 +370,7 @@ export function TerminalMenu({
                   key={entry.id}
                   onSelect={() => pickRow(entry)}
                   trailing={
-                    entry.keys ? (
-                      <kbd className="ov-menu-keys">{shortcutLabel(entry.keys)}</kbd>
-                    ) : null
+                    entry.keys ? <kbd className="menu-keys">{shortcutLabel(entry.keys)}</kbd> : null
                   }
                 >
                   {entry.label}
@@ -449,7 +447,7 @@ export function TerminalMenu({
                 >
                   <span className="ov-menu-label">{item.label}</span>
                   {item.keys && <kbd className="ov-menu-keys">{shortcutLabel(item.keys)}</kbd>}
-                  {item.submenu && <ChevronRightIcon className="pane-menu-chevron" />}
+                  {item.submenu && <ChevronRightIcon className="menu-chevron" />}
                 </button>
               );
             })}

@@ -150,7 +150,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
       <MenuItem
         key={choice.value}
         onSelect={run(() => pick(choice.value))}
-        trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+        trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
       >
         {choice.label}
       </MenuItem>
@@ -207,7 +207,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         label={submenus[which].label}
         nested
         autoFocus={subOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu)}
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
@@ -240,7 +240,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         label={`Color for ${channel}`}
         nested
         autoFocus={chanOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu, leftward)}
         onClose={() => {
           setChanOpen(null);
@@ -282,7 +282,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           if (which !== 'colors') setChanOpen(null);
         },
       }}
-      trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+      trailing={<ChevronRightIcon className="menu-chevron" />}
     >
       {submenus[which].label}
     </MenuItem>
@@ -403,7 +403,7 @@ export function ShowHereRows({
       {lua.map((ref) => (
         <MenuItem
           key={paneKey(ref)}
-          trailing={<span className="pane-menu-plugin">{ref.props.plugin}</span>}
+          trailing={<span className="menu-hint">{ref.props.plugin}</span>}
           onSelect={() => pick(ref)}
         >
           {paneLabel(ref)}
@@ -415,7 +415,7 @@ export function ShowHereRows({
 
 /** A dot in a color, before a row's name. */
 function Swatch({ color }: { color: string }) {
-  return <span className="pane-menu-swatch" style={{ background: color }} aria-hidden="true" />;
+  return <span className="menu-swatch" style={{ background: color }} aria-hidden="true" />;
 }
 
 /** The rows of Channel colors: each channel the pane knows, with a dot
@@ -457,7 +457,7 @@ export function ChannelColorRows({
             onOpen: (focus) => onOpen(channel, focus),
           }}
           onFocus={() => onLeave(channel)}
-          trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+          trailing={<ChevronRightIcon className="menu-chevron" />}
         >
           <Swatch color={chatChannelColor(channel, palette, colors)} />
           {channel}
@@ -501,7 +501,7 @@ export function ChannelColorItems({
         done();
         void setChatColor(channel, choice.value).catch(() => undefined);
       }}
-      trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+      trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
     >
       <Swatch color={choice.swatch} />
       {choice.label}

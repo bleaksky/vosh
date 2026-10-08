@@ -160,7 +160,7 @@ export function MenuSurface({
       aria-label={label}
       data-menu-surface=""
       data-menu-nested={nested ? '' : undefined}
-      className={`pane-menu${className ? ` ${className}` : ''}`}
+      className={`menu${className ? ` ${className}` : ''}`}
       style={
         pos ? { left: pos.left, top: pos.top } : { left: at.x, top: at.y, visibility: 'hidden' }
       }
@@ -225,7 +225,7 @@ export function MenuItem({
         type="button"
         role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
         aria-checked={checked}
-        className="pane-menu-item"
+        className="menu-item"
         aria-disabled={disabled || undefined}
         aria-haspopup={submenu ? 'menu' : undefined}
         aria-expanded={submenu ? submenu.open : undefined}
@@ -251,7 +251,7 @@ export function MenuItem({
           else onSelect?.();
         }}
       >
-        <span className="pane-menu-text">{children}</span>
+        <span className="menu-label">{children}</span>
         {trailing}
       </button>
     </li>
@@ -259,5 +259,5 @@ export function MenuItem({
 }
 
 export function MenuSeparator() {
-  return <li role="separator" className="pane-menu-sep" />;
+  return <li role="separator" className="menu-sep" />;
 }

@@ -3,6 +3,7 @@ import panelCss from '../styles/panel.css?raw';
 import affectsCss from '../styles/affects.css?raw';
 import mapCss from '../styles/map.css?raw';
 import frameCss from '../styles/frame.css?raw';
+import overlaysCss from '../styles/overlays.css?raw';
 import tokensCss from '../styles/tokens.css?raw';
 import { TEXT_SIZES } from '../theme/appearanceSettings';
 import { liveChipMeasure } from './affects/chipMeasure';
@@ -32,6 +33,8 @@ const RULES = [
   ...rulesOf(mapCss).filter((r) => r.selector.includes('.pane-')),
 ];
 const FRAME_RULES = rulesOf(frameCss);
+// The menus float over the panes and keep a size of their own.
+const MENU_RULES = rulesOf(overlaysCss).filter((r) => /\.menu\b/.test(r.selector));
 const TOKEN_RULES = rulesOf(tokensCss);
 
 /** The declarations of the one rule with `selector` in `rules`. */
@@ -341,10 +344,10 @@ describe('the panel in panel.css', () => {
 
   it('sets every text in the panes at your panel size, and the menus at their own', () => {
     let read = 0;
-    for (const { selector, body } of RULES) {
+    for (const { selector, body } of [...RULES, ...MENU_RULES]) {
       for (const [, prop, value] of body.matchAll(/(font-size|line-height)\s*:\s*([^;]+);/g)) {
         const at = `${selector} ${prop}`;
-        if (selector.includes('pane-menu')) {
+        if (/\.menu\b/.test(selector)) {
           expect(value.trim(), at).toMatch(/^\d+px$/);
         } else if (selector === '.vitals-ledger-current' && prop === 'font-size') {
           // Ledger's figure, which VitalsLedger sets from your size.

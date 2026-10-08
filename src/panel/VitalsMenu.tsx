@@ -51,7 +51,7 @@ export function VitalsChoiceItems<T extends string>({
             done();
             void pick(choice.value).catch(() => undefined);
           }}
-          trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
+          trailing={choice.checked ? <CheckIcon className="menu-check" /> : null}
         >
           {choice.label}
         </MenuItem>
@@ -122,7 +122,7 @@ export function VitalsMenu({ x, y, onClose }: Props) {
         label={submenus[which].label}
         nested
         autoFocus={subOpen.focus}
-        className="pane-menu-sub"
+        className="menu-sub"
         at={submenuAt(r, menu)}
         onClose={() => {
           // Escape or ArrowLeft: back to the row that opened it.
@@ -147,7 +147,7 @@ export function VitalsMenu({ x, y, onClose }: Props) {
         controls: subId(which),
         onOpen: (focus) => setSubOpen((prev) => openPaneSubmenu(prev, which, focus)),
       }}
-      trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+      trailing={<ChevronRightIcon className="menu-chevron" />}
     >
       {submenus[which].label}
     </MenuItem>

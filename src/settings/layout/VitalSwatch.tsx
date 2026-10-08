@@ -83,13 +83,13 @@ export function VitalSwatch({
             {choice.mark && (
               <span className="st-vital-color-mark">{COLOR_MARK_WORDS[choice.mark]}</span>
             )}
-            {choice.checked && <CheckIcon className="pane-menu-check" />}
+            {choice.checked && <CheckIcon className="menu-check" />}
           </span>
         ) : null
       }
     >
       <span
-        className={cx('pane-menu-swatch', choice.swatch === null && 'is-default')}
+        className={cx('menu-swatch', choice.swatch === null && 'is-default')}
         style={choice.swatch === null ? undefined : { background: choice.swatch }}
       />
       {choice.label}
