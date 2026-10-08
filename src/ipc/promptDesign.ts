@@ -22,6 +22,10 @@ export interface PromptSpan {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  /** The spaces a `%{right}` put in, so the pinned band knows which gap
+   *  to close first when the row is too wide for it. Left out on every
+   *  other span. */
+  push?: boolean;
 }
 
 /** A drawn design. */

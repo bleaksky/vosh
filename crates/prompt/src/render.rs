@@ -94,6 +94,11 @@ pub struct Span {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    /// The span is the spaces a `%{right}` put in, so a band that cannot
+    /// hold the row at the width the push reached to knows which gap to
+    /// close first. Only the first `%{right}` on a row pushes.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub push: bool,
     /// The whole look at the piece's first cell, dim, the underline's
     /// kind and color, inverse, strike and blink included, so a test can
     /// check an edit kept it. The webview reads the fields above alone.
@@ -194,6 +199,7 @@ impl Writer {
         }
         if let Some(span) = self.spans.get_mut(push.span) {
             span.width = pad;
+            span.push = true;
         }
         for span in self.spans.iter_mut().skip(push.span + 1) {
             span.col += pad;
@@ -347,6 +353,7 @@ impl Writer {
                 bold: look.bold,
                 italic: look.italic,
                 underline: look.underline.is_some(),
+                push: false,
                 look,
             });
         }
