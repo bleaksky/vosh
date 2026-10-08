@@ -466,16 +466,24 @@ export function Terminal({
     // Fill the copy anew from the session's scrollback, in the wash fields
     // in force, and keep the live pane at its tail. The history pane keeps
     // the row it shows. Only a copy the screen gave back says the
-    // scrollback was restored, since its writes stopped meanwhile.
+    // scrollback was restored, since its writes stopped meanwhile. A fill
+    // that a newer one overtook writes nothing and settles nothing, since
+    // the writer and the screen are the newer fill's. The reset goes in
+    // the stream (RIS), since xterm still parses what an earlier writer
+    // handed it after a reset called from here, and the history would
+    // show twice.
+    let fills = 0;
     const fill = (banner: boolean, done: () => void) => {
+      const gen = ++fills;
       const top = term.buffer.active.viewportY;
       writer.dispose();
-      term.reset();
       writer = new RegionWriter(term);
       if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
+      writer.local('\x1bc');
       shaper = new OutputShaper(term.cols, fields, washed);
       washedRef.current = false;
       const settle = () => {
+        if (gen !== fills) return;
         if (quietRef.current) {
           term.scrollToLine(top);
         } else {
@@ -486,6 +494,7 @@ export function Terminal({
       };
       loadScrollback(false, session)
         .then(({ bytes }) => {
+          if (gen !== fills) return;
           if (bytes.length === 0) return settle();
           writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));
           if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
@@ -518,8 +527,9 @@ export function Terminal({
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled(), session)
       .then(({ bytes, seededNative }) => {
-        // A copy the native grid hides takes none of it.
-        const toXterm = mirror.mirrors();
+        // A copy the native grid hides takes none of it, and neither does
+        // a copy that began filling anew, since the fill writes it all.
+        const toXterm = mirror.mirrors() && fills === 0;
         if (bytes.length > 0) {
           if (toXterm) {
             writer.local(WashPainter.whole(localDecoder.decode(bytes), washRef.current, washed));

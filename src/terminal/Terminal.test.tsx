@@ -15,6 +15,9 @@ const bus = vi.hoisted(() => ({
   written: new Map<object, string[]>(),
   /** What each region writer wrote of the pane's own, by the xterm. */
   local: new Map<object, string[]>(),
+  /** Scrollback loads held until a test answers them, while it holds. */
+  hold: false,
+  held: [] as ((bytes: number[]) => void)[],
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -30,6 +33,11 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: async (cmd: string, args?: unknown) => {
     bus.invoked.push([cmd, args]);
+    if (cmd === 'scrollback_load' && bus.hold) {
+      return new Promise((answer) =>
+        bus.held.push((bytes) => answer({ bytes, seeded_native: false })),
+      );
+    }
     if (cmd === 'scrollback_load') return { bytes: [], seeded_native: false };
     return null;
   },
@@ -48,7 +56,6 @@ vi.mock('@xterm/xterm', () => {
     }
     loadAddon() {}
     open() {}
-    reset() {}
     scrollToLine() {}
     onResize = none;
     onScroll = none;
@@ -246,6 +253,10 @@ function themeChanged(id: string): void {
   for (const cb of bus.handlers.get('vosh://theme-changed') ?? []) cb({ payload: id });
 }
 
+/** The yellow wash of wash_wraps_whole_line in the trigger engine. */
+const SANCTUARY =
+  '\x1b[33;48;2;51;51;0mYour \x1b[33msanctuary\x1b[0m\x1b[33;48;2;51;51;0m flickers and fades.\x1b[0m\r\n';
+
 /** How many times a pane loaded the scrollback. */
 const loads = () => bus.invoked.filter(([cmd]) => cmd === 'scrollback_load').length;
 
@@ -272,16 +283,37 @@ describe('a theme change on a pane xterm draws', () => {
   it('fills anew from the scrollback, with no banner, once a wash painted', async () => {
     const root = await mount();
     themeChanged('obsidian-ember');
-    // The yellow wash of wash_wraps_whole_line in the trigger engine.
-    output(
-      1,
-      '\x1b[33;48;2;51;51;0mYour \x1b[33msanctuary\x1b[0m\x1b[33;48;2;51;51;0m flickers and fades.\x1b[0m\r\n',
-    );
+    output(1, SANCTUARY);
     const before = loads();
     await act(async () => themeChanged('vellum'));
     expect(loads()).toBe(before + 1);
     const local = [...bus.local.values()].flat();
     expect(local.some((text) => text.includes('[scrollback restored]'))).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+  it('writes the history once when a second change overtakes a fill', async () => {
+    const root = await mount();
+    themeChanged('obsidian-ember');
+    const history = 'The day has begun.\r\n';
+    output(1, SANCTUARY);
+    bus.hold = true;
+    await act(async () => themeChanged('vellum'));
+    // The stand in mirror writes at once where the real one waits for
+    // the fill, so the pane paints a wash again and the next change
+    // fills anew while the first fill still loads.
+    output(1, SANCTUARY);
+    await act(async () => themeChanged('obsidian-ember'));
+    const [first, second] = bus.held.splice(0);
+    expect(second).toBeDefined();
+    const bytes = [...new TextEncoder().encode(history)];
+    await act(async () => second(bytes));
+    await act(async () => first(bytes));
+    bus.hold = false;
+    const [local] = [...bus.local.values()];
+    // The fill resets in the stream, then writes the history once.
+    expect(local[0]).toBe('\x1bc');
+    expect(local.join('').split('The day has begun.').length - 1).toBe(1);
     await act(async () => root.unmount());
   });
 
