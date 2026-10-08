@@ -209,7 +209,7 @@
 }
 
 .pc-head .st-icon-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-rule {
@@ -295,7 +295,7 @@
 }
 
 .pc-menu-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-menu-button[aria-disabled='true'] {
@@ -683,7 +683,7 @@
 
 .pc-name-button:hover,
 .pc-name-button[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -748,7 +748,7 @@
 .pc-start:focus-visible,
 .pc-start[aria-checked='true'],
 .pc-start[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-start-check {
@@ -823,7 +823,7 @@
 }
 
 .pc-forget .btn[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* Presets holds the start list with its samples, not rows, so it keeps
@@ -1278,7 +1278,7 @@
 
 .pc-picker-row:hover,
 .pc-picker-row.is-current {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .pc-picker-name {
@@ -1374,7 +1374,7 @@
 }
 
 .pc-form.is-on {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* A sample sits on the terminal's ground, as it draws in the text. */
@@ -1687,11 +1687,11 @@
 
 .gs-step:hover,
 .gs-step.is-current {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .gs-step:focus-visible {
-  background: var(--menu-hi);
+  background: var(--hover);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 

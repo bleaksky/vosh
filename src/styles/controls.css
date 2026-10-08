@@ -16,13 +16,13 @@
 }
 
 /* On paper a field is the raised paper, so it takes a hairline ring.
-   The segmented track takes the black wash of the menu highlight, as
+   The segmented track takes the black wash of the hover, as
    SPEC 4 drew it, so the pressed segment on the raised paper stands
    out of it. */
 :root[data-appearance='light'] .st-app,
 :root[data-appearance='light'] .st-controls {
   --st-fill-ring: inset 0 0 0 1px var(--sep);
-  --st-seg-track: var(--menu-hi);
+  --st-seg-track: var(--hover);
   --st-seg-ring: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
   --st-selrow-ring: 0 0 0 1px var(--sep);
 }
@@ -406,7 +406,7 @@
 
 /* A disabled button takes no hover fill. */
 .btn:where(:enabled):hover {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .btn:focus-visible {

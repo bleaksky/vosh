@@ -166,7 +166,7 @@
 
 .wr-kind:hover,
 .wr-kind.is-open {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .wr-kind:focus-visible {
@@ -186,7 +186,7 @@
 }
 
 .btn.is-pressed {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .wr-main {

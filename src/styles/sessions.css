@@ -607,7 +607,7 @@
    focus, so a row under a resting pointer goes dark once the arrow keys
    move on (Q1). */
 .shell-menu-session:focus {
-  background: var(--menu-hi);
+  background: var(--hover);
   outline: none;
 }
 

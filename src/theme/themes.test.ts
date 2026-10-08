@@ -135,7 +135,6 @@ const NORD: TokenSheet = {
     sep: '#434c5e',
     divider: '#3e444f',
     selrow: '#3b4252',
-    hover: '#393f4a',
     inputband: '#353b46',
     text: '#e5e9f0',
     secondary: '#c0c7d3',
@@ -153,7 +152,7 @@ const NORD: TokenSheet = {
     selectionText: '#eceff4',
     field: 'rgba(255, 255, 255, 0.102)',
     track: 'rgba(255, 255, 255, 0.249)',
-    menuHi: 'rgba(255, 255, 255, 0.108)',
+    hover: 'rgba(255, 255, 255, 0.108)',
     keyRing: 'rgba(255, 255, 255, 0.219)',
     edge: 'rgba(255, 255, 255, 0.19)',
   },
@@ -168,7 +167,6 @@ const EMBER: TokenSheet = {
     sep: '#1b1a19',
     divider: '#100f0e',
     selrow: '#121110',
-    hover: '#0b0b0a',
     inputband: '#080807',
     text: '#c0bdbb',
     secondary: '#8e8b89',
@@ -186,7 +184,7 @@ const EMBER: TokenSheet = {
     selectionText: '#f2efee',
     field: 'rgba(255, 255, 255, 0.06)',
     track: 'rgba(255, 255, 255, 0.16)',
-    menuHi: 'rgba(255, 255, 255, 0.08)',
+    hover: 'rgba(255, 255, 255, 0.08)',
     keyRing: 'rgba(255, 255, 255, 0.14)',
     edge: 'rgba(255, 255, 255, 0.12)',
   },
@@ -201,7 +199,6 @@ const RUBRIC: TokenSheet = {
     sep: '#cbc1af',
     divider: '#dcd1bd',
     selrow: '#f5efe4',
-    hover: '#e2d8c3',
     inputband: '#e7ddc7',
     text: '#151d2a',
     secondary: '#525558',
@@ -219,7 +216,7 @@ const RUBRIC: TokenSheet = {
     selectionText: '#151d2a',
     field: '#f5efe4',
     track: 'rgba(0, 0, 0, 0.146)',
-    menuHi: 'rgba(0, 0, 0, 0.052)',
+    hover: 'rgba(0, 0, 0, 0.052)',
     keyRing: 'rgba(0, 0, 0, 0.124)',
     edge: 'rgba(0, 0, 0, 0.146)',
   },
@@ -337,13 +334,13 @@ describe('contrast floors', () => {
 
 describe('control washes', () => {
   // The surface each wash sits on and steps: the field, the track and
-  // the keycap ring the panel, the menu highlight raised, the edge the
+  // the keycap ring the panel, the hover raised, the edge the
   // ground.
   const SURFACE = {
     field: 'panel',
     track: 'panel',
     keyRing: 'panel',
-    menuHi: 'raised',
+    hover: 'raised',
     edge: 'bg',
   } as const;
   type Wash = keyof typeof SURFACE;
@@ -386,7 +383,7 @@ describe('control washes', () => {
       field: 0.06,
       track: 0.16,
       keyRing: 0.14,
-      menuHi: 0.08,
+      hover: 0.08,
       edge: 0.12,
     };
     for (const key of WASHES) {
@@ -915,7 +912,9 @@ describe('color vision swaps', () => {
 
   // The 26 themes one-window (a206426c) ships, their Typical fits, their
   // play palettes with Fit game colors on and their window tokens,
-  // digested from that commit. Color vision changes none of them.
+  // digested from that commit. Color vision changes none of them. The
+  // tokens digest is that commit's with its solid hover dropped and its
+  // menu highlight named hover, since the two became one wash (R21c Q8).
   it('fits and paints Typical byte for byte as at a206426c', () => {
     expect(BUILTIN_THEMES).toHaveLength(26);
     expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, t.fitted ?? null])))).toBe(
@@ -925,7 +924,7 @@ describe('color vision swaps', () => {
       '9c975f41',
     );
     expect(digest(JSON.stringify(BUILTIN_THEMES.map((t) => [t.id, themeTokens(t)])))).toBe(
-      '8b44151f',
+      '97a9f5e0',
     );
     for (const theme of BUILTIN_THEMES) {
       expect(themeTokens(theme, 'typical'), theme.id).toEqual(themeTokens(theme));
@@ -1829,6 +1828,14 @@ describe('custom theme chrome', () => {
       panel: '#eeeeee',
     });
     expect(migrateCustomChrome(undefined)).toEqual({});
+  });
+
+  it('carries a menu highlight pin over as the hover', () => {
+    const wash = 'rgba(255, 255, 255, 0.1)';
+    expect(migrateCustomChrome({ menuHi: wash })).toEqual({ hover: wash });
+    // A hover pin of its own wins.
+    expect(migrateCustomChrome({ menuHi: wash, hover: '#222222' })).toEqual({ hover: '#222222' });
+    expect(migrateCustomChrome({ menuHi: ' ' })).toEqual({});
   });
 
   it('derives a legacy custom theme from its terminal slots', () => {

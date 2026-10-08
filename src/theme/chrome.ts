@@ -8,8 +8,8 @@
 //   panel       the terminal ground itself, so the window is one surface
 //   lines       steps in OKLab L, white over a dark ground and black
 //               over a light one. The line (sep) steps 11, the divider
-//               6, hover 4 and a dark selected row 7, all over the
-//               panel, and the input band 2.5 over the ground. OKLab L
+//               6 and a dark selected row 7, both over the panel, and
+//               the input band 2.5 over the ground. OKLab L
 //               runs so steep near pure black that a step of 11 lands
 //               on #040404 there, so on a dark ground each step keeps
 //               at least the alpha it takes on Obsidian Ember's #050403.
@@ -39,7 +39,7 @@
 //               tier on it. The selection text token travels with the
 //               fill, so the window and both renderers draw one pair.
 //   controls    the field, the off switch track, the keycap ring, the
-//               menu highlight and the edge are washes, white on dark
+//               hover and the edge are washes, white on dark
 //               and black on light, at the alpha that steps the surface
 //               each sits on by WASH_STEP, with the same floor near
 //               black. A wash, so a field takes its step on the panel
@@ -111,7 +111,7 @@ export interface ChromeTokens {
   divider: string;
   /// Selected row fill.
   selrow: string;
-  /// Hovered row fill.
+  /// The hovered or keyboard row, button or menu item, on any surface.
   hover: string;
   /// Command input band fill.
   inputband: string;
@@ -146,8 +146,6 @@ export interface ChromeTokens {
   field: string;
   /// A switch track while the switch is off.
   track: string;
-  /// The hovered or keyboard row on a floating surface.
-  menuHi: string;
   /// Keycap ring, and the ring inside a color swatch, in Settings, on
   /// the prompt card and in the pane menus.
   keyRing: string;
@@ -183,7 +181,6 @@ export const CHROME_COLOR_KEYS = [
   'selectionText',
   'field',
   'track',
-  'menuHi',
   'keyRing',
   'edge',
 ] as const satisfies readonly (keyof ChromeTokens)[];
@@ -212,7 +209,6 @@ const INK_MAX_L = 0.24;
 const STEP = {
   sep: 11,
   divider: 6,
-  hover: 4,
   selrow: 7,
   inputband: 2.5,
   raised: 6,
@@ -238,7 +234,7 @@ const SELECTION_ALPHA = { dark: 0.28, light: 0.2 } as const;
 
 /// The steps the control washes take off the surface they sit on, in
 /// OKLab L times 100: the field, the track and the keycap ring off the
-/// panel, the menu highlight off raised, and the edge off the ground.
+/// panel, the hover off raised, and the edge off the ground.
 /// Each is the step the fixed wash before them took there (Themes
 /// review Q10), white on Obsidian Ember and black on Vellum, so those
 /// two paint as they did. On dark the edge takes the 0.12 of the ring
@@ -251,13 +247,13 @@ export const WASH_STEP = {
     field: 7.94, // white 0.06
     track: 18.57, // white 0.16
     keyRing: 16.53, // white 0.14
-    menuHi: 8.35, // white 0.08
+    hover: 8.35, // white 0.08
     edge: 14.46, // white 0.12
   },
   light: {
     track: 10.39, // black 0.14
     keyRing: 8.88, // black 0.12
-    menuHi: 3.86, // black 0.05
+    hover: 3.86, // black 0.05
     edge: 10.39, // black 0.14
   },
 } as const;
@@ -858,7 +854,6 @@ export function deriveChrome(
     sep: pick(o.sep, stepOver(panel.rgb, 'sep', dark)).css,
     divider: pick(o.divider, stepOver(panel.rgb, 'divider', dark)).css,
     selrow: pick(o.selrow, dark ? stepOver(panel.rgb, 'selrow', true) : raised.rgb).css,
-    hover: pick(o.hover, stepOver(panel.rgb, 'hover', dark)).css,
     inputband: pick(o.inputband, stepOver(bg.rgb, 'inputband', dark)).css,
     text: text.css,
     secondary: secondary.css,
@@ -876,7 +871,7 @@ export function deriveChrome(
     selectionText: pick(o.selectionText, selection.text).css,
     field: o.field || field,
     track: o.track || washOver(panel.rgb, steps.track, dark),
-    menuHi: o.menuHi || washOver(raised.rgb, steps.menuHi, dark),
+    hover: o.hover || washOver(raised.rgb, steps.hover, dark),
     keyRing: o.keyRing || washOver(panel.rgb, steps.keyRing, dark),
     edge: o.edge || washOver(bg.rgb, steps.edge, dark),
   };

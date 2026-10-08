@@ -14,7 +14,7 @@
   --sep: #1b1a19;
   --divider: #100f0e;
   --selrow: #121110;
-  --hover: #0b0b0a;
+  --hover: rgba(255, 255, 255, 0.081);
   --inputband: #080807;
   --text: #c0bdbb;
   --secondary: #8e8b89;
@@ -32,7 +32,6 @@
   --selection-text: #f2efee;
   --field: rgba(255, 255, 255, 0.058);
   --track: rgba(255, 255, 255, 0.158);
-  --menu-hi: rgba(255, 255, 255, 0.081);
   --key-ring: rgba(255, 255, 255, 0.138);
   --edge: rgba(255, 255, 255, 0.121);
   /* theme.ts also writes this one as rgba, since the map canvas reads

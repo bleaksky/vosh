@@ -1735,7 +1735,7 @@
 }
 
 .st-suggest-item[aria-selected='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 /* Panel layout: the 180×110 schematic and a column beside it that

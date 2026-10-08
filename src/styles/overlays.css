@@ -200,7 +200,7 @@
 }
 
 .ov-pal-row.is-selected {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .ov-pal-row.is-danger {
@@ -318,7 +318,7 @@
 
 .menu-item:focus,
 .menu-item[aria-expanded='true'] {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .menu-item[aria-disabled='true'] {
@@ -523,7 +523,7 @@
 }
 
 .ov-find-btn:hover:not(:disabled) {
-  background: var(--menu-hi);
+  background: var(--hover);
 }
 
 .ov-find-btn:disabled {
