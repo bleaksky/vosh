@@ -147,6 +147,10 @@ theme_terminal_colors = false
 bright_bold = true
 blink_text = false
 color_vision = "deuteranopia"
+screen_reader = true
+screen_reader_background = true
+screen_reader_prompt = true
+screen_reader_burst = 16
 terminal_base_ansi = [
     "#000000",
     "#cd3131",

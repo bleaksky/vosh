@@ -251,6 +251,32 @@ pub(crate) struct UiConfig {
     /// never turns it off saves the bytes it saved before.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub readable_highlights: bool,
+    /// Read new game lines. While on, each line the screen shows, after
+    /// gags, also goes to the page for a screen reader to announce. Off
+    /// by default, and written only while on, so a profile that never
+    /// turns it on saves the bytes it saved before.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader: bool,
+    /// Read in the background, under Read new game lines. While on, the
+    /// lines are read while Vosh is not the window in front. Off by
+    /// default, and written only while on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader_background: bool,
+    /// Read your prompt, under Read new game lines. While on, the prompt
+    /// is read as it changes too. Off by default, and written only while
+    /// on.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub screen_reader_prompt: bool,
+    /// Past this many lines in one pulse, the screen reader hears the
+    /// count and the last line instead of each line. 4, 8, 16 or 32,
+    /// and 8, the default, is not written. A hand edit of anything else
+    /// reads as 8 and never stops the profile loading.
+    #[serde(
+        default = "default_screen_reader_burst",
+        deserialize_with = "deserialize_screen_reader_burst",
+        skip_serializing_if = "is_default_screen_reader_burst"
+    )]
+    pub screen_reader_burst: u32,
     /// Collapse repeated lines. While on, a line the game sends that shows
     /// exactly as the line before it on screen, colors included, joins it,
     /// and the screen shows the two once with a count before them. The
@@ -1074,6 +1100,49 @@ where
     })
 }
 
+/// The lines in one pulse the screen reader reads one by one until you
+/// pick another burst.
+pub(crate) const DEFAULT_SCREEN_READER_BURST: u32 = 8;
+
+/// The bursts you can pick.
+pub(crate) const SCREEN_READER_BURSTS: [u32; 4] = [4, 8, 16, 32];
+
+fn default_screen_reader_burst() -> u32 {
+    DEFAULT_SCREEN_READER_BURST
+}
+
+fn is_default_screen_reader_burst(burst: &u32) -> bool {
+    *burst == DEFAULT_SCREEN_READER_BURST
+}
+
+/// Hold a burst to 4, 8, 16 or 32, and read anything else as 8.
+pub(crate) fn coerce_screen_reader_burst(burst: u32) -> u32 {
+    if SCREEN_READER_BURSTS.contains(&burst) {
+        burst
+    } else {
+        DEFAULT_SCREEN_READER_BURST
+    }
+}
+
+/// Read the burst leniently, so a hand edit never stops a profile
+/// loading. A number holds to the four bursts, and anything else reads
+/// as the default.
+pub(crate) fn deserialize_screen_reader_burst<'de, D>(deser: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Number(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Raw::deserialize(deser)? {
+        Raw::Number(n) => coerce_screen_reader_burst(u32::try_from(n).unwrap_or(0)),
+        Raw::Other(_) => DEFAULT_SCREEN_READER_BURST,
+    })
+}
+
 /// The share of the terminal column a snoop split takes until you
 /// drag it (SN7).
 pub(crate) const DEFAULT_SNOOP_SHARE: f64 = 0.4;
@@ -1287,6 +1356,10 @@ impl Default for UiConfig {
             fit_game_colors: true,
             color_vision: default_color_vision(),
             readable_highlights: true,
+            screen_reader: false,
+            screen_reader_background: false,
+            screen_reader_prompt: false,
+            screen_reader_burst: DEFAULT_SCREEN_READER_BURST,
             collapse_repeats: false,
             collapse_fight_lines: true,
             collapse_attack_lines: false,
@@ -2384,6 +2457,55 @@ name = "haste"
         assert!(through_toml(&ui).readable_highlights);
         ui.readable_highlights = false;
         assert!(!through_toml(&ui).readable_highlights);
+    }
+
+    #[test]
+    fn the_screen_reader_switches_round_trip_and_are_written_only_while_on() {
+        let mut config = ProfileConfig::default();
+        let off = config.to_toml().unwrap();
+        assert!(!off.contains("screen_reader"), "{off}");
+        config.ui.screen_reader = true;
+        config.ui.screen_reader_background = true;
+        config.ui.screen_reader_prompt = true;
+        let on = config.to_toml().unwrap();
+        for key in [
+            "screen_reader = true",
+            "screen_reader_background = true",
+            "screen_reader_prompt = true",
+        ] {
+            assert!(on.contains(key), "{on}");
+        }
+        let back = through_toml(&config.ui);
+        assert!(back.screen_reader && back.screen_reader_background && back.screen_reader_prompt);
+        // A file from before the switches reads them off.
+        let old = ProfileConfig::from_toml("[ui]\ntheme = \"vellum\"\n").unwrap();
+        assert!(!old.ui.screen_reader);
+        assert!(!old.ui.screen_reader_background);
+        assert!(!old.ui.screen_reader_prompt);
+        assert_eq!(old.ui.screen_reader_burst, 8);
+    }
+
+    #[test]
+    fn the_screen_reader_burst_is_written_only_off_8_and_a_hand_edit_reads_8() {
+        let mut config = ProfileConfig::default();
+        assert!(!config.to_toml().unwrap().contains("screen_reader_burst"));
+        for burst in SCREEN_READER_BURSTS {
+            config.ui.screen_reader_burst = burst;
+            assert_eq!(through_toml(&config.ui).screen_reader_burst, burst);
+        }
+        config.ui.screen_reader_burst = 16;
+        assert!(config
+            .to_toml()
+            .unwrap()
+            .contains("screen_reader_burst = 16"));
+        for value in ["7", "\"x\"", "-4", "0", "4294967300", "16.0"] {
+            let ui = ProfileConfig::from_toml(&format!("[ui]\nscreen_reader_burst = {value}\n"))
+                .unwrap()
+                .ui;
+            assert_eq!(ui.screen_reader_burst, 8, "{value}");
+        }
+        assert_eq!(coerce_screen_reader_burst(32), 32);
+        assert_eq!(coerce_screen_reader_burst(7), 8);
     }
 
     #[test]

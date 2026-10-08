@@ -452,6 +452,19 @@ export interface UiConfig {
    *  color a trigger paints text in at a lightness that reads on the
    *  theme's terminal background. On unless you turn it off. */
   readable_highlights: boolean;
+  /** Read new game lines. While on, the session sends each line it shows,
+   *  after gags, for a screen reader to announce. Off unless you turn it
+   *  on. */
+  screen_reader: boolean;
+  /** Read in the background, under Read new game lines. Off unless you
+   *  turn it on. */
+  screen_reader_background: boolean;
+  /** Read your prompt, under Read new game lines. Off unless you turn it
+   *  on. */
+  screen_reader_prompt: boolean;
+  /** Past this many lines in one pulse, the reader hears the count and
+   *  the last line. 4, 8, 16 or 32, and 8 unless you pick another. */
+  screen_reader_burst: ScreenReaderBurst;
   /** Collapse repeated lines. While on, the session shows a line the
    *  game sends that reads exactly as the line before it on screen,
    *  colors included, once with a count before it. Off unless you turn
@@ -661,6 +674,10 @@ export interface RawUiConfig {
   fit_game_colors?: boolean;
   color_vision?: string;
   readable_highlights?: boolean;
+  screen_reader?: boolean;
+  screen_reader_background?: boolean;
+  screen_reader_prompt?: boolean;
+  screen_reader_burst?: number;
   collapse_repeats?: boolean;
   collapse_fight_lines?: boolean;
   collapse_attack_lines?: boolean;
@@ -780,6 +797,10 @@ export function normalizeUiConfig(raw: RawUiConfig): UiConfig {
     fit_game_colors: cfg.fit_game_colors !== false,
     color_vision: toColorVision(cfg.color_vision),
     readable_highlights: cfg.readable_highlights !== false,
+    screen_reader: cfg.screen_reader === true,
+    screen_reader_background: cfg.screen_reader_background === true,
+    screen_reader_prompt: cfg.screen_reader_prompt === true,
+    screen_reader_burst: normalizeScreenReaderBurst(cfg.screen_reader_burst),
     collapse_repeats: cfg.collapse_repeats === true,
     collapse_fight_lines: cfg.collapse_fight_lines !== false,
     collapse_attack_lines: cfg.collapse_attack_lines === true,
@@ -869,6 +890,19 @@ export function normalizeWritingCardCols(raw: unknown): number | null {
   return typeof raw === 'number' && Number.isFinite(raw)
     ? Math.min(500, Math.max(75, Math.round(raw)))
     : null;
+}
+
+/** The bursts you can pick for the screen reader. */
+export const SCREEN_READER_BURSTS = [4, 8, 16, 32] as const;
+export type ScreenReaderBurst = (typeof SCREEN_READER_BURSTS)[number];
+
+/** The burst the screen reader takes until you pick another. */
+export const DEFAULT_SCREEN_READER_BURST: ScreenReaderBurst = 8;
+
+/** Read a stored burst as Rust reads it. Anything but 4, 8, 16 or 32 is
+ *  8. */
+export function normalizeScreenReaderBurst(raw: unknown): ScreenReaderBurst {
+  return SCREEN_READER_BURSTS.find((burst) => burst === raw) ?? DEFAULT_SCREEN_READER_BURST;
 }
 
 /** The lines a terminal keeps until you pick another Scrollback size. */
