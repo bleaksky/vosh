@@ -4,6 +4,7 @@ import type { Fight } from '../stores/gmcp/combatStore';
 import type { VitalSample } from '../stores/gmcp/vitalsStore';
 import { VitalsBands } from './VitalsBands';
 import { VitalsBlocks } from './VitalsBlocks';
+import { VitalsCandles } from './VitalsCandles';
 import { VitalsDials } from './VitalsDials';
 import type { DrawnVitalsProps } from './VitalsDrawn';
 import {
@@ -35,6 +36,7 @@ export function DrawnSection({
   fight,
   history,
   values,
+  flame,
   ...props
 }: DrawnVitalsProps & {
   fit: DrawnFit;
@@ -49,6 +51,8 @@ export function DrawnSection({
   history: readonly VitalSample[];
   /** The Values form, which the column styles write their figures in. */
   values: VitalsValues;
+  /** The color the Candles flame burns in (vitalsFlame). */
+  flame: string | undefined;
 }) {
   let body: ReactNode;
   let height: number;
@@ -67,6 +71,11 @@ export function DrawnSection({
     case 'traces':
       body = <VitalsTraces {...props} history={history} fight={fight} fit={fit.fit} />;
       height = tracesHeight(size, mine);
+      under = fit.fit === 'under';
+      break;
+    case 'candles':
+      body = <VitalsCandles {...props} fit={fit.fit} />;
+      height = marksHeight(size, mine);
       under = fit.fit === 'under';
       break;
     case 'blocks':
@@ -100,7 +109,10 @@ export function DrawnSection({
       ref={sectionRef}
       className={`panel-vitals panel-vitals-marks${under ? ' is-under' : ''}${cols ? ' is-cols' : ''}`}
       style={
-        props.waiting ? ({ '--vitals-min-height': `${height}px` } as CSSProperties) : undefined
+        {
+          ...(flame ? { '--vitals-flame': flame } : {}),
+          ...(props.waiting ? { '--vitals-min-height': `${height}px` } : {}),
+        } as CSSProperties
       }
       aria-label={label}
     >

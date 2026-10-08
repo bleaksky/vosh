@@ -1715,6 +1715,84 @@
   margin: 0;
 }
 
+/* Candles. A taper laid on its side, the wax 6 tall on a hairline
+   shelf as long as your max, a 1 px wick and a 6 by 9 flame at the
+   end in the theme's yellow, which low dims to a third. The wax eases
+   in 160 ms, and the wax a hit melted stays pale with a drip under it. */
+.vitals-candle {
+  position: relative;
+  display: block;
+  height: var(--mud-row);
+}
+
+.vitals-marks.is-under .vitals-candle {
+  height: 16px;
+}
+
+.vitals-drawn .vitals-marks.is-candles.is-under .vitals-mark {
+  margin-top: 5px;
+}
+
+.vitals-candle > * {
+  position: absolute;
+}
+
+.vitals-candle-shelf {
+  top: 15px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--divider);
+}
+
+.vitals-candle-wax,
+.vitals-candle-melt {
+  top: 9px;
+  height: 6px;
+}
+
+.vitals-candle-wax {
+  left: 0;
+  border-radius: 1.5px 0 0 1.5px;
+  background: var(--vital-mark);
+  transition: width 160ms ease-out;
+}
+
+.vitals-candle-melt {
+  background: var(--vital-ghost);
+}
+
+.vitals-candle-drip {
+  top: 14px;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 0 1px 1px;
+  background: var(--vital-ghost);
+}
+
+.vitals-candle-wick {
+  top: 6px;
+  width: 1px;
+  height: 3px;
+  margin-left: -1px;
+  background: color-mix(in oklab, var(--text) 70%, transparent);
+  transition: left 160ms ease-out;
+}
+
+.vitals-candle-flame {
+  top: -2px;
+  width: 6px;
+  height: 9px;
+  margin-left: -3.5px;
+  overflow: visible;
+  fill: var(--vitals-flame);
+  transition: left 160ms ease-out;
+}
+
+.vitals-tone.is-low .vitals-candle-flame {
+  fill: color-mix(in oklab, var(--vitals-flame) 35%, transparent);
+}
+
 /* Show each hit. The part a hit took holds pale beside the fill, then
    drains toward it in 400 ms (vitalsHit.ts). With Reduce motion on,
    every fill jumps and the pale part just goes. */

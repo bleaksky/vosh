@@ -11,6 +11,7 @@ import {
   vitalsFooterHeight,
   vitalsGeometry,
   vitalInks,
+  vitalsFlame,
   vitalsOn,
   vitalTone,
   widestVital,
@@ -246,6 +247,17 @@ describe('opponentHealth', () => {
       hidden: true,
     });
     expect(opponentHealth({ hp_pct: 54, condition: 'awful', hidden: true }).value).toBe('?');
+  });
+});
+
+describe('vitalsFlame', () => {
+  it('burns in the yellow on Triad and in a yellow leaning red on Rubric', () => {
+    const triad = findTheme('triad');
+    const rubric = findTheme('rubric');
+    expect(vitalsFlame(triad.xterm, themeTokens(triad))).toBe(triad.xterm.yellow);
+    expect(vitalsFlame(rubric.xterm, themeTokens(rubric))).toBe(
+      `color-mix(in oklab, ${rubric.xterm.yellow} 45%, ${rubric.xterm.red})`,
+    );
   });
 });
 

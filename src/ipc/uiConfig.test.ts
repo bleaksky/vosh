@@ -361,6 +361,7 @@ describe('vitals style', () => {
       'rings',
       'vials',
       'orbs',
+      'candles',
       'text',
     ]);
   });

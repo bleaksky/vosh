@@ -39,6 +39,7 @@ import { textRows, type TextLine } from '../../panel/vitalsTextFit';
 import {
   shownRows,
   vitalInks,
+  vitalsFlame,
   vitalsOn,
   vitalsStylePick,
   VITALS_STYLE_LABELS,
@@ -143,15 +144,15 @@ export function VitalsGallery({
   const family = panelFontFamily(config.panel_font);
   const faceVersion = usePanelFaceVersion();
   const data = useGalleryVitals();
-  const inks = useMemo(
-    () =>
-      vitalInks(
-        config.vitals_colors,
-        playPalette(theme, config.fit_game_colors, config.color_vision),
-        themeTokens(theme),
-      ),
-    [config.vitals_colors, config.fit_game_colors, config.color_vision, theme],
+  const palette = useMemo(
+    () => playPalette(theme, config.fit_game_colors, config.color_vision),
+    [config.fit_game_colors, config.color_vision, theme],
   );
+  const inks = useMemo(
+    () => vitalInks(config.vitals_colors, palette, themeTokens(theme)),
+    [config.vitals_colors, palette, theme],
+  );
+  const flame = useMemo(() => vitalsFlame(palette, themeTokens(theme)), [palette, theme]);
   const { cols, env } = usePanelText(config, width);
   const text = useGalleryText(drawnVitalsText(config), data, cols);
   const face = family === null ? readPanelFace() : measurable(family);
@@ -168,6 +169,7 @@ export function VitalsGallery({
       text={text}
       env={env}
       inks={inks}
+      flame={flame}
       panel={panel}
       width={width}
       scale={scale}
@@ -190,6 +192,8 @@ export interface VitalsTilesProps {
   text: PromptRendered | null;
   env: BandEnv;
   inks: VitalInks;
+  /** The color the Candles flame burns in. */
+  flame: string;
   /** Your panel's width, and the width and scale each tile draws at. */
   panel: number;
   width: number;
@@ -214,6 +218,7 @@ export function VitalsTiles({
   text,
   env,
   inks,
+  flame,
   panel,
   width,
   scale,
@@ -290,6 +295,7 @@ export function VitalsTiles({
                         history={history}
                         options={{ ...options, style }}
                         inks={inks}
+                        flame={flame}
                         width={width}
                         size={size}
                         measure={measure}
@@ -321,6 +327,7 @@ function StyleTile({
   history,
   options,
   inks,
+  flame,
   width,
   size,
   measure,
@@ -331,6 +338,7 @@ function StyleTile({
   history: readonly VitalSample[];
   options: VitalsOptions;
   inks: VitalInks;
+  flame: string;
   width: number;
   size: number;
   measure: MeasureText;
@@ -346,6 +354,7 @@ function StyleTile({
       fit={fit}
       options={options}
       inks={inks}
+      flame={flame}
     />
   );
 }

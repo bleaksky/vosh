@@ -148,6 +148,7 @@ export const VITALS_STYLE_LABELS: Readonly<Record<VitalsStyle, string>> = {
   rings: 'Rings',
   vials: 'Vials',
   orbs: 'Orbs',
+  candles: 'Candles',
   text: 'Text',
 };
 
@@ -286,6 +287,18 @@ export function vitalInks(
     inks[vital] = rgb && panel ? toHex(liftAtHue(rgb, panel, VITAL_COLOR_CONTRAST, dir)) : color;
   }
   return inks;
+}
+
+/** The color the Candles flame burns in: the palette's yellow on a dark
+ *  theme, and a yellow leaning red on a light one, where the yellow
+ *  alone reads brown (More Vitals Styles, board 2). */
+export function vitalsFlame(
+  palette: XtermPalette,
+  ground: Pick<VitalsGround, 'appearance'>,
+): string {
+  return ground.appearance === 'dark'
+    ? palette.yellow
+    : `color-mix(in oklab, ${palette.yellow} 45%, ${palette.red})`;
 }
 
 /** A vital's tone and color as the classes and the custom property

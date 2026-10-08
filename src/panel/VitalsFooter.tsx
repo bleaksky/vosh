@@ -24,6 +24,7 @@ import {
   vitalsOn,
   vitalsGeometry,
   vitalInks,
+  vitalsFlame,
   VITAL_LABELS,
   type VitalInks,
   type VitalsGeometry,
@@ -119,6 +120,7 @@ export function VitalsFooter({
     () => vitalInks(options.colors, palette, themeTokens(theme)),
     [options.colors, palette, theme],
   );
+  const flame = useMemo(() => vitalsFlame(palette, themeTokens(theme)), [palette, theme]);
   const style = options.style;
   const sectionRef = useRef<HTMLElement | null>(null);
   const width = useFooterWidth(sectionRef, style !== 'rows');
@@ -175,6 +177,7 @@ export function VitalsFooter({
       options={options}
       inks={inks}
       hits={hits}
+      flame={flame}
       opponentOnly={opponentOnly}
     />
   );
@@ -201,6 +204,8 @@ export interface VitalsBlockProps {
   inks?: VitalInks;
   /** What Show each hit leaves on each mark now (useVitalsHits). */
   hits?: HitViews;
+  /** The color the Candles flame burns in (vitalsFlame). */
+  flame?: string;
   sectionRef?: Ref<HTMLElement>;
   /** Only the opponent row, and nothing out of a fight, as when every
    *  vital is off. */
@@ -218,6 +223,7 @@ export function VitalsBlock({
   options,
   inks = {},
   hits = NO_HITS,
+  flame,
   sectionRef,
   opponentOnly = false,
 }: VitalsBlockProps) {
@@ -295,6 +301,7 @@ export function VitalsBlock({
         fight={fight}
         history={history}
         values={options.values}
+        flame={flame}
       />
     );
   }

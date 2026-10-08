@@ -47,6 +47,7 @@ function draw(patch: Partial<UiConfig> = {}, vitals: Vitals = SAMPLE_VITALS): st
       text={null}
       env={ENV}
       inks={{}}
+      flame="#eeca71"
       panel={300}
       width={300}
       scale={0.98}
@@ -90,6 +91,7 @@ describe('the Style gallery', () => {
       'Rings',
       'Vials',
       'Orbs',
+      'Candles',
       'Text',
     ]);
     expect(html).toContain('data-st-anchor="style"');
@@ -113,6 +115,7 @@ describe('the Style gallery', () => {
       'rings',
       'vials',
       'orbs',
+      'candles',
       'text',
     ]);
   });
@@ -133,6 +136,7 @@ describe('the Style gallery', () => {
       'Rings',
       'Vials',
       'Orbs',
+      'Candles',
       'Text Yours in 0.7',
     ]);
     expect(radios(html)).toContain('text checked');

@@ -293,6 +293,34 @@ describe('Orbs', () => {
   });
 });
 
+describe('Candles', () => {
+  it('burns each candle to its share on a shelf as long as your max', () => {
+    const html = draw({ style: 'candles', fit: 'beside' }, {}, { flame: '#eeca71' });
+    expect(all(html, /vitals-candle-wax" style="width:([\d.]+)%/g).map(Number)).toEqual([
+      54,
+      (744 / 1038) * 100,
+      (590 / 870) * 100,
+      (402 / 521) * 100,
+    ]);
+    expect(all(html, /(vitals-candle-shelf)/g)).toHaveLength(4);
+    expect(html).toContain('--vitals-flame:#eeca71');
+  });
+
+  it('leaves the wax a hit melted pale, with a drip under it', () => {
+    const html = draw(
+      { style: 'candles', fit: 'beside' },
+      {},
+      { hits: { hp: { fill: 70, ghost: 80, draining: false, peak: 80 } } },
+    );
+    expect(html).toContain('vitals-candle-melt vitals-ghost" style="left:70%;width:10%"');
+    expect(html).toContain('vitals-candle-drip" style="left:calc(73.5% - 1px)"');
+  });
+
+  it('drops each candle under its label and value on a narrow panel', () => {
+    expect(draw({ style: 'candles', fit: 'under' })).toContain('vitals-marks is-candles is-under');
+  });
+});
+
 describe('Show each hit', () => {
   // Board 4: the guard went from 61 to 54 and Tolliver from 851 to 744.
   const HEALTH_WAS = (851 / 1038) * 100;

@@ -82,6 +82,7 @@ const STYLE_CAPTIONS: Readonly<Record<VitalsStyle, string>> = {
   vials:
     "Vials. Each vital fills a small vial beside its figure, the way a flask shows what's left.",
   orbs: 'Orbs. Each vital fills a round orb from the bottom up, the way old action games show health.',
+  candles: 'Candles. Each vital burns down like a candle, and the flame dims when you run low.',
   text: 'Text. You write your vitals with the codes your prompt uses, in the card you know from Customize prompt.',
 };
 
