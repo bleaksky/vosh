@@ -1383,40 +1383,50 @@ Updates download from the GitHub releases of the project. Vosh checks the signat
 
 <!-- id: fix-it.terminal-renderer -->
 
-Vosh ships two terminal renderers. On macOS the native GPU surface draws the terminal by default, and the `#nativesurface` command switches between it and the xterm renderer from the command line. Windows and Linux always draw with the xterm renderer, whatever the switch says.
+Vosh ships two terminal renderers. On macOS the native GPU surface draws the terminal by default. The `#nativesurface` command changes between it and the xterm renderer from the command line. Windows and Linux always use the xterm renderer, whatever the switch says.
 
-- Type `#nativesurface off` to draw with the xterm renderer.
-- Type `#nativesurface on` to draw with the native surface.
-- Type `#nativesurface default` to return to the macOS default, the native surface.
-- Restart Vosh. The switch applies only on restart, and the echo reminds you with `restart Vosh to apply`.
+- To draw with the xterm renderer, type `#nativesurface off`.
+- To draw with the native surface, type `#nativesurface on`.
+- To go back to the macOS default, the native surface, type `#nativesurface default`.
+- Restart Vosh. The switch applies only when you restart. The echo reminds you with `restart Vosh to apply`.
 
-The command runs entirely in the frontend and stores your choice locally under the key `vosh.nativesurface`. A bad argument echoes `usage #nativesurface on | off | default (takes effect on restart)`.
+The command runs fully in the frontend. It stores your choice locally under the key `vosh.nativesurface`. A bad argument echoes `usage #nativesurface on | off | default (takes effect on restart)`.
 
-On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`, which draws the xterm renderer with your graphics card. Turn it off when the terminal draws wrong, then restart Vosh.
+On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`. It draws the xterm renderer with your graphics card. When the terminal draws incorrectly, turn it off, then restart Vosh.
 
-If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. A font list saved by an older Vosh that names a font Vosh no longer ships draws in JetBrains Mono. Install the font you want or pick it in `Font`. The size defaults to 14. When the panes or the status line show the wrong typeface or size, check `Font` and `Size` under Panel text, right after Terminal text.
+If the text shows in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono. It ships inside Vosh and works on every computer.
 
-Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size. Turn it off to let each character keep its own.
+A font list that an older Vosh saved can name a font that Vosh no longer ships. Then the terminal draws in JetBrains Mono. Install the font you want, or choose it in `Font`. The default size is 14.
+
+When the panes or the status line show the wrong typeface or size, check `Font` and `Size` under Panel text, right after Terminal text.
+
+Under General, `Font and size` in Keep the same for every character decides one thing. It decides whether every character shares one terminal font and size, and one panel font and size. Turn it off to let each character keep its own.
 
 ### 8.2 Recover a bad connection
 
 <!-- id: fix-it.reconnect -->
 
-The session button in the title band holds the connection controls. Its dot shows idle, connecting, connected, or an error. After a failed connection the button reads `Not connected`, and pointing at it shows why.
+The session button in the title band holds the connection controls. Its dot shows idle, connecting, connected, or an error. After a connection fails, the button reads `Not connected`. Point at it to see why.
 
-- Click the session button and choose `Disconnect`, then wait for the dot to go idle.
-- Choose `Edit connection…` to check the address of this session. The form holds `Host`, `Port`, and `Use TLS`, and the defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
-- Choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` elsewhere.
+- Click the session button and choose `Disconnect`. Wait for the dot to go idle.
+- To check the address of this session, choose `Edit connection…`. The form holds `Host`, `Port`, and `Use TLS`. The defaults are `play.theforsakenlands.com` on port `1848` with TLS off. Click `Save`.
+- Choose the `Connect to` row, or press `Cmd+R` on macOS or `Ctrl+R` on Windows and Linux.
 
-`Use TLS` wraps the connection in TLS. Match it to what the server offers on that port. The default port `1848` expects it off. Settings under General, then Connection, edits the same address for the session in front with its `World`, `Host and port`, and `Use TLS` rows. Its `Reconnect when the link drops` row turns the redial after a drop on or off for the profile of that session.
+`Use TLS` puts the connection in TLS. Set it to match what the server offers on that port. The default port `1848` needs it off. Settings under General, then Connection, edits the same address for the session in front. It has the `World`, `Host and port`, and `Use TLS` rows. Its `Reconnect when the link drops` row turns the reconnect after a drop on or off for the profile of that session.
 
-Disconnecting has side effects. Session scoped variables clear when the next connection opens, so nothing you set with `#var` outlives its connection, while profile variables survive. The chat pane empties when you choose `Disconnect` or connect to another world, and keeps its lines through a drop and the redial after it. On reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up the profile set to log in as your character after login.
+A disconnect has other effects. Session variables clear when the next connection opens, so nothing you set with `#var` lasts longer than its connection. Profile variables stay.
 
-Two other paths reach the same controls. On macOS the Session menu in the menu bar holds the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. And the `Cmd+K` palette runs the `Connect to` row or `Disconnect`.
+The chat pane empties when you choose `Disconnect` or connect to another world. It keeps its lines through a drop and the reconnect after it. When you reconnect, Vosh compares the host and port with your profiles and changes to the best match automatically. After login, it changes to the profile set to log in as your character.
 
-The status line shows how long the game takes to answer you, just before the tick, like `38ms`. Your computer measures it on the connection, so nothing extra goes to the game. It stays dim while you can't feel it, turns the warn color from 300 ms, when your commands start to land a pulse late, and reads in seconds in red from a second, like `1.4s`. When a command you sent is stuck on its way to the game, it counts up from the moment you sent it, so you see a stall as it happens. Anything the game sends ends the wait, a line or a GMCP packet alike. What you type ahead while a skill lags you never counts, since the game holds it until the lag ends. If the game sends you nothing at all for more than half a minute after a command, that counts as a stall too. The lines you write into a note never count, since the game doesn't answer them. It shows the session in front, comes with the game's first answer, and leaves with the connection. Hover it to read `Round trip to the game`. In a narrow window a reading under 300 ms gives way before the game time, and a slower one always stays.
+Two other places have the same controls. On macOS the Session menu in the menu bar has the `Connect to` row, `Edit connection…`, `New session…`, and `Disconnect`. The command palette (`Cmd+K`) runs the `Connect to` row or `Disconnect`.
 
-Type `#lag` to ask whether it was you or the game. It prints the round trip now, how it usually runs over the last 10 minutes, and each stall since you connected, with when it began, its worst reading, and how long it lasted. A stall that waited on a command began when you sent it, so its time and length are the real ones. A stall is any stretch at 300 ms or more, and Vosh keeps the last 20 of each session.
+The status line shows how long the game takes to answer you, just before the tick, such as `38ms`. Your computer measures it on the connection, so nothing more goes to the game. It stays dim while you can't feel the delay. From 300 ms, it turns the warn color, because then your commands start to come a pulse late. From one second, it shows seconds in red, such as `1.4s`.
+
+When a command you sent is stuck on its way to the game, the reading counts up from the moment you sent it. So you see a stall while it happens. Anything the game sends ends the wait, a line or a GMCP packet. What you type while a skill lags you never counts, because the game holds it until the lag ends. If the game sends you nothing for more than half a minute after a command, that also counts as a stall. The lines you write into a note never count, because the game doesn't answer them.
+
+The reading shows the session in front. It comes with the first answer of the game, and goes away with the connection. Point at it to read `Round trip to the game`. In a narrow window, a reading under 300 ms goes away before the game time does. A slower reading always stays.
+
+To find out whether a delay came from you or from the game, type `#lag`. It prints the round trip now and how it usually runs over the last 10 minutes. It also prints each stall since you connected, with when it started, its worst reading, and how long it lasted. A stall that waited on a command started when you sent the command, so its time and length are correct. A stall is any period at 300 ms or more. Vosh keeps the last 20 stalls of each session.
 
 ### 8.3 Find your data on disk
 
@@ -1428,23 +1438,24 @@ Vosh keeps all of its data in one app data folder named `com.aabahran.vosh`.
 - On Linux, open `~/.local/share/com.aabahran.vosh`.
 - On Windows, open `%APPDATA%\com.aabahran.vosh`.
 
-Inside that folder.
+These are the contents of that folder.
 
-- `profiles.toml` indexes your profiles and names the active one. Once you open a second session or name one, it also lists your sessions in order, each with its name, its world and the profile it plays, so they come back at your next launch.
-- `profiles/<name>.toml` holds each profile snapshot with connection defaults, aliases, variables, triggers, timers, tick config, and macros. In loadout mode the aliases, triggers, and macros live in `catalog.toml` instead, and the profile file keeps the rest.
+- `profiles.toml` lists your profiles and names the active one. After you open a second session or name one, it also lists your sessions in order. Each session has its name, its world, and the profile it plays, so they come back at your next launch.
+- `profiles/<name>.toml` holds the snapshot of each profile. It has the connection defaults, aliases, variables, triggers, timers, tick config, and macros. In loadout mode the aliases, triggers, and macros are in `catalog.toml` instead, and the profile file keeps the rest.
 - `profiles/legacy/` holds a copy of each profile file as it was when the loadouts migration ran.
-- `global.toml` holds cross profile UI preferences.
-- `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
-- `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
-- `scrollback.txt` keeps the newest terminal lines of the first session you opened across restarts, as many as `Scrollback size` under Logs in Settings says, and each later session keeps its own in a file with its number, such as `scrollback-2.txt`. Vosh writes each one when a connection ends, every few minutes while it runs, and as you quit, so a crash loses at most a few minutes of it. Closing a session deletes its file.
+- `global.toml` holds the UI preferences that all profiles share.
+- `catalog.toml` and `loadouts.toml` show when loadout mode is active.
+- `logs.sqlite` stores the session logs, with the `-wal` and `-shm` files beside it.
+- `scrollback.txt` keeps the newest terminal lines of the first session you opened, across restarts. It keeps as many lines as `Scrollback size` under Logs in Settings says. Each later session keeps its own lines in a file with its number, such as `scrollback-2.txt`.
+- Vosh writes each scrollback file when a connection ends, every few minutes while it runs, and when you quit. So a crash loses at most a few minutes of it. When you close a session, Vosh deletes its file.
 - `maps.sqlite`, if you have one, holds rooms that older builds recorded. Vosh no longer reads or writes it.
-- `affect_full.toml` remembers the most hours Vosh has seen for each affect, for each character.
+- `affect_full.toml` remembers the most hours that Vosh saw for each affect, for each character.
 - `scripts/` holds Lua files for `#script load`.
 - `plugins/` holds plugin folders, each with a `manifest.toml`.
 
-Every TOML save is safe by design. Vosh writes the new text to a temp file, copies the old file to `<file>.bak.<timestamp>` with a millisecond timestamp, swaps the temp file in atomically, and keeps the ten newest backups. A save that fails leaves the old file in place. To roll back a bad profile edit, copy the backup you want over the live file.
+Every TOML save is safe by design. Vosh writes the new text to a temp file. It copies the old file to `<file>.bak.<timestamp>`, with a timestamp in milliseconds. It then puts the temp file in place in one atomic step, and keeps the ten newest backups. A save that fails leaves the old file in place. To undo a bad profile edit, copy the backup you want over the live file.
 
-A leftover `profile.toml` at the root is the legacy single profile file. Vosh migrates it to `profiles/default.toml` on the first multi profile launch.
+A `profile.toml` that is still at the root is the single profile file of the builds before named profiles. Vosh moves it to `profiles/default.toml` the first time a build with named profiles starts.
 
 ## Reference
 
