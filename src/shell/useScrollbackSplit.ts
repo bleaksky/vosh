@@ -160,15 +160,18 @@ export function useScrollbackSplit({
   useEffect(() => {
     if (!splitOpen) return;
     let raf = 0;
+    // The repaint frames, which stop with the poll. A wheel can close the
+    // split inside them, and the pane they would repaint is gone then.
+    let repaintRaf = 0;
     let done = false;
     let tries = 0;
     const repaintBurst = () => {
       let frames = 0;
       const repaint = () => {
         historyTermRef.current?.refresh();
-        if (++frames < 6) requestAnimationFrame(repaint);
+        if (++frames < 6) repaintRaf = requestAnimationFrame(repaint);
       };
-      requestAnimationFrame(repaint);
+      repaintRaf = requestAnimationFrame(repaint);
     };
     const tick = () => {
       const h = historyTermRef.current;
@@ -197,6 +200,7 @@ export function useScrollbackSplit({
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(repaintRaf);
       // The split closed or another session shows, so a page still
       // waiting has nothing to land in.
       pendingPageRef.current = false;

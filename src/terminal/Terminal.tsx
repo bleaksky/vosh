@@ -43,6 +43,9 @@ interface Props {
    *  context, and sizes, reports and copies nothing. */
   shown?: boolean;
   onReady?: (handle: TerminalHandle) => void;
+  /** The pane is going, and its handle does nothing from now on. A host
+   *  that keeps the handle lets go of it here. */
+  onGone?: (handle: TerminalHandle) => void;
   fontFamily: string;
   fontSize: number;
   /// Row spacing as a multiple of the glyph height (xterm's lineHeight).
@@ -105,6 +108,7 @@ export function Terminal({
   session,
   shown = true,
   onReady,
+  onGone,
   fontFamily,
   fontSize,
   lineHeight,
@@ -174,6 +178,8 @@ export function Terminal({
   // disposed and recreated, wiping all output.
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onGoneRef = useRef(onGone);
+  onGoneRef.current = onGone;
 
   // Whether this pane draws bands now: your prompt shows lifted, xterm
   // draws the terminal and the pane shows.
@@ -214,6 +220,12 @@ export function Terminal({
 
   useEffect(() => {
     if (!containerRef.current) return;
+    // Set first as the pane unmounts. xterm lets its renderer go then, and
+    // a scrollback load, a timer or a host call that lands after it must
+    // not reach the terminal: a refresh or a scroll of a disposed xterm
+    // queues a frame that reads the missing renderer and throws.
+    let gone = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
     const term = new XTerm({
       // The user types into the bottom input box, not into xterm, so a
@@ -324,10 +336,8 @@ export function Terminal({
     paneSizer.safeFit();
     const webgl = xtermWebgl(term, blink, quietRef.current);
     if (shownRef.current) webgl.load();
-    requestAnimationFrame(paneSizer.safeFit);
-    setTimeout(paneSizer.safeFit, 50);
-    setTimeout(paneSizer.safeFit, 200);
-    setTimeout(paneSizer.safeFit, 800);
+    const firstFit = requestAnimationFrame(paneSizer.safeFit);
+    for (const ms of [50, 200, 800]) timers.push(setTimeout(paneSizer.safeFit, ms));
     termRef.current = term;
     paneSizer.start();
 
@@ -441,7 +451,7 @@ export function Terminal({
       shaper = new OutputShaper(term.cols, fields, washed);
       washWidthRef.current.filled();
       const settle = () => {
-        if (gen !== fills) return;
+        if (gone || gen !== fills) return;
         if (quietRef.current) {
           term.scrollToLine(top);
         } else {
@@ -452,7 +462,7 @@ export function Terminal({
       };
       loadScrollback(false, session)
         .then(({ bytes }) => {
-          if (gen !== fills) return;
+          if (gone || gen !== fills) return;
           if (bytes.length === 0) return settle();
           writer.local(shaper.whole(localDecoder.decode(bytes)));
           if (banner) writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
@@ -485,6 +495,9 @@ export function Terminal({
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled(), session)
       .then(({ bytes, seededNative }) => {
+        // A pane that went before its scrollback came takes none of it,
+        // and its host hears nothing.
+        if (gone) return;
         // A copy the native grid hides takes none of it, and neither does
         // a copy that began filling anew, since the fill writes it all.
         const toXterm = mirror.mirrors() && fills === 0;
@@ -514,6 +527,7 @@ export function Terminal({
         // matters for padToBottom: cursorY only reflects the
         // post-restore position after the queued bytes are drained.
         const notify = () => {
+          if (gone) return;
           if (!quietRef.current) mirror.write(padToBottom);
           notifyPosition();
           onScrollbackLoadedRef.current?.();
@@ -528,6 +542,7 @@ export function Terminal({
         // No scrollback yet, or backend not ready; still notify so
         // the host can apply its initial scroll gesture (no-op on
         // an empty terminal, but does not lose the user intent).
+        if (gone) return;
         if (!quietRef.current) mirror.write(padToBottom);
         notifyPosition();
         onScrollbackLoadedRef.current?.();
@@ -663,7 +678,7 @@ export function Terminal({
     term.onResize(scheduleSizePush);
     // First push after the deferred fits settle so the backend gets
     // the real size rather than the 80x24 default xterm starts with.
-    setTimeout(pushSize, 900);
+    timers.push(setTimeout(pushSize, 900));
 
     // What the host reaches the pane by (src/terminal/terminalHandle.ts).
     const handle = terminalHandle({
@@ -681,6 +696,7 @@ export function Terminal({
       quiet: () => quietRef.current,
       lent: () => lentRef.current,
       session,
+      gone: () => gone,
     });
     onReadyRef.current?.(handle);
 
@@ -706,6 +722,10 @@ export function Terminal({
     const selection = watchSelection(term, quietRef.current, shownRef, session);
 
     return () => {
+      gone = true;
+      onGoneRef.current?.(handle);
+      cancelAnimationFrame(firstFit);
+      for (const timer of timers) clearTimeout(timer);
       paneSizer.stop();
       selection.removeCopyKey();
       detachUnderlayInput?.();
@@ -730,7 +750,7 @@ export function Terminal({
       noteReader(selection.selectionPart, false, session);
       if (selection.readerBack) noteReader('liveBack', false, session);
       searchAddon.dispose();
-      webgl.release();
+      webgl.dispose();
       term.dispose();
       termRef.current = null;
       paneSizerRef.current = null;
