@@ -58,12 +58,9 @@ impl From<u32> for TextPx {
 }
 
 impl fmt::Display for TextPx {
+    /// `14` for a whole size and `13.5` for a half.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_whole() {
-            write!(f, "{}", self.0 / 2)
-        } else {
-            write!(f, "{}.5", self.0 / 2)
-        }
+        write!(f, "{}", self.px())
     }
 }
 
