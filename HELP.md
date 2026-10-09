@@ -1463,101 +1463,101 @@ A `profile.toml` that is still at the root is the single profile file of the bui
 
 <!-- id: reference.slash-commands -->
 
-This is every slash command Vosh understands today.
+These are all the slash commands that Vosh knows today.
 
-- `#help` prints the command summary, and `#help <words>` opens Help on those words.
-- `#alias <name> <expansion>` defines, `#unalias <name>` removes, `#aliases` lists.
-- `#var <name> [value]` sets or shows a variable of this session, `#unvar <name>` removes it from this session and from the profile, `#vars` lists.
-- `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.
-- `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt, `#prompt {regex}` reads it with a pattern, `#prompt` says how Vosh reads it, and `#unprompt` stops reading it.
-- `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the game's own prompt.
+- `#help` prints the command summary. `#help <words>` opens Help on those words.
+- `#alias <name> <expansion>` makes an alias. `#unalias <name>` removes it. `#aliases` lists the aliases.
+- `#var <name> [value]` sets or shows a variable of this session. `#unvar <name>` removes it from this session and from the profile. `#vars` lists the variables.
+- `#trigger <name> {pattern} <action> [args]` makes a trigger. `#untrigger <name>` removes it. `#triggers` lists the triggers by priority.
+- `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt. `#prompt {regex}` reads it with a pattern. `#prompt` tells you how Vosh reads it. `#unprompt` stops reading it.
+- `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the prompt of the game.
 - `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.
-- `#prompt default` puts Vosh's default design in place of the design in this profile and keeps yours as an earlier design.
-- `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off for every session on the profile, `#group <name>` shows state, `#groups` lists.
-- `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer. `#tick reset` restarts the count of this session, and each command that changes a setting changes it for every session on the profile.
-- `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
-- `#lag` prints the round trip to the game now and as it usually runs over the last 10 minutes, then each stall since you connected with its time, its worst, and how long it lasted.
-- `#script load <name>` loads a Lua file, `#script reload` reads every loaded script again and runs it, `#scripts` lists them.
-- `#lua <code>` evaluates Lua inline.
-- `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot, and a load or a reset reaches every session on the profile. In loadout mode all three become notices.
+- `#prompt default` puts the default design of Vosh in place of the design in this profile. It keeps your design as an earlier design.
+- `#group <name> on|off` turns a group of triggers, aliases, macros, and timers on or off for every session on the profile. `#group <name>` shows its state. `#groups` lists the groups.
+- `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, and `#tick enable` control the tick timer. `#tick reset` starts the count of this session again. Each command that changes a setting changes it for every session on the profile.
+- `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, and `#tick warn off` set the tick warning.
+- `#lag` prints the round trip to the game now, and how it usually runs over the last 10 minutes. Then it prints each stall since you connected, with its time, its worst reading, and how long it lasted.
+- `#script load <name>` loads a Lua file. `#script reload` reads every loaded script again and runs it. `#scripts` lists the scripts.
+- `#lua <code>` runs Lua inline.
+- `#profile save`, `#profile load`, and `#profile reset` manage the profile snapshot. A load or a reset reaches every session on the profile. In loadout mode all three only show notices.
 - `#import-tintin <path>` imports TinTin++ aliases and variables.
-- `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.
-- `#record <name>` starts recording what you type in this session, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
-- `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.
-- `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.
-- `#walk <steps>` walks a string of directions like `3n2e` one room at a time, `#walk` says how many steps are left, and `#walk stop` stops the walk.
-- `#nativesurface on|off|default` forces the renderer on macOS, applied on restart.
+- `#logs forget-passwords` counts the lines in your session log where you sent a password. `#logs forget-passwords now` blanks them.
+- `#record <name>` starts to record what you type in this session. `#record` shows the status. `#record cancel` discards the recording. `#endrec` saves it as an alias.
+- `#qkey <name> <verb>` sets a quick key. `#qkey clear <name>` clears it. `#qkeys` lists the quick keys.
+- `#target <args>` works like `tar`. `#target clear|next|prev`, `#tarn`, `#tarp`, and `#tarclear` are its slash forms.
+- `#walk <steps>` walks a string of directions such as `3n2e`, one room at a time. `#walk` tells how many steps are left. `#walk stop` stops the walk.
+- `#nativesurface on|off|default` sets the renderer on macOS. The change applies when you restart.
 
-Targeting also works bare with no `#`. Type `tar` to list, `tar <N>` or `tar <substr>` to pick, `tarn` and `tarp` to cycle, `tarclear` to clear.
+Targeting also works with no `#`. Type `tar` to list, `tar <N>` or `tar <substr>` to choose, `tarn` and `tarp` to go through the list, and `tarclear` to clear.
 
-An unknown command points you at `#help`. Errors echo wrapped in square brackets.
+An unknown command points you to `#help`. Errors echo in square brackets.
 
 ### 9.2 Keyboard shortcuts
 
 <!-- id: reference.keyboard-shortcuts -->
 
-This is every built in key Vosh binds, grouped by where it works. On macOS the window shortcuts use `Cmd`, since `Ctrl` belongs to your macros there. The one exception is `Ctrl+Cmd+S`, the key macOS gives a sidebar. Windows and Linux use `Ctrl`.
+These are all the built in keys of Vosh, grouped by where they work. On macOS the window shortcuts use `Cmd`, because `Ctrl` belongs to your macros there. The one exception is `Ctrl+Cmd+S`, the key that macOS gives a sidebar. Windows and Linux use `Ctrl`.
 
 Anywhere in the main window.
 
-- `Cmd+K` toggles the command palette.
-- `Cmd+F` opens the find bar, and pressed again puts the caret back in it.
-- `Cmd+R` connects the session in front while it is not connected.
+- `Cmd+K` opens and closes the command palette.
+- `Cmd+F` opens the find bar. When you press it again, it puts the caret back in the find bar.
+- `Cmd+R` connects the session in front while it isn't connected.
 - `Cmd+,` opens Settings.
 - `Cmd+/` opens Help.
 - `Cmd+Shift+L` shows or hides the panel.
 - `Cmd+\` opens or closes the scrollback split.
-- `Cmd+J` moves into the snoop while one is open, and pressed again steps to the next tab.
-- `Cmd+Shift+P` reads your latest prompt aloud while `Read new game lines` is on under Accessibility.
-- `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers and `Cmd+Option+4` on Macros. They work in Settings too. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
+- `Cmd+J` moves into the snoop while one is open. When you press it again, it goes to the next tab.
+- `Cmd+Shift+P` reads your newest prompt aloud while `Read new game lines` is on under Accessibility.
+- `Cmd+Option+1` opens Settings on Timers, `Cmd+Option+2` on Aliases, `Cmd+Option+3` on Triggers, and `Cmd+Option+4` on Macros. They also work in Settings. On Windows and Linux the keys are `Ctrl+Shift+1` to `Ctrl+Shift+4`.
 
 For your sessions, in the main window.
 
 - `Cmd+T` opens a new session.
-- `Cmd+1` to `Cmd+9` bring the session at that place in the sidebar to the front. Hold `Cmd` a moment and each row shows its key.
-- `Cmd+Shift+]` steps to the next session and `Cmd+Shift+[` to the one before, round from the last to the first. They use the bracket keys whatever your layout types on them.
-- `Cmd+W` closes the session in front, and asks first while it is connected. With one session it closes the window.
-- `Cmd+Shift+W` closes the window, and asks first while a session is connected.
+- `Cmd+1` to `Cmd+9` bring the session at that place in the sidebar to the front. Hold `Cmd` for a moment and each row shows its key.
+- `Cmd+Shift+]` goes to the next session and `Cmd+Shift+[` to the session before. After the last session, they go round to the first. They use the bracket keys, whatever your keyboard layout types on them.
+- `Cmd+W` closes the session in front. It asks first while the session is connected. With one session it closes the window.
+- `Cmd+Shift+W` closes the window. It asks first while a session is connected.
 - `Ctrl+Cmd+S` hides or shows the sessions sidebar while two or more sessions are open. In a window too narrow for it, the sidebar slides in over the terminal. On Windows and Linux the key is `Ctrl+Shift+S`.
 
-A macro on one of these keys, or on one of the four Settings keys, keeps the key in every session on its profile, and Settings says so at the top of the macro. The other keys above win over a macro.
+A macro on one of these keys, or on one of the four Settings keys, keeps the key in every session on its profile. Settings tells you so at the top of the macro. The other keys above win over a macro.
 
-On macOS, `Cmd+W` in Settings or Help closes that window, and `Cmd+Q` quits Vosh. `Cmd+Q` asks first while two or more sessions are connected.
+On macOS, `Cmd+W` in Settings or Help closes that window. `Cmd+Q` quits Vosh. `Cmd+Q` asks first while two or more sessions are connected.
 
 In the command line.
 
-- `Enter` submits. `Shift+Enter` inserts a newline for multi line compose, and in password mode it submits instead.
-- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names. On an empty line, `Tab` moves on to the panel and `Shift+Tab` back to the terminal.
-- `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.
+- `Enter` sends. `Shift+Enter` adds a new line for text with more than one line. In password mode it sends instead.
+- `Tab` and `Shift+Tab` go through tab completion. The candidates are your history words, the characters in the room, and names you saw recently. On an empty line, `Tab` moves to the panel and `Shift+Tab` moves back to the terminal.
+- `ArrowUp` and `ArrowDown` recall history, filtered by the prefix you already typed.
 - `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.
-- `Escape` cancels an in flight paste burst, stops a walk, closes the scrollback split, and snaps the terminal to its tail.
-- `Home` and `End` jump the caret, also reachable as `Cmd+Left` and `Cmd+Right` or `Fn+Left` and `Fn+Right` on macOS. Add `Shift` to extend the selection.
+- `Escape` cancels a paste burst that is in progress, stops a walk, closes the scrollback split, and takes the terminal back to the live tail.
+- `Home` and `End` move the caret to the start and end. On macOS `Cmd+Left` and `Cmd+Right` or `Fn+Left` and `Fn+Right` do the same. Add `Shift` to extend the selection.
 - `Cmd+A` on an empty command line selects the whole terminal, scrollback included.
 - `Cmd+C` with nothing selected in the command line copies the terminal selection.
 
-In the find bar. `Enter` finds the next match, `Shift+Enter` the previous, `Escape` closes and clears.
+In the find bar. `Enter` finds the next match, and `Shift+Enter` finds the previous match. `Escape` closes the bar and clears the highlights.
 
-In a snoop. `Cmd+F` opens Find on the tab in front, `Cmd+C` copies what you select, and `Escape` or any key that types puts you back on the command line.
+In a snoop. `Cmd+F` opens Find on the tab in front. `Cmd+C` copies what you select. `Escape`, or any key that types, puts you back on the command line.
 
-In the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` runs the entry, `ArrowRight` opens a list like Choose theme, `ArrowLeft` or `Backspace` steps back out of it, and `Escape` steps back or closes.
+In the command palette. `ArrowUp` and `ArrowDown` move the selection, and `Enter` runs the entry. `ArrowRight` opens a list such as Choose theme. `ArrowLeft` or `Backspace` goes back out of it. `Escape` goes back or closes the palette.
 
-In the terminal menu. `ArrowUp` and `ArrowDown` move through the items, `Enter` picks one, `ArrowRight` opens the Settings list, `ArrowLeft` steps back out of it, and `Escape` closes the list, then the menu.
+In the right click menu. `ArrowUp` and `ArrowDown` move through the items, and `Enter` chooses one. `ArrowRight` opens the Settings list, and `ArrowLeft` goes back out of it. `Escape` closes the list, then the menu.
 
-In Settings and Help. `Cmd+F` puts the caret in the search, `ArrowUp` and `ArrowDown` move through the results, and `Escape` clears the search. In Help, `Enter` steps to the next match in the topic you read and `Shift+Enter` to the previous one.
+In Settings and Help. `Cmd+F` puts the caret in the search. `ArrowUp` and `ArrowDown` move through the results. `Escape` clears the search. In Help, `Enter` goes to the next match in the topic you read, and `Shift+Enter` goes to the previous match.
 
-In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items, and `Home` and `End` jump to the first and the last. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading reaches its group switch, and `Space` flips it.
+In an Automation list in Settings. `ArrowUp` and `ArrowDown` move through the group headings and items. `Home` and `End` go to the first and the last item. On a heading, `ArrowLeft` folds its group and `ArrowRight` opens it. `Tab` from a heading goes to its group switch, and `Space` turns the switch on or off.
 
-Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and snaps to the live tail. Right click opens the terminal menu.
+Mouse on the terminal. Wheel up opens the scrollback split. Middle click closes the split and goes back to the live tail. Right click opens the right click menu.
 
-Bind your own keys as macros in Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`. While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2` and `Numpad4` walk north, east, south and west, and `Numpad9` and `Numpad3` go up and down.
+To bind your own keys as macros, go to Settings under Automation, then Macros. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`. While the `Numpad movement` preset is on, `Numpad8`, `Numpad6`, `Numpad2`, and `Numpad4` walk north, east, south, and west. `Numpad9` and `Numpad3` go up and down.
 
 ### 9.3 Prompt design codes
 
 <!-- id: reference.prompt-codes -->
 
-Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose `Edit as text` there to read them or type your own.
+Your own prompt is a design of text and codes. Customize prompt writes the codes for you when you click the parts of your prompt and choose values. To read the codes or type your own, choose `Edit as text` there.
 
-Until you change it, your design follows the game. Vosh writes it from your PROMPT and fight prompt so it draws as the game does, and writes it again each time you change them in the game. Your first change makes the design yours, and `Same as the game` among the starts follows the game again.
+Until you change it, your design follows the game. Vosh writes it from your PROMPT and fight prompt, so it draws as the game does. It writes it again each time you change them in the game. Your first change makes the design yours. `Same as the game` among the starts follows the game again.
 
 | Code                                           | What it does                                                                        |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -1587,4 +1587,6 @@ Until you change it, your design follows the game. Vosh writes it from your PROM
 | `%{raw}`                                       | Your prompt exactly as the game sent it.                                            |
 | `%%`                                           | A percent sign.                                                                     |
 
-Every value in `Insert value…` has codes of its own, and the picker shows them beside each form. Your tick, the time and the date keep counting while your prompt sits idle. Vosh draws it again each second they change, and waits while you select text or read back. Pinned, the band keeps counting through both. A line with `%{right}` ends on the last column of your terminal, and Vosh draws it again when the window changes width.
+Every value in `Insert value…` has codes of its own. The picker shows them beside each form. Your tick, the time, and the date keep counting while your prompt is idle. Vosh draws the prompt again each second they change. It waits while you select text or read back.
+
+When the prompt is pinned, the band keeps counting through both. A line with `%{right}` ends on the last column of your terminal. Vosh draws it again when the width of the window changes.
