@@ -2,6 +2,40 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.95.0 - 2026-10-08
+
+Write your descriptions, notes and history in a card built for it, save a scene to share, and shape the command line your way. This is the test build before 1.0.
+
+- The writing card edits your description, history, personality, purpose, notes and the other board kinds. Open it from the Write menu, the command palette, or the notice that shows when the game's editor opens.
+- Drag the writing card anywhere, size its text box from the corner, or pin it into a Writing pane in the panel. Vosh keeps where you put it for each profile.
+- The card reads your note back from the game before it posts, says which line differs when one does, and finds a post again after a dropped connection.
+- Send for approval and Send for review sit in the card's menu. Vosh remembers a check that waits and reminds you when you send newer text.
+- Save a scene picks a stretch of your log and saves it as text, ANSI or a web page in your theme. Open it from Session logs or the right click menu.
+- Save as file can add times and save a web page. Copy as text leaves out password lines, as a saved file does.
+- Log search stays quick on long logs and opens on the last 7 days. Choose how long Vosh keeps logs, and turn logging off for one profile.
+- Your scrollback survives a quit or a crash. Set its size in Settings › General.
+- Pick the mark before the commands you send. Use ›, >, your own text or no mark, give it a color, and dim your commands if you like.
+- Shape the command line. Pick its background, size, caret blink and color, and the color of what you type.
+- Color commands as you type shows aliases, Vosh commands and chat in their own colors before you send them.
+- A pill at the start of the command line shows when you are in the game's editor, with the line you are on, and at a password prompt, in the pager or on a walk.
+- Snoop a player and a split shows their screen above yours, with a tab for each player.
+- See how long the game takes to answer on the status line, and type #lag to list each stall.
+- Show each hit keeps the part of a vital a hit takes pale for a moment before it drains.
+- Settings has eleven tabs, with Logs, Accessibility, Vitals and Prompt on their own. Old links still land on the right row.
+- Tab follows the screen in every window, and a screen reader hears the names, keys and regions. Turn on the Screen reader section in Settings › Accessibility to hear new lines, and press Cmd+Shift+P to hear your prompt.
+- High Contrast is rebuilt and High Contrast Light joins it. Increase contrast on macOS picks the pair.
+- Menus, buttons and keys look the same in every window.
+- One sessions toggle sits beside the window buttons. Press Ctrl+Cmd+S on macOS or Ctrl+Shift+S on Windows and Linux.
+- On macOS the Settings pages open with Cmd+Option and a number, since Cmd+Shift+3 and 4 take screenshots.
+- Things and people in a room take their colors after a walk or a goto, not only after a look, and your target colors on the first look.
+- A right aligned part of a pinned prompt stays whole.
+- A line Vosh prints after a prompt starts on its own row.
+- Submenus stay open while the pointer moves into them.
+- A reconnect from the account menu now knows which character you play.
+- Help is rewritten in short, plain sentences.
+- Vosh no longer offers Berkeley Mono. A setting that named it draws in the bundled JetBrains Mono.
+- Windows builds are not signed yet. If SmartScreen warns you, choose More info and then Run anyway.
+
 ## v0.9.0 - 2026-10-06
 
 Play several characters in one window, write plugins that draw their own panes, pick a vitals style, and get alerts when something needs you.
