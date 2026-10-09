@@ -186,9 +186,10 @@ pub(crate) fn lay_catalog_change_over(
     for alias in came {
         p.aliases.set(alias.clone());
     }
-    let (gone, came) = changes(&before.triggers, &after.triggers, |t| t.name.as_str());
-    for name in gone {
-        p.triggers.remove(name);
+    // So is a trigger.
+    let (gone, came) = changes(&before.triggers, &after.triggers, Trigger::id);
+    for (group, name) in gone {
+        p.triggers.remove(group, name);
     }
     for trigger in came {
         if let Err(e) = p.triggers.set(trigger.clone()) {

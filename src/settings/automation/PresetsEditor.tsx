@@ -144,7 +144,7 @@ export function PresetsEditor({
           }
           const regroup = preset ? groupsReset(preset, before.edit, after.edit) : null;
           if (regroup && regroup.size > 0) {
-            await setTriggerGroups(regroup, triggerStore(profile));
+            await setTriggerGroups(regroup, triggerStore(profile), after.id);
           }
           if (!after.alert || serializeValue(before.alert) === serializeValue(after.alert)) {
             continue;

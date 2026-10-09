@@ -125,11 +125,11 @@ pub(crate) struct CatalogJoin {
     pub clashes: Vec<Clash>,
 }
 
-/// An item of the file that the catalog already holds, a trigger by its
-/// name, an alias by its name in the file's group, and a macro of yours
-/// by its key. Yours stays and the file's is left out. An alias whose
-/// name the file holds in more than one group clashes too, past the one
-/// its Settings listed first.
+/// An item of the file that the catalog already holds, a trigger or an
+/// alias by its name in the file's group, and a macro of yours by its
+/// key. Yours stays and the file's is left out. A trigger or an alias
+/// whose name the file holds in more than one group clashes too, past
+/// the one its Settings listed first, since they all join one group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Clash {
     pub kind: ClashKind,
@@ -332,15 +332,8 @@ fn join_catalog(file: &ProfileConfig, catalog: &GlobalCatalog, group: &str) -> C
         .filter(|t| t.preset.is_none())
         .cloned()
         .collect();
-    let triggers = join(
-        ClashKind::Trigger,
-        &yours,
-        &catalog.triggers,
-        |t| &t.name,
-        |t| t.group = Some(group.to_string()),
-        &mut clashes,
-    );
-    let aliases = join_aliases(&file.aliases, &catalog.aliases, group, &mut clashes);
+    let triggers = join_grouped(&yours, &catalog.triggers, group, &mut clashes);
+    let aliases = join_grouped(&file.aliases, &catalog.aliases, group, &mut clashes);
     // A launch installs the catalog's own preset macros from its
     // enabled_presets, so the file's stay out. The file's macros meet only
     // yours in the catalog. A preset macro there is held off by one of
@@ -397,22 +390,54 @@ fn join<T: Clone>(
     joined
 }
 
-/// The aliases of `file`, each moved into `group`, that `kept` lacks
-/// there. An alias is known by its group and its name, so one of a name
-/// the catalog keeps in another group joins beside it. When the file
-/// holds a name in more than one group, the one its Settings listed
-/// first joins, since that is the one that fired, and each other adds a
-/// clash, as does each the catalog already has in `group`.
-fn join_aliases(
-    file: &[Alias],
-    kept: &[Alias],
+/// A trigger or an alias, which the stores know by its group and its
+/// name.
+trait Grouped: Clone {
+    const KIND: ClashKind;
+    fn id(&self) -> (Option<&str>, &str);
+    /// Give the item `name` and put it in `group`.
+    fn regroup(&mut self, name: &str, group: &str);
+}
+
+impl Grouped for Alias {
+    const KIND: ClashKind = ClashKind::Alias;
+    fn id(&self) -> (Option<&str>, &str) {
+        Alias::id(self)
+    }
+    fn regroup(&mut self, name: &str, group: &str) {
+        self.name = name.to_string();
+        self.group = Some(group.to_string());
+    }
+}
+
+impl Grouped for Trigger {
+    const KIND: ClashKind = ClashKind::Trigger;
+    fn id(&self) -> (Option<&str>, &str) {
+        Trigger::id(self)
+    }
+    fn regroup(&mut self, name: &str, group: &str) {
+        self.name = name.to_string();
+        self.group = Some(group.to_string());
+    }
+}
+
+/// The triggers or aliases of `file`, each moved into `group`, that
+/// `kept` lacks there. Each is known by its group and its name, so one
+/// of a name the catalog keeps in another group joins beside it. When
+/// the file holds a name in more than one group, the one its Settings
+/// listed first joins, since they would all land in `group`, and each
+/// other adds a clash, as does each the catalog already has in `group`.
+/// For an alias that is also the one that fired.
+fn join_grouped<T: Grouped>(
+    file: &[T],
+    kept: &[T],
     group: &str,
     clashes: &mut Vec<Clash>,
-) -> Vec<Alias> {
-    let mut joined: Vec<Alias> = Vec::new();
-    for (at, alias) in file.iter().enumerate() {
-        let (group_here, name) = alias.id();
-        // Another alias of the name the file lists first, in Settings order.
+) -> Vec<T> {
+    let mut joined: Vec<T> = Vec::new();
+    for (at, item) in file.iter().enumerate() {
+        let (group_here, name) = item.id();
+        // Another of the name the file lists first, in Settings order.
         let listed_before = file.iter().enumerate().any(|(other, b)| {
             other != at
                 && b.id().1 == name
@@ -423,15 +448,14 @@ fn join_aliases(
         let kept_here = kept.iter().any(|mine| mine.id() == (Some(group), name));
         if listed_before || kept_here {
             clashes.push(Clash {
-                kind: ClashKind::Alias,
+                kind: T::KIND,
                 name: name.to_string(),
             });
             continue;
         }
-        let mut alias = alias.clone();
-        alias.name = name.to_string();
-        alias.group = Some(group.to_string());
-        joined.push(alias);
+        let mut item = item.clone();
+        item.regroup(name, group);
+        joined.push(item);
     }
     joined
 }
@@ -739,8 +763,10 @@ mod tests {
 
         let join = plan.catalog.unwrap();
         assert_eq!(join.group, "Healer profile (2)");
-        // The preset trigger tells stays out with its preset.
-        assert_eq!(names(&join.triggers, |t| &t.name), ["room-items"]);
+        // The preset trigger tells stays out with its preset. A trigger is
+        // known by its group and its name, so the file's spam joins beside
+        // the catalog's spam in no group.
+        assert_eq!(names(&join.triggers, |t| &t.name), ["spam", "room-items"]);
         // An alias is known by its group and its name, so the file's kk
         // joins beside the catalog's kk in no group.
         assert_eq!(names(&join.aliases, |a| &a.name), ["kk", "heal"]);
@@ -753,19 +779,80 @@ mod tests {
             .chain(join.aliases.iter().map(|a| a.group.as_deref()))
             .chain(join.macros.iter().map(|m| m.group.as_deref()))
             .collect();
-        assert_eq!(groups, [Some("Healer profile (2)"); 5]);
-        // A clash keeps yours, by name and for a macro by key.
+        assert_eq!(groups, [Some("Healer profile (2)"); 6]);
+        // A clash keeps yours, here a macro by key.
         let clash = |kind, name: &str| Clash {
             kind,
             name: name.into(),
         };
-        assert_eq!(
-            join.clashes,
-            [
-                clash(ClashKind::Trigger, "spam"),
-                clash(ClashKind::Macro, "F2"),
-            ]
-        );
+        assert_eq!(join.clashes, [clash(ClashKind::Macro, "F2")]);
+        // A trigger the catalog has in that group clashes.
+        catalog.triggers[0].group = Some("Healer profile (2)".into());
+        let again = super::plan(
+            "Healer profile (2).toml",
+            EXPORT,
+            &ScopeConfig::default(),
+            Some(&catalog),
+        )
+        .unwrap();
+        let join = again.catalog.unwrap();
+        assert_eq!(names(&join.triggers, |t| &t.name), ["room-items"]);
+        assert_eq!(join.clashes[0], clash(ClashKind::Trigger, "spam"));
+    }
+
+    #[test]
+    fn a_trigger_name_two_groups_share_joins_once_and_a_per_profile_file_keeps_both() {
+        let in_group = |name: &str, command: &str, group: &str| Trigger {
+            group: Some(group.into()),
+            ..Trigger::new(
+                name,
+                "^Orla arrives",
+                TriggerAction::Send {
+                    template: command.into(),
+                },
+            )
+        };
+        let file = ProfileConfig {
+            triggers: vec![
+                in_group("greet", "bow orla", "Tolliver"),
+                in_group("greet", "wave orla", "Maren"),
+                in_group("flee", "flee", "Tolliver"),
+                in_group("hp", "quaff", "Maren"),
+            ],
+            ..ProfileConfig::default()
+        };
+        // The catalog has hp in the group the file joins, and greet in
+        // another.
+        let catalog = GlobalCatalog {
+            triggers: vec![
+                in_group("hp", "quaff red", "Orla"),
+                in_group("greet", "nod", "Tolliver"),
+            ],
+            ..GlobalCatalog::default()
+        };
+        let mut clashes = Vec::new();
+        let joined = join_grouped(&file.triggers, &catalog.triggers, "Orla", &mut clashes);
+        // Maren's greet, which Settings listed first, joins.
+        let got: Vec<(&str, Option<&str>)> = joined
+            .iter()
+            .map(|t| (t.name.as_str(), t.group.as_deref()))
+            .collect();
+        assert_eq!(got, [("greet", Some("Orla")), ("flee", Some("Orla"))]);
+        assert!(matches!(
+            &joined[0].actions[0],
+            TriggerAction::Send { template } if template == "wave orla"
+        ));
+        let clash = |name: &str| Clash {
+            kind: ClashKind::Trigger,
+            name: name.into(),
+        };
+        assert_eq!(clashes, [clash("greet"), clash("hp")]);
+
+        // In per profile mode the file loads as it is, both kept.
+        let mut p = crate::profile::live::Profile::default();
+        file.apply_to(&mut p);
+        assert_eq!(p.triggers.named("greet").len(), 2);
+        assert!(p.triggers.get_in(Some("Tolliver"), "greet").is_some());
     }
 
     #[test]
@@ -793,7 +880,7 @@ mod tests {
             ..GlobalCatalog::default()
         };
         let mut clashes = Vec::new();
-        let joined = join_aliases(&file.aliases, &catalog.aliases, "Orla", &mut clashes);
+        let joined = join_grouped(&file.aliases, &catalog.aliases, "Orla", &mut clashes);
         // Maren's ds, which Settings listed first and so fired, joins.
         let got: Vec<(&str, &str, Option<&str>)> = joined
             .iter()

@@ -855,7 +855,7 @@ impl ScriptEngine {
                 self.stopped.insert(owner.clone(), reason);
                 self.owned_callbacks(owner)
             }
-            Owner::Trigger(_) | Owner::Alias { .. } => self.owned_callbacks(owner),
+            Owner::Trigger { .. } | Owner::Alias { .. } => self.owned_callbacks(owner),
         };
         let mut actions = self.release(&ids);
         if let Owner::Plugin(name) = owner {
@@ -1191,7 +1191,7 @@ mod tests {
         )
         .unwrap();
         e.run_body(
-            &Owner::Trigger("dawn".into()),
+            &Owner::trigger("dawn"),
             "mud.trigger('day', 'The day has begun', function() mud.echo('body') end)",
             &[],
         )
@@ -1448,7 +1448,7 @@ mod tests {
         // share names, and a call Vosh stops cancels nothing.
         let made = e
             .run_body(
-                &Owner::Trigger("tick".into()),
+                &Owner::trigger("tick"),
                 "later = mud.timer(60, function() end)",
                 &[],
             )
@@ -1987,7 +1987,7 @@ mod tests {
         assert_eq!(typed.actions, vec![Action::Send("rescue Orla".into())]);
         let body = e
             .run_body(
-                &Owner::Trigger("guard".into()),
+                &Owner::trigger("guard"),
                 "mud.send(plugins.helpers.rescue(captures[1]))",
                 &["Maren".into()],
             )
@@ -2241,7 +2241,7 @@ mod tests {
     fn run_body(code: &str, captures: &[&str]) -> ScriptOutcome {
         let captures: Vec<String> = captures.iter().map(|c| (*c).to_string()).collect();
         let mut e = ScriptEngine::new().unwrap();
-        e.run_body(&Owner::Trigger("body".into()), code, &captures)
+        e.run_body(&Owner::trigger("body"), code, &captures)
     }
 
     /// Run `code` as a body with `captures`, in a fresh engine, and
@@ -2589,14 +2589,14 @@ mod tests {
         let outcome = returns_in_time(|| {
             let mut e = ScriptEngine::new().unwrap();
             e.run_body(
-                &Owner::Trigger("late".into()),
+                &Owner::trigger("late"),
                 "local mt = {} local t = setmetatable({}, mt) \
                  mt.__close = function() while true do end end \
                  local x <close> = t while true do end",
                 &[],
             )
         });
-        assert_eq!(outcome.stopped, [Owner::Trigger("late".into())]);
+        assert_eq!(outcome.stopped, [Owner::trigger("late")]);
     }
 
     #[test]
@@ -2916,7 +2916,7 @@ mod tests {
     #[test]
     fn a_body_that_runs_away_names_its_trigger_or_alias() {
         let mut e = ScriptEngine::new().unwrap();
-        let tells = Owner::Trigger("tells".into());
+        let tells = Owner::trigger("tells");
         let outcome = e.run_body(&tells, "mud.send('look') while true do end", &[]);
         assert_eq!(
             error_lines(&outcome),
@@ -2936,7 +2936,7 @@ mod tests {
     #[test]
     fn a_function_a_body_left_behind_stops_its_trigger() {
         let mut e = ScriptEngine::new().unwrap();
-        let tells = Owner::Trigger("tells".into());
+        let tells = Owner::trigger("tells");
         let made = e
             .run_body(
                 &tells,
@@ -3046,7 +3046,7 @@ mod tests {
                 ("print", Owner::Typed, "You are hungry.".to_string()),
             ]
         );
-        let tells = Owner::Trigger("tells".into());
+        let tells = Owner::trigger("tells");
         let body = e
             .run_body(&tells, "print(captures[1])", &["Maren".into()])
             .unwrap();
@@ -3069,7 +3069,7 @@ mod tests {
     fn every_other_stop_prints_one_error_and_no_note() {
         let mut e = ScriptEngine::new().unwrap();
         let spin = "while true do end";
-        let tells = Owner::Trigger("tells".into());
+        let tells = Owner::trigger("tells");
         let heal = Owner::alias("heal");
         let combat = Owner::Script("combat.lua".into());
         for (owner, outcome) in [

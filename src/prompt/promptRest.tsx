@@ -205,9 +205,11 @@ export function restBody({
       >
         <LineTriggers
           triggers={lineTriggers}
-          onMove={async (name) => {
-            await moveTriggerToPrompts(name);
-            setLineTriggers((list) => list.filter((t) => t.name !== name));
+          onMove={async (moved) => {
+            await moveTriggerToPrompts(moved.name, moved.group ?? null);
+            setLineTriggers((list) =>
+              list.filter((t) => t.name !== moved.name || t.group !== moved.group),
+            );
           }}
         />
       </Starts>

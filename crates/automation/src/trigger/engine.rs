@@ -76,6 +76,9 @@ pub struct LineResult {
 pub struct TriggerAlert {
     /// The trigger's name, which titles the banner.
     pub trigger: String,
+    /// The trigger's group, None for no group. Two groups may each hold
+    /// a trigger of one name, and each rings for itself.
+    pub group: Option<String>,
     pub parts: AlertParts,
 }
 
@@ -197,9 +200,12 @@ pub fn process_on_ground(
             // A trigger rings once for the line, however many of its
             // patterns match.
             if let Some(parts) = &compiled.trigger.alert {
-                if !alerts.iter().any(|a| a.trigger == compiled.trigger.name) {
+                if !alerts.iter().any(|a| {
+                    a.trigger == compiled.trigger.name && a.group == compiled.trigger.group
+                }) {
                     alerts.push(TriggerAlert {
                         trigger: compiled.trigger.name.clone(),
+                        group: compiled.trigger.group.clone(),
                         parts: parts.clone(),
                     });
                 }
@@ -277,7 +283,7 @@ pub fn process_on_ground(
                                 .collect();
                             scripts.push(ScriptCall {
                                 source: compiled.trigger.name.clone(),
-                                group: None,
+                                group: compiled.trigger.group.clone(),
                                 body: body.clone(),
                                 captures,
                             });
@@ -854,6 +860,7 @@ mod tests {
             r.alerts,
             [TriggerAlert {
                 trigger: "visitor".into(),
+                group: None,
                 parts,
             }]
         );
@@ -861,10 +868,83 @@ mod tests {
         assert!(r.alerts.is_empty(), "{:?}", r.alerts);
     }
 
+    /// The trigger `name` of `group`, which sends `command` on a line
+    /// that says Maren walks in, and rings a banner.
+    fn grouped(name: &str, group: &str, command: &str) -> Trigger {
+        Trigger {
+            group: Some(group.into()),
+            alert: Some(crate::alert::AlertParts::default()),
+            ..Trigger::new(
+                name,
+                r"^Maren walks in\.$",
+                TriggerAction::Send {
+                    template: command.into(),
+                },
+            )
+        }
+    }
+
+    #[test]
+    fn two_groups_each_keep_a_trigger_of_one_name_and_both_fire() {
+        let mut s = store(vec![
+            grouped("greet", "Tolliver", "bow maren"),
+            grouped("greet", "Orla", "wave maren"),
+        ]);
+        assert_eq!(s.list().len(), 2);
+        let r = process(&s, b"Maren walks in.", SESSION);
+        // Both fire, in the order the store took them at one priority.
+        assert_eq!(r.sends, ["bow maren", "wave maren"]);
+        let rang: Vec<_> = r.alerts.iter().map(|a| a.group.as_deref()).collect();
+        assert_eq!(rang, [Some("Tolliver"), Some("Orla")]);
+        // Saving one again replaces only the one in its group.
+        s.set(grouped("greet", " Orla ", "salute maren")).unwrap();
+        assert_eq!(s.list().len(), 2);
+        assert_eq!(
+            process(&s, b"Maren walks in.", SESSION).sends,
+            ["bow maren", "salute maren"]
+        );
+        // A group switched off holds only its own.
+        s.set_group_enabled("Tolliver", false);
+        assert_eq!(
+            process(&s, b"Maren walks in.", SESSION).sends,
+            ["salute maren"]
+        );
+        s.set_group_enabled("Tolliver", true);
+        // A stop holds only the trigger of its group, in its session.
+        s.stop(Some("Orla"), "greet", SESSION);
+        assert!(!s.is_stopped(Some("Tolliver"), "greet", SESSION));
+        assert_eq!(
+            process(&s, b"Maren walks in.", SESSION).sends,
+            ["bow maren"]
+        );
+        assert_eq!(process(&s, b"Maren walks in.", StopKey(2)).sends.len(), 2);
+        // Removing takes the group too.
+        assert!(!s.remove(None, "greet"));
+        assert!(s.remove(Some("Tolliver"), "greet"));
+        assert!(!s.is_stopped(Some("Orla"), "greet", StopKey(2)));
+        assert_eq!(s.named("greet").len(), 1);
+        assert_eq!(s.get("greet").unwrap().group.as_deref(), Some("Orla"));
+    }
+
+    #[test]
+    fn a_higher_priority_fires_first_whatever_the_group() {
+        let s = store(vec![
+            grouped("greet", "Orla", "wave maren"),
+            Trigger {
+                priority: 10,
+                ..grouped("greet", "Tolliver", "bow maren")
+            },
+        ]);
+        assert_eq!(
+            process(&s, b"Maren walks in.", SESSION).sends,
+            ["bow maren", "wave maren"]
+        );
+    }
+
     #[test]
     fn a_trigger_vosh_stopped_or_turned_off_rings_nothing() {
         let mut s = store(vec![visitor(crate::alert::AlertParts::default())]);
-        s.stop("visitor", SESSION);
+        s.stop(None, "visitor", SESSION);
         let rung = process(&s, b"Maren walks in.", SESSION).alerts;
         assert!(rung.is_empty(), "{rung:?}");
         assert_eq!(process(&s, b"Maren walks in.", StopKey(2)).alerts.len(), 1);

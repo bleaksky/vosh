@@ -9,9 +9,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::alert::AlertParts;
-use crate::groups::GroupSwitch;
+use crate::groups::{clean_group, compare_groups, GroupSwitch};
 use crate::revision::next_revision;
-use crate::stops::{StopKey, Stops};
+use crate::stops::{split_stop_id, stop_id, StopKey, Stops};
 use crate::trigger::action::TriggerAction;
 
 /// A single pattern row inside a trigger. Mirrors Mudlet's per-pattern
@@ -410,6 +410,22 @@ impl Trigger {
         }
     }
 
+    /// What the store knows this trigger by: its group, None for no
+    /// group, and its name, both trimmed. Two groups may each hold a
+    /// trigger of one name.
+    pub fn id(&self) -> (Option<&str>, &str) {
+        (clean_group(self.group.as_deref()), self.name.trim())
+    }
+
+    /// How a message names this trigger: its name, and its group after
+    /// it when it has one, like `tells in Maren`.
+    pub fn label(&self) -> String {
+        match self.id() {
+            (Some(group), name) => format!("{name} in {group}"),
+            (None, name) => name.to_string(),
+        }
+    }
+
     /// Convenience accessor for the first pattern's text — used by
     /// older call sites + UI summaries that just need "what does this
     /// trigger match on?" at a glance.
@@ -439,6 +455,25 @@ pub(crate) struct CompiledTrigger {
     pub regexes: Vec<Regex>,
 }
 
+/// `trigger` as the store keeps it, its name and group trimmed and an
+/// empty group as none, so a name typed with a space at either end is
+/// the same trigger as the one without.
+fn cleaned(mut trigger: Trigger) -> Trigger {
+    let name = trigger.name.trim();
+    if name.len() != trigger.name.len() {
+        trigger.name = name.to_string();
+    }
+    trigger.group = clean_group(trigger.group.as_deref()).map(str::to_string);
+    trigger
+}
+
+/// Your triggers. A trigger is known by its group and its name together,
+/// so two groups may each hold a trigger of one name, like one group of
+/// triggers for each character you play. Every trigger that matches a
+/// line fires, so two of one name both fire while both their groups are
+/// on. They fire by priority, high to low, and triggers of one priority
+/// in the order the store took them, which a whole list save from
+/// Settings gives as the list it sends.
 #[derive(Default)]
 pub struct TriggerStore {
     items: Vec<CompiledTrigger>,
@@ -448,8 +483,8 @@ pub struct TriggerStore {
     /// See [`TriggerStore::revision`].
     revision: u64,
     /// The triggers whose Lua Vosh stopped, each under the key of the
-    /// session it stopped in. A stopped trigger matches nothing under its
-    /// key until you save it again.
+    /// session it stopped in, by [`stop_id`]. A stopped trigger matches
+    /// nothing under its key until you save it again.
     stopped: Stops,
 }
 
@@ -466,12 +501,15 @@ impl TriggerStore {
         self.revision
     }
 
-    /// Insert or replace a trigger by name. Compiles every enabled
+    /// Insert a trigger, or replace the one of its name in its group.
+    /// The name and the group are trimmed first. Compiles every enabled
     /// pattern; returns an error on the first one that does not parse
     /// (the error names the offending pattern so the user can fix it).
     /// Disabled patterns are skipped — flipping them on later requires
-    /// re-saving the trigger.
+    /// re-saving the trigger. A replaced trigger moves behind the others
+    /// of its priority.
     pub fn set(&mut self, trigger: Trigger) -> Result<(), TriggerError> {
+        let trigger = cleaned(trigger);
         let mut regexes = Vec::with_capacity(trigger.patterns.len());
         for entry in &trigger.patterns {
             if !entry.enabled {
@@ -484,9 +522,10 @@ impl TriggerStore {
                 })?;
             regexes.push(regex);
         }
-        self.items.retain(|t| t.trigger.name != trigger.name);
+        self.items.retain(|t| t.trigger.id() != trigger.id());
         // Saving a trigger Vosh stopped turns it back on everywhere.
-        self.stopped.clear(&trigger.name);
+        let (group, name) = trigger.id();
+        self.stopped.clear(&stop_id(group, name));
         self.items.push(CompiledTrigger { trigger, regexes });
         self.items
             .sort_by_key(|t| std::cmp::Reverse(t.trigger.priority));
@@ -494,10 +533,13 @@ impl TriggerStore {
         Ok(())
     }
 
-    pub fn remove(&mut self, name: &str) -> bool {
-        self.stopped.clear(name);
+    /// Remove the trigger `name` of `group`, None for the one in no
+    /// group. True when it went.
+    pub fn remove(&mut self, group: Option<&str>, name: &str) -> bool {
+        let id = (clean_group(group), name.trim());
+        self.stopped.clear(&stop_id(id.0, id.1));
         let before = self.items.len();
-        self.items.retain(|t| t.trigger.name != name);
+        self.items.retain(|t| t.trigger.id() != id);
         let removed = before != self.items.len();
         if removed {
             self.revision = next_revision();
@@ -518,25 +560,48 @@ impl TriggerStore {
         removed
     }
 
-    pub fn get(&self, name: &str) -> Option<&Trigger> {
+    /// The trigger `name` of `group`, None for the one in no group.
+    pub fn get_in(&self, group: Option<&str>, name: &str) -> Option<&Trigger> {
+        let id = (clean_group(group), name.trim());
         self.items
             .iter()
-            .find(|t| t.trigger.name == name)
+            .find(|t| t.trigger.id() == id)
             .map(|t| &t.trigger)
     }
 
-    /// Turn the trigger `name` off under `key`, after Vosh stopped its Lua
-    /// there. It stays off there until you save it again.
-    pub fn stop(&mut self, name: &str, key: StopKey) {
-        if self.get(name).is_some() {
-            self.stopped.stop(name, key);
+    /// Every trigger of `name`, in the order Settings lists their groups:
+    /// the one in no group, then the groups in [`compare_groups`] order.
+    pub fn named(&self, name: &str) -> Vec<&Trigger> {
+        let name = name.trim();
+        let mut out: Vec<&Trigger> = self
+            .items
+            .iter()
+            .map(|t| &t.trigger)
+            .filter(|t| t.name == name)
+            .collect();
+        out.sort_by(|a, b| compare_groups(a.id().0, b.id().0));
+        out
+    }
+
+    /// The first trigger of `name` Settings lists, whatever its group.
+    pub fn get(&self, name: &str) -> Option<&Trigger> {
+        self.named(name).first().copied()
+    }
+
+    /// Turn the trigger `name` of `group` off under `key`, after Vosh
+    /// stopped its Lua there. It stays off there until you save it again.
+    pub fn stop(&mut self, group: Option<&str>, name: &str, key: StopKey) {
+        if self.get_in(group, name).is_some() {
+            self.stopped
+                .stop(&stop_id(clean_group(group), name.trim()), key);
         }
     }
 
-    /// True while Vosh holds the trigger `name` off under `key` after a
-    /// stop.
-    pub fn is_stopped(&self, name: &str, key: StopKey) -> bool {
-        self.stopped.contains(name, key)
+    /// True while Vosh holds the trigger `name` of `group` off under
+    /// `key` after a stop.
+    pub fn is_stopped(&self, group: Option<&str>, name: &str, key: StopKey) -> bool {
+        self.stopped
+            .contains(&stop_id(clean_group(group), name.trim()), key)
     }
 
     /// Drop every stop under `key`, as the session it names closes.
@@ -565,10 +630,14 @@ impl TriggerStore {
     /// engine consumes this directly; per-trigger and per-pattern
     /// enable flags still apply downstream of the group check.
     pub(crate) fn iter_compiled(&self, key: StopKey) -> impl Iterator<Item = &CompiledTrigger> {
-        let stopped = self.stopped.under(key);
+        // Most sessions stop nothing, so a line builds no id then.
+        let stopped = self.stopped.under(key).filter(|ids| !ids.is_empty());
         self.items.iter().filter(move |c| {
             self.groups.allows(c.trigger.group.as_deref())
-                && !stopped.is_some_and(|names| names.contains(&c.trigger.name))
+                && !stopped.is_some_and(|ids| {
+                    let (group, name) = c.trigger.id();
+                    ids.contains(&stop_id(group, name))
+                })
         })
     }
 
@@ -624,9 +693,10 @@ impl TriggerStore {
         next.groups = std::mem::take(&mut self.groups);
         // The editor saves the whole list at once, so a trigger Vosh
         // stopped stays off, under each key, unless this save changed it.
-        next.stopped = self.stopped.kept(|name| {
-            let now = next.get(name);
-            now.is_some() && now == self.get(name)
+        next.stopped = self.stopped.kept(|id| {
+            let (group, name) = split_stop_id(id);
+            let now = next.get_in(group, name);
+            now.is_some() && now == self.get_in(group, name)
         });
         next.revision = next_revision();
         *self = next;
@@ -693,7 +763,7 @@ mod tests {
         store.set(trigger("flee", "^You run")).unwrap();
         let after_replace = store.revision();
         assert_ne!(after_replace, after_add);
-        assert!(store.remove("flee"));
+        assert!(store.remove(Some("combat"), "flee"));
         assert_ne!(store.revision(), after_replace);
     }
 
@@ -702,7 +772,7 @@ mod tests {
         let mut store = TriggerStore::new();
         store.set(trigger("flee", "^You flee")).unwrap();
         let rev = store.revision();
-        assert!(!store.remove("missing"));
+        assert!(!store.remove(Some("combat"), "missing"));
         assert_eq!(store.remove_by_preset("highlights"), 0);
         assert!(store.set(trigger("bad", "(")).is_err());
         store.set_group_enabled("combat", false);
@@ -727,26 +797,26 @@ mod tests {
     fn a_stopped_trigger_stays_off_in_its_session_until_you_save_it() {
         let mut store = TriggerStore::new();
         store.set(trigger("hunger", "^You are hungry")).unwrap();
-        store.stop("hunger", SESSION);
-        assert!(store.is_stopped("hunger", SESSION));
+        store.stop(Some("combat"), "hunger", SESSION);
+        assert!(store.is_stopped(Some("combat"), "hunger", SESSION));
         assert!(!gags(&store, "You are hungry.", SESSION));
         // The other session still matches it.
-        assert!(!store.is_stopped("hunger", OTHER));
+        assert!(!store.is_stopped(Some("combat"), "hunger", OTHER));
         assert!(gags(&store, "You are hungry.", OTHER));
         // The list and its revision stay as they were, so Settings and
         // the saved profile still hold the trigger as you wrote it.
         assert_eq!(store.list().len(), 1);
-        store.stop("hunger", OTHER);
+        store.stop(Some("combat"), "hunger", OTHER);
         store.set(trigger("hunger", "^You are hungry")).unwrap();
         for key in [SESSION, OTHER] {
-            assert!(!store.is_stopped("hunger", key));
+            assert!(!store.is_stopped(Some("combat"), "hunger", key));
             assert!(gags(&store, "You are hungry.", key));
         }
         // No trigger of that name, nothing to stop.
-        store.stop("missing", SESSION);
-        assert!(!store.is_stopped("missing", SESSION));
+        store.stop(Some("combat"), "missing", SESSION);
+        assert!(!store.is_stopped(Some("combat"), "missing", SESSION));
         // The stops of a session that closed go with it.
-        store.stop("hunger", SESSION);
+        store.stop(Some("combat"), "hunger", SESSION);
         store.forget_stops(SESSION);
         assert!(gags(&store, "You are hungry.", SESSION));
     }
@@ -756,9 +826,9 @@ mod tests {
         let mut store = TriggerStore::new();
         store.set(trigger("hunger", "^You are hungry")).unwrap();
         store.set(trigger("day", "^The day has begun")).unwrap();
-        store.stop("hunger", SESSION);
-        store.stop("day", SESSION);
-        store.stop("day", OTHER);
+        store.stop(Some("combat"), "hunger", SESSION);
+        store.stop(Some("combat"), "day", SESSION);
+        store.stop(Some("combat"), "day", OTHER);
         let mut edited = store.list();
         for t in &mut edited {
             if t.name == "day" {
@@ -768,15 +838,15 @@ mod tests {
         store
             .import_json(&serde_json::to_string(&edited).unwrap())
             .unwrap();
-        assert!(store.is_stopped("hunger", SESSION));
+        assert!(store.is_stopped(Some("combat"), "hunger", SESSION));
         assert!(!gags(&store, "You are hungry.", SESSION));
-        assert!(!store.is_stopped("hunger", OTHER));
+        assert!(!store.is_stopped(Some("combat"), "hunger", OTHER));
         for key in [SESSION, OTHER] {
-            assert!(!store.is_stopped("day", key));
+            assert!(!store.is_stopped(Some("combat"), "day", key));
             assert!(gags(&store, "The day has begun.", key));
         }
-        assert!(store.remove("hunger"));
-        assert!(!store.is_stopped("hunger", SESSION));
+        assert!(store.remove(Some("combat"), "hunger"));
+        assert!(!store.is_stopped(Some("combat"), "hunger", SESSION));
     }
 
     /// A trigger whose rows are `rows`, each a pattern with its mode.
@@ -1077,6 +1147,49 @@ mod tests {
             assert_eq!(t.patterns[0].mode, MatchMode::Regex, "{value}");
             assert_eq!(t.patterns[1].mode, MatchMode::Text, "{value}");
         }
+    }
+
+    #[test]
+    fn a_whole_list_save_keeps_a_name_in_each_group_and_each_its_own_stop() {
+        let in_group = |group: &str, pattern: &str| Trigger {
+            group: Some(group.into()),
+            ..Trigger::new("hunger", pattern, TriggerAction::Gag)
+        };
+        let mut store = TriggerStore::new();
+        store.set(in_group("Tolliver", "^You are hungry")).unwrap();
+        store.set(in_group("Maren", "^You are hungry")).unwrap();
+        store.stop(Some("Tolliver"), "hunger", SESSION);
+        store.stop(Some("Maren"), "hunger", SESSION);
+        // Settings sends Maren's with a new pattern and a space after its
+        // name, and Tolliver's as it was.
+        let mut edited = store.list();
+        edited[1].patterns = vec![TriggerPattern::regex("^You are starving")];
+        edited[1].name = "hunger ".into();
+        store
+            .import_json(&serde_json::to_string(&edited).unwrap())
+            .unwrap();
+        let rows: Vec<(String, Option<String>)> = store
+            .list()
+            .into_iter()
+            .map(|t| (t.name, t.group))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("hunger".into(), Some("Tolliver".into())),
+                ("hunger".into(), Some("Maren".into()))
+            ]
+        );
+        assert!(store.is_stopped(Some("Tolliver"), "hunger", SESSION));
+        assert!(!store.is_stopped(Some("Maren"), "hunger", SESSION));
+        assert_eq!(
+            store
+                .get_in(Some(" Maren"), " hunger")
+                .unwrap()
+                .first_pattern(),
+            "^You are starving"
+        );
+        assert_eq!(store.get_in(None, "hunger"), None);
     }
 
     #[test]

@@ -13,8 +13,10 @@ pub enum Owner {
     Script(String),
     /// A `#lua` line you typed.
     Typed,
-    /// The Script action of the trigger of this name.
-    Trigger(String),
+    /// The Script action of the trigger of this name in this group, None
+    /// for the one in no group. Two groups may each hold a trigger of one
+    /// name.
+    Trigger { name: String, group: Option<String> },
     /// The Lua body of the alias of this name in this group, None for
     /// the one in no group. Two groups may each hold an alias of one
     /// name.
@@ -22,6 +24,14 @@ pub enum Owner {
 }
 
 impl Owner {
+    /// The owner of the Script action of the trigger `name` in no group.
+    pub fn trigger(name: impl Into<String>) -> Self {
+        Owner::Trigger {
+            name: name.into(),
+            group: None,
+        }
+    }
+
     /// The owner of the body of the alias `name` in no group.
     pub fn alias(name: impl Into<String>) -> Self {
         Owner::Alias {
@@ -30,15 +40,22 @@ impl Owner {
         }
     }
 
-    /// How the lines name an alias: its name, and its group after it
-    /// when it has one, like `ds in Tolliver`. Empty for any other owner.
-    pub(crate) fn alias_label(&self) -> String {
+    /// How the lines name a trigger or an alias: its name, and its group
+    /// after it when it has one, like `ds in Tolliver`. Empty for any
+    /// other owner.
+    pub(crate) fn item_label(&self) -> String {
         match self {
-            Owner::Alias {
+            Owner::Trigger {
+                name,
+                group: Some(group),
+            }
+            | Owner::Alias {
                 name,
                 group: Some(group),
             } => format!("{name} in {group}"),
-            Owner::Alias { name, group: None } => name.clone(),
+            Owner::Trigger { name, group: None } | Owner::Alias { name, group: None } => {
+                name.clone()
+            }
             _ => String::new(),
         }
     }
@@ -55,8 +72,8 @@ impl Owner {
             Owner::Plugin(name) => format!("plugin:{name}"),
             Owner::Script(name) => name.clone(),
             Owner::Typed => "#lua".to_string(),
-            Owner::Trigger(name) => format!("trigger {name}"),
-            Owner::Alias { .. } => format!("alias {}", self.alias_label()),
+            Owner::Trigger { .. } => format!("trigger {}", self.item_label()),
+            Owner::Alias { .. } => format!("alias {}", self.item_label()),
         }
     }
 
@@ -79,8 +96,8 @@ impl Owner {
     /// before the line number of an error in it.
     pub(crate) fn body_chunk(&self) -> String {
         match self {
-            Owner::Trigger(name) => format!("=trigger {name}"),
-            Owner::Alias { .. } => format!("=alias {}", self.alias_label()),
+            Owner::Trigger { .. } => format!("=trigger {}", self.item_label()),
+            Owner::Alias { .. } => format!("=alias {}", self.item_label()),
             Owner::Typed => "=#lua".to_string(),
             Owner::Plugin(name) | Owner::Script(name) => format!("={name}"),
         }

@@ -569,12 +569,14 @@ fn trigger_entries(profiles: &[(String, ProfileConfig)], library: &[&str]) -> Ve
 }
 
 /// The triggers of one profile file in the order its store runs them. A
-/// store keeps the last copy of a name, in the place of that copy, and
-/// runs a higher priority first, keeping the order within one priority.
+/// store keeps the last copy of a name in one group, in the place of that
+/// copy, and runs a higher priority first, keeping the order within one
+/// priority. Copies of one name in two groups both stay, and the catalog
+/// renames the later entry as it renames any name two entries share.
 fn run_order(triggers: &[Trigger]) -> Vec<&Trigger> {
     let mut run: Vec<&Trigger> = Vec::new();
     for trigger in triggers {
-        run.retain(|t| t.name != trigger.name);
+        run.retain(|t| t.id() != trigger.id());
         run.push(trigger);
     }
     run.sort_by_key(|t| std::cmp::Reverse(t.priority));

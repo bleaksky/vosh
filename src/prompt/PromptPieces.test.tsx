@@ -612,6 +612,7 @@ describe('the D6 row', () => {
         triggers={[
           { name: 'Sleep when mana is low', pattern: '\\[\\d+/\\d+hp', preset: false },
           { name: 'From a preset', pattern: 'mv\\]', preset: true },
+          { name: 'hp', group: 'Orla', pattern: 'hp', preset: false },
         ]}
         onMove={() => Promise.resolve()}
       />,
@@ -621,7 +622,8 @@ describe('the D6 row', () => {
     );
     expect(html).toContain('class="pc-d6-name">Sleep when mana is low<');
     expect(html).toContain('class="pc-d6-pattern">\\[\\d+/\\d+hp<');
-    expect(html.match(/Move to Prompts/g)).toHaveLength(1);
+    expect(html).toContain('class="pc-d6-name">hp in Orla<');
+    expect(html.match(/Move to Prompts/g)).toHaveLength(2);
     expect(
       renderToStaticMarkup(<LineTriggers triggers={[]} onMove={() => Promise.resolve()} />),
     ).toBe('');

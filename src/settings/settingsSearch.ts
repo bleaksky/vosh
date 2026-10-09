@@ -522,7 +522,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   {
     label: 'Triggers',
     keywords:
-      'trigger pattern highlight gag replace route wash regex text starts with match mode alert banner notification sound tone chime bell knock bounce flash',
+      'trigger pattern highlight gag replace route wash regex text starts with match mode alert banner notification sound tone chime bell knock bounce flash group character',
     target: at('automation', 'triggers'),
   },
   {

@@ -785,6 +785,66 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_trigger_name_in_two_groups_round_trips_and_an_old_file_saves_the_same() {
+        use vosh_automation::trigger::TriggerAction;
+        // A file from before groups could share a trigger name, written
+        // by hand, with a space in one name and around another.
+        let old = "[[triggers]]\nname = \"hp watch\"\npattern = \"^HP\"\npriority = 5\n\
+                   enabled = true\ngroup = \"Orla\"\n\n[[triggers.patterns]]\n\
+                   pattern = \"^HP\"\nenabled = true\n\n[[triggers.actions]]\nkind = \"gag\"\n\n\
+                   [[triggers]]\nname = \" flee \"\npattern = \"^You flee\"\n\n\
+                   [[triggers.actions]]\nkind = \"gag\"\n";
+        let config = ProfileConfig::from_toml(old).unwrap();
+        let mut profile = Profile::default();
+        config.apply_to(&mut profile);
+        // The name loads trimmed, and a space inside one stays.
+        assert!(profile.triggers.get_in(None, "flee").is_some());
+        assert!(profile.triggers.get_in(Some("Orla"), "hp watch").is_some());
+        // Saved again with no change, the text stays as it was.
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        let mut again = Profile::default();
+        ProfileConfig::from_toml(&text)
+            .unwrap()
+            .apply_to(&mut again);
+        assert_eq!(ProfileConfig::from_profile(&again).to_toml().unwrap(), text);
+
+        // Two groups each keep their greet, in the order they were set.
+        for (command, group) in [("bow maren", "Tolliver"), ("wave maren", "Orla")] {
+            profile
+                .triggers
+                .set(Trigger {
+                    group: Some(group.into()),
+                    ..Trigger::new(
+                        "greet",
+                        "^Maren arrives",
+                        TriggerAction::Send {
+                            template: command.into(),
+                        },
+                    )
+                })
+                .unwrap();
+        }
+        let text = ProfileConfig::from_profile(&profile).to_toml().unwrap();
+        let mut back = Profile::default();
+        ProfileConfig::from_toml(&text).unwrap().apply_to(&mut back);
+        let rows: Vec<(String, Option<String>)> = back
+            .triggers
+            .list()
+            .into_iter()
+            .map(|t| (t.name, t.group))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("hp watch".into(), Some("Orla".into())),
+                ("flee".into(), None),
+                ("greet".into(), Some("Tolliver".into())),
+                ("greet".into(), Some("Orla".into())),
+            ]
+        );
+    }
+
     fn secs(s: u64) -> Duration {
         Duration::from_secs(s)
     }

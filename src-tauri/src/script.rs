@@ -118,7 +118,7 @@ pub(crate) fn run_console(
 pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &ScriptOutcome) {
     for owner in &outcome.stopped {
         match owner {
-            Owner::Trigger(name) => profile.triggers.stop(name, key),
+            Owner::Trigger { name, group } => profile.triggers.stop(group.as_deref(), name, key),
             Owner::Alias { name, group } => profile.aliases.stop(group.as_deref(), name, key),
             Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }

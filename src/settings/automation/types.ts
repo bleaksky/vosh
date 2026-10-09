@@ -91,8 +91,12 @@ export interface KindSpec<T> {
   rowNotes?: (values: readonly T[], groupOn: (group: string) => boolean) => (string | null)[];
   /** The list row for a value, less its uid. */
   entry: (value: T) => Omit<ListEntry, 'uid'>;
-  /** A stable name for an item across a reload, like a trigger's name. */
+  /** A stable name for an item across a reload, like a trigger's group
+   *  and name. */
   keyOf: (value: T) => string;
+  /** What a deep link names an item by, when that is not its key, like
+   *  a trigger's name, which a preset's card links to. */
+  linkKeyOf?: (value: T) => string;
   blank?: () => T;
   /** JSON editing. Leave out for kinds with no JSON view. */
   json?: {

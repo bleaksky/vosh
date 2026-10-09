@@ -285,7 +285,7 @@ mod tests {
         );
         assert_eq!(error_lines(&script), [format!("weather.lua:1: {ONLY}")]);
         let body = e.run_body(
-            &Owner::Trigger("rain".into()),
+            &Owner::trigger("rain"),
             "mud.pane('weather', 'Weather')",
             &[],
         );

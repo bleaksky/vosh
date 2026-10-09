@@ -389,7 +389,7 @@ export function CommandBox({ command, className }: { command: string; className?
 interface LineTriggersProps {
   triggers: readonly PromptLineTrigger[];
   /** Set one to match Prompts. It resolves once the trigger moved. */
-  onMove: (name: string) => Promise<void>;
+  onMove: (trigger: PromptLineTrigger) => Promise<void>;
 }
 
 /** The Line triggers row: once a profile reads your prompt, Line
@@ -411,9 +411,9 @@ export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
       </p>
       <ul className="pc-d6-list">
         {triggers.map((t) => (
-          <li key={t.name} className="pc-d6-row">
+          <li key={`${t.group ?? ''}\u001f${t.name}`} className="pc-d6-row">
             <span className="pc-d6-what">
-              <span className="pc-d6-name">{t.name}</span>
+              <span className="pc-d6-name">{t.group ? `${t.name} in ${t.group}` : t.name}</span>
               <span className="pc-d6-pattern">{t.pattern}</span>
             </span>
             {!t.preset && (
@@ -421,7 +421,7 @@ export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
                 disabled={busy !== null}
                 onClick={() => {
                   setBusy(t.name);
-                  void onMove(t.name)
+                  void onMove(t)
                     .catch((e: unknown) =>
                       pushToast({
                         kind: 'error',

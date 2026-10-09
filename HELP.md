@@ -518,7 +518,7 @@ A trigger watches the lines that come in and runs actions when a pattern matches
 
 - Open Settings and choose Automation, then Triggers.
 - Click `New trigger`.
-- Type a name and a pattern, and choose how the pattern matches. `Text` matches a line that is exactly the pattern. `Starts with` matches any line that starts with the pattern. `Regex` reads the pattern as a regular expression.
+- Type a name and a pattern, and choose how the pattern matches. A name can have spaces in it. Vosh removes spaces before and after the name. `Text` matches a line that is exactly the pattern. `Starts with` matches any line that starts with the pattern. `Regex` reads the pattern as a regular expression.
 - To add another pattern in the same mode, open `Advanced` and click `Add pattern` in More patterns. The trigger fires when any pattern that is on matches.
 - Leave `Priority` under `Advanced` at `5`, the default for a new trigger. Or make it higher to run before other triggers. Triggers with a higher priority run first. Leave `Match` on `Lines`.
 - Choose `Room` in `Match` to match only the armies, things, and people that a room lists after its exits line. The game sends `Room.Chars` and `Room.Items` packets with each look. Vosh counts the lines from them. So a say or an arrival after the look stays a plain line.
@@ -532,6 +532,10 @@ A trigger watches the lines that come in and runs actions when a pattern matches
 - For a tell, your name, a fight, low health, or the connection, use an alert preset instead. Get alerts at 3.9 shows how.
 - Click `Save`. Vosh shows `Saved` in the bar at the bottom.
 
+When Vosh can't save the list, it tells you why beside `Save`. It puts a red ring on each trigger to fix and selects the first one. The message goes away when you fix the triggers.
+
+To turn related triggers on and off together, give them the same name in `Group`. Two groups can each have a trigger with the same name. When both groups are on, both triggers run, as 3.11 tells you. One group can have only one trigger with a given name.
+
 `Text` and `Starts with` ignore spaces at the start of the line. `Text` also ignores them at the end. So a line you copy from a look matches with or without the five spaces before it. Neither mode needs escapes, and neither fills `$1`. A `Regex` pattern needs escapes for literal punctuation. Its groups fill `$1` and on.
 
 A new trigger starts in `Text`, and older triggers read as `Regex`. The mode covers every pattern of the trigger. In `Edit all as JSON…` a `Text` or `Starts with` row reads `text`. So if you change only its `pattern`, there or by hand in the file, nothing changes.
@@ -544,7 +548,7 @@ Each row you changed says `Changed` and shows what the preset has. `Advanced` co
 
 A preset trigger has no `Delete`. To stop it, turn off `Enabled`. `Reset to preset` under the card puts back the rows of that trigger. Like every change, it waits for `Save`. A trigger of your own can't have the name of a preset trigger, whether that preset is on or off. `Edit all as JSON…` lists only your own triggers.
 
-You can also make triggers in the command line. `#trigger name {pattern} send command` makes one with a `Regex` pattern at priority 0 on the `line` target. `#triggers` lists all of them by priority. `#untrigger name` removes one. Vosh refuses a regex that isn't valid and names the broken pattern.
+You can also make triggers in the command line. `#trigger name {pattern} send command` makes one with a `Regex` pattern at priority 0 on the `line` target. `#triggers` lists all of them by priority, with the group after the name. `#untrigger name` removes one. When two groups have a trigger with that name, add the group, as in `#untrigger greet Maren`. Vosh refuses a regex that isn't valid and names the broken pattern.
 
 ### 3.3 Highlight lines
 
@@ -554,7 +558,7 @@ A highlight trigger changes the style of every line that matches a pattern. Make
 
 - Type `#trigger <name> {pattern} highlight <color> [styles]`. Every line that matches the pattern shows in that color and style.
 - To tint the whole line and not only the text, add `wash` to the list of styles.
-- To check the pattern and the action, type `#triggers`. A new trigger with the name of an existing trigger replaces it.
+- To check the pattern and the action, type `#triggers`. A new trigger with the name of an existing trigger replaces it, and stays in its group. When two groups have a trigger with that name, it replaces the trigger in the group that is first in the list. A new trigger goes in no group.
 
 A plain highlight changes the style of the matched words. The rest of the line keeps the colors that the game sent. A wash marks the whole line. The text of the line takes the highlight color. A dim field in that color fills the row from edge to edge. The field follows the palette of your theme, so a washed line goes well with the colors around it.
 
@@ -668,7 +672,7 @@ Slash commands control Vosh from the command line, without Settings. Vosh handle
 - Type `#help` at any time for the full list, or `#help <words>` to open Help on those words.
 - Manage aliases with `#alias <name> <expansion>`, `#unalias <name> [group]`, and `#aliases`.
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
-- Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
+- Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name> [group]`, and `#triggers`.
 - To tell Vosh how to read your prompt, use `#prompt game {setting}` and `#prompt fight {setting}`, with the codes you type in the game. Or use `#prompt {regex}`, where each named group such as `(?<hp>\d+)` is a value. `#prompt` alone tells you how Vosh reads your prompt. `#unprompt` stops it.
 - To turn the drawing of your design on or off, use `#prompt draw on|off`. With drawing off, you see the prompt of the game, and your design stays. With no design of your own, Vosh draws your prompt as the game does. It follows each change you make to the prompt in the game.
 - To choose where your prompt shows, use `#prompt show text|lifted|pinned`.
@@ -714,7 +718,7 @@ One title from one script rings at most one time in 10 seconds. On macOS, when y
 
 Each script and each plugin owns the triggers, GMCP handlers, and timers it adds. This includes those that its callbacks add later. When you load it again with `#script reload` or `#script load`, Vosh removes all of them, if the script runs with no error. So nothing doubles, and a trigger you deleted from the file goes away. A load with an error keeps what the script had. Variables it set and groups it turned on or off stay.
 
-Two scripts can each have a trigger with the same name. A new `mud.on_gmcp` handler runs at once on the last packet of its package. So it sees your `Char.Status` and doesn't wait for your next login. A new `Comm.Channel` handler waits for the next message instead. This is because each chat packet is one message and not a state.
+Two scripts can each have a trigger with the same name. A trigger that Lua makes with `mud.trigger` is in no group, and your trigger list doesn't show it. Your groups and `#group` don't turn it on or off. A new `mud.on_gmcp` handler runs at once on the last packet of its package. So it sees your `Char.Status` and doesn't wait for your next login. A new `Comm.Channel` handler waits for the next message instead. This is because each chat packet is one message and not a state.
 
 A script you load with `#script load` stays loaded until you close the session or quit Vosh. Only that session runs it. For a script that loads automatically, make a plugin. To see your plugins, open Settings and choose Scripts.
 
@@ -829,7 +833,7 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 | `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                      |
 | `pane:meta(text)`                   | The words beside the pane's name.                                                                            |
 
-### 3.11 Use one alias name for each character
+### 3.11 Use one alias or trigger name for each character
 
 <!-- id: automate.alias-per-character -->
 
@@ -844,6 +848,8 @@ To make each alias run for its own character, use loadouts. Make a loadout for e
 You can also turn the groups on and off yourself with the switch on each heading, or with `#group <name> on|off`.
 
 An alias that a plugin makes is in no group. While it lasts, it runs in place of all your aliases with that name.
+
+Triggers work differently. Two groups can each have a trigger with the same name, such as a `greet` trigger for each character. When both groups are on, both triggers run on a line that they match. No trigger stops another trigger. They run by priority, the highest first. The group of a trigger doesn't change when it runs. The list doesn't put a ring on either trigger. To make each trigger run only for its own character, use loadouts in the same way.
 
 ## Shape the window
 
@@ -1247,7 +1253,7 @@ To bring in a profile, click `Import…` beside `New profile` and choose a Vosh 
 
 Click `Import` or `Replace`. Vosh selects the profile and tells you under the list what happened. The profile takes all of the presets that the file has on, and all of the changes to them.
 
-In loadout mode, the triggers, aliases, and macros in the file go into the shared catalog, never into the profile file. They go into a group with the name of the file, such as `Healer profile`. When the catalog already has a trigger with the same name, an alias with the same name in that group, or a macro of yours on the same key, yours stays. When the file has an alias name in two or more groups, only the alias that ran in that file comes in. The line under the list tells you about each item that stays out.
+In loadout mode, the triggers, aliases, and macros in the file go into the shared catalog, never into the profile file. They go into a group with the name of the file, such as `Healer profile`. When the catalog already has a trigger or an alias with the same name in that group, or a macro of yours on the same key, yours stays. When the file has an alias name in two or more groups, only the alias that ran in that file comes in. When the file has a trigger name in two or more groups, only the trigger in the group that is first in the list comes in. The line under the list tells you about each item that stays out.
 
 The presets of the file stay out. That is the triggers and macros they added, the list of presets that are on, and the changes to them. This is because the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.
 
@@ -1331,7 +1337,7 @@ Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder.
 
 Files from other clients go through Settings. Choose Automation and click `Import…`. Choose a MUSHclient, Mudlet, GMUD, or `CMUD or zMUD` export with `Choose file…`, or paste it into `Contents`. Leave `Format` on `Detect automatically` and click `Import`. The summary lists counts, and anything that was refused, not supported, or not readable.
 
-A trigger with the name of a preset trigger stays out, so the preset keeps its own trigger. The summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
+Triggers from other clients go in no group. They replace your triggers with the same name that are in no group. A trigger with the name of a preset trigger stays out, so the preset keeps its own trigger. The summary lists it under `Left out, a preset uses the name`. A Vosh profile export goes in under Characters, with `Import…` beside `New profile`.
 
 ### 7.4 Search session logs
 
@@ -1489,7 +1495,7 @@ These are all the slash commands that Vosh knows today.
 - `#help` prints the command summary. `#help <words>` opens Help on those words.
 - `#alias <name> <expansion>` makes an alias. `#unalias <name> [group]` removes it. Add the group when two groups have an alias with that name. `#aliases` lists the aliases.
 - `#var <name> [value]` sets or shows a variable of this session. `#unvar <name>` removes it from this session and from the profile. `#vars` lists the variables.
-- `#trigger <name> {pattern} <action> [args]` makes a trigger. `#untrigger <name>` removes it. `#triggers` lists the triggers by priority.
+- `#trigger <name> {pattern} <action> [args]` makes a trigger. `#untrigger <name> [group]` removes it. Add the group when two groups have a trigger with that name. `#triggers` lists the triggers by priority.
 - `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt. `#prompt {regex}` reads it with a pattern. `#prompt` tells you how Vosh reads it. `#unprompt` stops reading it.
 - `#prompt draw on|off` draws your design in place of your prompt in this profile, or shows the prompt of the game.
 - `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.

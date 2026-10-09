@@ -2400,6 +2400,78 @@ fn slash_untrigger_removes() {
     assert_eq!(p.triggers.len(), 0);
 }
 
+/// A profile with a trigger named `greet` in the Maren and Tolliver
+/// groups, and `hp watch` in the Orla group.
+fn triggers_in_groups() -> Profile {
+    use vosh_automation::trigger::Trigger;
+    let mut p = Profile::default();
+    for (name, group, command) in [
+        ("greet", "Tolliver", "bow"),
+        ("greet", "Maren", "wave"),
+        ("hp watch", "Orla", "quaff"),
+    ] {
+        p.triggers
+            .set(Trigger {
+                group: Some(group.into()),
+                ..Trigger::new(
+                    name,
+                    "^Orla arrives",
+                    TriggerAction::Send {
+                        template: command.into(),
+                    },
+                )
+            })
+            .unwrap();
+    }
+    p
+}
+
+#[test]
+fn untrigger_asks_which_group_when_two_hold_the_name() {
+    let mut p = triggers_in_groups();
+    let r = process(&mut p, "#untrigger greet");
+    assert_eq!(
+        r.echo,
+        ["[greet is in Maren and Tolliver, so name the group too, like #untrigger greet Maren]"]
+    );
+    assert_eq!(p.triggers.len(), 3);
+    let r = process(&mut p, "#untrigger greet Orla");
+    assert_eq!(r.echo, ["[trigger greet Orla not found]"]);
+    let r = process(&mut p, "#untrigger greet Maren");
+    assert_eq!(r.echo, ["trigger greet in Maren removed"]);
+    assert!(p.triggers.get_in(Some("Tolliver"), "greet").is_some());
+    // One left, so the name alone finds it.
+    let r = process(&mut p, "#untrigger greet");
+    assert_eq!(r.echo, ["trigger greet in Tolliver removed"]);
+    // A name with a space in it, alone and with its group.
+    let r = process(&mut p, "#untrigger hp watch Orla");
+    assert_eq!(r.echo, ["trigger hp watch in Orla removed"]);
+    assert!(p.triggers.is_empty());
+}
+
+#[test]
+fn trigger_replaces_the_first_listed_and_keeps_its_group() {
+    let mut p = triggers_in_groups();
+    let r = process(&mut p, "#trigger greet {^Orla waves} send nod");
+    assert_eq!(r.echo, ["trigger greet in Maren set"]);
+    assert_eq!(p.triggers.named("greet").len(), 2);
+    assert_eq!(
+        p.triggers
+            .get_in(Some("Maren"), "greet")
+            .unwrap()
+            .first_pattern(),
+        "^Orla waves"
+    );
+    let r = process(&mut p, "#triggers");
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("greet in Tolliver /^Orla arrives/")),
+        "{:?}",
+        r.echo
+    );
+}
+
 #[test]
 fn parse_braced_pattern_handles_escaped_close() {
     let (pattern, rest) = parse_braced_pattern(r"{a\}b} send hi").unwrap();

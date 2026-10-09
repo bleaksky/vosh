@@ -3,6 +3,12 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+/// A group as the alias and trigger stores keep it: trimmed, and None
+/// for no group.
+pub(crate) fn clean_group(group: Option<&str>) -> Option<&str> {
+    group.map(str::trim).filter(|g| !g.is_empty())
+}
+
 /// The order Settings lists groups in: items with no group first, then
 /// each group by its name with case folded, and two names that differ
 /// only in case by their exact text. `compareGroups` in
