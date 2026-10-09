@@ -156,10 +156,12 @@ fn request_font_rebuild(family: String, font_px: f32) {
 }
 
 /// Re-create the atlas at the configured font/size (CSS px * scale).
-/// Called when the font setting changes.
-#[allow(clippy::cast_precision_loss)]
-pub(crate) fn request_set_font(family: String, font_size: u32) {
-    let font_px = (font_size as f32 * load_f32(&CELLS.dpr, 2.0)).max(6.0);
+/// Called when the font setting changes. `font_size` takes a half step,
+/// such as 13.5, and the atlas draws it at the fractional point size.
+/// The cell stays whole device pixels, since it comes from xterm's device
+/// cell or from rounded font metrics.
+pub(crate) fn request_set_font(family: String, font_size: f32) {
+    let font_px = (font_size * load_f32(&CELLS.dpr, 2.0)).max(6.0);
     request_font_rebuild(family, font_px);
 }
 
@@ -207,7 +209,7 @@ pub(super) fn font_atlas_params(scale: f64) -> (String, f32) {
         .try_lock()
         .map(|p| (p.ui.font_family.clone(), p.ui.font_size));
     match font {
-        Some((family, size)) => (family, size_for(size as f32)),
+        Some((family, size)) => (family, size_for(size.px())),
         None => ("monospace".to_string(), size_for(14.0)),
     }
 }

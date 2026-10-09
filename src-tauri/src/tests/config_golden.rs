@@ -48,6 +48,7 @@ use crate::profile::panes::{DockEntryPersist, PaneLayoutPersist, PaneNode};
 use crate::profile::set::{GetStarted, ProfileEntry, ProfileSet, ProfilesIndex, SessionEntry};
 use crate::profile::shared::{GlobalConfig, Scope, ScopeConfig};
 use crate::profile::tests::claim;
+use crate::profile::text_size::TextPx;
 use crate::profile::ui::{CustomTheme, TrackedAffect, UiConfig, VitalsConfig};
 use crate::sessions::SessionId;
 use crate::tick::TickConfig;
@@ -328,10 +329,10 @@ fn full_ui() -> UiConfig {
         night_theme: "custom-dusk".into(),
         auto_update: true,
         font_family: "JetBrains Mono, monospace".into(),
-        font_size: 16,
+        font_size: TextPx::whole(16),
         terminal_line_height: "loose".into(),
         panel_font: "\"Iosevka\", Menlo, monospace".into(),
-        panel_font_size: 13,
+        panel_font_size: TextPx::whole(13),
         tracked_affects: vec![
             TrackedAffect {
                 name: "sanctuary".into(),
@@ -410,7 +411,7 @@ fn full_ui() -> UiConfig {
         input_line_color: Some("#d8dee9".into()),
         input_line_background: "own".into(),
         input_line_background_color: Some("#1d1f21".into()),
-        input_line_size: 16,
+        input_line_size: TextPx::from_px(15.5),
         input_type_colors: true,
         input_type_alias_color: Some("#8abeb7".into()),
         input_type_hash_color: Some("#b294bb".into()),
@@ -788,7 +789,7 @@ fn full_global() -> GlobalConfig {
         auto_update: Some(true),
         keep_last_command: Some(true),
         font_family: Some("JetBrains Mono, monospace".into()),
-        font_size: Some(16),
+        font_size: Some(TextPx::whole(16)),
         follow_system_appearance: Some(true),
         light_theme: Some("kanso-pearl".into()),
         dark_theme: Some("tokyo-night".into()),
@@ -798,7 +799,7 @@ fn full_global() -> GlobalConfig {
         color_vision: Some("protanopia".into()),
         terminal_line_height: Some("compact".into()),
         panel_font: Some("system".into()),
-        panel_font_size: Some(0),
+        panel_font_size: Some(TextPx::whole(0)),
         dock_layout: Some(vec![DockEntryPersist {
             id: "map".into(),
             zone: "left".into(),
