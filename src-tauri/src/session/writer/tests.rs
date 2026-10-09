@@ -697,6 +697,32 @@ fn counts_the_lines_the_editor_holds_as_you_type() {
     assert_eq!(held(&t), None);
 }
 
+fn loses_the_count_when_a_line_may_have_gone_in_with_other_text() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    t.opens(&[], &TEXT);
+    t.typed("./ save");
+    t.took();
+    assert_eq!(held(&t), Some(3));
+    t.typed("Orla watches the gate.");
+    t.game(&["> ", "Maren tells you 'are you there?'"], "> ");
+    assert_eq!(held(&t), Some(4));
+    t.typed("Tolliver keeps the keys.");
+    t.game(&["Maren tells you 'are you there?'"], "> ");
+    assert_eq!(held(&t), None);
+    t.took();
+    assert_eq!(held(&t), None);
+    t.typed(".s");
+    t.lists(&TEXT);
+    assert_eq!(held(&t), Some(3));
+    t.typed("Maren keeps the books.");
+    t.game(&["", "Maren tells you 'are you there?'"], "> > ");
+    assert_eq!(held(&t), None);
+    t.typed(".s");
+    t.lists(&TEXT);
+    assert_eq!(held(&t), Some(3));
+}
+
 fn counts_every_page_of_the_listing_the_editor_opened_on() {
     let mut t = Table::new();
     t.typed("desc edit");
@@ -1255,6 +1281,7 @@ in_every_order!(
     sends_your_typed_line_as_a_game_command_while_the_editor_is_open,
     offers_the_card_after_you_open_the_editor_and_opens_on_its_listing,
     counts_the_lines_the_editor_holds_as_you_type,
+    loses_the_count_when_a_line_may_have_gone_in_with_other_text,
     counts_every_page_of_the_listing_the_editor_opened_on,
     an_empty_listing_holds_no_lines,
     a_job_leaves_the_count_alone,

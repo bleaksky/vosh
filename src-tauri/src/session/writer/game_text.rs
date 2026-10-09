@@ -113,6 +113,12 @@ pub(crate) fn lone_prompts(text: &str) -> usize {
     }
 }
 
+/// The editor puts a line you send into the text: anything but a dot
+/// command or the `@` that ends it (`olc.c:3611`, `3746`).
+pub(crate) fn takes(line: &str) -> bool {
+    !line.starts_with(['.', '@'])
+}
+
 /// The editor waits for a line: the partial a read ended on is its `> `,
 /// once or more. `.s` on an empty text prints its first number and no
 /// line end (`olc.c:3647`), so that number may come before it.
@@ -407,6 +413,15 @@ mod tests {
 
     fn line(plain: &str) -> GameLine {
         GameLine::new(plain, plain.as_bytes())
+    }
+
+    #[test]
+    fn the_editor_takes_a_line_but_no_dot_command_or_at() {
+        assert!(takes("Orla watches the gate."));
+        assert!(takes(""));
+        assert!(!takes(".s"));
+        assert!(!takes("./ look"));
+        assert!(!takes("@"));
     }
 
     #[test]

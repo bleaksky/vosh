@@ -51,7 +51,7 @@ use serde::Serialize;
 use tokio::time::Instant;
 
 use game_text::{
-    deleted, editor_waits, lone_prompts, opened_listing, pager_waits, shown_lines, GameLine,
+    deleted, editor_waits, lone_prompts, opened_listing, pager_waits, shown_lines, takes, GameLine,
     BANNER, CLEARED, FORMATTED, INSERTED, PAGER,
 };
 use job::Job;
@@ -169,6 +169,12 @@ struct Open {
     opening: bool,
     /// The lines the editor holds, while Vosh can count them.
     held: Option<usize>,
+    /// Lines you sent that the editor puts in the text and has not
+    /// answered yet.
+    waiting: usize,
+    /// The last read ended on the editor's `> `, so the next starts a
+    /// flush of its own.
+    at_prompt: bool,
     /// The lines of this read, past the pager, for a `.s` in it.
     read: Vec<GameLine>,
     beast: Option<String>,
@@ -176,12 +182,59 @@ struct Open {
 }
 
 impl Open {
-    /// A line the game sent while you type into the editor, and what it
-    /// says the editor did to the text.
+    /// A line the game sent while you type into the editor, for a `.s`.
     fn line(&mut self, line: &GameLine) {
         let plain = line.plain.trim_start_matches("> ");
         let plain = plain.strip_prefix(PAGER).unwrap_or(plain);
         self.read.push(GameLine::new(plain, plain.as_bytes()));
+    }
+
+    /// The end of a read while you type into the editor. A `.s` tells how
+    /// many lines it holds, and goes on past the pager. Any other read
+    /// counts as it goes.
+    fn read_end(&mut self, text: &str, partial: &str) {
+        if pager_waits(partial) {
+            return;
+        }
+        if let Some(n) = shown_lines(&self.read, partial) {
+            self.held = Some(n);
+            // The editor answers in order, so it took every line before.
+            self.waiting = 0;
+        } else {
+            self.follow(text);
+        }
+        self.read.clear();
+    }
+
+    /// Follow a read in order. The game ends each flush with one `> `
+    /// (`comm.c:1616`) and takes one line a pulse, so a flush with
+    /// nothing else in it took a line you sent. A line can also go in
+    /// with other text of its pulse, or wait behind lag, and a flush with
+    /// text cannot tell which, so the count goes until a `.s`.
+    fn follow(&mut self, text: &str) {
+        let mut worded = !self.at_prompt;
+        for line in text.replace('\r', "").split('\n') {
+            let mut rest = line.strip_prefix(PAGER).unwrap_or(line);
+            while let Some(after) = rest.strip_prefix("> ") {
+                if self.waiting > 0 && worded {
+                    self.waiting = 0;
+                    self.held = None;
+                } else if self.waiting > 0 {
+                    self.waiting -= 1;
+                    self.held = self.held.map(|n| n + 1);
+                }
+                worded = false;
+                rest = after;
+            }
+            if !rest.is_empty() {
+                worded = true;
+                self.said(rest);
+            }
+        }
+    }
+
+    /// A line the game sent, and what it says the editor did to the text.
+    fn said(&mut self, plain: &str) {
         if plain == CLEARED {
             self.held = Some(0);
         } else if plain == INSERTED {
@@ -194,21 +247,6 @@ impl Open {
                 .held
                 .map(|n| if (1..=n).contains(&gone) { n - 1 } else { n });
         }
-    }
-
-    /// The end of a read while you type into the editor. Each `> ` alone
-    /// is a line it took, and a `.s` tells how many it holds. A long `.s`
-    /// goes on past the pager.
-    fn read_end(&mut self, text: &str, partial: &str) {
-        if pager_waits(partial) {
-            return;
-        }
-        if let Some(n) = shown_lines(&self.read, partial) {
-            self.held = Some(n);
-        } else {
-            self.held = self.held.map(|n| n + lone_prompts(text));
-        }
-        self.read.clear();
     }
 }
 
@@ -271,14 +309,17 @@ impl Writer {
     /// go. While a job holds the editor open, each line goes as `./` and
     /// the line. Anything you send takes back the offer.
     pub(crate) fn typed(&mut self, bytes: &[u8], out: u64) -> Vec<u8> {
-        if let Some(open) = &mut self.open {
-            open.offer = None;
-        }
         let text = String::from_utf8_lossy(bytes);
         let lines: Vec<&str> = text
             .split_terminator('\n')
             .map(|l| l.trim_end_matches('\r'))
             .collect();
+        if let Some(open) = &mut self.open {
+            open.offer = None;
+            if self.job.is_none() {
+                open.waiting += lines.iter().filter(|l| takes(l)).count();
+            }
+        }
         self.opener = lines
             .last()
             .and_then(|line| openers::opens(line))
@@ -329,6 +370,8 @@ impl Writer {
                 pager: false,
                 opening: true,
                 held: None,
+                waiting: 0,
+                at_prompt: false,
                 read: Vec::new(),
                 beast: o.beast,
                 offer: None,
@@ -386,6 +429,9 @@ impl Writer {
                 open.held = Some(opened_listing(&open.lines).len());
             } else if !open.opening && self.job.is_none() {
                 open.read_end(text, partial);
+            }
+            if !text.is_empty() {
+                open.at_prompt = waits;
             }
         }
         let mut send = Vec::new();
