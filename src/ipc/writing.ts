@@ -161,6 +161,11 @@ export async function writingTake(id: number, session?: number): Promise<void> {
   await invoke('writing_take', { id, session });
 }
 
+/** Open the card on the text the game's editor holds now, for the job `id`. */
+export async function writingTakeEditor(id: number, session?: number): Promise<void> {
+  await invoke('writing_take_editor', { id, session });
+}
+
 /** Hear each change to where a session's writer stands. */
 export async function onWriting(
   cb: (state: WritingState, session: number) => void,

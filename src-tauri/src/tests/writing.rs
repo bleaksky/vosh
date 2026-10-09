@@ -656,6 +656,31 @@ async fn the_writer_counts_the_lines_you_type_into_the_editor() {
     h.finish().await;
 }
 
+/// The card opens on what the editor holds after the lines you typed.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_card_opens_on_what_the_editor_holds_now() {
+    let _grid = grid();
+    let h = Harness::new(&OLD).await;
+    let typed = [NEW[0], "her hair bound in silver."];
+    h.type_line("description edit").await;
+    h.until("the opened text", |h| h.last()["lines"] == 1).await;
+    for line in typed {
+        h.type_line(line).await;
+    }
+    h.until("two more lines", |h| h.last()["lines"] == 3).await;
+    crate::ipc::writing::writing_take_editor(h.app.state(), 7, None)
+        .await
+        .expect("the writer hears");
+    let done = h.done().await;
+    assert_eq!(done["kind"], "read", "{done}");
+    assert_eq!(done["lines"], json!([OLD[0], typed[0], typed[1]]));
+    assert_eq!(h.last()["done"]["id"], 7);
+    let heard = h.heard();
+    assert_eq!(heard[heard.len() - 2..], [".s", "@"], "{heard:?}");
+    h.finish().await;
+}
+
 /// A description sent in each order the prompt tick can come in.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

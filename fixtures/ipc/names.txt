@@ -179,6 +179,7 @@ command writing_start(job, session?)
 command writing_stop(session?)
 command writing_switches_set(spelling, guide)
 command writing_take(id, session?)
+command writing_take_editor(id, session?)
 event session://alert app heard
 event session://alerts-ended app heard
 event session://game-prompt-seen app heard

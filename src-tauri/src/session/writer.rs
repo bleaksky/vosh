@@ -8,6 +8,7 @@
 //! after that line. Until the game's prompt returns, the page sends
 //! what you type there raw and counts it against the text's width, and
 //! the writer counts the lines the editor holds from what it answers.
+//! Once you typed into it, the card opens on what it holds with a `.s`.
 //!
 //! While a job runs, every other send of the session waits: what
 //! triggers, timers, Lua and `#walk` send stays in the stream's hold and
@@ -133,6 +134,11 @@ pub(crate) enum WriterCommand {
     Stop,
     /// Open the card on the offer `id`.
     Take {
+        id: u64,
+    },
+    /// Open the card on the text the game's editor holds now, for the
+    /// page's job `id`.
+    TakeEditor {
         id: u64,
     },
 }
@@ -516,6 +522,24 @@ impl Writer {
                         self.job = Some(job);
                     }
                     _ => self.finish(id, JobResult::OfferGone),
+                }
+            }
+            WriterCommand::TakeEditor { id } => {
+                let free = self.job.is_none() && self.waiting.is_none();
+                let listed = self.open.as_ref().is_some_and(|o| o.listed);
+                let open = if free && listed {
+                    self.open.take()
+                } else {
+                    None
+                };
+                match open {
+                    Some(open) => {
+                        let pager = self.game == Game::Pager;
+                        let mut job = Job::take_editor(id, open.kind, open.beast, pager);
+                        job.start(now, &mut send);
+                        self.job = Some(job);
+                    }
+                    None => self.finish(id, JobResult::OfferGone),
                 }
             }
         }

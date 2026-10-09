@@ -795,6 +795,87 @@ fn reads_a_notes_fields_once_you_take_the_offer() {
     }
 }
 
+fn opens_the_card_on_what_the_editor_holds_after_you_typed() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    t.opens(&[], &LISTED);
+    t.typed(TEXT[0]);
+    t.took();
+    t.typed(TEXT[1]);
+    t.took();
+    assert_eq!(t.writer.state(0).offer, None);
+    assert_eq!(t.run(WriterCommand::TakeEditor { id: 3 }), vec![".s"]);
+    let mut held: Vec<&str> = LISTED.to_vec();
+    held.extend(&TEXT[..2]);
+    assert_eq!(t.lists(&held), vec!["@"]);
+    t.tick();
+    let done = t.writer.state(0).done.expect("a result");
+    assert_eq!(done.id, 3);
+    assert_eq!(
+        done.result,
+        JobResult::Read {
+            lines: held.iter().copied().map(String::from).collect(),
+            beast: None,
+            note: None,
+        }
+    );
+}
+
+fn turns_the_pager_before_it_reads_what_the_editor_holds() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    t.opens(&[], &LISTED);
+    t.typed(".s");
+    t.game(&[" 1 This tall elf"], "\r[Hit Return to continue]\r");
+    assert_eq!(t.run(WriterCommand::TakeEditor { id: 1 }), vec![""]);
+    assert_eq!(t.game(&[" 2 her hair"], "> "), vec![".s"]);
+    assert_eq!(t.lists(&LISTED), vec!["@"]);
+    t.tick();
+    assert!(matches!(t.done(), Some(JobResult::Read { .. })));
+}
+
+fn asks_the_board_after_it_reads_what_a_note_holds() {
+    let mut t = Table::new();
+    t.typed("note edit");
+    t.opens(&[], &[""]);
+    t.typed(LISTED[0]);
+    t.took();
+    assert_eq!(t.run(WriterCommand::TakeEditor { id: 1 }), vec![".s"]);
+    assert_eq!(t.lists(&LISTED[..1]), vec!["@"]);
+    assert_eq!(t.tick(), vec!["note show"]);
+    t.answer(&["Tolliver: About the gate", "To: Maren"]);
+    match t.done() {
+        Some(JobResult::Read {
+            note: Some(note), ..
+        }) => assert_eq!(note.to, "Maren"),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn the_editor_is_gone_with_no_editor_open_or_a_job_under_way() {
+    let mut t = Table::new();
+    assert_eq!(
+        t.run(WriterCommand::TakeEditor { id: 1 }),
+        Vec::<String>::new()
+    );
+    assert_eq!(t.done(), Some(JobResult::OfferGone));
+    t.typed("desc edit");
+    t.opens(&[], &LISTED);
+    t.run(WriterCommand::Start(job(
+        2,
+        Kind::Description,
+        Action::Paste,
+        &TEXT,
+    )));
+    assert_eq!(
+        t.run(WriterCommand::TakeEditor { id: 3 }),
+        Vec::<String>::new()
+    );
+    let done = t.writer.state(0).done.expect("a result");
+    assert_eq!((done.id, done.result), (3, JobResult::OfferGone));
+    assert!(t.writer.state(0).job.is_some());
+}
+
 fn a_drop_ends_the_job_with_what_the_game_took() {
     let mut t = Table::new();
     t.run(WriterCommand::Start(job(
@@ -1179,6 +1260,10 @@ in_every_order!(
     a_job_leaves_the_count_alone,
     takes_the_offer_back_when_anything_else_went_out,
     reads_a_notes_fields_once_you_take_the_offer,
+    opens_the_card_on_what_the_editor_holds_after_you_typed,
+    turns_the_pager_before_it_reads_what_the_editor_holds,
+    asks_the_board_after_it_reads_what_a_note_holds,
+    the_editor_is_gone_with_no_editor_open_or_a_job_under_way,
     a_drop_ends_the_job_with_what_the_game_took,
     checks_your_description_once,
     finds_your_note_on_the_boards_list_and_sends_nothing_else,

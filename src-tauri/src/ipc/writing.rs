@@ -63,6 +63,19 @@ pub(crate) async fn writing_take(
     to_writer(state.inner(), session, WriterCommand::Take { id }).await
 }
 
+/// Open the card on the text the game's editor holds now: the writer
+/// lists it with `.s`, leaves with `@`, and answers with the job `id`. With
+/// no editor open on a text it names, or a job under way, it answers that
+/// the offer went.
+#[tauri::command]
+pub(crate) async fn writing_take_editor(
+    state: State<'_, SharedState>,
+    id: u64,
+    session: Option<SessionId>,
+) -> Result<(), String> {
+    to_writer(state.inner(), session, WriterCommand::TakeEditor { id }).await
+}
+
 /// The app data folder's writing.toml.
 fn path(state: &SharedState) -> Result<std::path::PathBuf, String> {
     state

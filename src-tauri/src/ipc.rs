@@ -80,6 +80,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         writing::writing_start,
         writing::writing_stop,
         writing::writing_take,
+        writing::writing_take_editor,
         writing::writing_file_get,
         writing::writing_character_set,
         writing::writing_switches_set,
