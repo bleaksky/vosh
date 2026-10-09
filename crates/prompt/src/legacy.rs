@@ -76,8 +76,11 @@ fn mapped(name: &str, braced: bool, bar_width: u32) -> Option<String> {
         "bar_hp" => bar("hp"),
         "bar_mn" => bar("mana"),
         "bar_mv" => bar("move"),
-        // No store keeps a change for each tick.
-        "dhp" | "dmn" | "dmv" => Some(String::new()),
+        // 0.7 drew the change since the tick began, and today's change
+        // over the last tick holds until the next one.
+        "dhp" => renamed("hp_tick"),
+        "dmn" => renamed("mana_tick"),
+        "dmv" => renamed("move_tick"),
         "tick" => Some("%{tick:unit}".into()),
         // The game hour, as 0.7 printed it.
         "time" => Some("%{hour:ampm}".into()),
@@ -117,7 +120,7 @@ mod tests {
                 "%bar_hp, %bar_mn, %bar_mv",
                 "%{hp:bar:20}, %{mana:bar:20}, %{move:bar:20}",
             ),
-            ("%dhp, %dmn, %dmv", ", , "),
+            ("%dhp, %dmn, %dmv", "%hp_tick, %mana_tick, %move_tick"),
             ("%tick", "%{tick:unit}"),
             ("%time", "%{hour:ampm}"),
             (
@@ -141,7 +144,7 @@ mod tests {
         // A percent sign, a bare %, and braces 0.7 did not read stay.
         assert_eq!(rewrite("100%% % %{} %{a b} %"), "100%% % %{} %{a b} %");
         assert_eq!(rewrite("%%mn"), "%%mn");
-        assert_eq!(rewrite("hp %dhp%nl"), "hp %nl");
+        assert_eq!(rewrite("hp %dhp%nl"), "hp %hp_tick%nl");
         assert_eq!(rewrite("é%mné %{é}"), "é%manaé %{é}");
         assert_eq!(rewrite(""), "");
     }

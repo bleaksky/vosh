@@ -341,6 +341,11 @@ fn form_list(kind: Option<Kind>) -> &'static [(FormatName, &'static str, bool)] 
             (F::On, "Mark when on", true),
             (F::Off, "Mark when off", true),
         ],
+        Kind::Change => &[
+            (F::Value, "Nothing at zero", true),
+            (F::Zero, "0 at zero", true),
+            (F::PlusMinus, "±0 at zero", true),
+        ],
         Kind::Member => &[
             (F::Percent, "Percent", true),
             (F::Bar, "Bar", true),
@@ -378,6 +383,8 @@ fn format_label(format: FormatName) -> &'static str {
         FormatName::Names => "Names",
         FormatName::On => "Mark when on",
         FormatName::Off => "Mark when off",
+        FormatName::Zero => "0 at zero",
+        FormatName::PlusMinus => "±0 at zero",
     }
 }
 
@@ -412,6 +419,8 @@ fn shown_as(value: &crate::design::ValueRef) -> (FieldRef, FormatName, Option<u8
         Format::Names => (FormatName::Names, None),
         Format::On => (FormatName::On, None),
         Format::Off => (FormatName::Off, None),
+        Format::Zero => (FormatName::Zero, None),
+        Format::PlusMinus => (FormatName::PlusMinus, None),
     };
     (field.clone(), format, width)
 }

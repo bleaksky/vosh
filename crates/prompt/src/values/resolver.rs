@@ -4,6 +4,7 @@
 use serde_json::Value as Json;
 
 use super::catalog::{entry, field, Entry, Field, MemberStat, Pair};
+use super::changes::{change_of, Over};
 use super::{max_spellings, since_of, ClientValues, Values, Vars};
 use crate::aabahran::codes::{Position, PHASES};
 use crate::design::FieldRef;
@@ -266,7 +267,7 @@ impl<'a> Resolver<'a> {
         first(&[&from_var, &from_gmcp])
     }
 
-    fn gauge(&self, pair: Pair, want_max: bool) -> Resolved {
+    pub(super) fn gauge(&self, pair: Pair, want_max: bool) -> Resolved {
         let max = match self.max(pair) {
             Resolved::Value(v) if v.number().is_some() => Some(v),
             _ => None,
@@ -764,10 +765,34 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// A change of a vital, a script value first. A change over a tick
+    /// needs the tick running, and none is Absent.
+    fn change(&self, name: &str, pair: Pair, over: Over) -> Resolved {
+        first(&[
+            &|| match self.vars.var(name).map(str::trim) {
+                None => Got::Nothing,
+                Some("") => Got::Blank,
+                Some(t) => t
+                    .parse()
+                    .map_or_else(|_| is(Value::Text(t.to_string())), |n| is(Value::Change(n))),
+            },
+            &|| {
+                let ticks = over == Over::Pulse || self.client.tick.is_some();
+                match self.vars.change(pair, over).filter(|_| ticks) {
+                    Some(n) => is(Value::Change(n)),
+                    None => Got::Is(Resolved::Absent),
+                }
+            },
+        ])
+    }
+
     fn resolve_entry(&self, e: &'static Entry) -> Resolved {
         let name = e.name;
         if let Some(pair) = Pair::of(name) {
             return self.gauge(pair, name == pair.max());
+        }
+        if let Some((pair, over)) = change_of(name) {
+            return self.change(name, pair, over);
         }
         match name {
             "fight" => first(&[&|| self.var_flag("fight"), &|| match self.combat() {

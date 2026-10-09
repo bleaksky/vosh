@@ -135,6 +135,8 @@ pub enum FormatName {
     Names,
     On,
     Off,
+    Zero,
+    PlusMinus,
 }
 
 /// A color the card offers.
@@ -367,6 +369,8 @@ fn content_for(
             FormatName::Names => F::Names,
             FormatName::On => F::On,
             FormatName::Off => F::Off,
+            FormatName::Zero => F::Zero,
+            FormatName::PlusMinus => F::PlusMinus,
         };
         id == F::Value || kind.formats().contains(&id)
     };
@@ -449,6 +453,8 @@ fn content_for(
         FormatName::Names => one(Format::Names),
         FormatName::On => one(Format::On),
         FormatName::Off => one(Format::Off),
+        FormatName::Zero => one(Format::Zero),
+        FormatName::PlusMinus => one(Format::PlusMinus),
     }
 }
 

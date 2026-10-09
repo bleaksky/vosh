@@ -32,7 +32,7 @@ use super::gmcp_vars;
 use super::now_ms;
 use super::prompt_view::observe_prompt_gmcp;
 use super::read::walked;
-use super::steps::recolor_target;
+use super::steps::{game_ticked, recolor_target};
 use super::vitals_text;
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
@@ -319,6 +319,7 @@ pub(super) fn gmcp_step(
         }
     }
     let tick_step = crate::tick::observe_world_time_for_tick(&p.tick, &mut c.tick, msg, now);
+    game_ticked(c, tick_step.as_ref());
     script::snapshot_vars(p, c);
     let outcome = c.script.dispatch_gmcp(&msg.package, &msg.data);
     let apply = script::apply_actions(p, c, outcome);

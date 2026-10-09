@@ -70,6 +70,7 @@ pub(crate) fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) 
             }
         }
         Kind::Ticks => Value::Ticks(num(s).unwrap_or(0)),
+        Kind::Change => Value::Change(num(s).unwrap_or(0)),
         Kind::Member => {
             let (name, pct) = s.rsplit_once(' ').unwrap_or((s, "0"));
             Value::Member {

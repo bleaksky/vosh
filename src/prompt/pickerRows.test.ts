@@ -212,6 +212,45 @@ describe('the topics', () => {
   });
 });
 
+describe('the changes of your vitals', () => {
+  // Health change and Health this tick, as prompt_state_get reports them
+  // after a hit and a tick.
+  const change = (name: string, label: string, value: string | null): PromptFieldState =>
+    field(name, {
+      label,
+      kind: 'change',
+      source: value === null ? null : 'vosh',
+      state: value === null ? 'absent' : 'value',
+      value,
+      search: ['hp', 'gain', 'loss'],
+    });
+  const HP_CHANGE = change('hp_change', 'Health change', '-34');
+  const HP_TICK = change('hp_tick', 'Health this tick', null);
+
+  it('lists both under Vitals after Health, each with what it reads now', () => {
+    const groups = pickerGroups([HEALTH, HP_CHANGE, HP_TICK], [], '');
+    expect(groups[0].label).toBe('Vitals');
+    expect(groups[0].rows.map(rowKey)).toEqual(['field:hp', 'field:hp_change', 'field:hp_tick']);
+    expect(groups[0].rows.map((r) => r.status)).toEqual(['1020', '-34', '']);
+    expect(groups[0].rows.every((r) => !r.dim)).toBe(true);
+  });
+
+  it('finds them by health, by tick and by gain', () => {
+    const find = (q: string) =>
+      flatRows(pickerGroups([HEALTH, HP_CHANGE, HP_TICK], [], q)).map(rowKey);
+    expect(find('health')).toEqual(['field:hp', 'field:hp_change', 'field:hp_tick']);
+    expect(find('this tick')).toEqual(['field:hp_tick']);
+    expect(find('gain')).toEqual(['field:hp_change', 'field:hp_tick']);
+  });
+
+  it('says Vosh works each one out', () => {
+    expect(sourceLine(HP_CHANGE)).toBe('From Vosh. How much it changed since your last prompt.');
+    expect(sourceLine(HP_TICK)).toBe(
+      'From Vosh. How much it changed over the last tick, kept until the next one.',
+    );
+  });
+});
+
 describe('a field that takes a name', () => {
   it('writes the name you type into its token', () => {
     expect(fieldName(HEALTH, '')).toBe('hp');
