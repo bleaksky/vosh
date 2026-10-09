@@ -132,7 +132,9 @@ export type PromptFormatName =
   | 'count'
   | 'names'
   | 'on'
-  | 'off';
+  | 'off'
+  | 'zero'
+  | 'plusminus';
 
 /** A color the card offers. By value with no field is the piece's own
  *  value, by how full it is, by the game's `%h` bands with `game`, or in

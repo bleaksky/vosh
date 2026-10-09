@@ -94,6 +94,12 @@ export function sourceLine(f: PromptFieldState): string {
     return 'From your prompt, and from the game when your prompt leaves it out.';
   }
   if (fromPrompt) return 'From your prompt only. The game sends it nowhere else.';
+  // Vosh works out a change from your vitals, each prompt or each tick.
+  if (f.kind === 'change') {
+    return f.name.endsWith('_tick')
+      ? 'From Vosh. How much it changed over the last tick, kept until the next one.'
+      : 'From Vosh. How much it changed since your last prompt.';
+  }
   // The game's prompt is the game's own line, which Vosh keeps.
   if (f.kind === 'raw') return 'From the game. Vosh keeps your last prompt as it came.';
   if (f.group === 'scripts') return 'From your scripts.';
