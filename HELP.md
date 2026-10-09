@@ -484,13 +484,15 @@ An alias expands a short name into one or more commands. Aliases are in Settings
 
 - Open Settings, choose Automation, and choose `Aliases` in the switcher at the top.
 - Click `New alias` in the bar at the bottom.
-- Type a name in `Name`.
+- Type a name in `Name`. An alias name is one word, because the alias matches the first word you type. Vosh removes spaces before and after the name.
 - Type the expansion in `Expansion`. `;` splits the expansion into separate commands. `\;` keeps a literal semicolon.
 - Click `Save`. The bar shows `Saved`.
 
+When Vosh can't save the list, it tells you why beside `Save`. It puts a red ring on each item to fix and selects the first one. The message goes away when you fix the items.
+
 Captures take words from the line you typed. `%1` through `%9` take the first through ninth word after the alias name. `%0` takes all the words after the name. `%1-` takes word one through the end, with the spaces kept. A missing word expands to nothing. `%%` gives a literal percent.
 
-To turn related aliases on and off together, give them the same name in `Group`. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
+To turn related aliases on and off together, give them the same name in `Group`. Two groups can each have an alias with the same name, as 3.11 tells you. Then use the switch on the heading of their group, or `#group <name> on|off`. Under `Advanced`, `Run Lua instead` runs a Lua script in place of the expansion. The words you typed are in its captures table.
 
 Triggers, Aliases, Macros, and Timers each list your items under a heading for each group. Presets lists them under a heading for each category. The items with no group are at the top, under no heading. Click a heading to fold its group, and click it again to open it. The chevron points down while the group is open. A folded heading shows how many items it holds.
 
@@ -502,9 +504,11 @@ The switch after a group heading turns the whole group on and off at once, the s
 
 In loadout mode, the loadouts decide each group of triggers, aliases, and macros. This is true while an active loadout lists groups, or while you keep the catalog dormant. The switch still turns such a group on or off, and so does `#group`. A note under the heading names the loadouts that decide the group, or says every loadout is off. After you turn the group on or off yourself, the note tells you more. The loadouts set it back when you next launch Vosh, change profiles, or save Loadouts.
 
+A new group that no active loadout lists goes off when you next launch Vosh, change profiles, or save Loadouts. A note under its heading tells you so before you save. To keep the group on, add it to a loadout. Vosh doesn't add it for you, because the group can be for a different character.
+
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` changes `kk dragon` into `kick dragon` and then `backstab dragon`.
 
-You can also make aliases in the command line. `#alias gc get all corpse` sets one and echoes `alias gc set`. `#aliases` lists every alias, and `#unalias gc` removes one. When you set an alias again with `#alias`, `#endrec`, or `mud.alias` in Lua, it stays in its group.
+You can also make aliases in the command line. `#alias gc get all corpse` sets one and echoes `alias gc set`. `#aliases` lists every alias, and `#unalias gc` removes one. When two groups have an alias with that name, add the group, as in `#unalias ds Tolliver`. When you set an alias again with `#alias`, `#endrec`, or `mud.alias` in Lua, Vosh changes the alias with that name that runs now. It stays in its group. A new alias goes in no group.
 
 ### 3.2 Create a trigger
 
@@ -662,7 +666,7 @@ Example. Bind `F1` to `stand; flee`. When you press `F1` in the command line, Vo
 Slash commands control Vosh from the command line, without Settings. Vosh handles every line that starts with `#` itself, and the line never goes to the MUD.
 
 - Type `#help` at any time for the full list, or `#help <words>` to open Help on those words.
-- Manage aliases with `#alias <name> <expansion>`, `#unalias <name>`, and `#aliases`.
+- Manage aliases with `#alias <name> <expansion>`, `#unalias <name> [group]`, and `#aliases`.
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
 - To tell Vosh how to read your prompt, use `#prompt game {setting}` and `#prompt fight {setting}`, with the codes you type in the game. Or use `#prompt {regex}`, where each named group such as `(?<hp>\d+)` is a value. `#prompt` alone tells you how Vosh reads your prompt. `#unprompt` stops it.
@@ -734,7 +738,7 @@ A new install of a plugin starts off for every profile. When you install over a 
 
 Each plugin runs in its own environment. Its globals and its `mud` table are its own, so two plugins never overwrite each other. A plugin can read the standard libraries, such as `string` and `table`, but it can't change them. It starts from new globals each time it loads. A line that it gives to `mud.input` runs no `#` command except `#echo`.
 
-An alias that a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It replaces your own alias with that name until the plugin turns off. When you turn a plugin off, Vosh removes its aliases and all else it added.
+An alias that a plugin makes lasts while the plugin runs, and Vosh never saves it. It works only in the session whose plugin made it. It replaces your own aliases with that name, in every group, until the plugin turns off. When you turn a plugin off, Vosh removes its aliases and all else it added.
 
 Your `#lua` lines, the Lua in your triggers and aliases, and scripts from `#script load` share one set of globals in each session. An alias that they make is one you keep, and every session on the profile runs it. They get to the globals of a plugin through `plugins.<name>`. This is a view that you can read but not change. An example is `plugins.helpers.rescue("Orla")`, which calls a function that the plugin helpers defines.
 
@@ -824,6 +828,22 @@ mud.on_gmcp("Char.State", function(data) state = data; draw() end)
 | `{ line = text }`                   | Terminal font text. `{red}` and `{reset}` color it.                                                          |
 | `{ rule = true }`                   | A thin line across the pane that sets the blocks apart.                                                      |
 | `pane:meta(text)`                   | The words beside the pane's name.                                                                            |
+
+### 3.11 Use one alias name for each character
+
+<!-- id: automate.alias-per-character -->
+
+Two groups can each have an alias with the same name. For example, make a group for each character, and put a `ds` alias in each group. Each `ds` casts the spell for its own character. One group can have only one alias with a given name.
+
+When the groups of two aliases with the same name are both on, one alias runs. It is the alias in the group that is first in the list. The aliases with no group are first. The groups follow in alphabetical order, and Vosh ignores capital letters.
+
+The list puts a warning ring on each alias that doesn't run because of this. Its card names the alias that runs instead, such as `Tolliver’s ds fires instead while both groups are on.` When you turn off the group of the first alias, the next alias runs.
+
+To make each alias run for its own character, use loadouts. Make a loadout for each character that turns on the group of that character and not the groups of your other characters. Then turn on the loadout of the character that you play. Loadouts are in Settings under Automation, as 7.2 tells you.
+
+You can also turn the groups on and off yourself with the switch on each heading, or with `#group <name> on|off`.
+
+An alias that a plugin makes is in no group. While it lasts, it runs in place of all your aliases with that name.
 
 ## Shape the window
 
@@ -1227,7 +1247,7 @@ To bring in a profile, click `Import…` beside `New profile` and choose a Vosh 
 
 Click `Import` or `Replace`. Vosh selects the profile and tells you under the list what happened. The profile takes all of the presets that the file has on, and all of the changes to them.
 
-In loadout mode, the triggers, aliases, and macros in the file go into the shared catalog, never into the profile file. They go into a group with the name of the file, such as `Healer profile`. When the catalog already has an item with the same name, or a macro of yours on the same key, yours stays. The line under the list tells you so.
+In loadout mode, the triggers, aliases, and macros in the file go into the shared catalog, never into the profile file. They go into a group with the name of the file, such as `Healer profile`. When the catalog already has a trigger with the same name, an alias with the same name in that group, or a macro of yours on the same key, yours stays. When the file has an alias name in two or more groups, only the alias that ran in that file comes in. The line under the list tells you about each item that stays out.
 
 The presets of the file stay out. That is the triggers and macros they added, the list of presets that are on, and the changes to them. This is because the presets of the catalog serve every character. Under `In this file`, `Presets` says `Stay as the catalog has them`.
 
@@ -1305,7 +1325,7 @@ The `#import-tintin` command reads aliases and variables from a TinTin++ `.tin` 
 - Check the `skipped (unsupported)` line. It counts by name the directives that Vosh doesn't support, so you can move them by hand.
 - Check the `unparsed` count. It shows the alias or variable lines that the parser couldn't read.
 
-The importer reads `#alias {name} {expansion}` and `#variable {name} {value}`. It also takes `#var` as a short form. Nested braces and escaped braces in the values parse correctly. The importer skips `#nop` lines and comments that start with `;`, and doesn't tell you. Imported aliases overwrite existing aliases with the same name. Variables go into profile scope, so they stay with the profile.
+The importer reads `#alias {name} {expansion}` and `#variable {name} {value}`. It also takes `#var` as a short form. Nested braces and escaped braces in the values parse correctly. The importer skips `#nop` lines and comments that start with `;`, and doesn't tell you. Imported aliases go in no group. They replace your aliases with the same name that are in no group. Variables go into profile scope, so they stay with the profile.
 
 Example. `#import-tintin ~/aabahran.tin` imports the file from your home folder. A skip line of `event=2 ticker=1` tells you that it left out two `event` directives and one `ticker` directive.
 
@@ -1467,7 +1487,7 @@ A `profile.toml` that is still at the root is the single profile file of the bui
 These are all the slash commands that Vosh knows today.
 
 - `#help` prints the command summary. `#help <words>` opens Help on those words.
-- `#alias <name> <expansion>` makes an alias. `#unalias <name>` removes it. `#aliases` lists the aliases.
+- `#alias <name> <expansion>` makes an alias. `#unalias <name> [group]` removes it. Add the group when two groups have an alias with that name. `#aliases` lists the aliases.
 - `#var <name> [value]` sets or shows a variable of this session. `#unvar <name>` removes it from this session and from the profile. `#vars` lists the variables.
 - `#trigger <name> {pattern} <action> [args]` makes a trigger. `#untrigger <name>` removes it. `#triggers` lists the triggers by priority.
 - `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt. `#prompt {regex}` reads it with a pattern. `#prompt` tells you how Vosh reads it. `#unprompt` stops reading it.
