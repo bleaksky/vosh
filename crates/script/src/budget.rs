@@ -160,7 +160,7 @@ mod tests {
         for owner in [
             Owner::Typed,
             Owner::Trigger("tells".into()),
-            Owner::Alias("heal".into()),
+            Owner::alias("heal"),
         ] {
             budget.charge(&owner, Duration::from_secs(1));
             assert!(budget.allows(&owner), "{owner:?}");

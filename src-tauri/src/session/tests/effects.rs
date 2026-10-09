@@ -344,7 +344,7 @@ fn an_alias_body_that_runs_away_turns_its_alias_off() {
             "Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."
         )]
     );
-    assert!(p.aliases.is_stopped("heal", c.stop_key));
+    assert!(p.aliases.is_stopped(None, "heal", c.stop_key));
     // Typed again, it passes through, as an alias you turned off does.
     let ran = crate::input::run_line(&state, &mut p, &mut c, "heal");
     assert_eq!(super::line_script_result(ran).send_bytes, b"heal\r\n");

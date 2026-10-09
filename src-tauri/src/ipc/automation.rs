@@ -79,7 +79,8 @@ pub(crate) async fn aliases_export(
     aliases_json(&p.aliases)
 }
 
-/// The JSON `aliases_export` sends, sorted by name. The page reads it in
+/// The JSON `aliases_export` sends, sorted by name, and the aliases of
+/// one name in the order Settings lists their groups. The page reads it in
 /// the palette and the Aliases editor, and its tests read
 /// `fixtures/ipc/aliases_export.json`, which a test here holds to it.
 fn aliases_json(store: &vosh_automation::alias::AliasStore) -> Result<String, String> {
@@ -709,13 +710,37 @@ mod tests {
         let mut old = AliasStore::new();
         old.set(Alias::new("hl", "cast heal"));
         old.set(Alias::new("kk", "kick"));
-        old.stop("hl", one);
-        old.stop("kk", two);
+        old.stop(None, "hl", one);
+        old.stop(None, "kk", two);
         let saved = vec![Alias::new("hl", "cast heal"), Alias::new("kk", "kick %1")];
         let store = imported_aliases(saved, &old);
-        assert!(store.is_stopped("hl", one));
-        assert!(!store.is_stopped("hl", two));
-        assert!(!store.is_stopped("kk", two));
+        assert!(store.is_stopped(None, "hl", one));
+        assert!(!store.is_stopped(None, "hl", two));
+        assert!(!store.is_stopped(None, "kk", two));
+    }
+
+    #[test]
+    fn a_saved_list_keeps_an_alias_name_in_each_group_and_the_export_lists_both() {
+        use super::{aliases_json, imported_aliases};
+        use vosh_automation::alias::AliasStore;
+        let json = r#"[
+            {"name": "ds", "expansion": "cast 'detect scry' tolliver", "group": "Tolliver"},
+            {"name": " ds ", "expansion": "cast 'detect scry' maren", "group": "Maren"},
+            {"name": "res", "expansion": "cast resurrect", "group": "Maren"}
+        ]"#;
+        let parsed = serde_json::from_str(json).unwrap();
+        let store = imported_aliases(parsed, &AliasStore::new());
+        assert_eq!(store.list().len(), 3);
+        let exported: Vec<serde_json::Value> =
+            serde_json::from_str(&aliases_json(&store).unwrap()).unwrap();
+        let rows: Vec<(&str, &str)> = exported
+            .iter()
+            .map(|a| (a["name"].as_str().unwrap(), a["group"].as_str().unwrap()))
+            .collect();
+        assert_eq!(
+            rows,
+            [("ds", "Maren"), ("ds", "Tolliver"), ("res", "Maren")]
+        );
     }
 
     #[test]

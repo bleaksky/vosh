@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::groups::GroupSwitch;
+use crate::groups::{compare_groups, GroupSwitch};
 use crate::revision::next_revision;
 use crate::split::split_commands;
 use crate::stops::{StopKey, Stops};
@@ -167,16 +167,100 @@ pub enum ExpandStep {
 
 #[derive(Debug, Error)]
 pub enum ExpandError {
-    #[error("alias recursion limit exceeded ({0})")]
-    RecursionLimit(usize),
+    /// The aliases ran `depth` deep from the line you typed. `chain`
+    /// labels each alias expanded on the way down, the one you typed
+    /// first, so the message can name the alias that calls itself.
+    #[error("{}", recursion_text(.chain, *.depth))]
+    RecursionLimit { depth: usize, chain: Vec<String> },
+}
+
+/// What Vosh prints when an alias runs too deep: the alias that calls
+/// itself, and through which others when it goes around them first.
+fn recursion_text(chain: &[String], depth: usize) -> String {
+    for (i, label) in chain.iter().enumerate() {
+        let Some(again) = chain[i + 1..].iter().position(|l| l == label) else {
+            continue;
+        };
+        let mut between: Vec<&str> = Vec::new();
+        for other in &chain[i + 1..i + 1 + again] {
+            if !between.contains(&other.as_str()) {
+                between.push(other);
+            }
+        }
+        return if between.is_empty() {
+            format!("alias {label} calls itself, so Vosh stopped it after {depth} steps")
+        } else {
+            format!(
+                "alias {label} calls itself through {}, so Vosh stopped it after {depth} steps",
+                between.join(" and ")
+            )
+        };
+    }
+    match chain.first() {
+        Some(first) => format!("alias {first} runs aliases {depth} deep, so Vosh stopped it there"),
+        None => format!("aliases ran {depth} deep, so Vosh stopped them"),
+    }
 }
 
 /// Default cap on alias recursion depth. Matches the `TinTin++` default.
 pub const DEFAULT_MAX_DEPTH: usize = 16;
 
+/// A group as the store keeps it: trimmed, and None for no group.
+fn clean_group(group: Option<&str>) -> Option<&str> {
+    group.map(str::trim).filter(|g| !g.is_empty())
+}
+
+/// `alias` as the store keeps it, its name and group trimmed and an
+/// empty group as none. A name you typed with a space before or after it
+/// would never match the first word of a line otherwise.
+fn cleaned(mut alias: Alias) -> Alias {
+    let name = alias.name.trim();
+    if name.len() != alias.name.len() {
+        alias.name = name.to_string();
+    }
+    alias.group = clean_group(alias.group.as_deref()).map(str::to_string);
+    alias
+}
+
+/// The text the stops know an alias by, its group and its name, since
+/// two groups may each hold an alias of one name.
+fn stop_id(group: Option<&str>, name: &str) -> String {
+    format!("{}\u{1f}{name}", group.unwrap_or(""))
+}
+
+/// The group and the name a [`stop_id`] stands for.
+fn split_stop_id(id: &str) -> (Option<&str>, &str) {
+    let (group, name) = id.split_once('\u{1f}').unwrap_or(("", id));
+    (clean_group(Some(group)), name)
+}
+
+impl Alias {
+    /// What the store knows this alias by: its group, None for no
+    /// group, and its name, both trimmed.
+    pub fn id(&self) -> (Option<&str>, &str) {
+        (clean_group(self.group.as_deref()), self.name.trim())
+    }
+
+    /// How a message names this alias: its name, and its group after
+    /// it when it has one, like `ds in Tolliver`.
+    pub fn label(&self) -> String {
+        match &self.group {
+            Some(group) => format!("{} in {group}", self.name),
+            None => self.name.clone(),
+        }
+    }
+}
+
+/// Your aliases. An alias is known by its group and its name together,
+/// so two groups may each hold an alias of one name, like one group of
+/// aliases for each character you play. When more than one of them
+/// could expand, the one whose group Settings lists first does: an alias
+/// in no group, then the groups in [`compare_groups`] order.
 #[derive(Debug, Clone)]
 pub struct AliasStore {
-    aliases: HashMap<String, Alias>,
+    /// Every alias by name. The aliases of one name sit in the order
+    /// Settings lists their groups, one for each group.
+    aliases: HashMap<String, Vec<Alias>>,
     max_depth: usize,
     /// The groups you turned off. An alias in an off group passes
     /// through whatever its own `enabled` flag says.
@@ -184,8 +268,8 @@ pub struct AliasStore {
     /// See [`AliasStore::revision`].
     revision: u64,
     /// The aliases whose Lua Vosh stopped, each under the key of the
-    /// session it stopped in. A stopped alias passes through there, as an
-    /// off one does, until you save it again.
+    /// session it stopped in, by [`stop_id`]. A stopped alias passes
+    /// through there, as an off one does, until you save it again.
     stopped: Stops,
 }
 
@@ -232,8 +316,12 @@ impl AliasStore {
     /// alias, paired with whether that group is currently enabled.
     /// Used by the Settings UI to render the per-group toggle row.
     pub fn groups(&self) -> Vec<(String, bool)> {
-        self.groups
-            .list(self.aliases.values().filter_map(|a| a.group.as_deref()))
+        self.groups.list(
+            self.aliases
+                .values()
+                .flatten()
+                .filter_map(|a| a.group.as_deref()),
+        )
     }
 
     /// Persistence accessor for the disabled-groups set. Returns the
@@ -260,39 +348,91 @@ impl AliasStore {
         self
     }
 
-    /// Insert or replace an alias. Saving an alias Vosh stopped turns
-    /// it back on everywhere.
+    /// Insert an alias, or replace the one of its name in its group.
+    /// The name and the group are trimmed first. Saving an alias Vosh
+    /// stopped turns it back on everywhere.
     pub fn set(&mut self, alias: Alias) {
-        self.stopped.clear(&alias.name);
-        self.aliases.insert(alias.name.clone(), alias);
+        let alias = cleaned(alias);
+        self.stopped
+            .clear(&stop_id(alias.group.as_deref(), &alias.name));
+        let list = self.aliases.entry(alias.name.clone()).or_default();
+        match list.binary_search_by(|a| compare_groups(a.group.as_deref(), alias.group.as_deref()))
+        {
+            Ok(at) => list[at] = alias,
+            Err(at) => list.insert(at, alias),
+        }
         self.revision = next_revision();
     }
 
-    pub fn remove(&mut self, name: &str) -> bool {
-        self.stopped.clear(name);
-        let removed = self.aliases.remove(name).is_some();
+    /// Remove the alias `name` of `group`, None for the one in no group.
+    /// True when it went.
+    pub fn remove(&mut self, group: Option<&str>, name: &str) -> bool {
+        let group = clean_group(group);
+        let name = name.trim();
+        self.stopped.clear(&stop_id(group, name));
+        let Some(list) = self.aliases.get_mut(name) else {
+            return false;
+        };
+        let before = list.len();
+        list.retain(|a| a.group.as_deref() != group);
+        let removed = list.len() != before;
+        if list.is_empty() {
+            self.aliases.remove(name);
+        }
         if removed {
             self.revision = next_revision();
         }
         removed
     }
 
-    pub fn get(&self, name: &str) -> Option<&Alias> {
-        self.aliases.get(name)
+    /// The alias `name` of `group`, None for the one in no group.
+    pub fn get_in(&self, group: Option<&str>, name: &str) -> Option<&Alias> {
+        let group = clean_group(group);
+        self.named(name)
+            .iter()
+            .find(|a| a.group.as_deref() == group)
     }
 
-    /// Turn the alias `name` off under `key`, after Vosh stopped its Lua
-    /// there. It stays off there until you save it again.
-    pub fn stop(&mut self, name: &str, key: StopKey) {
-        if self.aliases.contains_key(name) && self.stopped.stop(name, key) {
+    /// The first alias of `name` Settings lists, whatever its group.
+    pub fn get(&self, name: &str) -> Option<&Alias> {
+        self.named(name).first()
+    }
+
+    /// Every alias of `name`, in the order Settings lists their groups,
+    /// which is the order they win in.
+    pub fn named(&self, name: &str) -> &[Alias] {
+        self.aliases.get(name.trim()).map_or(&[], Vec::as_slice)
+    }
+
+    /// The alias of `name` that expands when you type it in the session
+    /// `key` names: the first Settings lists that is on, in a group that
+    /// is on, and not stopped there.
+    pub fn winner(&self, name: &str, key: StopKey) -> Option<&Alias> {
+        self.named(name).iter().find(|a| self.fires(a, key))
+    }
+
+    /// The alias a bare name means to `#alias` and `mud.alias`: the one
+    /// that expands in the session `key` names, else the first Settings
+    /// lists.
+    pub fn chosen(&self, name: &str, key: StopKey) -> Option<&Alias> {
+        self.winner(name, key).or_else(|| self.get(name))
+    }
+
+    /// Turn the alias `name` of `group` off under `key`, after Vosh
+    /// stopped its Lua there. It stays off there until you save it again.
+    pub fn stop(&mut self, group: Option<&str>, name: &str, key: StopKey) {
+        if self.get_in(group, name).is_some()
+            && self.stopped.stop(&stop_id(clean_group(group), name), key)
+        {
             self.revision = next_revision();
         }
     }
 
-    /// True while Vosh holds the alias `name` off under `key` after a
-    /// stop.
-    pub fn is_stopped(&self, name: &str, key: StopKey) -> bool {
-        self.stopped.contains(name, key)
+    /// True while Vosh holds the alias `name` of `group` off under `key`
+    /// after a stop.
+    pub fn is_stopped(&self, group: Option<&str>, name: &str, key: StopKey) -> bool {
+        self.stopped
+            .contains(&stop_id(clean_group(group), name), key)
     }
 
     /// Drop every stop under `key`, as the session it names closes.
@@ -304,9 +444,10 @@ impl AliasStore {
     /// store holds as `old` held it. The Settings editor saves the whole
     /// list at once, so only the alias you changed comes back on.
     pub fn keep_stops_from(&mut self, old: &AliasStore) {
-        self.stopped = old
-            .stopped
-            .kept(|name| self.aliases.get(name) == old.aliases.get(name));
+        self.stopped = old.stopped.kept(|id| {
+            let (group, name) = split_stop_id(id);
+            self.get_in(group, name) == old.get_in(group, name)
+        });
     }
 
     /// True when the saved alias `alias` expands under `key`: it is on,
@@ -314,7 +455,7 @@ impl AliasStore {
     fn fires(&self, alias: &Alias, key: StopKey) -> bool {
         alias.enabled
             && self.groups.allows(alias.group.as_deref())
-            && !self.stopped.contains(&alias.name, key)
+            && !self.is_stopped(alias.group.as_deref(), &alias.name, key)
     }
 
     /// The names that expand if you press Enter now in the session
@@ -322,7 +463,11 @@ impl AliasStore {
     /// there and every alias in `plugins`. Names match case sensitively,
     /// as expansion matches them.
     pub fn live_names(&self, plugins: &PluginAliases, key: StopKey) -> Vec<String> {
-        let saved = self.aliases.values().filter(|a| self.fires(a, key));
+        let saved = self
+            .aliases
+            .values()
+            .flatten()
+            .filter(|a| self.fires(a, key));
         let made = plugins.list().into_iter().map(|(_, alias)| alias);
         let mut names: Vec<String> = saved.chain(made).map(|a| a.name.clone()).collect();
         names.sort();
@@ -330,10 +475,15 @@ impl AliasStore {
         names
     }
 
+    /// Every alias, sorted by name, and the aliases of one name in the
+    /// order Settings lists their groups.
     pub fn list(&self) -> Vec<&Alias> {
-        let mut out: Vec<&Alias> = self.aliases.values().collect();
-        out.sort_by(|a, b| a.name.cmp(&b.name));
-        out
+        let mut names: Vec<&String> = self.aliases.keys().collect();
+        names.sort();
+        names
+            .into_iter()
+            .flat_map(|name| self.aliases[name].iter())
+            .collect()
     }
 
     /// Expand a single command line and return only the resulting send
@@ -365,43 +515,52 @@ impl AliasStore {
         key: StopKey,
     ) -> Result<Vec<ExpandStep>, ExpandError> {
         let mut steps = Vec::new();
+        let mut chain = Vec::new();
         for raw in split_commands(line) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, 0, plugins, key, &mut steps)?;
+            self.expand_into(trimmed, plugins, key, &mut chain, &mut steps)?;
         }
         Ok(steps)
     }
 
+    /// Expand `command` into `out`. `chain` labels the aliases this
+    /// command sits inside, the one you typed first, and its length is
+    /// the depth.
     fn expand_into(
         &self,
         command: &str,
-        depth: usize,
         plugins: &PluginAliases,
         key: StopKey,
+        chain: &mut Vec<String>,
         out: &mut Vec<ExpandStep>,
     ) -> Result<(), ExpandError> {
-        if depth >= self.max_depth {
-            return Err(ExpandError::RecursionLimit(self.max_depth));
-        }
-
         let (name, rest) = split_first_word(command);
         // The alias fires only when:
-        //   * the named entry exists, AND
+        //   * an entry of that name exists, AND
         //   * its own `enabled` flag is true, AND
         //   * its group is enabled (or it is ungrouped), AND
         //   * Vosh has not stopped its Lua in this session.
         // Disabled groups short-circuit to pass-through so the user
         // can flip whole "Combat" / "Crafting" loadouts off without
-        // editing each row. An alias a plugin made has none of these and
-        // comes first.
-        let saved = || self.aliases.get(name).filter(|a| self.fires(a, key));
+        // editing each row. Of the entries of one name that fire, the
+        // one whose group Settings lists first wins. An alias a plugin
+        // made has none of these and comes first.
+        let saved = || self.winner(name, key);
         let Some(alias) = plugins.get(name).or_else(saved) else {
             out.push(ExpandStep::Command(command.to_string()));
             return Ok(());
         };
+        if chain.len() >= self.max_depth {
+            let mut chain = chain.clone();
+            chain.push(alias.label());
+            return Err(ExpandError::RecursionLimit {
+                depth: self.max_depth,
+                chain,
+            });
+        }
 
         // Script-bodied aliases bypass template expansion entirely.
         // Lua reads the words after the name as `captures[1]`,
@@ -409,6 +568,7 @@ impl AliasStore {
         if let Some(body) = &alias.script {
             out.push(ExpandStep::Script(ScriptCall {
                 source: alias.name.clone(),
+                group: alias.group.clone(),
                 body: body.clone(),
                 captures: rest.split_whitespace().map(str::to_string).collect(),
             }));
@@ -416,13 +576,15 @@ impl AliasStore {
         }
 
         let expanded = substitute_params(&alias.expansion, rest);
+        chain.push(alias.label());
         for raw in split_commands(&expanded) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, depth + 1, plugins, key, out)?;
+            self.expand_into(trimmed, plugins, key, chain, out)?;
         }
+        chain.pop();
         Ok(())
     }
 }
@@ -642,7 +804,7 @@ mod tests {
         let s = store(&[("say", "say %0")]);
         assert!(matches!(
             s.expand_line("say hello", SESSION),
-            Err(ExpandError::RecursionLimit(_))
+            Err(ExpandError::RecursionLimit { .. })
         ));
     }
 
@@ -745,7 +907,7 @@ mod tests {
         let s = store(&[("a", "b"), ("b", "a")]);
         assert!(matches!(
             s.expand_line("a", SESSION),
-            Err(ExpandError::RecursionLimit(_))
+            Err(ExpandError::RecursionLimit { .. })
         ));
     }
 
@@ -847,8 +1009,8 @@ mod tests {
     #[test]
     fn remove_alias() {
         let mut s = store(&[("greet", "wave")]);
-        assert!(s.remove("greet"));
-        assert!(!s.remove("greet"));
+        assert!(s.remove(None, "greet"));
+        assert!(!s.remove(None, "greet"));
         assert_eq!(
             s.expand_line("greet", SESSION).unwrap(),
             vec!["greet".to_string()]
@@ -864,12 +1026,12 @@ mod tests {
         assert_ne!(after_add, empty);
         s.set_group_enabled("social", false);
         s.set_disabled_groups(["social"]);
-        assert!(!s.remove("missing"));
+        assert!(!s.remove(None, "missing"));
         assert_eq!(s.revision(), after_add);
         s.set(Alias::new("greet", "bow"));
         let after_replace = s.revision();
         assert_ne!(after_replace, after_add);
-        assert!(s.remove("greet"));
+        assert!(s.remove(None, "greet"));
         assert_ne!(s.revision(), after_replace);
     }
 
@@ -898,7 +1060,7 @@ mod tests {
         s.set(off);
         s.set(Alias::new("fl", "flee").with_group("combat"));
         s.set_group_enabled("combat", false);
-        s.stop("hl", SESSION);
+        s.stop(None, "hl", SESSION);
         let mut plugins = PluginAliases::default();
         plugins.set("mapper", "go", "run %1");
         plugins.set("other", "kk", "kick hard");
@@ -912,48 +1074,48 @@ mod tests {
     #[test]
     fn a_stopped_alias_passes_through_in_its_session_until_you_save_it() {
         let mut s = store(&[("hl", "cast heal")]);
-        s.stop("hl", SESSION);
-        assert!(s.is_stopped("hl", SESSION));
+        s.stop(None, "hl", SESSION);
+        assert!(s.is_stopped(None, "hl", SESSION));
         assert_eq!(
             s.expand_line("hl", SESSION).unwrap(),
             vec!["hl".to_string()]
         );
         // The other session still expands it.
-        assert!(!s.is_stopped("hl", OTHER));
+        assert!(!s.is_stopped(None, "hl", OTHER));
         assert_eq!(
             s.expand_line("hl", OTHER).unwrap(),
             vec!["cast heal".to_string()]
         );
-        s.stop("hl", OTHER);
+        s.stop(None, "hl", OTHER);
         s.set(Alias::new("hl", "cast heal"));
         for key in [SESSION, OTHER] {
-            assert!(!s.is_stopped("hl", key));
+            assert!(!s.is_stopped(None, "hl", key));
             assert_eq!(
                 s.expand_line("hl", key).unwrap(),
                 vec!["cast heal".to_string()]
             );
         }
         // The stops of a session that closed go with it.
-        s.stop("hl", SESSION);
+        s.stop(None, "hl", SESSION);
         s.forget_stops(SESSION);
-        assert!(!s.is_stopped("hl", SESSION));
+        assert!(!s.is_stopped(None, "hl", SESSION));
     }
 
     #[test]
     fn a_whole_list_save_keeps_only_the_unchanged_alias_stops_in_each_session() {
         let mut old = store(&[("hl", "cast heal"), ("kk", "kick")]);
-        old.stop("hl", SESSION);
-        old.stop("kk", SESSION);
-        old.stop("kk", OTHER);
+        old.stop(None, "hl", SESSION);
+        old.stop(None, "kk", SESSION);
+        old.stop(None, "kk", OTHER);
         let mut saved = store(&[("hl", "cast heal"), ("kk", "kick %1")]);
         saved.keep_stops_from(&old);
-        assert!(saved.is_stopped("hl", SESSION));
-        assert!(!saved.is_stopped("hl", OTHER));
+        assert!(saved.is_stopped(None, "hl", SESSION));
+        assert!(!saved.is_stopped(None, "hl", OTHER));
         for key in [SESSION, OTHER] {
-            assert!(!saved.is_stopped("kk", key));
+            assert!(!saved.is_stopped(None, "kk", key));
         }
-        assert!(saved.remove("hl"));
-        assert!(!saved.is_stopped("hl", SESSION));
+        assert!(saved.remove(None, "hl"));
+        assert!(!saved.is_stopped(None, "hl", SESSION));
     }
 
     #[test]
@@ -971,6 +1133,7 @@ mod tests {
         let kick = |captures: &[&str]| {
             ExpandStep::Script(ScriptCall {
                 source: "kk".into(),
+                group: None,
                 body: body.into(),
                 captures: captures.iter().map(|c| (*c).to_string()).collect(),
             })
@@ -998,12 +1161,152 @@ mod tests {
         );
     }
 
+    /// The store with `ds` in the groups Tolliver and Maren, each casting
+    /// for its own character.
+    fn two_characters() -> AliasStore {
+        let mut s = AliasStore::new();
+        s.set(Alias::new("ds", "cast 'detect scry' tolliver").with_group("Tolliver"));
+        s.set(Alias::new("ds", "cast 'detect scry' maren").with_group("Maren"));
+        s
+    }
+
+    #[test]
+    fn two_groups_each_keep_an_alias_of_one_name() {
+        let mut s = two_characters();
+        let groups: Vec<Option<&str>> = s.list().iter().map(|a| a.group.as_deref()).collect();
+        // Settings lists Maren before Tolliver, and so does the store.
+        assert_eq!(groups, [Some("Maren"), Some("Tolliver")]);
+        assert_eq!(
+            s.get_in(Some("Tolliver"), "ds").unwrap().expansion,
+            "cast 'detect scry' tolliver"
+        );
+        // Saving one again replaces only the one in its group.
+        s.set(Alias::new("ds", "cast 'detect scry' self").with_group("Maren"));
+        assert_eq!(s.list().len(), 2);
+        assert_eq!(
+            s.get_in(Some("Maren"), "ds").unwrap().expansion,
+            "cast 'detect scry' self"
+        );
+        // One in no group is a third alias of the name.
+        s.set(Alias::new("ds", "say no group"));
+        assert_eq!(s.named("ds").len(), 3);
+        assert_eq!(s.get("ds").unwrap().group, None);
+    }
+
+    #[test]
+    fn the_group_settings_lists_first_wins() {
+        let mut s = two_characters();
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry' maren"]
+        );
+        // An alias in no group comes before every group.
+        s.set(Alias::new("ds", "say first"));
+        assert_eq!(s.expand_line("ds", SESSION).unwrap(), ["say first"]);
+        assert!(s.remove(None, "ds"));
+        // An alias you turned off gives way to the next one.
+        let mut off = s.get_in(Some("Maren"), "ds").unwrap().clone();
+        off.enabled = false;
+        s.set(off);
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry' tolliver"]
+        );
+    }
+
+    #[test]
+    fn switching_a_group_off_lets_the_other_fire() {
+        let mut s = two_characters();
+        s.set_group_enabled("Maren", false);
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry' tolliver"]
+        );
+        assert_eq!(
+            s.winner("ds", SESSION).unwrap().group.as_deref(),
+            Some("Tolliver")
+        );
+        s.set_group_enabled("Tolliver", false);
+        assert_eq!(s.expand_line("ds", SESSION).unwrap(), ["ds"]);
+        assert_eq!(
+            s.chosen("ds", SESSION).unwrap().group.as_deref(),
+            Some("Maren")
+        );
+    }
+
+    #[test]
+    fn unalias_removes_the_alias_of_one_group() {
+        let mut s = two_characters();
+        assert!(!s.remove(None, "ds"));
+        assert!(!s.remove(Some("Orla"), "ds"));
+        assert!(s.remove(Some(" Maren "), "ds"));
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry' tolliver"]
+        );
+        assert!(s.remove(Some("Tolliver"), "ds"));
+        let leftover = s.list();
+        assert!(leftover.is_empty(), "{leftover:?}");
+    }
+
+    #[test]
+    fn a_stop_holds_off_the_alias_of_one_group() {
+        let mut s = two_characters();
+        s.stop(Some("Maren"), "ds", SESSION);
+        assert!(!s.is_stopped(Some("Tolliver"), "ds", SESSION));
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry' tolliver"]
+        );
+        let mut saved = two_characters();
+        saved.keep_stops_from(&s);
+        assert!(saved.is_stopped(Some("Maren"), "ds", SESSION));
+    }
+
+    #[test]
+    fn names_and_groups_are_trimmed() {
+        let mut s = AliasStore::new();
+        let mut alias = Alias::new("  ds ", "cast 'detect scry'");
+        alias.group = Some(" Orla ".into());
+        s.set(alias);
+        let mut blank = Alias::new("hl", "cast heal");
+        blank.group = Some("  ".into());
+        s.set(blank);
+        let ds = s.get_in(Some("Orla"), "ds").unwrap();
+        assert_eq!(
+            (ds.name.as_str(), ds.group.as_deref()),
+            ("ds", Some("Orla"))
+        );
+        assert_eq!(s.get("hl").unwrap().group, None);
+        assert_eq!(
+            s.expand_line("ds", SESSION).unwrap(),
+            ["cast 'detect scry'"]
+        );
+    }
+
+    #[test]
+    fn a_runaway_alias_names_itself() {
+        let s = store(&[("say", "say %0")]);
+        let err = s.expand_line("say hello", SESSION).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "alias say calls itself, so Vosh stopped it after 16 steps"
+        );
+        let mut s = store(&[("a", "b"), ("b", "c")]);
+        s.set(Alias::new("c", "a").with_group("Orla"));
+        let err = s.expand_line("a", SESSION).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "alias a calls itself through b and c in Orla, so Vosh stopped it after 16 steps"
+        );
+    }
+
     #[test]
     fn recursion_limit_can_be_lowered() {
         let s = store(&[("a", "a")]).with_max_depth(2);
         assert!(matches!(
             s.expand_line("a", SESSION),
-            Err(ExpandError::RecursionLimit(2))
+            Err(ExpandError::RecursionLimit { depth: 2, .. })
         ));
     }
 }

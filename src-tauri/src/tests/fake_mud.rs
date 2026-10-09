@@ -1835,6 +1835,54 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
     h.finish(grid).await;
 }
 
+// Two groups each hold an alias named ds, one per character. The one in
+// the group Settings lists first goes to the game, and once you turn its
+// group off the other one does. The guard keeps other tests off the
+// shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_alias_name_two_groups_share_sends_the_first_listed_one() {
+    let grid = crate::native::grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    {
+        let mut p = h.state.selected_profile().await;
+        let in_group = |expansion: &str, group: &str| vosh_automation::alias::Alias {
+            group: Some(group.into()),
+            ..vosh_automation::alias::Alias::new("ds", expansion)
+        };
+        p.aliases.set(in_group("look", "Maren"));
+        p.aliases.set(in_group("ponder", "Tolliver"));
+    }
+    let rooms = |h: &Harness| {
+        h.screen()
+            .iter()
+            .filter(|r| r.as_str() == "[Exits: south]")
+            .count()
+    };
+    let before = rooms(&h);
+    h.type_line("ds").await;
+    h.until("the game's answer to look", |h| rooms(h) > before)
+        .await;
+    let screen = h.screen();
+    assert!(
+        !screen.iter().any(|row| row.contains("Huh?")),
+        "{screen:#?}"
+    );
+
+    // Maren's group off, Tolliver's ds goes, and the game knows no ponder.
+    h.state
+        .selected_profile()
+        .await
+        .aliases
+        .set_group_enabled("Maren", false);
+    h.type_line("ds").await;
+    h.until_shown("Huh?").await;
+    h.finish(grid).await;
+}
+
 // A trigger's Lua that hands a line to mud.input runs it as if you typed
 // it, so a Lua alias the line names runs its body and the game hears what
 // the body sends. The guard keeps other tests off the shared native grid.

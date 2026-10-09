@@ -248,13 +248,18 @@ async fn a_replace_keeps_the_world_the_characters_and_the_plugins_of_your_profil
 }
 
 /// Put the app over `dir` in loadout mode, with a catalog that holds
-/// your `kk`.
+/// your `kk` in the group an import of `Healer profile.toml` joins, so
+/// the file's kk clashes with it. An alias of that name in another
+/// group would join beside it.
 async fn loadout_mode(dir: &Path, state: &SharedState) {
     use crate::loadouts::catalog::save_global_catalog;
     use crate::loadouts::set::save_loadout_set;
     use vosh_automation::alias::Alias;
     let catalog = GlobalCatalog {
-        aliases: vec![Alias::new("kk", "kick %1 twice")],
+        aliases: vec![Alias {
+            group: Some("Healer profile".into()),
+            ..Alias::new("kk", "kick %1 twice")
+        }],
         enabled_presets: Some(Vec::new()),
         ..GlobalCatalog::default()
     };
@@ -290,7 +295,7 @@ async fn in_loadout_mode_the_items_join_the_catalog_and_a_clash_keeps_yours() {
         .unwrap();
     assert_eq!(
         (kk.expansion.as_str(), kk.group.as_deref()),
-        ("kick %1 twice", None)
+        ("kick %1 twice", Some("Healer profile"))
     );
     let heal = saved_catalog
         .aliases

@@ -178,9 +178,10 @@ pub(crate) fn lay_catalog_change_over(
     set: Option<&LoadoutSet>,
 ) {
     let had = GroupsHad::of(p);
-    let (gone, came) = changes(&before.aliases, &after.aliases, |a| a.name.as_str());
-    for name in gone {
-        p.aliases.remove(name);
+    // An alias is known by its group and its name, as the store knows it.
+    let (gone, came) = changes(&before.aliases, &after.aliases, Alias::id);
+    for (group, name) in gone {
+        p.aliases.remove(group, name);
     }
     for alias in came {
         p.aliases.set(alias.clone());

@@ -438,7 +438,10 @@ fn join_into(p: &mut Profile, join: CatalogJoin) -> usize {
         }
     }
     for alias in join.aliases {
-        if p.aliases.get(&alias.name).is_none() {
+        if p.aliases
+            .get_in(alias.group.as_deref(), &alias.name)
+            .is_none()
+        {
             p.aliases.set(alias);
             joined += 1;
         }

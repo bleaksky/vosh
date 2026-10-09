@@ -540,12 +540,16 @@ async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
         &default_file,
     )
     .unwrap();
+    // The old kk in no group sits beside the catalog's kk in its folder,
+    // since an alias is known by its group and its name.
     let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
     assert_eq!(
         items_on(&*state.selected_profile().await),
-        ["alias hh", "alias kk", "alias zz"]
+        ["alias hh", "alias kk", "alias kk", "alias zz"]
     );
     persist(&state).await;
+    // The Healer keeps the folder of the default character off, so only
+    // the old kk in no group is on there.
     let state = relaunch_as(dir.path(), "Healer").await;
     assert_eq!(
         items_on(&*state.selected_profile().await),
