@@ -221,6 +221,12 @@ function MainWindow() {
       ...(offer !== undefined ? { offer } : {}),
     }));
   }, []);
+  // The editor pill's Open in the writing card, on the text the game's
+  // editor holds now.
+  const openWritingFromEditor = useCallback((kind: WritingKind) => {
+    setPromptCard(null);
+    setWritingCard((prev) => ({ kind, n: (prev?.n ?? 0) + 1, fromEditor: true }));
+  }, []);
   // Your race and level, which decide the boards you write on and a
   // werebeast's beast.
   const charStatus = useCharStatus();
@@ -639,6 +645,7 @@ function MainWindow() {
       macroKeys={macroKeys}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
+      onOpenWriting={openWritingFromEditor}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
       onLocalEcho={(text, session) => {
         writeTo(session, text);

@@ -16,7 +16,7 @@ import {
 } from '../ipc/nativeSurface';
 import { sendInput, sendMaskedInput, sendRawInput, stopWalk } from '../ipc/session';
 import type { LineLook } from '../ipc/uiConfig';
-import { writingStart } from '../ipc/writing';
+import { writingStart, type WritingKind } from '../ipc/writing';
 import { useWriting, writingOf } from '../stores/session/writingStore';
 import { loadWriting, useWritingFile } from '../writing/draftsStore';
 import { pasted } from '../writing/text';
@@ -77,6 +77,9 @@ interface Props {
    *  holds a stale height until the next keystroke and the whole
    *  layout shifts when that keystroke lands. */
   fontKey?: string;
+  /** Open the writing card on the text the game's editor holds, from
+   *  the editor pill's menu. */
+  onOpenWriting?: (kind: WritingKind) => void;
 }
 
 /** The writing card drives the game's editor in `session`, so its other
@@ -124,6 +127,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     onExitSplit,
     onSelectAllTerminal,
     fontKey,
+    onOpenWriting,
   }: Props,
   ref,
 ) {
@@ -664,7 +668,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       style={rowStyle}
     >
       {pill ? (
-        <LinePill pill={pill} />
+        <LinePill
+          pill={pill}
+          editor={
+            editor && onOpenWriting
+              ? {
+                  onOpenWriting: () => onOpenWriting(editor.kind),
+                  // Finish goes as an @ you typed would.
+                  onFinish: () => void submitLine('@', session),
+                  onReturn: () => inputRef.current?.focus(),
+                }
+              : null
+          }
+        />
       ) : (
         lineMark && (
           <span

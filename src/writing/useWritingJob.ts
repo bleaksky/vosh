@@ -3,6 +3,7 @@ import {
   writingStart,
   writingStop,
   writingTake,
+  writingTakeEditor,
   type JobResult,
   type WriteJob,
   type WritingState,
@@ -23,6 +24,8 @@ export interface WritingJobs {
   run: (job: JobSpec) => void;
   /** Open the card on the offer `id`, a read the writer runs. */
   take: (id: number, job: JobSpec) => void;
+  /** Open the card on the text the game's editor holds now. */
+  takeEditor: (job: JobSpec) => void;
   stop: () => void;
   /** The card's job under way, or null. */
   running: WritingState['job'];
@@ -64,6 +67,12 @@ export function useWritingJob(
       const job = { ...spec, id };
       pending.current = job;
       void writingTake(id, session).catch(fail(job));
+    },
+    takeEditor: (spec) => {
+      nextId += 1;
+      const job = { ...spec, id: nextId };
+      pending.current = job;
+      void writingTakeEditor(job.id, session).catch(fail(job));
     },
     stop: () => {
       void writingStop(session).catch(() => {});

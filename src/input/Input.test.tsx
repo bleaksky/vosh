@@ -11,7 +11,11 @@ import { FakeDocument, FakeElement, FakeNode, findAll } from '../test/fakeDom';
 // event bus.
 
 type Handler = (event: { payload: unknown }) => void;
-const bus = vi.hoisted(() => ({ handlers: new Map<string, Set<Handler>>() }));
+const bus = vi.hoisted(() => ({
+  handlers: new Map<string, Set<Handler>>(),
+  /** Each call into Rust, as its command and its arguments. */
+  calls: [] as [string, unknown][],
+}));
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async (event: string, cb: Handler) => {
@@ -24,8 +28,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: async (cmd: string) =>
-    cmd === 'ui_get_config'
+  invoke: async (cmd: string, args?: unknown) => {
+    bus.calls.push([cmd, args]);
+    return cmd === 'ui_get_config'
       ? {
           tracked_affects: [],
           input_caret_blink: true,
@@ -39,7 +44,8 @@ vi.mock('@tauri-apps/api/core', () => ({
         ? { aliases: ['eb'], commands: ['alias', 'walk'] }
         : cmd === 'writing_file_get'
           ? { version: 1, spelling: false, guide: true, characters: {} }
-          : null,
+          : null;
+  },
 }));
 
 function fire(event: string, payload: unknown): void {
@@ -90,6 +96,28 @@ beforeAll(async () => {
       writable: true,
     });
   }
+  // The editor pill's menu finds its rows, places itself by the pill's
+  // box and asks what holds focus.
+  const node = FakeNode.prototype as unknown as Record<string, unknown>;
+  node.contains = function (this: FakeNode, other: FakeNode | null): boolean {
+    for (let n = other; n; n = n.parentNode) if (n === this) return true;
+    return false;
+  };
+  const rows = (root: FakeElement) =>
+    findAll(root, (el) => (el.getAttribute('role') ?? '').startsWith('menuitem'));
+  const el = FakeElement.prototype as unknown as Record<string, unknown>;
+  el.querySelectorAll = function (this: FakeElement) {
+    return rows(this);
+  };
+  el.querySelector = function (this: FakeElement) {
+    return rows(this)[0] ?? null;
+  };
+  el.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0 });
+  Object.defineProperty(FakeElement.prototype, 'offsetWidth', {
+    value: 0,
+    configurable: true,
+    writable: true,
+  });
   // The game editor measures a column on a canvas the stand in DOM
   // does not draw.
   Object.defineProperty(FakeElement.prototype, 'getContext', {
@@ -115,7 +143,7 @@ function styleOf(el: FakeElement | undefined): string {
 /** Mount the command line, and read the mark it draws as its class and
  *  text, or null with no mark, and the row and its caret. `enabled`
  *  focuses the line, so it draws the caret. */
-async function mountLine(enabled = false) {
+async function mountLine(enabled = false, onOpenWriting?: (kind: string) => void) {
   const host = doc.createElement('div');
   const root = createRoot(host as unknown as HTMLElement);
   const handle: { current: InputHandle | null } = { current: null };
@@ -125,6 +153,7 @@ async function mountLine(enabled = false) {
         ref: handle,
         enabled,
         macroKeys: { command: () => undefined, bound: () => false },
+        ...(onOpenWriting && { onOpenWriting }),
       }),
     );
     await settle();
@@ -157,6 +186,7 @@ async function mountLine(enabled = false) {
       if (!el) return null;
       return findAll(el, (n) => n.getAttribute('aria-hidden') === 'true')
         .map((n) => n.textContent)
+        .filter((text) => text !== '')
         .join(' ');
     },
     /** What the pill reads to a screen reader. */
@@ -167,6 +197,8 @@ async function mountLine(enabled = false) {
         'placeholder',
       ) ?? null,
     has: (name: string) => byClass(name) !== undefined,
+    /** The pill's button, in the game's editor. */
+    pillButton: () => findAll(host, (el) => el.tagName === 'BUTTON')[0],
     type: (text: string) =>
       act(async () => {
         handle.current?.insert(text);
@@ -283,6 +315,67 @@ describe('the mode pill', () => {
     expect(line.rowStyle()).toBe('--input-mode:var(--secondary)');
     await passwordAt(false);
     expect(line.pill()).toBeNull();
+    await line.unmount();
+  });
+});
+
+/** The handlers React keeps on an element. The stand in DOM sends no
+ *  events. */
+function on(el: FakeElement | undefined): Record<string, () => void> {
+  const key = el && Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  if (!el || !key) throw new Error('the element has no React props');
+  return (el as unknown as Record<string, Record<string, () => void>>)[key];
+}
+
+describe('the editor pill’s menu', () => {
+  const menuRow = (label: string) =>
+    findAll(doc.body, (el) => el.getAttribute('role') === 'menuitem').find((el) =>
+      el.textContent.startsWith(label),
+    );
+
+  it('opens from the pill, which says it holds a menu', async () => {
+    const opened: string[] = [];
+    const line = await mountLine(false, (kind) => opened.push(kind));
+    await writingAt({ game: 'editor', editor: 'description', lines: 3 });
+    const button = line.pillButton();
+    expect(button?.getAttribute('class')).toBe('input-pill');
+    expect(button?.getAttribute('aria-label')).toBe('Description, line 4 of 30');
+    expect(button?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => on(button).onClick());
+    expect(line.pillButton()?.getAttribute('aria-expanded')).toBe('true');
+    const menu = findAll(doc.body, (el) => el.getAttribute('role') === 'menu')[0];
+    expect(menu?.getAttribute('aria-label')).toBe('Description');
+    expect(menuRow('Open in the writing card')).toBeDefined();
+    expect(menuRow('Finish')?.textContent).toBe('Finish@');
+    await act(async () => on(menuRow('Open in the writing card')).onClick());
+    expect(opened).toEqual(['description']);
+    expect(line.pillButton()?.getAttribute('aria-expanded')).toBe('false');
+    await writingAt({});
+    await line.unmount();
+  });
+
+  it('sends @ from Finish', async () => {
+    const line = await mountLine(false, () => {});
+    await writingAt({ game: 'editor', editor: 'note', lines: 3 });
+    expect(line.pill()).toBe('Note · line 4');
+    await act(async () => on(line.pillButton()).onClick());
+    bus.calls.length = 0;
+    await act(async () => {
+      on(menuRow('Finish')).onClick();
+      await settle();
+    });
+    expect(bus.calls).toContainEqual(['session_send_raw', { line: '@', session: 1 }]);
+    await writingAt({});
+    await line.unmount();
+  });
+
+  it('is no button for a walk, More or a password', async () => {
+    const line = await mountLine(false, () => {});
+    await walkAt({ kind: 'walking', done: 1, total: 2, left: 'w', route: false });
+    expect(line.pill()).toBe('Walking · 1 step left');
+    expect(line.pillButton()).toBeUndefined();
+    await walkAt({ kind: 'idle' });
     await line.unmount();
   });
 });

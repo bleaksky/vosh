@@ -377,6 +377,22 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--input-mode) 45%, transparent);
 }
 
+button.input-pill {
+  cursor: default;
+}
+
+button.input-pill:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--input-mode) 45%, transparent),
+    0 0 0 2px var(--accent);
+}
+
+.input-pill svg {
+  margin-right: -3px;
+  color: var(--secondary);
+}
+
 .input-pill-dot {
   opacity: 0.55;
 }
