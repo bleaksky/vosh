@@ -2141,6 +2141,82 @@ fn slash_unalias_removes() {
     assert_eq!(r.bytes, b"greet\r\n");
 }
 
+/// A profile with `ds` in the groups Maren and Tolliver.
+fn ds_in_two_groups() -> Profile {
+    let mut p = Profile::default();
+    for (expansion, group) in [("look", "Maren"), ("ponder", "Tolliver")] {
+        p.aliases.set(Alias {
+            group: Some(group.into()),
+            ..Alias::new("ds", expansion)
+        });
+    }
+    p
+}
+
+#[test]
+fn unalias_asks_which_group_when_two_hold_the_name() {
+    let mut p = ds_in_two_groups();
+    let r = process(&mut p, "#unalias ds");
+    assert!(
+        r.echo.iter().any(|l| l.contains(
+            "ds is in Maren and Tolliver, so name the group too, like #unalias ds Maren"
+        )),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(p.aliases.named("ds").len(), 2);
+    let r = process(&mut p, "#unalias ds Orla");
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("alias ds in Orla not found")),
+        "{:?}",
+        r.echo
+    );
+    let r = process(&mut p, "#unalias ds Maren");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Maren removed"),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(process(&mut p, "ds").bytes, b"ponder\r\n");
+    // With one left, the name alone is enough.
+    let r = process(&mut p, "#unalias ds");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Tolliver removed"),
+        "{:?}",
+        r.echo
+    );
+    let leftover = p.aliases.named("ds");
+    assert!(leftover.is_empty(), "{leftover:?}");
+}
+
+#[test]
+fn alias_again_replaces_the_one_that_fires_in_its_group() {
+    let mut p = ds_in_two_groups();
+    p.aliases.set_group_enabled("Maren", false);
+    let r = process(&mut p, "#alias ds glance");
+    assert!(
+        r.echo.iter().any(|l| l == "alias ds in Tolliver set"),
+        "{:?}",
+        r.echo
+    );
+    assert_eq!(
+        p.aliases.get_in(Some("Tolliver"), "ds").unwrap().expansion,
+        "glance"
+    );
+    assert_eq!(
+        p.aliases.get_in(Some("Maren"), "ds").unwrap().expansion,
+        "look"
+    );
+    let r = process(&mut p, "#aliases");
+    assert!(
+        r.echo.iter().any(|l| l.contains("ds in Maren -> look")),
+        "{:?}",
+        r.echo
+    );
+}
+
 #[test]
 fn slash_var_set_and_show() {
     let mut p = Profile::default();
@@ -2225,7 +2301,13 @@ fn alias_recursion_returns_error_echo_not_panic() {
     let r = process(&mut p, "loop");
     let leftover = &r.bytes;
     assert!(leftover.is_empty(), "{leftover:?}");
-    assert!(r.echo.iter().any(|l| l.contains("recursion limit")));
+    assert!(
+        r.echo
+            .iter()
+            .any(|l| l.contains("alias loop calls itself, so Vosh stopped it after 16 steps")),
+        "{:?}",
+        r.echo
+    );
 }
 
 #[test]

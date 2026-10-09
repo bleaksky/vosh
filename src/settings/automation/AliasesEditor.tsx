@@ -4,6 +4,7 @@ import {
   aliasKey,
   aliasStore,
   blankAlias,
+  coveredAliasNotes,
   jsonListText,
   loadAliases,
   normalizeAlias,
@@ -14,7 +15,7 @@ import {
 } from '../../automation/automationRecords';
 import { withGroup } from '../../automation/automationTriggers';
 import { subscribeAliasesChanged } from '../../ipc/automation';
-import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
+import { Card, CardNote, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';
 import type { DetailProps, EditorProps, KindSpec } from './types';
@@ -31,6 +32,7 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
   load: (profile) => loadAliases(aliasStore(profile)),
   save: (draft, _written, profile) => saveAliasDraft(draft, aliasStore(profile)),
   validate: validateAliases,
+  rowNotes: coveredAliasNotes,
   entry: (a) => ({
     name: a.name,
     meta: (a.script ?? a.expansion).split('\n')[0],
@@ -54,7 +56,7 @@ export function AliasesEditor(props: EditorProps) {
   return <DraftEditor spec={ALIASES_SPEC} {...props} />;
 }
 
-function AliasDetail({ value: a, update, fresh, revealInList }: DetailProps<AliasRecord>) {
+function AliasDetail({ value: a, update, fresh, revealInList, note }: DetailProps<AliasRecord>) {
   const [advanced, setAdvanced] = useState(a.script !== undefined);
   const advancedId = useId();
   const nameRef = useRef<HTMLInputElement | null>(null);
@@ -68,6 +70,7 @@ function AliasDetail({ value: a, update, fresh, revealInList }: DetailProps<Alia
 
   return (
     <Card className="st-auto-card">
+      {note && <CardNote tone="warn">{note}</CardNote>}
       <Row label="Name">
         <Field ref={nameRef} mono width="100%" value={a.name} onChange={(name) => set({ name })} />
       </Row>

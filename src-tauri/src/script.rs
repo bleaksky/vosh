@@ -74,11 +74,17 @@ pub(crate) fn run_alias_body(
     c: &mut Connection,
     call: &vosh_automation::ScriptCall,
 ) -> ApplyResult {
-    if profile.aliases.is_stopped(&call.source, c.stop_key) {
+    if profile
+        .aliases
+        .is_stopped(call.group.as_deref(), &call.source, c.stop_key)
+    {
         return ApplyResult::default();
     }
     refresh_vars(profile, c);
-    let owner = Owner::Alias(call.source.clone());
+    let owner = Owner::Alias {
+        name: call.source.clone(),
+        group: call.group.clone(),
+    };
     let outcome = c.script.run_body(&owner, &call.body, &call.captures);
     apply_actions(profile, c, outcome)
 }
@@ -113,7 +119,7 @@ pub(crate) fn turn_off_stopped(profile: &mut Profile, key: StopKey, outcome: &Sc
     for owner in &outcome.stopped {
         match owner {
             Owner::Trigger(name) => profile.triggers.stop(name, key),
-            Owner::Alias(name) => profile.aliases.stop(name, key),
+            Owner::Alias { name, group } => profile.aliases.stop(group.as_deref(), name, key),
             Owner::Plugin(_) | Owner::Script(_) | Owner::Typed => {}
         }
     }
@@ -279,11 +285,15 @@ pub(crate) fn apply_actions(
                 result.keep_lua_lines(c, &owner, LuaKind::Error, &text, at.as_ref());
             }
             Action::SetAlias { name, expansion } => {
-                define_alias(profile, name, expansion);
+                define_alias(profile, c.stop_key, name, expansion);
                 result.durable_changed = true;
             }
+            // The alias mud.alias would replace: the one that fires in
+            // this session, else the first Settings lists.
             Action::RemoveAlias(name) => {
-                profile.aliases.remove(&name);
+                if let Some(old) = profile.aliases.chosen(&name, c.stop_key).cloned() {
+                    profile.aliases.remove(old.group.as_deref(), &old.name);
+                }
                 result.durable_changed = true;
             }
             // A plugin's aliases last in its session, so nothing saves.
@@ -390,22 +400,29 @@ pub(crate) fn apply_actions(
     result
 }
 
-/// Define the alias `name`, or replace the one of that name, the way
-/// `mud.alias`, `#alias`, and `#endrec` do. A replaced alias stays in its group, so
-/// the group still turns it on and off. In loadout mode that group is
-/// what keeps a character's alias to that character, even when a script
-/// sets the alias again at launch.
+/// Define the alias `name`, or replace one of that name, the way
+/// `mud.alias`, `#alias`, and `#endrec` do, and answer how a message
+/// names it. When groups hold more than one alias of the name, the one
+/// replaced is the one that fires in the session `key` names, else the
+/// first Settings lists. A replaced alias stays in its group, so the
+/// group still turns it on and off. In loadout mode that group is what
+/// keeps a character's alias to that character, even when a script sets
+/// the alias again at launch. A new alias goes in no group.
 pub(crate) fn define_alias(
     profile: &mut Profile,
+    key: StopKey,
     name: impl Into<String>,
     expansion: impl Into<String>,
-) {
+) -> String {
     let mut alias = Alias::new(name, expansion);
+    alias.name = alias.name.trim().to_string();
     alias.group = profile
         .aliases
-        .get(&alias.name)
+        .chosen(&alias.name, key)
         .and_then(|old| old.group.clone());
+    let label = alias.label();
     profile.aliases.set(alias);
+    label
 }
 
 /// Outcome of `toggle_group`. Reports which stores actually carried

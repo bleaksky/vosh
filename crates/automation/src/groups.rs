@@ -1,6 +1,26 @@
 //! The group switch the alias and trigger stores share.
 
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
+
+/// The order Settings lists groups in: items with no group first, then
+/// each group by its name with case folded, and two names that differ
+/// only in case by their exact text. `compareGroups` in
+/// src/automation/automationList.ts sorts the headings the same way, and
+/// both compare UTF-16 code units, so the alias that fires when two
+/// groups hold one name is the one Settings lists first.
+pub fn compare_groups(a: Option<&str>, b: Option<&str>) -> Ordering {
+    match (a, b) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        (Some(a), Some(b)) => a
+            .to_lowercase()
+            .encode_utf16()
+            .cmp(b.to_lowercase().encode_utf16())
+            .then_with(|| a.encode_utf16().cmp(b.encode_utf16())),
+    }
+}
 
 /// The groups you turned off. It keeps the off names rather than the on
 /// ones, so a group you just named starts on. An empty name means no
@@ -66,7 +86,32 @@ impl GroupSwitch {
 
 #[cfg(test)]
 mod tests {
-    use super::GroupSwitch;
+    use std::cmp::Ordering;
+
+    use super::{compare_groups, GroupSwitch};
+
+    #[test]
+    fn groups_sort_as_settings_lists_them() {
+        let mut names = vec![
+            Some("orla"),
+            Some("Maren"),
+            None,
+            Some("Maren2"),
+            Some("maren"),
+        ];
+        names.sort_by(|a, b| compare_groups(*a, *b));
+        assert_eq!(
+            names,
+            [
+                None,
+                Some("Maren"),
+                Some("maren"),
+                Some("Maren2"),
+                Some("orla")
+            ]
+        );
+        assert_eq!(compare_groups(Some("Orla"), Some("Orla")), Ordering::Equal);
+    }
 
     #[test]
     fn a_switch_says_whether_the_group_turned() {

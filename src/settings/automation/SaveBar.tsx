@@ -10,6 +10,11 @@ interface SaveBarProps {
   /** Another quiet action on the left, like Loadouts' Turn all off. */
   extra?: ReactNode;
   status: SaveStatus;
+  /** What stopped the last Save, in red beside the buttons, until you
+   *  fix it, save, or discard. */
+  error?: string | undefined;
+  /** The id the error line takes, so the rows it names can point at it. */
+  errorId?: string | undefined;
   /** Save stays off while the page cannot save, like a JSON view that
    *  does not read. */
   canSave: boolean;
@@ -22,12 +27,15 @@ interface SaveBarProps {
  *  hairline on top. `New trigger` and the save state on the left,
  *  Discard and Save on the right. The state reads `Unsaved changes`
  *  while the draft differs from the last save and `Saved` for two
- *  seconds after one. */
+ *  seconds after one. What stopped a Save sits in red just left of
+ *  Discard, where your eye is when you press Save. */
 export function SaveBar({
   newLabel,
   onNew,
   extra,
   status,
+  error,
+  errorId,
   canSave,
   busy,
   onDiscard,
@@ -47,6 +55,11 @@ export function SaveBar({
           {status === 'dirty' ? 'Unsaved changes' : status === 'saved' ? 'Saved' : ''}
         </span>
       </div>
+      {error && (
+        <p id={errorId} className="st-savebar-error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="st-savebar-actions">
         <Button onClick={onDiscard} disabled={!dirty || busy}>
           Discard

@@ -27,6 +27,7 @@
     "automate.lua-scripts": "3.8",
     "automate.alerts": "3.9",
     "automate.lua-panes": "3.10",
+    "automate.alias-per-character": "3.11",
     "shape.arrange-panels": "4.1",
     "shape.use-the-map": "4.2",
     "shape.chat-pane": "4.3",

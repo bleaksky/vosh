@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   addDraftItem,
   countPhrase,
@@ -19,6 +19,7 @@ import {
   updateDraftItem,
   type Draft,
   type SavedWrite,
+  type SaveProblem,
 } from '../../automation/automationDraft';
 import {
   buildSections,
@@ -78,6 +79,27 @@ interface DraftEditorProps<T> {
 const SAVED_MS = 2000;
 const JSON_PARSE_MS = 150;
 
+/** What stopped the last Save, as the save bar shows it. `uids` are the
+ *  rows the list marks. `check` is set for a problem the list itself
+ *  has, which goes away as you fix it. */
+interface SaveError {
+  message: string;
+  uids: readonly string[];
+  check: boolean;
+}
+
+const NO_UIDS: readonly string[] = [];
+
+/** `problem` about the draft values, with the uids of the items it
+ *  names, in list order. */
+function errorOf<T>(problem: SaveProblem, draft: Draft<T>): SaveError {
+  const uids = problem.at.flatMap((at) => {
+    const item = draft.items[at];
+    return item ? [item.uid] : [];
+  });
+  return { message: problem.message, uids, check: true };
+}
+
 /** One kind's list, detail card, and save bar over a draft. The draft
  *  loads when the editor mounts, from the profile Settings shows. Save
  *  validates, writes it through the kind's API to that profile, and
@@ -109,6 +131,8 @@ export function DraftEditor<T>({
   const [revealSeq, setRevealSeq] = useState(0);
   const [jsonText, setJsonText] = useState('');
   const [jsonBad, setJsonBad] = useState(false);
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
+  const errorId = useId();
   const draftRef = useRef<Draft<T> | null>(null);
   const selectedRef = useRef<string | null>(null);
   const pinnedUid = pinned?.uid ?? null;
@@ -237,6 +261,41 @@ export function DraftEditor<T>({
       return { uid: item.uid, ...entry };
     });
   }, [draft, spec, entryCache]);
+  // The warn notes of the rows, by uid, like an alias another group's
+  // alias of its name covers.
+  const byName = groupSwitches?.byName;
+  const rowNotes = useMemo(() => {
+    const notes = new Map<string, string>();
+    if (!draft || !spec.rowNotes) return notes;
+    const values = draft.items.map((item) => item.value);
+    const groupOn = (group: string) => byName?.get(group)?.enabled ?? true;
+    spec.rowNotes(values, groupOn).forEach((note, at) => {
+      if (note) notes.set(draft.items[at].uid, note);
+    });
+    return notes;
+  }, [draft, spec, byName]);
+  const errorUids = useMemo(() => new Set(saveError?.uids ?? NO_UIDS), [saveError]);
+
+  // A problem the list has stays in the save bar while you fix it, and
+  // follows your edits: it names what is still wrong, and goes once
+  // nothing is.
+  useEffect(() => {
+    if (!draft || !saveError?.check) return;
+    const problem = spec.validate?.(draftValues(draft)) ?? null;
+    if (!problem) {
+      setSaveError(null);
+      return;
+    }
+    const next = errorOf(problem, draft);
+    if (
+      next.message !== saveError.message ||
+      next.uids.length !== saveError.uids.length ||
+      next.uids.some((uid, i) => uid !== saveError.uids[i])
+    ) {
+      setSaveError(next);
+    }
+  }, [draft, saveError, spec]);
+
   const allSections = useMemo(() => buildSections(entries), [entries]);
   const sections = useMemo(() => filterSections(allSections, filter), [allSections, filter]);
   // The rows you can see. A folded group's rows leave it.
@@ -428,6 +487,7 @@ export function DraftEditor<T>({
     }
     setJsonBad(false);
     pinned?.discard();
+    setSaveError(null);
     onError(null);
   };
 
@@ -435,11 +495,26 @@ export function DraftEditor<T>({
     if (jsonPending.current !== null && !applyJson(jsonPending.current)) return;
     const d = draftRef.current;
     if (!d || busy) return;
-    const problem = spec.validate?.(draftValues(d)) ?? pinned?.validate?.() ?? null;
-    if (problem) {
-      onError(problem);
+    const listProblem = spec.validate?.(draftValues(d)) ?? null;
+    if (listProblem) {
+      // Mark the rows it names and select the first, so its card shows
+      // what to fix.
+      const error = errorOf(listProblem, d);
+      setSaveError(error);
+      const first = error.uids[0];
+      if (first !== undefined) {
+        setFilter('');
+        setSelected(first);
+        reveal(first);
+      }
       return;
     }
+    const pinnedProblem = pinned?.validate?.() ?? null;
+    if (pinnedProblem) {
+      setSaveError({ message: pinnedProblem, uids: NO_UIDS, check: false });
+      return;
+    }
+    setSaveError(null);
     onError(null);
     setBusy(true);
     savingRef.current = true;
@@ -465,7 +540,7 @@ export function DraftEditor<T>({
       // so the next Save sends only the rest and makes nothing twice.
       const current = draftRef.current;
       if (!reloaded && current && writes.length > 0) setDraft(markAllWritten(current, writes));
-      onError(automationSaveError(e));
+      setSaveError({ message: automationSaveError(e), uids: NO_UIDS, check: false });
     } finally {
       savingRef.current = false;
       setBusy(false);
@@ -506,6 +581,7 @@ export function DraftEditor<T>({
           update: update(uid),
           fresh: fresh === uid,
           revealInList: () => reveal(uid),
+          note: rowNotes.get(uid),
         })}
         {canDelete && (
           <div className="st-auto-detail-actions">
@@ -551,6 +627,9 @@ export function DraftEditor<T>({
               monoName={spec.monoName ?? false}
               monoMeta={spec.monoMeta ?? false}
               warnNotes={warnNotes}
+              rowNotes={rowNotes}
+              errorUids={errorUids}
+              errorId={saveError ? errorId : undefined}
               folded={folds.folded}
               onFold={folds.setFold}
               groupSwitches={groupSwitches}
@@ -576,6 +655,8 @@ export function DraftEditor<T>({
         onNew={onNew}
         extra={draft && barExtra ? barExtra(draft, setDraft) : undefined}
         status={status}
+        error={saveError?.message}
+        errorId={errorId}
         canSave={!(jsonOpen && jsonBad)}
         busy={busy || !draft}
         onDiscard={onDiscard}

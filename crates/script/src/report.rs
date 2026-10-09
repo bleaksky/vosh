@@ -139,8 +139,12 @@ pub(crate) fn stop_lines(owner: &Owner, site: &Site, stop: &Stop) -> Vec<Action>
                 ),
             },
         ],
-        (Owner::Trigger(name) | Owner::Alias(name), _) => vec![error(format!(
+        (Owner::Trigger(name), _) => vec![error(format!(
             "{what} {name} stays off until you save it or restart Vosh."
+        ))],
+        (Owner::Alias { .. }, _) => vec![error(format!(
+            "{what} {} stays off until you save it or restart Vosh.",
+            owner.alias_label()
         ))],
         (Owner::Script(_), _) => vec![error(format!("{what} It stays off until #script reload."))],
         (Owner::Typed, Site::LuaTrigger { .. } | Site::Gmcp { .. }) => {
@@ -212,7 +216,7 @@ fn subject(owner: &Owner, site: &Site) -> String {
     match owner {
         Owner::Plugin(name) | Owner::Script(name) => name.clone(),
         Owner::Trigger(name) => format!("the Lua in trigger {name}"),
-        Owner::Alias(name) => format!("the Lua in alias {name}"),
+        Owner::Alias { .. } => format!("the Lua in alias {}", owner.alias_label()),
         Owner::Typed => match site {
             Site::Entry => "your #lua line".to_string(),
             Site::LuaTrigger { name, .. } => format!("the Lua trigger {name}"),
@@ -357,8 +361,16 @@ mod tests {
             }]
         );
         assert_eq!(
-            texts(&stop_lines(&Owner::Alias("heal".into()), &Site::Entry, &time)),
+            texts(&stop_lines(&Owner::alias("heal"), &Site::Entry, &time)),
             ["Vosh stopped the Lua in alias heal after 100 ms. heal stays off until you save it or restart Vosh."]
+        );
+        let grouped = Owner::Alias {
+            name: "heal".into(),
+            group: Some("Orla".into()),
+        };
+        assert_eq!(
+            texts(&stop_lines(&grouped, &Site::Entry, &time)),
+            ["Vosh stopped the Lua in alias heal in Orla after 100 ms. heal in Orla stays off until you save it or restart Vosh."]
         );
         assert_eq!(
             texts(&stop_lines(

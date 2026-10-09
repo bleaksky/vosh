@@ -19,6 +19,8 @@ import {
 import {
   activeLoadouts,
   aliasesForSave,
+  aliasKey,
+  coveredAliasNotes,
   loadAliases,
   saveAliasDraft,
   automationSaveError,
@@ -47,6 +49,7 @@ import {
   validateAliases,
   validateMacros,
   validateTimers,
+  type AliasRecord,
   type MacroRecord,
   type MacroStoreApi,
   type TimerRecord,
@@ -97,12 +100,69 @@ describe('aliases', () => {
     expect(normalizeAlias({ name: 'x', expansion: 'y', script: '' }).script).toBe('');
   });
 
-  it('asks for unique names', () => {
-    expect(validateAliases([normalizeAlias({ name: 'kk', expansion: '' })])).toBeNull();
-    expect(validateAliases([normalizeAlias({ name: ' ' })])).toContain('name');
-    expect(
-      validateAliases([normalizeAlias({ name: 'kk' }), normalizeAlias({ name: 'kk' })]),
-    ).toContain('Two aliases');
+  it('asks for a name of one word, once in each group', () => {
+    const alias = (name: string, group?: string) => normalizeAlias({ name, group });
+    expect(validateAliases([alias('kk')])).toBeNull();
+    expect(validateAliases([alias('kk'), alias(' ')])).toEqual({
+      message: 'This alias needs a name before you can save.',
+      at: [1],
+    });
+    expect(validateAliases([alias('kk'), alias('kk')])).toEqual({
+      message: 'You have two aliases named “kk” with no group. Rename one or give it a group.',
+      at: [0, 1],
+    });
+    // Two groups may each hold the name, and one group holds it once.
+    const ds = [alias('ds', 'Tolliver'), alias('ds', 'Maren'), alias('ds')];
+    expect(validateAliases(ds)).toBeNull();
+    expect(validateAliases([...ds, alias('ds', 'Maren')])).toEqual({
+      message: 'Maren has two aliases named “ds”. Rename one or move it to another group.',
+      at: [1, 3],
+    });
+    expect(validateAliases([alias('kk'), { ...alias(''), name: 'd s' }])).toEqual({
+      message: 'An alias name is one word, so “d s” won’t work. Take out the space.',
+      at: [1],
+    });
+  });
+
+  it('trims the name on load and on save', () => {
+    const loaded = normalizeAlias({ name: ' ds ', expansion: 'cast', group: ' Orla ' });
+    expect(loaded).toEqual({ name: 'ds', expansion: 'cast', enabled: true, group: 'Orla' });
+    const saved = JSON.parse(aliasesForSave([{ ...loaded, name: 'ds  ' }])) as AliasRecord[];
+    expect(saved[0].name).toBe('ds');
+    // A name with a space after it is still the same alias.
+    expect(aliasKey({ ...loaded, name: 'ds ' })).toBe(aliasKey(loaded));
+  });
+
+  it('notes the alias another group covers, naming the one that fires', () => {
+    const alias = (name: string, group?: string, enabled = true) => ({
+      ...normalizeAlias({ name, group }),
+      enabled,
+    });
+    const list = [
+      alias('ds', 'Tolliver'),
+      alias('ds', 'Maren'),
+      alias('res', 'Tolliver'),
+      alias('res', 'Maren', false),
+    ];
+    const allOn = () => true;
+    expect(coveredAliasNotes(list, allOn)).toEqual([
+      'Maren’s ds fires instead while both groups are on.',
+      null,
+      null,
+      null,
+    ]);
+    // Maren off, Tolliver's ds fires, and the note says when it would not.
+    expect(coveredAliasNotes(list, (g) => g !== 'Maren')[0]).toBe(
+      'Maren’s ds fires instead whenever the Maren group is on.',
+    );
+    // An alias in no group comes first.
+    expect(coveredAliasNotes([...list, alias('ds')], allOn)).toEqual([
+      'Your ds with no group fires instead.',
+      'Your ds with no group fires instead.',
+      null,
+      null,
+      null,
+    ]);
   });
 });
 
@@ -254,11 +314,16 @@ describe('macros', () => {
 
   it('asks for a key, a command, and unique keys', () => {
     expect(validateMacros(macros)).toBeNull();
-    expect(validateMacros([{ key: '', command: 'x', enabled: true }])).toContain('Press a key');
-    expect(validateMacros([{ key: 'F1', command: ' ', enabled: true }])).toBe(
+    expect(validateMacros([{ key: '', command: 'x', enabled: true }])?.message).toContain(
+      'Press a key',
+    );
+    expect(validateMacros([{ key: 'F1', command: ' ', enabled: true }])?.message).toBe(
       'The macro on F1 needs a command.',
     );
-    expect(validateMacros([macros[0], macros[0]])).toContain('Two macros use F1');
+    expect(validateMacros([macros[0], macros[0]])).toEqual({
+      message: 'Two macros use F1. Give each one its own key.',
+      at: [0, 1],
+    });
   });
 
   describe('a preset macro', () => {
@@ -286,7 +351,7 @@ describe('macros', () => {
       expect(validateMacros(stored)).toBeNull();
       expect(validateMacros([...stored, { ...north, command: ' ' }])).toBeNull();
       // Two of yours on one key still clash.
-      expect(validateMacros([...stored, { ...rec, command: 'rest' }])).toBe(
+      expect(validateMacros([...stored, { ...rec, command: 'rest' }])?.message).toBe(
         'Two macros use Numpad3. Give each one its own key.',
       );
     });
@@ -581,7 +646,10 @@ describe('timers', () => {
 
   it('asks for a command', () => {
     expect(validateTimers(timers)).toBeNull();
-    expect(validateTimers([{ ...blankTimer(), name: 'Rest' }])).toContain('Rest');
+    expect(validateTimers([...timers, { ...blankTimer(), name: 'Rest' }])).toEqual({
+      message: 'The timer “Rest” needs a command.',
+      at: [timers.length],
+    });
   });
 });
 

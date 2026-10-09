@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { automationSaveError } from '../../automation/automationRecords';
-import { groupSwitchesLoadError, switchesByName, withSwitch } from '../../automation/groupSwitches';
+import {
+  groupSwitchesLoadError,
+  readHold,
+  switchesByName,
+  withSwitch,
+} from '../../automation/groupSwitches';
 import {
   listGroupSwitches,
+  newGroupHold,
   setGroupEnabled,
   subscribeGroupsChanged,
   type GroupList,
   type GroupSwitch,
+  type LoadoutHold,
 } from '../../ipc/automation';
 import { subscribeLoadoutsChanged } from '../../ipc/loadouts';
 import { getShownProfile } from '../shownProfile';
@@ -19,6 +26,9 @@ export interface GroupSwitches {
   /** Turn a whole group on or off at once. The switch moves now, and
    *  the store's answer replaces it. */
   turn: (group: string, enabled: boolean) => void;
+  /** What the loadouts would decide about a group you named but have
+   *  not saved, or null while they have no opinion. */
+  newHold?: LoadoutHold | null;
 }
 
 const NONE: ReadonlyMap<string, GroupSwitch> = new Map();
@@ -35,6 +45,7 @@ export function useGroupSwitches(
   onError: (message: string | null) => void,
 ): GroupSwitches | null {
   const [byName, setByName] = useState<ReadonlyMap<string, GroupSwitch>>(NONE);
+  const [newHold, setNewHold] = useState<LoadoutHold | null>(null);
   // Only the newest answer lands, so a slow load never undoes a switch.
   const seq = useRef(0);
 
@@ -50,6 +61,10 @@ export function useGroupSwitches(
         // message, since that would hide a save error.
         if (seq.current === mine) onError(groupSwitchesLoadError);
       });
+    // Only a note hangs on this one, so a reply that fails shows none.
+    newGroupHold(list, getShownProfile())
+      .then((hold) => setNewHold(readHold(hold)))
+      .catch(() => setNewHold(null));
   }, [list, onError]);
 
   useEffect(() => {
@@ -93,5 +108,5 @@ export function useGroupSwitches(
     [list, onError, reload],
   );
 
-  return list ? { byName, turn } : null;
+  return list ? { byName, turn, newHold } : null;
 }

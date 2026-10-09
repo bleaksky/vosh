@@ -1,6 +1,7 @@
 import { resetPanelLayout } from '../../panel/panelReset';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { appShortcut, type SettingsShortcutId } from '../../lib/appMenu';
+import { compareAliasGroups, normalizeAlias } from '../../automation/automationRecords';
 import { exportAliases } from '../../ipc/automation';
 import { type PromptShow } from '../../ipc/prompt';
 import type { WritingKind } from '../../ipc/writing';
@@ -707,29 +708,36 @@ export async function chooseTheme(id: string): Promise<void> {
  *  run immediately. Ones that read what you type after the name insert
  *  the alias name into the input for the user to finish. A Lua alias
  *  runs its script and ignores its expansion, so its row shows and
- *  searches the script, the way the Aliases list in Settings does. */
+ *  searches the script, the way the Aliases list in Settings does.
+ *  Two groups may each hold an alias of one name, and a row sends the
+ *  name, so each name gets one row, the alias Settings lists first. Its
+ *  id carries its group. */
 export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry[]> {
   try {
     const json = await exportAliases();
     const parsed: unknown = JSON.parse(json);
     if (!Array.isArray(parsed)) return [];
+    const aliases = parsed
+      .map(normalizeAlias)
+      .filter((a) => a.name.length > 0 && a.enabled)
+      .sort((a, b) => (a.name === b.name ? compareAliasGroups(a, b) : 0));
     const rows: PaletteEntry[] = [];
-    for (const raw of parsed) {
-      if (!raw || typeof raw !== 'object') continue;
-      const r = raw as { name?: unknown; expansion?: unknown; script?: unknown; enabled?: unknown };
-      const name = typeof r.name === 'string' ? r.name.trim() : '';
-      if (name.length === 0 || r.enabled === false) continue;
-      const script = typeof r.script === 'string' ? r.script : null;
-      const body = script ?? (typeof r.expansion === 'string' ? r.expansion : '');
+    const named = new Set<string>();
+    for (const alias of aliases) {
+      const { name, group } = alias;
+      if (named.has(name)) continue;
+      named.add(name);
+      const script = alias.script ?? null;
+      const body = script ?? alias.expansion;
       const meta = body.split('\n')[0];
       // A script reads the words after the name from its captures
       // table. Any use of it counts, whatever index the words start at.
       const takesArgs = script !== null ? /\bcaptures\b/.test(script) : /%\d|\$\d/.test(body);
       rows.push({
-        id: `alias-${name}`,
+        id: group ? `alias-${name}-in-${group}` : `alias-${name}`,
         section: 'aliases',
         title: name,
-        keywords: body,
+        keywords: group ? `${body} ${group}` : body,
         ...(meta ? { meta } : {}),
         metaMono: true,
         searchOnly: true,

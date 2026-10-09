@@ -2105,6 +2105,12 @@
   box-shadow: inset 0 0 0 1px var(--warn);
 }
 
+/* A row a Save problem names, like two aliases of one name in one
+   group, carries a 1 px danger ring until you fix it. */
+.st-auto-row.is-error {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
 /* The list scrolls, so the ring sits inside the row. */
 .st-auto-row:focus-visible {
   outline: 2px solid var(--accent);
@@ -2682,6 +2688,19 @@
   font-size: 12px;
   line-height: 16px;
   white-space: nowrap;
+}
+
+/* What stopped a Save, 12/400 in the danger text color, right aligned
+   against Discard. It takes the room the left side leaves and wraps to
+   a second line before it would push the buttons. */
+.st-savebar-error {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: right;
 }
 
 /* ── Input, Prompt (InputPrompt) ───────────────────────────────────── */

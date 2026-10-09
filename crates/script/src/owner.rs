@@ -15,11 +15,34 @@ pub enum Owner {
     Typed,
     /// The Script action of the trigger of this name.
     Trigger(String),
-    /// The Lua body of the alias of this name.
-    Alias(String),
+    /// The Lua body of the alias of this name in this group, None for
+    /// the one in no group. Two groups may each hold an alias of one
+    /// name.
+    Alias { name: String, group: Option<String> },
 }
 
 impl Owner {
+    /// The owner of the body of the alias `name` in no group.
+    pub fn alias(name: impl Into<String>) -> Self {
+        Owner::Alias {
+            name: name.into(),
+            group: None,
+        }
+    }
+
+    /// How the lines name an alias: its name, and its group after it
+    /// when it has one, like `ds in Tolliver`. Empty for any other owner.
+    pub(crate) fn alias_label(&self) -> String {
+        match self {
+            Owner::Alias {
+                name,
+                group: Some(group),
+            } => format!("{name} in {group}"),
+            Owner::Alias { name, group: None } => name.clone(),
+            _ => String::new(),
+        }
+    }
+
     /// The tag the alerts of this owner carry, the name `#scripts` lists
     /// it under, such as `plugin:vitals_alert`.
     pub fn tag(&self) -> String {
@@ -33,7 +56,7 @@ impl Owner {
             Owner::Script(name) => name.clone(),
             Owner::Typed => "#lua".to_string(),
             Owner::Trigger(name) => format!("trigger {name}"),
-            Owner::Alias(name) => format!("alias {name}"),
+            Owner::Alias { .. } => format!("alias {}", self.alias_label()),
         }
     }
 
@@ -57,7 +80,7 @@ impl Owner {
     pub(crate) fn body_chunk(&self) -> String {
         match self {
             Owner::Trigger(name) => format!("=trigger {name}"),
-            Owner::Alias(name) => format!("=alias {name}"),
+            Owner::Alias { .. } => format!("=alias {}", self.alias_label()),
             Owner::Typed => "=#lua".to_string(),
             Owner::Plugin(name) | Owner::Script(name) => format!("={name}"),
         }

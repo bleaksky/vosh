@@ -75,6 +75,35 @@ pub(crate) fn loadout_hold(set: &LoadoutSet, group: &str) -> Option<LoadoutHold>
     Some(LoadoutHold { on, by })
 }
 
+/// What `set` decides about a group no loadout lists, such as one you
+/// just named in Settings: off while any active loadout lists groups or
+/// the catalog is dormant, so it goes off at the next launch, profile
+/// switch or Loadouts save, and None while the loadouts have no opinion.
+/// Vosh never adds the group to a loadout for you, since a loadout says
+/// which groups a character plays and a new group may belong to another
+/// character.
+pub(crate) fn new_group_hold(set: &LoadoutSet) -> Option<LoadoutHold> {
+    if set.dormant {
+        return Some(LoadoutHold {
+            on: false,
+            by: Vec::new(),
+        });
+    }
+    if set.effective_enabled_groups().is_empty() {
+        return None;
+    }
+    let mut by: Vec<String> = Vec::new();
+    for name in &set.active {
+        let lists = set
+            .get(name)
+            .is_some_and(|loadout| !loadout.enabled_groups.is_empty());
+        if lists && !by.contains(name) {
+            by.push(name.clone());
+        }
+    }
+    Some(LoadoutHold { on: false, by })
+}
+
 /// Apply whatever group state the loadout set actually calls for:
 /// explicit dormancy wins, otherwise the union rules run (including
 /// the no-opinion guard). Every apply point (startup, profile switch,
@@ -239,6 +268,24 @@ mod tests {
             loadouts: vec![healer, warrior, Loadout::empty("Quiet")],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_new_group_is_held_off_as_a_group_no_loadout_lists() {
+        let both = set_of(&["Healer", "Warrior", "Quiet"], false);
+        assert_eq!(new_group_hold(&both), loadout_hold(&both, "maren"));
+        assert_eq!(
+            new_group_hold(&both),
+            Some(LoadoutHold {
+                on: false,
+                by: vec!["Healer".into(), "Warrior".into()],
+            })
+        );
+        assert_eq!(new_group_hold(&set_of(&["Quiet"], false)), None);
+        assert_eq!(
+            new_group_hold(&set_of(&[], true)),
+            loadout_hold(&set_of(&[], true), "maren")
+        );
     }
 
     #[test]

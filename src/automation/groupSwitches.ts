@@ -7,6 +7,16 @@
 import type { GroupSwitch, LoadoutHold } from '../ipc/automation';
 import { listJoin } from '../lib/text';
 
+/** The hold a reply to groups_new_hold carries, or null for none. */
+export function readHold(raw: unknown): LoadoutHold | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  return {
+    on: r.on === true,
+    by: Array.isArray(r.by) ? r.by.filter((n): n is string => typeof n === 'string') : [],
+  };
+}
+
 /** The switches of a list by group name. A reply that is not a list
  *  holds none. */
 export function switchesByName(list: unknown): ReadonlyMap<string, GroupSwitch> {
@@ -17,13 +27,8 @@ export function switchesByName(list: unknown): ReadonlyMap<string, GroupSwitch> 
     const r = raw as Record<string, unknown>;
     if (typeof r.name !== 'string' || r.name === '') continue;
     const sw: GroupSwitch = { name: r.name, enabled: r.enabled !== false };
-    const hold = r.loadouts as Record<string, unknown> | null | undefined;
-    if (hold && typeof hold === 'object') {
-      sw.loadouts = {
-        on: hold.on === true,
-        by: Array.isArray(hold.by) ? hold.by.filter((n): n is string => typeof n === 'string') : [],
-      };
-    }
+    const hold = readHold(r.loadouts);
+    if (hold) sw.loadouts = hold;
     out.set(sw.name, sw);
   }
   return out;
@@ -68,4 +73,17 @@ export function loadoutHoldNote(hold: LoadoutHold, enabled: boolean): string {
   if (turned) return `${who} ${verb} this group ${hold.on ? 'on' : 'off'} again ${UNTIL}.`;
   if (hold.on) return `${who} ${verb} this group on.`;
   return `${who} ${one ? 'leaves' : 'leave'} this group off.`;
+}
+
+/** The note under the heading of a group you named but have not saved,
+ *  while the loadouts turn off every group none of them lists. Vosh
+ *  never adds the group to a loadout for you, since it may belong to
+ *  another character. */
+export function newGroupNote(hold: LoadoutHold): string {
+  if (hold.by.length === 0) {
+    return `Every loadout is off, so this new group goes off ${UNTIL}.`;
+  }
+  const one = hold.by.length === 1;
+  const who = `The ${listJoin(hold.by)} ${one ? 'loadout' : 'loadouts'}`;
+  return `${who} ${one ? 'doesn’t' : 'don’t'} list this new group, so it goes off ${UNTIL}. Add it to a loadout to keep it on.`;
 }

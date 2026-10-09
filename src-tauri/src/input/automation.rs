@@ -33,19 +33,55 @@ pub(super) fn slash_alias(profile: &mut Profile, c: &Connection, args: &str) -> 
             "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
         ));
     }
-    crate::script::define_alias(profile, name, expansion);
-    InputResult::echo_line(format!("alias {name} set"))
+    let label = crate::script::define_alias(profile, c.stop_key, name, expansion);
+    InputResult::echo_line(format!("alias {label} set"))
 }
 
+/// `#unalias <name> [group]`. With a group it removes the alias of that
+/// name in that group. Without one it removes the alias of that name in
+/// no group, or the only alias of that name, and asks for the group
+/// when more than one group holds the name.
 pub(super) fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
-    let name = args.trim();
+    let (name, group) = split_first_word(args.trim());
     if name.is_empty() {
-        return InputResult::error("usage #unalias <name>");
+        return InputResult::error("usage #unalias <name> [group]");
     }
-    if profile.aliases.remove(name) {
-        InputResult::echo_line(format!("alias {name} removed"))
-    } else {
-        InputResult::error(format!("alias {name} not found"))
+    let group = Some(group.trim()).filter(|g| !g.is_empty());
+    let found = profile.aliases.named(name);
+    let target = match group {
+        Some(group) => profile.aliases.get_in(Some(group), name),
+        None => profile
+            .aliases
+            .get_in(None, name)
+            .or_else(|| (found.len() == 1).then(|| &found[0])),
+    };
+    let Some(target) = target.cloned() else {
+        if group.is_none() && found.len() > 1 {
+            let groups: Vec<&str> = found.iter().filter_map(|a| a.group.as_deref()).collect();
+            let example = groups.first().copied().unwrap_or_default();
+            return InputResult::error(format!(
+                "{name} is in {}, so name the group too, like #unalias {name} {example}",
+                join_and(&groups)
+            ));
+        }
+        let label = match group {
+            Some(group) => format!("{name} in {group}"),
+            None => name.to_string(),
+        };
+        return InputResult::error(format!("alias {label} not found"));
+    };
+    profile
+        .aliases
+        .remove(target.group.as_deref(), &target.name);
+    InputResult::echo_line(format!("alias {} removed", target.label()))
+}
+
+/// `a`, `a and b`, or `a, b and c`.
+fn join_and(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 
@@ -60,7 +96,7 @@ pub(super) fn slash_aliases_list(profile: &Profile, c: &Connection) -> InputResu
     lines.push(format!("{count} alias(es):"));
     for a in aliases {
         let mark = if a.enabled { ' ' } else { '*' };
-        lines.push(format!("  {mark} {} -> {}", a.name, a.expansion));
+        lines.push(format!("  {mark} {} -> {}", a.label(), a.expansion));
     }
     // A plugin's aliases last while it runs, and Vosh never saves them.
     for (plugin, a) in from_plugins {
@@ -442,7 +478,7 @@ pub(super) fn slash_endrec(profile: &mut Profile, c: &mut Connection) -> InputRe
     let expansion = recorder.commands.join(";");
     let name = recorder.name.clone();
     let count = recorder.commands.len();
-    crate::script::define_alias(profile, name.clone(), expansion);
+    crate::script::define_alias(profile, c.stop_key, name.clone(), expansion);
     InputResult::echo_line(format!(
         "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
     ))

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Draft, KindNoun, SavedWrite } from '../../automation/automationDraft';
+import type { Draft, KindNoun, SavedWrite, SaveProblem } from '../../automation/automationDraft';
 import type { ListEntry } from '../../automation/automationList';
 import type { GroupList } from '../../ipc/automation';
 
@@ -46,6 +46,9 @@ export interface DetailProps<T> {
   /** Call after a Group change lands, so the list shows the row under
    *  its new heading. */
   revealInList: () => void;
+  /** What the list ring on this item says, like an alias another group's
+   *  alias of its name covers. Undefined for an item with none. */
+  note?: string | undefined;
 }
 
 /** Everything one kind's editor needs. Keep a spec stable across
@@ -80,8 +83,12 @@ export interface KindSpec<T> {
     written: (write: SavedWrite<T>) => void,
     profile: string | undefined,
   ) => Promise<void>;
-  /** Why the draft cannot save yet, or null. */
-  validate?: (values: T[]) => string | null;
+  /** Why the draft cannot save yet, and which items, or null. */
+  validate?: (values: T[]) => SaveProblem | null;
+  /** A note for each item the list rings in warn, or null, given every
+   *  value and whether a group is on now. The detail card shows it too.
+   *  Aliases note the one another group's alias of its name covers. */
+  rowNotes?: (values: readonly T[], groupOn: (group: string) => boolean) => (string | null)[];
   /** The list row for a value, less its uid. */
   entry: (value: T) => Omit<ListEntry, 'uid'>;
   /** A stable name for an item across a reload, like a trigger's name. */

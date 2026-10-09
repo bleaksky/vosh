@@ -855,7 +855,7 @@ impl ScriptEngine {
                 self.stopped.insert(owner.clone(), reason);
                 self.owned_callbacks(owner)
             }
-            Owner::Trigger(_) | Owner::Alias(_) => self.owned_callbacks(owner),
+            Owner::Trigger(_) | Owner::Alias { .. } => self.owned_callbacks(owner),
         };
         let mut actions = self.release(&ids);
         if let Owner::Plugin(name) = owner {
@@ -2303,7 +2303,7 @@ mod tests {
         let mut e = ScriptEngine::new().unwrap();
         let actions = e
             .run_body(
-                &Owner::Alias("later".into()),
+                &Owner::alias("later"),
                 "mud.timer(1, function() mud.send(captures[1]) end)",
                 &["later".to_string()],
             )
@@ -2924,7 +2924,7 @@ mod tests {
         );
         assert_eq!(outcome.stopped, [tells]);
         assert_eq!(outcome.actions.len(), 1);
-        let heal = Owner::Alias("heal".into());
+        let heal = Owner::alias("heal");
         let outcome = e.run_body(&heal, "while true do end", &[]);
         assert_eq!(
             error_lines(&outcome),
@@ -3070,7 +3070,7 @@ mod tests {
         let mut e = ScriptEngine::new().unwrap();
         let spin = "while true do end";
         let tells = Owner::Trigger("tells".into());
-        let heal = Owner::Alias("heal".into());
+        let heal = Owner::alias("heal");
         let combat = Owner::Script("combat.lua".into());
         for (owner, outcome) in [
             (tells.clone(), e.run_body(&tells, spin, &[])),

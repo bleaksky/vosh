@@ -277,6 +277,7 @@ pub fn process_on_ground(
                                 .collect();
                             scripts.push(ScriptCall {
                                 source: compiled.trigger.name.clone(),
+                                group: None,
                                 body: body.clone(),
                                 captures,
                             });

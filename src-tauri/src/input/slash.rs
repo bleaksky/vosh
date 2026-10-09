@@ -115,7 +115,7 @@ pub(super) fn handle_slash(
 pub(super) const HELP_TEXT: &str = "\
 slash commands:
   #alias <name> <expansion>            define or replace an alias
-  #unalias <name>                      remove an alias
+  #unalias <name> [group]              remove an alias, from one group
   #aliases                             list aliases
   #var <name> <value>                  set a session variable
   #var <name>                          show a variable
