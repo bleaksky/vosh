@@ -438,6 +438,150 @@ fn font_mime(bytes: &[u8]) -> &'static str {
     }
 }
 
+/// The sizes a family draws at, for the Size selects. A face with
+/// outlines scales to any size, half steps such as 13.5 among them. A
+/// bitmap only face holds fixed sizes, its strikes, and draws only those
+/// cleanly, so Settings keeps it to whole sizes, or to its strikes when
+/// the face lists them.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct FontSizing {
+    /// True for a face with outlines, and for a face Vosh cannot judge.
+    pub half_sizes: bool,
+    /// The sizes in pixels a bitmap only face holds, smallest first.
+    /// Empty for a face with outlines or one that lists none.
+    pub strikes: Vec<u32>,
+}
+
+impl FontSizing {
+    /// A face that takes any size.
+    const SCALABLE: Self = Self {
+        half_sizes: true,
+        strikes: Vec::new(),
+    };
+
+    /// A bitmap only face with these strikes.
+    fn bitmap(mut strikes: Vec<u32>) -> Self {
+        strikes.sort_unstable();
+        strikes.dedup();
+        Self {
+            half_sizes: false,
+            strikes,
+        }
+    }
+}
+
+/// The sizes `family` draws at, read from its regular face on the
+/// blocking pool. A family Vosh cannot find or read takes half sizes.
+pub(crate) async fn sizing(family: String) -> FontSizing {
+    tauri::async_runtime::spawn_blocking(move || family_sizing(&family))
+        .await
+        .unwrap_or(FontSizing::SCALABLE)
+}
+
+/// The sizes the regular face of `family` draws at. macOS also asks
+/// CoreText for the face's format, which names a bitmap face that does
+/// not live in an sfnt file.
+#[cfg(target_os = "macos")]
+fn family_sizing(family: &str) -> FontSizing {
+    use core_text::font_descriptor::kCTFontFormatBitmap;
+    if let Some(sizing) = face_for_family(family)
+        .ok()
+        .and_then(|face| face_sizing(&face))
+    {
+        return sizing;
+    }
+    let bitmap = regular_descriptor(family)
+        .and_then(|(descriptor, _)| descriptor.font_format())
+        .is_some_and(|format| format == kCTFontFormatBitmap);
+    if bitmap {
+        FontSizing::bitmap(Vec::new())
+    } else {
+        FontSizing::SCALABLE
+    }
+}
+
+/// The sizes the face of `family` the font scheme serves draws at.
+#[cfg(not(target_os = "macos"))]
+fn family_sizing(family: &str) -> FontSizing {
+    face_for_family(family)
+        .ok()
+        .and_then(|face| face_sizing(&face))
+        .unwrap_or(FontSizing::SCALABLE)
+}
+
+/// The sizes the single face in `face` draws at, from its sfnt tables:
+/// any size for a face with `glyf`, `CFF ` or `CFF2` outlines, else its
+/// strikes from `EBLC`, `CBLC`, `bloc` or `sbix`. A PCF or BDF file, the
+/// bitmap formats Linux keeps, holds fixed sizes too, and Vosh reads no
+/// strikes from them. None for a face it cannot judge.
+fn face_sizing(face: &[u8]) -> Option<FontSizing> {
+    // PCF, PCF packed with gzip, which is how Linux ships most of them,
+    // and BDF.
+    if face.starts_with(b"\x01fcp")
+        || face.starts_with(&[0x1f, 0x8b])
+        || face.starts_with(b"STARTFONT")
+    {
+        return Some(FontSizing::bitmap(Vec::new()));
+    }
+    let tables = sfnt_tables(face)?;
+    let find = |tag: &[u8; 4]| tables.iter().find(|(t, _)| t == tag).map(|(_, body)| *body);
+    if [b"glyf", b"CFF ", b"CFF2"]
+        .iter()
+        .any(|tag| find(tag).is_some())
+    {
+        return Some(FontSizing::SCALABLE);
+    }
+    if let Some(body) = [b"EBLC", b"CBLC", b"bloc"].iter().find_map(|tag| find(tag)) {
+        return Some(FontSizing::bitmap(bitmap_location_strikes(body)));
+    }
+    find(b"sbix").map(|body| FontSizing::bitmap(sbix_strikes(body)))
+}
+
+/// The tables of the single face sfnt `face`, by tag. None for bytes that
+/// are no sfnt face.
+fn sfnt_tables(face: &[u8]) -> Option<Vec<([u8; 4], &[u8])>> {
+    let magic = face.get(..4)?;
+    if ![&[0, 1, 0, 0][..], b"true", b"OTTO", b"typ1"].contains(&magic) {
+        return None;
+    }
+    let count = usize::from(u16::from_be_bytes(face.get(4..6)?.try_into().ok()?));
+    (0..count)
+        .map(|index| {
+            let record = 12 + 16 * index;
+            let tag: [u8; 4] = face.get(record..record + 4)?.try_into().ok()?;
+            let offset = be32(face, record + 8)?;
+            let len = be32(face, record + 12)?;
+            Some((tag, face.get(offset..offset.checked_add(len)?)?))
+        })
+        .collect()
+}
+
+/// The pixel sizes an `EBLC`, `CBLC` or `bloc` table lists: a count at
+/// byte 4, then a 48 byte record for each strike with its vertical pixels
+/// per em at byte 45.
+fn bitmap_location_strikes(table: &[u8]) -> Vec<u32> {
+    let count = be32(table, 4).unwrap_or(0).min(table.len() / 48);
+    (0..count)
+        .filter_map(|index| table.get(8 + 48 * index + 45).copied())
+        .filter(|&ppem| ppem > 0)
+        .map(u32::from)
+        .collect()
+}
+
+/// The pixel sizes an `sbix` table lists: a count at byte 4, then an
+/// offset for each strike, which starts with its pixels per em.
+fn sbix_strikes(table: &[u8]) -> Vec<u32> {
+    let count = be32(table, 4).unwrap_or(0).min(table.len() / 4);
+    (0..count)
+        .filter_map(|index| {
+            let at = be32(table, 8 + 4 * index)?;
+            let ppem = table.get(at..at + 2)?;
+            Some(u32::from(u16::from_be_bytes(ppem.try_into().ok()?)))
+        })
+        .filter(|&ppem| ppem > 0)
+        .collect()
+}
+
 /// The font scheme handler. Serves the face [`face_for_family`] finds
 /// for the family in the URL path, or 404 when there is none. It reads
 /// the font file and asks CoreText about the face, so run it on the
@@ -470,6 +614,152 @@ mod tests {
             && a.iter()
                 .zip(b)
                 .all(|(x, y)| x.family == y.family && x.monospace == y.monospace)
+    }
+
+    /// A single face sfnt with these tables, laid out after the
+    /// directory in order.
+    fn sfnt(tables: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
+        let mut out = vec![0, 1, 0, 0];
+        out.extend_from_slice(&u16::try_from(tables.len()).unwrap().to_be_bytes());
+        out.extend_from_slice(&[0; 6]);
+        let mut offset = 12 + 16 * tables.len();
+        let mut bodies = Vec::new();
+        for (tag, body) in tables {
+            out.extend_from_slice(&tag[..]);
+            out.extend_from_slice(&[0; 4]);
+            out.extend_from_slice(&u32::try_from(offset).unwrap().to_be_bytes());
+            out.extend_from_slice(&u32::try_from(body.len()).unwrap().to_be_bytes());
+            offset += body.len();
+            bodies.extend_from_slice(body);
+        }
+        out.extend(bodies);
+        out
+    }
+
+    /// An `EBLC` table with one strike for each of `ppems`.
+    fn eblc(ppems: &[u8]) -> Vec<u8> {
+        let mut out = vec![0, 2, 0, 0];
+        out.extend_from_slice(&u32::try_from(ppems.len()).unwrap().to_be_bytes());
+        for &ppem in ppems {
+            let mut record = [0u8; 48];
+            record[44] = ppem;
+            record[45] = ppem;
+            out.extend_from_slice(&record);
+        }
+        out
+    }
+
+    /// An `sbix` table with one empty strike for each of `ppems`.
+    fn sbix(ppems: &[u16]) -> Vec<u8> {
+        let mut out = vec![0, 1, 0, 1];
+        out.extend_from_slice(&u32::try_from(ppems.len()).unwrap().to_be_bytes());
+        let first = 8 + 4 * ppems.len();
+        for index in 0..ppems.len() {
+            out.extend_from_slice(&u32::try_from(first + 4 * index).unwrap().to_be_bytes());
+        }
+        for &ppem in ppems {
+            out.extend_from_slice(&ppem.to_be_bytes());
+            out.extend_from_slice(&72u16.to_be_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn a_face_with_outlines_takes_half_sizes() {
+        for tag in [b"glyf", b"CFF ", b"CFF2"] {
+            let face = sfnt(&[(b"head", vec![0; 54]), (tag, vec![0; 8])]);
+            assert_eq!(face_sizing(&face), Some(FontSizing::SCALABLE), "{tag:?}");
+        }
+        // Outlines win over the bitmaps some faces carry for small sizes.
+        let face = sfnt(&[(b"EBLC", eblc(&[12, 14])), (b"glyf", vec![0; 8])]);
+        assert_eq!(face_sizing(&face), Some(FontSizing::SCALABLE));
+    }
+
+    #[test]
+    fn a_bitmap_only_face_keeps_to_its_strikes() {
+        let face = sfnt(&[(b"EBDT", vec![0; 4]), (b"EBLC", eblc(&[16, 12, 14, 12]))]);
+        assert_eq!(
+            face_sizing(&face),
+            Some(FontSizing::bitmap(vec![12, 14, 16]))
+        );
+        let face = sfnt(&[(b"bdat", vec![0; 4]), (b"bloc", eblc(&[10]))]);
+        assert_eq!(face_sizing(&face), Some(FontSizing::bitmap(vec![10])));
+        let face = sfnt(&[(b"CBLC", eblc(&[109])), (b"CBDT", vec![0; 4])]);
+        assert_eq!(face_sizing(&face), Some(FontSizing::bitmap(vec![109])));
+        let face = sfnt(&[(b"sbix", sbix(&[20, 40]))]);
+        assert_eq!(face_sizing(&face), Some(FontSizing::bitmap(vec![20, 40])));
+        // A strike table that lists more than it holds keeps what it holds.
+        let mut table = eblc(&[13]);
+        table[7] = 9;
+        let face = sfnt(&[(b"EBLC", table)]);
+        assert_eq!(face_sizing(&face), Some(FontSizing::bitmap(vec![13])));
+    }
+
+    #[test]
+    fn linux_bitmap_files_snap_to_whole_sizes() {
+        for head in [
+            &b"\x01fcp\x09\0\0\0"[..],
+            &[0x1f, 0x8b, 8, 0][..],
+            b"STARTFONT 2.1\n",
+        ] {
+            assert_eq!(face_sizing(head), Some(FontSizing::bitmap(Vec::new())));
+        }
+    }
+
+    #[test]
+    fn a_face_vosh_cannot_read_is_not_judged() {
+        assert_eq!(face_sizing(b""), None);
+        assert_eq!(face_sizing(b"wOF2 and the rest"), None);
+        assert_eq!(face_sizing(&sfnt(&[(b"head", vec![0; 54])])), None);
+        // A directory that points past the end of the file.
+        let mut face = sfnt(&[(b"glyf", vec![0; 8])]);
+        face.truncate(face.len() - 4);
+        assert_eq!(face_sizing(&face), None);
+    }
+
+    #[test]
+    fn the_bundled_jetbrains_mono_takes_half_sizes() {
+        for file in [
+            "JetBrainsMonoNerdFont-Regular.ttf",
+            "JetBrainsMonoNerdFont-Bold.ttf",
+        ] {
+            let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../public/fonts");
+            let face = std::fs::read(Path::new(dir).join(file)).expect("the repo holds it");
+            assert_eq!(face_sizing(&face), Some(FontSizing::SCALABLE), "{file}");
+        }
+    }
+
+    // Slow, since it reads every installed font file. Run it with
+    // --ignored --nocapture to see which families snap to whole sizes.
+    #[test]
+    #[ignore = "reads every installed font file"]
+    fn list_the_installed_families_that_snap() {
+        let snapping: Vec<(String, FontSizing)> = enumerate_fonts()
+            .into_iter()
+            .map(|entry| {
+                let sizing = family_sizing(&entry.family);
+                (entry.family, sizing)
+            })
+            .filter(|(_, sizing)| !sizing.half_sizes)
+            .collect();
+        for (family, sizing) in &snapping {
+            println!("{family}: {:?}", sizing.strikes);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn installed_outline_fonts_take_half_sizes() {
+        for family in ["Menlo", "Monaco", "Courier New", "No Such Family Vosh Test"] {
+            assert_eq!(family_sizing(family), FontSizing::SCALABLE, "{family}");
+        }
+        // macOS ships one bitmap only family, with a single 16 px strike.
+        if regular_descriptor("GB18030 Bitmap").is_some() {
+            assert_eq!(
+                family_sizing("GB18030 Bitmap"),
+                FontSizing::bitmap(vec![16])
+            );
+        }
     }
 
     #[test]

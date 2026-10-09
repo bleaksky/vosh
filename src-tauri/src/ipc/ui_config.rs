@@ -629,6 +629,14 @@ pub(crate) async fn fonts_list() -> Vec<FontEntry> {
     crate::app::system_fonts::list().await
 }
 
+/// The sizes a font family draws at, so the Size selects offer half
+/// sizes only for a font that takes them. `family` is one family name,
+/// not a font list. Async, since it reads the font file.
+#[tauri::command]
+pub(crate) async fn font_sizing(family: String) -> crate::app::system_fonts::FontSizing {
+    crate::app::system_fonts::sizing(family).await
+}
+
 /// The 16 ANSI slots a chat channel can take, in the frontend's names.
 const CHAT_COLOR_SLOTS: [&str; 16] = [
     "black",
