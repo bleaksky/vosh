@@ -27,8 +27,8 @@ pub use sgr::{Color, SgrState};
 use serde::Serialize;
 
 use crate::design::{
-    BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Template, TokenKind,
-    ValueRef,
+    BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Style, Template,
+    TokenKind, ValueRef,
 };
 use crate::values::format::{
     h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value,
@@ -148,6 +148,17 @@ struct Writer {
     /// For each row, whether a piece on it reads a field the caller
     /// asked about, see [`render_reading`].
     marks: Vec<bool>,
+    /// What the piece being written sets with its own codes.
+    own: Own,
+}
+
+/// The look a piece sets with its own codes, the ones right before its
+/// content, as opposed to the look it takes from the pieces before it.
+#[derive(Debug, Clone, Copy, Default)]
+struct Own {
+    /// A text color other than the default.
+    fg: bool,
+    dim: bool,
 }
 
 impl Writer {
@@ -163,6 +174,7 @@ impl Writer {
             cols,
             push: None,
             marks: vec![false],
+            own: Own::default(),
         }
     }
 
@@ -445,6 +457,7 @@ fn draw(
         if reads(piece.codes.start..piece.content.end) {
             w.mark();
         }
+        w.own = Own::default();
         for code in piece.codes.clone() {
             write_code(&mut w, template, code, values);
         }
@@ -523,14 +536,29 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
         return;
     };
     let (spec, layer) = match code {
-        Code::Reset => return w.sgr("0"),
-        Code::Style(style) => return w.sgr(style.sgr()),
+        Code::Reset => {
+            w.own = Own::default();
+            return w.sgr("0");
+        }
+        Code::Style(style) => {
+            match style {
+                Style::Dim => w.own.dim = true,
+                Style::Off => w.own.dim = false,
+                _ => {}
+            }
+            return w.sgr(style.sgr());
+        }
         Code::Fg(spec) => (spec, Layer::Fg),
         Code::Bg(spec) => (spec, Layer::Bg),
         Code::UnderlineColor(spec) => (spec, Layer::Underline),
     };
     match color_params(spec, layer, values) {
-        Some(params) => w.sgr(&params),
+        Some(params) => {
+            if layer == Layer::Fg {
+                w.own.fg = *spec != ColorSpec::Default;
+            }
+            w.sgr(&params);
+        }
         None => w.text(template.token_text(token), false),
     }
 }
@@ -663,18 +691,23 @@ fn write_formatted(
 }
 
 /// A change of a vital, in the theme's green for a gain and red for a
-/// loss while the design gives it no color of its own. A color the
-/// design sets before it wins, and a zero takes the color around it.
+/// loss at normal intensity. A text color the value's own piece sets
+/// wins, and so does dim when the piece sets it. A color or dim the
+/// pieces before it leave does not count, and the look comes back after
+/// it. A zero takes the look around it.
 fn write_change(w: &mut Writer, n: i64, text: &str) {
     let before = w.state;
-    let own = match n.signum() {
+    let sign = match n.signum() {
         1 => Some(Color::Ansi(2)),
         -1 => Some(Color::Ansi(1)),
         _ => None,
     };
-    match own.filter(|_| before.fg == Color::Default && !text.is_empty()) {
+    match sign.filter(|_| !w.own.fg && !text.is_empty()) {
         Some(color) => {
-            w.sgr(&color.params(false));
+            let mut look = before;
+            look.fg = color;
+            look.dim = w.own.dim;
+            w.restore(look);
             w.text(text, false);
             w.restore(before);
         }

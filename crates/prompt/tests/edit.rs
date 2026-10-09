@@ -1259,3 +1259,40 @@ fn the_games_prompt_goes_in_as_the_raw_token() {
     );
     assert_eq!(text, "%{raw}");
 }
+
+#[test]
+fn a_change_added_after_a_dim_part_draws_its_sign_color_until_you_color_it() {
+    let draw = |template: &str| {
+        render_str(
+            template,
+            &Sampled { fight: false },
+            RenderOptions::default(),
+        )
+        .ansi
+    };
+    let added = edit(
+        "%s_dim%c_gray[",
+        &EditOp::InsertField {
+            at: 1,
+            field: "hp_change".into(),
+            format: None,
+        },
+    );
+    assert_eq!(added, "%s_dim%c_gray[%hp_change");
+    assert_eq!(
+        draw(&added),
+        "\x1b[2m\x1b[90m[\x1b[22;32m+34\x1b[2;90m\x1b[0m"
+    );
+    // A color you give the value itself wins.
+    let colored = edit(
+        &added,
+        &EditOp::SetColor {
+            piece: 1,
+            color: ColorChoice::Named { index: 6 },
+            background: false,
+            underline: false,
+        },
+    );
+    assert_eq!(colored, "%s_dim%c_gray[%c_cyan%hp_change");
+    assert_eq!(draw(&colored), "\x1b[2m\x1b[90m[\x1b[36m+34\x1b[0m");
+}

@@ -1590,7 +1590,7 @@ Until you change it, your design follows the game. Vosh writes it from your PROM
 | `%{raw}`                                       | Your prompt exactly as the game sent it.                                            |
 | `%%`                                           | A percent sign.                                                                     |
 
-A gain shows in the green of your theme and a loss in its red. A color you give the value comes first. A change shows nothing until Vosh has two prompts to compare, or two ticks. It starts again when you connect or switch profiles. `%{if:hp_change}` shows what sits before `%{end}` only when Health changed.
+A gain shows in the green of your theme and a loss in its red, at full brightness. A color you give the value itself comes first, and so does dim that you give it. A color or dim from the parts before the value doesn't change it, and the parts after it keep their look. A change shows nothing until Vosh has two prompts to compare, or two ticks. It starts again when you connect or switch profiles. `%{if:hp_change}` shows what sits before `%{end}` only when Health changed.
 
 Every value in `Insert value…` has codes of its own. The picker shows them beside each form. Your tick, the time, and the date keep counting while your prompt is idle. Vosh draws the prompt again each second they change. It waits while you select text or read back.
 
