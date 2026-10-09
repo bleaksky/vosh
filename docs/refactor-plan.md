@@ -1986,6 +1986,21 @@ You asked on October 9 to allow half sizes when a font allows it. The build on f
 
 Help 6.4 and the command line topic say that half sizes work.
 
+#### October 9. Aliases by group and name
+
+A tester on Windows kept a group of aliases for each character and reused short names such as ds, res and say. The store kept one alias per name, so Settings refused every save with `Two aliases are named …` in small red text at the top of the page, and the new group never saved. You decided on October 9 that an alias is known by its name and its group. The build is fd79b62b to the commit of this record on fix/alias-groups from one-window d795361a.
+
+- Identity. `AliasStore` in `crates/automation/src/alias.rs` keeps the aliases of each name in a list, one for each group. `set` replaces the alias of its name in its group, `remove`, `get_in`, `stop` and `is_stopped` take the group, and `Alias::id` gives the pair. The profile TOML, the catalog, `aliases_export` and `aliases_import`, the catalog change a save from another profile lays over, the Lua stop keys, `ScriptCall` and `Owner::Alias` all carry the group. A profile that never repeats a name saves the same bytes, and the goldens did not move.
+- Which one fires. Of the aliases of one name that are on, in a group that is on and not stopped, the one in the group Settings lists first expands. That is the alias in no group, then the groups in `compare_groups` order in `crates/automation/src/groups.rs`, by name with case folded and then exactly, in UTF-16 code units. `compareGroups` in `src/automation/automationList.ts` now sorts the headings by the same rule, where it used `localeCompare`, so a heading with accents or punctuation can move. A plugin alias is in no group and still comes before all of yours.
+- Commands. `#unalias <name> [group]` removes the alias of that group. With no group it removes the one in no group, or the only one, and when groups share the name it says which groups hold it. `#alias`, `#endrec` and `mud.alias` replace the alias of that name that fires in the session, else the first listed, and keep its group. `mud.unalias` removes the same one. `#aliases` lists each alias with its group.
+- Settings. The editor keys an alias by group and name, trims names on load and save, and refuses a name with a space inside. The alias another group covers wears the warn ring, and its card says `Maren’s ds fires instead while both groups are on.`, or `whenever the Maren group is on` while that group is off. The palette shows one row per name, the first listed, with the group in its id.
+- Save errors. Every Automation list now shows what stopped a Save in red beside Save, rings the rows it names in danger, selects the first, and follows your edits until nothing is wrong. Validators return a `SaveProblem` with the indexes they name. A store error shows there too. Load errors and the list changed note stay at the top.
+- Smaller holes. A runaway alias names itself, such as `alias say calls itself, so Vosh stopped it after 16 steps`, and names the aliases in a loop. A new group that an active loadout leaves off shows the note `The Maren loadout doesn’t list this new group …` under its heading before you save, through the new `groups_new_hold` command. Vosh does not add the group to the loadout, since in the Path B model a loadout declares the groups a character plays and imposes them, and a new group may belong to another character.
+- Import. A Vosh export in loadout mode joins the catalog in the group named for the file, so an alias clashes only with one of its name in that group. A file that holds a name in more than one group brings the first listed and lists the rest as clashes. Per profile import keeps both. The other clients' importers set no group, as before.
+- Not changed. Triggers are still keyed by name alone, in `TriggerStore::set` and `triggerKey`, and macros by key and preset. They do not share the alias code. The migration wizard still asks you to keep one version of an alias name across profiles.
+
+Help 3.11 is new and says how one alias name works for each character, 3.1 says where save errors show, and the command lists name the group of `#unalias`.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
