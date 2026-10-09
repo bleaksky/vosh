@@ -121,6 +121,7 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 - Direct and concise. Vary sentence length for rhythm.
 - Concrete and specific over abstract. Definitive statements over conditionals.
 - No filler phrases ("it's important to note", "let's explore", "streamline", and similar).
+- HELP.md follows ASD-STE100 Simplified Technical English within these rules.
 
 ## Current State
 
