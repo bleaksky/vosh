@@ -16,6 +16,12 @@ pub(crate) const BANNER: [&str; 4] = [
 /// What the editor prints after `.c` (`olc.c:3626`).
 pub(crate) const CLEARED: &str = "String cleared.";
 
+/// What the editor prints after `.i` puts a line in (`olc.c:3560`).
+pub(crate) const INSERTED: &str = "Line inserted.";
+
+/// What the editor prints after `.f` wraps the text (`olc.c:3724`).
+pub(crate) const FORMATTED: &str = "String formatted.";
+
 /// What the editor prints when a line would take the text past what it
 /// holds, before it closes (`olc.c:3836`).
 pub(crate) const TOO_LONG: &str = "String too long, last line skipped.";
@@ -120,6 +126,29 @@ pub(crate) fn editor_waits(partial: &str) -> bool {
     }
     prompts > 0
         && (rest.is_empty() || listing_number(rest).is_some_and(|(_, text)| text.is_empty()))
+}
+
+/// The line `.d` took out, from what the editor prints after it
+/// (`olc.c:3717`, `Line %d deleted.`). It prints the number even for a
+/// line the text does not hold.
+pub(crate) fn deleted(line: &str) -> Option<usize> {
+    line.strip_prefix("Line ")?
+        .strip_suffix(" deleted.")?
+        .parse()
+        .ok()
+}
+
+/// How many lines a `.s` in this read listed, or None for a read with
+/// no listing. On an empty text `.s` prints its first number alone
+/// before the `> ` (`olc.c:3647`).
+pub(crate) fn shown_lines(lines: &[GameLine], partial: &str) -> Option<usize> {
+    let held = listing(lines).len();
+    if held > 0 {
+        return Some(held);
+    }
+    let partial = partial.replace('\r', "");
+    let number = partial.trim_end_matches("> ");
+    (number != partial && listing_number(number) == Some((1, ""))).then_some(0)
 }
 
 /// The game's pager waits for Return.
@@ -396,6 +425,18 @@ mod tests {
         assert!(!editor_waits("<1020hp 800m 930mv> "));
         assert!(!editor_waits("\r[Hit Return to continue]\r"));
         assert!(pager_waits("\r[Hit Return to continue]\r"));
+    }
+
+    #[test]
+    fn reads_what_the_editor_says_it_did() {
+        assert_eq!(deleted("Line 2 deleted."), Some(2));
+        assert_eq!(deleted("Line two deleted."), None);
+        assert_eq!(deleted("Tolliver deleted."), None);
+        let shown = [line(" 1 one"), line(" 2 two")];
+        assert_eq!(shown_lines(&shown, "> "), Some(2));
+        assert_eq!(shown_lines(&[], " 1 > "), Some(0));
+        assert_eq!(shown_lines(&[], "> "), None);
+        assert_eq!(shown_lines(&[line("Tolliver says 'hi'")], "> "), None);
     }
 
     #[test]

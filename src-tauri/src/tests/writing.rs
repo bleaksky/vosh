@@ -635,6 +635,27 @@ async fn the_card_offers_itself_when_you_open_the_editor() {
     h.finish().await;
 }
 
+/// The writer counts the lines the editor holds as you type into it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_writer_counts_the_lines_you_type_into_the_editor() {
+    let _grid = grid();
+    let h = Harness::new(&OLD).await;
+    h.type_line("description edit").await;
+    h.until("the opened text", |h| h.last()["lines"] == 1).await;
+    h.type_line(NEW[0]).await;
+    h.type_line("").await;
+    h.until("two more lines", |h| h.last()["lines"] == 3).await;
+    h.type_line(".d 1").await;
+    h.until("a line gone", |h| h.last()["lines"] == 2).await;
+    h.type_line(".c").await;
+    h.until("the text cleared", |h| h.last()["lines"] == 0)
+        .await;
+    h.type_line("@").await;
+    h.until("the prompt", |h| h.last()["lines"].is_null()).await;
+    h.finish().await;
+}
+
 /// A description sent in each order the prompt tick can come in.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

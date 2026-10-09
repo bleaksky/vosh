@@ -646,6 +646,108 @@ fn offers_the_card_after_you_open_the_editor_and_opens_on_its_listing() {
     );
 }
 
+/// How many lines the editor holds, as the page hears it.
+fn held(t: &Table) -> Option<usize> {
+    t.writer.state(0).lines
+}
+
+fn counts_the_lines_the_editor_holds_as_you_type() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    t.opens(&[], &TEXT);
+    assert_eq!(held(&t), Some(3));
+    t.typed("Orla watches the gate.");
+    t.took();
+    assert_eq!(held(&t), Some(4));
+    t.typed("");
+    t.typed("!");
+    t.game(&[], "> > ");
+    assert_eq!(held(&t), Some(6));
+    t.game(&["Maren tells you 'are you there?'"], "> ");
+    assert_eq!(held(&t), Some(6));
+    t.typed(".c");
+    t.game(&["String cleared."], "> ");
+    assert_eq!(held(&t), Some(0));
+    t.typed("Tolliver keeps the keys.");
+    t.took();
+    t.typed("Maren keeps the books.");
+    t.took();
+    t.typed(".i 1 Orla keeps the gate.");
+    t.game(&["Line inserted."], "> ");
+    assert_eq!(held(&t), Some(3));
+    t.typed(".d 2");
+    t.game(&["Line 2 deleted."], "> ");
+    assert_eq!(held(&t), Some(2));
+    t.typed(".d 9");
+    t.game(&["Line 9 deleted."], "> ");
+    assert_eq!(held(&t), Some(2));
+    t.typed(".s");
+    t.lists(&LISTED);
+    assert_eq!(held(&t), Some(2));
+    t.typed(".s");
+    t.lists(&TEXT);
+    assert_eq!(held(&t), Some(3));
+    t.typed(".f");
+    t.game(&["String formatted."], "> ");
+    assert_eq!(held(&t), None);
+    t.typed(".s");
+    t.lists(&LISTED);
+    assert_eq!(held(&t), Some(2));
+    t.tick();
+    assert_eq!(held(&t), None);
+}
+
+fn counts_every_page_of_the_listing_the_editor_opened_on() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    let mut lines: Vec<&str> = super::game_text::BANNER.to_vec();
+    lines.push(TEXT[0]);
+    t.game(&lines, "\r[Hit Return to continue]\r");
+    assert!(t.writer.state(0).offer.is_some());
+    assert_eq!(held(&t), None);
+    t.typed("");
+    let rest = format!("[Hit Return to continue]{}", TEXT[1]);
+    t.game(&[&rest, TEXT[2]], "> ");
+    assert_eq!(held(&t), Some(3));
+    t.typed(".s");
+    let numbered: Vec<String> = (1..=24).map(|n| format!("{n:>2} line {n}")).collect();
+    let page: Vec<&str> = numbered.iter().map(String::as_str).collect();
+    t.game(&page[..22], "\r[Hit Return to continue]\r");
+    assert_eq!(held(&t), Some(3));
+    t.typed("");
+    let turned = format!("[Hit Return to continue]{}", page[22]);
+    t.game(&[&turned, page[23]], "> ");
+    assert_eq!(held(&t), Some(24));
+}
+
+fn an_empty_listing_holds_no_lines() {
+    let mut t = Table::new();
+    t.typed("note edit");
+    t.opens(&[], &[""]);
+    assert_eq!(held(&t), Some(0));
+    t.typed(".s");
+    t.lists(&[]);
+    assert_eq!(held(&t), Some(0));
+}
+
+fn a_job_leaves_the_count_alone() {
+    let mut t = Table::new();
+    t.typed("desc edit");
+    t.opens(&[], &LISTED);
+    assert_eq!(held(&t), Some(2));
+    t.run(WriterCommand::Start(job(
+        1,
+        Kind::Description,
+        Action::Paste,
+        &TEXT,
+    )));
+    assert!(t.writer.state(0).job.is_some());
+    t.game(&["String cleared."], "> ");
+    t.took();
+    t.took();
+    assert_eq!(held(&t), Some(2));
+}
+
 fn takes_the_offer_back_when_anything_else_went_out() {
     let mut t = Table::new();
     t.typed("history edit");
@@ -1071,6 +1173,10 @@ in_every_order!(
     stop_leaves_the_editor_and_clears_the_note_it_started,
     sends_your_typed_line_as_a_game_command_while_the_editor_is_open,
     offers_the_card_after_you_open_the_editor_and_opens_on_its_listing,
+    counts_the_lines_the_editor_holds_as_you_type,
+    counts_every_page_of_the_listing_the_editor_opened_on,
+    an_empty_listing_holds_no_lines,
+    a_job_leaves_the_count_alone,
     takes_the_offer_back_when_anything_else_went_out,
     reads_a_notes_fields_once_you_take_the_offer,
     a_drop_ends_the_job_with_what_the_game_took,

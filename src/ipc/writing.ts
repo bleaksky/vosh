@@ -137,6 +137,8 @@ export interface WritingState {
   editor: WritingKind | null;
   /** The card's offer, after you opened the editor yourself. */
   offer: { id: number; kind: WritingKind } | null;
+  /** How many lines the game's editor holds, while Vosh can count them. */
+  lines: number | null;
   job: JobProgress | null;
   /** Sends of the session that wait for the job. */
   held: number;
