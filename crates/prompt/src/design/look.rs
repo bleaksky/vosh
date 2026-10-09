@@ -133,6 +133,41 @@ impl Look {
     }
 }
 
+/// What a piece sets with its own codes, the ones right before its
+/// content, as the renderer reads them for a change of a vital. A color
+/// or dim the pieces before it leave does not count. The default color
+/// and a reset are no color of its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Own {
+    /// A text color other than the default.
+    pub(crate) fg: bool,
+    pub(crate) dim: bool,
+}
+
+impl Own {
+    /// What the piece sets after one more of its codes.
+    pub(crate) fn take(&mut self, code: &Code) {
+        match code {
+            Code::Reset => *self = Own::default(),
+            Code::Style(Style::Dim) => self.dim = true,
+            Code::Style(Style::Off) => self.dim = false,
+            Code::Fg(spec) => self.fg = *spec != ColorSpec::Default,
+            _ => {}
+        }
+    }
+
+    /// What `items`, a piece's codes, set.
+    pub(crate) fn of(items: &[Item]) -> Own {
+        let mut own = Own::default();
+        for item in items {
+            if let TokenKind::Code(code) = &item.kind {
+                own.take(code);
+            }
+        }
+        own
+    }
+}
+
 /// A color as the look keeps it, None for the terminal's own.
 pub(crate) fn color(spec: &ColorSpec) -> Option<ColorSpec> {
     (*spec != ColorSpec::Default).then(|| spec.clone())
