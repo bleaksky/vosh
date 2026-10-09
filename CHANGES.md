@@ -20,6 +20,7 @@ Write your descriptions, notes and history in a card built for it, save a scene 
 - A pill at the start of the command line shows when you are in the game's editor, with the line you are on, and at a password prompt, in the pager or on a walk.
 - Snoop a player and a split shows their screen above yours, with a tab for each player.
 - See how long the game takes to answer on the status line, and type #lag to list each stall.
+- Your prompt can show how much your health, mana and moves changed since your last prompt and over the last tick, with a gain in green and a loss in red. Find them under Insert value as Health change and Health this tick, and pick how a zero shows.
 - Show each hit keeps the part of a vital a hit takes pale for a moment before it drains.
 - Settings has eleven tabs, with Logs, Accessibility, Vitals and Prompt on their own. Old links still land on the right row.
 - Tab follows the screen in every window, and a screen reader hears the names, keys and regions. Turn on the Screen reader section in Settings › Accessibility to hear new lines, and press Cmd+Shift+P to hear your prompt.
