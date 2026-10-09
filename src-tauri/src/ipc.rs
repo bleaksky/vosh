@@ -203,6 +203,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
         automation::macros_delete,
         automation::macros_groups_list,
         automation::groups_list,
+        automation::groups_new_hold,
         automation::groups_set_enabled,
         automation::timers_list,
         automation::timers_set,
