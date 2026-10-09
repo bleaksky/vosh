@@ -1974,6 +1974,18 @@ You asked on October 9 for prompt values that show how much your health went up 
 
 Help 9.3 lists the codes. The prompt text editor has no completion for any code, so it gains none here.
 
+#### October 9. Half sizes
+
+You asked on October 9 to allow half sizes when a font allows it. The build on feat/half-sizes covers every text size you set, which are the terminal `Size`, the Panel text `Size` and the command line `Size`. No other control sets a font size. The vitals text rows draw at the panel size.
+
+- Storage. `font_size`, `panel_font_size` and `input_line_size` hold half steps as `TextPx` in `src-tauri/src/profile/text_size.rs`, a count of half pixels. A whole size writes as an integer, so a profile that never picks a half loads unchanged and saves the same bytes. A half writes as a float, such as `13.5`. A read takes either, and a hand edit off the half steps, such as 13.3, reads as the nearest half. The clamp to 6 through 64 and the 0 that follows the terminal stay. The full profile golden now saves a command line size of 15.5, the one byte change.
+- What allows means. A font allows half sizes when its regular face scales, which is when it has `glyf`, `CFF ` or `CFF2` outlines. A bitmap only face has fixed strikes in `EBLC`, `CBLC`, `bloc` or `sbix`, and its Size rows offer only those strikes. A bitmap file with no strikes Vosh reads, PCF or BDF on Linux, keeps to whole sizes. A face Vosh cannot find or read allows half sizes. The `font_sizing` command reads the face the font scheme serves, and on macOS also asks CoreText for the face format, which names a bitmap face outside an sfnt file. The bundled JetBrains Mono and the generic families scale without a call. On this Mac the one family that snaps is GB18030 Bitmap, at 16 px.
+- Platform limits. Windows lists no raster `.fon` fonts through DirectWrite, which font-kit reads, so every font the Font list shows there has outlines. Linux reads the first face font-kit lists, as the font scheme does. WebKitGTK draws no PCF or BDF font since Pango 1.44, so such a font is rare in the list.
+- Controls. Each Size select offers every half step from 11 to 18, so the arrow keys move a half at a time, and a saved size outside the list stays listed. For a bitmap font the row offers its strikes, or the whole sizes, and a line under it says so. Picking a bitmap font moves a half size onto a size it holds, for the terminal, the command line and a panel that follows the terminal font.
+- Renderers. xterm measures the glyph at the fractional size and cuts its cell to whole device pixels, with the WebGL and the DOM renderer alike, so the fit, the pane sizer, the band and the pinned prompt rows run on whole device pixel cells as before. The native grid now takes the size as it is (`native_surface_set_font` takes a float). Core Text draws the atlas at the fractional size, and the cell comes from the cell xterm reports or from the rounded font metrics, so the glyph atlas, the cursor, the selection and the underlay keep their alignment. The panel rows round to whole pixels in panel.css and `paneTextSize.ts`, and the command line and the panel take the fraction as CSS. The baseline test now runs every half step from 11 to 18.
+
+Help 6.4 and the command line topic say that half sizes work.
+
 ## Part 5. Decisions for you
 
 In the order of the answer sheet. Each says which phase waits on it.
