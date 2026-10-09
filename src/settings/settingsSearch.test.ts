@@ -74,6 +74,47 @@ describe('searchSettingsRows', () => {
     });
   });
 
+  it('finds the sent commands rows by the words board 09 gives', () => {
+    const inputHits = (query: string) =>
+      searchSettingsRows(query, mac)
+        .filter((r) => r.target.group === 'input')
+        .map((r) => r.label);
+    const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target;
+    expect(labels('prefix')).toEqual(['Mark before your commands']);
+    expect(target('Mark before your commands')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-commands',
+    });
+    // Two Accessibility rows say faint too.
+    expect(inputHits('faint')).toEqual(['Dim sent commands']);
+    expect(labels('glyph')).toEqual(['Use the same mark in the command line']);
+    expect(labels('mark color')[0]).toBe('Mark color');
+    expect(searchSettingsRows('mark color', mac)[0].target).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'mark-color',
+    });
+    expect(target('Command color')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'sent-color',
+    });
+    expect(target('Show the commands your macros send')).toEqual({
+      group: 'input',
+      section: 'sent',
+      anchor: 'echo-macros',
+    });
+    // Ties fall in the order the page draws them.
+    expect(inputHits('color')).toEqual([
+      'Color commands as you type',
+      'Mark color',
+      'Command color',
+      'Caret color',
+      'Text color',
+    ]);
+  });
+
   it('finds where the session in front connects', () => {
     expect(labels('session port')).toEqual(['World', 'Host and port']);
     expect(labels('session tls')).toEqual(['Use TLS']);
