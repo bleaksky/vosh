@@ -27,8 +27,8 @@ pub use sgr::{Color, SgrState};
 use serde::Serialize;
 
 use crate::design::{
-    BarColor, Code, ColorSpec, FieldRef, Format, Layer, PieceKind, Scale, Style, Template,
-    TokenKind, ValueRef,
+    BarColor, Code, ColorSpec, FieldRef, Format, Layer, Own, PieceKind, Scale, Template, TokenKind,
+    ValueRef,
 };
 use crate::values::format::{
     h_band, how_full, p_band, step_color, tank_bar_cells, Band, Resolved, Value,
@@ -150,15 +150,6 @@ struct Writer {
     marks: Vec<bool>,
     /// What the piece being written sets with its own codes.
     own: Own,
-}
-
-/// The look a piece sets with its own codes, the ones right before its
-/// content, as opposed to the look it takes from the pieces before it.
-#[derive(Debug, Clone, Copy, Default)]
-struct Own {
-    /// A text color other than the default.
-    fg: bool,
-    dim: bool,
 }
 
 impl Writer {
@@ -537,15 +528,11 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
     };
     let (spec, layer) = match code {
         Code::Reset => {
-            w.own = Own::default();
+            w.own.take(code);
             return w.sgr("0");
         }
         Code::Style(style) => {
-            match style {
-                Style::Dim => w.own.dim = true,
-                Style::Off => w.own.dim = false,
-                _ => {}
-            }
+            w.own.take(code);
             return w.sgr(style.sgr());
         }
         Code::Fg(spec) => (spec, Layer::Fg),
@@ -554,9 +541,7 @@ fn write_code(w: &mut Writer, template: &Template, token: usize, values: &dyn Va
     };
     match color_params(spec, layer, values) {
         Some(params) => {
-            if layer == Layer::Fg {
-                w.own.fg = *spec != ColorSpec::Default;
-            }
+            w.own.take(code);
             w.sgr(&params);
         }
         None => w.text(template.token_text(token), false),

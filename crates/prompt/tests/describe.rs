@@ -523,3 +523,26 @@ fn a_push_to_the_right_reads_as_the_right_edge_and_a_layout_token() {
     assert_eq!(token.kind, TokenKindName::Line);
     assert!(token.known);
 }
+
+#[test]
+fn a_change_reads_the_look_it_draws_in() {
+    let template = "%s_dim%c_gray[%hp_change]%c_cyan%s_dim%mana_change";
+    let described = describe(&Template::parse(template), &Sampled { fight: false }, false);
+    // A color or dim before it does not apply to its sign color.
+    let hp = piece(&described.pieces, "%hp_change");
+    assert_eq!(hp.color, ColorChoice::Default);
+    assert!(!hp.dim);
+    // A color and dim of its own do.
+    let mana = piece(&described.pieces, "%c_cyan%s_dim%mana_change");
+    assert_eq!(mana.color, ColorChoice::Named { index: 6 });
+    assert!(mana.dim);
+    // So does a dim of its own with no color.
+    let own = describe(
+        &Template::parse("%c_gray[%s_dim%hp_change"),
+        &Sampled { fight: false },
+        false,
+    );
+    let hp = piece(&own.pieces, "%s_dim%hp_change");
+    assert_eq!(hp.color, ColorChoice::Default);
+    assert!(hp.dim);
+}

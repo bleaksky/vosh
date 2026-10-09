@@ -12,7 +12,8 @@
 //! A piece's look is the SGR state at its first cell with every condition
 //! holding, as [`crate::card::edit`] reads it, so the rows show what an
 //! edit keeps. A bar draws its cells in its own color, so its Color row
-//! reads the bar's color.
+//! reads the bar's color. A change of a vital in its sign color takes no
+//! color or dim from the pieces before it, so its rows read only its own.
 
 use serde::Serialize;
 
@@ -138,7 +139,7 @@ pub fn describe(template: &Template, values: &dyn Values, preview: bool) -> Desc
         .enumerate()
         .map(|(index, piece)| {
             let edited = &doc.pieces[index];
-            let look = &looks[index];
+            let look = &edited.shown(&looks[index]);
             let shown = edited.value().map(shown_as);
             let (field, format, width) = match &shown {
                 Some((field, format, width)) => (Some(field.clone()), Some(*format), *width),

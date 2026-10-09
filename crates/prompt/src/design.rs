@@ -52,7 +52,7 @@ mod write;
 pub use pieces::{PieceKind, Template};
 pub use tokens::{Code, ColorSpec, FieldRef, Format, Scale, TokenKind, UnderlineStyle};
 
-pub(crate) use look::{bg, code, color, fg, restore, transition, underline_color, Item, Look};
+pub(crate) use look::{bg, code, color, fg, restore, transition, underline_color, Item, Look, Own};
 pub(crate) use pieces::Piece;
 pub(crate) use tokens::{brace_char, parse_field, BarColor, Layer, Style, ValueRef};
 pub(crate) use tokens::{BAR_DEFAULT_WIDTH, BAR_MAX_WIDTH};

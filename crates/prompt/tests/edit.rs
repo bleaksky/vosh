@@ -1296,3 +1296,110 @@ fn a_change_added_after_a_dim_part_draws_its_sign_color_until_you_color_it() {
     assert_eq!(colored, "%s_dim%c_gray[%c_cyan%hp_change");
     assert_eq!(draw(&colored), "\x1b[2m\x1b[90m[\x1b[36m+34\x1b[0m");
 }
+
+/// `template` drawn with the samples, out of a fight.
+fn ansi(template: &str) -> String {
+    render_str(
+        template,
+        &Sampled { fight: false },
+        RenderOptions::default(),
+    )
+    .ansi
+}
+
+fn recolor(template: &str, piece: usize, index: u8) -> String {
+    edit(
+        template,
+        &EditOp::SetColor {
+            piece,
+            color: ColorChoice::Named { index },
+            background: false,
+            underline: false,
+        },
+    )
+}
+
+fn dim(template: &str, piece: usize, on: bool) -> String {
+    edit(
+        template,
+        &EditOp::SetStyle {
+            piece,
+            style: StyleChoice::Dim,
+            on,
+        },
+    )
+}
+
+#[test]
+fn recoloring_the_part_before_a_change_puts_the_old_color_back_after_it() {
+    // The gray goes after the change, so the change draws green and the
+    // part after it stays gray.
+    let recolored = recolor("%c_gray[%hp_change]", 0, 7);
+    assert_eq!(recolored, "%c_white[%hp_change%c_gray]");
+    assert_eq!(
+        ansi(&recolored),
+        "\x1b[37m[\x1b[32m+34\x1b[37m\x1b[90m]\x1b[0m"
+    );
+}
+
+#[test]
+fn dimming_the_part_before_a_change_puts_the_old_look_back_after_it() {
+    let dimmed = dim("%c_gray[%hp_change]", 0, true);
+    assert_eq!(dimmed, "%c_gray%s_dim[%hp_change%s_off]");
+    assert_eq!(
+        ansi(&dimmed),
+        "\x1b[90m\x1b[2m[\x1b[22;32m+34\x1b[2;90m\x1b[22;23;24;25;27;29m]\x1b[0m"
+    );
+    let undimmed = dim("%s_dim%c_gray[%mana_change]", 0, false);
+    assert_eq!(undimmed, "%c_gray[%mana_change%s_dim]");
+    assert_eq!(
+        ansi(&undimmed),
+        "\x1b[90m[\x1b[31m-12\x1b[90m\x1b[2m]\x1b[0m"
+    );
+}
+
+#[test]
+fn a_change_at_the_end_of_the_design_takes_the_old_look_after_it() {
+    let recolored = recolor("%c_gray[%hp_change", 0, 7);
+    assert_eq!(recolored, "%c_white[%hp_change%c_gray");
+    assert_eq!(
+        ansi(&recolored),
+        "\x1b[37m[\x1b[32m+34\x1b[37m\x1b[90m\x1b[0m"
+    );
+}
+
+#[test]
+fn two_changes_in_a_row_both_draw_their_sign_colors() {
+    let recolored = recolor("%c_gray[%hp_change%mana_change]", 0, 7);
+    assert_eq!(recolored, "%c_white[%hp_change%mana_change%c_gray]");
+    assert_eq!(
+        ansi(&recolored),
+        "\x1b[37m[\x1b[32m+34\x1b[37m\x1b[31m-12\x1b[37m\x1b[90m]\x1b[0m"
+    );
+}
+
+#[test]
+fn a_change_with_its_own_color_keeps_it_and_its_look() {
+    let recolored = recolor("%c_gray[%c_cyan%hp_change]", 0, 7);
+    assert_eq!(recolored, "%c_white[%c_cyan%hp_change]");
+    assert_eq!(ansi(&recolored), "\x1b[37m[\x1b[36m+34]\x1b[0m");
+    // A dim before it would show on its own color, so the restore stays
+    // on it.
+    let dimmed = dim("%c_gray[%c_cyan%hp_change]", 0, true);
+    assert_eq!(dimmed, "%c_gray%s_dim[%s_off%c_cyan%hp_change]");
+    assert_eq!(
+        ansi(&dimmed),
+        "\x1b[90m\x1b[2m[\x1b[22;23;24;25;27;29m\x1b[36m+34]\x1b[0m"
+    );
+}
+
+#[test]
+fn a_change_takes_a_color_or_dim_you_give_it_over_the_same_before_it() {
+    let colored = recolor("%c_gray[%hp_change", 1, 8);
+    assert_eq!(colored, "%c_gray[%c_gray%hp_change");
+    assert_eq!(ansi(&colored), "\x1b[90m[\x1b[90m+34\x1b[0m");
+    let dimmed = dim("%s_dim[%hp_change", 1, true);
+    assert_eq!(dimmed, "%s_dim[%s_dim%hp_change");
+    assert_eq!(ansi(&dimmed), "\x1b[2m[\x1b[2m\x1b[32m+34\x1b[39m\x1b[0m");
+    assert_eq!(dim(&dimmed, 1, false), "%s_dim[%hp_change");
+}
