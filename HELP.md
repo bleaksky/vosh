@@ -1072,97 +1072,129 @@ When you set a target with `tar`, Vosh also fills `$target`. So `cast dispel $ta
 
 <!-- id: make-it-yours.switch-themes -->
 
-Themes recolor the whole window, the terminal included. They live in Settings under Appearance, in the Theme section.
+A theme sets the colors of the whole window, the terminal included. Themes are in Settings under Appearance, in the Theme section.
 
 - Open Settings and choose Appearance.
-- Click a theme in the gallery. Each one draws in its own colors with its name under it, and your own themes follow the built in ones. The theme applies at once and saves. The arrow keys move the pick too.
-- Read the line under the gallery. It describes the theme on screen and, for a built in theme, names where its colors come from, who made them, and the license they carry.
-- Use the `Vision` switch above the gallery to see every theme as a player with deuteranopia, protanopia or tritanopia sees it. It starts on your `Color vision` from Accessibility and only previews, so it changes no theme.
-- Pick how the window changes theme in `Switch themes`. `Off` keeps the theme you click. `With the system` switches between the `Light theme` and the `Dark theme` you pick under it whenever your system does. `With the game` shows your `Day theme` from the game's dawn and your `Night theme` from its dusk, so the window turns about every 6 minutes.
-- High Contrast and High Contrast Light keep every text color at 7:1 or better. With `Switch themes` on `With the system`, turning on Increase contrast in macOS settings shows them, the light one while your system is light and the dark one while it is dark. While Increase contrast is on, a theme you click waits in its slot and shows once you turn it off.
-- Pick the `Day theme` and the `Night theme` from any theme, light or dark. Both start on the theme showing, so nothing changes until you pick. A click in the gallery fills whichever one is showing now.
-- Choose a pair close in tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes read as evening coming on, where a dark and a light one flash at every turn.
-- Go offline and the window keeps the theme it showed last, through a relaunch too, until the game names the time again.
-- Click `Import…` to read a Ghostty, iTerm2, Kitty, or Alacritty theme file. Vosh adds it to your own themes and switches to it.
-- Or choose `Choose theme` in the View menu or the palette, which lists every theme.
+- Click a theme in the gallery. Each theme draws in its own colors, with its name under it. Your own themes come after the built in themes. The theme applies at once and saves. You can also choose a theme with the arrow keys.
+- Read the line under the gallery. It describes the theme on screen. For a built in theme, it also names the source of its colors, who made them, and their license.
+- The `Vision` switch above the gallery shows every theme as a player with deuteranopia, protanopia, or tritanopia sees it. It starts on your `Color vision` from Accessibility. It is only a preview, so it changes no theme.
+- To choose how the window changes theme, use `Switch themes`. `Off` keeps the theme you click. `With the system` changes between the `Light theme` and the `Dark theme` you choose under it, when your system changes.
+- `With the game` shows your `Day theme` from dawn in the game and your `Night theme` from dusk. So the window changes about every 6 minutes.
+- High Contrast and High Contrast Light keep every text color at 7:1 or better. When `Switch themes` is on `With the system`, Increase contrast in macOS settings shows them. The light one shows while your system is light, and the dark one while it is dark.
+- While Increase contrast is on, a theme you click waits in its slot. It shows after you turn Increase contrast off.
+- Choose the `Day theme` and the `Night theme` from any theme, light or dark. Both start on the theme that shows, so nothing changes until you choose. A click in the gallery fills the one that shows now.
+- Choose a pair with a similar tone, such as Obsidian Ember by night and Gruvbox by day. Two dark themes feel like evening coming on. A dark theme and a light theme flash at every change.
+- When you go offline, the window keeps the theme it showed last, also through a relaunch. It keeps it until the game gives the time again.
+- To read a Ghostty, iTerm2, Kitty, or Alacritty theme file, click `Import…`. Vosh adds it to your own themes and changes to it.
+- Or choose `Choose theme` in the View menu or the palette. It lists every theme.
 
-A theme sets both layers of the window. The window layer covers the grounds, the text, the separators, the accent, and the warn, danger, and success colors. The terminal layer covers the background, the text, the cursor, the selection, and all sixteen ANSI colors. MUD text takes the theme's sixteen colors while `Use the theme's colors for MUD text` is on under Terminal text, which it is for every theme until you turn it off.
+A theme sets both layers of the window. The window layer covers the backgrounds, the text, the separators, and the accent. It also covers the warn, danger, and success colors. The terminal layer covers the background, the text, the cursor, the selection, and all sixteen ANSI colors. MUD text takes the sixteen colors of the theme while `Use the theme's colors for MUD text` is on under Terminal text. It is on for every theme until you turn it off.
 
-A new install starts on Triad, with Rubric as its light theme. The built in themes stay as they are, so start a custom theme from one to change it. If the theme you use ever disappears, Vosh falls back to Obsidian Ember. One Dark, Vellum and Everforest Light left Vosh. If you chose one, Vosh shows the theme that took its place until you pick another, One Half Dark for One Dark, Rubric for Vellum, and Melange Light for Everforest Light.
+A new install starts on Triad, with Rubric as its light theme. The built in themes don't change. So to change one, start a custom theme from it. If the theme you use is ever gone, Vosh uses Obsidian Ember.
+
+One Dark, Vellum, and Everforest Light are no longer in Vosh. If you chose one of them, Vosh shows the theme that replaced it until you choose another. One Half Dark replaces One Dark, Rubric replaces Vellum, and Melange Light replaces Everforest Light.
 
 ### 6.2 Create a custom theme
 
 <!-- id: make-it-yours.build-your-own-theme -->
 
-A custom theme starts as a copy of the theme you see and changes any of its colors. The editor lives in Settings under Appearance, then Advanced.
+A custom theme starts as a copy of the theme you see. You can change any of its colors. The editor is in Settings under Appearance, then Advanced.
 
-- Open Settings, choose Appearance, and switch to the theme you want to start from.
-- Open `Advanced` at the bottom of the page and click `New custom theme`. Vosh copies the theme you see, names the copy after it with `copy` at the end, and switches to it.
-- Pick the theme you are changing in `Theme to edit`, and set its `Name` and `Description`.
+- Open Settings, choose Appearance, and change to the theme you want to start from.
+- Open `Advanced` at the bottom of the page and click `New custom theme`. Vosh copies the theme you see. It names the copy after that theme, with `copy` at the end, and changes to it.
+- Choose the theme you are changing in `Theme to edit`. Set its `Name` and `Description`.
 - Change its colors in four groups. Accent and status holds Accent, Danger, Warning, and Success. Terminal holds the background, the text, the cursor, the text under the cursor, the selection, and the selected text. Normal colors and Bright colors hold the sixteen ANSI colors.
-- Press a swatch to pick a color, or type one into the field beside it.
+- To choose a color, click a swatch, or type a color in the field beside it.
 
-Every change applies at once and saves. Your custom themes join the gallery after the built in ones. To remove one, pick it in `Theme to edit`, click `Delete…`, and confirm.
+Every change applies at once and saves. Your custom themes come after the built in themes in the gallery. To remove one, choose it in `Theme to edit`, click `Delete…`, and confirm.
 
 ### 6.3 Control terminal colors
 
 <!-- id: make-it-yours.control-terminal-colors -->
 
-The colors MUD text draws in live in Settings under Appearance, and the rows that help you see them live under Accessibility.
+The colors of MUD text are in Settings under Appearance. The rows that help you see them are under Accessibility.
 
 - Open Settings and choose Appearance.
-- Under Terminal text, turn on `Use the theme's colors for MUD text` to draw what the game sends in the theme's own sixteen colors, or turn it off to keep the exact colors your MUD sends. It is on for every theme until you turn it off.
-- Open `Advanced` and change `Base palette`, the sixteen colors MUD text uses while the theme's colors are off. Change any color with its swatch or by typing a hex color. The first change keeps all sixteen as your own list.
-- Click `Reset` beside Base palette to go back to the stock chart. It stays off until you change a color.
-- Choose Accessibility and pick your `Color vision` under Color and contrast when you confuse red and green, or blue and green. Vosh swaps those colors for ones you tell apart, in the game text and the window's status colors. Keep `Typical` otherwise.
-- Leave `Keep highlight colors readable` on under Color and contrast, and Vosh darkens or lightens a color your triggers set when the theme would make it faint. It is on until you turn it off.
+- Under Terminal text, turn on `Use the theme's colors for MUD text` to draw what the game sends in the sixteen colors of the theme. Turn it off to keep the exact colors that your MUD sends. It is on for every theme until you turn it off.
+- Open `Advanced` and change `Base palette`. These are the sixteen colors that MUD text uses while the colors of the theme are off. To change a color, use its swatch or type a hex color. The first change keeps all sixteen as your own list.
+- To go back to the stock chart, click `Reset` beside Base palette. It stays off until you change a color.
+- If you confuse red and green, or blue and green, choose Accessibility. Then choose your `Color vision` under Color and contrast. Vosh changes those colors to colors you can tell apart, in the game text and the status colors of the window. If not, keep `Typical`.
+- Leave `Keep highlight colors readable` on under Color and contrast. Vosh then makes a color that your triggers set darker or lighter when the theme would make it faint. It is on until you turn it off.
 
-`Fit game colors` under Accessibility, then Color and contrast, is on until you turn it off. While you play, it lifts the game colors that fade on the theme, such as a faint room name or a bold white that matches the text around it. Vosh moves each color lighter or darker at its own hue, so the theme's red stays red. The terminal, your pinned prompt, the chat pane and its channel colors, the room name under the map, and the game time and the moons in the status line all draw the fitted colors. On a light theme the terminal also darkens the fixed colors the game sends past the theme's sixteen until they show, such as the yellow desert and the white snow of the game's minimap. The window, Settings and log exports keep the theme as published, so it still matches the same theme in your other terminals. Only a Color vision other than Typical changes the window, in its status colors and, where it must, its accent. Solarized Dark stays as published in play too, since its soft text is what the scheme is, until you pick a Color vision other than Typical. The base palette under Advanced stays as you set it.
+`Fit game colors` is under Accessibility, then Color and contrast. It is on until you turn it off. While you play, it makes the game colors that fade on the theme easier to see. Examples are a faint room name, or a bold white that is the same as the text around it. Vosh moves each color lighter or darker with the same hue, so the red of the theme stays red.
 
-`Color vision` swaps the colors your eyes confuse for colors they tell apart, the way color blind modes in games do. Typical keeps every theme as it ships. Deuteranopia and Protanopia turn tells in green blue, so they stand clear of hits on you in red and of says in bold yellow. Reds lean toward orange and blues toward violet where the theme allows. Tritanopia turns blues purple and magentas pink, so blue stands clear of yells in cyan and of tells in green. Each color keeps the lightness of its theme where it can, and a soft theme such as Kanso Zen gains enough color for the change to show. Two channels you told apart never run together for your vision, newbie chat and immortal talk included. No color drops below the contrast the theme keeps or runs into body text and white, and hits on you stay as far from HP at 40 percent as they were. Where a color has no room left to turn, it keeps its own hue. On a theme whose own text, yells and cabal already fill the blues, such as Tokyo Night, tells keep their green. Newbie chat in bold green turns blue only where the blues leave room. The game text follows Color vision whenever the theme's colors draw it, with Fit game colors on or off, Solarized Dark included. Every window follows it too, Settings included. Under Deuteranopia and Protanopia the window's success color turns blue and danger leans toward orange, in health bars, the affect chips, group health and alert marks. Under Tritanopia the window keeps its status colors where you tell them apart, and makes them lighter or darker where danger sits near warn or success, such as on Harbor Dark. An accent the theme sets stays as the theme drew it, and an accent Vosh picks stands as far from all three as the theme's hues allow. The theme editor still shows each theme's published colors. The line under the Color vision row says what your vision changes. A built in theme switches at once. A theme of your own plays its usual colors for a few seconds while Vosh works out the swap. Your color vision follows your theme, so it stays the same on every character while `Theme` is on under General, in Keep the same for every character.
+These all draw the fitted colors. They are the terminal, your pinned prompt, the chat pane and its channel colors, and the room name under the map. They are also the game time and the moons in the status line. On a light theme the terminal also makes darker the fixed colors that the game sends past the sixteen colors of the theme. It does this until they show, such as the yellow desert and the white snow of the minimap of the game.
 
-Keep highlight colors readable covers the exact colors a trigger or a preset paints text in, such as `{#8fa7d9}` or `{fg:244}` in `Replace with`. Vosh measures each one against the terminal background. When one reads too faint, Vosh keeps its hue and moves it darker on a light theme or lighter on a dark one until it reads. A color that already reads stays as you picked it, and your trigger keeps the color you saved. This switch never changes the game's own colors or the theme's sixteen colors. Fit game colors covers those. A theme switch reaches the lines that arrive after it, and earlier lines keep the color they were drawn in.
+The window, Settings, and log exports keep the theme as it was published. So it still matches the same theme in your other terminals. Only a Color vision other than Typical changes the window. It changes the status colors and, where necessary, the accent. Solarized Dark also stays as it was published during play, because its soft text is part of the scheme. This is true until you choose a Color vision other than Typical.
 
-More colors sit with the rows they belong to. `Command color` under Input, then Sent commands, recolors the local echo of every command you send. `Mark color` above it recolors the mark before each one, which stays the grey of your theme's bright black until you pick a color. `Text color` and `Caret color` under Input, then Command line, recolor what you type and the caret, which keep your theme's text and accent until you pick a color. While `Color commands as you type` is on, four more rows sit under it. `Aliases` start in your theme's cyan, `Vosh commands` in its magenta, `Chat` in its yellow, and `A # command Vosh doesn't know` in its danger color. `Divider color` under Layout, then Split terminal, recolors the line between the history and the live tail. Press the swatch to pick a color or type a hex color like `#fffc41`. Each applies live, and emptying the field returns it to the theme default.
+The base palette under Advanced stays as you set it.
+
+`Color vision` changes the colors that your eyes confuse to colors that they can tell apart. Color blind modes in games do the same. Typical keeps every theme as it ships. Deuteranopia and Protanopia change tells in green to blue. So tells are easy to tell apart from hits on you in red and from says in bold yellow. Reds move toward orange and blues toward violet, where the theme allows it.
+
+Tritanopia changes blues to purple and magentas to pink. So blue is easy to tell apart from yells in cyan and from tells in green. Each color keeps the lightness of its theme where it can. A soft theme such as Kanso Zen gets enough color for the change to show.
+
+Two channels that you could tell apart never become the same for your vision, newbie chat and immortal talk included. No color goes below the contrast that the theme keeps, or becomes too near to body text and white. Hits on you stay as far from HP at 40 percent as they were. When a color has no room left to change, it keeps its own hue.
+
+On a theme where its own text, yells, and cabal already use all the blues, such as Tokyo Night, tells stay green. Newbie chat in bold green changes to blue only where the blues leave room. The game text follows Color vision whenever the colors of the theme draw it. This is true with Fit game colors on or off, Solarized Dark included. Every window also follows it, Settings included.
+
+Under Deuteranopia and Protanopia, the success color of the window changes to blue and danger moves toward orange. This shows in health bars, the affect chips, group health, and alert marks. Under Tritanopia, the window keeps its status colors where you can tell them apart. It makes them lighter or darker where danger is near warn or success, such as on Harbor Dark.
+
+An accent that the theme sets stays as the theme drew it. An accent that Vosh chooses is as far from all three status colors as the hues of the theme allow. The theme editor still shows the published colors of each theme. The line under the Color vision row tells what your vision changes. A built in theme changes at once. A theme of your own plays its usual colors for a few seconds while Vosh calculates the change.
+
+Your color vision follows your theme. So it stays the same on every character while `Theme` is on under General, in Keep the same for every character.
+
+Keep highlight colors readable covers the exact colors that a trigger or a preset uses for text, such as `{#8fa7d9}` or `{fg:244}` in `Replace with`. Vosh measures each one against the terminal background. When one is too faint, Vosh keeps its hue. It makes the color darker on a light theme or lighter on a dark theme until it is readable. A color that is already readable stays as you chose it. Your trigger keeps the color you saved.
+
+This switch never changes the colors of the game or the sixteen colors of the theme. Fit game colors covers those. A change of theme reaches the lines that come in after it. Earlier lines keep the color they were drawn in.
+
+Other colors are with the rows they belong to. `Command color` under Input, then Sent commands, changes the color of the local echo of every command you send. `Mark color` above it changes the color of the mark before each command. The mark stays the grey of the bright black of your theme until you choose a color.
+
+`Text color` and `Caret color` under Input, then Command line, change the color of what you type and of the caret. They keep the text and accent colors of your theme until you choose a color. While `Color commands as you type` is on, four more rows are under it. `Aliases` start in the cyan of your theme, `Vosh commands` in its magenta, `Chat` in its yellow, and `A # command Vosh doesn't know` in its danger color.
+
+`Divider color` under Layout, then Split terminal, changes the color of the line between the history and the live tail. To choose a color, click the swatch or type a hex color such as `#fffc41`. Each one applies live. When you empty the field, it goes back to the theme default.
 
 ### 6.4 Set the fonts
 
 <!-- id: make-it-yours.pick-your-fonts -->
 
-The terminal font lives in Settings under Appearance, then Terminal text. The panel font and its size live right after it, under Panel text.
+The terminal font is in Settings under Appearance, then Terminal text. The panel font and its size are right after it, under Panel text.
 
 - Open Settings and choose Appearance.
-- Under Terminal text, pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer.
-- Pick a size in `Size`, from 11 to 18 pt. The default is 14.
-- Pick `Compact`, `Default`, or `Loose` in `Line height`.
-- Under Panel text, pick a font in `Font` for every pane in the panel and the status line under the terminal. `As designed`, the default, keeps the fonts the panes were drawn in. The headers, labels, counts, and rows use the font of the menus and Settings, and the game text in your affects, the chips, and chat uses your terminal font. `Same as terminal` draws all of it in your terminal font. `System font` draws all of it in the font of the menus and Settings. The rest of the list holds the fonts the terminal `Font` offers.
-- Pick a size in `Size` under Panel text. The headers, the labels, the rows, chat, the map labels, and the status line all grow with it, so the panel reads as one size. It starts at 12 pt, the size the panes were drawn at, and `Same as terminal` follows your terminal size. The menus, the title band, Settings, and Help keep their sizes.
-- To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
-- Turn on `Bright text in bold` under Advanced to draw bright colors in the bold weight of your font. It works on macOS.
-- Turn off `Blinking text` under Accessibility, then Motion, to keep text that your MUD or your prompt sets to blink still. It starts off when your system reduces motion.
+- Under Terminal text, choose a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every computer. The rest of the list holds the monospace fonts installed on your computer.
+- Choose a size in `Size`, from 11 to 18 pt. The default is 14.
+- Choose `Compact`, `Default`, or `Loose` in `Line height`.
+- Under Panel text, choose a font in `Font`. It sets the font of every pane in the panel and of the status line.
+- `As designed` is the default. It keeps the fonts the panes were designed in. The headers, labels, counts, and rows use the font of the menus and Settings. The game text in your affects, the chips, and chat uses your terminal font.
+- `Same as terminal` draws all of it in your terminal font. `System font` draws all of it in the font of the menus and Settings. The rest of the list holds the fonts that the terminal `Font` offers.
+- Choose a size in `Size` under Panel text. The headers, the labels, the rows, chat, the map labels, and the status line all get larger or smaller with it. So the panel reads as one size.
+- The size starts at 12 pt, the size the panes were designed at. `Same as terminal` follows your terminal size. The menus, the title band, Settings, and Help keep their sizes.
+- To set a whole list of fonts, open `Advanced` and type it in `Font stack`, such as `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
+- To draw bright colors in the bold weight of your font, turn on `Bright text in bold` under Advanced. It works on macOS.
+- To stop text that your MUD or your prompt sets to blink, turn off `Blinking text` under Accessibility, then Motion. It starts off when your system reduces motion.
 
-Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one terminal font and size and one panel font and size.
+Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides one thing. It decides whether every character shares one terminal font and size, and one panel font and size.
 
 ### 6.5 Hear the game with a screen reader
 
 <!-- id: make-it-yours.screen-reader -->
 
-Vosh can hand the game to your screen reader, such as VoiceOver on macOS or NVDA on Windows. The switches live in Settings under Accessibility, in the Screen reader section, and each one is off until you turn it on.
+Vosh can give the game to your screen reader, such as VoiceOver on macOS or NVDA on Windows. The switches are in Settings under Accessibility, in the Screen reader section. Each switch is off until you turn it on.
 
 - Open Settings and choose Accessibility.
-- Under Screen reader, turn on `Read new game lines`. Your screen reader then reads each line the game shows, after your gags and routes, so a line your gags hide or your routes take out of the terminal stays quiet.
-- The lines that land within one pulse of the game join one announcement, so a room look reads as one piece.
-- Pick a number in `Long bursts`, 4, 8, 16 or 32. When more lines than that land at once, you hear how many came and then the last one, such as `12 lines.` and the line. It starts at 8.
-- Turn on `Read your prompt` to hear your prompt after the lines of each pulse. Your prompt comes every pulse, so it starts off. With it off, press `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows and Linux to hear your latest prompt when you want it. `Read your prompt` in the command palette does the same.
-- Turn on `Read in the background` to keep hearing the game while you work in another app. With it off, Vosh stays quiet while another app is in front.
+- Under Screen reader, turn on `Read new game lines`. Your screen reader then reads each line that the game shows, after your gags and routes. So a line that your gags hide, or that your routes take out of the terminal, stays quiet.
+- The lines that come within one pulse of the game join into one announcement. So a room look reads as one piece.
+- Choose a number in `Long bursts`, 4, 8, 16, or 32. When more lines than that come at once, you hear how many came, and then the last line. An example is `12 lines.` and the line. It starts at 8.
+- Turn on `Read your prompt` to hear your prompt after the lines of each pulse. Your prompt comes every pulse, so this starts off.
+- With it off, press `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows and Linux to hear your newest prompt. `Read your prompt` in the command palette does the same.
+- To hear the game while you work in another app, turn on `Read in the background`. With it off, Vosh stays quiet while another app is in front.
 
-Vosh also keeps the last 500 lines of the session in front in a list named Game lines, right after the terminal. Step through it with your screen reader to read back what you missed, line by line. The list reads nothing aloud by itself. A session behind keeps its lines quietly, and its list shows them when you bring it to the front. It all works with either terminal renderer.
+Vosh also keeps the last 500 lines of the session in front in a list named Game lines, right after the terminal. To read back what you missed, go through it line by line with your screen reader. The list doesn't read anything aloud by itself. A session behind keeps its lines quietly. Its list shows them when you bring the session to the front. All of this works with both terminal renderers.
 
-The prompt key works only while `Read new game lines` is on. With it off, a macro you bound to `Ctrl+Shift+P` keeps working.
+The prompt key works only while `Read new game lines` is on. With it off, a macro that you bound to `Ctrl+Shift+P` keeps working.
 
 Each change applies at once and saves with your profile.
 
-When a screen reader runs as Vosh starts and `Read new game lines` is off, the terminal says once where to find it. On macOS Vosh asks whether VoiceOver is on. On Windows it asks for the sign Narrator, NVDA, JAWS and other screen readers give the system. Linux gets no line, since no sign of a running screen reader holds across its desktops.
+When a screen reader runs as Vosh starts and `Read new game lines` is off, the terminal tells you one time where to find it. On macOS, Vosh asks the system if VoiceOver is on. On Windows, it looks for the sign that Narrator, NVDA, JAWS, and other screen readers give the system. Linux gets no line, because no sign of a running screen reader works on all its desktops.
 
 ## Characters and data
 
