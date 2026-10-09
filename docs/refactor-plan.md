@@ -528,6 +528,17 @@ Where CL4 departs from board 09. Only in the Size select's arrow, as in CL2. The
 
 At the close every gate passed on de170df2. The build, the format check, lint with no errors and its one old warning, the type check, vitest with 4225 page tests passed and 174 skipped, knip, the CSS usage check, cargo fmt, clippy on macOS and for Windows, and the workspace tests with 2872 passed and 6 ignored. What waits is your app check. Open `input:command-line#mark-commands`, `input:command-line#sent-color` and `input:command-line#echo-macros` from the Recent list in the palette and check each lands on its row under Sent commands.
 
+Help follows ASD-STE100 Simplified Technical English, adapted to the CLAUDE.md writing style. You asked for it on October 8, to make Help read more human and to fix its long comma chains, and you approved the direction. HELP.md was rewritten one section at a time, 76f52ddd to b4f99665, with 4d9c6b96 naming the command palette the same way everywhere, on docs/help-ste from one-window 49fc6183.
+
+- The CLAUDE.md rules still win. Active voice, you for the reader, no dashes in prose, no semicolons, no colons in body sentences, no asterisks, no emojis and no filler. Contractions stay, since they sound human.
+- A procedure sentence holds 20 words at most and a description 25. Each sentence gives one instruction. Steps are imperative, and a list holds them in order where the order matters. The Help body format has no numbered list, so ordered steps are bullets in their order.
+- Verbs are active, present and plain, with no phrasal or vague verb where a plain one exists. Help says what happens and uses neither should nor may for a fact.
+- One word names one thing across the file, with the exact label the app shows. Help says the command line, the command palette, the right click menu, the scrollback split and on Windows and Linux every time.
+- Articles stay. No cluster runs past three nouns. A paragraph keeps to one topic and six sentences at most. A list of three or more takes the serial comma.
+- Every fact, setting, key, code in backticks, link, heading, heading number and id line stays, and game text stays verbatim. A check compared the backticked spans of each topic before and after, and none was lost.
+
+HELP.md went from 30,738 words in 1,820 sentences, 15.2 words each on average, to 32,601 words in 2,626 sentences, 11.2 on average. Sentences over 25 words went from 196 to none, outside quoted game text.
+
 ## Decisions taken
 
 You approved this plan on October 1, 2026. Every decision takes its recommended answer from the answer sheet, except four you answered yourself the same day and D19, which changed on October 2.
